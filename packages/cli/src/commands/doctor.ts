@@ -4,12 +4,14 @@
  * through the presenter and support `--json` for scripting/CI.
  */
 import { existsSync, realpathSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 import { delimiter, join, resolve } from "node:path";
 
 import type { Command } from "commander";
 
 import { bold, cyan, dim, formatBytes, gray, green, red } from "@fusionkit/cli-ui";
 import type { Presenter, StatusKind } from "@fusionkit/cli-ui";
+import { resolveWebSearchExecutor } from "@fusionkit/model-gateway";
 
 import {
   DEFAULT_CLOUD_PANEL,
@@ -165,7 +167,10 @@ function statusFor(check: Check): StatusKind {
 }
 
 /** Report on the local MLX runtime and any downloaded models (best-effort). */
-async function reportLocalMlx(presenter: Presenter, report: DoctorEntry[]): Promise<void> {
+async function reportLocalMlx(
+  presenter: Presenter,
+  report: DoctorEntry[]
+): Promise<{ modelsDownloaded: number }> {
   const host = detectHost();
   presenter.blank();
   presenter.heading("local MLX (Apple Silicon)");
@@ -177,7 +182,7 @@ async function reportLocalMlx(presenter: Presenter, report: DoctorEntry[]): Prom
       ok: false,
       detail: `not available on ${host.platform}/${host.arch}`
     });
-    return;
+    return { modelsDownloaded: 0 };
   }
 
   const env = ownedMlxEnv();
@@ -211,6 +216,7 @@ async function reportLocalMlx(presenter: Presenter, report: DoctorEntry[]): Prom
   presenter.line(
     `  ${dim(`${Math.round(host.totalRamGB)}GB RAM · cache ${env.dir} · ${formatBytes(info.diskBytes)} on disk`)}`
   );
+  return { modelsDownloaded: downloaded.length };
 }
 
 /** `fusionkit doctor` — a proactive environment checklist with fix hints. */
@@ -259,6 +265,20 @@ async function runDoctor(opts: { provision?: boolean }, ctx: CommandContext): Pr
     ok: repoRoot !== undefined,
     ...(repoRoot !== undefined ? { detail: repoRoot } : { hint: "cd into your project, or run `git init`" })
   });
+  if (repoRoot !== undefined) {
+    let hasCommit = false;
+    try {
+      execFileSync("git", ["rev-parse", "--verify", "HEAD"], { cwd: repoRoot, stdio: "ignore" });
+      hasCommit = true;
+    } catch {
+      hasCommit = false;
+    }
+    checks.push({
+      label: "repository has at least one commit",
+      ok: hasCommit,
+      ...(hasCommit ? { detail: repoRoot } : { hint: "make an initial commit (`git add . && git commit -m \"init\"`)" })
+    });
+  }
 
   presenter.heading("prerequisites");
   for (const check of checks) {
@@ -305,6 +325,33 @@ async function runDoctor(opts: { provision?: boolean }, ctx: CommandContext): Pr
   const missingDefaultKeys = defaultCredentialChecks.filter((check) => !check.present);
   const presentDefaultKeys = defaultCredentialChecks.filter((check) => check.present);
 
+  // Gateway-executed web search: which provider serves each caller dialect.
+  presenter.blank();
+  presenter.heading("web search (gateway-executed, server-tool parity)");
+  for (const dialect of ["responses", "anthropic"] as const) {
+    const label = dialect === "responses" ? "codex (responses)" : "claude code (anthropic)";
+    const executor = resolveWebSearchExecutor(dialect);
+    const disabled = process.env.FUSIONKIT_WEB_SEARCH === "0";
+    const detail =
+      executor !== undefined
+        ? `via ${executor.provider} (${executor.model})`
+        : disabled
+          ? "disabled (FUSIONKIT_WEB_SEARCH=0)"
+          : "no provider key";
+    const hint =
+      executor !== undefined || disabled
+        ? undefined
+        : "set OPENAI_API_KEY or ANTHROPIC_API_KEY to enable web search";
+    presenter.status(executor !== undefined ? "ok" : disabled ? "pending" : "fail", label, detail, hint);
+    report.push({
+      section: "web-search",
+      label,
+      ok: executor !== undefined,
+      detail,
+      ...(hint !== undefined ? { hint } : {})
+    });
+  }
+
   // Per-platform capability: cloud everywhere; local MLX on Apple Silicon only.
   presenter.blank();
   presenter.heading("platform capability");
@@ -350,7 +397,7 @@ async function runDoctor(opts: { provision?: boolean }, ctx: CommandContext): Pr
     });
   }
 
-  await reportLocalMlx(presenter, report);
+  const localMlx = await reportLocalMlx(presenter, report);
 
   // Optional: actually warm the engine now (doctor + setup in one shot).
   if (opts.provision === true && runner) {
@@ -393,7 +440,11 @@ async function runDoctor(opts: { provision?: boolean }, ctx: CommandContext): Pr
     }
   }
 
-  const ready = runner && (anyCredentials || localCapable);
+  // A "local path" means a model is actually on disk, not merely that the
+  // hardware could host one — a bare Apple Silicon machine with no keys and no
+  // downloads still cannot serve a request.
+  const localReady = localCapable && localMlx.modelsDownloaded > 0;
+  const ready = runner && (anyCredentials || localReady);
   if (ctx.json) {
     ctx.emit({
       ready,
@@ -404,7 +455,8 @@ async function runDoctor(opts: { provision?: boolean }, ctx: CommandContext): Pr
           present: presentDefaultKeys.map((check) => check.env),
           missing: missingDefaultKeys.map((check) => check.env)
         },
-        localCapable
+        localCapable,
+        localReady
       },
       checks: report
     });
@@ -417,9 +469,12 @@ async function runDoctor(opts: { provision?: boolean }, ctx: CommandContext): Pr
       return 1;
     }
     const setupHint = engineWarm ? "" : ` Then run ${bold("fusionkit setup")} to pre-warm the engine.`;
+    const localHint = localCapable
+      ? ` Or download a local model with ${bold("fusionkit models")}.`
+      : "";
     presenter.line(
-      red("almost ready — no provider credentials found and local MLX is not available on this host.") +
-        ` Export one of ${bold(acceptedKeyEnvs.join(", "))}.${setupHint}`
+      red("almost ready — no provider credentials found and no local model is downloaded.") +
+        ` Export one of ${bold(acceptedKeyEnvs.join(", "))}.${localHint}${setupHint}`
     );
     return 1;
   }
@@ -560,7 +615,7 @@ export function registerDoctor(program: Command): void {
     .option("--provision", "also pre-provision (warm) the fusion engine into the uv cache")
     .option("--json", "emit machine-readable JSON")
     .action(async (opts: { provision?: boolean; json?: boolean }, command: Command) => {
-      process.exit(await runDoctor({ provision: opts.provision === true }, contextFor(command)));
+      process.exitCode = await runDoctor({ provision: opts.provision === true }, contextFor(command));
     });
 
   program
@@ -568,6 +623,6 @@ export function registerDoctor(program: Command): void {
     .description("show the effective fusion config and a dry-run preview")
     .option("--json", "emit machine-readable JSON")
     .action((_opts: { json?: boolean }, command: Command) => {
-      process.exit(runStatus(contextFor(command)));
+      process.exitCode = runStatus(contextFor(command));
     });
 }

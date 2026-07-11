@@ -44,6 +44,14 @@ test("anthropicModelsResponse aliases every model past Claude Code's claude/anth
   assert.equal(claudeModelAlias("claude-opus-4-8"), "claude-opus-4-8");
 });
 
+test("anthropicToChat tolerates thinking: null (same failure class as Responses reasoning: null)", () => {
+  const chat = anthropicToChat(
+    { model: "claude-x", messages: [{ role: "user", content: "hi" }], thinking: null },
+    "claude-x"
+  );
+  assert.equal(chat.reasoning_effort, undefined);
+});
+
 type Mock = {
   url: string;
   lastChatBody: () => Record<string, unknown> | undefined;
@@ -130,6 +138,9 @@ test("anthropicToChat maps system, tools, and tool results", () => {
 
   const messages = chat.messages as Record<string, unknown>[];
   assert.equal(chat.model, "local-model");
+  // Modern spelling: OpenAI reasoning models reject legacy `max_tokens`.
+  assert.equal(chat.max_completion_tokens, 100);
+  assert.equal(chat.max_tokens, undefined);
   assert.equal(messages[0]?.role, "system");
   assert.equal(messages[1]?.role, "user");
   assert.equal(messages[2]?.role, "assistant");
@@ -138,6 +149,26 @@ test("anthropicToChat maps system, tools, and tool results", () => {
   assert.equal((messages[3] as { tool_call_id?: string }).tool_call_id, "tu_1");
   const tools = chat.tools as Array<{ type: string; function: { name: string } }>;
   assert.equal(tools[0]?.function.name, "search");
+});
+
+test("anthropicToChat treats explicit null optional fields as absent", () => {
+  // Some clients encode "unset" as an explicit JSON null (Codex does on the
+  // Responses wire); a null `thinking`/`tool_choice`/`system` must translate
+  // like an absent field instead of crashing the turn.
+  const chat = anthropicToChat(
+    {
+      model: "claude-x",
+      system: null,
+      messages: [{ role: "user", content: "hi" }],
+      thinking: null,
+      metadata: null,
+      tool_choice: null
+    },
+    "local-model"
+  );
+  assert.deepEqual(chat.messages, [{ role: "user", content: "hi" }]);
+  assert.equal(chat.reasoning_effort, undefined);
+  assert.equal(chat.tool_choice, undefined);
 });
 
 test("anthropicToChat projects typed client tools but excludes server-executed tools", () => {
@@ -242,6 +273,84 @@ test("anthropic streaming starts eagerly and pings during the panel phase", asyn
       // already closed via cancel
     }
   }
+});
+
+test("streams a fused tool call end to end as Anthropic tool_use blocks", async () => {
+  // OpenAI-chat SSE with a tool call whose arguments arrive fragmented across
+  // chunks, then a tool_calls finish. The adapter must reconstruct one tool_use
+  // block with the fully-merged JSON input.
+  const chunks = [
+    'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_1","function":{"name":"search","arguments":"{\\"q\\":"}}]}}]}\n\n',
+    'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"\\"cats\\"}"}}]}}]}\n\n',
+    'data: {"choices":[{"delta":{},"finish_reason":"tool_calls"}]}\n\n',
+    "data: [DONE]\n\n"
+  ];
+  const encoder = new TextEncoder();
+  const upstream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      for (const chunk of chunks) controller.enqueue(encoder.encode(chunk));
+      controller.close();
+    }
+  });
+  const decoder = new TextDecoder();
+  const reader = openAiSseToAnthropic(upstream, "claude-x").getReader();
+  let out = "";
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    if (value !== undefined) out += decoder.decode(value);
+  }
+  assert.ok(out.includes('"type":"tool_use"'), "a tool_use content block must be emitted");
+  assert.ok(out.includes('"name":"search"'), "the tool name must be carried through");
+  assert.ok(out.includes("input_json_delta"), "the arguments must stream as input_json_delta");
+  // Both fragments ("{\"q\": and \"cats\"}) must reach the client.
+  assert.ok(out.includes("cats"), "both argument fragments must be forwarded");
+  assert.ok(out.includes('"stop_reason":"tool_use"'), "tool_calls maps to a tool_use stop reason");
+});
+
+test("truncated stream (no finish_reason) surfaces an Anthropic error, not end_turn", async () => {
+  // Upstream ends after some content but never sends a finish_reason / [DONE].
+  const encoder = new TextEncoder();
+  const upstream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(
+        encoder.encode('data: {"choices":[{"delta":{"content":"partial"}}]}\n\n')
+      );
+      controller.close();
+    }
+  });
+  const decoder = new TextDecoder();
+  const reader = openAiSseToAnthropic(upstream, "claude-x").getReader();
+  let out = "";
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    if (value !== undefined) out += decoder.decode(value);
+  }
+  assert.ok(out.includes("event: error"), "a truncated stream must emit an error event");
+  assert.ok(!out.includes('"stop_reason":"end_turn"'), "truncation must not fabricate a clean end_turn");
+});
+
+test("an OpenAI mid-stream error becomes a native Anthropic error event", async () => {
+  const encoder = new TextEncoder();
+  const upstream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(
+        encoder.encode(
+          'data: {"error":{"message":"provider overloaded","type":"provider_error"}}\n\n'
+        )
+      );
+      controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+      controller.close();
+    }
+  });
+  const output = await new Response(openAiSseToAnthropic(upstream, "claude-x")).text();
+
+  assert.match(output, /event: error/);
+  assert.match(output, /provider overloaded/);
+  assert.match(output, /provider_error/);
+  assert.doesNotMatch(output, /incomplete_stream/);
+  assert.doesNotMatch(output, /"stop_reason":"end_turn"/);
 });
 
 test("chatToAnthropicMessage produces a text content block", () => {

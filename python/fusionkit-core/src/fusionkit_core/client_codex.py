@@ -6,7 +6,7 @@ from typing import Any
 
 from openai import AsyncOpenAI
 
-from fusionkit_core.client_errors import _call_with_retries
+from fusionkit_core.client_errors import _call_with_retries, classify_provider_error
 from fusionkit_core.client_types import ToolChoice, ToolDefinition
 from fusionkit_core.client_wire import _codex_input, _codex_tool_choice, _codex_tools, _codex_usage
 from fusionkit_core.config import ModelEndpoint, SamplingConfig
@@ -17,6 +17,13 @@ from fusionkit_core.registry import (
     CODEX_DEFAULT_INSTRUCTIONS,
 )
 from fusionkit_core.types import ChatMessage, ModelResponse, StreamChunk, ToolCall, Usage
+
+
+class _CodexResponseFailed(Exception):
+    def __init__(self, code: str | None, message: str) -> None:
+        self.code = code
+        self.message = message
+        super().__init__(message)
 
 
 class CodexResponsesClient:
@@ -88,6 +95,8 @@ class CodexResponsesClient:
         tool_choice: ToolChoice | None = None,
         extra: Mapping[str, Any] | None = None,
     ) -> ModelResponse:
+        # CodexResponsesClient does not forward SamplingConfig to the Responses API;
+        # self-mode temperature diversity is therefore ineffective for Codex endpoints.
         del sampling
         started = time.perf_counter()
         text_parts: list[str] = []
@@ -141,7 +150,7 @@ class CodexResponsesClient:
         tool_choice: ToolChoice | None = None,
         extra: Mapping[str, Any] | None = None,
     ) -> AsyncIterator[StreamChunk]:
-        del sampling
+        del sampling  # see chat() — sampling is not honored on Codex Responses
         async for chunk in self._stream(messages, tools, tool_choice, extra):
             yield chunk
 
@@ -214,7 +223,12 @@ class CodexResponsesClient:
                 response = getattr(event, "response", None)
                 error = getattr(response, "error", None)
                 message = getattr(error, "message", None) or "Codex response failed"
-                raise RuntimeError(message)
+                code = getattr(error, "code", None)
+                raise classify_provider_error(
+                    _CodexResponseFailed(code, message),
+                    provider="codex",
+                    model_id=self.model_id,
+                )
 
     async def aclose(self) -> None:
         await self._client.close()

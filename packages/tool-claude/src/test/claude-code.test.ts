@@ -46,7 +46,7 @@ function makeRepo(): { repo: string; cleanup: () => void; head: string; outputRo
   const repo = join(root, "repo");
   mkdirSync(repo);
   gitText(repo, ["init", "--quiet", "--initial-branch=main"]);
-  gitText(repo, ["config", "user.email", "ensemble@warrant.local"]);
+  gitText(repo, ["config", "user.email", "ensemble@fusionkit.local"]);
   gitText(repo, ["config", "user.name", "ensemble"]);
   writeFileSync(join(repo, "README.md"), "# ensemble\n");
   gitText(repo, ["add", "-A"]);
@@ -60,7 +60,7 @@ function makeRepo(): { repo: string; cleanup: () => void; head: string; outputRo
 }
 
 function liveClaudeSmokeSkipReason(): string | false {
-  if ((process.env.FUSIONKIT_CLAUDE_SMOKE ?? process.env.WARRANT_CLAUDE_SMOKE) !== "1") {
+  if ((process.env.FUSIONKIT_CLAUDE_SMOKE ?? process.env.FUSIONKIT_CLAUDE_SMOKE) !== "1") {
     return "set FUSIONKIT_CLAUDE_SMOKE=1 plus Claude Code credentials to run the live Claude Code smoke";
   }
   return claudeCodeHarnessCredentialSkipReason() ?? false;

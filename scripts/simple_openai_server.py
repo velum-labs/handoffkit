@@ -1,16 +1,21 @@
 #!/usr/bin/env python3
 """Front one model endpoint (any provider) as an OpenAI Chat Completions server.
 
-Thin CLI wrapper around ``fusionkit_server.openai_endpoint`` (the same code that
-backs the ``fusionkit serve-endpoint`` command). Kept for the in-repo demos and
-scripts; the shipped path is ``uvx fusionkit serve-endpoint``.
+Thin CLI wrapper around the same uvicorn path as ``fusionkit serve-endpoint``.
+Kept for the in-repo demos and scripts; the shipped path is
+``uvx fusionkit serve-endpoint``.
 """
 from __future__ import annotations
 
 import argparse
+import json
 
+import uvicorn
+from fusionkit_core.config import FusionConfig
 from fusionkit_core.registry import API_KEY_ENVS
-from fusionkit_server.openai_endpoint import build_endpoint, serve_single_endpoint
+from fusionkit_core.trace import setup_fusion_tracing
+from fusionkit_server.app import create_app
+from fusionkit_server.openai_endpoint import build_endpoint
 
 DEFAULT_PROVIDER = next(iter(API_KEY_ENVS))
 
@@ -31,6 +36,7 @@ def main() -> None:
     parser.add_argument("--port", type=int, required=True)
     args = parser.parse_args()
 
+    setup_fusion_tracing("fusionkit-panel-model")
     endpoint = build_endpoint(
         id=args.id,
         model=args.model,
@@ -39,7 +45,21 @@ def main() -> None:
         api_key_env=args.api_key_env,
         timeout_s=args.timeout_s,
     )
-    serve_single_endpoint(endpoint, host=args.host, port=args.port)
+    print(
+        json.dumps(
+            {
+                "event": "starting",
+                "id": endpoint.id,
+                "provider": endpoint.provider,
+                "model": endpoint.model,
+            }
+        ),
+        flush=True,
+    )
+    fusion_config = FusionConfig(endpoints=[endpoint], default_model=endpoint.id)
+    api = create_app(fusion_config)
+    print(json.dumps({"event": "listening", "host": args.host, "port": args.port}), flush=True)
+    uvicorn.run(api, host=args.host, port=args.port)
 
 
 if __name__ == "__main__":

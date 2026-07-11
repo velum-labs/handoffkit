@@ -29,8 +29,10 @@ class GoogleModelClient:
         self.model_id = endpoint.id
         self.max_context = endpoint.max_context
         client_kwargs: dict[str, Any] = {"api_key": resolve_api_key(endpoint)}
+        http_options: dict[str, Any] = {"timeout": int(endpoint.timeout_s * 1000)}
         if endpoint.base_url:
-            client_kwargs["http_options"] = {"base_url": endpoint.base_url}
+            http_options["base_url"] = endpoint.base_url
+        client_kwargs["http_options"] = http_options
         self._client = genai.Client(**client_kwargs)
 
     def _request(

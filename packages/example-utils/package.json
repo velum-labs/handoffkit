@@ -2,7 +2,7 @@
   "name": "@fusionkit/example-utils",
   "private": true,
   "version": "0.1.0",
-  "description": "Shared narration and live-model helpers for standalone Warrant examples.",
+  "description": "Shared narration and live-model helpers for FusionKit examples.",
   "license": "Apache-2.0",
   "type": "module",
   "exports": {
@@ -17,7 +17,6 @@
   "dependencies": {
     "@ai-sdk/openai-compatible": "2.0.48",
     "@ai-sdk/provider": "4.0.2",
-    "@fusionkit/handoff": "workspace:*",
     "@fusionkit/protocol": "workspace:*",
     "@fusionkit/registry": "workspace:*",
     "ai": "6.0.200"

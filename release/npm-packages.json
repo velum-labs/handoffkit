@@ -30,44 +30,12 @@
       "name": "@fusionkit/kernel"
     },
     {
-      "path": "legacy/packages/sdk",
-      "name": "@fusionkit/sdk"
-    },
-    {
       "path": "packages/workspace",
       "name": "@fusionkit/workspace"
     },
     {
-      "path": "legacy/packages/plane",
-      "name": "@fusionkit/plane"
-    },
-    {
-      "path": "legacy/packages/runner",
-      "name": "@fusionkit/runner"
-    },
-    {
-      "path": "legacy/packages/handoff",
-      "name": "@fusionkit/handoff"
-    },
-    {
-      "path": "legacy/packages/adapter-compute",
-      "name": "@fusionkit/adapter-compute"
-    },
-    {
       "path": "packages/adapter-ai-sdk",
       "name": "@fusionkit/adapter-ai-sdk"
-    },
-    {
-      "path": "legacy/packages/session-vercel-sandbox",
-      "name": "@fusionkit/session-vercel-sandbox"
-    },
-    {
-      "path": "legacy/packages/session-hermetic",
-      "name": "@fusionkit/session-hermetic"
-    },
-    {
-      "path": "legacy/packages/session-harness",
-      "name": "@fusionkit/session-harness"
     },
     {
       "path": "packages/model-gateway",

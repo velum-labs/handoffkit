@@ -28,6 +28,13 @@ export type EventsToSseOptions = {
   onComplete?: () => void;
   /** Logger for human-facing gateway diagnostics. */
   logger?: FusionGatewayLogger;
+  /**
+   * Emit the chat-layer `: keepalive` comments (default true). Set false when a
+   * downstream dialect translator (Anthropic / Responses) wraps this stream and
+   * emits its own keepalive — the translator drops these comments anyway, so
+   * running both is a redundant double keepalive.
+   */
+  keepalive?: boolean;
 };
 
 export function eventsToSseResponse(
@@ -35,19 +42,23 @@ export function eventsToSseResponse(
   options: EventsToSseOptions = {}
 ): Response {
   const logger = options.logger ?? defaultFusionGatewayLogger;
+  const emitKeepalive = options.keepalive !== false;
   const encoder = new TextEncoder();
   const readable = new ReadableStream<Uint8Array>({
     async start(controller) {
       let alive = true;
-      const keepalive = setInterval(() => {
-        if (alive) {
-          try {
-            controller.enqueue(encoder.encode(": keepalive\n\n"));
-          } catch {
-            alive = false;
-          }
-        }
-      }, KEEPALIVE_MS);
+      const keepalive = emitKeepalive
+        ? setInterval(() => {
+            if (!alive) return;
+            // Honor backpressure: skip the keepalive if the consumer queue is full.
+            if ((controller.desiredSize ?? 1) <= 0) return;
+            try {
+              controller.enqueue(encoder.encode(": keepalive\n\n"));
+            } catch {
+              alive = false;
+            }
+          }, KEEPALIVE_MS)
+        : undefined;
       if (options.notice !== undefined) {
         controller.enqueue(encoder.encode(noticeChunk(options.notice)));
       }
@@ -64,7 +75,7 @@ export function eventsToSseResponse(
               controller.enqueue(encoder.encode(noticeChunk(event.content)));
               break;
             case "keepalive":
-              controller.enqueue(encoder.encode(": keepalive\n\n"));
+              if (emitKeepalive) controller.enqueue(encoder.encode(": keepalive\n\n"));
               break;
             case "error": {
               const message = `fusion error: ${event.error.message}`;
@@ -88,7 +99,7 @@ export function eventsToSseResponse(
         controller.enqueue(encoder.encode(errorEvent(`fusion error: ${message}`)));
       } finally {
         alive = false;
-        clearInterval(keepalive);
+        if (keepalive !== undefined) clearInterval(keepalive);
         try {
           controller.close();
         } catch {

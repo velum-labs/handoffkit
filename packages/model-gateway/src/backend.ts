@@ -27,6 +27,14 @@ export type Backend = {
    * can route it to its real provider instead of fusing it.
    */
   resolveModel?(requested: string | undefined): string | undefined;
+  /**
+   * Whether the backend serves this exact model id itself (a fused route or a
+   * registered passthrough). Unlike {@link resolveModel} — which folds unknown
+   * ids into the default — this distinguishes "mine" from "unknown", so the
+   * gateway can hand unknown ids to a relay (e.g. the Codex backend relay)
+   * instead of silently fusing them.
+   */
+  servesModel?(model: string): boolean;
   /** POST <base>/chat/completions — supports streaming (SSE) upstream. */
   chat(body: unknown, signal?: AbortSignal, options?: BackendRequestOptions): Promise<Response>;
   /** GET <base>/models. */
@@ -46,6 +54,13 @@ export type BackendRequestOptions = {
    * sub-agent access below one level of delegation.
    */
   panelDepth?: number;
+  /**
+   * The caller will wrap the returned stream in a dialect translator
+   * (Anthropic / Responses) that emits its own keepalive. The fusion backend
+   * then suppresses its chat-layer `: keepalive` comments, which the translator
+   * would only drop anyway, so exactly one keepalive reaches the client.
+   */
+  translated?: boolean;
 };
 
 export type OpenAiBackendOptions = {

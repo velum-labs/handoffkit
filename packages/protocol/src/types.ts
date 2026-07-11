@@ -1,7 +1,7 @@
 /**
- * Warrant protocol types. These are the schemas marked for open
- * publication in the spec (warrant.contract.v1, warrant.receipt.v1,
- * warrant.event.v1, warrant.manifest.v1, warrant.policy.v1).
+ * FusionKit protocol types. These are the schemas marked for open
+ * publication in the spec (fusionkit.contract.v1, fusionkit.receipt.v1,
+ * fusionkit.event.v1, fusionkit.manifest.v1, fusionkit.policy.v1).
  */
 
 import type { JsonValue } from "./jcs.js";
@@ -108,7 +108,7 @@ export type ManifestFile = {
 };
 
 export type WorkspaceManifest = {
-  version: "warrant.manifest.v1";
+  version: "fusionkit.manifest.v1";
   baseRef: string;
   /** Hash of the git bundle blob containing history up to baseRef. */
   bundleHash: string;
@@ -138,7 +138,7 @@ export type BudgetSpec = {
 };
 
 export type RunContract = {
-  version: "warrant.contract.v1";
+  version: "fusionkit.contract.v1";
   runId: string;
   issuedAt: string;
   issuer: KeyRef;
@@ -186,7 +186,7 @@ export type RetentionPolicy = {
 };
 
 export type Policy = {
-  version: "warrant.policy.v1";
+  version: "fusionkit.policy.v1";
   runners: { allowPools: string[] };
   agents: { allow: AgentKind[] };
   dataClasses: DataClassRule[];
@@ -224,7 +224,7 @@ export type RunEvent =
   | { type: "run.cancelled"; actor: ActorRef };
 
 export type ChainedEvent = {
-  version: "warrant.event.v1";
+  version: "fusionkit.event.v1";
   seq: number;
   ts: string;
   /** Hash of the previous chained event; the genesis event uses the contract hash. */
@@ -266,7 +266,7 @@ export type DisclosureRecord = {
 };
 
 export type Receipt = {
-  version: "warrant.receipt.v1";
+  version: "fusionkit.receipt.v1";
   runId: string;
   contractHash: string;
   runner: RunnerIdentity;
@@ -286,7 +286,7 @@ export type Receipt = {
 };
 
 /**
- * Handoff protocol objects (warrant.checkpoint.v1, warrant.envelope.v1).
+ * Handoff protocol objects (fusionkit.checkpoint.v1, fusionkit.envelope.v1).
  *
  * A checkpoint captures resumable state at a semantic boundary. An envelope
  * is the portable description of a continuation: which checkpoint, which
@@ -299,7 +299,7 @@ export type Receipt = {
 export type SemanticState = {
   /** Blob hash of the captured transcript, if one was attached. */
   transcriptHash?: string;
-  /** Blob hash of the tool-call journal (warrant.tooljournal.v1), if any. */
+  /** Blob hash of the tool-call journal (fusionkit.tooljournal.v1), if any. */
   toolJournalHash?: string;
   /** Short human-readable summary of where the work stands. */
   note?: string;
@@ -317,17 +317,17 @@ export type ToolCallRecord = {
 };
 
 /**
- * Tool-call history captured at semantic boundaries (warrant.tooljournal.v1).
+ * Tool-call history captured at semantic boundaries (fusionkit.tooljournal.v1).
  * Content-addressed and referenced from a checkpoint's semantic state, so a
  * continuation carries what the loop's tools saw and did.
  */
 export type ToolJournal = {
-  version: "warrant.tooljournal.v1";
+  version: "fusionkit.tooljournal.v1";
   entries: ToolCallRecord[];
 };
 
 export type Checkpoint = {
-  version: "warrant.checkpoint.v1";
+  version: "fusionkit.checkpoint.v1";
   checkpointId: string;
   createdAt: string;
   tier: CheckpointTier;
@@ -350,7 +350,7 @@ export type HandoffTargetRef = {
 };
 
 export type HandoffEnvelope = {
-  version: "warrant.envelope.v1";
+  version: "fusionkit.envelope.v1";
   envelopeId: string;
   createdAt: string;
   source: HandoffSource;
@@ -378,7 +378,7 @@ export type ContinuationRef = {
 
 /** Self-contained bundle sufficient for fully offline verification. */
 export type ReceiptBundle = {
-  version: "warrant.bundle.v1";
+  version: "fusionkit.bundle.v1";
   contract: RunContract;
   receipt: Receipt;
   events: ChainedEvent[];

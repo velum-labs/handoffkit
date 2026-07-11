@@ -5,7 +5,7 @@ import {
   MODEL_FUSION_SCHEMA_BUNDLE_HASH,
   requestHash
 } from "@fusionkit/protocol";
-import { CANDIDATE_ISOLATION_DEFAULTS } from "@fusionkit/runtime-utils";
+import { CANDIDATE_ISOLATION_DEFAULTS, registerCleanup } from "@fusionkit/runtime-utils";
 import type {
   HarnessCandidateRecordV1,
   HarnessRunRequestV1,
@@ -94,7 +94,11 @@ function isAbandonedStraggler(output: HarnessCandidateOutput): boolean {
  * (harnesses kill their children on abort, so this is prompt). Without
  * `graceMs` this is exactly `Promise.allSettled`.
  */
-async function settleWithStragglerGrace<T>(
+/**
+ * Shared by managed harnesses and raw k=1 proposal panels: straggler policy is
+ * a panel semantic, not an execution-mechanism detail.
+ */
+export async function settleWithStragglerGrace<T>(
   runs: readonly Promise<T>[],
   options: {
     graceMs: number | undefined;
@@ -359,7 +363,7 @@ function fallbackCandidateHardening(descriptor: EnsembleDescriptor): CandidateHa
     mount_policy: {
       worktree_writable: mountPolicy?.worktreeWritable ?? true,
       read_only_caches: [...(mountPolicy?.readOnlyCachePaths ?? [])],
-      ignored_dirs: [...(mountPolicy?.ignoredDirs ?? [".git", "node_modules", ".warrant"])]
+      ignored_dirs: [...(mountPolicy?.ignoredDirs ?? [".git", "node_modules", ".warrant", ".fusionkit"])]
     },
     network_policy: {
       default_deny: networkPolicy?.defaultDeny ?? true,
@@ -438,6 +442,16 @@ export async function runEnsembleLegacy(descriptor: EnsembleDescriptor): Promise
   let prepared: unknown;
   let outputs: HarnessCandidateOutput[] = [];
   let cleanupWorktrees = worktreePlan?.worktrees ?? [];
+  // A crash or interrupt mid-run must not leave worktrees (or their
+  // `.git/worktrees` registrations) behind: the cleanup registry removes the
+  // current plan on shutdown. Normal teardown in `finally` unregisters this so
+  // it does not double-run (and so an explicit leak opt-out is honored).
+  const unregisterWorktreeCleanup =
+    worktreePlan !== undefined
+      ? registerCleanup(() => {
+          cleanupWorktreePlan({ ...worktreePlan, worktrees: cleanupWorktrees });
+        })
+      : undefined;
   try {
     prepared = await descriptor.harness.prepare({ descriptor, request });
     // Every candidate still settles before continuing so a failure cannot leave
@@ -689,13 +703,20 @@ export async function runEnsembleLegacy(descriptor: EnsembleDescriptor): Promise
       ...(descriptor.reviewEvidence ? { reviewEvidence: descriptor.reviewEvidence } : {})
     });
   } finally {
+    // Normal teardown owns cleanup now, so drop the crash-safety registration
+    // first (whether or not we clean below — an explicit leak opt-out must not
+    // be overridden by the registry on a later signal).
+    unregisterWorktreeCleanup?.();
     await descriptor.harness.cleanup?.({
       descriptor,
       request,
       candidates: outputs,
       prepared
     });
-    if (worktreePlan && descriptor.cleanupWorktrees === true) {
+    // Cleanup is the default; leaking worktrees is now an explicit opt-out
+    // (`cleanupWorktrees: false`), so a run no longer silently accumulates
+    // worktrees in the user's repo.
+    if (worktreePlan && descriptor.cleanupWorktrees !== false) {
       cleanupWorktrees = cleanupWorktreePlan({
         ...worktreePlan,
         worktrees: cleanupWorktrees

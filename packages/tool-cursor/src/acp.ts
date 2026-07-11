@@ -6,8 +6,8 @@ import {
   CURSOR_BRIDGE_MODEL_NAME,
   FUSION_PANEL_MODEL,
   commandOnPath,
-  freePort,
   readEnv,
+  reservePort,
   terminate
 } from "@fusionkit/tools";
 
@@ -53,8 +53,10 @@ async function runCursorAcpOutcome(
   input: Required<Pick<CursorAcpProducerInput, "command">> & CursorAcpProducerInput
 ): Promise<CursorFrontDoorOutcome> {
   const modelName = input.modelName ?? CURSOR_BRIDGE_MODEL_NAME;
-  // Reserve a real free loopback port so parallel probes cannot collide.
-  const bridgePort = await freePort();
+  // Hold a real free loopback port until the bridge is about to bind it, so
+  // parallel probes cannot collide on (or steal) it.
+  const reservation = await reservePort();
+  const bridgePort = reservation.port;
   const bridgeEnv = cursorBridgeEnv({
     port: bridgePort,
     gatewayUrl: input.gatewayUrl,
@@ -64,6 +66,7 @@ async function runCursorAcpOutcome(
 
   const { serveCli } = resolveCursorkitCli();
   let bridgeOut = "";
+  await reservation.release();
   // detached: the bridge may spawn children; teardown kills the whole group.
   const bridge = spawn(process.execPath, [serveCli, "serve"], {
     env: bridgeEnv,

@@ -120,7 +120,7 @@ for (const entry of manifest.packages ?? []) {
   }
 }
 
-for (const path of ["packages/testkit", "packages/example-utils"]) {
+for (const path of ["packages/example-utils"]) {
   const pkg = readJson(`${path}/package.json`);
   if (publishable.has(path)) fail(`${path} must not be in the runtime publish manifest`);
   if (pkg.private !== true) fail(`${path} must remain private`);

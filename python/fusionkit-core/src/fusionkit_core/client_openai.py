@@ -8,7 +8,7 @@ from typing import Any
 import httpx
 from openai import AsyncOpenAI
 
-from fusionkit_core.client_errors import _call_with_retries
+from fusionkit_core.client_errors import ProviderCallError, _call_with_retries
 from fusionkit_core.client_types import ToolChoice, ToolDefinition
 from fusionkit_core.client_wire import (
     _openai_messages,
@@ -51,6 +51,12 @@ class OpenAICompatibleClient:
             timeout=endpoint.timeout_s,
             default_headers=default_headers,
         )
+        self._openrouter_http: httpx.AsyncClient | None = None
+
+    def _openrouter_http_client(self) -> httpx.AsyncClient:
+        if self._openrouter_http is None:
+            self._openrouter_http = httpx.AsyncClient(timeout=min(self.endpoint.timeout_s, 10.0))
+        return self._openrouter_http
 
     async def _openrouter_provider_cost(self, generation_id: str | None) -> ProviderCost | None:
         if self.endpoint.provider != "openrouter":
@@ -63,32 +69,33 @@ class OpenAICompatibleClient:
             **OPENROUTER_ATTRIBUTION_HEADERS,
         }
         last_status = "unavailable"
-        async with httpx.AsyncClient(timeout=min(self.endpoint.timeout_s, 10.0)) as client:
-            for attempt in range(3):
-                try:
-                    response = await client.get(url, params={"id": generation_id}, headers=headers)
-                except httpx.HTTPError as exc:
-                    return ProviderCost(
-                        source="provider",
-                        generation_id=generation_id,
-                        lookup_status=f"error:{exc.__class__.__name__}",
-                    )
-                if response.status_code == 200:
-                    payload = response.json()
-                    data = payload.get("data") if isinstance(payload, dict) else None
-                    if isinstance(data, dict):
-                        return _openrouter_provider_cost_from_generation(generation_id, data)
-                    return ProviderCost(
-                        source="provider",
-                        generation_id=generation_id,
-                        lookup_status="malformed_response",
-                    )
-                if response.status_code == 404:
-                    last_status = "not_ready"
+        client = self._openrouter_http_client()
+        for attempt in range(3):
+            try:
+                response = await client.get(url, params={"id": generation_id}, headers=headers)
+            except httpx.HTTPError as exc:
+                return ProviderCost(
+                    source="provider",
+                    generation_id=generation_id,
+                    lookup_status=f"error:{exc.__class__.__name__}",
+                )
+            if response.status_code == 200:
+                payload = response.json()
+                data = payload.get("data") if isinstance(payload, dict) else None
+                if isinstance(data, dict):
+                    return _openrouter_provider_cost_from_generation(generation_id, data)
+                return ProviderCost(
+                    source="provider",
+                    generation_id=generation_id,
+                    lookup_status="malformed_response",
+                )
+            if response.status_code == 404:
+                last_status = "not_ready"
+                if attempt < 2:
                     await asyncio.sleep(0.2 * (attempt + 1))
-                    continue
-                last_status = f"http_{response.status_code}"
-                break
+                continue
+            last_status = f"http_{response.status_code}"
+            break
         return ProviderCost(
             source="provider",
             generation_id=generation_id,
@@ -155,6 +162,13 @@ class OpenAICompatibleClient:
             model_id=self.model_id,
         )
         latency_s = time.perf_counter() - started
+        if not response.choices:
+            raise ProviderCallError(
+                "provider returned no completion choices",
+                category="unknown",
+                provider=self.endpoint.provider,
+                model_id=self.model_id,
+            )
         choice = response.choices[0]
         usage = Usage()
         if response.usage is not None:
@@ -235,4 +249,7 @@ class OpenAICompatibleClient:
 
     async def aclose(self) -> None:
         await self._client.close()
+        if self._openrouter_http is not None:
+            await self._openrouter_http.aclose()
+            self._openrouter_http = None
 

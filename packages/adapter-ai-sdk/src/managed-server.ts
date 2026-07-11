@@ -11,7 +11,13 @@ import type {
   LanguageModelV3StreamPart,
   LanguageModelV3StreamResult
 } from "@ai-sdk/provider";
-import { freePort, MANAGED_SERVER_DEFAULTS, sleep } from "@fusionkit/runtime-utils";
+import {
+  MANAGED_SERVER_DEFAULTS,
+  registerCleanup,
+  reservePort,
+  sleep,
+  terminateGroup
+} from "@fusionkit/runtime-utils";
 
 import { MLX_LM_STRUCTURED_PIN, MlxEnv } from "./mlx-env.js";
 import type { MlxEnvOptions, SpawnSpec } from "./mlx-env.js";
@@ -81,7 +87,7 @@ function defaultCreateModel(
   // ManagedModelServer owns this local OpenAI-compatible endpoint shape; keep
   // the provider name, /v1 prefix, and dummy key co-located with the server.
   return createOpenAICompatible({
-    name: "warrant-managed-server",
+    name: "fusionkit-managed-server",
     // The provider appends route paths (e.g. /chat/completions) directly,
     // so the OpenAI-compatible API prefix belongs on the base URL.
     baseURL: `${baseURL}/v1`,
@@ -92,7 +98,7 @@ function defaultCreateModel(
 
 export class ManagedModelServer implements LanguageModelV3 {
   readonly specificationVersion = "v3" as const;
-  readonly provider = "warrant-managed-server";
+  readonly provider = "fusionkit-managed-server";
   readonly modelId: string;
 
   private readonly options: ManagedModelServerOptions;
@@ -106,6 +112,8 @@ export class ManagedModelServer implements LanguageModelV3 {
   private idleTimer: ReturnType<typeof setInterval> | undefined;
   private outputTail = "";
   private stopping = false;
+  /** Drops the current child's cleanup-registry registration once it exits. */
+  private unregisterCleanup: (() => void) | undefined;
 
   constructor(options: ManagedModelServerOptions) {
     this.options = options;
@@ -151,17 +159,30 @@ export class ManagedModelServer implements LanguageModelV3 {
     const startedAt = Date.now();
     this.state = "starting";
     try {
-      const port = this.options.port ?? (await freePort());
+      // Hold the loopback port until the child is about to bind it, so a
+      // concurrent picker cannot steal it out from under this server.
+      const reservation = this.options.port === undefined ? await reservePort() : undefined;
+      const port = this.options.port ?? (reservation as { port: number }).port;
       this.options.onEvent?.({ type: "starting", port });
       const spec = await this.options.prepare(port);
 
       this.outputTail = "";
+      await reservation?.release();
+      // Detached so the server runs in its own process group: a shutdown kills
+      // the whole group (the server plus anything it forked), not just the
+      // top-level process.
       const child = spawn(spec.cmd, spec.args, {
         env: spec.env,
         ...(spec.cwd ? { cwd: spec.cwd } : {}),
+        detached: true,
         stdio: ["ignore", "pipe", "pipe"]
       });
       this.child = child;
+      // A crash or interrupt of the owning process must not orphan the server:
+      // group-kill it via the cleanup registry, dropped once the child exits.
+      this.unregisterCleanup = registerCleanup(() =>
+        terminateGroup(child, this.options.shutdownGraceMs ?? DEFAULT_SHUTDOWN_GRACE_MS)
+      );
 
       const log = spec.logFile ? this.openLog(spec.logFile) : undefined;
       const capture = (chunk: Buffer): void => {
@@ -179,6 +200,8 @@ export class ManagedModelServer implements LanguageModelV3 {
         exited = true;
         exitCode = code;
         log?.end();
+        this.unregisterCleanup?.();
+        this.unregisterCleanup = undefined;
         // A process that dies while we believe it is running is a crash:
         // reset so the next call respawns instead of hitting a dead URL.
         if (this.state === "running" && this.child === child && !this.stopping) {
@@ -273,6 +296,8 @@ export class ManagedModelServer implements LanguageModelV3 {
       clearInterval(this.idleTimer);
       this.idleTimer = undefined;
     }
+    this.unregisterCleanup?.();
+    this.unregisterCleanup = undefined;
     this.state = "stopped";
     this.child = undefined;
     this.inner = undefined;
@@ -286,11 +311,10 @@ export class ManagedModelServer implements LanguageModelV3 {
     const exited = new Promise<void>((resolve) => {
       child.once("exit", () => resolve());
     });
-    child.kill("SIGTERM");
-    const timer = setTimeout(() => child.kill("SIGKILL"), graceMs);
-    timer.unref?.();
+    // Group-kill (SIGTERM -> SIGKILL) so a server that spawned worker processes
+    // does not leave them running after we scale to zero.
+    terminateGroup(child, graceMs);
     await exited;
-    clearTimeout(timer);
   }
 
   private async stopProcess(reason: "idle" | "explicit"): Promise<void> {
@@ -426,7 +450,7 @@ function structuredEnvOptions(): Pick<
 
 /**
  * The MLX preset: a managed server whose Python environment is owned by
- * Warrant (see MlxEnv) and whose process is spawned from that env's own
+ * FusionKit (see MlxEnv) and whose process is spawned from that env's own
  * interpreter. `handle.env` exposes verify/info/destroy for the footprint.
  */
 export function mlxServer(

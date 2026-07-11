@@ -1,7 +1,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { createCommandHarness, createMockHarness } from "@fusionkit/ensemble";
+import { createCommandHarness, createMockHarness, deriveSourceRepo } from "@fusionkit/ensemble";
 import type { EnsembleRunResult, HarnessAdapter } from "@fusionkit/ensemble";
 
 import { bold, dim, glyph, green, red } from "@fusionkit/cli-ui";
@@ -25,9 +25,11 @@ import type {
   ModelFusionSideEffects,
   ToolExecutionRecordV1
 } from "@fusionkit/protocol";
+import { ensureRunOutputDir } from "@fusionkit/runtime-utils";
 import { gitText } from "@fusionkit/workspace";
 
 import { fail } from "../shared/errors.js";
+import { readPackageVersion } from "../shared/package-version.js";
 import { toolRegistry } from "../tools.js";
 
 export type HandoffPayload = {
@@ -49,7 +51,7 @@ function writeJson(path: string, value: unknown): void {
 }
 
 export function writeEnsembleOutput(outDir: string, result: EnsembleRunResult): void {
-  mkdirSync(outDir, { recursive: true });
+  ensureRunOutputDir(outDir);
   mkdirSync(join(outDir, "candidates"), { recursive: true });
   mkdirSync(join(outDir, "model-call-records"), { recursive: true });
   writeJson(join(outDir, "summary.json"), result.summary ?? {});
@@ -88,7 +90,7 @@ export function parseHandoffTask(payload: unknown): BenchmarkTaskRecordV1 {
   return task;
 }
 
-export function baseGitSha(repo: string): string {
+function resolveBaseGitSha(repo: string): string {
   try {
     return gitText(repo, ["rev-parse", "HEAD"]).trim();
   } catch {
@@ -96,22 +98,37 @@ export function baseGitSha(repo: string): string {
   }
 }
 
-function metadata<S extends ModelFusionRecordV1["schema"]>(schema: S, createdAt: string) {
+export function baseGitSha(repo: string): string | undefined {
+  try {
+    return gitText(repo, ["rev-parse", "HEAD"]).trim();
+  } catch {
+    return undefined;
+  }
+}
+
+const CLI_VERSION = readPackageVersion(import.meta.url, "../../package.json");
+
+function metadata<S extends ModelFusionRecordV1["schema"]>(schema: S, createdAt: string, repo?: string) {
   return {
     schema,
     schema_version: "v1" as const,
     schema_bundle_hash: MODEL_FUSION_SCHEMA_BUNDLE_HASH,
-    producer: "handoffkit-cli",
-    producer_version: "0.1.0",
-    producer_git_sha: "0".repeat(40),
+    producer: "fusionkit-cli",
+    producer_version: CLI_VERSION,
+    ...(repo !== undefined
+      ? (() => {
+          const sha = baseGitSha(repo);
+          return sha !== undefined ? { producer_git_sha: sha } : {};
+        })()
+      : {}),
     created_at: createdAt
   };
 }
 
-function toolRecordsForResult(result: EnsembleRunResult): ToolExecutionRecordV1[] {
+function toolRecordsForResult(result: EnsembleRunResult, repo?: string): ToolExecutionRecordV1[] {
   return result.toolRecords.map((record): ToolExecutionRecordV1 => {
     const toolRecord: ToolExecutionRecordV1 = {
-      ...metadata("tool-execution-record.v1", result.harnessRunResult.created_at),
+      ...metadata("tool-execution-record.v1", result.harnessRunResult.created_at, repo),
       execution_id: record.execution_id,
       plan_id: record.plan_id,
       status: record.status,
@@ -125,9 +142,10 @@ function toolRecordsForResult(result: EnsembleRunResult): ToolExecutionRecordV1[
 
 export function recordsForResult(
   task: BenchmarkTaskRecordV1,
-  result: EnsembleRunResult
+  result: EnsembleRunResult,
+  repo?: string
 ): ModelFusionRecordV1[] {
-  const toolRecords = toolRecordsForResult(result);
+  const toolRecords = toolRecordsForResult(result, repo);
   const records: ModelFusionRecordV1[] = [
     task,
     result.harnessRunRequest,
@@ -151,11 +169,11 @@ export function skippedHandoffRecords(input: {
 }): ModelFusionRecordV1[] {
   const createdAt = new Date().toISOString();
   const request: HarnessRunRequestV1 = {
-    ...metadata("harness-run-request.v1", createdAt),
+    ...metadata("harness-run-request.v1", createdAt, input.repo),
     request_id: `ensemble_req_${input.descriptorId}`,
     harness_kind: input.harnessKind,
-    source_repo: "handoffkit",
-    base_git_sha: baseGitSha(input.repo),
+    source_repo: deriveSourceRepo(input.repo),
+    base_git_sha: resolveBaseGitSha(input.repo),
     prompt: input.task.prompt ?? "",
     prompt_hash: input.task.prompt_hash,
     allowed_tools: input.task.allowed_tools,
@@ -168,7 +186,7 @@ export function skippedHandoffRecords(input: {
     }
   };
   const result: HarnessRunResultV1 = {
-    ...metadata("harness-run-result.v1", createdAt),
+    ...metadata("harness-run-result.v1", createdAt, input.repo),
     result_id: `ensemble_result_${input.descriptorId}`,
     request_id: request.request_id,
     harness_kind: input.harnessKind,

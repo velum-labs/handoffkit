@@ -75,18 +75,18 @@ test("defaultModelForAuthChoice gives a per-choice default", () => {
 
 // --- buildAuthOptions: combinable methods, gated by detection --------------
 
-test("buildAuthOptions always offers API-key providers and local", () => {
+test("buildAuthOptions always offers API-key providers and local", async () => {
   process.env.HOME = freshHome();
-  const values = buildAuthOptions({}).map((option) => option.value);
+  const values = (await buildAuthOptions({})).map((option) => option.value);
   for (const expected of ["openai", "anthropic", "google", "openrouter", "local"] as const) {
     assert.ok(values.includes(expected), `expected ${expected} in ${values.join(", ")}`);
   }
 });
 
-test("buildAuthOptions hint reflects whether the API key env is set", () => {
+test("buildAuthOptions hint reflects whether the API key env is set", async () => {
   process.env.HOME = freshHome();
-  const set = buildAuthOptions({ OPENAI_API_KEY: "x" }).find((o) => o.value === "openai");
-  const unset = buildAuthOptions({}).find((o) => o.value === "openai");
+  const set = (await buildAuthOptions({ OPENAI_API_KEY: "x" })).find((o) => o.value === "openai");
+  const unset = (await buildAuthOptions({})).find((o) => o.value === "openai");
   assert.match(set?.hint ?? "", /is set/);
   assert.match(unset?.hint ?? "", /set OPENAI_API_KEY/);
 });
@@ -113,28 +113,26 @@ test("defaultMemberId derives the base from the choice and unique-ifies", () => 
   assert.equal(defaultMemberId("claude-code", taken), "claude-code");
 });
 
-test("buildAuthOptions local hint reflects the host", () => {
+test("buildAuthOptions local hint reflects the host", async () => {
   process.env.HOME = freshHome();
-  const apple = buildAuthOptions(
-    {},
-    { platform: "darwin", arch: "arm64", totalRamGB: 32, appleSilicon: true }
+  const apple = (
+    await buildAuthOptions({}, { platform: "darwin", arch: "arm64", totalRamGB: 32, appleSilicon: true })
   ).find((option) => option.value === "local");
   assert.match(apple?.hint ?? "", /32GB RAM/);
 
-  const other = buildAuthOptions(
-    {},
-    { platform: "linux", arch: "x64", totalRamGB: 64, appleSilicon: false }
+  const other = (
+    await buildAuthOptions({}, { platform: "linux", arch: "x64", totalRamGB: 64, appleSilicon: false })
   ).find((option) => option.value === "local");
   assert.match(other?.hint ?? "", /Apple Silicon only/);
 });
 
-test("buildAuthOptions includes codex only when a login is detected", () => {
+test("buildAuthOptions includes codex only when a login is detected", async () => {
   const home = freshHome();
   process.env.HOME = home;
   mkdirSync(join(home, ".codex"), { recursive: true });
   const token = jwt({ exp: Math.floor(Date.now() / 1000) + 3600 });
   writeFileSync(join(home, ".codex", "auth.json"), JSON.stringify({ tokens: { access_token: token } }));
 
-  const values = buildAuthOptions({}).map((option) => option.value);
+  const values = (await buildAuthOptions({})).map((option) => option.value);
   assert.ok(values.includes("codex"), `expected codex in ${values.join(", ")}`);
 });

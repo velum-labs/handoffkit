@@ -303,9 +303,11 @@ export {
   createWorktreePlan,
   defaultOutputRoot,
   diffCandidateWorktree,
+  diffWorkspace,
   sealCandidateWorktree
 } from "./worktree.js";
 export type { CandidateWorktree, WorktreePlan } from "./worktree.js";
+export { deriveSourceRepo } from "./source-repo.js";
 export { hardeningToJson, panelMemberPreamble } from "./harness.js";
 export type {
   EnsembleCandidateSummary,

@@ -28,7 +28,7 @@
             "single",
             "self",
             "panel",
-            "router"
+            "heuristic"
           ]
         },
         "messages": {

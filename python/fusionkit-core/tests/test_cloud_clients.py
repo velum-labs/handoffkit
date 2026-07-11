@@ -8,11 +8,13 @@ from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock
 
+import pytest
 from fusionkit_core.clients import (
     AnthropicModelClient,
     CodexResponsesClient,
     GoogleModelClient,
     OpenAICompatibleClient,
+    ProviderCallError,
     _anthropic_messages,
     _anthropic_tools,
     _codex_input,
@@ -27,6 +29,7 @@ from fusionkit_core.clients import (
 )
 from fusionkit_core.config import EndpointAuth, ModelEndpoint, ProviderKind, SamplingConfig
 from fusionkit_core.credentials import clear_credential_cache
+from fusionkit_core.judge import accumulate_tool_call
 from fusionkit_core.types import ChatMessage, ToolCall
 
 TOOLS = [
@@ -203,6 +206,37 @@ def test_google_contents_split_system_and_roles() -> None:
     declarations = tools[0].function_declarations
     assert declarations is not None
     assert declarations[0].name == "search"
+
+
+def test_google_tool_result_recovers_function_name_from_prior_call_id() -> None:
+    _, contents = _google_contents(
+        [
+            ChatMessage(role="user", content="look it up"),
+            ChatMessage(
+                role="assistant",
+                tool_calls=[
+                    ToolCall(
+                        id="call_search_1",
+                        name="search",
+                        arguments='{"q":"fusion"}',
+                    )
+                ],
+            ),
+            # OpenAI-shaped tool continuations carry the call id but normally
+            # omit `name`; Gemini requires the original function name.
+            ChatMessage(
+                role="tool",
+                content="result",
+                tool_call_id="call_search_1",
+            ),
+        ]
+    )
+
+    parts = contents[-1].parts
+    assert parts is not None
+    response_part = parts[0]
+    assert response_part.function_response is not None
+    assert response_part.function_response.name == "search"
 
 
 # --- response normalization (mocked SDKs) -----------------------------------
@@ -406,6 +440,22 @@ async def test_openai_stream_chat_yields_chunks() -> None:
     assert chunks[-1].usage.total_tokens == 3
 
 
+async def test_openai_chat_classifies_an_empty_choices_response() -> None:
+    client = OpenAICompatibleClient(_endpoint("openai-compatible"))
+    response = SimpleNamespace(
+        id="empty-completion",
+        choices=[],
+        usage=None,
+        model_dump=lambda mode="json": {"id": "empty-completion", "choices": []},
+    )
+    client._client.chat.completions.create = AsyncMock(return_value=response)
+
+    with pytest.raises(ProviderCallError, match="no completion choices") as raised:
+        await client.chat([ChatMessage(role="user", content="hi")])
+
+    assert raised.value.category == "unknown"
+
+
 async def test_openrouter_chat_attaches_generation_cost(monkeypatch) -> None:
     client = OpenAICompatibleClient(_endpoint("openrouter", model="anthropic/claude-sonnet-4.5"))
     response = SimpleNamespace(
@@ -570,6 +620,54 @@ async def test_anthropic_stream_chat_includes_prompt_tokens() -> None:
     assert terminal.usage.total_tokens == 16
 
 
+async def test_anthropic_stream_chat_reconstructs_streamed_tool_use() -> None:
+    # A streamed tool call arrives as a content_block_start (id + name) followed
+    # by input_json_delta fragments that only reference the block by index. The
+    # client must emit tool_call_delta chunks that fold back into one call.
+    client = AnthropicModelClient(_endpoint("anthropic"))
+    events = [
+        SimpleNamespace(
+            type="message_start",
+            message=SimpleNamespace(usage=SimpleNamespace(input_tokens=7, output_tokens=0)),
+        ),
+        SimpleNamespace(
+            type="content_block_start",
+            index=0,
+            content_block=SimpleNamespace(type="tool_use", id="toolu_1", name="search"),
+        ),
+        SimpleNamespace(
+            type="content_block_delta",
+            index=0,
+            delta=SimpleNamespace(type="input_json_delta", partial_json='{"q": '),
+        ),
+        SimpleNamespace(
+            type="content_block_delta",
+            index=0,
+            delta=SimpleNamespace(type="input_json_delta", partial_json='"cats"}'),
+        ),
+        SimpleNamespace(
+            type="message_delta",
+            delta=SimpleNamespace(stop_reason="tool_use"),
+            usage=SimpleNamespace(output_tokens=4),
+        ),
+    ]
+    client._client.messages.create = AsyncMock(return_value=_aiter(events))
+
+    chunks = [chunk async for chunk in client.stream_chat([ChatMessage(role="user", content="hi")])]
+
+    accumulator: list[dict[str, str]] = []
+    seen_ids: set[str] = set()
+    for chunk in chunks:
+        if chunk.tool_call_delta is not None:
+            accumulate_tool_call(accumulator, seen_ids, chunk.tool_call_delta)
+
+    assert len(accumulator) == 1
+    assert accumulator[0]["id"] == "toolu_1"
+    assert accumulator[0]["name"] == "search"
+    assert json.loads(accumulator[0]["arguments"]) == {"q": "cats"}
+    assert chunks[-1].finish_reason == "tool_use"
+
+
 # --- subscription auth clients ---------------------------------------------
 
 
@@ -665,6 +763,66 @@ async def test_codex_client_streams_and_sets_headers(monkeypatch) -> None:
     assert kwargs["instructions"]
     assert kwargs["store"] is False
     assert "max_output_tokens" not in kwargs
+
+
+async def test_codex_response_failed_raises_classified_provider_error(monkeypatch) -> None:
+    # Acceptance (WS8.3): a terminal `response.failed` event surfaces as a
+    # classified ProviderCallError (here auth_permanent), not a bare
+    # RuntimeError that bypasses the error taxonomy.
+    clear_credential_cache()
+    token = _jwt(
+        {
+            "exp": time.time() + 3600,
+            "https://api.openai.com/auth": {"chatgpt_account_id": "acct_x"},
+        }
+    )
+    monkeypatch.setenv("FK_CODEX_OAUTH", token)
+    endpoint = ModelEndpoint(
+        id="codex-sub",
+        provider="codex",
+        model="gpt-5.5-codex",
+        auth=EndpointAuth(mode="codex", token_env="FK_CODEX_OAUTH"),
+    )
+    client = CodexResponsesClient(endpoint)
+    events = [
+        SimpleNamespace(type="response.output_text.delta", delta="par"),
+        SimpleNamespace(
+            type="response.failed",
+            response=SimpleNamespace(
+                error=SimpleNamespace(
+                    code="invalid_api_key", message="Incorrect API key provided"
+                )
+            ),
+        ),
+    ]
+    client._client.responses.create = AsyncMock(return_value=_aiter(events))
+
+    with pytest.raises(ProviderCallError) as excinfo:
+        await client.chat([ChatMessage(role="user", content="hi")])
+
+    assert excinfo.value.category == "auth_permanent"
+    assert excinfo.value.provider == "codex"
+
+
+def test_google_client_forwards_endpoint_timeout(monkeypatch) -> None:
+    # Acceptance (WS8.3): endpoint.timeout_s reaches the google-genai client
+    # (http_options timeout is in milliseconds) so a hung Gemini call cannot
+    # stall the whole asyncio.gather panel forever.
+    captured: dict[str, Any] = {}
+
+    class _FakeGenaiClient:
+        def __init__(self, **kwargs: Any) -> None:
+            captured.update(kwargs)
+
+    monkeypatch.setattr("fusionkit_core.client_google.genai.Client", _FakeGenaiClient)
+    endpoint = _endpoint("google").model_copy(update={"timeout_s": 30.0})
+
+    GoogleModelClient(endpoint)
+
+    http_options = captured.get("http_options")
+    assert http_options is not None
+    assert http_options["timeout"] == 30_000
+    assert http_options["base_url"] == "https://example.test"
 
 
 def test_codex_input_round_trips_tool_calls_and_results() -> None:

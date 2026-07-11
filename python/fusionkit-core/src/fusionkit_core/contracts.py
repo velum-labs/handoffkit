@@ -77,7 +77,7 @@ ArtifactKind: TypeAlias = Literal[
     "other",
 ]
 CapabilityStatus: TypeAlias = Literal["supported", "unsupported", "degraded", "unknown"]
-FusionMode: TypeAlias = Literal["single", "self", "panel", "router"]
+FusionMode: TypeAlias = Literal["single", "self", "panel", "heuristic"]
 ChatRole: TypeAlias = Literal["system", "user", "assistant", "tool"]
 ApiCompatibility: TypeAlias = Literal[
     "openai-chat-completions",
@@ -449,7 +449,7 @@ FUSION_RUN_STATE_TO_STATUS: dict[FusionRunState, Status] = {
 # We fall back to this constant there; a source checkout still recomputes from the
 # files. tests/ assert the two agree, so this can never silently drift from the
 # schema source. (Mirrors handoffkit's pinned MODEL_FUSION_SCHEMA_BUNDLE_HASH.)
-SCHEMA_BUNDLE_HASH = "sha256:bb04c698793875568976fd6e5c7c9f76dd10f306c2ff2156be46b63afc261867"
+SCHEMA_BUNDLE_HASH = "sha256:e55314e30d77e8e7db902194ff87a4e739cc66e6db2aa0e5edbef037b02f6f6e"
 
 
 def schema_bundle_hash(schema_dir: Path | None = None) -> str:

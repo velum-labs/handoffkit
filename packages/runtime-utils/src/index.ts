@@ -1,9 +1,17 @@
+import { randomUUID } from "node:crypto";
 import { spawn, spawnSync } from "node:child_process";
 import type { ChildProcess, SpawnOptions } from "node:child_process";
-import { createWriteStream, existsSync } from "node:fs";
+import { createWriteStream, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import type { WriteStream } from "node:fs";
 import { createServer } from "node:net";
-import { delimiter, join } from "node:path";
+import type { Server } from "node:net";
+import { delimiter, join, sep } from "node:path";
+
+import { terminateGroup } from "./process.js";
+
+export { registerCleanup, runCleanups } from "./cleanup.js";
+export { superviseSpawn, terminateGroup } from "./process.js";
+export type { ExitInfo, Spawned, SuperviseSpawnOptions } from "./process.js";
 
 type EnvInput = Record<string, string | undefined>;
 
@@ -33,6 +41,22 @@ export const CANDIDATE_ISOLATION_DEFAULTS = {
 
 export function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** Generate a compact random id (hex, no dashes) with an optional prefix. */
+export function randomId(length = 10, prefix?: string): string {
+  const id = randomUUID().replace(/-/g, "").slice(0, length);
+  return prefix !== undefined ? `${prefix}${id}` : id;
+}
+
+/**
+ * Rough token estimate from text (and optional tool/JSON payload strings):
+ * minimum 1 token, ceil(chars / 4).
+ */
+export function estimateTokens(...texts: string[]): number {
+  let chars = 0;
+  for (const text of texts) chars += text.length;
+  return Math.max(1, Math.ceil(chars / 4));
 }
 
 export function withDeadline(signal: AbortSignal | undefined, timeoutMs: number): AbortSignal {
@@ -81,7 +105,10 @@ export function commandOnPath(
   env: Record<string, string | undefined> = process.env
 ): boolean {
   if (command.includes("/") || command.includes("\\")) return existsSync(command);
-  const pathValue = env.PATH ?? process.env.PATH ?? "";
+  // An explicitly passed env is authoritative: the probe must see exactly
+  // what the spawn will see. Falling back to the real PATH here would make
+  // availability checks pass for binaries the child could never resolve.
+  const pathValue = env.PATH ?? "";
   const exts =
     process.platform === "win32"
       ? (env.PATHEXT ?? ".COM;.EXE;.BAT;.CMD").split(";").filter((entry) => entry.length > 0)
@@ -103,6 +130,22 @@ export function captureWorktreeDiff(cwd: string): string | undefined {
   } catch {
     return undefined;
   }
+}
+
+/**
+ * Create a run-output directory. When it lives under a `.fusionkit/` segment
+ * (the default output roots inside user repos), drop a self-ignoring
+ * `.gitignore` so run artifacts never pollute the user's `git status` —
+ * while committed config like `.fusionkit/fusion.json` stays trackable.
+ */
+export function ensureRunOutputDir(dir: string): string {
+  mkdirSync(dir, { recursive: true });
+  const normalized = dir.split(sep).join("/");
+  if (/(^|\/)\.fusionkit\//.test(`${normalized}/`)) {
+    const ignorePath = join(dir, ".gitignore");
+    if (!existsSync(ignorePath)) writeFileSync(ignorePath, "*\n");
+  }
+  return dir;
 }
 
 export function definedEnv(env: EnvInput): Record<string, string> {
@@ -235,29 +278,60 @@ function reserve(port: number): void {
   recentlyReserved.set(port, timer);
 }
 
-export async function freePort(): Promise<number> {
-  for (let attempt = 0; attempt < 20; attempt += 1) {
-    const port = await probeEphemeralPort();
-    if (!recentlyReserved.has(port)) {
-      reserve(port);
-      return port;
+/**
+ * A held ephemeral port: the loopback listener stays open (so nothing else can
+ * grab the port) until the caller `release()`s it — ideally immediately before
+ * spawning the process that will bind it, which closes the classic
+ * probe-then-close race where a returned port is stolen in the gap. The `server`
+ * is exposed so a Node-side caller can adopt the already-bound listener instead
+ * of releasing and re-binding.
+ */
+export type ReservedPort = {
+  port: number;
+  server: Server;
+  release: () => Promise<void>;
+};
+
+/**
+ * Bind (and hold) a free loopback port. Prefer this over {@link freePort} at any
+ * bind site that can race: hold the reservation while preparing the child, then
+ * `release()` right before the child binds.
+ */
+export async function reservePort(): Promise<ReservedPort> {
+  for (let attempt = 0; ; attempt += 1) {
+    const server = createServer();
+    // The held listener must not keep the process alive on its own.
+    server.unref();
+    const port = await new Promise<number>((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(0, "127.0.0.1", () => {
+        const address = server.address();
+        resolve(typeof address === "object" && address !== null ? address.port : 0);
+      });
+    });
+    if (recentlyReserved.has(port) && attempt < 20) {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+      continue;
     }
+    reserve(port);
+    let released = false;
+    const release = (): Promise<void> =>
+      new Promise((resolve) => {
+        if (released) {
+          resolve();
+          return;
+        }
+        released = true;
+        server.close(() => resolve());
+      });
+    return { port, server, release };
   }
-  const port = await probeEphemeralPort();
-  reserve(port);
-  return port;
 }
 
-function probeEphemeralPort(): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const server = createServer();
-    server.on("error", reject);
-    server.listen(0, "127.0.0.1", () => {
-      const address = server.address();
-      const port = typeof address === "object" && address !== null ? address.port : 0;
-      server.close(() => resolve(port));
-    });
-  });
+export async function freePort(): Promise<number> {
+  const reserved = await reservePort();
+  await reserved.release();
+  return reserved.port;
 }
 
 export type CliCaptureOptions = {
@@ -346,13 +420,13 @@ export function runCliCapture(
     if (options.timeoutMs !== undefined) {
       timer = setTimeout(() => {
         timedOut = true;
-        terminate(child, options.graceMs);
+        terminateGroup(child, options.graceMs);
       }, options.timeoutMs);
     }
     const onAbort = (): void => {
       aborted = true;
       abortReason = signal !== undefined ? abortReasonText(signal) : "aborted";
-      terminate(child, options.graceMs);
+      terminateGroup(child, options.graceMs);
     };
     signal?.addEventListener("abort", onAbort, { once: true });
     const cleanup = (): void => {
@@ -404,7 +478,7 @@ export function spawnTool(
   return new Promise((resolveExit, reject) => {
     const child = spawn(command, args, {
       stdio: "inherit",
-      env: { ...process.env, ...env },
+      env: buildChildEnv({ extra: env }),
       ...(cwd !== undefined ? { cwd } : {})
     });
     child.on("error", reject);
@@ -558,24 +632,13 @@ export function waitForOutput(
   });
 }
 
+/**
+ * SIGTERM -> SIGKILL a child's whole process group. Thin wrapper over
+ * {@link terminateGroup} (the shared supervisor primitive) kept for the many
+ * existing `terminate(child)` call sites.
+ */
 export function terminate(child: ChildProcess, graceMs = 5000): void {
-  if (child.pid === undefined || child.exitCode !== null || child.signalCode !== null) return;
-  const pid = child.pid;
-  const signal = (sig: NodeJS.Signals): void => {
-    try {
-      process.kill(-pid, sig);
-    } catch {
-      try {
-        child.kill(sig);
-      } catch {
-        // already gone
-      }
-    }
-  };
-  signal("SIGTERM");
-  const timer = setTimeout(() => signal("SIGKILL"), graceMs);
-  timer.unref();
-  child.once("exit", () => clearTimeout(timer));
+  terminateGroup(child, graceMs);
 }
 
 export function escapeMarkdownCell(value: string): string {

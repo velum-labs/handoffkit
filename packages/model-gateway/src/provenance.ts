@@ -11,6 +11,8 @@ import {
   requestHash,
   responseHash
 } from "@fusionkit/protocol";
+
+import { decodeBufferedSse } from "./sse/parse.js";
 import type {
   ModelCallRecordV1,
   ModelFusionChatMessage,
@@ -204,12 +206,12 @@ function usageFromObject(value: unknown): ModelFusionUsage | undefined {
 
 function usageFromSse(text: string): ModelFusionUsage | undefined {
   let usage: ModelFusionUsage | undefined;
-  for (const line of text.split("\n")) {
-    const trimmed = line.trim();
-    if (!trimmed.startsWith("data:")) continue;
-    const payload = trimmed.slice(5).trim();
-    if (payload === "[DONE]") continue;
-    const parsed = parseJson(Buffer.from(payload));
+  // Best-effort provenance capture over a buffered response body: a non-JSON or
+  // truncated payload is skipped (parseJson returns undefined) rather than
+  // failing the record — provenance is an observation, never authoritative.
+  for (const event of decodeBufferedSse(text)) {
+    if (event.data === "[DONE]") continue;
+    const parsed = parseJson(Buffer.from(event.data));
     const candidate = usageFromObject(parsed);
     if (candidate !== undefined) usage = candidate;
   }
@@ -225,12 +227,11 @@ function providerCostFromObject(value: unknown): JsonValue | undefined {
 
 function providerCostFromSse(text: string): JsonValue | undefined {
   let providerCost: JsonValue | undefined;
-  for (const line of text.split("\n")) {
-    const trimmed = line.trim();
-    if (!trimmed.startsWith("data:")) continue;
-    const payload = trimmed.slice(5).trim();
-    if (payload === "[DONE]") continue;
-    const candidate = providerCostFromObject(parseJson(Buffer.from(payload)));
+  // Best-effort provenance capture (see usageFromSse): unparseable payloads are
+  // skipped rather than treated as fatal.
+  for (const event of decodeBufferedSse(text)) {
+    if (event.data === "[DONE]") continue;
+    const candidate = providerCostFromObject(parseJson(Buffer.from(event.data)));
     if (candidate !== undefined) providerCost = candidate;
   }
   return providerCost;

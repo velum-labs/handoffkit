@@ -1,10 +1,13 @@
-import { execFile } from "node:child_process";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
-import { promisify } from "node:util";
 
 import { hashCanonicalSha256 } from "@fusionkit/protocol";
-import { CANDIDATE_ISOLATION_DEFAULTS } from "@fusionkit/runtime-utils";
+import {
+  CANDIDATE_ISOLATION_DEFAULTS,
+  definedEnv,
+  randomId,
+  superviseSpawn
+} from "@fusionkit/runtime-utils";
 
 import type {
   CandidateActualIsolationKind,
@@ -19,8 +22,6 @@ import type {
   CandidateMicrovmRuntimeMetadata
 } from "./harness.js";
 
-const execFileAsync = promisify(execFile);
-
 const DEFAULT_CONTAINER_IMAGE = CANDIDATE_ISOLATION_DEFAULTS.containerImage;
 const DEFAULT_CONTAINER_ENGINE = CANDIDATE_ISOLATION_DEFAULTS.containerEngine;
 const DEFAULT_CONTAINER_WORKDIR = CANDIDATE_ISOLATION_DEFAULTS.containerWorkdir;
@@ -28,7 +29,7 @@ const DEFAULT_MICROVM_PROVIDER: CandidateMicrovmProvider =
   CANDIDATE_ISOLATION_DEFAULTS.microvmProvider;
 const DEFAULT_MICROVM_RUNTIME = CANDIDATE_ISOLATION_DEFAULTS.microvmRuntime;
 const UNKNOWN_RUNTIME_DIGEST = CANDIDATE_ISOLATION_DEFAULTS.unknownRuntimeDigest;
-const DEFAULT_IGNORED_DIRS = [".git", "node_modules", ".warrant"];
+const DEFAULT_IGNORED_DIRS = [".git", "node_modules", ".warrant", ".fusionkit"];
 const DEFAULT_MAX_SCAN_BYTES = 256 * 1024;
 
 export type CandidateCommandIsolationInput = {
@@ -37,6 +38,8 @@ export type CandidateCommandIsolationInput = {
   timeoutMs?: number;
   isolation?: CandidateIsolationConfig;
   env?: Record<string, string | undefined>;
+  /** Aborts the command (and its whole process group / container) when fired. */
+  signal?: AbortSignal;
 };
 
 export type CandidateCommandIsolationResult = {
@@ -82,6 +85,7 @@ type CommandResult = {
   stderr: string;
   exitCode: number;
   timedOut: boolean;
+  aborted: boolean;
 };
 
 export async function runCandidateCommandWithIsolation(
@@ -107,9 +111,15 @@ export function createCliContainerDriver(
     id: engine,
     supportsNetworkPolicy: false,
     async execute(input) {
+      // A generated name lets us reap the container itself on timeout/abort:
+      // killing the `docker run` client only ends the local CLI, leaving the
+      // container running detached — `docker kill <name>` (plus `--rm`) reaps it.
+      const containerName = `fusionkit_${randomId(12)}`;
       const args = [
         "run",
         "--rm",
+        "--name",
+        containerName,
         "-v",
         `${input.cwd}:${input.workdir}:rw`,
         "-w",
@@ -122,7 +132,19 @@ export function createCliContainerDriver(
         args.push("--network", "none");
       }
       args.push(input.image, "sh", "-lc", input.command);
-      const result = await runHostCommand(engine, args, input.cwd, input.timeoutMs);
+      const result = await runHostCommand(
+        engine,
+        args,
+        input.cwd,
+        input.timeoutMs,
+        undefined,
+        input.signal
+      );
+      // The client process is gone, but a timeout/abort means the container may
+      // still be running: reap it by name and report whether that succeeded.
+      const orphaned = result.timedOut || result.aborted;
+      let reaped = true;
+      if (orphaned) reaped = await dockerKill(engine, containerName);
       return {
         stdout: result.stdout,
         stderr: result.stderr,
@@ -130,14 +152,37 @@ export function createCliContainerDriver(
         timedOut: result.timedOut,
         cleanup: {
           attempted: true,
-          succeeded: !result.timedOut,
-          ...(result.timedOut
-            ? { error: "container cleanup not confirmed after timeout" }
+          succeeded: !orphaned && reaped,
+          ...(orphaned
+            ? {
+                error: reaped
+                  ? `container ${containerName} killed after ${
+                      result.timedOut ? "timeout" : "abort"
+                    }`
+                  : `container ${containerName} could not be killed after ${
+                      result.timedOut ? "timeout" : "abort"
+                    }`
+              }
             : {})
         }
       };
     }
   };
+}
+
+/**
+ * Best-effort `docker kill <name>` (or `podman kill`) to reap a container whose
+ * launching client we already group-killed. Bounded so cleanup cannot hang;
+ * returns whether the kill command exited cleanly.
+ */
+async function dockerKill(engine: string, containerName: string): Promise<boolean> {
+  try {
+    const spawned = superviseSpawn(engine, ["kill", containerName], { timeoutMs: 10_000 });
+    const exit = await spawned.done;
+    return exit.exitCode === 0;
+  } catch {
+    return false;
+  }
 }
 
 export function secretAbsenceMetadata(input: {
@@ -179,11 +224,15 @@ async function runProcessCommand(
     ["-lc", input.command],
     input.cwd,
     input.timeoutMs,
-    input.env
+    input.env,
+    input.signal
   );
   const transcript = [command.stdout, command.stderr].filter(Boolean).join("\n");
   return {
-    ...command,
+    stdout: command.stdout,
+    stderr: command.stderr,
+    exitCode: command.exitCode,
+    timedOut: command.timedOut,
     hardening: hardeningMetadata({
       requestedIsolation: isolation.kind,
       actualIsolation: "process",
@@ -254,7 +303,8 @@ async function runContainerCommand(
       image,
       workdir: isolation.mountPolicy.workdir,
       mountPolicy: isolation.mountPolicy,
-      networkPolicy: isolation.networkPolicy
+      networkPolicy: isolation.networkPolicy,
+      ...(input.signal !== undefined ? { signal: input.signal } : {})
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -379,7 +429,8 @@ async function runMicrovmCommand(
       workdir: isolation.mountPolicy.workdir,
       mountPolicy: isolation.mountPolicy,
       networkPolicy: isolation.networkPolicy,
-      secretPolicy: isolation.secretPolicy
+      secretPolicy: isolation.secretPolicy,
+      ...(input.signal !== undefined ? { signal: input.signal } : {})
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -429,46 +480,44 @@ async function runHostCommand(
   args: string[],
   cwd: string,
   timeoutMs: number | undefined,
-  env?: Record<string, string | undefined>
+  env?: Record<string, string | undefined>,
+  signal?: AbortSignal
 ): Promise<CommandResult> {
-  const mergedEnv =
-    env === undefined
-      ? undefined
-      : {
-          ...process.env,
-          ...Object.fromEntries(
-            Object.entries(env).filter((entry): entry is [string, string] => entry[1] !== undefined)
-          )
-        };
+  // Candidate commands are model-influenced, so the child env is always
+  // allowlist-built (system baseline + caller-injected values); the parent's
+  // credentials are never inherited wholesale. The supervisor spawns the whole
+  // command in its own process group, so a timeout/abort kills every descendant
+  // (a shell and anything it forked) instead of only the top-level process.
+  const spawned = superviseSpawn(command, args, {
+    cwd,
+    extraEnv: definedEnv(env ?? {}),
+    ...(timeoutMs !== undefined ? { timeoutMs } : {}),
+    ...(signal !== undefined ? { signal } : {})
+  });
+  const stdout: Buffer[] = [];
+  const stderr: Buffer[] = [];
+  spawned.child.stdout?.on("data", (chunk: Buffer) => stdout.push(chunk));
+  spawned.child.stderr?.on("data", (chunk: Buffer) => stderr.push(chunk));
+  let exit;
   try {
-    const result = await execFileAsync(command, args, {
-      cwd,
-      ...(mergedEnv !== undefined ? { env: mergedEnv } : {}),
-      ...(timeoutMs !== undefined ? { timeout: timeoutMs } : {})
-    });
-    return {
-      stdout: result.stdout,
-      stderr: result.stderr,
-      exitCode: 0,
-      timedOut: false
-    };
+    exit = await spawned.done;
   } catch (error) {
-    const failed = error as {
-      stdout?: string;
-      stderr?: string;
-      code?: number;
-      signal?: string;
-      killed?: boolean;
-      message?: string;
-    };
-    const timedOut = failed.killed === true || failed.signal === "SIGTERM";
-    return {
-      stdout: failed.stdout ?? "",
-      stderr: failed.stderr ?? failed.message ?? "",
-      exitCode: typeof failed.code === "number" ? failed.code : 1,
-      timedOut
-    };
+    // Spawn failure (e.g. the engine binary is missing): surface it as a
+    // non-zero result rather than throwing into the harness.
+    const message = error instanceof Error ? error.message : String(error);
+    return { stdout: "", stderr: message, exitCode: 127, timedOut: false, aborted: false };
   }
+  // `timedOut`/`aborted` come from the supervisor tracking who initiated the
+  // termination (the timeout timer vs the abort signal), not from inferring it
+  // from the delivered signal name — a child that exits on SIGTERM for its own
+  // reasons is no longer misreported as a timeout.
+  return {
+    stdout: Buffer.concat(stdout).toString("utf8"),
+    stderr: Buffer.concat(stderr).toString("utf8"),
+    exitCode: exit.exitCode ?? 1,
+    timedOut: exit.timedOut,
+    aborted: exit.aborted
+  };
 }
 
 function normalizeIsolation(

@@ -69,7 +69,7 @@ const server = http.createServer((req, res) => {
 server.listen(port, "127.0.0.1");
 `;
 
-const scratch = mkdtempSync(join(tmpdir(), "warrant-managed-"));
+const scratch = mkdtempSync(join(tmpdir(), "fusionkit-managed-"));
 const serverScript = join(scratch, "fake-server.cjs");
 writeFileSync(serverScript, FAKE_SERVER_SOURCE);
 after(() => rmSync(scratch, { recursive: true, force: true }));

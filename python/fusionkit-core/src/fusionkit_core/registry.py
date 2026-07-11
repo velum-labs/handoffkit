@@ -82,7 +82,7 @@ _MODE_BY_SUFFIX = cast(dict[str, str], _FUSION["modeBySuffix"])
 
 
 def fusion_mode_for_model(model: str) -> str:
-    """Map a fusion alias's suffix to its FusionMode (defaults to the router mode)."""
+    """Map a fusion alias's suffix to its FusionMode (defaults to the heuristic mode)."""
     suffix = model.rsplit("/", maxsplit=1)[-1]
     return _MODE_BY_SUFFIX.get(suffix, FUSION_DEFAULT_MODE)
 
@@ -164,9 +164,19 @@ DEFAULT_MODEL_PRICING: dict[str, dict[str, float]] = {
     **cast(dict[str, dict[str, float]], _PRICING["manualOverrides"]),
 }
 
+_PRICING_ALIASES: dict[str, str] = cast(dict[str, str], _PRICING.get("aliases", {}))
+
+
+def _resolve_pricing_alias(model: str) -> str | None:
+    key = model.lower()
+    for alias, canonical in _PRICING_ALIASES.items():
+        if alias.lower() == key:
+            return canonical
+    return None
+
 
 def default_pricing_for(model: str) -> dict[str, float] | None:
-    """Default list pricing for a model: exact match first, then longest prefix."""
+    """Default list pricing for a model: exact match, then explicit alias; never prefix."""
     key = model.lower()
     exact = next(
         (pricing for name, pricing in DEFAULT_MODEL_PRICING.items() if name.lower() == key),
@@ -174,12 +184,19 @@ def default_pricing_for(model: str) -> dict[str, float] | None:
     )
     if exact is not None:
         return dict(exact)
-    best: tuple[int, dict[str, float]] | None = None
-    for name, pricing in DEFAULT_MODEL_PRICING.items():
-        lowered = name.lower()
-        if key.startswith(lowered) and (best is None or len(lowered) > best[0]):
-            best = (len(lowered), pricing)
-    return dict(best[1]) if best is not None else None
+    canonical = _resolve_pricing_alias(model)
+    if canonical is not None:
+        aliased = next(
+            (
+                pricing
+                for name, pricing in DEFAULT_MODEL_PRICING.items()
+                if name.lower() == canonical.lower()
+            ),
+            None,
+        )
+        if aliased is not None:
+            return dict(aliased)
+    return None
 
 
 __all__ = [

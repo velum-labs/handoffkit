@@ -13,6 +13,7 @@ from fusionkit_core.producers import (
     trajectory_from_response,
 )
 from fusionkit_core.types import ChatMessage, ModelResponse
+from pydantic import ValidationError
 
 
 class FailingChatClient:
@@ -107,7 +108,7 @@ async def test_panel_reasoning_flows_into_trajectory_items() -> None:
 
 @pytest.mark.asyncio
 async def test_fusion_engine_runs_router_to_panel() -> None:
-    config = _config(default_mode="router")
+    config = _config(default_mode="heuristic")
     clients = {
         "fast": FakeModelClient("fast", ["fast answer with evidence"]),
         "judge": FakeModelClient(
@@ -229,6 +230,58 @@ async def test_self_fusion_tolerates_single_sample_failure() -> None:
 
 
 @pytest.mark.asyncio
+async def test_judge_synthesize_uses_request_max_tokens_over_config_default() -> None:
+    class CaptureSynth:
+        model_id = "synth"
+        max_context = None
+
+        def __init__(self) -> None:
+            self.captured: list[SamplingConfig] = []
+
+        async def chat(
+            self,
+            messages: Sequence[ChatMessage],
+            sampling: SamplingConfig | None = None,
+            tools: Sequence[Any] | None = None,
+            tool_choice: Any | None = None,
+            extra: Mapping[str, Any] | None = None,
+        ) -> ModelResponse:
+            self.captured.append(sampling or SamplingConfig())
+            return ModelResponse(model_id=self.model_id, content="synthesized answer")
+
+        def stream_chat(self, *args: Any, **kwargs: Any) -> Any:
+            raise AssertionError("stream_chat should not be called")
+
+        async def aclose(self) -> None:
+            return None
+
+    synth = CaptureSynth()
+    config = _config(default_mode="panel")
+    config.sampling = SamplingConfig(max_tokens=1024)
+    config.synthesizer_model = "synth"
+    clients = {
+        "fast": FakeModelClient("fast", ["panel member answer"]),
+        "judge": FakeModelClient(
+            "judge",
+            [
+                '{"consensus":["ok"],"contradictions":[],"unique_insights":[],'
+                '"coverage_gaps":[],"likely_errors":[],"recommended_final_structure":[]}',
+            ],
+        ),
+        "synth": synth,
+    }
+    engine = FusionEngine(config=config, clients=clients)
+
+    result = await engine.run(
+        [ChatMessage(role="user", content="fuse this")],
+        sampling=SamplingConfig(max_tokens=8000),
+    )
+
+    assert result.content == "synthesized answer"
+    assert synth.captured[-1].max_tokens == 8000
+
+
+@pytest.mark.asyncio
 async def test_panel_fuses_from_survivor_when_one_model_fails() -> None:
     config = _config(default_mode="panel")
     config.panel_models = ["fast", "broken"]
@@ -253,6 +306,50 @@ async def test_panel_fuses_from_survivor_when_one_model_fails() -> None:
     assert statuses == ["failed", "succeeded"]
     assert result.metrics["succeeded_trajectory_count"] == 1
     assert result.metrics["failed_trajectory_count"] == 1
+
+
+def test_default_mode_is_named_heuristic() -> None:
+    # Honesty rename (WS8.5): the default mode is keyword-matching routing, so
+    # it is called "heuristic" — "router" oversold 63 lines of substring rules.
+    config = FusionConfig(
+        endpoints=[ModelEndpoint(id="m", model="x", base_url="http://localhost:1")],
+        default_model="m",
+    )
+    assert config.default_mode == "heuristic"
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"default_model": "missing"},
+        {"judge_model": "missing"},
+        {"synthesizer_model": "missing"},
+        {"panel_models": ["missing"]},
+        {"panel_models": ["m", "m"]},
+        {"sample_count": 0},
+    ],
+)
+def test_config_rejects_invalid_model_references_and_counts(
+    overrides: dict[str, object],
+) -> None:
+    payload: dict[str, object] = {
+        "endpoints": [ModelEndpoint(id="m", model="model-m")],
+        "default_model": "m",
+        **overrides,
+    }
+    with pytest.raises(ValidationError):
+        FusionConfig.model_validate(payload)
+
+
+def test_config_rejects_duplicate_endpoint_ids() -> None:
+    with pytest.raises(ValidationError):
+        FusionConfig(
+            endpoints=[
+                ModelEndpoint(id="same", model="model-a"),
+                ModelEndpoint(id="same", model="model-b"),
+            ],
+            default_model="same",
+        )
 
 
 def _config(default_mode: FusionMode = "single") -> FusionConfig:

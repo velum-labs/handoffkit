@@ -2,7 +2,7 @@ import { resolve } from "node:path";
 
 import type { Command } from "commander";
 
-import { dim, done, note, uiStream } from "@fusionkit/cli-ui";
+import { dim, uiStream } from "@fusionkit/cli-ui";
 
 import { DEFAULT_REASONING_MODEL, FUSION_TOOLS, gitToplevel, pickTool, runFusion } from "../fusion-quickstart.js";
 import type { FusionTool, RunFusionOptions } from "../fusion-quickstart.js";
@@ -15,6 +15,7 @@ import { fail } from "../shared/errors.js";
 import { warnPassthroughTypos } from "../shared/flag-suggest.js";
 
 import { registerPaletteAction } from "./palette.js";
+import { runFusionStop } from "./stop.js";
 import {
   collect,
   parseBudget,
@@ -26,7 +27,6 @@ import {
   parsePanelTrust,
   parsePort
 } from "../shared/options.js";
-import { reapFusionServices } from "../shared/portless.js";
 
 type FusionOpts = {
   tool?: string;
@@ -99,12 +99,13 @@ function applyFusionOptions(command: Command): Command {
     )
     .option(
       "--on-rate-limit <policy>",
-      "vendor rate-limit/credit handoff: fusion (continue on the ensemble, default) | passthrough | fail"
+      "vendor rate-limit/credit handoff: fusion (rerun the turn on the ensemble minus the throttled vendor, default) | passthrough (return the vendor error as-is) | fail (stop the session)"
     )
     .option("--budget <usd>", "stop the session once it has spent this much (gateway-observed USD)")
     .option(
       "--panel-trust <level>",
-      "panel candidate autonomy: full (max, default) | guarded (harness-fenced to the worktree)"
+      "panel model sandbox: full = models may run any command and edit any file (default) | " +
+        "guarded = each model may only edit inside its own draft worktree"
     )
     .option(
       "--k <n>",
@@ -160,7 +161,7 @@ function resolveOptions(opts: FusionOpts): RunFusionOptions {
   if (opts.resume !== undefined) options.resume = opts.resume;
   if (opts.continue === true) options.continueLatest = true;
 
-  const fusionkitDirEnv = process.env.FUSIONKIT_DIR ?? process.env.WARRANT_FUSIONKIT_DIR;
+  const fusionkitDirEnv = process.env.FUSIONKIT_DIR;
   if (options.fusionkitDir === undefined && fusionkitDirEnv !== undefined) {
     options.fusionkitDir = resolve(fusionkitDirEnv);
   }
@@ -275,7 +276,7 @@ export function registerFusion(program: Command): void {
     })),
     { label: "Run the gateway for any tool", hint: "fusionkit serve", argv: ["serve"] },
     { label: "Set up this repo (.fusionkit/)", hint: "fusionkit init", argv: ["init"] },
-    { label: "Stop background fusion services", hint: "fusionkit fusion stop", argv: ["fusion", "stop"] }
+    { label: "Stop background fusion services", hint: "fusionkit stop", argv: ["stop"] }
   );
 
   // Top-level shortcuts: `fusionkit codex`, `fusionkit claude`, etc.
@@ -298,7 +299,7 @@ export function registerFusion(program: Command): void {
           fail("--expose only applies to `fusionkit serve` (launched agents reach the gateway on loopback)");
         }
         const code = await runFusion(tool, args, options);
-        process.exit(code);
+        process.exitCode = code;
       });
   }
 
@@ -323,10 +324,8 @@ export function registerFusion(program: Command): void {
       // `fusion stop` reaps persistent portless singletons left running by prior
       // runs (the router, dashboard, ...).
       if (positionalTool === "stop") {
-        const stopped = await reapFusionServices((line) => uiStream().write(`${dim(line)}\n`));
-        if (stopped === 0) note("no background fusion services were running");
-        else done(`stopped ${stopped} background fusion service(s)`);
-        process.exit(0);
+        process.exitCode = await runFusionStop();
+        return;
       }
 
       const { options, configTool } = resolveContext(opts);
@@ -345,7 +344,7 @@ export function registerFusion(program: Command): void {
         fail("--expose only applies to `fusionkit serve` (launched agents reach the gateway on loopback)");
       }
       const code = await runFusion(resolvedTool, toolArgs, options);
-      process.exit(code);
+      process.exitCode = code;
     });
 
   // Top-level `init` — scaffold a committed .fusionkit/ folder for this repo.
@@ -363,6 +362,6 @@ export function registerFusion(program: Command): void {
         force: opts.force === true,
         ...(options.fusionkitDir !== undefined ? { fusionkitDir: options.fusionkitDir } : {})
       });
-      process.exit(code);
+      process.exitCode = code;
     });
 }

@@ -3,7 +3,7 @@ import { test } from "node:test";
 
 import { distillLog, freePort, spawnLogged, spawnTool, waitForHttp } from "../shared/proc.js";
 
-const MISSING_BINARY = "warrant-definitely-not-a-real-binary-xyz";
+const MISSING_BINARY = "fusionkit-definitely-not-a-real-binary-xyz";
 
 test("freePort returns a usable ephemeral port", async () => {
   const port = await freePort();

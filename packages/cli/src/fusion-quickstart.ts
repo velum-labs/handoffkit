@@ -20,12 +20,19 @@ import { appendFileSync, mkdirSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { DEFAULT_ENSEMBLE_NAME, formatDurationMs, FUSION_PANEL_MODEL, fusionModelId } from "@fusionkit/tools";
+import {
+  DEFAULT_ENSEMBLE_NAME,
+  formatDurationMs,
+  FUSION_PANEL_MODEL,
+  fusionModelId,
+  registerCleanup
+} from "@fusionkit/tools";
 import type { ToolLaunchContext } from "@fusionkit/tools";
 import { harnessSupportsFiniteK } from "@fusionkit/ensemble";
 import { isLookaheadK } from "@fusionkit/protocol";
 import { defaultSessionsDir, FileSystemSessionStore, formatUsd } from "@fusionkit/model-gateway";
-import type { SessionMetaInput, SessionSummary } from "@fusionkit/model-gateway";
+import type { CodexRelayOptions, SessionMetaInput, SessionSummary } from "@fusionkit/model-gateway";
+import { codexCatalogEntries, readCodexModelsCache } from "@fusionkit/tool-codex";
 import { cursorInstructions } from "@fusionkit/tool-cursor";
 
 import {
@@ -240,6 +247,32 @@ export function styledPreambleLines(lines: readonly string[]): string[] {
   return out;
 }
 
+/**
+ * The gateway's Codex backend relay config: whatever Codex client points at
+ * this gateway with its own ChatGPT login (the `fusionkit codex` launcher's
+ * session, or a `codex --profile fusion-*` session after `fusionkit install
+ * codex`) keeps its full stock model list — `GET /v1/models` merges the
+ * client's live stock catalog behind the fusion/panel entries, and a
+ * stock-model pick is relayed verbatim to the Codex backend under the
+ * client's own auth. Inert for every other client.
+ */
+export function codexRelayConfig(
+  modelLabel: string,
+  ensembles: readonly EnsembleRunSpec[],
+  unionModels: readonly PanelModelSpec[]
+): CodexRelayOptions {
+  const fusedIds = ensembles.map((ensemble) => fusionModelId(ensemble.name));
+  const nativeModels = [...new Set(unionModels.map((spec) => spec.model))];
+  // Test/self-hosted hook, mirroring the Python engine's
+  // FUSIONKIT_CODEX_RESPONSES_BASE_URL override.
+  const backendUrl = process.env.FUSIONKIT_CODEX_BACKEND_URL;
+  return {
+    ...(backendUrl !== undefined && backendUrl.length > 0 ? { backendUrl } : {}),
+    catalog: (template, stock) => codexCatalogEntries(modelLabel, nativeModels, template, fusedIds, stock),
+    fallbackStock: () => readCodexModelsCache()
+  };
+}
+
 export async function runFusion(
   tool: FusionTool,
   toolArgs: string[],
@@ -381,6 +414,9 @@ export async function runFusion(
   const models = selected.models;
   const unionModels = unionPanelSpecs(ensembles);
 
+  // Resolved up front so an unknown tool fails before anything boots.
+  const integration = tool === "serve" ? undefined : toolRegistry.get(tool);
+
   // Cross-platform gating (WS8): a local MLX panel only runs on Apple Silicon.
   // Fail early with a pointer at the cross-platform cloud path instead of
   // crashing deep in the MLX backend on Linux/Windows.
@@ -502,10 +538,22 @@ export async function runFusion(
   // orphaning detached child process groups. Resources push their disposer as
   // soon as they exist; cleanup runs them in reverse order, exactly once.
   const disposers: Array<() => Promise<void> | void> = [];
+  // A last-words hook for long-running modes (`serve`): settle any live UI and
+  // print the session receipt before teardown starts. Must be synchronous-ish
+  // and never throw. It runs at the head of cleanup, so it fires exactly once
+  // whichever path (signal, error, normal return) triggers the teardown.
+  let onShutdown: (() => void) | undefined;
   let cleaned = false;
+  let unregisterCleanup: () => void = () => {};
   const cleanup = async (): Promise<void> => {
     if (cleaned) return;
     cleaned = true;
+    unregisterCleanup();
+    try {
+      onShutdown?.();
+    } catch {
+      // shutdown niceties must never block teardown
+    }
     for (const dispose of disposers.reverse()) {
       try {
         await dispose();
@@ -514,27 +562,12 @@ export async function runFusion(
       }
     }
   };
-  // A last-words hook for long-running modes (`serve`): settle any live UI and
-  // print the session receipt before teardown starts. Must be synchronous-ish
-  // and never throw.
-  let onShutdown: (() => void) | undefined;
-  let signalled = false;
-  const onSignal = (): void => {
-    if (signalled) return;
-    signalled = true;
-    try {
-      onShutdown?.();
-    } catch {
-      // shutdown niceties must never block teardown
-    }
-    // Never wedge on shutdown: if cleanup stalls (a child ignoring SIGTERM),
-    // force-exit after a grace period.
-    const forced = setTimeout(() => process.exit(1), 10_000);
-    forced.unref();
-    void cleanup().then(() => process.exit(130));
-  };
-  process.once("SIGINT", onSignal);
-  process.once("SIGTERM", onSignal);
+  // A Ctrl+C (SIGINT) or SIGTERM routes through the shared cleanup registry: it
+  // runs the registered teardown (this disposer stack, plus any supervised
+  // process groups) then re-raises the conventional exit code (130/143). This
+  // replaces a bespoke signal handler so the forced exit can never bypass
+  // runCleanups(); the registry also bounds the whole shutdown by a hard timeout.
+  unregisterCleanup = registerCleanup(cleanup);
 
   // Out-of-band per-turn status: while the coding agent owns the screen, the
   // only channel that cannot corrupt its TUI is the terminal title.
@@ -625,8 +658,8 @@ export async function runFusion(
   // When --observe is set, boot the dashboard and export the standard OTLP env
   // BEFORE anything starts, so the in-process gateway/ensemble/agent tracers
   // and every spawned child (panel servers, synthesis serve, cursor bridge)
-  // export spans to it. Without the flag (and without a user-provided
-  // OTEL_EXPORTER_OTLP_TRACES_ENDPOINT) nothing is exported.
+  // export spans and events to it. Without the flag (and without a
+  // user-provided OTEL_EXPORTER_OTLP_* endpoint) nothing is exported.
   let observability: Observability | undefined;
   let stack: FusionStack;
   try {
@@ -644,11 +677,12 @@ export async function runFusion(
         });
         disposers.push(() => observability?.close() ?? Promise.resolve());
         // A user-configured endpoint (e.g. PostHog) wins; --observe fills the
-        // default so the local dashboard receives the spans.
-        process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT ??= observability.otlpUrl;
+        // base default so both OTLP signals (spans on /v1/traces, events on
+        // /v1/logs) land on the local dashboard.
+        process.env.OTEL_EXPORTER_OTLP_ENDPOINT ??= observability.otlpUrl;
         if (boot === undefined) {
           log(`fusion: observability dashboard at ${observability.url}`);
-          log(`fusion: spans -> ${observability.otlpUrl} (OTLP/HTTP)`);
+          log(`fusion: spans + events -> ${observability.otlpUrl} (OTLP/HTTP)`);
         }
         openUrl(observability.url);
       } catch (error) {
@@ -687,6 +721,7 @@ export async function runFusion(
       ...(panelHarness !== undefined ? { harness: panelHarness } : {}),
       ...(report !== undefined ? { report } : {}),
       ...(options.endpoints !== undefined ? { endpoints: options.endpoints } : {}),
+      codexRelay: codexRelayConfig(modelLabel, ensembles, unionModels),
       ...(options.fusionkitDir !== undefined ? { fusionkitDir: options.fusionkitDir } : {}),
       ...(stackPrompts !== undefined ? { prompts: stackPrompts } : {}),
       ...(stackJudgeModel !== undefined ? { judgeModel: stackJudgeModel } : {}),
@@ -957,7 +992,6 @@ export async function runFusion(
       });
       return 0;
     }
-    const integration = toolRegistry.get(tool);
     if (integration === undefined || !integration.modes.includes("fusion")) {
       throw new Error(`unknown fusion tool: ${String(tool)}`);
     }

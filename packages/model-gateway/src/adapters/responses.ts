@@ -14,8 +14,14 @@
  */
 
 import type { Backend } from "../backend.js";
+import { randomId } from "@fusionkit/runtime-utils";
 import type { OpenAiChoice } from "./openai-chat-wire.js";
+import { droppedField } from "./dropped.js";
+import { unwrapUpstreamError } from "./upstream-error.js";
 import { openAiSseToResponses } from "./responses-stream.js";
+import { composeServerToolStream, runBufferedServerToolLoop } from "./server-tool-loop.js";
+import type { ExecutedSearch } from "./server-tool-loop.js";
+import { resolveWebSearchExecutor } from "./web-search.js";
 export { openAiSseToResponses } from "./responses-stream.js";
 
 // ---- Responses request types (the subset Codex sends) ----
@@ -45,15 +51,35 @@ type ResponsesTool = {
   execution?: string;
 };
 
+/**
+ * Codex encodes "unset" as an explicit JSON `null` for several optional fields
+ * (e.g. `"reasoning": null` whenever the selected model's metadata advertises
+ * no reasoning levels — the default for a custom-provider model like the fused
+ * panel). Every nullable field below must be read with a null-tolerant guard;
+ * reading `.effort` off a null `reasoning` 502'd every fused Codex turn.
+ */
 export type ResponsesRequest = {
   model?: string;
   instructions?: string;
   input?: string | ResponsesInputItem[];
   tools?: ResponsesTool[];
-  tool_choice?: "auto" | "none" | "required" | { type: string; name?: string };
+  tool_choice?: "auto" | "none" | "required" | { type: string; name?: string } | null;
   max_output_tokens?: number;
   temperature?: number;
   top_p?: number;
+  parallel_tool_calls?: boolean;
+  /**
+   * Codex serializes `reasoning: null` (not an absent key) for models whose
+   * catalog metadata carries no reasoning level — every custom-provider panel
+   * member slug (e.g. `grok-4`, `deepseek`) resolves to Codex's fallback model
+   * info, which has none. Null must translate as "no reasoning", never throw.
+   */
+  reasoning?: { effort?: string; [key: string]: unknown } | null;
+  text?: { format?: { type?: string; name?: string; schema?: unknown; strict?: boolean; [key: string]: unknown } } | null;
+  previous_response_id?: string | null;
+  truncation?: string | unknown;
+  metadata?: Record<string, unknown> | null;
+  include?: unknown[] | null;
   stream?: boolean;
 };
 
@@ -68,15 +94,33 @@ type OpenAiResponse = {
   provider_cost?: unknown;
 };
 
-function randomId(): string {
-  return Math.random().toString(36).slice(2, 12);
-}
-
 function partText(part: ResponsesContentPart): string {
+  if (part.type === "refusal" && typeof part.text === "string") return part.text;
   if (typeof part.text === "string" && (part.type === "input_text" || part.type === "output_text" || part.type === "text")) {
     return part.text;
   }
   return "";
+}
+
+function mapTextFormat(text: NonNullable<ResponsesRequest["text"]>): unknown | undefined {
+  const format = text.format;
+  if (format === undefined) return undefined;
+  switch (format.type) {
+    case "json_schema":
+      return {
+        type: "json_schema",
+        json_schema: {
+          ...(typeof format.name === "string" ? { name: format.name } : {}),
+          ...(format.schema !== undefined ? { schema: format.schema } : {}),
+          ...(typeof format.strict === "boolean" ? { strict: format.strict } : {})
+        }
+      };
+    case "json_object":
+      return { type: "json_object" };
+    default:
+      droppedField("responses", "text");
+      return undefined;
+  }
 }
 
 function contentToText(content: string | ResponsesContentPart[]): string {
@@ -90,6 +134,8 @@ function contentToParts(content: string | ResponsesContentPart[]): string | Reco
   for (const part of content) {
     if (part.type === "input_image" && typeof part.image_url === "string") {
       parts.push({ type: "image_url", image_url: { url: part.image_url } });
+    } else if (part.type === "input_file") {
+      droppedField("responses", "input_file");
     } else {
       const text = partText(part);
       if (text.length > 0) parts.push({ type: "text", text });
@@ -120,8 +166,11 @@ function mapToolChoice(choice: NonNullable<ResponsesRequest["tool_choice"]>): un
  *   `tool_search_call`) — Codex dispatches these by payload shape, and a
  *   `function_call` under the same name fails with "handler received
  *   unsupported payload".
+ * - `server`: a server-executed tool (`web_search`) the *gateway* runs via the
+ *   server-tool loop. Its calls never surface as callable items — the loop
+ *   intercepts them and the egress renders native `web_search_call` items.
  */
-export type ResponsesToolKind = "function" | "custom" | "typed";
+export type ResponsesToolKind = "function" | "custom" | "typed" | "server";
 
 export type ResponsesToolEntry = {
   kind: ResponsesToolKind;
@@ -156,6 +205,41 @@ function isClientTypedTool(tool: ResponsesTool): boolean {
     tool.execution === "client"
   );
 }
+
+/**
+ * A declared server-executed web search tool (Codex's `{type: "web_search"}`,
+ * or variants like `web_search_preview`). When a web-search executor is
+ * available the gateway runs these itself (see `server-tool-loop.ts`);
+ * otherwise they are dropped with a warning as before.
+ */
+function isServerWebSearchTool(tool: ResponsesTool): boolean {
+  return (
+    typeof tool.type === "string" &&
+    tool.type.startsWith("web_search") &&
+    (tool.name === undefined || tool.name.length === 0) &&
+    tool.execution !== "client"
+  );
+}
+
+/** The name the gateway-executed web search tool is projected under chat-side. */
+export const WEB_SEARCH_TOOL_NAME = "web_search";
+
+const WEB_SEARCH_TOOL_DESCRIPTION =
+  "Search the web for current, factual information. The search runs server-side and " +
+  "returns result text with source URLs. Use it when the answer depends on information " +
+  "that may have changed since your training data.";
+
+const WEB_SEARCH_TOOL_PARAMETERS = {
+  type: "object",
+  properties: {
+    query: { type: "string", description: "The web search query." }
+  },
+  required: ["query"],
+  additionalProperties: false
+} as const;
+
+/** Options gating server-executed tool projection (on iff an executor exists). */
+export type ResponsesTranslationOptions = { serverTools?: boolean };
 
 /** A tool definition harvested from an echoed `tool_search_output` item. */
 type DiscoveredTool = {
@@ -217,7 +301,10 @@ function discoveredToolsFromInput(body: ResponsesRequest): DiscoveredTool[] {
  * to how its calls must be emitted. Typed tools are keyed by their `type`;
  * discovered tools carry their namespace for egress dispatch.
  */
-export function responsesToolRegistry(body: ResponsesRequest): ResponsesToolRegistry {
+export function responsesToolRegistry(
+  body: ResponsesRequest,
+  options: ResponsesTranslationOptions = {}
+): ResponsesToolRegistry {
   const registry = new Map<string, ResponsesToolEntry>();
   for (const tool of body.tools ?? []) {
     if (typeof tool.name === "string" && tool.name.length > 0) {
@@ -225,6 +312,9 @@ export function responsesToolRegistry(body: ResponsesRequest): ResponsesToolRegi
       continue;
     }
     if (isClientTypedTool(tool)) registry.set(tool.type as string, { kind: "typed" });
+    else if (options.serverTools === true && isServerWebSearchTool(tool)) {
+      registry.set(WEB_SEARCH_TOOL_NAME, { kind: "server" });
+    }
   }
   for (const tool of discoveredToolsFromInput(body)) {
     if (registry.has(tool.name)) continue;
@@ -295,7 +385,11 @@ function customToolInput(args: string): string {
 }
 
 /** Translate a Responses request to an OpenAI Chat Completions body. */
-export function responsesToChat(body: ResponsesRequest, backendModel: string | undefined): Record<string, unknown> {
+export function responsesToChat(
+  body: ResponsesRequest,
+  backendModel: string | undefined,
+  options: ResponsesTranslationOptions = {}
+): Record<string, unknown> {
   const messages: Record<string, unknown>[] = [];
   if (typeof body.instructions === "string" && body.instructions.length > 0) {
     messages.push({ role: "system", content: body.instructions });
@@ -350,6 +444,22 @@ export function responsesToChat(body: ResponsesRequest, backendModel: string | u
         });
         continue;
       }
+      // A prior gateway-executed web search echoed back. Codex echoes these
+      // items with no id/call_id and no results (on the real API results live
+      // server-side), so the exchange cannot round-trip as a chat tool call —
+      // fold it into the transcript as assistant context so the fused model
+      // remembers the search happened and does not blindly repeat it.
+      if (item.type === "web_search_call") {
+        flushToolCalls();
+        pendingAssistantText = undefined;
+        const action = (item as { action?: { query?: unknown } }).action;
+        const query = typeof action?.query === "string" ? action.query : "";
+        messages.push({
+          role: "assistant",
+          content: query.length > 0 ? `[searched the web for: ${JSON.stringify(query)}]` : "[searched the web]"
+        });
+        continue;
+      }
       // A prior *typed* tool call echoed back (e.g. `tool_search_call`): replay
       // it as an assistant tool call under the tool's projected name (its item
       // type minus `_call`) so the chat-side history stays coherent across the
@@ -383,7 +493,10 @@ export function responsesToChat(body: ResponsesRequest, backendModel: string | u
       // item may sit between an assistant message and its function calls, so
       // dropping it must not break their adjacency (`pendingAssistantText`
       // survives; every other item type invalidates it below).
-      if (item.type === "reasoning") continue;
+      if (item.type === "reasoning") {
+        droppedField("responses", "reasoning", "input");
+        continue;
+      }
       pendingAssistantText = undefined;
       if (item.type === "function_call_output" || item.type === "custom_tool_call_output") {
         const out = item as { call_id: string; output: unknown };
@@ -425,9 +538,29 @@ export function responsesToChat(body: ResponsesRequest, backendModel: string | u
     messages,
     stream: body.stream === true
   };
-  if (typeof body.max_output_tokens === "number") chat.max_tokens = body.max_output_tokens;
+  if (typeof body.max_output_tokens === "number") chat.max_completion_tokens = body.max_output_tokens;
   if (typeof body.temperature === "number") chat.temperature = body.temperature;
   if (typeof body.top_p === "number") chat.top_p = body.top_p;
+  if (typeof body.parallel_tool_calls === "boolean") chat.parallel_tool_calls = body.parallel_tool_calls;
+  // `reasoning: null` means "this model has no reasoning config" (Codex sends
+  // it for every custom-provider panel member slug) — skip silently rather
+  // than treating it as an untranslatable field, and never dereference it.
+  if (body.reasoning != null) {
+    const effort = body.reasoning.effort;
+    if (effort === "low" || effort === "medium" || effort === "high") {
+      chat.reasoning_effort = effort;
+    } else {
+      droppedField("responses", "reasoning");
+    }
+  }
+  if (body.text != null) {
+    const responseFormat = mapTextFormat(body.text);
+    if (responseFormat !== undefined) chat.response_format = responseFormat;
+  }
+  if (body.previous_response_id != null) droppedField("responses", "previous_response_id");
+  if (body.truncation != null) droppedField("responses", "truncation");
+  if (body.metadata != null) droppedField("responses", "metadata");
+  if (body.include != null && body.include.length > 0) droppedField("responses", "include");
   {
     // Every callable tool is forwarded as a chat function tool (Chat
     // Completions only speaks JSON function tools):
@@ -475,6 +608,28 @@ export function responsesToChat(body: ResponsesRequest, backendModel: string | u
             parameters: tool.parameters ?? { type: "object", properties: {} }
           }
         });
+      } else if (options.serverTools === true && isServerWebSearchTool(tool)) {
+        // Server-executed web search, honored by the gateway's server-tool
+        // loop: projected as an ordinary function tool the fused model can
+        // call; the loop intercepts and executes the calls.
+        if (!tools.some((t) => (t.function as { name?: string } | undefined)?.name === WEB_SEARCH_TOOL_NAME)) {
+          tools.push({
+            type: "function",
+            function: {
+              name: WEB_SEARCH_TOOL_NAME,
+              description: WEB_SEARCH_TOOL_DESCRIPTION,
+              parameters: WEB_SEARCH_TOOL_PARAMETERS
+            }
+          });
+        }
+      } else if (
+        typeof tool.type === "string" &&
+        tool.type.length > 0 &&
+        tool.type !== "function" &&
+        tool.type !== "custom" &&
+        (tool.name === undefined || tool.name.length === 0)
+      ) {
+        droppedField("responses", tool.type, "tools");
       }
     }
     // Tools discovered mid-conversation (via a prior `tool_search` execution)
@@ -497,7 +652,7 @@ export function responsesToChat(body: ResponsesRequest, backendModel: string | u
     }
     if (tools.length > 0) chat.tools = tools;
   }
-  if (body.tool_choice !== undefined) {
+  if (body.tool_choice != null) {
     const choice = mapToolChoice(body.tool_choice);
     if (choice !== undefined) chat.tool_choice = choice;
   }
@@ -534,6 +689,27 @@ function typedToolCallItem(input: {
     status: "completed",
     execution: "client",
     arguments: typedToolArguments(input.args)
+  };
+}
+
+/** The `query` from a web_search call's JSON arguments (raw args as fallback). */
+function webSearchQueryOf(args: string): string {
+  try {
+    const parsed = JSON.parse(args) as { query?: unknown };
+    if (typeof parsed.query === "string") return parsed.query;
+  } catch {
+    // fall through to the raw argument string
+  }
+  return args;
+}
+
+/** The native output item for a gateway-executed web search. */
+function executedSearchItem(search: ExecutedSearch): Record<string, unknown> {
+  return {
+    type: "web_search_call",
+    id: search.itemId,
+    status: search.status === "completed" ? "completed" : "failed",
+    action: { type: "search", query: search.query }
   };
 }
 
@@ -597,6 +773,18 @@ function buildOutput(
         );
         continue;
       }
+      if (entry.kind === "server") {
+        // Unreachable in practice: the server-tool loop intercepts these calls
+        // before they reach a terminal message. Render the native item shape
+        // (never a function_call — nobody on the caller's side dispatches it).
+        output.push({
+          type: "web_search_call",
+          id: `ws_${randomId()}`,
+          status: "completed",
+          action: { type: "search", query: webSearchQueryOf(args) }
+        });
+        continue;
+      }
       output.push({
         type: "function_call",
         id: `fc_${randomId()}`,
@@ -615,10 +803,12 @@ function buildOutput(
 export function chatToResponses(
   openai: OpenAiResponse,
   model: string,
-  toolRegistry: ResponsesToolRegistry = EMPTY_TOOL_REGISTRY
+  toolRegistry: ResponsesToolRegistry = EMPTY_TOOL_REGISTRY,
+  searches: readonly ExecutedSearch[] = []
 ): Record<string, unknown> {
   const message = openai.choices?.[0]?.message;
-  const output = buildOutput(message, toolRegistry);
+  // Gateway-executed searches happened before the terminal step's output.
+  const output = [...searches.map(executedSearchItem), ...buildOutput(message, toolRegistry)];
   const inputTokens = openai.usage?.prompt_tokens;
   const outputTokens = openai.usage?.completion_tokens;
   return {
@@ -661,13 +851,53 @@ export async function handleResponses(
 ): Promise<Response> {
   const requestedModel = body.model ?? backend.defaultModel ?? "";
   const upstreamModel = backend.resolveModel?.(body.model) ?? backend.defaultModel;
-  const toolRegistry = responsesToolRegistry(body);
-  const chat = responsesToChat(body, upstreamModel);
-  const upstream = await backend.chat(chat, signal, { modelCallId, ...(panelDepth !== undefined ? { panelDepth } : {}) });
+  // Server-executed web search is honored when the caller declared the tool,
+  // an executor is available (a provider key exists), and no *client* tool
+  // already owns the projected name; otherwise the ingress keeps its
+  // honest-drop behavior.
+  const declaresWebSearch = body.tools?.some(isServerWebSearchTool) === true;
+  const clientNameCollision = body.tools?.some((tool) => tool.name === WEB_SEARCH_TOOL_NAME) === true;
+  const executor = declaresWebSearch && !clientNameCollision ? resolveWebSearchExecutor("responses") : undefined;
+  const serverTools = executor !== undefined;
+  const toolRegistry = responsesToolRegistry(body, { serverTools });
+  const chat = responsesToChat(body, upstreamModel, { serverTools });
+  const requestOptions = {
+    modelCallId,
+    ...(panelDepth !== undefined ? { panelDepth } : {}),
+    // The streamed response is translated to Responses SSE by
+    // openAiSseToResponses, which emits its own keepalive.
+    ...(body.stream === true ? { translated: true } : {})
+  };
+  const upstream = await backend.chat(chat, signal, requestOptions);
 
   if (!upstream.ok) {
     const detail = await upstream.text();
-    return jsonResponse(upstream.status, { error: { type: "api_error", message: detail.slice(0, 2000) } });
+    return jsonResponse(upstream.status, { error: unwrapUpstreamError(detail) });
+  }
+
+  if (executor !== undefined) {
+    const loopOptions = {
+      chat,
+      runStep: (stepChat: Record<string, unknown>) => backend.chat(stepChat, signal, requestOptions),
+      serverToolNames: new Set([WEB_SEARCH_TOOL_NAME]),
+      executor,
+      ...(signal !== undefined ? { signal } : {})
+    };
+    if (body.stream === true) {
+      const source = upstream.body;
+      if (source === null) return jsonResponse(502, { error: { type: "api_error", message: "no upstream stream" } });
+      const composed = composeServerToolStream({ ...loopOptions, firstStep: upstream });
+      return new Response(openAiSseToResponses(composed, requestedModel, toolRegistry), {
+        status: 200,
+        headers: { "content-type": "text/event-stream", "cache-control": "no-cache" }
+      });
+    }
+    const outcome = await runBufferedServerToolLoop({ ...loopOptions, firstStep: upstream });
+    if (outcome.kind === "upstream_error") {
+      const detail = await outcome.response.text();
+      return jsonResponse(outcome.response.status, { error: { type: "api_error", message: detail.slice(0, 2000) } });
+    }
+    return jsonResponse(200, chatToResponses(outcome.openai as OpenAiResponse, requestedModel, toolRegistry, outcome.searches));
   }
 
   if (body.stream === true) {

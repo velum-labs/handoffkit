@@ -9,6 +9,7 @@
  * raw observations only — never a computed verdict.
  */
 import type { ProvenanceSink, ModelGatewayCallContext, ModelGatewayCallResult } from "./provenance.js";
+import { decodeBufferedSse } from "./sse/parse.js";
 
 /** A normalized trajectory step (mirrors harness-trajectory.v1 / TrajectoryStep). */
 export type CapturedStep = {
@@ -275,12 +276,11 @@ function tryParseJson(text: string): unknown {
  */
 function parseSseEvents(text: string): Record<string, unknown>[] {
   const events: Record<string, unknown>[] = [];
-  for (const line of text.split("\n")) {
-    const trimmed = line.trim();
-    if (!trimmed.startsWith("data:")) continue;
-    const payload = trimmed.slice(5).trim();
-    if (payload.length === 0 || payload === "[DONE]") continue;
-    const obj = asObject(tryParseJson(payload));
+  // Best-effort trajectory reconstruction over a captured (buffered) response
+  // body: a non-JSON or truncated `data:` payload is skipped, never fatal.
+  for (const event of decodeBufferedSse(text)) {
+    if (event.data.length === 0 || event.data === "[DONE]") continue;
+    const obj = asObject(tryParseJson(event.data));
     if (obj !== undefined) events.push(obj);
   }
   return events;

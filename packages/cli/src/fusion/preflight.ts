@@ -138,19 +138,13 @@ function keyProbeFor(spec: PanelModelSpec, key: string): KeyProbe | undefined {
     case "x-goog-api-key":
       headers["x-goog-api-key"] = key;
       break;
-    case "query-key":
-      break;
     default: {
       const exhaustive: never = probe.auth;
       throw new Error(`unknown probe auth style ${String(exhaustive)}`);
     }
   }
   const base = spec.baseUrl ?? providerDefaultBaseUrl(provider);
-  const url =
-    probe.auth === "query-key"
-      ? `${base}${probe.path}?key=${encodeURIComponent(key)}`
-      : `${base}${probe.path}`;
-  return { url, headers, invalidStatuses: [...probe.invalidStatuses] };
+  return { url: `${base}${probe.path}`, headers, invalidStatuses: [...probe.invalidStatuses] };
 }
 
 /**

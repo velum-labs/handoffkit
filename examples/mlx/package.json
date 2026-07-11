@@ -2,12 +2,15 @@
   "name": "@fusionkit/mlx-example",
   "private": true,
   "version": "0.1.0",
-  "description": "Apple-Silicon smoke test: Warrant-owned MLX server with a generateText call.",
+  "description": "Apple-Silicon smoke test: FusionKit-owned MLX server with a generateText call.",
   "license": "Apache-2.0",
   "type": "module",
   "dependencies": {
     "@fusionkit/adapter-ai-sdk": "workspace:*",
     "@fusionkit/registry": "workspace:*",
     "ai": "6.0.200"
+  },
+  "scripts": {
+    "test": "node --test \"dist/test/*.test.js\""
   }
 }

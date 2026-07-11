@@ -1,15 +1,22 @@
+import { randomId } from "@fusionkit/runtime-utils";
+import { SseDecoder, SseParseError } from "../sse/parse.js";
 import type { OpenAiChoice } from "./openai-chat-wire.js";
+import { serverToolMarkerOf } from "./server-tool-loop.js";
+import type { ServerToolMarker } from "./server-tool-loop.js";
 
 const ENCODER = new TextEncoder();
 
 type OpenAiUsage = { prompt_tokens?: number; completion_tokens?: number };
-type OpenAiChunk = { choices?: OpenAiChoice[]; usage?: OpenAiUsage; provider_cost?: unknown };
-type ResponsesToolKind = "function" | "custom" | "typed";
+type OpenAiStreamError = { message?: string; type?: string; code?: string };
+type OpenAiChunk = {
+  choices?: OpenAiChoice[];
+  usage?: OpenAiUsage | null;
+  provider_cost?: unknown;
+  /** An OpenAI-style mid-stream error event (`data: {"error": {...}}`). */
+  error?: OpenAiStreamError;
+};
+type ResponsesToolKind = "function" | "custom" | "typed" | "server";
 type ResponsesToolRegistry = ReadonlyMap<string, { kind: ResponsesToolKind; namespace?: string }>;
-
-function randomId(): string {
-  return Math.random().toString(36).slice(2, 12);
-}
 
 function typedToolArguments(args: string): unknown {
   if (args.trim().length === 0) return {};
@@ -46,8 +53,10 @@ function customToolInput(args: string): string {
   }
 }
 
-function sse(type: string, data: Record<string, unknown>): Uint8Array {
-  return ENCODER.encode(`event: ${type}\ndata: ${JSON.stringify({ type, ...data })}\n\n`);
+function sse(type: string, data: Record<string, unknown>, sequenceNumber: number): Uint8Array {
+  return ENCODER.encode(
+    `event: ${type}\ndata: ${JSON.stringify({ type, sequence_number: sequenceNumber, ...data })}\n\n`
+  );
 }
 
 type ToolAccumulator = {
@@ -96,11 +105,32 @@ function streamedToolItem(tool: ToolAccumulator): Record<string, unknown> {
         arguments: tool.args,
         status: "completed"
       };
+    case "server":
+      // Unreachable in practice: the server-tool loop intercepts these calls
+      // before they reach the translator. Render the native item shape so a
+      // stray call never surfaces as a function_call nobody dispatches.
+      return {
+        type: "web_search_call",
+        id: tool.itemId,
+        status: "completed",
+        action: { type: "search", query: webSearchQueryOf(tool.args) }
+      };
     default: {
       const exhaustive: never = tool.kind;
       throw new Error(`unknown tool kind: ${String(exhaustive)}`);
     }
   }
+}
+
+/** The `query` from a web_search call's JSON arguments (raw args as fallback). */
+function webSearchQueryOf(args: string): string {
+  try {
+    const parsed = JSON.parse(args) as { query?: unknown };
+    if (typeof parsed.query === "string") return parsed.query;
+  } catch {
+    // fall through to the raw argument string
+  }
+  return args;
 }
 
 export function openAiSseToResponses(
@@ -109,12 +139,18 @@ export function openAiSseToResponses(
   toolRegistry: ResponsesToolRegistry = new Map()
 ): ReadableStream<Uint8Array> {
   const reader = upstream.getReader();
-  const decoder = new TextDecoder();
+  const sseDecoder = new SseDecoder();
   const responseId = `resp_${randomId()}`;
   const messageItemId = `msg_${randomId()}`;
   const reasoningItemId = `rs_${randomId()}`;
-  const tools = new Map<number, ToolAccumulator>();
-  let buffer = "";
+  // Tool fragments keyed by `index`, falling back to `id`, with id/index-less
+  // fragments appended to the last open call (parallel index-less calls no
+  // longer collapse into one — the same fix the shared assembler encodes).
+  // `toolList` preserves open order for the finalize/assemble passes.
+  const toolByIndex = new Map<number, ToolAccumulator>();
+  const toolById = new Map<string, ToolAccumulator>();
+  const toolList: ToolAccumulator[] = [];
+  let lastTool: ToolAccumulator | undefined;
   let created = false;
   let keepaliveTimer: ReturnType<typeof setInterval> | undefined;
   let textOpen = false;
@@ -131,8 +167,20 @@ export function openAiSseToResponses(
   let inputTokens: number | undefined;
   let outputTokens: number | undefined;
   let providerCost: unknown;
+  let sequenceNumber = 0;
+
+  const emit = (type: string, data: Record<string, unknown>): Uint8Array => {
+    const encoded = sse(type, data, sequenceNumber);
+    sequenceNumber += 1;
+    return encoded;
+  };
 
   type Controller = ReadableStreamDefaultController<Uint8Array>;
+
+  // Gateway-executed web searches (server-tool loop markers): open item per
+  // search, completed items collected for the terminal response payload.
+  const openSearches = new Map<string, { outputIndex: number }>();
+  const completedSearchItems: Record<string, unknown>[] = [];
 
   const baseResponse = (status: string, output: Record<string, unknown>[]): Record<string, unknown> => ({
     id: responseId,
@@ -159,7 +207,7 @@ export function openAiSseToResponses(
   const ensureCreated = (controller: Controller): void => {
     if (created) return;
     created = true;
-    controller.enqueue(sse("response.created", { response: baseResponse("in_progress", []) }));
+    controller.enqueue(emit("response.created", { response: baseResponse("in_progress", []) }));
   };
 
   // Reasoning summary item lifecycle. The item opens on the first reasoning
@@ -179,7 +227,7 @@ export function openAiSseToResponses(
     reasoningOpen = true;
     reasoningOutputIndex = nextOutputIndex++;
     controller.enqueue(
-      sse("response.output_item.added", {
+      emit("response.output_item.added", {
         output_index: reasoningOutputIndex,
         item: { type: "reasoning", id: reasoningItemId, summary: [] }
       })
@@ -194,12 +242,12 @@ export function openAiSseToResponses(
     reasoningParts.push(text);
     const base = { item_id: reasoningItemId, output_index: reasoningOutputIndex, summary_index: summaryIndex };
     controller.enqueue(
-      sse("response.reasoning_summary_part.added", { ...base, part: { type: "summary_text", text: "" } })
+      emit("response.reasoning_summary_part.added", { ...base, part: { type: "summary_text", text: "" } })
     );
-    controller.enqueue(sse("response.reasoning_summary_text.delta", { ...base, delta: text }));
-    controller.enqueue(sse("response.reasoning_summary_text.done", { ...base, text }));
+    controller.enqueue(emit("response.reasoning_summary_text.delta", { ...base, delta: text }));
+    controller.enqueue(emit("response.reasoning_summary_text.done", { ...base, text }));
     controller.enqueue(
-      sse("response.reasoning_summary_part.done", { ...base, part: { type: "summary_text", text } })
+      emit("response.reasoning_summary_part.done", { ...base, part: { type: "summary_text", text } })
     );
   };
 
@@ -211,7 +259,7 @@ export function openAiSseToResponses(
       tokenPartIndex = reasoningParts.length;
       reasoningParts.push("");
       controller.enqueue(
-        sse("response.reasoning_summary_part.added", {
+        emit("response.reasoning_summary_part.added", {
           item_id: reasoningItemId,
           output_index: reasoningOutputIndex,
           summary_index: tokenPartIndex,
@@ -221,7 +269,7 @@ export function openAiSseToResponses(
     }
     reasoningParts[tokenPartIndex] += text;
     controller.enqueue(
-      sse("response.reasoning_summary_text.delta", {
+      emit("response.reasoning_summary_text.delta", {
         item_id: reasoningItemId,
         output_index: reasoningOutputIndex,
         summary_index: tokenPartIndex,
@@ -235,9 +283,9 @@ export function openAiSseToResponses(
     const text = reasoningParts[tokenPartIndex] ?? "";
     const base = { item_id: reasoningItemId, output_index: reasoningOutputIndex, summary_index: tokenPartIndex };
     tokenPartIndex = -1;
-    controller.enqueue(sse("response.reasoning_summary_text.done", { ...base, text }));
+    controller.enqueue(emit("response.reasoning_summary_text.done", { ...base, text }));
     controller.enqueue(
-      sse("response.reasoning_summary_part.done", { ...base, part: { type: "summary_text", text } })
+      emit("response.reasoning_summary_part.done", { ...base, part: { type: "summary_text", text } })
     );
   };
 
@@ -249,7 +297,7 @@ export function openAiSseToResponses(
     closeTokenPart(controller);
     reasoningClosed = true;
     controller.enqueue(
-      sse("response.output_item.done", {
+      emit("response.output_item.done", {
         output_index: reasoningOutputIndex,
         item: { type: "reasoning", id: reasoningItemId, summary: reasoningSummary() }
       })
@@ -263,13 +311,13 @@ export function openAiSseToResponses(
     textOpen = true;
     messageOutputIndex = nextOutputIndex++;
     controller.enqueue(
-      sse("response.output_item.added", {
+      emit("response.output_item.added", {
         output_index: messageOutputIndex,
         item: { type: "message", id: messageItemId, status: "in_progress", role: "assistant", content: [] }
       })
     );
     controller.enqueue(
-      sse("response.content_part.added", {
+      emit("response.content_part.added", {
         item_id: messageItemId,
         output_index: messageOutputIndex,
         content_index: 0,
@@ -278,11 +326,48 @@ export function openAiSseToResponses(
     );
   };
 
+  // The server-tool loop injects marker chunks around each gateway-executed
+  // web search; render them as the native web_search_call item lifecycle.
+  const handleServerToolMarker = (controller: Controller, marker: ServerToolMarker): void => {
+    if (marker.phase === "start") {
+      ensureCreated(controller);
+      closeReasoning(controller);
+      const outputIndex = nextOutputIndex++;
+      openSearches.set(marker.item_id, { outputIndex });
+      controller.enqueue(
+        emit("response.output_item.added", {
+          output_index: outputIndex,
+          item: {
+            type: "web_search_call",
+            id: marker.item_id,
+            status: "in_progress",
+            action: { type: "search", query: marker.query }
+          }
+        })
+      );
+      controller.enqueue(emit("response.web_search_call.in_progress", { output_index: outputIndex, item_id: marker.item_id }));
+      controller.enqueue(emit("response.web_search_call.searching", { output_index: outputIndex, item_id: marker.item_id }));
+      return;
+    }
+    const outputIndex = openSearches.get(marker.item_id)?.outputIndex ?? nextOutputIndex++;
+    openSearches.delete(marker.item_id);
+    const item = {
+      type: "web_search_call",
+      id: marker.item_id,
+      status: marker.status === "failed" ? "failed" : "completed",
+      action: { type: "search", query: marker.query }
+    };
+    completedSearchItems.push(item);
+    controller.enqueue(emit("response.web_search_call.completed", { output_index: outputIndex, item_id: marker.item_id }));
+    controller.enqueue(emit("response.output_item.done", { output_index: outputIndex, item }));
+  };
+
   const assembleOutput = (): Record<string, unknown>[] => {
     const output: Record<string, unknown>[] = [];
     if (reasoningParts.length > 0) {
       output.push({ type: "reasoning", id: reasoningItemId, summary: reasoningSummary() });
     }
+    output.push(...completedSearchItems);
     if (textOpen) {
       output.push({
         type: "message",
@@ -292,20 +377,20 @@ export function openAiSseToResponses(
         content: [{ type: "output_text", text: textValue, annotations: [] }]
       });
     }
-    for (const tool of tools.values()) {
+    for (const tool of toolList) {
       output.push(streamedToolItem(tool));
     }
     return output;
   };
 
-  const finalize = (controller: Controller): void => {
+  const finalize = (controller: Controller, terminal: "completed" | "incomplete" = "completed"): void => {
     if (finished) return;
     finished = true;
     if (keepaliveTimer !== undefined) clearInterval(keepaliveTimer);
     closeReasoning(controller);
     if (textOpen) {
       controller.enqueue(
-        sse("response.output_text.done", {
+        emit("response.output_text.done", {
           item_id: messageItemId,
           output_index: messageOutputIndex,
           content_index: 0,
@@ -313,7 +398,7 @@ export function openAiSseToResponses(
         })
       );
       controller.enqueue(
-        sse("response.content_part.done", {
+        emit("response.content_part.done", {
           item_id: messageItemId,
           output_index: messageOutputIndex,
           content_index: 0,
@@ -321,7 +406,7 @@ export function openAiSseToResponses(
         })
       );
       controller.enqueue(
-        sse("response.output_item.done", {
+        emit("response.output_item.done", {
           output_index: messageOutputIndex,
           item: {
             type: "message",
@@ -333,46 +418,81 @@ export function openAiSseToResponses(
         })
       );
     }
-    for (const tool of tools.values()) {
+    for (const tool of toolList) {
       if (tool.kind === "custom") {
         // The raw input is only extractable from the completed JSON arguments,
         // so a custom call flushes its whole input here in one delta + done.
         const input = customToolInput(tool.args);
         const base = { item_id: tool.itemId, output_index: tool.outputIndex };
-        controller.enqueue(sse("response.custom_tool_call_input.delta", { ...base, delta: input }));
-        controller.enqueue(sse("response.custom_tool_call_input.done", { ...base, input }));
+        controller.enqueue(emit("response.custom_tool_call_input.delta", { ...base, delta: input }));
+        controller.enqueue(emit("response.custom_tool_call_input.done", { ...base, input }));
         controller.enqueue(
-          sse("response.output_item.done", { output_index: tool.outputIndex, item: streamedToolItem(tool) })
+          emit("response.output_item.done", { output_index: tool.outputIndex, item: streamedToolItem(tool) })
         );
         continue;
       }
-      if (tool.kind === "typed") {
-        // A typed tool's native item carries its arguments as a completed JSON
-        // value, so it flushes whole in the item.done (no argument deltas).
+      if (tool.kind === "typed" || tool.kind === "server") {
+        // A typed/server tool's native item carries its arguments as a
+        // completed JSON value, so it flushes whole in the item.done (no
+        // argument deltas).
         controller.enqueue(
-          sse("response.output_item.done", { output_index: tool.outputIndex, item: streamedToolItem(tool) })
+          emit("response.output_item.done", { output_index: tool.outputIndex, item: streamedToolItem(tool) })
         );
         continue;
       }
       controller.enqueue(
-        sse("response.function_call_arguments.done", {
+        emit("response.function_call_arguments.done", {
           item_id: tool.itemId,
           output_index: tool.outputIndex,
           arguments: tool.args
         })
       );
       controller.enqueue(
-        sse("response.output_item.done", { output_index: tool.outputIndex, item: streamedToolItem(tool) })
+        emit("response.output_item.done", { output_index: tool.outputIndex, item: streamedToolItem(tool) })
       );
     }
-    controller.enqueue(sse("response.completed", { response: baseResponse("completed", assembleOutput()) }));
+    // Truncation is an error, not a clean stop: an upstream that ended without a
+    // finish_reason terminates as `response.incomplete`, never a fabricated
+    // `response.completed` (WS5.2), so callers that meter/persist see the turn
+    // as incomplete.
+    controller.enqueue(
+      terminal === "completed"
+        ? emit("response.completed", { response: baseResponse("completed", assembleOutput()) })
+        : emit("response.incomplete", { response: baseResponse("incomplete", assembleOutput()) })
+    );
+  };
+
+  // A mid-stream provider failure (`data: {"error": {...}}` — e.g. the fusion
+  // router's classified provider_error) becomes a `response.failed` event
+  // carrying the upstream message, so the consumer (codex) reports the real
+  // provider/API error instead of a bare "stream disconnected".
+  const failStream = (controller: Controller, error: OpenAiStreamError): void => {
+    if (finished) return;
+    finished = true;
+    if (keepaliveTimer !== undefined) clearInterval(keepaliveTimer);
+    ensureCreated(controller);
+    controller.enqueue(
+      emit("response.failed", {
+        response: {
+          ...baseResponse("failed", assembleOutput()),
+          error: {
+            code: error.code ?? error.type ?? "upstream_error",
+            message: error.message ?? "upstream provider error"
+          }
+        }
+      })
+    );
   };
 
   const process = (controller: Controller, chunk: OpenAiChunk): void => {
-    if (chunk.usage !== undefined) {
-      inputTokens = chunk.usage.prompt_tokens ?? inputTokens;
-      outputTokens = chunk.usage.completion_tokens ?? outputTokens;
+    if (chunk.error != null) {
+      failStream(controller, chunk.error);
+      return;
     }
+    // Real OpenAI streams carry `"usage": null` on every chunk except the
+    // final usage chunk, so a null must read as "absent".
+    inputTokens = chunk.usage?.prompt_tokens ?? inputTokens;
+    outputTokens = chunk.usage?.completion_tokens ?? outputTokens;
     if (chunk.provider_cost !== undefined) providerCost = chunk.provider_cost;
     const choice = chunk.choices?.[0];
     if (choice === undefined) return;
@@ -390,7 +510,7 @@ export function openAiSseToResponses(
       ensureText(controller);
       textValue += delta.content;
       controller.enqueue(
-        sse("response.output_text.delta", {
+        emit("response.output_text.delta", {
           item_id: messageItemId,
           output_index: messageOutputIndex,
           content_index: 0,
@@ -401,8 +521,14 @@ export function openAiSseToResponses(
 
     if (Array.isArray(delta.tool_calls)) {
       for (const call of delta.tool_calls) {
-        const openAiIndex = typeof call.index === "number" ? call.index : 0;
-        let tool = tools.get(openAiIndex);
+        const indexKey = typeof call.index === "number" ? call.index : undefined;
+        const idKey = typeof call.id === "string" && call.id.length > 0 ? call.id : undefined;
+        let tool =
+          indexKey !== undefined
+            ? toolByIndex.get(indexKey)
+            : idKey !== undefined
+              ? toolById.get(idKey)
+              : lastTool;
         if (tool === undefined) {
           ensureCreated(controller);
           closeReasoning(controller);
@@ -411,33 +537,45 @@ export function openAiSseToResponses(
           const kind = entry.kind;
           tool = {
             outputIndex: nextOutputIndex++,
-            itemId: kind === "custom" ? `ctc_${randomId()}` : kind === "typed" ? `ttc_${randomId()}` : `fc_${randomId()}`,
+            itemId:
+              kind === "custom"
+                ? `ctc_${randomId()}`
+                : kind === "typed"
+                  ? `ttc_${randomId()}`
+                  : kind === "server"
+                    ? `ws_${randomId()}`
+                    : `fc_${randomId()}`,
             callId: call.id ?? `call_${randomId()}`,
             name,
             args: "",
             kind,
             ...(entry.namespace !== undefined ? { namespace: entry.namespace } : {})
           };
-          tools.set(openAiIndex, tool);
+          toolList.push(tool);
           controller.enqueue(
-            sse("response.output_item.added", {
+            emit("response.output_item.added", {
               output_index: tool.outputIndex,
               item:
                 kind === "custom"
                   ? { type: "custom_tool_call", id: tool.itemId, call_id: tool.callId, name: tool.name, input: "" }
                   : kind === "typed"
                     ? { type: `${tool.name}_call`, id: tool.itemId, call_id: tool.callId, status: "in_progress", execution: "client", arguments: {} }
-                    : {
-                        type: "function_call",
-                        id: tool.itemId,
-                        call_id: tool.callId,
-                        name: tool.name,
-                        ...(tool.namespace !== undefined ? { namespace: tool.namespace } : {}),
-                        arguments: ""
-                      }
+                    : kind === "server"
+                      ? { type: "web_search_call", id: tool.itemId, status: "in_progress", action: { type: "search" } }
+                      : {
+                          type: "function_call",
+                          id: tool.itemId,
+                          call_id: tool.callId,
+                          name: tool.name,
+                          ...(tool.namespace !== undefined ? { namespace: tool.namespace } : {}),
+                          arguments: ""
+                        }
             })
           );
         }
+        if (indexKey !== undefined && !toolByIndex.has(indexKey)) toolByIndex.set(indexKey, tool);
+        if (idKey !== undefined && !toolById.has(idKey)) toolById.set(idKey, tool);
+        lastTool = tool;
         if (call.function?.name !== undefined && tool.name.length === 0) tool.name = call.function.name;
         const args = call.function?.arguments;
         if (typeof args === "string" && args.length > 0) {
@@ -445,7 +583,7 @@ export function openAiSseToResponses(
           // Custom and typed calls buffer their arguments (extracted at finalize).
           if (tool.kind === "function") {
             controller.enqueue(
-              sse("response.function_call_arguments.delta", {
+              emit("response.function_call_arguments.delta", {
                 item_id: tool.itemId,
                 output_index: tool.outputIndex,
                 delta: args
@@ -461,6 +599,63 @@ export function openAiSseToResponses(
     }
   };
 
+  // Backpressure handshake: the pump awaits `resumePull` while the consumer's
+  // queue is full; `pull` resolves it. This replaces the "return when
+  // desiredSize changed" hack with an explicit pump that drains the upstream
+  // reader to completion while honoring backpressure.
+  let resumePull: (() => void) | undefined;
+  const awaitPull = (): Promise<void> =>
+    new Promise((resolve) => {
+      resumePull = resolve;
+    });
+
+  const handleEvent = (controller: Controller, data: string): void => {
+    if (data.length === 0) return;
+    if (data === "[DONE]") {
+      // A `[DONE]` with no prior finish_reason is truncation, not a clean stop.
+      if (!finished) finalize(controller, "incomplete");
+      return;
+    }
+    let chunk: OpenAiChunk;
+    try {
+      chunk = JSON.parse(data) as OpenAiChunk;
+    } catch (error) {
+      // The live upstream stream is authoritative: a malformed payload is a
+      // stream error, never silently skipped (WS5).
+      const detail = error instanceof Error ? error.message : String(error);
+      throw new SseParseError(`malformed OpenAI SSE payload in Responses translation: ${detail}`, data.slice(0, 200));
+    }
+    const marker = serverToolMarkerOf(chunk);
+    if (marker !== undefined) {
+      handleServerToolMarker(controller, marker);
+      return;
+    }
+    process(controller, chunk);
+  };
+
+  const pump = async (controller: Controller): Promise<void> => {
+    try {
+      for (;;) {
+        if ((controller.desiredSize ?? 1) <= 0) await awaitPull();
+        const { done, value } = await reader.read();
+        if (done) {
+          for (const event of sseDecoder.flush()) handleEvent(controller, event.data);
+          // Upstream closed with no finish_reason: incomplete, not completed.
+          if (!finished) finalize(controller, "incomplete");
+          controller.close();
+          return;
+        }
+        if (value !== undefined) {
+          for (const event of sseDecoder.feed(value)) handleEvent(controller, event.data);
+        }
+      }
+    } catch (error) {
+      if (keepaliveTimer !== undefined) clearInterval(keepaliveTimer);
+      controller.error(error);
+      void reader.cancel(error).catch(() => undefined);
+    }
+  };
+
   return new ReadableStream<Uint8Array>({
     start(controller) {
       // Emit `response.created` immediately and keep the connection alive with
@@ -470,51 +665,24 @@ export function openAiSseToResponses(
       ensureCreated(controller);
       keepaliveTimer = setInterval(() => {
         if (finished) return;
+        // Honor backpressure: skip the keepalive if the consumer's queue is full.
+        if ((controller.desiredSize ?? 1) <= 0) return;
         try {
           controller.enqueue(ENCODER.encode(": keepalive\n\n"));
         } catch {
           // controller closed
         }
       }, 3000);
+      void pump(controller);
     },
-    async pull(controller) {
-      // Keep reading upstream until at least one chunk is enqueued (or the
-      // stream closes). A pull that resolves without enqueuing anything can
-      // stall Node's webstreams pull scheduling permanently (observed on Node
-      // 24 when e.g. the upstream's `[DONE]` line arrives after finalize
-      // already ran — the keepalive timer is cleared by then, so nothing else
-      // ever unblocks the stream).
-      for (;;) {
-        const sizeBefore = controller.desiredSize ?? 0;
-        const { done, value } = await reader.read();
-        if (done) {
-          if (!finished) finalize(controller);
-          controller.close();
-          return;
-        }
-        buffer += decoder.decode(value, { stream: true });
-        let newline = buffer.indexOf("\n");
-        while (newline >= 0) {
-          const line = buffer.slice(0, newline).trim();
-          buffer = buffer.slice(newline + 1);
-          newline = buffer.indexOf("\n");
-          if (!line.startsWith("data:")) continue;
-          const payload = line.slice(5).trim();
-          if (payload === "[DONE]") {
-            if (!finished) finalize(controller);
-            continue;
-          }
-          try {
-            process(controller, JSON.parse(payload) as OpenAiChunk);
-          } catch {
-            // ignore malformed lines
-          }
-        }
-        if ((controller.desiredSize ?? 0) !== sizeBefore) return;
-      }
+    pull() {
+      resumePull?.();
+      resumePull = undefined;
     },
     cancel(reason) {
       if (keepaliveTimer !== undefined) clearInterval(keepaliveTimer);
+      resumePull?.();
+      resumePull = undefined;
       return reader.cancel(reason);
     }
   });

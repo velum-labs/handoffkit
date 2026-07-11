@@ -2,6 +2,7 @@ import type { Command } from "commander";
 
 import { LOCAL_TOOLS, runLocal } from "../local.js";
 import type { LocalTool } from "../local.js";
+import { contextFor } from "../shared/context.js";
 import { fail } from "../shared/errors.js";
 
 export function registerLocal(program: Command): void {
@@ -25,18 +26,22 @@ export function registerLocal(program: Command): void {
       async (
         tool: string | undefined,
         args: string[],
-        opts: { publicUrl?: string; authToken?: string; ide?: boolean }
+        opts: { publicUrl?: string; authToken?: string; ide?: boolean },
+        command: Command
       ) => {
+        const ctx = contextFor(command);
         if (tool === undefined || !(LOCAL_TOOLS as readonly string[]).includes(tool)) {
           fail(`usage: fusionkit local <${LOCAL_TOOLS.join(" | ")}> [args...]`);
         }
-        const options: { publicUrl?: string; authToken?: string; ide?: boolean } = {
+        // Setup progress rides the presenter so --quiet silences it; the
+        // launched agent itself owns the terminal from here.
+        const code = await runLocal(tool as LocalTool, args, {
+          log: (line) => ctx.presenter.note(line),
           ...(opts.publicUrl !== undefined ? { publicUrl: opts.publicUrl } : {}),
           ...(opts.ide === true ? { ide: true } : {}),
           ...(opts.authToken !== undefined ? { authToken: opts.authToken } : {})
-        };
-        const code = await runLocal(tool as LocalTool, args, options);
-        process.exit(code);
+        });
+        process.exitCode = code;
       }
     );
 }

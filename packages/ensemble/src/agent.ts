@@ -1,7 +1,7 @@
 import { runWorktreeAgent } from "@fusionkit/adapter-ai-sdk";
 import { artifactHash, ATTR } from "@fusionkit/protocol";
 import { RUNTIME_TIMEOUT_MS } from "@fusionkit/runtime-utils";
-import { emitFusionMarker } from "@fusionkit/tracing";
+import { emitFusionEvent } from "@fusionkit/tracing";
 import type { FusionTraceCarrier } from "@fusionkit/tracing";
 
 import { traceCandidate } from "./candidate-trace.js";
@@ -39,6 +39,12 @@ export type AgentHarnessOptions = {
   k?: number;
   /** Per-`run` shell-command timeout (ms). */
   timeoutMs?: number;
+  /**
+   * Extra env var names/patterns forwarded to panel `run` tool commands.
+   * By default children get only the system baseline (PATH/HOME/locale/TLS),
+   * never the parent's credentials; name anything else explicitly.
+   */
+  envAllow?: readonly (string | RegExp)[];
   /** Overall wall-clock budget for one model's agent run (ms). */
   modelTimeoutMs?: number;
   /** Trace carrier of the enclosing run/turn; when set, each candidate is traced. */
@@ -105,7 +111,16 @@ export function createAgentHarness(options: AgentHarnessOptions): HarnessAdapter
       if (baseUrl === undefined) {
         throw new Error(`no model endpoint configured for panel model "${model.id}"`);
       }
-      const root = worktree?.path ?? process.cwd();
+      // No silent process.cwd() fallback: running N concurrent panel agents in
+      // the user's real checkout would be destructive. A missing worktree AND
+      // workspace is a hard, actionable error.
+      const root = worktree?.path ?? descriptor.workspace;
+      if (root === undefined) {
+        throw new Error(
+          `agent harness for panel model "${model.id}" has no worktree and no descriptor.workspace; ` +
+            "set descriptor.workspace (or enable worktree isolation) so candidates never run in the current directory"
+        );
+      }
       const candidateId = `${descriptor.id}_${model.id}_${ordinal}`;
       const executionId = `exec_${candidateId}`;
       const planId = `plan_${candidateId}`;
@@ -140,6 +155,7 @@ export function createAgentHarness(options: AgentHarnessOptions): HarnessAdapter
         ...(options.apiKey !== undefined ? { apiKey: options.apiKey } : {}),
         ...(options.k !== undefined ? { k: options.k } : {}),
         ...(options.timeoutMs !== undefined ? { commandTimeoutMs: options.timeoutMs } : {}),
+        ...(options.envAllow !== undefined ? { envAllow: options.envAllow } : {}),
         ...(tracer.carrier !== undefined
           ? { trace: tracer.carrier, candidateId, modelId: model.id, onStep: tracer.step }
           : {})
@@ -160,7 +176,7 @@ export function createAgentHarness(options: AgentHarnessOptions): HarnessAdapter
 
       const transcript = JSON.stringify(steps, null, 2);
       const outputHash = artifactHash(transcript);
-      emitFusionMarker("ensemble", "fusion.tool.execution", tracer.carrier, {
+      emitFusionEvent("ensemble", "fusion.tool.execution", tracer.carrier, {
         [ATTR.FUSION_CANDIDATE_ID]: candidateId,
         [ATTR.FUSION_MODEL_ID]: model.id,
         [ATTR.FUSION_TURN]: options.turn,

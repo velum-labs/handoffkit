@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import time
 import traceback
 import uuid
 from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as distribution_version
 from pathlib import Path
@@ -34,7 +36,7 @@ from fusionkit_core.contracts import (
     contract_metadata,
 )
 from fusionkit_core.fusion import FusionEngine
-from fusionkit_core.judge import FuseResult
+from fusionkit_core.judge import FuseResult, sum_usages
 from fusionkit_core.kernel import FusionKernel
 from fusionkit_core.producers import PanelExhaustedError, trajectory_from_contract
 from fusionkit_core.registry import (
@@ -60,8 +62,15 @@ from fusionkit_core.trace import (
     context_of_span,
     fusion_span,
 )
-from fusionkit_core.types import ChatMessage, ModelResponse, PanelMode, StreamChunk, ToolCall
-from pydantic import BaseModel, Field, ValidationError
+from fusionkit_core.types import (
+    ChatMessage,
+    ModelResponse,
+    PanelMode,
+    ProviderCost,
+    StreamChunk,
+    Usage,
+)
+from pydantic import BaseModel, Field, ValidationError, model_validator
 
 from fusionkit_server.cursor_endpoint import translate_cursor_request
 
@@ -78,25 +87,42 @@ class FusionToolExecutionOptions(BaseModel):
 
 class FusionOptions(BaseModel):
     mode: FusionMode | None = None
-    panel_models: list[str] | None = None
+    panel_models: list[str] | None = Field(default=None, min_length=1)
     sample_count: int | None = Field(default=None, ge=1)
     tool_execution: FusionToolExecutionOptions = Field(
         default_factory=FusionToolExecutionOptions
     )
 
+    @model_validator(mode="after")
+    def _reject_duplicate_panel_members(self) -> FusionOptions:
+        if self.panel_models is not None and len(set(self.panel_models)) != len(
+            self.panel_models
+        ):
+            raise ValueError("panel_models must not contain duplicates")
+        return self
+
 
 class FusionRequest(BaseModel):
     model: str = FUSION_DEFAULT_ALIAS
-    messages: list[ChatMessage]
-    temperature: float | None = None
-    top_p: float | None = None
-    max_tokens: int | None = None
+    messages: list[ChatMessage] = Field(min_length=1)
+    temperature: float | None = Field(default=None, ge=0, le=2)
+    top_p: float | None = Field(default=None, gt=0, le=1)
+    max_tokens: int | None = Field(default=None, ge=1)
+    # OpenAI's modern spelling of `max_tokens` (required by reasoning models);
+    # the Node gateway adapters emit it. Folded into `max_tokens` below.
+    max_completion_tokens: int | None = Field(default=None, ge=1)
     stream: bool = False
     # Forwarded only on the per-model passthrough path (when `model` names a
     # configured endpoint); the fusion path ignores them.
     tools: list[dict[str, Any]] | None = None
     tool_choice: str | dict[str, Any] | None = None
     fusion: FusionOptions = Field(default_factory=FusionOptions)
+
+    @model_validator(mode="after")
+    def _fold_max_completion_tokens(self) -> FusionRequest:
+        if self.max_tokens is None and self.max_completion_tokens is not None:
+            self.max_tokens = self.max_completion_tokens
+        return self
 
 
 class TrajectoryItemInput(BaseModel):
@@ -135,10 +161,9 @@ class FuseTrajectoriesRequest(BaseModel):
     """
 
     model: str = FUSION_DEFAULT_ALIAS
-    # Raw OpenAI chat messages (assistant tool_calls are nested under `function`,
-    # tool results carry `tool_call_id`, content may be a parts array); normalized
-    # to FusionKit ChatMessage in the handler.
-    messages: list[dict[str, Any]]
+    # ChatMessage accepts OpenAI's nested assistant tool calls, null content,
+    # and content-part arrays while still requiring a valid role.
+    messages: list[ChatMessage] = Field(min_length=1)
     trajectories: list[TrajectoryInput] = Field(default_factory=list)
     tools: list[dict[str, Any]] | None = None
     tool_choice: str | dict[str, Any] | None = None
@@ -154,6 +179,12 @@ class FuseTrajectoriesRequest(BaseModel):
     panel_mode: PanelMode = "trajectory"
     stream: bool = False
 
+    @model_validator(mode="after")
+    def _require_successful_trajectory(self) -> FuseTrajectoriesRequest:
+        if not any(trajectory.status == "succeeded" for trajectory in self.trajectories):
+            raise ValueError("at least one succeeded trajectory is required")
+        return self
+
 
 def _package_version() -> str:
     try:
@@ -168,15 +199,40 @@ def create_app(
     run_manager: FusionRunManager | None = None,
     run_store_path: Path | None = None,
 ) -> FastAPI:
-    app = FastAPI(title="fusionkit", version=_package_version())
     model_clients = clients or build_clients(config)
+
+    @asynccontextmanager
+    async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+        try:
+            yield
+        finally:
+            seen: set[int] = set()
+            for client in model_clients.values():
+                identity = id(client)
+                if identity in seen:
+                    continue
+                seen.add(identity)
+                try:
+                    await client.aclose()
+                except Exception:  # noqa: BLE001 - close every remaining client
+                    logger.exception("failed to close model client %s", client.model_id)
+
+    app = FastAPI(title="fusionkit", version=_package_version(), lifespan=lifespan)
     engine = FusionEngine(config=config, clients=model_clients)
     native_runs = run_manager or _create_run_manager(engine, run_store_path)
     kernel = FusionKernel(engine, native_runs)
 
+    # An opaque token the spawning CLI passes down so its discover-or-spawn
+    # health probe can tell "the exact router I would start" apart from a
+    # sibling with the same endpoint ids but different prompts/keys/sampling.
+    identity = os.environ.get("FUSIONKIT_ROUTER_IDENTITY", "")
+
     @app.get("/health")
     async def health() -> dict[str, str]:
-        return {"status": "ok"}
+        payload = {"status": "ok"}
+        if identity:
+            payload["identity"] = identity
+        return payload
 
     def _models_payload() -> dict[str, Any]:
         data: list[dict[str, Any]] = [
@@ -262,14 +318,29 @@ def create_app(
     async def _handle_chat_completions(
         request: FusionRequest,
         trace: TraceContext | None = None,
+        *,
+        record_run: bool = False,
     ) -> dict[str, Any] | JSONResponse | StreamingResponse:
         # Per-model passthrough: when `model` names a configured endpoint, call
         # that model directly (no fusion run) so a single `fusionkit serve` can
         # front every panel model by id for an external coding harness. The
-        # reserved `fusionkit/{router,panel,single,self}` names keep the fusion
+        # reserved `fusionkit/{heuristic,panel,single,self}` names keep the fusion
         # path below.
         if _is_endpoint_model(config, request.model):
             return await _passthrough_chat(kernel, config, request)
+        if request.model not in FUSION_MODEL_ALIASES:
+            return _openai_error_response(
+                "unknown_model",
+                f"Unknown model {request.model!r}.",
+                status_code=400,
+            )
+        for panel_model in request.fusion.panel_models or []:
+            if not _is_endpoint_model(config, panel_model):
+                return _openai_error_response(
+                    "unknown_model",
+                    f"Unknown panel model endpoint {panel_model!r}.",
+                    status_code=400,
+                )
         # Real SSE streaming on the fused path: the candidate trajectories are
         # generated, then the synthesizer turn streams tokens straight through
         # (no buffer-then-rechunk).
@@ -294,17 +365,20 @@ def create_app(
         # the caller posts `tool` results back on the next request.
         if request.tools:
             return await _fusion_tool_step(kernel, config, request, trace=trace)
-        resolved = await _resolve_native_chat(kernel, request, config)
-        if isinstance(resolved, JSONResponse):
-            return resolved
-        final_output, metadata = resolved
-        return _openai_chat_response(request.model, final_output, metadata)
+        if record_run:
+            resolved = await _resolve_native_chat(kernel, request, config)
+            if isinstance(resolved, JSONResponse):
+                return resolved
+            inspection, metadata = resolved
+            return _openai_chat_response(request.model, inspection, metadata)
+        return await _lightweight_fusion_chat(kernel, config, request, trace=trace)
 
     @app.post("/v1/chat/completions", response_model=None)
     async def chat_completions(
         request: FusionRequest,
         http_request: Request,
     ) -> dict[str, Any] | JSONResponse | StreamingResponse:
+        record_run = http_request.headers.get("x-fusionkit-record") == "1"
         parent = context_from_headers(dict(http_request.headers))
         with fusion_span(
             "server",
@@ -313,7 +387,7 @@ def create_app(
             {"gen_ai.request.model": request.model},
         ) as request_span:
             trace = context_of_span(request_span, parent)
-            return await _handle_chat_completions(request, trace)
+            return await _handle_chat_completions(request, trace, record_run=record_run)
 
     @app.post("/v1/cursor/chat/completions", response_model=None)
     async def cursor_chat_completions(
@@ -349,6 +423,7 @@ def create_app(
                 "request body could not be validated as a chat completion request",
                 status_code=400,
             )
+        record_run = raw_request.headers.get("x-fusionkit-record") == "1"
         parent = context_from_headers(dict(raw_request.headers))
         with fusion_span(
             "server",
@@ -357,7 +432,7 @@ def create_app(
             {"gen_ai.request.model": request.model},
         ) as request_span:
             trace = context_of_span(request_span, parent)
-            return await _handle_chat_completions(request, trace)
+            return await _handle_chat_completions(request, trace, record_run=record_run)
 
     @app.post("/v1/fusion/trajectories:fuse", response_model=None)
     async def fuse_trajectories(
@@ -365,7 +440,17 @@ def create_app(
         http_request: Request,
     ) -> dict[str, Any] | JSONResponse | StreamingResponse:
         judge_model = request.judge_model or config.resolved_judge_model
-        synthesizer_model = request.synthesizer_model or config.resolved_synthesizer_model
+        # Request-level precedence mirrors config-level resolution
+        # (FusionConfig.resolved_synthesizer_model): a request that pins a
+        # judge without a synthesizer means "this judge doubles as the
+        # synthesizer" — falling back to the *config* synthesizer instead
+        # would silently synthesize a named ensemble's turn on the default
+        # ensemble's judge model.
+        synthesizer_model = (
+            request.synthesizer_model
+            or request.judge_model
+            or config.resolved_synthesizer_model
+        )
         for required_model in (judge_model, synthesizer_model):
             try:
                 kernel.client(required_model)
@@ -388,7 +473,7 @@ def create_app(
             )
             for trajectory in request.trajectories
         ]
-        messages = [_to_chat_message(message) for message in request.messages]
+        messages = request.messages
         tools = _normalize_tools(request.tools)
         tool_choice = _normalize_tool_choice(request.tool_choice)
         trace = context_from_headers(dict(http_request.headers))
@@ -433,7 +518,13 @@ def create_app(
                 "fusion step failed; see the server logs for details",
                 status_code=502,
             )
-        return _openai_step_response(request.model, result.response, _fusion_extension(result))
+        return _openai_step_response(
+            request.model,
+            result.response,
+            _fusion_extension(result),
+            usage=_fuse_step_usage(result),
+            provider_cost=result.turn_provider_cost(),
+        )
 
     return app
 
@@ -494,6 +585,47 @@ async def _passthrough_chat(
     return _openai_step_response(request.model, response)
 
 
+async def _lightweight_fusion_chat(
+    kernel: FusionKernel,
+    config: FusionConfig,
+    request: FusionRequest,
+    *,
+    trace: TraceContext | None = None,
+) -> dict[str, Any] | JSONResponse:
+    """Non-streaming fused chat without event-sourced run recording."""
+    try:
+        result = await kernel.run_step(
+            request.messages,
+            mode=_mode_from_request(request),
+            sampling=_request_sampling(config, request),
+            panel_models=request.fusion.panel_models,
+            sample_count=request.fusion.sample_count,
+            trace=trace,
+        )
+    except ProviderCallError as exc:
+        return _provider_error_response(exc)
+    except PanelExhaustedError:
+        traceback.print_exc()
+        return _openai_error_response(
+            "all_models_failed",
+            "fusion step failed: every panel model failed; see the server logs for details",
+            status_code=502,
+        )
+    except Exception:  # noqa: BLE001 - surface as an OpenAI-style error body
+        traceback.print_exc()
+        return _openai_error_response(
+            "internal_error", "fusion step failed; see the server logs for details", status_code=502
+        )
+    return _openai_step_response(
+        request.model,
+        result.response,
+        _fusion_extension(result),
+        usage=_fuse_step_usage(result),
+        provider_cost=result.turn_provider_cost(),
+        fusionkit=_lightweight_fusion_metadata(result),
+    )
+
+
 async def _fusion_tool_step(
     kernel: FusionKernel,
     config: FusionConfig,
@@ -536,7 +668,13 @@ async def _fusion_tool_step(
         return _openai_error_response(
             "internal_error", "fusion step failed; see the server logs for details", status_code=502
         )
-    return _openai_step_response(request.model, result.response, _fusion_extension(result))
+    return _openai_step_response(
+        request.model,
+        result.response,
+        _fusion_extension(result),
+        usage=_fuse_step_usage(result),
+        provider_cost=result.turn_provider_cost(),
+    )
 
 
 def _request_sampling(config: FusionConfig, request: FusionRequest) -> SamplingConfig:
@@ -578,7 +716,7 @@ async def _resolve_native_chat(
     kernel: FusionKernel,
     request: FusionRequest,
     config: FusionConfig,
-) -> tuple[str, dict[str, Any]] | JSONResponse:
+) -> tuple[RunInspection, dict[str, Any]] | JSONResponse:
     run_request = _fusion_request_to_run_request(request, config)
     result = await kernel.create_and_run(run_request)
     if isinstance(result, CreateRunResult):
@@ -593,7 +731,7 @@ async def _resolve_native_chat(
         result = kernel.inspect_run(result.run_id)
     if result.state != "completed" or result.final_output is None:
         return _openai_native_error_response(result.terminal_error, status_code=500)
-    return result.final_output, _chat_fusion_metadata(result)
+    return result, _chat_fusion_metadata(result)
 
 
 async def _fused_completion_sse(
@@ -671,12 +809,17 @@ async def _fused_completion_sse(
         fusion_extension = _fusion_extension(final_result)
         if fusion_extension is not None:
             extra["fusion"] = fusion_extension
-    # WS7: carry the synthesizer turn's token usage on the terminal chunk so a
-    # streaming client (and the Node gateway's cost meter, which reads `usage`
-    # off the SSE tail) can account a fused stream's cost — mirroring the
-    # non-streaming `_openai_step_response` body, which always includes `usage`.
-    if response is not None:
-        extra["usage"] = _usage_dict(response)
+    # Carry the fuse step's token usage (judge + synthesizer combined) on the
+    # terminal chunk so a streaming client (and the Node gateway's cost meter,
+    # which reads `usage` off the SSE tail) can account a fused stream's cost —
+    # mirroring the non-streaming `_openai_step_response` body.
+    if final_result is not None:
+        extra["usage"] = _usage_payload(_fuse_step_usage(final_result))
+        step_cost = final_result.turn_provider_cost()
+        if step_cost is not None:
+            extra["provider_cost"] = step_cost.model_dump(mode="json", exclude_none=True)
+    elif response is not None:
+        extra["usage"] = _usage_payload(response.usage)
         if response.provider_cost is not None:
             extra["provider_cost"] = response.provider_cost.model_dump(
                 mode="json", exclude_none=True
@@ -785,6 +928,10 @@ def _tool_execution_policy_from_options(options: FusionToolExecutionOptions) -> 
     )
 
 
+def _lightweight_fusion_metadata(result: FuseResult) -> dict[str, Any]:
+    return {"trajectory_count": result.panel_trajectory_count}
+
+
 def _chat_fusion_metadata(inspection: RunInspection) -> dict[str, Any]:
     return {
         "run_id": inspection.run_id,
@@ -871,51 +1018,6 @@ def _mode_from_request(request: FusionRequest) -> FusionMode:
     return cast(FusionMode, fusion_mode_for_model(request.model))
 
 
-def _coerce_message_content(content: Any) -> str:
-    if isinstance(content, str):
-        return content
-    if isinstance(content, list):
-        parts: list[str] = []
-        for part in content:
-            if isinstance(part, str):
-                parts.append(part)
-            elif isinstance(part, dict) and isinstance(part.get("text"), str):
-                parts.append(part["text"])
-        return "".join(parts)
-    return ""
-
-
-def _to_chat_message(message: dict[str, Any]) -> ChatMessage:
-    """Normalize a raw OpenAI chat message into a FusionKit ChatMessage,
-    flattening nested ({function:{name,arguments}}) tool calls."""
-    kwargs: dict[str, Any] = {
-        "role": message.get("role", "user"),
-        "content": _coerce_message_content(message.get("content")),
-    }
-    if message.get("tool_call_id"):
-        kwargs["tool_call_id"] = message["tool_call_id"]
-    if message.get("name"):
-        kwargs["name"] = message["name"]
-    tool_calls = message.get("tool_calls")
-    if tool_calls:
-        parsed: list[ToolCall] = []
-        for call in tool_calls:
-            function = (
-                call.get("function") if isinstance(call, dict) and "function" in call else call
-            )
-            function = function if isinstance(function, dict) else {}
-            parsed.append(
-                ToolCall(
-                    id=call.get("id", "") if isinstance(call, dict) else "",
-                    name=function.get("name", ""),
-                    arguments=function.get("arguments", "{}") or "{}",
-                )
-            )
-        if parsed:
-            kwargs["tool_calls"] = parsed
-    return ChatMessage(**kwargs)
-
-
 # `type` values that mark a wire shape or a choice mode, never a tool identity.
 _NON_TOOL_TYPES = frozenset({"function", "custom", "auto", "none", "required", "any", "tool"})
 
@@ -991,11 +1093,19 @@ def _tool_calls_payload(response: ModelResponse) -> list[dict[str, Any]]:
     ]
 
 
-def _usage_dict(response: ModelResponse) -> dict[str, Any]:
+def _fuse_step_usage(result: FuseResult) -> Usage:
+    usages: list[Usage] = []
+    if result.panel_usage is not None:
+        usages.append(result.panel_usage)
+    usages.append(result.turn_usage())
+    return sum_usages(usages)
+
+
+def _usage_payload(usage: Usage) -> dict[str, Any]:
     return {
-        "prompt_tokens": response.usage.prompt_tokens,
-        "completion_tokens": response.usage.completion_tokens,
-        "total_tokens": response.usage.total_tokens,
+        "prompt_tokens": usage.prompt_tokens,
+        "completion_tokens": usage.completion_tokens,
+        "total_tokens": usage.total_tokens,
     }
 
 
@@ -1033,6 +1143,10 @@ def _openai_step_response(
     model: str,
     response: ModelResponse,
     fusion: dict[str, Any] | None = None,
+    *,
+    usage: Usage | None = None,
+    provider_cost: ProviderCost | None = None,
+    fusionkit: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     message: dict[str, Any] = {"role": "assistant", "content": response.content or ""}
     if response.reasoning:
@@ -1043,18 +1157,21 @@ def _openai_step_response(
     if tool_calls:
         message["tool_calls"] = tool_calls
     finish_reason = "tool_calls" if tool_calls else (response.finish_reason or "stop")
+    resolved_cost = provider_cost if provider_cost is not None else response.provider_cost
     payload: dict[str, Any] = {
         "id": f"chatcmpl-{uuid.uuid4()}",
         "object": "chat.completion",
         "created": int(time.time()),
         "model": model,
         "choices": [{"index": 0, "message": message, "finish_reason": finish_reason}],
-        "usage": _usage_dict(response),
+        "usage": _usage_payload(usage if usage is not None else response.usage),
     }
-    if response.provider_cost is not None:
-        payload["provider_cost"] = response.provider_cost.model_dump(mode="json", exclude_none=True)
+    if resolved_cost is not None:
+        payload["provider_cost"] = resolved_cost.model_dump(mode="json", exclude_none=True)
     if fusion is not None:
         payload["fusion"] = fusion
+    if fusionkit is not None:
+        payload["fusionkit"] = fusionkit
     return payload
 
 
@@ -1127,7 +1244,13 @@ def _status_for_category(category: ProviderErrorCategory) -> int:
             assert_never(unreachable)
 
 
-def _openai_chat_response(model: str, content: str, metadata: dict[str, Any]) -> dict[str, Any]:
+def _openai_chat_response(
+    model: str, inspection: RunInspection, metadata: dict[str, Any]
+) -> dict[str, Any]:
+    # Real metering on the plain non-streaming path: the run ledger already
+    # records every model call (panel + judge + synthesizer), so the response
+    # carries their summed usage rather than a fabricated null block.
+    usage = inspection.usage
     return {
         "id": f"chatcmpl-{uuid.uuid4()}",
         "object": "chat.completion",
@@ -1139,14 +1262,14 @@ def _openai_chat_response(model: str, content: str, metadata: dict[str, Any]) ->
                 "finish_reason": "stop",
                 "message": {
                     "role": "assistant",
-                    "content": content,
+                    "content": inspection.final_output or "",
                 },
             }
         ],
         "usage": {
-            "prompt_tokens": None,
-            "completion_tokens": None,
-            "total_tokens": None,
+            "prompt_tokens": usage.prompt_tokens if usage is not None else None,
+            "completion_tokens": usage.completion_tokens if usage is not None else None,
+            "total_tokens": usage.total_tokens if usage is not None else None,
         },
         "fusionkit": metadata,
     }

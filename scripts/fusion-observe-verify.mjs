@@ -17,7 +17,7 @@ import { startFusionStack, startObservability } from "../packages/cli/dist/fusio
 import { BENCHMARK_PANEL_PRESETS, FUSION_PANEL_MODEL } from "../packages/registry/dist/index.js";
 import { codexLaunchConfigToml } from "../packages/tool-codex/dist/index.js";
 
-const FK_DIR = process.env.WARRANT_FUSION_FK_DIR ?? fileURLToPath(new URL("..", import.meta.url));
+const FK_DIR = process.env.FUSIONKIT_FUSION_FK_DIR ?? fileURLToPath(new URL("..", import.meta.url));
 const log = (line) => process.stderr.write(`${line}\n`);
 const E2E_PANEL = BENCHMARK_PANEL_PRESETS["gpt-opus-smoke"];
 if (E2E_PANEL === undefined) throw new Error("missing gpt-opus-smoke benchmark panel preset");
@@ -66,7 +66,7 @@ async function main() {
 
   log("building + starting scope dashboard...");
   const obs = await startObservability({ log });
-  process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT = obs.otlpUrl;
+  process.env.OTEL_EXPORTER_OTLP_ENDPOINT = obs.otlpUrl;
   initFusionTracing({ serviceName: "fusion-observe-verify" });
   log(`dashboard: ${obs.url}`);
 
@@ -127,6 +127,7 @@ async function main() {
     log(`  judge: thinking=${detail.judge.thinking !== undefined} final=${detail.judge.final !== undefined}`);
     log(`  finalOutput=${(detail.finalOutput ?? "").slice(0, 120)}`);
     log(`  spanCounts=${JSON.stringify(detail.spanCounts)}`);
+    log(`  eventCounts=${JSON.stringify(detail.eventCounts)}`);
   }
 
   log(`\nRESULT: ${test.status === 0 ? "GREEN" : "RED"} — dashboard at ${obs.url} (trace ${session?.traceId ?? "none"})`);

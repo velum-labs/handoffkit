@@ -764,7 +764,7 @@ export function createCodexHarness(options: CodexHarnessOptions = {}): HarnessAd
     prepare: () => {
       const env = definedEnv(options.env ?? process.env);
       return {
-        tempRoot: mkdtempSync(join(tmpdir(), "warrant-codex-")),
+        tempRoot: mkdtempSync(join(tmpdir(), "fusionkit-codex-")),
         env,
         provider: options.provider ?? providerFromEnv(env)
       } satisfies PreparedCodexHarness;

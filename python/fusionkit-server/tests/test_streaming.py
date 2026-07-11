@@ -242,10 +242,13 @@ def test_fused_streaming_streams_synthesizer_and_carries_fusion_metadata(tmp_pat
         "synthesize",
         "select_trajectory",
     )
-    # WS7: the synthesizer turn's token usage rides the terminal chunk so the
-    # gateway cost meter can price a fused *stream* (not just the non-streaming
-    # response). The FakeModelClient reports completion_tokens = word count.
-    assert terminal["usage"]["completion_tokens"] == len(["fused", "streamed", "answer"])
+    # Streamed and buffered fused responses must account the same roles:
+    # panel + judge + synthesizer. FakeModelClient reports completion_tokens
+    # as word count: 2 candidate words plus the same 3-word judge/synth script
+    # used twice.
+    assert terminal["usage"]["completion_tokens"] == 2 + 2 * len(
+        ["fused", "streamed", "answer"]
+    )
 
 
 class _AnthropicShapedStreamClient:
@@ -318,9 +321,11 @@ def test_fused_streaming_terminal_chunk_carries_prompt_tokens(tmp_path) -> None:
     assert response.status_code == 200
     chunks = _sse_chunks(response.text)
     terminal = chunks[-1]
-    assert terminal["usage"]["prompt_tokens"] == 11
-    assert terminal["usage"]["completion_tokens"] == 5
-    assert terminal["usage"]["total_tokens"] == 16
+    # Panel FakeModelClient (0/2/2) + judge analyze (7/1/8) + synthesizer
+    # stream (11/5/16), summed per role.
+    assert terminal["usage"]["prompt_tokens"] == 0 + 11 + 7
+    assert terminal["usage"]["completion_tokens"] == 2 + 5 + 1
+    assert terminal["usage"]["total_tokens"] == 2 + 16 + 8
 
 
 def test_fused_streaming_emits_tool_calls(tmp_path) -> None:

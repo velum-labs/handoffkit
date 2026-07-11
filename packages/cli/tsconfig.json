@@ -28,7 +28,13 @@
       "path": "../protocol"
     },
     {
+      "path": "../runtime-utils"
+    },
+    {
       "path": "../registry"
+    },
+    {
+      "path": "../testkit"
     },
     {
       "path": "../tool-claude"

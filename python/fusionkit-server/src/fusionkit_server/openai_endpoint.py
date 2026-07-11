@@ -1,72 +1,33 @@
-"""Front one model endpoint (any provider) as an OpenAI Chat Completions server.
+"""Helpers for fronting a single provider model as an OpenAI Chat Completions endpoint.
 
-This is the cloud analogue of the local MLX server: it serves a single
-``/v1/chat/completions`` endpoint backed by FusionKit's provider clients
-(``build_client``), so an OpenAI/Anthropic/Google model can be consumed by any
-OpenAI-compatible caller (for example, HandoffKit's per-candidate coding
-harness). One process fronts exactly one model, which keeps per-model routing
-trivial for the caller.
+``build_endpoint`` constructs a :class:`ModelEndpoint` from CLI flags. The
+``fusionkit serve-endpoint`` command serves it via the shared FastAPI app
+(``create_app`` + uvicorn), which exposes passthrough chat-completions for one
+model id — including streaming and dict ``tool_choice`` handling.
 
-Single-threaded on purpose (one model, low volume); each request runs the async
-provider client in a fresh event loop so the SDK's HTTP client is bound to the
-loop that drives it. Shared by the ``fusionkit serve-endpoint`` CLI command and
-``scripts/simple_openai_server.py``.
+``_to_tools`` and ``_astream_sse`` remain for unit tests that exercise tool
+normalization and SSE framing without standing up the full server.
 """
 from __future__ import annotations
 
-import asyncio
 import json
 import time
-import traceback
 import uuid
 from collections.abc import AsyncIterator, Sequence
-from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Any, cast
 
-from fusionkit_core.clients import ChatClient, ToolChoice, ToolDefinition, build_client
+from fusionkit_core.client_types import ToolChoice, ToolDefinition
+from fusionkit_core.clients import ChatClient
 from fusionkit_core.config import (
     EndpointAuth,
     ModelEndpoint,
     ProviderKind,
     SamplingConfig,
     SubscriptionAuthMode,
-    model_sampling_defaults,
 )
 from fusionkit_core.judge import accumulate_tool_call, warn_malformed_tool_calls
 from fusionkit_core.registry import PROVIDER_DEFAULT_BASE_URL
-from fusionkit_core.trace import (
-    ATTR,
-    candidate_baggage_of,
-    context_from_headers,
-    context_of_span,
-    emit_marker,
-    end_fusion_span,
-    json_attr,
-    setup_fusion_tracing,
-    start_fusion_span,
-)
 from fusionkit_core.types import ChatMessage, ToolCall
-
-
-def _to_chat_message(message: dict[str, Any]) -> ChatMessage:
-    content = message.get("content")
-    kwargs: dict[str, Any] = {
-        "role": message.get("role", "user"),
-        "content": content if isinstance(content, str) else "",
-    }
-    if message.get("tool_call_id"):
-        kwargs["tool_call_id"] = message["tool_call_id"]
-    tool_calls = message.get("tool_calls")
-    if tool_calls:
-        kwargs["tool_calls"] = [
-            ToolCall(
-                id=call.get("id", ""),
-                name=call.get("function", {}).get("name", ""),
-                arguments=call.get("function", {}).get("arguments", "{}"),
-            )
-            for call in tool_calls
-        ]
-    return ChatMessage(**kwargs)
 
 
 def _to_tools(tools: Any) -> list[dict[str, Any]] | None:
@@ -186,247 +147,6 @@ async def _astream_sse(
     yield "data: [DONE]\n\n"
 
 
-def make_handler(endpoint: ModelEndpoint) -> type[BaseHTTPRequestHandler]:
-    class Handler(BaseHTTPRequestHandler):
-        server_version = "fusionkit-openai-bridge/0.1"
-
-        def log_message(self, format: str, *args: Any) -> None:
-            prefix = f"{self.address_string()} - - [{self.log_date_time_string()}] "
-            print(prefix + format % args, flush=True)
-
-        def _send_json(self, status: int, payload: dict[str, Any]) -> None:
-            body = json.dumps(payload).encode("utf-8")
-            self.send_response(status)
-            self.send_header("content-type", "application/json")
-            self.send_header("content-length", str(len(body)))
-            self.end_headers()
-            self.wfile.write(body)
-
-        def do_GET(self) -> None:
-            if self.path in ("/health", "/v1/health"):
-                self._send_json(
-                    200,
-                    {"status": "ok", "model": endpoint.id, "provider": endpoint.provider},
-                )
-                return
-            if self.path == "/v1/models":
-                self._send_json(
-                    200,
-                    {
-                        "object": "list",
-                        "data": [
-                            {"id": endpoint.id, "object": "model", "owned_by": endpoint.provider}
-                        ],
-                    },
-                )
-                return
-            self._send_json(404, {"error": {"message": "not found"}})
-
-        def _serve_stream(
-            self,
-            messages: Sequence[ChatMessage],
-            sampling: SamplingConfig,
-            tools: Sequence[ToolDefinition] | None,
-            tool_choice: ToolChoice | None,
-        ) -> None:
-            self.send_response(200)
-            self.send_header("content-type", "text/event-stream")
-            self.send_header("cache-control", "no-cache")
-            self.end_headers()
-
-            async def pump() -> None:
-                # Build + close the client inside this request's event loop so the
-                # SDK connection pool is released instead of leaking a socket.
-                client = build_client(endpoint)
-                try:
-                    async for sse in _astream_sse(
-                        client, endpoint.model, messages, sampling, tools, tool_choice
-                    ):
-                        self.wfile.write(sse.encode("utf-8"))
-                        self.wfile.flush()
-                except Exception:  # noqa: BLE001 - surface mid-stream as an SSE error
-                    traceback.print_exc()
-                    error = {
-                        "message": "internal error during streaming; see the server logs",
-                        "type": "internal_error",
-                    }
-                    self.wfile.write(f"data: {json.dumps({'error': error})}\n\n".encode())
-                    self.wfile.write(b"data: [DONE]\n\n")
-                    self.wfile.flush()
-                finally:
-                    await client.aclose()
-
-            asyncio.run(pump())
-
-        def do_POST(self) -> None:
-            if self.path != "/v1/chat/completions":
-                self._send_json(404, {"error": {"message": "not found"}})
-                return
-            trace = context_from_headers(dict(self.headers.items()))
-            correlation = candidate_baggage_of(trace)
-            identity = {
-                ATTR.GEN_AI_OPERATION_NAME: "chat",
-                ATTR.GEN_AI_PROVIDER_NAME: endpoint.provider,
-                ATTR.GEN_AI_REQUEST_MODEL: endpoint.model,
-                ATTR.FUSION_MODEL_ID: endpoint.id,
-                ATTR.FUSION_ENDPOINT_ID: endpoint.id,
-                ATTR.FUSION_CANDIDATE_ID: correlation.get("fusion.candidate.id"),
-                ATTR.FUSION_TRAJECTORY_ID: correlation.get("fusion.trajectory.id"),
-            }
-            call_span = start_fusion_span(
-                "panel-model", f"chat {endpoint.model}", trace, identity
-            )
-            call_ctx = context_of_span(call_span, trace) if call_span is not None else None
-            try:
-                length = int(self.headers.get("content-length", "0"))
-                request = json.loads(self.rfile.read(length).decode("utf-8"))
-                messages = [
-                    _to_chat_message(message) for message in (request.get("messages") or [])
-                ]
-                tools = _to_tools(request.get("tools"))
-                raw_tool_choice = request.get("tool_choice")
-                tool_choice = raw_tool_choice if isinstance(raw_tool_choice, str) else None
-                # Per-model anti-repetition defaults (qwen/kimi) apply only when
-                # the caller did not set the knob itself.
-                model_defaults = model_sampling_defaults(endpoint.model)
-                default_temperature = model_defaults.get("temperature", 0.2)
-                default_top_p = model_defaults.get("top_p", 0.95)
-                sampling = SamplingConfig(
-                    temperature=float(
-                        request.get("temperature", default_temperature) or default_temperature
-                    ),
-                    top_p=float(request.get("top_p", default_top_p) or default_top_p),
-                    max_tokens=int(request.get("max_tokens", 1024) or 1024),
-                )
-                if request.get("stream"):
-                    # Real passthrough streaming: drain the provider's stream_chat
-                    # straight to the client as chat.completion.chunk SSE events.
-                    try:
-                        self._serve_stream(messages, sampling, tools, tool_choice)
-                    except Exception as exc:
-                        end_fusion_span(call_span, error=str(exc))
-                        raise
-                    end_fusion_span(call_span)
-                    return
-                emit_marker(
-                    "panel-model",
-                    "fusion.model_call.started",
-                    call_ctx,
-                    {
-                        **identity,
-                        ATTR.FUSION_MESSAGE_COUNT: len(messages),
-                        ATTR.FUSION_TOOL_COUNT: len(tools) if tools else 0,
-                    },
-                )
-
-                async def run() -> Any:
-                    # Build and close the client within this request's event
-                    # loop so the SDK's HTTP connection pool is released instead
-                    # of leaking a socket/file descriptor per request.
-                    client = build_client(endpoint)
-                    try:
-                        return await client.chat(
-                            messages,
-                            sampling,
-                            tools=tools,
-                            tool_choice=tool_choice,
-                        )
-                    finally:
-                        await client.aclose()
-
-                started = time.perf_counter()
-                response = asyncio.run(run())
-                latency_s = time.perf_counter() - started
-                if response.tool_calls:
-                    finish_reason = "tool_calls"
-                else:
-                    finish_reason = response.finish_reason or "stop"
-                if call_span is not None:
-                    call_span.set_attributes(
-                        {
-                            key: value
-                            for key, value in {
-                                ATTR.FUSION_USAGE: json_attr(
-                                    {
-                                        "prompt_tokens": response.usage.prompt_tokens,
-                                        "completion_tokens": response.usage.completion_tokens,
-                                        "total_tokens": response.usage.total_tokens,
-                                        "latency_s": round(latency_s, 3),
-                                    }
-                                ),
-                                ATTR.GEN_AI_USAGE_INPUT_TOKENS: response.usage.prompt_tokens,
-                                ATTR.GEN_AI_USAGE_OUTPUT_TOKENS: response.usage.completion_tokens,
-                                ATTR.GEN_AI_RESPONSE_FINISH_REASONS: [finish_reason],
-                                ATTR.FUSION_FINISH_REASON: finish_reason,
-                                ATTR.FUSION_TOOL_CALL_COUNT: len(response.tool_calls),
-                                ATTR.FUSION_CONTENT: (response.content or "")[:400],
-                            }.items()
-                            if value is not None
-                        }
-                    )
-                print(
-                    json.dumps(
-                        {
-                            "event": "chat_completion",
-                            "model": endpoint.id,
-                            "provider": endpoint.provider,
-                            "latency_s": round(latency_s, 3),
-                        }
-                    ),
-                    flush=True,
-                )
-                message_body: dict[str, Any] = {"role": "assistant", "content": response.content}
-                if response.tool_calls:
-                    message_body["tool_calls"] = [
-                        {
-                            "id": call.id or f"call_{uuid.uuid4().hex[:8]}",
-                            "type": "function",
-                            "function": {"name": call.name, "arguments": call.arguments},
-                        }
-                        for call in response.tool_calls
-                    ]
-                payload: dict[str, Any] = {
-                    "id": f"chatcmpl-{uuid.uuid4()}",
-                    "object": "chat.completion",
-                    "created": int(time.time()),
-                    "model": endpoint.model,
-                    "choices": [
-                        {
-                            "index": 0,
-                            "message": message_body,
-                            "finish_reason": finish_reason,
-                        }
-                    ],
-                    "usage": {
-                        "prompt_tokens": response.usage.prompt_tokens,
-                        "completion_tokens": response.usage.completion_tokens,
-                        "total_tokens": response.usage.total_tokens,
-                    },
-                }
-                if response.provider_cost is not None:
-                    payload["provider_cost"] = response.provider_cost.model_dump(
-                        mode="json", exclude_none=True
-                    )
-                self._send_json(200, payload)
-                end_fusion_span(call_span)
-            except Exception as exc:  # noqa: BLE001 - surface as an OpenAI error body
-                traceback.print_exc()
-                end_fusion_span(call_span, error=f"{exc.__class__.__name__}: {exc}")
-                # The trace payload keeps the real error server-side; the HTTP
-                # body stays generic so internals never leak to clients.
-                self._send_json(
-                    500,
-                    {
-                        "error": {
-                            "message": "internal error; see the server logs for details",
-                            "type": "internal_error",
-                        }
-                    },
-                )
-
-    return Handler
-
-
 def build_endpoint(
     *,
     id: str,
@@ -458,21 +178,3 @@ def build_endpoint(
             credentials_path=credentials_path,
         ),
     )
-
-
-def serve_single_endpoint(endpoint: ModelEndpoint, *, host: str = "127.0.0.1", port: int) -> None:
-    setup_fusion_tracing("fusionkit-panel-model")
-    print(
-        json.dumps(
-            {
-                "event": "starting",
-                "id": endpoint.id,
-                "provider": endpoint.provider,
-                "model": endpoint.model,
-            }
-        ),
-        flush=True,
-    )
-    server = HTTPServer((host, port), make_handler(endpoint))
-    print(json.dumps({"event": "listening", "host": host, "port": port}), flush=True)
-    server.serve_forever()

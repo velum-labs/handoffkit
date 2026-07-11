@@ -22,10 +22,10 @@ function git(cwd: string, args: string[]): string {
 }
 
 function makeRepo(): string {
-  const dir = mkdtempSync(join(tmpdir(), "warrant-test-repo-"));
+  const dir = mkdtempSync(join(tmpdir(), "fusionkit-test-repo-"));
   git(dir, ["init", "--quiet", "--initial-branch=main"]);
-  git(dir, ["config", "user.email", "test@warrant.local"]);
-  git(dir, ["config", "user.name", "warrant-test"]);
+  git(dir, ["config", "user.email", "test@fusionkit.local"]);
+  git(dir, ["config", "user.name", "fusionkit-test"]);
   writeFileSync(join(dir, "README.md"), "# fixture\n");
   writeFileSync(join(dir, "src.txt"), "original\n");
   git(dir, ["add", "-A"]);
@@ -79,7 +79,7 @@ test("capture denies secrets, includes allowlisted untracked, records denials", 
 
 test("materialize reproduces the captured workspace; output diff round-trips", async () => {
   const repo = makeRepo();
-  const sessionDir = mkdtempSync(join(tmpdir(), "warrant-test-session-"));
+  const sessionDir = mkdtempSync(join(tmpdir(), "fusionkit-test-session-"));
   try {
     writeFileSync(join(repo, "src.txt"), "modified\n");
     writeFileSync(join(repo, "notes.md"), "untracked notes\n");
@@ -123,7 +123,7 @@ test("materialize reproduces the captured workspace; output diff round-trips", a
 
 test("materialize rejects manifest paths that escape the workspace", async () => {
   const repo = makeRepo();
-  const sessionDir = mkdtempSync(join(tmpdir(), "warrant-test-session-"));
+  const sessionDir = mkdtempSync(join(tmpdir(), "fusionkit-test-session-"));
   try {
     const captured = captureWorkspace(repo);
     const manifest = {

@@ -109,7 +109,7 @@ fusionkit codex \
   from PyPI via `uvx`) fronts every cloud candidate directly through its
   provider's API. Keys come from `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` /
   `GEMINI_API_KEY` (override per model with `--key-env ID=ENV`). `--fusionkit-dir`
-  (or `WARRANT_FUSIONKIT_DIR`) is only a dev override that runs a local FusionKit
+  (or `FUSIONKIT_DIR`) is only a dev override that runs a local FusionKit
   checkout via `uv run` instead of `uvx`.
 - Keys load seamlessly: a project `.env` (the cwd, then the repo root) is read
   automatically, and already-exported env vars always win, so you never pass keys
@@ -269,7 +269,7 @@ fusionkit ensemble gateway [serve] [opts]   front door: tools drive the fusion e
   --model ID=MODEL        panel model mapping (repeatable)
   --command CMD           command harness script
   --repo DIR              workspace repository (default: .)
-  --out DIR               output directory (default: ./.warrant/gateway)
+  --out DIR               output directory (default: ./.fusionkit/gateway)
   --host H / --port N     bind address
   --auth-token TOKEN      require a bearer token on the gateway
 
@@ -319,12 +319,12 @@ Env-gated live tests (opt-in; need credentials/tools, skipped by default):
 
 ```bash
 # Codex (ambient auth) + cursor-agent (logged in; Cursorkit ships bundled)
-WARRANT_GATEWAY_LIVE_CODEX=1 \
-WARRANT_GATEWAY_LIVE_CURSOR=1 \
+FUSIONKIT_GATEWAY_LIVE_CODEX=1 \
+FUSIONKIT_GATEWAY_LIVE_CURSOR=1 \
 node --test packages/cli/dist/test/gateway-e2e.test.js
 
 # Claude (needs Anthropic credits)
-WARRANT_GATEWAY_LIVE_CLAUDE=1 node --test packages/cli/dist/test/gateway-e2e.test.js
+FUSIONKIT_GATEWAY_LIVE_CLAUDE=1 node --test packages/cli/dist/test/gateway-e2e.test.js
 ```
 
 Live tests stay gated so deterministic CI never depends on credentials, a

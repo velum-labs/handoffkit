@@ -6,8 +6,9 @@
  *
  * The wizard covers the whole config surface: the default tool, the panel
  * (member-by-member, mixing subscriptions / API keys / local MLX), the judge,
- * an optional extras step (budget, rate-limit policy, panel trust, reasoning),
- * and optional named ensembles — so nothing requires hand-editing JSON after.
+ * the first ensemble's name (editable, defaulting to `default`), an optional
+ * extras step (budget, rate-limit policy, panel sandbox, reasoning), and
+ * further named ensembles — so nothing requires hand-editing JSON after.
  */
 import { existsSync } from "node:fs";
 
@@ -33,6 +34,7 @@ import {
 import type { Presenter, WizardStep } from "@fusionkit/cli-ui";
 
 import { MlxCapabilityError } from "@fusionkit/adapter-ai-sdk";
+import { fusionModelId } from "@fusionkit/registry";
 
 import { formatBytes, glyph } from "@fusionkit/cli-ui";
 
@@ -54,7 +56,13 @@ import type { HostInfo } from "./fusion/local-catalog.js";
 import { ownedMlxEnv } from "./fusion/mlx.js";
 import { buildPanel, isAllLocal, judgeOptions, withKeyEnv } from "./fusion/panel-builder.js";
 import { fetchDefaultPrompts } from "./fusion/prompts.js";
-import { ON_RATE_LIMIT_OPTIONS, PANEL_TRUST_OPTIONS } from "./shared/options.js";
+import {
+  ON_RATE_LIMIT_MESSAGE,
+  ON_RATE_LIMIT_OPTIONS,
+  PANEL_TRUST_HELP,
+  PANEL_TRUST_MESSAGE,
+  PANEL_TRUST_OPTIONS
+} from "./shared/options.js";
 import { disableTelemetry, enableTelemetry, resolveTelemetry } from "./telemetry/consent.js";
 
 export { defaultMemberId, judgeOptions } from "./fusion/panel-builder.js";
@@ -230,11 +238,11 @@ export async function resolveInitOverwrite(opts: {
   return { action: "refuse" };
 }
 
-/** Interactive extras: budget / rate-limit / trust / reasoning. Defaults skip it. */
+/** Interactive extras: budget / rate-limit / sandbox / reasoning. Defaults skip it. */
 async function promptExtras(config: FusionConfig): Promise<void> {
   if (!canPromptInteractively()) return;
   const wantsExtras = await confirm({
-    message: "Configure extras (budget, rate-limit policy, panel trust, reasoning)?",
+    message: "Configure extras (budget, rate-limit policy, panel sandbox, reasoning)?",
     defaultValue: false
   });
   if (!wantsExtras) return;
@@ -249,13 +257,14 @@ async function promptExtras(config: FusionConfig): Promise<void> {
   }
 
   config.onRateLimit = await select({
-    message: "When a vendor passthrough model hits a rate limit / credit wall",
+    message: ON_RATE_LIMIT_MESSAGE,
     options: ON_RATE_LIMIT_OPTIONS,
     defaultIndex: 0
   });
 
+  note(PANEL_TRUST_HELP);
   const trust = await select({
-    message: "Panel candidate autonomy",
+    message: PANEL_TRUST_MESSAGE,
     options: PANEL_TRUST_OPTIONS,
     defaultIndex: 0
   });
@@ -268,16 +277,35 @@ async function promptExtras(config: FusionConfig): Promise<void> {
   config.reasoning = reasoning;
 }
 
-/** Optionally define extra named ensembles (each its own `fusion-<name>` model). */
-async function promptNamedEnsembles(host: HostInfo): Promise<Record<string, EnsembleConfig>> {
+/**
+ * Validate a candidate ensemble name (shape, reserved names, collisions),
+ * returning a one-line problem instead of throwing so prompt loops can re-ask.
+ */
+function ensembleNameProblem(name: string, taken: ReadonlySet<string>): string | undefined {
+  try {
+    validateEnsembleName(name, "init");
+  } catch (error) {
+    return error instanceof FusionConfigError ? error.message : String(error);
+  }
+  if (taken.has(name)) return `"${name}" is taken — pick another name`;
+  return undefined;
+}
+
+/**
+ * Optionally define extra named ensembles (each its own `fusion-<name>` model).
+ * `taken` seeds the reserved names (the first ensemble picked in the wizard).
+ */
+async function promptNamedEnsembles(
+  host: HostInfo,
+  taken: ReadonlySet<string>
+): Promise<Record<string, EnsembleConfig>> {
   const extras: Record<string, EnsembleConfig> = {};
-  if (!canPromptInteractively()) return extras;
   for (;;) {
     const more = await confirm({
       message:
         Object.keys(extras).length === 0
-          ? "Add a named ensemble (its own fusion-<name> model, e.g. a fast panel)?"
-          : "Add another named ensemble?",
+          ? "Add another ensemble (its own fusion-<name> model, e.g. a fast panel)?"
+          : "Add another ensemble?",
       defaultValue: false
     });
     if (!more) return extras;
@@ -285,14 +313,9 @@ async function promptNamedEnsembles(host: HostInfo): Promise<Record<string, Ense
       await text({ message: "Ensemble name (lowercase letters, digits, dashes)", defaultValue: "" })
     ).trim();
     if (name.length === 0) return extras;
-    try {
-      validateEnsembleName(name, "init");
-      if (name === DEFAULT_ENSEMBLE_NAME || extras[name] !== undefined) {
-        note(`"${name}" is taken — pick another name`);
-        continue;
-      }
-    } catch (error) {
-      note(error instanceof FusionConfigError ? error.message : String(error));
+    const problem = ensembleNameProblem(name, new Set([...taken, ...Object.keys(extras)]));
+    if (problem !== undefined) {
+      note(problem);
       continue;
     }
     const panel = await buildPanel(host);
@@ -310,7 +333,7 @@ async function promptNamedEnsembles(host: HostInfo): Promise<Record<string, Ense
             defaultIndex: 0
           });
     extras[name] = { panel, ...(judgeModel !== undefined ? { judgeModel } : {}) };
-    done(`ensemble ${bold(name)} ${dim(`→ fusion-${name}`)}`);
+    done(`ensemble ${bold(name)} ${dim(`→ ${fusionModelId(name)}`)}`);
   }
 }
 
@@ -353,6 +376,7 @@ export async function runFusionInit(input: {
     tool: FusionTool;
     panel: PanelModelSpec[];
     judgeModel: string;
+    ensembleName: string;
     observe: boolean;
   };
   const steps: Array<WizardStep<InitWizardState>> = [
@@ -397,6 +421,34 @@ export async function runFusionInit(input: {
       }
     },
     {
+      id: "name",
+      title: "ensemble name",
+      // The panel + judge just configured form the first ensemble; let the user
+      // name it (keeping "default" is fine — it is a convention, not required).
+      run: async (state) => {
+        note(
+          `the panel above is your first ensemble. Naming it ${bold(DEFAULT_ENSEMBLE_NAME)} keeps the canonical ` +
+            `${cyan(fusionModelId(DEFAULT_ENSEMBLE_NAME))} model id; any other name serves as ${cyan("fusion-<name>")}.`
+        );
+        for (;;) {
+          const answer = await text({
+            message: "Ensemble name (lowercase letters, digits, dashes)",
+            defaultValue: DEFAULT_ENSEMBLE_NAME,
+            allowBack: true
+          });
+          if (answer === BACK) return BACK;
+          const trimmed = answer.trim();
+          const ensembleName = trimmed.length === 0 ? DEFAULT_ENSEMBLE_NAME : trimmed;
+          const problem = ensembleNameProblem(ensembleName, new Set());
+          if (problem !== undefined) {
+            note(problem);
+            continue;
+          }
+          return { ...state, ensembleName };
+        }
+      }
+    },
+    {
       id: "observe",
       title: "observability",
       run: async (state) => {
@@ -412,10 +464,10 @@ export async function runFusionInit(input: {
     {
       id: "telemetry",
       title: "telemetry",
+      // One-time, opt-in, and never re-asked once decided anywhere (env,
+      // kill switch, or a previous answer). Default is no.
+      skip: () => resolveTelemetry().source !== "default",
       run: async (state) => {
-        // One-time, opt-in, and never re-asked once decided anywhere (env,
-        // kill switch, or a previous answer). Default is no.
-        if (resolveTelemetry().source !== "default") return state;
         const optIn = await confirm({
           message:
             "Share anonymous usage telemetry? (never prompts, code, or paths — `fusionkit telemetry status` shows the exact fields)",
@@ -429,23 +481,25 @@ export async function runFusionInit(input: {
       }
     }
   ];
-  const { tool, panel, judgeModel, observe } = await runWizard<InitWizardState>({
+  const { tool, panel, judgeModel, ensembleName, observe } = await runWizard<InitWizardState>({
     steps,
-    initial: { tool: "codex", panel: [], judgeModel: "", observe: false }
+    initial: { tool: "codex", panel: [], judgeModel: "", ensembleName: DEFAULT_ENSEMBLE_NAME, observe: false }
   });
 
-  const namedEnsembles = await promptNamedEnsembles(host);
+  const namedEnsembles = await promptNamedEnsembles(host, new Set([ensembleName]));
 
   const config: FusionConfig = {
     version: FUSION_CONFIG_VERSION,
     tool,
     ensembles: {
-      [DEFAULT_ENSEMBLE_NAME]: {
+      [ensembleName]: {
         panel,
         ...(judgeModel.length > 0 ? { judgeModel } : {})
       },
       ...namedEnsembles
     },
+    // A non-"default" first name still stays the session default, explicitly.
+    ...(ensembleName !== DEFAULT_ENSEMBLE_NAME ? { defaultEnsemble: ensembleName } : {}),
     local: isAllLocal(panel),
     observe
   };
@@ -467,7 +521,7 @@ export async function runFusionInit(input: {
   // If the Python CLI is unreachable, skip silently — unset prompts use the
   // built-in defaults at run time, and the user can eject them later with
   // `fusionkit prompts edit`.
-  const defaultPrompts = fetchDefaultPrompts(input.fusionkitDir);
+  const defaultPrompts = await fetchDefaultPrompts(input.fusionkitDir);
   const wrotePrompts =
     defaultPrompts !== undefined
       ? writeFusionPrompts(input.repoRoot, defaultPrompts, { force })
@@ -488,13 +542,14 @@ export async function runFusionInit(input: {
 
   const summary: string[] = [
     `tool: ${bold(tool)}`,
-    `panel: ${panel.map((spec) => spec.id).join(", ")}`,
+    `ensemble ${bold(ensembleName)} ${dim(`(${fusionModelId(ensembleName)})`)}: ${panel.map((spec) => spec.id).join(", ")}`,
     ...(judgeModel.length > 0 ? [`judge: ${judgeModel}`] : []),
     ...Object.keys(namedEnsembles).map(
-      (name) => `ensemble ${name}: ${(namedEnsembles[name]?.panel ?? []).map((spec) => spec.id).join(", ")}`
+      (name) =>
+        `ensemble ${bold(name)} ${dim(`(${fusionModelId(name)})`)}: ${(namedEnsembles[name]?.panel ?? []).map((spec) => spec.id).join(", ")}`
     ),
     ...(config.budgetUsd !== undefined ? [`budget: $${config.budgetUsd}`] : []),
-    ...(config.panelTrust !== undefined ? [`trust: ${config.panelTrust}`] : []),
+    ...(config.panelTrust !== undefined ? [`panel sandbox: ${config.panelTrust}`] : []),
     dim(`tune later: fusionkit config edit · fusionkit ensemble list`)
   ];
   presenter.blank();

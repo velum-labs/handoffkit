@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import logging
 from collections.abc import Mapping, Sequence
 from typing import Any
 
@@ -359,17 +358,27 @@ def _google_contents(
 ) -> tuple[str, list[genai_types.Content]]:
     system_parts: list[str] = []
     contents: list[genai_types.Content] = []
+    function_names_by_call_id: dict[str, str] = {}
     for message in messages:
         if message.role == "system":
             system_parts.append(message.content)
             continue
         if message.role == "tool":
+            function_name = message.name or (
+                function_names_by_call_id.get(message.tool_call_id)
+                if message.tool_call_id is not None
+                else None
+            )
+            if not function_name:
+                raise ValueError(
+                    "Google tool results require a matching prior assistant tool call"
+                )
             contents.append(
                 genai_types.Content(
                     role="user",
                     parts=[
                         genai_types.Part.from_function_response(
-                            name=message.name or "",
+                            name=function_name,
                             response={"result": message.content},
                         )
                     ],
@@ -382,6 +391,7 @@ def _google_contents(
             parts.append(genai_types.Part.from_text(text=message.content))
         if message.tool_calls:
             for call in message.tool_calls:
+                function_names_by_call_id[call.id] = call.name
                 parts.append(
                     genai_types.Part.from_function_call(
                         name=call.name,
@@ -440,7 +450,12 @@ def _google_extract(
     candidates = getattr(response, "candidates", None) or []
     for candidate in candidates:
         if getattr(candidate, "finish_reason", None) is not None:
-            finish_reason = str(candidate.finish_reason)
+            # google-genai parses finish_reason into an enum; str() would leak
+            # the enum repr ("FinishReason.STOP"), inconsistent with every
+            # other provider's plain finish strings — use the bare name.
+            finish_reason = getattr(
+                candidate.finish_reason, "name", None
+            ) or str(candidate.finish_reason)
         content = getattr(candidate, "content", None)
         for part in getattr(content, "parts", None) or []:
             if getattr(part, "text", None):
@@ -464,14 +479,7 @@ def _loads_arguments(arguments: str) -> dict[str, Any]:
     try:
         loaded = json.loads(arguments or "{}")
     except json.JSONDecodeError as exc:
-        # Never silently swallow corruption: an empty input object downstream
-        # shows up as an inscrutable tool failure with no pointer back here.
-        logging.getLogger("fusionkit.tool_calls").warning(
-            "dropping malformed tool-call arguments during provider translation: "
-            "len=%d error=%s preview=%r",
-            len(arguments),
-            exc,
-            arguments[:120],
-        )
-        return {}
-    return loaded if isinstance(loaded, dict) else {}
+        raise ValueError("tool-call arguments must be valid JSON") from exc
+    if not isinstance(loaded, dict):
+        raise ValueError("tool-call arguments must be a JSON object")
+    return loaded

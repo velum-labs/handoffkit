@@ -160,15 +160,27 @@ const protocolPackageManifest = JSON.parse(readFileSync(protocolPackageManifestP
 const protocolPackageOpenApi = JSON.parse(readFileSync(protocolPackageOpenApiPath, "utf8"));
 
 const modelFusionPin = rootPackage.devDependencies?.[modelFusionTypescriptPackageName];
-if (typeof modelFusionPin !== "string" || !/^\d+\.\d+\.\d+$/.test(modelFusionPin)) {
+// Between a contract change and its npm release, the repo consumes the local
+// contract source directly (the only content that matches the new bundle
+// hash). Once published, the pin returns to an exact registry version.
+const localContractPin = "file:spec/model-fusion-contract";
+if (
+  typeof modelFusionPin !== "string" ||
+  (modelFusionPin !== localContractPin && !/^\d+\.\d+\.\d+$/.test(modelFusionPin))
+) {
   fail(
-    `${rootPackagePath}: devDependency ${modelFusionTypescriptPackageName} must be pinned to an exact version`
+    `${rootPackagePath}: devDependency ${modelFusionTypescriptPackageName} must be pinned to an exact version ` +
+      `(or ${localContractPin} while an unpublished contract change is in flight)`
   );
 }
 if (protocolPackage.name !== modelFusionTypescriptPackageName) {
   fail(`${protocolPackageJsonPath}: package name must be ${modelFusionTypescriptPackageName}`);
 }
-if (protocolPackage.version !== rootPackage.devDependencies?.[modelFusionTypescriptPackageName]) {
+const expectedInstalledVersion =
+  modelFusionPin === localContractPin
+    ? JSON.parse(readFileSync("spec/model-fusion-contract/package.json", "utf8")).version
+    : modelFusionPin;
+if (protocolPackage.version !== expectedInstalledVersion) {
   fail(`${protocolPackageJsonPath}: package version must match the root devDependency pin`);
 }
 if (protocolPackage.publishConfig?.registry !== "https://registry.npmjs.org") {

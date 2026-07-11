@@ -85,16 +85,22 @@ function sortedRecord(record) {
 
 function validate(pricing) {
   const models = pricing.models;
+  const aliases = pricing.aliases;
   const overrides = pricing.manualOverrides;
   if (models === undefined || typeof models !== "object" || Array.isArray(models)) {
     fail("pricing.models must be an object");
+    return;
+  }
+  if (aliases === undefined || typeof aliases !== "object" || Array.isArray(aliases)) {
+    fail("pricing.aliases must be an object");
     return;
   }
   if (overrides === undefined || typeof overrides !== "object" || Array.isArray(overrides)) {
     fail("pricing.manualOverrides must be an object");
     return;
   }
-  for (const [model, entry] of [...Object.entries(models), ...Object.entries(overrides)]) {
+  const priced = { ...models, ...overrides };
+  for (const [model, entry] of Object.entries(priced)) {
     try {
       const normalized = normalizePrice(entry);
       if (normalized.inputPer1mTokens < 0 || normalized.outputPer1mTokens < 0) {
@@ -102,6 +108,15 @@ function validate(pricing) {
       }
     } catch (error) {
       fail(`${model}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+  for (const [alias, canonical] of Object.entries(aliases)) {
+    if (typeof canonical !== "string" || canonical.length === 0) {
+      fail(`pricing.aliases.${alias} must be a non-empty canonical model id`);
+      continue;
+    }
+    if (!(canonical in priced)) {
+      fail(`pricing.aliases.${alias} → ${canonical} must reference a priced model`);
     }
   }
 }
@@ -117,6 +132,7 @@ async function main() {
   const current = readPricingFile();
   const liteLlm = fetchMode ? await fetchLiteLlmPrices() : undefined;
   const manualOverrides = sortedRecord(current.pricing.manualOverrides ?? {});
+  const aliases = sortedRecord(current.pricing.aliases ?? {});
   const models = {};
 
   for (const [model, entry] of Object.entries(current.pricing.models ?? {})) {
@@ -131,6 +147,7 @@ async function main() {
     $comment: current.$comment,
     pricing: {
       models: sortedRecord(models),
+      aliases,
       manualOverrides
     }
   };

@@ -1,12 +1,21 @@
 from __future__ import annotations
 
 import json
+from collections.abc import AsyncIterator, Mapping, Sequence
 from typing import Any
 
 from fastapi.testclient import TestClient
 from fusionkit_core.clients import FakeModelClient, ProviderCallError
-from fusionkit_core.config import EndpointAuth, FusionConfig, FusionMode, ModelEndpoint
+from fusionkit_core.config import (
+    EndpointAuth,
+    FusionConfig,
+    FusionMode,
+    ModelEndpoint,
+    SamplingConfig,
+)
+from fusionkit_core.types import ChatMessage, ModelResponse, StreamChunk
 from fusionkit_server import create_app
+from fusionkit_server.app import FusionRequest
 
 
 def test_chat_completions_single_mode(tmp_path) -> None:
@@ -26,6 +35,9 @@ def test_chat_completions_single_mode(tmp_path) -> None:
 
     response = client.post(
         "/v1/chat/completions",
+        # Run recording is opt-in (WS8.4); this test exercises the recorded
+        # path end-to-end, including the runs API lookup below.
+        headers={"x-fusionkit-record": "1"},
         json={
             "model": "fusionkit/single",
             "messages": [{"role": "user", "content": "hello"}],
@@ -47,6 +59,279 @@ def test_chat_completions_single_mode(tmp_path) -> None:
     assert run_response.json()["state"] == "completed"
 
 
+def test_chat_completions_fused_response_sums_usage_across_all_roles(tmp_path) -> None:
+    # Acceptance (WS4): the plain non-streaming fused response must carry real
+    # usage — the sum of every ledgered model call (panel + judge + synthesizer)
+    # — instead of a fabricated null block. FakeModelClient reports
+    # completion_tokens = word count and prompt_tokens = 0.
+    config = FusionConfig(
+        endpoints=[
+            ModelEndpoint(id="m1", model="fake-m1", base_url="http://localhost:8101"),
+            ModelEndpoint(id="judge", model="fake-judge", base_url="http://localhost:8201"),
+        ],
+        default_model="m1",
+        judge_model="judge",
+        synthesizer_model="judge",
+        default_mode="panel",
+        panel_models=["m1"],
+    )
+    app = create_app(
+        config,
+        clients={
+            "m1": FakeModelClient("m1", ["candidate answer text"]),  # 3 tokens
+            "judge": FakeModelClient(
+                "judge",
+                [
+                    # Judge analysis: a single unbroken JSON token (1 token).
+                    '{"consensus":["ok"],"contradictions":[],"unique_insights":[],'
+                    '"coverage_gaps":[],"likely_errors":[],"recommended_final_structure":[]}',
+                    "fused final answer",  # synthesizer turn: 3 tokens
+                ],
+            ),
+        },
+        run_store_path=tmp_path / "runs",
+    )
+    client = TestClient(app)
+
+    response = client.post(
+        "/v1/chat/completions",
+        json={
+            "model": "fusionkit/panel",
+            "messages": [{"role": "user", "content": "compare"}],
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["choices"][0]["message"]["content"] == "fused final answer"
+    assert body["usage"]["prompt_tokens"] == 0
+    assert body["usage"]["completion_tokens"] == 3 + 1 + 3
+
+
+def _panel_app(tmp_path) -> TestClient:
+    config = FusionConfig(
+        endpoints=[
+            ModelEndpoint(id="m1", model="fake-m1", base_url="http://localhost:8101"),
+            ModelEndpoint(id="judge", model="fake-judge", base_url="http://localhost:8201"),
+        ],
+        default_model="m1",
+        judge_model="judge",
+        synthesizer_model="judge",
+        default_mode="panel",
+        panel_models=["m1"],
+    )
+    app = create_app(
+        config,
+        clients={
+            "m1": FakeModelClient("m1", ["candidate answer"]),
+            "judge": FakeModelClient(
+                "judge",
+                [
+                    '{"consensus":["ok"],"contradictions":[],"unique_insights":[],'
+                    '"coverage_gaps":[],"likely_errors":[],"recommended_final_structure":[]}',
+                    "fused final answer",
+                ],
+            ),
+        },
+        run_store_path=tmp_path / "runs",
+    )
+    return TestClient(app)
+
+
+def _fuse_payload(*, messages: list[dict[str, Any]], status: str = "succeeded") -> dict[str, Any]:
+    return {
+        "model": "fusionkit/panel",
+        "messages": messages,
+        "trajectories": [
+            {
+                "trajectory_id": "trajectory_1",
+                "model_id": "m1",
+                "status": status,
+                "final_output": "candidate",
+            }
+        ],
+    }
+
+
+def test_fuse_rejects_messages_without_roles_before_model_calls(tmp_path) -> None:
+    client = _panel_app(tmp_path)
+
+    response = client.post(
+        "/v1/fusion/trajectories:fuse",
+        json=_fuse_payload(messages=[{"content": "silently became a user message"}]),
+    )
+
+    assert response.status_code == 422
+
+
+def test_fuse_rejects_a_panel_with_no_successful_trajectory(tmp_path) -> None:
+    client = _panel_app(tmp_path)
+
+    response = client.post(
+        "/v1/fusion/trajectories:fuse",
+        json=_fuse_payload(
+            messages=[{"role": "user", "content": "fuse this"}],
+            status="failed",
+        ),
+    )
+
+    assert response.status_code == 422
+
+
+def test_chat_rejects_unknown_models_and_invalid_sampling_before_fanout(tmp_path) -> None:
+    for body in (
+        {
+            "model": "totally-unknown-model",
+            "messages": [{"role": "user", "content": "do not silently fuse"}],
+        },
+        {
+            "model": "fusionkit/panel",
+            "messages": [{"role": "user", "content": "negative tokens"}],
+            "max_tokens": -1,
+        },
+        {
+            "model": "fusionkit/panel",
+            "messages": [{"role": "user", "content": "invalid probability"}],
+            "top_p": 1.5,
+        },
+        {
+            "model": "fusionkit/panel",
+            "messages": [
+                {
+                    "role": "assistant",
+                    "content": None,
+                    "tool_calls": [
+                        {
+                            "id": "call_bad",
+                            "type": "function",
+                            "function": {"name": "read", "arguments": '{"broken"'},
+                        }
+                    ],
+                }
+            ],
+        },
+    ):
+        response = _panel_app(tmp_path).post("/v1/chat/completions", json=body)
+        assert response.status_code in (400, 422), response.text
+
+
+def test_app_shutdown_closes_every_model_client_once(tmp_path) -> None:
+    class ClosableClient:
+        model_id = "fast"
+        max_context = None
+
+        def __init__(self) -> None:
+            self.close_calls = 0
+
+        async def chat(
+            self,
+            messages: Sequence[ChatMessage],
+            sampling: SamplingConfig | None = None,
+            tools: Sequence[Mapping[str, Any]] | None = None,
+            tool_choice: str | Mapping[str, Any] | None = None,
+            extra: Mapping[str, Any] | None = None,
+        ) -> ModelResponse:
+            return ModelResponse(model_id=self.model_id, content="ok")
+
+        async def stream_chat(
+            self,
+            messages: Sequence[ChatMessage],
+            sampling: SamplingConfig | None = None,
+            tools: Sequence[Mapping[str, Any]] | None = None,
+            tool_choice: str | Mapping[str, Any] | None = None,
+            extra: Mapping[str, Any] | None = None,
+        ) -> AsyncIterator[StreamChunk]:
+            yield StreamChunk(delta="ok", finish_reason="stop")
+
+        async def aclose(self) -> None:
+            self.close_calls += 1
+
+    client = ClosableClient()
+    config = FusionConfig(
+        endpoints=[ModelEndpoint(id="fast", model="fake-fast")],
+        default_model="fast",
+        default_mode="single",
+    )
+    with TestClient(
+        create_app(config, clients={"fast": client}, run_store_path=tmp_path / "runs")
+    ):
+        pass
+
+    assert client.close_calls == 1
+
+
+def test_plain_chat_completions_does_not_record_a_run(tmp_path) -> None:
+    # Acceptance (WS8.4): a plain chat completion is a lightweight in-memory
+    # turn — no event-sourced run machinery, no permanent run directory, no
+    # fcntl file locking on the event loop. Run recording is opt-in.
+    client = _panel_app(tmp_path)
+
+    response = client.post(
+        "/v1/chat/completions",
+        json={
+            "model": "fusionkit/panel",
+            "messages": [{"role": "user", "content": "compare"}],
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["choices"][0]["message"]["content"] == "fused final answer"
+    runs_dir = tmp_path / "runs"
+    assert not runs_dir.exists() or list(runs_dir.iterdir()) == []
+
+
+def test_chat_completions_records_a_run_when_opted_in(tmp_path) -> None:
+    # Acceptance (WS8.4): the x-fusionkit-record header opts back into the
+    # event-sourced run path — the response carries a run id that the runs API
+    # can inspect.
+    client = _panel_app(tmp_path)
+
+    response = client.post(
+        "/v1/chat/completions",
+        headers={"x-fusionkit-record": "1"},
+        json={
+            "model": "fusionkit/panel",
+            "messages": [{"role": "user", "content": "compare"}],
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    run_id = body["fusionkit"]["run_id"]
+    assert run_id
+    run_response = client.get(f"/v1/fusion/runs/{run_id}")
+    assert run_response.status_code == 200
+    assert run_response.json()["state"] == "completed"
+    assert list((tmp_path / "runs").iterdir())
+
+
+def test_health_serves_the_router_identity_token(tmp_path, monkeypatch) -> None:
+    # Acceptance (WS9.4): the spawning CLI hashes its full effective config and
+    # passes the token down; /health serves it back so a later run's
+    # discover-or-spawn probe can tell a compatible router from a stale one
+    # (changed model, prompt override, or API key) with the same endpoint ids.
+    monkeypatch.setenv("FUSIONKIT_ROUTER_IDENTITY", "cafef00d:m1,judge")
+    client = _panel_app(tmp_path)
+
+    body = client.get("/health").json()
+
+    assert body["status"] == "ok"
+    assert body["identity"] == "cafef00d:m1,judge"
+
+
+def test_health_omits_identity_when_not_spawned_by_the_cli(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.delenv("FUSIONKIT_ROUTER_IDENTITY", raising=False)
+    client = _panel_app(tmp_path)
+
+    body = client.get("/health").json()
+
+    assert body["status"] == "ok"
+    assert "identity" not in body
+
+
 def test_models_endpoint_remains_openai_compatible(tmp_path) -> None:
     app = create_app(_config(), run_store_path=tmp_path / "runs")
     client = TestClient(app)
@@ -56,7 +341,9 @@ def test_models_endpoint_remains_openai_compatible(tmp_path) -> None:
     assert response.status_code == 200
     body = response.json()
     assert body["object"] == "list"
-    assert {"id": "fusionkit/router", "object": "model"} in body["data"]
+    # Honesty rename (WS8.5): the keyword-matching mode is "heuristic", not
+    # "router" — a real learned router is explicitly post-launch.
+    assert {"id": "fusionkit/heuristic", "object": "model"} in body["data"]
 
 
 def test_chat_completions_streaming_returns_sse_chunks(tmp_path) -> None:
@@ -155,7 +442,7 @@ def test_chat_completions_passthrough_by_endpoint_id(tmp_path) -> None:
             ModelEndpoint(id="sonnet", model="fake-sonnet", base_url="http://localhost:8102"),
         ],
         default_model="gpt",
-        default_mode="router",
+        default_mode="heuristic",
     )
     app = create_app(
         config,
@@ -196,7 +483,7 @@ def test_subscription_endpoint_is_first_class_in_unified_server(tmp_path) -> Non
             ),
         ],
         default_model="fast",
-        default_mode="router",
+        default_mode="heuristic",
     )
     app = create_app(
         config,
@@ -231,7 +518,7 @@ def test_chat_completions_passthrough_accepts_tool_loop_messages(tmp_path) -> No
             ModelEndpoint(id="gpt", model="fake-gpt", base_url="http://localhost:8101"),
         ],
         default_model="gpt",
-        default_mode="router",
+        default_mode="heuristic",
     )
     app = create_app(
         config,
@@ -298,7 +585,7 @@ def test_passthrough_provider_error_surfaces_machine_readable_error_category(tmp
     config = FusionConfig(
         endpoints=[ModelEndpoint(id="gpt", model="fake-gpt", base_url="http://localhost:8101")],
         default_model="gpt",
-        default_mode="router",
+        default_mode="heuristic",
     )
     error = ProviderCallError(
         "You exceeded your current quota",
@@ -334,7 +621,7 @@ def test_passthrough_auth_error_maps_to_401_with_error_category(tmp_path) -> Non
     config = FusionConfig(
         endpoints=[ModelEndpoint(id="gpt", model="fake-gpt", base_url="http://localhost:8101")],
         default_model="gpt",
-        default_mode="router",
+        default_mode="heuristic",
     )
     error = ProviderCallError(
         "invalid api key", category="auth_permanent", provider="openai", status_code=401
@@ -353,6 +640,29 @@ def test_passthrough_auth_error_maps_to_401_with_error_category(tmp_path) -> Non
 
     assert response.status_code == 401
     assert response.json()["error"]["error_category"] == "auth_permanent"
+
+
+def test_fusion_request_accepts_max_completion_tokens() -> None:
+    # The Node gateway adapters emit OpenAI's modern `max_completion_tokens`
+    # spelling; the router must fold it into `max_tokens` rather than silently
+    # dropping the caller's output cap.
+    modern = FusionRequest.model_validate(
+        {
+            "messages": [{"role": "user", "content": "hi"}],
+            "max_completion_tokens": 321,
+        }
+    )
+    assert modern.max_tokens == 321
+
+    # An explicit legacy value wins over the modern spelling.
+    both = FusionRequest.model_validate(
+        {
+            "messages": [{"role": "user", "content": "hi"}],
+            "max_tokens": 100,
+            "max_completion_tokens": 321,
+        }
+    )
+    assert both.max_tokens == 100
 
 
 def _config(default_mode: FusionMode = "single") -> FusionConfig:

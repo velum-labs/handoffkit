@@ -107,18 +107,34 @@ export function isolationFlag(value: string | undefined): SessionIsolation | und
 export { PANEL_AUTH_MODES, PANEL_PROVIDERS };
 
 /**
+ * WS5 rate-limit / credit handoff picker prompt, shared by every interactive
+ * surface (`fusionkit init` extras, `fusionkit config edit`).
+ */
+export const ON_RATE_LIMIT_MESSAGE = "When a vendor passthrough model hits a rate limit / credit wall";
+
+/**
  * WS5 rate-limit / credit handoff picker options — the one description of each
- * policy, shared by every interactive surface (`config set onRateLimit`, the
- * init extras step). The flag-validation list below derives from it.
+ * policy, shared by every interactive surface (`config edit`, the init extras
+ * step). Each label is the exact value written to `.fusionkit/fusion.json`
+ * (`onRateLimit`), and each hint describes the runtime behavior in
+ * `FusionVendorProxy`. The flag-validation list below derives from it.
  */
 export const ON_RATE_LIMIT_OPTIONS: ReadonlyArray<{
   value: OnRateLimitPolicy;
   label: string;
   hint: string;
 }> = [
-  { value: "fusion", label: "fusion", hint: "continue on the ensemble (default)" },
-  { value: "passthrough", label: "passthrough", hint: "surface the vendor error to the tool" },
-  { value: "fail", label: "fail", hint: "stop the session" }
+  {
+    value: "fusion",
+    label: "fusion",
+    hint: "rerun the turn on the fusion ensemble (minus the throttled vendor) and answer from there (default)"
+  },
+  {
+    value: "passthrough",
+    label: "passthrough",
+    hint: "return the vendor's error to the coding agent as-is (no fallback)"
+  },
+  { value: "fail", label: "fail", hint: "stop the session with a gateway error" }
 ];
 
 /** WS5 rate-limit / credit handoff policies (`--on-rate-limit`). */
@@ -134,10 +150,35 @@ export function parseOnRateLimit(value: string | undefined): OnRateLimitPolicy |
   return value as OnRateLimitPolicy;
 }
 
-/** Panel trust picker options, shared by every interactive surface. */
+/**
+ * Panel sandbox (`panelTrust`) prompt copy — the one description of each
+ * level, shared by every interactive surface (the init extras step, `config
+ * edit`, the `config set` picker). Each panel model drafts unattended in its
+ * own disposable git worktree; this setting decides whether it may also act
+ * outside that worktree. The option labels are exactly the values persisted
+ * to `fusion.json` (and accepted by `--panel-trust`), so what the prompts
+ * show is what the config says.
+ */
+export const PANEL_TRUST_MESSAGE = "Panel model sandbox — what may each model touch while it drafts?";
+
+/** One-line explainer shown above the panel sandbox picker. */
+export const PANEL_TRUST_HELP =
+  "each panel model drafts unattended in its own disposable git worktree. " +
+  "full lifts the coding agent's sandbox so drafts never hit permission walls; " +
+  "guarded keeps the sandbox, blocking edits outside each model's worktree. " +
+  "keep full (the default) unless you don't fully trust every panel model.";
+
 export const PANEL_TRUST_OPTIONS: ReadonlyArray<{ value: PanelTrust; label: string; hint: string }> = [
-  { value: "full", label: "full", hint: "maximum autonomy (default)" },
-  { value: "guarded", label: "guarded", hint: "harness-fenced to the worktree" }
+  {
+    value: "full",
+    label: "full",
+    hint: "no sandbox: may run any command and edit any file on this machine (default)"
+  },
+  {
+    value: "guarded",
+    label: "guarded",
+    hint: "sandboxed: may only edit files inside its own draft worktree"
+  }
 ];
 
 /** Panel candidate trust levels (`--panel-trust`). `full` is the default. */

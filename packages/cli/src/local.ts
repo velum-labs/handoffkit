@@ -66,6 +66,8 @@ export type RunLocalOptions = {
   config?: BackendConfig;
   /** Override the tunnel provisioner (tests). */
   startTunnel?: (options: StartPublicTunnelOptions) => Promise<PublicTunnel>;
+  /** Override the local gateway lifecycle (tests). */
+  startGateway?: (config: BackendConfig, authToken?: string) => Promise<GatewayHandle>;
   log?: (line: string) => void;
 };
 
@@ -88,7 +90,7 @@ export async function runLocal(
   // always enforce a gateway bearer token (auto-generated when unset).
   const needsTunnel = tool === "cursor" && options.ide !== true && publicUrl === undefined;
   const authToken = options.authToken ?? (needsTunnel ? generateSessionToken() : undefined);
-  const gateway = await startLocalGateway(config, authToken);
+  const gateway = await (options.startGateway ?? startLocalGateway)(config, authToken);
   // The framed summary renders only on the default interactive surface;
   // injected log sinks (tests, programmatic callers) keep plain lines.
   const styled = options.log === undefined && isInteractive();
@@ -126,18 +128,25 @@ export async function runLocal(
         uiStream().write(
           `${green(glyph.tick())} ${bold("gateway is running")} ${dim("— point any tool at it, or Ctrl+C to stop")}\n`
         );
-        process.once("SIGINT", () => {
-          uiStream().write(`\n${green(glyph.tick())} ${bold("gateway stopped")}\n`);
-          process.exit(130);
-        });
       } else {
         for (const row of rows) log(row);
         log(dim("Press Ctrl+C to stop."));
       }
-      await new Promise<void>(() => {
-        /* run until interrupted */
+      const exitCode = await new Promise<number>((resolve) => {
+        const finish = (code: number): void => {
+          process.off("SIGINT", onInterrupt);
+          process.off("SIGTERM", onTerminate);
+          if (styled) {
+            uiStream().write(`\n${green(glyph.tick())} ${bold("gateway stopped")}\n`);
+          }
+          resolve(code);
+        };
+        const onInterrupt = (): void => finish(130);
+        const onTerminate = (): void => finish(143);
+        process.once("SIGINT", onInterrupt);
+        process.once("SIGTERM", onTerminate);
       });
-      return 0;
+      return exitCode;
     }
     const integration = toolRegistry.get(tool);
     if (integration === undefined || !integration.modes.includes("local")) {

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import random
 from collections.abc import Awaitable, Callable
 from typing import Any, Literal, TypeVar
 
@@ -39,7 +40,8 @@ _QUOTA_MARKERS = (
     "insufficient quota",
     "exceeded your current quota",
     "billing_hard_limit_reached",
-    "billing",
+    "billing hard limit",
+    "billing quota",
     "credit balance",
     "insufficient credits",
     "out of credits",
@@ -151,53 +153,71 @@ def _retry_after(exc: BaseException) -> float | None:
     return None
 
 
-def _error_blob(exc: BaseException) -> str:
-    """Lower-cased haystack of provider error code/type/message for matching."""
-    parts: list[str] = []
+def _append_text(parts: list[str], value: object) -> None:
+    if isinstance(value, str):
+        parts.append(value)
+    elif isinstance(value, int | float):
+        parts.append(str(value))
+
+
+def _error_haystacks(exc: BaseException) -> tuple[str, str, str]:
+    """Split provider error text into structured fields vs free-form message haystacks."""
+    structured_parts: list[str] = []
+    message_parts: list[str] = []
     body = getattr(exc, "body", None)
     error_obj: Any = body
     if isinstance(body, dict):
         inner = body.get("error")
         error_obj = inner if isinstance(inner, dict) else body
     if isinstance(error_obj, dict):
-        for key in ("code", "type", "status", "message"):
-            value = error_obj.get(key)
-            if isinstance(value, str):
-                parts.append(value)
-    for attr in ("code", "type", "message"):
-        value = getattr(exc, attr, None)
-        if isinstance(value, str):
-            parts.append(value)
-    parts.append(str(exc))
-    return " ".join(parts).lower()
+        for key in ("code", "type", "status"):
+            _append_text(structured_parts, error_obj.get(key))
+        _append_text(message_parts, error_obj.get("message"))
+    for attr in ("code", "type"):
+        _append_text(structured_parts, getattr(exc, attr, None))
+    message = getattr(exc, "message", None)
+    if isinstance(message, str):
+        message_parts.append(message)
+    message_parts.append(str(exc))
+    structured = " ".join(structured_parts).lower()
+    message_blob = " ".join(message_parts).lower()
+    full = f"{structured} {message_blob}".strip()
+    return structured, message_blob, full
 
 
-def _category_for(status: int | None, blob: str) -> ProviderErrorCategory:
-    # Context overflow first: it is the most specific signal, and some spellings
-    # arrive on status codes the generic rules below would misread (OpenAI's
-    # ``request_too_large`` rides HTTP 429/413, which is not transient here —
-    # retrying the same oversized payload can never succeed).
-    if any(marker in blob for marker in _CONTEXT_OVERFLOW_MARKERS):
+def _matches_markers(blob: str, markers: tuple[str, ...]) -> bool:
+    return any(marker in blob for marker in markers)
+
+
+def _category_for(
+    status: int | None,
+    structured: str,
+    message: str,
+    full: str,
+) -> ProviderErrorCategory:
+    if (status is None or status < 500) and _matches_markers(full, _CONTEXT_OVERFLOW_MARKERS):
         return "context_overflow"
-    # Quota next: an OpenAI ``insufficient_quota`` is delivered as HTTP 429, so
-    # it must win over the generic 429-is-transient rule below.
-    if any(marker in blob for marker in _QUOTA_MARKERS):
+    if status is not None and status >= 500:
+        return "transient"
+    quota_blob = structured
+    if status is None or status in (400, 402):
+        quota_blob = f"{structured} {message}".strip()
+    if _matches_markers(quota_blob, _QUOTA_MARKERS):
         return "quota_exhausted"
-    # 402 Payment Required (e.g. OpenRouter with no credits): retrying the same
-    # key will not help.
     if status == 402:
         return "quota_exhausted"
     if status in (401, 403):
         return "auth_permanent"
-    if status == 404 and "model" in blob:
+    if status == 404 and "model" in full:
         return "auth_permanent"
-    if any(marker in blob for marker in _AUTH_MARKERS):
+    auth_blob = structured
+    if status is None:
+        auth_blob = f"{structured} {message}".strip()
+    if _matches_markers(auth_blob, _AUTH_MARKERS):
         return "auth_permanent"
     if status == 429:
         return "transient"
-    if status is not None and status >= 500:
-        return "transient"
-    if any(marker in blob for marker in _TRANSIENT_MARKERS):
+    if _matches_markers(full, _TRANSIENT_MARKERS):
         return "transient"
     return "unknown"
 
@@ -218,8 +238,8 @@ def classify_provider_error(
     if isinstance(exc, ProviderCallError):
         return exc
     status = _status_code(exc)
-    blob = _error_blob(exc)
-    category = _category_for(status, blob)
+    structured, message_blob, full = _error_haystacks(exc)
+    category = _category_for(status, structured, message_blob, full)
     message = str(getattr(exc, "message", None) or str(exc) or exc.__class__.__name__)
     return ProviderCallError(
         message,
@@ -261,10 +281,12 @@ async def _call_with_retries(
             )
             if not error.retryable or attempt >= max_attempts:
                 raise error from exc
-            delay = (
+            cap = min(
+                max_delay_s,
                 error.retry_after
                 if error.retry_after is not None
-                else min(max_delay_s, base_delay_s * (2 ** (attempt - 1)))
+                else base_delay_s * 2 ** (attempt - 1),
             )
+            delay = random.uniform(cap / 2, cap)
         await asyncio.sleep(delay)
 

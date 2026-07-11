@@ -17,24 +17,64 @@ from fusionkit_core.run import (
     ToolPausePlaceholder,
     TrajectoryInspection,
 )
+from fusionkit_core.run_models import RunUsage
 
 
 class FileSystemRunStore:
     def __init__(self, root: str | Path) -> None:
         self.root = Path(root)
-        self.root.mkdir(parents=True, exist_ok=True)
-        (self.root / "_idempotency").mkdir(parents=True, exist_ok=True)
 
     def get_idempotency(self, idempotency_key: str) -> IdempotencyRecord | None:
         path = self._idempotency_path(idempotency_key)
-        if not path.exists():
-            return None
-        return IdempotencyRecord.model_validate(_read_json(path))
+        lock_path = self._idempotency_lock_path(idempotency_key)
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+        with lock_path.open("a", encoding="utf-8") as lock_handle:
+            fcntl.flock(lock_handle, fcntl.LOCK_SH)
+            try:
+                if not path.exists():
+                    return None
+                return IdempotencyRecord.model_validate(_read_json(path))
+            finally:
+                fcntl.flock(lock_handle, fcntl.LOCK_UN)
 
     def write_idempotency(self, record: IdempotencyRecord) -> None:
         path = self._idempotency_path(record.idempotency_key)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        _write_json(path, record.model_dump(mode="json"))
+        lock_path = self._idempotency_lock_path(record.idempotency_key)
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+        with lock_path.open("a", encoding="utf-8") as lock_handle:
+            fcntl.flock(lock_handle, fcntl.LOCK_EX)
+            try:
+                _write_json(path, record.model_dump(mode="json"))
+            finally:
+                fcntl.flock(lock_handle, fcntl.LOCK_UN)
+
+    def initialize_idempotent_run(
+        self,
+        record: IdempotencyRecord,
+        event: FusionRunEvent,
+        summary: RunStateSummary,
+    ) -> tuple[IdempotencyRecord, bool]:
+        """Atomically claim an idempotency key and initialize its run.
+
+        The key lock spans the existence check, first event, summary, and index
+        write. Concurrent callers therefore either create the one canonical run
+        or observe it only after its summary is readable.
+        """
+
+        path = self._idempotency_path(record.idempotency_key)
+        lock_path = self._idempotency_lock_path(record.idempotency_key)
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+        with lock_path.open("a", encoding="utf-8") as lock_handle:
+            fcntl.flock(lock_handle, fcntl.LOCK_EX)
+            try:
+                if path.exists():
+                    return IdempotencyRecord.model_validate(_read_json(path)), False
+                sequenced = self.append_event(event)
+                self.write_summary(summary.model_copy(update={"event_cursor": sequenced.event_seq}))
+                _write_json(path, record.model_dump(mode="json"))
+                return record, True
+            finally:
+                fcntl.flock(lock_handle, fcntl.LOCK_UN)
 
     def append_event(self, event: FusionRunEvent) -> FusionRunEvent:
         run_dir = self._run_dir(event.run_id)
@@ -106,6 +146,7 @@ class FileSystemRunStore:
         judge_synthesis_record = None
         pending_tool_actions: dict[str, ToolPausePlaceholder] = {}
         provider_metadata = []
+        call_usages: list[dict[str, Any]] = []
 
         for event in events:
             if event.event_type == "trajectory_recorded":
@@ -129,10 +170,11 @@ class FileSystemRunStore:
                 if event.model_call_id is not None:
                     model_call_ids.append(event.model_call_id)
                 model_call_payload = event.payload.get("model_call_record")
-                if isinstance(model_call_payload, dict) and isinstance(
-                    model_call_payload.get("metadata"), dict
-                ):
-                    provider_metadata.append(model_call_payload["metadata"])
+                if isinstance(model_call_payload, dict):
+                    if isinstance(model_call_payload.get("metadata"), dict):
+                        provider_metadata.append(model_call_payload["metadata"])
+                    if isinstance(model_call_payload.get("usage"), dict):
+                        call_usages.append(model_call_payload["usage"])
             elif event.event_type == "artifact_recorded":
                 artifact = _artifact_from_payload(event.payload.get("artifact"))
                 if artifact is not None:
@@ -175,6 +217,7 @@ class FileSystemRunStore:
             requires_action=_latest_pending_action(pending_tool_actions),
             terminal_error=summary.terminal_error,
             provider_metadata=provider_metadata,
+            usage=_sum_call_usages(call_usages),
         )
 
     def _summary_from_events(self, run_id: str) -> RunStateSummary:
@@ -240,6 +283,9 @@ class FileSystemRunStore:
     def _idempotency_path(self, idempotency_key: str) -> Path:
         return self.root / "_idempotency" / f"{hash_text(idempotency_key)}.json"
 
+    def _idempotency_lock_path(self, idempotency_key: str) -> Path:
+        return self.root / "_idempotency" / f"{hash_text(idempotency_key)}.lock"
+
 
 def _read_json(path: Path) -> Any:
     with path.open(encoding="utf-8") as handle:
@@ -268,6 +314,22 @@ def _latest_pending_action(
     if not pending_tool_actions:
         return None
     return list(pending_tool_actions.values())[-1]
+
+
+def _sum_call_usages(usages: list[dict[str, Any]]) -> RunUsage | None:
+    """Sum token usage across ledgered calls, keeping unreported fields None."""
+    if not usages:
+        return None
+
+    def total(field: str) -> int | None:
+        known = [value for usage in usages if isinstance(value := usage.get(field), int)]
+        return sum(known) if known else None
+
+    return RunUsage(
+        prompt_tokens=total("prompt_tokens"),
+        completion_tokens=total("completion_tokens"),
+        total_tokens=total("total_tokens"),
+    )
 
 
 def _dedupe_artifacts(artifacts: list[ContractArtifactRef]) -> list[ContractArtifactRef]:

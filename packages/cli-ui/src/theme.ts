@@ -8,11 +8,18 @@
  * plain ANSI shared by the Ink presenter and the plain-text fallback.
  */
 import figlet from "figlet";
+import stringWidth from "string-width";
 
 /** True when ANSI styling should be emitted to the given stream. */
 export function supportsColor(stream: NodeJS.WriteStream = process.stderr): boolean {
   if (process.env.NO_COLOR !== undefined && process.env.NO_COLOR !== "") return false;
   if (process.env.FORCE_COLOR !== undefined && process.env.FORCE_COLOR !== "0") return true;
+  if (process.env.TERM === "dumb") return false;
+  return Boolean(stream.isTTY);
+}
+
+/** True when Unicode glyphs (box-drawing, status icons) should be used. */
+export function supportsUnicode(stream: NodeJS.WriteStream = process.stderr): boolean {
   if (process.env.TERM === "dumb") return false;
   return Boolean(stream.isTTY);
 }
@@ -35,21 +42,23 @@ export const magenta = wrap(35, 39);
 export const cyan = wrap(36, 39);
 export const gray = wrap(90, 39);
 
-/** Status glyphs, with ASCII fallbacks when color (≈ unicode-friendly TTY) is off. */
+/** Status glyphs, with ASCII fallbacks on dumb terminals. */
 export const glyph = {
-  tick: () => (supportsColor() ? "✔" : "[ok]"),
-  cross: () => (supportsColor() ? "✖" : "[x]"),
-  bullet: () => (supportsColor() ? "•" : "*"),
-  arrow: () => (supportsColor() ? "›" : ">"),
-  pointer: () => (supportsColor() ? "❯" : ">"),
-  warn: () => (supportsColor() ? "⚠" : "[!]"),
-  pending: () => (supportsColor() ? "○" : "( )"),
-  checkboxOn: () => (supportsColor() ? "◉" : "[x]"),
-  checkboxOff: () => (supportsColor() ? "◯" : "[ ]")
+  tick: () => (supportsUnicode() ? "✔" : "[ok]"),
+  cross: () => (supportsUnicode() ? "✖" : "[x]"),
+  bullet: () => (supportsUnicode() ? "•" : "*"),
+  arrow: () => (supportsUnicode() ? "›" : ">"),
+  pointer: () => (supportsUnicode() ? "❯" : ">"),
+  warn: () => (supportsUnicode() ? "⚠" : "[!]"),
+  pending: () => (supportsUnicode() ? "○" : "( )"),
+  checkboxOn: () => (supportsUnicode() ? "◉" : "[x]"),
+  checkboxOff: () => (supportsUnicode() ? "◯" : "[ ]")
 };
 
-/** Frames for the in-place spinner (braille dots when color is on). */
-export const SPINNER_FRAMES: readonly string[] = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+/** Frames for the in-place spinner (braille dots when Unicode is supported). */
+export const SPINNER_FRAMES: readonly string[] = supportsUnicode()
+  ? ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+  : ["|", "/", "-", "\\"];
 
 /** The product tagline, shown beneath the banner/header. */
 const BRAND_TAGLINE = "real model fusion behind your coding agent";
@@ -71,7 +80,7 @@ export function stripAnsi(text: string): string {
 
 /** Visible (printed) width of a string, ignoring ANSI escapes. */
 export function visibleWidth(text: string): number {
-  return stripAnsi(text).length;
+  return stringWidth(stripAnsi(text));
 }
 
 /** Track open SGR codes across a sequence boundary (theme styles only). */
@@ -208,7 +217,7 @@ const ASCII_BOX: BoxChars = {
  * which can mount a React tree.
  */
 export function box(title: string, lines: string[], options: { tone?: BoxTone } = {}): string {
-  const chars = supportsColor() ? ROUNDED_BOX : ASCII_BOX;
+  const chars = supportsUnicode() ? ROUNDED_BOX : ASCII_BOX;
   const frame: (text: string) => string = options.tone === "error" ? red : dim;
 
   const titleText = options.tone === "error" ? bold(red(title)) : bold(title);

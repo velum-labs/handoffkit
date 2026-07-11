@@ -1,0 +1,86 @@
+---
+title: Rate-limit handoff
+description: Keep a turn moving when a passthrough vendor hits a rate limit, quota error, or billing error.
+---
+
+Rate-limit handoff is the recovery path for the moment when a single vendor model cannot answer. If you are working against a passthrough model and that vendor returns a rate-limit, quota, or billing error, the gateway can continue the same turn on the ensemble instead of ending the session with a raw upstream failure.
+
+This feature is on by default. It is most useful when you select a direct model in your agent's model picker, such as a panel member id, but still want FusionKit to be available as a fallback when that vendor is temporarily unavailable.
+
+## How it works
+
+The gateway classifies upstream provider failures. If the failure is a transient rate limit or credit exhaustion, and the policy is `fusion`, FusionKit excludes the failed vendor from the panel and reruns the turn through the ensemble. The coding agent receives a normal answer in its native protocol. The visible difference is a gateway log line that explains the failover.
+
+```bash
+fusionkit codex
+```
+
+That command uses `--on-rate-limit fusion` by default.
+
+## Policies
+
+Use `--on-rate-limit` to choose the behavior explicitly.
+
+| Policy | Behavior |
+| --- | --- |
+| `fusion` | Continue the turn on the ensemble, excluding the throttled vendor. This is the default. |
+| `passthrough` | Return the vendor error exactly as received. |
+| `fail` | Stop with a clear gateway error. |
+
+```bash
+fusionkit codex --on-rate-limit fusion
+fusionkit codex --on-rate-limit passthrough
+fusionkit codex --on-rate-limit fail
+```
+
+You can also set the default in `.fusionkit/fusion.json`:
+
+```json
+{
+  "version": "fusionkit.fusion.v3",
+  "onRateLimit": "fusion"
+}
+```
+
+## What you see
+
+When failover happens, the gateway reports the handoff and names the excluded vendor.
+
+```text
+fusion: running panel (gpt, gemini) for session <id> (excluding sonnet after a vendor rate-limit)...
+```
+
+The agent still receives a complete answer. The session also keeps its durable state, so you can inspect cost, turns, and activity later with `fusionkit sessions`.
+
+## What counts as a handoff condition
+
+FusionKit treats these classes as eligible for handoff:
+
+| Class | Examples | Handoff |
+| --- | --- | --- |
+| Transient throttling | HTTP 429, overloaded, `Retry-After` | Yes |
+| Quota or credit exhaustion | insufficient quota, billing, credit errors | Yes |
+| Permanent auth or access errors | HTTP 401, HTTP 403, model not found | No |
+
+Permanent auth errors are surfaced directly because another panel run cannot fix a missing key, disabled model, or unauthorized account.
+
+## Pair it with durable resume
+
+Rate-limit handoff handles the current turn. Durable sessions handle a later continuation. If a session stops for any reason, resume it with the most recent session or a specific id.
+
+```bash
+fusionkit sessions
+fusionkit codex --continue
+fusionkit codex --resume 1a2b3c
+```
+
+This gives you two recovery layers: automatic mid-turn failover when the failure is classifiable, and explicit resume when you choose to continue later.
+
+## When to change the default
+
+Keep `fusion` for normal work. Use `passthrough` when you are debugging a provider integration and need the raw upstream error. Use `fail` when a CI or evaluation run should stop immediately instead of substituting ensemble behavior.
+
+
+## Privacy note
+
+With the default `fusion` policy, a failed passthrough turn is re-sent to the configured panel providers. Use `passthrough` or `fail` when you do not want that provider expansion. See [Privacy and data handling](/docs/concepts/privacy).

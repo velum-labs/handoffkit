@@ -31,7 +31,8 @@
     "@fusionkit/protocol": "workspace:*",
     "@fusionkit/registry": "workspace:*",
     "@fusionkit/runtime-utils": "workspace:*",
-    "@fusionkit/tracing": "workspace:*"
+    "@fusionkit/tracing": "workspace:*",
+    "zod": "4.4.3"
   },
   "keywords": [
     "fusionkit",
@@ -42,5 +43,8 @@
     "gateway",
     "openai-compatible",
     "streaming"
-  ]
+  ],
+  "scripts": {
+    "test": "node --test \"dist/test/*.test.js\""
+  }
 }

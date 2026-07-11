@@ -104,7 +104,7 @@
     {
       "key": "docker",
       "repo": "handoffkit",
-      "description": "Warrant multi-role image. Built + smoke-tested in CI; never pushed to a registry.",
+      "description": "FusionKit multi-role image. Built + smoke-tested in CI; never pushed to a registry.",
       "versionSources": []
     }
   ]

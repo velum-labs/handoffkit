@@ -17,12 +17,14 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { carrierFromHeaders, newSessionCarrier } from "@fusionkit/tracing";
 import type { FusionTraceCarrier } from "@fusionkit/tracing";
 import { FUSION_PANEL_MODEL } from "@fusionkit/registry";
+import { estimateTokens, randomId } from "@fusionkit/runtime-utils";
 
 import { chatToAnthropicMessage, openAiSseToAnthropic } from "./adapters/anthropic.js";
 import type { AnthropicRequest } from "./adapters/anthropic.js";
 import { isCursorChatBody, translateCursorRequest } from "./adapters/cursor.js";
 import { chatToResponses, openAiSseToResponses } from "./adapters/responses.js";
 import type { ResponsesRequest } from "./adapters/responses.js";
+import { authorizedRequest } from "./auth.js";
 
 export type FrontDoorDialect = "openai-responses" | "anthropic-messages" | "openai-chat";
 
@@ -142,12 +144,10 @@ export function promptFromChat(body: ChatRequest): string {
 function syntheticOpenAiResponse(finalOutput: string): {
   id: string;
   choices: Array<{ message: { content: string }; finish_reason: string }>;
-  usage: { prompt_tokens: number; completion_tokens: number };
 } {
   return {
-    id: Math.random().toString(36).slice(2, 12),
-    choices: [{ message: { content: finalOutput }, finish_reason: "stop" }],
-    usage: { prompt_tokens: 0, completion_tokens: 0 }
+    id: randomId(),
+    choices: [{ message: { content: finalOutput }, finish_reason: "stop" }]
   };
 }
 
@@ -161,7 +161,7 @@ export function formatAnthropic(finalOutput: string, model: string): Record<stri
 
 export function formatChat(finalOutput: string, model: string): Record<string, unknown> {
   return {
-    id: `chatcmpl_${Math.random().toString(36).slice(2, 12)}`,
+    id: `chatcmpl_${randomId()}`,
     object: "chat.completion",
     created: Math.floor(Date.now() / 1000),
     model,
@@ -171,8 +171,7 @@ export function formatChat(finalOutput: string, model: string): Record<string, u
         message: { role: "assistant", content: finalOutput },
         finish_reason: "stop"
       }
-    ],
-    usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 }
+    ]
   };
 }
 
@@ -229,7 +228,7 @@ function writeChatSse(res: ServerResponse, finalOutput: string, model: string): 
   res.statusCode = 200;
   res.setHeader("content-type", "text/event-stream");
   res.setHeader("cache-control", "no-cache");
-  const id = `chatcmpl_${Math.random().toString(36).slice(2, 12)}`;
+  const id = `chatcmpl_${randomId()}`;
   const created = Math.floor(Date.now() / 1000);
   res.write(
     `data: ${JSON.stringify({
@@ -294,15 +293,8 @@ function writeJson(res: ServerResponse, status: number, value: unknown): void {
   res.end(payload);
 }
 
-function authorized(req: IncomingMessage, token: string): boolean {
-  const auth = req.headers.authorization;
-  if (typeof auth === "string" && auth === `Bearer ${token}`) return true;
-  const apiKey = req.headers["x-api-key"];
-  return typeof apiKey === "string" && apiKey === token;
-}
-
 function requestId(prefix: string): string {
-  return `${prefix}_${Math.random().toString(36).slice(2, 12)}`;
+  return randomId(10, `${prefix}_`);
 }
 
 function errorMessage(error: unknown): string {
@@ -369,7 +361,7 @@ export async function startFusionGateway(options: FusionGatewayOptions): Promise
       return;
     }
 
-    if (authToken !== undefined && !authorized(req, authToken)) {
+    if (authToken !== undefined && !authorizedRequest(req, authToken)) {
       writeJson(res, 401, { error: { message: "unauthorized", type: "auth_error" } });
       return;
     }
@@ -403,7 +395,7 @@ export async function startFusionGateway(options: FusionGatewayOptions): Promise
       if (raw === NO_BODY) return;
       const body = raw as AnthropicRequest;
       const text = promptFromAnthropic(body);
-      writeJson(res, 200, { input_tokens: Math.max(1, Math.ceil(text.length / 4)) });
+      writeJson(res, 200, { input_tokens: estimateTokens(text) });
       return;
     }
 

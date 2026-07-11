@@ -204,7 +204,7 @@ export function registerModels(program: Command): void {
     .description("list, download, and remove local MLX models")
     .option("--json", "emit machine-readable JSON")
     .action(async (_opts: { json?: boolean }, command: Command) => {
-      process.exit(await runList(contextFor(command)));
+      process.exitCode = await runList(contextFor(command));
     });
 
   models
@@ -212,7 +212,7 @@ export function registerModels(program: Command): void {
     .description("show the curated catalog and which models are downloaded")
     .option("--json", "emit machine-readable JSON")
     .action(async (_opts: { json?: boolean }, command: Command) => {
-      process.exit(await runList(contextFor(command)));
+      process.exitCode = await runList(contextFor(command));
     });
 
   models
@@ -247,7 +247,7 @@ export function registerModels(program: Command): void {
         },
         refreshNote: "fetching the mlx-community catalog…"
       });
-      process.exit(await runDownload(picked, opts.force === true, ctx));
+      process.exitCode = await runDownload(picked, opts.force === true, ctx);
     });
 
   models
@@ -284,6 +284,6 @@ export function registerModels(program: Command): void {
         options: () =>
           downloaded.map((model) => ({ value: model.repo, label: model.repo, hint: formatBytes(model.sizeBytes) }))
       });
-      process.exit(runRemove(picked, ctx));
+      process.exitCode = runRemove(picked, ctx);
     });
 }

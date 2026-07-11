@@ -12,6 +12,8 @@
  */
 export { startGateway } from "./server.js";
 export type { Gateway, GatewayOptions } from "./server.js";
+export { CodexBackendRelay, codexRelayAuth } from "./codex-relay.js";
+export type { CodexCatalogEntry, CodexRelayAuth, CodexRelayOptions, CodexStockEntry } from "./codex-relay.js";
 export {
   joinPath,
   ModelRoutedBackend,
@@ -26,7 +28,7 @@ export type {
   OpenAiBackendOptions
 } from "./backend.js";
 export { FusionBackend } from "./fusion-backend.js";
-export { InMemoryFusionBackendKernelStateStore } from "./fusion-backend.js";
+export { InMemoryFusionBackendKernelStateStore, PendingSessionWrites } from "./fusion-backend.js";
 export {
   FrontdoorArtifactTypes,
   FrontdoorFuseError,
@@ -156,6 +158,8 @@ export type {
   ResponsesToolKind,
   ResponsesToolRegistry
 } from "./adapters/responses.js";
+export { MAX_WEB_SEARCHES_PER_TURN, resolveWebSearchExecutor } from "./adapters/web-search.js";
+export type { WebSearchDialect, WebSearchExecutor, WebSearchOutcome } from "./adapters/web-search.js";
 export {
   FUSION_EVIDENCE_HEADER,
   FUSION_REPORT_HEADER,

@@ -4,20 +4,21 @@ import { dirname, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
 import { attrJson, attrStr } from "./types";
-import type { IncomingSpan, StoredSpan } from "./types";
+import type { AttributeSource, IncomingEvent, IncomingSpan, StoredEvent, StoredSpan } from "./types";
 
 /**
  * The collector store: a single local SQLite file (via Node's built-in
- * node:sqlite) holding every ingested span plus a lightweight derived
- * `sessions` row per trace. An in-process EventEmitter fans newly ingested
- * spans out to SSE subscribers for live updates. Process-local by design —
- * exactly right for a single-command local dashboard.
+ * node:sqlite) holding every ingested span and fusion event plus a
+ * lightweight derived `sessions` row per trace. An in-process EventEmitter
+ * fans newly ingested signals out to SSE subscribers for live updates.
+ * Process-local by design — exactly right for a single-command local
+ * dashboard.
  *
  * Trace data is disposable: the schema carries a version (PRAGMA
  * user_version) and the store recreates itself on mismatch. No migrations.
  */
 
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
 
 export type SessionRow = {
   trace_id: string;
@@ -69,6 +70,18 @@ function createSchema(handle: DatabaseSync): void {
     );
     CREATE INDEX IF NOT EXISTS spans_trace_idx ON spans (trace_id, start_ms, id);
     CREATE INDEX IF NOT EXISTS spans_name_idx ON spans (name);
+    CREATE TABLE IF NOT EXISTS events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      trace_id TEXT NOT NULL,
+      span_id TEXT,
+      name TEXT NOT NULL,
+      component TEXT NOT NULL,
+      service TEXT,
+      ts_ms REAL NOT NULL,
+      attributes TEXT
+    );
+    CREATE INDEX IF NOT EXISTS events_trace_idx ON events (trace_id, ts_ms, id);
+    CREATE INDEX IF NOT EXISTS events_name_idx ON events (name);
     CREATE TABLE IF NOT EXISTS sessions (
       trace_id TEXT PRIMARY KEY,
       started_at REAL NOT NULL,
@@ -100,15 +113,19 @@ export function db(): DatabaseSync {
   return handle;
 }
 
-function rowToSpan(row: Record<string, unknown>): StoredSpan {
-  let attributes: Record<string, unknown> = {};
+function rowAttributes(row: Record<string, unknown>): Record<string, unknown> {
   if (typeof row.attributes === "string" && row.attributes.length > 0) {
     try {
-      attributes = JSON.parse(row.attributes) as Record<string, unknown>;
+      return JSON.parse(row.attributes) as Record<string, unknown>;
     } catch {
       // tolerate a corrupt row rather than failing the page
     }
   }
+  return {};
+}
+
+function rowToSpan(row: Record<string, unknown>): StoredSpan {
+  const attributes = rowAttributes(row);
   return {
     id: row.id as number,
     trace_id: row.trace_id as string,
@@ -122,6 +139,19 @@ function rowToSpan(row: Record<string, unknown>): StoredSpan {
     status: row.status as StoredSpan["status"],
     ...(row.status_message !== null ? { status_message: row.status_message as string } : {}),
     attributes
+  };
+}
+
+function rowToEvent(row: Record<string, unknown>): StoredEvent {
+  return {
+    id: row.id as number,
+    trace_id: row.trace_id as string,
+    ...(row.span_id !== null ? { span_id: row.span_id as string } : {}),
+    name: row.name as string,
+    component: row.component as string,
+    ...(row.service !== null ? { service: row.service as string } : {}),
+    ts_ms: row.ts_ms as number,
+    attributes: rowAttributes(row)
   };
 }
 
@@ -157,10 +187,39 @@ export function ingestSpan(span: IncomingSpan): StoredSpan | undefined {
   return stored;
 }
 
-/** Fold one ingested span into its trace's derived session row. */
-function updateSession(span: StoredSpan): void {
+/**
+ * Insert one fusion event and fold it into its session row (a turn-info
+ * event carries the session identity; any event keeps the session's time
+ * range fresh so live sessions appear before their first span finishes).
+ */
+export function ingestEvent(event: IncomingEvent): StoredEvent {
   const handle = db();
-  handle
+  const result = handle
+    .prepare(
+      `INSERT INTO events (trace_id, span_id, name, component, service, ts_ms, attributes)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`
+    )
+    .run(
+      event.trace_id,
+      event.span_id ?? null,
+      event.name,
+      event.component,
+      event.service ?? null,
+      event.ts_ms,
+      JSON.stringify(event.attributes)
+    );
+  const stored: StoredEvent = { ...event, id: Number(result.lastInsertRowid) };
+  touchSession(event.trace_id, event.ts_ms, event.ts_ms);
+  if (event.name === "fusion.turn.info") {
+    applySessionIdentity(event.trace_id, event);
+  }
+  bus().emit("event", stored);
+  return stored;
+}
+
+/** Touch (or create) a trace's session row with a newly seen time range. */
+function touchSession(traceId: string, startMs: number, lastMs: number): void {
+  db()
     .prepare(
       `INSERT INTO sessions (trace_id, started_at, last_ts, status)
        VALUES (?, ?, ?, 'running')
@@ -168,30 +227,42 @@ function updateSession(span: StoredSpan): void {
          started_at = min(started_at, excluded.started_at),
          last_ts = max(last_ts, excluded.last_ts)`
     )
-    .run(span.trace_id, span.start_ms, span.end_ms);
+    .run(traceId, startMs, lastMs);
+}
 
-  // Session identity: the turn-info marker (or a run/passthrough span) carries
-  // the dialect, environment snapshot, and prompt preview.
-  if (span.name === "fusion.turn.info" || span.name === "fusion.run" || span.name === "fusion.passthrough") {
-    const environment = attrStr(span, "fusion.environment");
-    const repo =
-      attrStr(span, "fusion.repo") ?? attrJson<{ repo?: string }>(span, "fusion.environment")?.repo;
-    handle
-      .prepare(
-        `UPDATE sessions SET
-           dialect = coalesce(?, dialect),
-           repo = coalesce(?, repo),
-           environment = coalesce(?, environment),
-           prompt_preview = coalesce(?, prompt_preview)
-         WHERE trace_id = ?`
-      )
-      .run(
-        attrStr(span, "fusion.dialect") ?? null,
-        repo ?? null,
-        environment ?? null,
-        attrStr(span, "fusion.prompt_preview") ?? null,
-        span.trace_id
-      );
+/**
+ * Session identity: the turn-info event (or a run/passthrough span) carries
+ * the dialect, environment snapshot, and prompt preview.
+ */
+function applySessionIdentity(traceId: string, source: AttributeSource): void {
+  const environment = attrStr(source, "fusion.environment");
+  const repo =
+    attrStr(source, "fusion.repo") ?? attrJson<{ repo?: string }>(source, "fusion.environment")?.repo;
+  db()
+    .prepare(
+      `UPDATE sessions SET
+         dialect = coalesce(?, dialect),
+         repo = coalesce(?, repo),
+         environment = coalesce(?, environment),
+         prompt_preview = coalesce(?, prompt_preview)
+       WHERE trace_id = ?`
+    )
+    .run(
+      attrStr(source, "fusion.dialect") ?? null,
+      repo ?? null,
+      environment ?? null,
+      attrStr(source, "fusion.prompt_preview") ?? null,
+      traceId
+    );
+}
+
+/** Fold one ingested span into its trace's derived session row. */
+function updateSession(span: StoredSpan): void {
+  const handle = db();
+  touchSession(span.trace_id, span.start_ms, span.end_ms);
+
+  if (span.name === "fusion.run" || span.name === "fusion.passthrough") {
+    applySessionIdentity(span.trace_id, span);
   }
 
   // Terminal signals: a run/passthrough span ends the session outright; a
@@ -263,4 +334,22 @@ export function spansByName(names: string[], limit = 20000): StoredSpan[] {
     .prepare(`SELECT * FROM spans WHERE ${placeholders} ORDER BY start_ms ASC, id ASC LIMIT ?`)
     .all(...params, limit) as unknown as Record<string, unknown>[];
   return rows.map(rowToSpan);
+}
+
+/** Every fusion event of one trace, in time order (ingest id as tiebreak). */
+export function getEvents(traceId: string): StoredEvent[] {
+  const rows = db()
+    .prepare("SELECT * FROM events WHERE trace_id = ? ORDER BY ts_ms ASC, id ASC")
+    .all(traceId) as unknown as Record<string, unknown>[];
+  return rows.map(rowToEvent);
+}
+
+/** Cross-session event scan by exact name. */
+export function eventsByName(names: string[], limit = 20000): StoredEvent[] {
+  if (names.length === 0) return [];
+  const placeholders = names.map(() => "?").join(", ");
+  const rows = db()
+    .prepare(`SELECT * FROM events WHERE name IN (${placeholders}) ORDER BY ts_ms ASC, id ASC LIMIT ?`)
+    .all(...names, limit) as unknown as Record<string, unknown>[];
+  return rows.map(rowToEvent);
 }

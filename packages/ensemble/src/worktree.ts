@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -16,6 +16,8 @@ export type CandidateWorktree = {
   snapshotHash: string;
   sealed: boolean;
   cleaned: boolean;
+  /** When `cleaned` is false, why removal did not fully succeed. */
+  cleanupError?: string;
 };
 
 export type WorktreePlan = {
@@ -31,7 +33,7 @@ function safeSegment(value: string): string {
 }
 
 export function defaultOutputRoot(descriptor: EnsembleDescriptor): string {
-  const base = descriptor.outputRoot ?? join(descriptor.workspace ?? tmpdir(), ".warrant", "ensemble");
+  const base = descriptor.outputRoot ?? join(descriptor.workspace ?? tmpdir(), ".fusionkit", "ensemble");
   return resolve(base, safeSegment(descriptor.id));
 }
 
@@ -42,8 +44,12 @@ export function candidateId(descriptor: EnsembleDescriptor, model: EnsembleModel
 export function createWorktreePlan(descriptor: EnsembleDescriptor): WorktreePlan | undefined {
   if (!descriptor.workspace) return undefined;
   const workspace = resolve(descriptor.workspace);
+  // Sweep stale registrations left by crashed past runs (worktree dirs that no
+  // longer exist on disk) so their lingering `.git/worktrees` entries cannot
+  // make `git worktree add` fail with a path-reuse conflict below.
+  gitText(workspace, ["worktree", "prune"], { allowFail: true });
   const baseGitSha = descriptor.baseGitSha || gitText(workspace, ["rev-parse", "HEAD"]).trim();
-  const root = mkdtempSync(join(tmpdir(), `warrant-ensemble-${safeSegment(descriptor.id)}-`));
+  const root = mkdtempSync(join(tmpdir(), `fusionkit-ensemble-${safeSegment(descriptor.id)}-`));
   const snapshotHash = hashCanonicalSha256({
     workspace,
     baseGitSha,
@@ -55,7 +61,7 @@ export function createWorktreePlan(descriptor: EnsembleDescriptor): WorktreePlan
     for (const [ordinal, model] of descriptor.models.entries()) {
       const id = candidateId(descriptor, model, ordinal);
       const path = join(root, id);
-      const branchName = `warrant/ensemble/${safeSegment(descriptor.id)}/${safeSegment(model.id)}`;
+      const branchName = `fusionkit/ensemble/${safeSegment(descriptor.id)}/${safeSegment(model.id)}-${ordinal}`;
       gitText(workspace, ["worktree", "add", "--detach", path, baseGitSha]);
       worktrees.push({
         candidateId: id,
@@ -87,9 +93,32 @@ export function cleanupCandidateWorktree(
   workspace: string,
   worktree: CandidateWorktree
 ): CandidateWorktree {
-  gitText(workspace, ["worktree", "remove", "--force", worktree.path], { allowFail: true });
-  rmSync(worktree.path, { recursive: true, force: true });
-  return Object.freeze({ ...worktree, cleaned: true });
+  // Attempt the git-aware removal (drops the .git/worktrees registration too),
+  // then the directory, recording honest failure reasons instead of the old
+  // allowFail swallow that always reported `cleaned: true`.
+  let reason: string | undefined;
+  try {
+    gitText(workspace, ["worktree", "remove", "--force", worktree.path]);
+  } catch (error) {
+    reason = error instanceof Error ? error.message : String(error);
+  }
+  try {
+    rmSync(worktree.path, { recursive: true, force: true });
+  } catch (error) {
+    reason = reason ?? (error instanceof Error ? error.message : String(error));
+  }
+  // The desired end state is "the worktree directory is gone". If it is, the
+  // candidate is clean regardless of a stale-registration complaint from git;
+  // otherwise surface why.
+  const cleaned = !existsSync(worktree.path);
+  const cleanupError = cleaned
+    ? undefined
+    : reason ?? "worktree path still present after removal";
+  return Object.freeze({
+    ...worktree,
+    cleaned,
+    ...(cleanupError !== undefined ? { cleanupError } : {})
+  });
 }
 
 export function cleanupWorktreePlan(plan: WorktreePlan): CandidateWorktree[] {
@@ -100,9 +129,19 @@ export function cleanupWorktreePlan(plan: WorktreePlan): CandidateWorktree[] {
   return cleaned;
 }
 
-export function diffCandidateWorktree(worktree: CandidateWorktree): string {
-  gitText(worktree.path, ["add", "-A"], { allowFail: true });
-  return gitText(worktree.path, ["diff", "--cached", "--binary", worktree.baseGitSha], {
+/**
+ * Add-then-diff so untracked/new files are included: stage everything, then
+ * diff the index against `baseGitSha`. A plain `git diff` misses new files and
+ * makes `has_diff` report false negatives for candidates that only created
+ * files.
+ */
+export function diffWorkspace(path: string, baseGitSha: string): string {
+  gitText(path, ["add", "-A"], { allowFail: true });
+  return gitText(path, ["diff", "--cached", "--binary", baseGitSha], {
     allowFail: true
   });
+}
+
+export function diffCandidateWorktree(worktree: CandidateWorktree): string {
+  return diffWorkspace(worktree.path, worktree.baseGitSha);
 }

@@ -21,7 +21,7 @@ import { startOtlpCapture } from "./otlp-capture.mjs";
 import { startFusionStack } from "../packages/cli/dist/fusion-quickstart.js";
 import { BENCHMARK_PANEL_PRESETS } from "../packages/registry/dist/index.js";
 
-const FK_DIR = process.env.WARRANT_FUSION_FK_DIR ?? fileURLToPath(new URL("..", import.meta.url));
+const FK_DIR = process.env.FUSIONKIT_FUSION_FK_DIR ?? fileURLToPath(new URL("..", import.meta.url));
 const E2E_PANEL = BENCHMARK_PANEL_PRESETS["gpt-opus-smoke"];
 if (E2E_PANEL === undefined) throw new Error("missing gpt-opus-smoke benchmark panel preset");
 const E2E_JUDGE_MODEL = E2E_PANEL.members.find((member) => member.id === E2E_PANEL.judgeId)?.model;
@@ -176,15 +176,15 @@ async function driveHarness(gatewayUrl, repo, task) {
 async function main() {
   const root = mkdtempSync(join(tmpdir(), "fusion-step-e2e-"));
   const repo = materializeRepo(join(root, "repo"));
-  // Capture the run's spans with an in-script OTLP collector: the in-process
-  // gateway/ensemble tracer and every spawned child (panel servers, the
-  // Python synthesis engine) export to it over standard OTLP/HTTP.
+  // Capture the run's spans + events with an in-script OTLP collector: the
+  // in-process gateway/ensemble tracer and every spawned child (panel
+  // servers, the Python synthesis engine) export to it over standard OTLP/HTTP.
   const capture = await startOtlpCapture();
-  process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT = capture.endpoint;
+  process.env.OTEL_EXPORTER_OTLP_ENDPOINT = capture.baseEndpoint;
   initFusionTracing({ serviceName: "fusion-e2e" });
 
   log(`repo: ${repo}`);
-  log(`otlp capture: ${capture.endpoint}`);
+  log(`otlp capture: ${capture.baseEndpoint}`);
   log(`starting fusion stack (${E2E_PANEL.panelId}, judge ${E2E_JUDGE_MODEL})...`);
   const stack = await startFusionStack({
     repo,
@@ -218,6 +218,7 @@ async function main() {
     log(`trace_ids: ${trace.traceIds.join(", ")}`);
     log(`scopes: ${JSON.stringify(trace.scopes)}`);
     log(`span_names: ${JSON.stringify(trace.counts)}`);
+    log(`event_names: ${JSON.stringify(trace.eventCounts)}`);
 
     log(`\nRESULT: ${test.status === 0 ? "GREEN (tests pass out of the box)" : "RED (tests still failing)"}`);
     process.exitCode = test.status === 0 ? 0 : 1;

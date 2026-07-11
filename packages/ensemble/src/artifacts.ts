@@ -1,9 +1,10 @@
-import { mkdirSync, writeFileSync } from "node:fs";
+import { writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { artifactHash } from "@fusionkit/protocol";
 import type { ModelFusionArtifactKind } from "@fusionkit/protocol";
+import { ensureRunOutputDir } from "@fusionkit/runtime-utils";
 
 import type { HarnessArtifact } from "./harness.js";
 
@@ -28,7 +29,7 @@ function safeFileName(value: string): string {
 
 export function createArtifactStore(root: string): ArtifactStore {
   const resolvedRoot = resolve(root);
-  mkdirSync(resolvedRoot, { recursive: true });
+  ensureRunOutputDir(resolvedRoot);
   return {
     root: resolvedRoot,
     writeText(input) {

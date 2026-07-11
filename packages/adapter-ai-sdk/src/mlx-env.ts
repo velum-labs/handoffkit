@@ -4,6 +4,7 @@ import {
   mkdirSync,
   readdirSync,
   readFileSync,
+  renameSync,
   rmSync,
   statSync,
   writeFileSync
@@ -14,7 +15,7 @@ import { delimiter, dirname, join } from "node:path";
 import { MLX_HELPER_PY } from "./mlx-helper-source.js";
 
 /**
- * Warrant-owned MLX environment.
+ * FusionKit-owned MLX environment.
  *
  * The managed MLX backend does not shell out to whatever `mlx_lm.server`
  * happens to be on PATH — it owns the entire stack. This provisioner
@@ -34,7 +35,7 @@ import { MLX_HELPER_PY } from "./mlx-helper-source.js";
  * allowlist: exact version, bumped only as a reviewed code change.
  *
  * Toolchain: provisioning prefers `uv` when available (an explicit path,
- * WARRANT_UV, or PATH discovery) — it is much faster and can supply its own
+ * FUSIONKIT_UV, or PATH discovery) — it is much faster and can supply its own
  * managed CPython, removing even the system-python requirement. Without uv
  * it falls back to stdlib `python3 -m venv` + pip, so uv is an upgrade,
  * never a dependency. uv's caches and managed interpreters are contained
@@ -62,13 +63,32 @@ export const PYTHON_PIN = "3.12";
 /** Minimum Python the venv may be built from. */
 const MIN_PYTHON = { major: 3, minor: 9 };
 
-/** Default owned directory for the MLX stack. */
+/**
+ * Default owned directory for the MLX stack: `$FUSIONKIT_MLX_HOME` when set
+ * (tests and unusual layouts), otherwise `~/.fusionkit/mlx`. A pre-rename
+ * `~/.warrant/mlx` directory is moved to the new location once — the cache
+ * holds gigabytes of models and must survive the rename.
+ */
 export function defaultMlxDir(): string {
-  return join(homedir(), ".warrant", "mlx");
+  const override = process.env.FUSIONKIT_MLX_HOME;
+  if (override !== undefined && override.length > 0) return override;
+  const dir = join(homedir(), ".fusionkit", "mlx");
+  const legacyDir = join(homedir(), ".warrant", "mlx");
+  if (!existsSync(dir) && existsSync(legacyDir)) {
+    try {
+      mkdirSync(dirname(dir), { recursive: true });
+      renameSync(legacyDir, dir);
+    } catch {
+      // Same-volume rename failed (permissions, races); keep using the old
+      // location rather than silently re-provisioning 11 GB of models.
+      return legacyDir;
+    }
+  }
+  return dir;
 }
 
 export type MlxEnvManifest = {
-  version: "warrant.mlxenv.v1";
+  version: "fusionkit.mlxenv.v1";
   /** What was installed (e.g. "mlx-lm==0.31.3"). */
   packageSpec: string;
   /** Additional specs installed after the main one (e.g. the structured
@@ -136,7 +156,7 @@ export class MlxCapabilityError extends Error {
 }
 
 export type MlxEnvOptions = {
-  /** Owned directory. Defaults to ~/.warrant/mlx. */
+  /** Owned directory. Defaults to defaultMlxDir(). */
   dir?: string;
   /** Requirement to install. Defaults to the MLX_LM_PIN pin. */
   packageSpec?: string;
@@ -162,7 +182,7 @@ export type MlxEnvOptions = {
   python?: string;
   /**
    * uv binary to provision with, or `false` to disable uv entirely.
-   * Default: WARRANT_UV if set, otherwise "uv" discovered on PATH,
+   * Default: FUSIONKIT_UV if set, otherwise "uv" discovered on PATH,
    * otherwise the stdlib venv+pip fallback.
    */
   uv?: string | false;
@@ -200,6 +220,7 @@ function run(
 ): RunResult {
   const result = spawnSync(cmd, args, {
     encoding: "utf8",
+    // env-spread-allowed: trusted provisioning toolchain (uv/pip) we invoke ourselves, never model-chosen commands
     ...(extraEnv ? { env: { ...process.env, ...extraEnv } } : {})
   });
   if (result.error) {
@@ -226,6 +247,7 @@ function runStreaming(
 ): Promise<RunResult> {
   return new Promise((resolve) => {
     const child = spawn(cmd, args, {
+      // env-spread-allowed: trusted provisioning toolchain (uv/pip) we invoke ourselves, never model-chosen commands
       ...(extraEnv ? { env: { ...process.env, ...extraEnv } } : {})
     });
     let stdout = "";
@@ -332,11 +354,17 @@ export class MlxEnv {
   private readManifest(): MlxEnvManifest | undefined {
     if (!existsSync(this.manifestPath)) return undefined;
     try {
-      const parsed = JSON.parse(
-        readFileSync(this.manifestPath, "utf8")
-      ) as Partial<MlxEnvManifest>;
+      const raw = JSON.parse(readFileSync(this.manifestPath, "utf8")) as Record<string, unknown>;
+      // One-time migration of pre-rename manifests: accept the old version
+      // string, rewrite it, and carry on — the env underneath is identical
+      // and must not be re-provisioned.
+      if (raw.version === "warrant.mlxenv.v1") {
+        raw.version = "fusionkit.mlxenv.v1";
+        writeFileSync(this.manifestPath, `${JSON.stringify(raw, null, 2)}\n`);
+      }
+      const parsed = raw as Partial<MlxEnvManifest>;
       if (
-        parsed.version !== "warrant.mlxenv.v1" ||
+        parsed.version !== "fusionkit.mlxenv.v1" ||
         typeof parsed.packageSpec !== "string" ||
         typeof parsed.interpreterPath !== "string"
       ) {
@@ -370,7 +398,7 @@ export class MlxEnv {
   /**
    * Pick the provisioning toolchain. An explicit `python` option forces
    * stdlib venv+pip with that interpreter; otherwise uv is preferred
-   * (explicit path, WARRANT_UV, or PATH discovery) with venv+pip as the
+   * (explicit path, FUSIONKIT_UV, or PATH discovery) with venv+pip as the
    * no-extra-requirements fallback.
    */
   private resolveToolchain(): Toolchain {
@@ -378,7 +406,7 @@ export class MlxEnv {
       return { kind: "venv-pip", python: this.checkPython(this.explicitPython) };
     }
     if (this.uvOption !== false) {
-      const explicitUv = this.uvOption ?? process.env.WARRANT_UV;
+      const explicitUv = this.uvOption ?? process.env.FUSIONKIT_UV;
       const candidate = explicitUv ?? "uv";
       const probe = run(candidate, ["--version"]);
       if (probe.status === 0) {
@@ -408,7 +436,7 @@ export class MlxEnv {
     if (probe.status !== 0) {
       throw new MlxCapabilityError(
         `no usable Python interpreter ("${candidate}"): ${probe.stderr.trim() || "not found"} ` +
-          "(install python3, or install uv and Warrant will manage Python itself)"
+          "(install python3, or install uv and FusionKit will manage Python itself)"
       );
     }
     const [major = 0, minor = 0] = probe.stdout.trim().split(".").map(Number);
@@ -528,7 +556,7 @@ export class MlxEnv {
       "import sys; print(f'{sys.version_info[0]}.{sys.version_info[1]}.{sys.version_info[2]}')"
     ]);
     const manifest: MlxEnvManifest = {
-      version: "warrant.mlxenv.v1",
+      version: "fusionkit.mlxenv.v1",
       packageSpec: this.packageSpec,
       extraPackageSpecs: this.extraPackageSpecs,
       importName: this.importName,

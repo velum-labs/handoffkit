@@ -68,7 +68,7 @@ test("translate maps the full agent-mode payload", () => {
   assert.equal(translated.stream, true);
   assert.equal(translated.temperature, 0.2);
   assert.equal(translated.tool_choice, "auto");
-  assert.equal(translated.max_tokens, 4096);
+  assert.equal(translated.max_completion_tokens, 4096);
   assert.deepEqual(translated.messages, [
     { role: "system", content: "You are a coding agent." },
     { role: "user", content: "fix the bug" },
@@ -85,18 +85,18 @@ test("translate maps the full agent-mode payload", () => {
     },
     { role: "tool", tool_call_id: "call_1", content: "print('hi')" }
   ]);
-  // Responses-only fields must never survive translation.
+  // Responses-only fields must never survive translation (stream_options is re-added for metering).
   for (const stripped of [
     "input",
     "store",
     "include",
     "reasoning",
     "text",
-    "stream_options",
     "max_output_tokens"
   ]) {
     assert.equal(stripped in translated, false, `${stripped} must be stripped`);
   }
+  assert.deepEqual(translated.stream_options, { include_usage: true });
 });
 
 test("translate nests flat function tools and synthesizes custom tool schemas", () => {
@@ -207,15 +207,17 @@ test("translate turns a string input into a user message", () => {
   assert.deepEqual(translated.messages, [{ role: "user", content: "just text" }]);
 });
 
-test("translate passes a messages body through unchanged", () => {
+test("translate passes a messages body through and ensures streamed usage metering", () => {
   const body = {
     model: "m",
     messages: [{ role: "user", content: "hi" }],
-    stream: false,
-    stream_options: { include_usage: true }
+    stream: true
   };
 
-  assert.deepEqual(translateCursorRequest(body), body);
+  assert.deepEqual(translateCursorRequest(body), {
+    ...body,
+    stream_options: { include_usage: true }
+  });
 });
 
 test("translate yields empty messages when both messages and input are absent", () => {
@@ -403,7 +405,7 @@ test("local gateway /v1/cursor route translates the hybrid before the backend ca
     const sent = lastChatBody() as Record<string, unknown>;
     assert.equal("input" in sent, false, "the hybrid input list must not reach the backend");
     assert.equal(Array.isArray(sent.messages), true);
-    assert.equal(sent.max_tokens, 4096);
+    assert.equal(sent.max_completion_tokens, 4096);
     const body = (await response.json()) as { choices: Array<{ message: { content: string } }> };
     assert.equal(body.choices[0]?.message.content, "hello from fake");
   } finally {

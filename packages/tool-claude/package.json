@@ -47,5 +47,8 @@
     "claude-code",
     "harness",
     "adapter"
-  ]
+  ],
+  "scripts": {
+    "test": "node --test \"dist/test/*.test.js\""
+  }
 }

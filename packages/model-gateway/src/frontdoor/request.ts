@@ -70,6 +70,7 @@ async function runFusionTurnResponse(
     const merged = narration !== undefined ? mergeEventsWithNarration(events, narration) : events;
     return eventsToSseResponse(merged, {
       ...(req.notice !== undefined ? { notice: req.notice } : {}),
+      ...(req.suppressChatKeepalive === true ? { keepalive: false } : {}),
       logger: services.logger,
       onError: () => {
         narration?.close();

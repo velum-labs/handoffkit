@@ -39,30 +39,39 @@ test("parseUsageFromSse extracts the last usage block on the stream", () => {
   assert.deepEqual(parseUsageFromSse(sse), { promptTokens: 10, completionTokens: 5, totalTokens: 15 });
 });
 
-test("lookupPricing matches exact ids and longest prefix; overrides win", () => {
+test("lookupPricing resolves exact ids, aliases, and unknown models", () => {
   assert.deepEqual(lookupPricing("gpt-5.5"), { inputPer1mTokens: 1.25, outputPer1mTokens: 10 });
-  // A dated id resolves via the gpt-5.5 prefix.
-  assert.deepEqual(lookupPricing("gpt-5.5-2026-01-01"), { inputPer1mTokens: 1.25, outputPer1mTokens: 10 });
-  // The cheapest recommended judge (claude-haiku-4-5) resolves via the claude-haiku family prefix.
+  assert.deepEqual(lookupPricing("gpt-5.5-2026-05"), { inputPer1mTokens: 1.25, outputPer1mTokens: 10 });
   assert.deepEqual(lookupPricing("claude-haiku-4-5"), { inputPer1mTokens: 1, outputPer1mTokens: 5 });
-  // Unknown model → undefined unless overridden.
-  assert.equal(lookupPricing("mystery-model"), undefined);
+  assert.equal(lookupPricing("totally-new-model-2027"), undefined);
+  assert.equal(lookupPricing("claude-haiku-4-5-unknown-suffix"), undefined);
   assert.deepEqual(lookupPricing("mystery-model", { "mystery-model": { inputPer1mTokens: 1, outputPer1mTokens: 2 } }), {
     inputPer1mTokens: 1,
     outputPer1mTokens: 2
   });
 });
 
-test("estimateCost computes input+output cost from usage and pricing", () => {
-  // 1,000,000 prompt tokens @ $1.25/M + 1,000,000 completion @ $10/M = $11.25.
-  const cost = estimateCost(
+test("estimateCost computes input+output cost and supports partial usage", () => {
+  const full = estimateCost(
     { promptTokens: 1_000_000, completionTokens: 1_000_000 },
     { inputPer1mTokens: 1.25, outputPer1mTokens: 10 }
   );
-  assert.equal(cost, 11.25);
-  // Missing pricing or a token side → undefined (unknown, not zero).
-  assert.equal(estimateCost({ promptTokens: 1 }, { inputPer1mTokens: 1, outputPer1mTokens: 2 }), undefined);
+  assert.equal(full?.costUsd, 11.25);
+  assert.equal(full?.partialUsage, false);
+
+  const promptOnly = estimateCost({ promptTokens: 1_000_000 }, { inputPer1mTokens: 1.25, outputPer1mTokens: 10 });
+  assert.equal(promptOnly?.costUsd, 1.25);
+  assert.equal(promptOnly?.partialUsage, true);
+
+  assert.equal(estimateCost({}, { inputPer1mTokens: 1, outputPer1mTokens: 2 }), undefined);
   assert.equal(estimateCost({ promptTokens: 1, completionTokens: 1 }, undefined), undefined);
+});
+
+test("meterTurn flags partial usage when only one token side is present", () => {
+  const turn = meterTurn("gpt-5.5", { promptTokens: 1000 });
+  assert.equal(turn.partialUsage, true);
+  assert.equal(turn.unknownCost, false);
+  assert.ok(Math.abs((turn.costUsd ?? 0) - 0.00125) < 1e-9);
 });
 
 test("meterTurn: usage + known pricing yields the expected cost", () => {
@@ -114,8 +123,9 @@ test("meterCall and addLedgerEntry split provider and local compute dollars", ()
   });
   assert.equal(entry.providerCostUsd, 0);
   assert.ok(Math.abs((entry.localComputeCostUsd ?? 0) - 0.001) < 1e-9);
+  assert.equal(entry.costUsd, 0);
   const total = addLedgerEntry(emptySessionCost(), entry);
-  assert.ok(Math.abs(total.totalUsd - 0.001) < 1e-9);
+  assert.equal(total.totalUsd, 0);
   assert.equal(total.providerUsd, 0);
   assert.ok(Math.abs((total.localComputeUsd ?? 0) - 0.001) < 1e-9);
   assert.equal(total.localActiveMs, 10_000);

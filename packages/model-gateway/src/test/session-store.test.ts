@@ -64,12 +64,12 @@ function costEntry(stage: CostLedgerEntry["stage"]): CostLedgerEntry {
   };
 }
 
-test("round-trips a session through a fresh store instance (persist → reload)", () => {
+test("round-trips a session through a fresh store instance (persist → reload)", async () => {
   const root = tempDir();
   const writer = new FileSystemSessionStore(root);
-  writer.saveMeta(meta("alpha"));
-  writer.appendTurn("alpha", turn(1));
-  writer.appendTurn("alpha", turn(2));
+  await writer.saveMeta(meta("alpha"));
+  await writer.appendTurn("alpha", turn(1));
+  await writer.appendTurn("alpha", turn(2));
 
   // A brand-new instance (simulating a new CLI process) reads it back.
   const reader = new FileSystemSessionStore(root);
@@ -85,14 +85,14 @@ test("round-trips a session through a fresh store instance (persist → reload)"
   assert.equal(loaded.meta.updatedAt, 1002);
 });
 
-test("list summarizes sessions, most-recently-active first, with turn counts", () => {
+test("list summarizes sessions, most-recently-active first, with turn counts", async () => {
   const root = tempDir();
   const store = new FileSystemSessionStore(root);
-  store.saveMeta(meta("older"));
-  store.appendTurn("older", turn(1));
-  store.saveMeta(meta("newer"));
-  store.appendTurn("newer", turn(1));
-  store.appendTurn("newer", turn(2));
+  await store.saveMeta(meta("older"));
+  await store.appendTurn("older", turn(1));
+  await store.saveMeta(meta("newer"));
+  await store.appendTurn("newer", turn(1));
+  await store.appendTurn("newer", turn(2));
 
   const list = store.list();
   assert.deepEqual(list.map((entry) => entry.id), ["newer", "older"]);
@@ -100,11 +100,11 @@ test("list summarizes sessions, most-recently-active first, with turn counts", (
   assert.equal(list[1]?.turnCount, 1);
 });
 
-test("cost ledger entries persist beside the running summary", () => {
+test("cost ledger entries persist beside the running summary", async () => {
   const root = tempDir();
   const writer = new FileSystemSessionStore(root);
-  writer.saveMeta(meta("costed"));
-  writer.recordCostEntry("costed", costEntry("panel"), {
+  await writer.saveMeta(meta("costed"));
+  await writer.recordCostEntry("costed", costEntry("panel"), {
     totalUsd: 0.001,
     providerUsd: 0.001,
     localComputeUsd: 0,
@@ -125,10 +125,10 @@ test("cost ledger entries persist beside the running summary", () => {
   assert.equal(loaded?.costLedger[0]?.stage, "panel");
 });
 
-test("remove deletes a session and is idempotent", () => {
+test("remove deletes a session and is idempotent", async () => {
   const root = tempDir();
   const store = new FileSystemSessionStore(root);
-  store.saveMeta(meta("gone"));
+  await store.saveMeta(meta("gone"));
   assert.equal(store.remove("gone"), true);
   assert.equal(store.load("gone"), undefined);
   assert.equal(store.remove("gone"), false);
@@ -140,11 +140,11 @@ test("load returns undefined for an unknown id and an empty list on a missing ro
   assert.deepEqual(store.list(), []);
 });
 
-test("a torn trailing turn line is skipped, not fatal", () => {
+test("a torn trailing turn line is skipped, not fatal", async () => {
   const root = tempDir();
   const store = new FileSystemSessionStore(root);
-  store.saveMeta(meta("torn"));
-  store.appendTurn("torn", turn(1));
+  await store.saveMeta(meta("torn"));
+  await store.appendTurn("torn", turn(1));
   // Simulate a crash mid-write by appending a partial JSON line.
   appendFileSync(join(root, "torn", "turns.jsonl"), '{"turn":2,"messa', "utf8");
   const loaded = store.load("torn");
@@ -152,11 +152,11 @@ test("a torn trailing turn line is skipped, not fatal", () => {
   assert.deepEqual(loaded.turns.map((entry) => entry.turn), [1]);
 });
 
-test("the in-memory store mirrors the filesystem store's contract", () => {
+test("the in-memory store mirrors the filesystem store's contract", async () => {
   const store = new InMemorySessionStore();
-  store.saveMeta(meta("mem"));
-  store.appendTurn("mem", turn(1));
-  store.appendTurn("mem", turn(2));
+  await store.saveMeta(meta("mem"));
+  await store.appendTurn("mem", turn(1));
+  await store.appendTurn("mem", turn(2));
   const loaded = store.load("mem");
   assert.deepEqual(loaded?.turns.map((entry) => entry.turn), [1, 2]);
   assert.equal(store.list()[0]?.turnCount, 2);

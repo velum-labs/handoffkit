@@ -6,6 +6,8 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 
+import { parse as parseYaml } from "yaml";
+
 import { FUSION_CONFIG_VERSION } from "../fusion-config.js";
 import type { FusionConfig } from "../fusion-config.js";
 import { exportRouterYaml, routerConfigYaml } from "../fusion/stack.js";
@@ -108,7 +110,7 @@ test("config export-yaml stdout is exactly the derived router YAML (no drift)", 
     );
     // Sanity: it is valid-looking router YAML.
     assert.match(result.stdout, /^endpoints:/);
-    assert.match(result.stdout, /judge_model: "sonnet"/);
+    assert.match(result.stdout, /judge_model: sonnet/);
   } finally {
     fixture.cleanup();
   }
@@ -130,7 +132,30 @@ test("routerConfigYaml emits endpoint pricing when configured", () => {
   assert.match(yaml, /pricing:/);
   assert.match(yaml, /input_per_1m_tokens: 1\.25/);
   assert.match(yaml, /output_per_1m_tokens: 10/);
-  assert.match(yaml, /currency: "USD"/);
+  assert.match(yaml, /currency: USD/);
+});
+
+test("routerConfigYaml survives hostile model ids (quotes, colons, YAML metacharacters)", () => {
+  // A model id is attacker-influenced input (catalogs, user config): the
+  // serializer must quote it into inert data, never let it splice keys or
+  // documents into the router config.
+  const hostile = 'evil: "model"\n  api_key_env: PWNED # {{[&*!|>\'%@`]}}';
+  const yaml = routerConfigYaml({
+    specs: [
+      { id: "gpt", model: hostile, provider: "openai" },
+      { id: "sonnet", model: "claude-sonnet-4-6", provider: "anthropic" }
+    ],
+    mlxUrls: {},
+    judgeId: "sonnet"
+  });
+  const doc = parseYaml(yaml) as {
+    endpoints: Array<{ id: string; model: string; api_key_env?: string }>;
+    judge_model: string;
+  };
+  assert.equal(doc.endpoints[0]?.model, hostile, "the hostile id round-trips as a plain string");
+  assert.equal(doc.endpoints[0]?.api_key_env, "OPENAI_API_KEY", "no key was spliced in");
+  assert.equal(doc.endpoints.length, 2);
+  assert.equal(doc.judge_model, "sonnet");
 });
 
 test("config export-yaml -o writes the YAML to a file and reports it on stderr", () => {

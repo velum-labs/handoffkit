@@ -217,6 +217,12 @@ _CASES: list[tuple[str, _FakeSDKError, ProviderKind, ProviderErrorCategory]] = [
         "openai",
         "unknown",
     ),
+    (
+        "billing_word_is_not_always_quota",
+        _FakeSDKError(status_code=400, message="billing address has an invalid country code"),
+        "openai",
+        "unknown",
+    ),
 ]
 
 
@@ -303,6 +309,97 @@ async def test_non_transient_raises_without_retry(monkeypatch) -> None:
     assert excinfo.value.category == "auth_permanent"
     assert attempts == 1  # auth errors are not retried
     sleep.assert_not_awaited()
+
+
+async def test_retry_after_is_clamped_to_max_delay(monkeypatch) -> None:
+    # Acceptance (WS8.3): a provider Retry-After of an hour must not park the
+    # coroutine for an hour — the wait is clamped to max_delay_s.
+    sleeps: list[float] = []
+
+    async def _fake_sleep(delay: float) -> None:
+        sleeps.append(delay)
+
+    monkeypatch.setattr("fusionkit_core.clients.asyncio.sleep", _fake_sleep)
+    attempts = 0
+
+    async def _operation() -> str:
+        nonlocal attempts
+        attempts += 1
+        if attempts < 2:
+            raise _FakeSDKError(status_code=429, message="rate limit", retry_after="3600")
+        return "ok"
+
+    result = await _call_with_retries(_operation, provider="openai", model_id="m", max_delay_s=8.0)
+
+    assert result == "ok"
+    assert len(sleeps) == 1
+    assert sleeps[0] <= 8.0
+
+
+async def test_retry_backoff_is_jittered(monkeypatch) -> None:
+    # Acceptance (WS8.3): every retry delay is drawn from uniform(cap/2, cap),
+    # where cap = min(max_delay_s, Retry-After or exponential backoff). Jitter
+    # breaks the lockstep retries of a panel whose members all failed together.
+    sleeps: list[float] = []
+
+    async def _fake_sleep(delay: float) -> None:
+        sleeps.append(delay)
+
+    monkeypatch.setattr("fusionkit_core.clients.asyncio.sleep", _fake_sleep)
+    draws: list[tuple[float, float]] = []
+
+    def _uniform(low: float, high: float) -> float:
+        draws.append((low, high))
+        return high
+
+    monkeypatch.setattr("fusionkit_core.client_errors.random.uniform", _uniform)
+    attempts = 0
+
+    async def _operation() -> str:
+        nonlocal attempts
+        attempts += 1
+        if attempts < 3:
+            raise _FakeSDKError(status_code=503, message="service unavailable")
+        return "ok"
+
+    result = await _call_with_retries(
+        _operation, provider="openai", model_id="m", base_delay_s=0.5, max_delay_s=8.0
+    )
+
+    assert result == "ok"
+    # Attempt 1 backs off from cap 0.5, attempt 2 from cap 1.0.
+    assert draws == [(0.25, 0.5), (0.5, 1.0)]
+    assert sleeps == [0.5, 1.0]
+
+
+def test_server_error_status_outranks_echoed_auth_text() -> None:
+    # Acceptance (WS8.3): a 5xx whose message merely echoes tool output ("file
+    # does not exist") is a transient server failure, not auth_permanent.
+    exc = _FakeSDKError(status_code=500, message="upstream crashed: file does not exist")
+    assert classify_provider_error(exc, provider="openai").category == "transient"
+
+
+def test_rate_limit_with_billing_prose_stays_transient() -> None:
+    # Acceptance (WS8.3): on a 429, quota classification requires a structured
+    # error code/type — prose mentioning "billing" (e.g. echoed request
+    # content) no longer flips a plain rate limit to quota_exhausted.
+    exc = _FakeSDKError(
+        status_code=429,
+        body={
+            "error": {
+                "type": "rate_limit_error",
+                "message": "Rate limit reached while processing your billing page scrape",
+            }
+        },
+    )
+    assert classify_provider_error(exc, provider="openai").category == "transient"
+
+
+def test_statusless_auth_message_still_classifies() -> None:
+    # String-only failures (no status, no structured body) still classify from
+    # message text — there is nothing better to go on.
+    exc = _FakeSDKError(message="invalid api key")
+    assert classify_provider_error(exc, provider="openai").category == "auth_permanent"
 
 
 async def test_openai_client_retries_transient_and_returns_response(monkeypatch) -> None:

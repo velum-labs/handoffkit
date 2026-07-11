@@ -62,7 +62,7 @@ export const REGISTRY = {
       },
       "discovery": {
         "path": "/v1beta/models",
-        "auth": "query-key",
+        "auth": "x-goog-api-key",
         "responseShape": "google"
       }
     },
@@ -151,7 +151,6 @@ export const REGISTRY = {
         ],
         "responsesApiKey": [
           "FUSIONKIT_CODEX_API_KEY",
-          "WARRANT_CODEX_API_KEY",
           "CODEX_API_KEY",
           "OPENAI_API_KEY"
         ],
@@ -161,7 +160,6 @@ export const REGISTRY = {
         ],
         "openaiCompatibleApiKey": [
           "FUSIONKIT_CODEX_OPENAI_API_KEY",
-          "WARRANT_CODEX_OPENAI_API_KEY",
           "OPENAI_API_KEY"
         ]
       }
@@ -172,12 +170,12 @@ export const REGISTRY = {
     "bridgeModelName": "local-fusion",
     "localModelLabel": "fusionkit-local",
     "aliases": [
-      "fusionkit/router",
+      "fusionkit/heuristic",
       "fusionkit/panel",
       "fusionkit/self",
       "fusionkit/single"
     ],
-    "defaultAlias": "fusionkit/router",
+    "defaultAlias": "fusionkit/heuristic",
     "panelAlias": "fusionkit/panel",
     "gatewayDefaultBaseUrl": "http://127.0.0.1:8080",
     "gatewayApiKeyEnv": "FUSIONKIT_GATEWAY_API_KEY",
@@ -185,9 +183,9 @@ export const REGISTRY = {
       "single": "single",
       "self": "self",
       "panel": "panel",
-      "router": "router"
+      "heuristic": "heuristic"
     },
-    "defaultMode": "router"
+    "defaultMode": "heuristic"
   },
   "modelCatalog": {
     "defaultCloudPanel": [
@@ -445,6 +443,19 @@ export const REGISTRY = {
         "inputPer1mTokens": 2,
         "outputPer1mTokens": 8
       }
+    },
+    "aliases": {
+      "anthropic/claude-sonnet-4.5": "claude-sonnet",
+      "claude-haiku-4-5": "claude-haiku",
+      "claude-opus-4-8": "claude-opus",
+      "claude-sonnet-4-5": "claude-sonnet",
+      "gpt-4.1-mini": "gpt-4.1",
+      "gpt-5.1": "gpt-5",
+      "gpt-5.1-codex": "gpt-5",
+      "gpt-5.3-codex": "gpt-5",
+      "gpt-5.5-2026-05": "gpt-5.5",
+      "gpt-5.5-codex": "gpt-5.5",
+      "openai/gpt-5.5": "gpt-5.5"
     },
     "manualOverrides": {}
   },

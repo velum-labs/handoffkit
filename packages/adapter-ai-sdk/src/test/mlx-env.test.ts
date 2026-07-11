@@ -40,7 +40,7 @@ const skipUv = uvAvailable ? false : "uv is not available on this host";
 
 const tempDirs: string[] = [];
 function tempDir(): string {
-  const dir = mkdtempSync(join(tmpdir(), "warrant-mlxenv-"));
+  const dir = mkdtempSync(join(tmpdir(), "fusionkit-mlxenv-"));
   tempDirs.push(dir);
   return dir;
 }
@@ -55,7 +55,7 @@ after(() => {
  */
 function stubInstaller(
   counter: { installs: number; specs?: string[][] },
-  moduleNames: string[] = ["warrant_stub"]
+  moduleNames: string[] = ["fusionkit_stub"]
 ) {
   return (
     venvPython: string,
@@ -87,8 +87,8 @@ test("provisions an owned venv, writes the manifest, and is idempotent", { skip 
   const counter = { installs: 0 };
   const env = new MlxEnv({
     dir,
-    packageSpec: "warrant-stub==1.0.0",
-    importName: "warrant_stub",
+    packageSpec: "fusionkit-stub==1.0.0",
+    importName: "fusionkit_stub",
     requirePlatform: false,
     uv: false,
     install: stubInstaller(counter)
@@ -97,7 +97,7 @@ test("provisions an owned venv, writes the manifest, and is idempotent", { skip 
   assert.equal(env.verify(), false, "nothing provisioned yet");
   const manifest = await env.ensureProvisioned();
   assert.equal(counter.installs, 1);
-  assert.equal(manifest.packageSpec, "warrant-stub==1.0.0");
+  assert.equal(manifest.packageSpec, "fusionkit-stub==1.0.0");
   assert.equal(manifest.interpreterPath, env.venvPython);
   assert.ok(existsSync(env.venvPython), "venv interpreter exists");
   assert.ok(existsSync(env.manifestPath), "manifest written");
@@ -118,8 +118,8 @@ test("a pin change re-provisions the env in place", { skip }, async () => {
   const counter = { installs: 0 };
   const v1 = new MlxEnv({
     dir,
-    packageSpec: "warrant-stub==1.0.0",
-    importName: "warrant_stub",
+    packageSpec: "fusionkit-stub==1.0.0",
+    importName: "fusionkit_stub",
     requirePlatform: false,
     uv: false,
     install: stubInstaller(counter)
@@ -129,8 +129,8 @@ test("a pin change re-provisions the env in place", { skip }, async () => {
 
   const v2 = new MlxEnv({
     dir,
-    packageSpec: "warrant-stub==2.0.0",
-    importName: "warrant_stub",
+    packageSpec: "fusionkit-stub==2.0.0",
+    importName: "fusionkit_stub",
     requirePlatform: false,
     uv: false,
     install: stubInstaller(counter)
@@ -138,7 +138,7 @@ test("a pin change re-provisions the env in place", { skip }, async () => {
   assert.equal(v2.verify(), false, "old manifest does not satisfy the new pin");
   const manifest = await v2.ensureProvisioned();
   assert.equal(counter.installs, 2, "pin bump rebuilt the env");
-  assert.equal(manifest.packageSpec, "warrant-stub==2.0.0");
+  assert.equal(manifest.packageSpec, "fusionkit-stub==2.0.0");
   assert.equal(v2.verify(), true);
 });
 
@@ -146,8 +146,8 @@ test("prepare() spawns from the owned env with contained caches", { skip }, asyn
   const dir = tempDir();
   const env = new MlxEnv({
     dir,
-    packageSpec: "warrant-stub==1.0.0",
-    importName: "warrant_stub",
+    packageSpec: "fusionkit-stub==1.0.0",
+    importName: "fusionkit_stub",
     requirePlatform: false,
     uv: false,
     install: stubInstaller({ installs: 0 })
@@ -169,18 +169,18 @@ test("extra package specs are installed, recorded, and verified", { skip }, asyn
   const counter = { installs: 0, specs: [] as string[][] };
   const env = new MlxEnv({
     dir,
-    packageSpec: "warrant-stub==1.0.0",
+    packageSpec: "fusionkit-stub==1.0.0",
     extraPackageSpecs: ["outlines-core==0.0.0", "/path/to/overlay"],
-    importName: "warrant_stub",
-    extraImportNames: ["warrant_overlay_stub"],
+    importName: "fusionkit_stub",
+    extraImportNames: ["fusionkit_overlay_stub"],
     requirePlatform: false,
     uv: false,
-    install: stubInstaller(counter, ["warrant_stub", "warrant_overlay_stub"])
+    install: stubInstaller(counter, ["fusionkit_stub", "fusionkit_overlay_stub"])
   });
 
   const manifest = await env.ensureProvisioned();
   assert.deepEqual(counter.specs, [
-    ["warrant-stub==1.0.0", "outlines-core==0.0.0", "/path/to/overlay"]
+    ["fusionkit-stub==1.0.0", "outlines-core==0.0.0", "/path/to/overlay"]
   ]);
   assert.deepEqual(manifest.extraPackageSpecs, [
     "outlines-core==0.0.0",
@@ -192,13 +192,13 @@ test("extra package specs are installed, recorded, and verified", { skip }, asyn
   // rebuilds it.
   const changed = new MlxEnv({
     dir,
-    packageSpec: "warrant-stub==1.0.0",
+    packageSpec: "fusionkit-stub==1.0.0",
     extraPackageSpecs: ["outlines-core==9.9.9", "/path/to/overlay"],
-    importName: "warrant_stub",
-    extraImportNames: ["warrant_overlay_stub"],
+    importName: "fusionkit_stub",
+    extraImportNames: ["fusionkit_overlay_stub"],
     requirePlatform: false,
     uv: false,
-    install: stubInstaller(counter, ["warrant_stub", "warrant_overlay_stub"])
+    install: stubInstaller(counter, ["fusionkit_stub", "fusionkit_overlay_stub"])
   });
   assert.equal(changed.verify(), false, "extras drift fails verification");
   await changed.ensureProvisioned();
@@ -210,18 +210,18 @@ test("a missing extra import fails verification", { skip }, async () => {
   const dir = tempDir();
   const env = new MlxEnv({
     dir,
-    packageSpec: "warrant-stub==1.0.0",
+    packageSpec: "fusionkit-stub==1.0.0",
     extraPackageSpecs: ["/path/to/overlay"],
-    importName: "warrant_stub",
-    extraImportNames: ["warrant_overlay_stub"],
+    importName: "fusionkit_stub",
+    extraImportNames: ["fusionkit_overlay_stub"],
     requirePlatform: false,
     uv: false,
     // Installs only the primary stub: the overlay import must fail.
-    install: stubInstaller({ installs: 0 }, ["warrant_stub"])
+    install: stubInstaller({ installs: 0 }, ["fusionkit_stub"])
   });
   await assert.rejects(
     () => env.ensureProvisioned(),
-    /cannot import "warrant_stub, warrant_overlay_stub"/
+    /cannot import "fusionkit_stub, fusionkit_overlay_stub"/
   );
   assert.equal(env.verify(), false);
 });
@@ -230,8 +230,8 @@ test("a manifest without extras does not satisfy options with extras", { skip },
   const dir = tempDir();
   const plain = new MlxEnv({
     dir,
-    packageSpec: "warrant-stub==1.0.0",
-    importName: "warrant_stub",
+    packageSpec: "fusionkit-stub==1.0.0",
+    importName: "fusionkit_stub",
     requirePlatform: false,
     uv: false,
     install: stubInstaller({ installs: 0 })
@@ -241,9 +241,9 @@ test("a manifest without extras does not satisfy options with extras", { skip },
 
   const withExtras = new MlxEnv({
     dir,
-    packageSpec: "warrant-stub==1.0.0",
+    packageSpec: "fusionkit-stub==1.0.0",
     extraPackageSpecs: ["/path/to/overlay"],
-    importName: "warrant_stub",
+    importName: "fusionkit_stub",
     requirePlatform: false,
     uv: false,
     install: stubInstaller({ installs: 0 })
@@ -255,8 +255,8 @@ test("prepare() spawns an overridden server module when configured", { skip }, a
   const dir = tempDir();
   const env = new MlxEnv({
     dir,
-    packageSpec: "warrant-stub==1.0.0",
-    importName: "warrant_stub",
+    packageSpec: "fusionkit-stub==1.0.0",
+    importName: "fusionkit_stub",
     serverModule: "my_custom.server",
     requirePlatform: false,
     uv: false,
@@ -273,8 +273,8 @@ test("destroy() removes the entire owned footprint", { skip }, async () => {
   const dir = tempDir();
   const env = new MlxEnv({
     dir,
-    packageSpec: "warrant-stub==1.0.0",
-    importName: "warrant_stub",
+    packageSpec: "fusionkit-stub==1.0.0",
+    importName: "fusionkit_stub",
     requirePlatform: false,
     uv: false,
     install: stubInstaller({ installs: 0 })
@@ -358,8 +358,8 @@ test("mlxServer without structured keeps the stock entry point", { skip }, async
     model: "mlx-community/test-model",
     env: {
       dir: tempDir(),
-      packageSpec: "warrant-stub==1.0.0",
-      importName: "warrant_stub",
+      packageSpec: "fusionkit-stub==1.0.0",
+      importName: "fusionkit_stub",
       requirePlatform: false,
       uv: false,
       install: stubInstaller({ installs: 0 })
@@ -380,8 +380,8 @@ test("structured cannot be combined with a pre-built MlxEnv", () => {
 test("a missing interpreter is a clear capability error", { skip }, async () => {
   const env = new MlxEnv({
     dir: tempDir(),
-    packageSpec: "warrant-stub==1.0.0",
-    importName: "warrant_stub",
+    packageSpec: "fusionkit-stub==1.0.0",
+    importName: "fusionkit_stub",
     requirePlatform: false,
     python: "/definitely/not/a/python"
   });
@@ -411,8 +411,8 @@ test("provisions with uv when it is available", { skip: skipUv }, async () => {
   const counter = { installs: 0 };
   const env = new MlxEnv({
     dir,
-    packageSpec: "warrant-stub==1.0.0",
-    importName: "warrant_stub",
+    packageSpec: "fusionkit-stub==1.0.0",
+    importName: "fusionkit_stub",
     requirePlatform: false,
     install: stubInstaller(counter)
   });
@@ -427,8 +427,8 @@ test("provisions with uv when it is available", { skip: skipUv }, async () => {
 test("an explicitly requested uv that cannot run is an error, not a fallback", async () => {
   const env = new MlxEnv({
     dir: tempDir(),
-    packageSpec: "warrant-stub==1.0.0",
-    importName: "warrant_stub",
+    packageSpec: "fusionkit-stub==1.0.0",
+    importName: "fusionkit_stub",
     requirePlatform: false,
     uv: "/definitely/not/a/uv"
   });

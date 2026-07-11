@@ -113,9 +113,9 @@ function resolveEditor(): string | undefined {
  * prompt when reachable (so the user edits from truth), a commented stub
  * otherwise.
  */
-function seedContent(id: PromptId, fusionkitDir: string | undefined, ctx: CommandContext): string {
+async function seedContent(id: PromptId, fusionkitDir: string | undefined, ctx: CommandContext): Promise<string> {
   const task = ctx.presenter.task(`fetching the engine's default ${id} prompt`);
-  const defaults = fetchDefaultPrompts(fusionkitDir);
+  const defaults = await fetchDefaultPrompts(fusionkitDir);
   const seeded = defaults?.[id];
   if (seeded !== undefined) {
     task.succeed(`seeded from the engine's default ${id} prompt`);
@@ -140,7 +140,7 @@ async function runEdit(rawId: string, opts: PromptOpts, ctx: CommandContext): Pr
 
   if (!existsSync(path)) {
     mkdirSync(dirname(path), { recursive: true });
-    writeFileSync(path, seedContent(id, opts.fusionkitDir, ctx));
+    writeFileSync(path, await seedContent(id, opts.fusionkitDir, ctx));
     ctx.presenter.success(`created ${cyan(path)}`);
   }
 
@@ -199,7 +199,7 @@ export function registerPrompts(program: Command): void {
     .option("--ensemble <name>", "only this ensemble's overrides")
     .option("--json", "emit machine-readable JSON")
     .action((opts: PromptOpts, command: Command) => {
-      process.exit(runList(opts, contextFor(command)));
+      process.exitCode = runList(opts, contextFor(command));
     });
 
   const promptIdOrPick = async (given: string | undefined, verb: string): Promise<string> =>
@@ -220,7 +220,7 @@ export function registerPrompts(program: Command): void {
     .option("--json", "emit machine-readable JSON")
     .action(async (id: string | undefined, opts: PromptOpts, command: Command) => {
       const ctx = contextFor(command);
-      process.exit(await runEdit(await promptIdOrPick(id, "edit"), opts, ctx));
+      process.exitCode = await runEdit(await promptIdOrPick(id, "edit"), opts, ctx);
     });
 
   prompts
@@ -232,6 +232,6 @@ export function registerPrompts(program: Command): void {
     .option("--json", "emit machine-readable JSON")
     .action(async (id: string | undefined, opts: PromptOpts, command: Command) => {
       const ctx = contextFor(command);
-      process.exit(runReset(await promptIdOrPick(id, "reset"), opts, ctx));
+      process.exitCode = runReset(await promptIdOrPick(id, "reset"), opts, ctx);
     });
 }

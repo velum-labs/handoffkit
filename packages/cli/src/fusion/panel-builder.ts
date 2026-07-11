@@ -131,17 +131,30 @@ async function pickModel(
       }
     }
   };
+  const degradedNote = (result: ModelListResult | undefined): string | undefined => {
+    if (result?.degraded === undefined) return undefined;
+    return `${result.degraded.provider} was rejected — showing curated list`;
+  };
   const chosen = await fuzzySelect<string>({
     message: `Model (${sourceNote(cached ?? undefined)})`,
     placeholder: "type to filter",
     options: cached !== undefined ? toOptions(cached) : [],
     ...(cached === undefined
       ? {
-          refresh: async () => toOptions(await fetchList()),
+          refresh: async () => {
+            const list = await fetchList();
+            const note = degradedNote(list);
+            if (note !== undefined) out.write(`${dim(note)}\n`);
+            return toOptions(list);
+          },
           refreshNote: `fetching ${choice} models…`
         }
       : {})
   });
+  if (cached?.degraded !== undefined) {
+    const note = degradedNote(cached);
+    if (note !== undefined) out.write(`${dim(note)}\n`);
+  }
   if (chosen === CUSTOM_MODEL) {
     const suggestions = (cache.get(choice)?.models ?? []).map((model) => model.id);
     const custom = await autocompleteText({
@@ -284,7 +297,7 @@ export async function buildPanel(
   out.write(
     dim("Build your panel — add one or more models, choosing how each one authenticates.\n")
   );
-  const authOptions = buildAuthOptions(process.env, host);
+  const authOptions = await buildAuthOptions(process.env, host);
   const modelCache = new Map<AuthChoice, ModelListResult>();
   const localScan = new LocalScan(host);
   const taken = new Set<string>((options.existing ?? []).map((spec) => spec.id));

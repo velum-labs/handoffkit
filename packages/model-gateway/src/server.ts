@@ -1,4 +1,3 @@
-import { timingSafeEqual } from "node:crypto";
 import { once } from "node:events";
 import { createServer } from "node:http";
 import type { IncomingMessage, ServerResponse } from "node:http";
@@ -10,11 +9,20 @@ import {
 } from "./adapters/anthropic.js";
 import type { AnthropicRequest } from "./adapters/anthropic.js";
 import { effectiveModel, isStream, withDefaultModel } from "./adapters/chat.js";
+import { authorizedRequest } from "./auth.js";
+import type { CodexBackendRelay } from "./codex-relay.js";
 import { isCursorChatBody, translateCursorRequest } from "./adapters/cursor.js";
 import { handleResponses } from "./adapters/responses.js";
 import type { ResponsesRequest } from "./adapters/responses.js";
 import { PANEL_DEPTH_HEADER, parsePanelDepth } from "./backend.js";
 import type { Backend } from "./backend.js";
+import {
+  validateAnthropicRequest,
+  validateChatRequest,
+  validateCountTokensRequest,
+  validateResponsesRequest
+} from "./adapters/validate.js";
+import type { WireRejection } from "./adapters/validate.js";
 import {
   buildModelCallRecord,
   MODEL_CALL_ID_HEADER,
@@ -29,9 +37,8 @@ import type {
 /**
  * The local-model gateway HTTP server. It fronts a single OpenAI Chat
  * Completions backend (the owned mlx fork by default) and exposes the wire
- * dialects each agent harness needs. M1 implements the OpenAI chat surface
- * (opencode, Cursor IDE plan panel); the Anthropic Messages and OpenAI
- * Responses adapters return 501 until M2/M3 land.
+ * dialects each agent harness needs: OpenAI chat, Anthropic Messages, OpenAI
+ * Responses, and Cursor's Responses-hybrid BYOK shape.
  */
 
 export type GatewayOptions = {
@@ -44,6 +51,15 @@ export type GatewayOptions = {
   authToken?: string;
   /** Optional observation sink for model calls. */
   provenance?: ProvenanceSink;
+  /**
+   * Codex backend relay: merges the client's live stock model catalog into
+   * `/v1/models` and forwards Responses requests for models the backend does
+   * not serve locally to the ChatGPT Codex backend, using the auth material
+   * the Codex client itself attached. Inert for clients without that auth.
+   * Incompatible with `authToken` (the client's Authorization header is the
+   * relayed ChatGPT token), so it is ignored when a gateway token is set.
+   */
+  codexRelay?: CodexBackendRelay;
 };
 
 export type Gateway = {
@@ -56,6 +72,9 @@ export type Gateway = {
 export async function startGateway(options: GatewayOptions): Promise<Gateway> {
   const host = options.host ?? "127.0.0.1";
   const { backend, authToken, provenance } = options;
+  // With a gateway auth token, the Authorization header is the gateway's own
+  // bearer, never a relayable ChatGPT token — the relay cannot work.
+  const codexRelay = authToken === undefined ? options.codexRelay : undefined;
 
   const server = createServer((req, res) => {
     void handle(req, res).catch((error: unknown) => {
@@ -70,14 +89,15 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
 
   async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
     const method = req.method ?? "GET";
-    const path = new URL(req.url ?? "/", "http://localhost").pathname;
+    const url = new URL(req.url ?? "/", "http://localhost");
+    const path = url.pathname;
 
     if (path === "/health") {
       writeJson(res, 200, { status: "ok" });
       return;
     }
 
-    if (authToken !== undefined && !authorized(req, authToken)) {
+    if (authToken !== undefined && !authorizedRequest(req, authToken)) {
       writeJson(res, 401, { error: { message: "unauthorized", type: "auth_error" } });
       return;
     }
@@ -88,6 +108,24 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
       if (req.headers["anthropic-version"] !== undefined) {
         await pipeUpstream(res, anthropicModelsResponse(backend.defaultModel, backend.listModelIds?.()));
         return;
+      }
+      if (codexRelay !== undefined) {
+        // Codex parses the `models` key (its ModelInfo catalog — this is what
+        // drives its /model picker); OpenAI-shape clients read `data`. Serving
+        // both keys on one response keeps every client working.
+        const merged = await codexRelay.mergedCatalog(req.headers, url.search);
+        if (merged !== undefined) {
+          const base = (await (await backend.models()).json()) as {
+            data?: Array<{ id: string } & Record<string, unknown>>;
+          };
+          if (merged.etag !== undefined) res.setHeader("etag", merged.etag);
+          writeJson(res, 200, {
+            object: "list",
+            data: codexRelay.mergeDataIds(base.data ?? [], merged.models),
+            models: merged.models
+          });
+          return;
+        }
       }
       await pipeUpstream(res, await backend.models());
       return;
@@ -122,6 +160,7 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
     if (method === "POST" && (path === "/v1/chat/completions" || path === "/chat/completions")) {
       const raw = await readJson(req, res);
       if (raw === NO_BODY) return;
+      if (rejectInvalid(res, validateChatRequest(raw))) return;
       const body = withDefaultModel(raw, backend.defaultModel);
       await handleModelCall(res, provenance, {
         dialect: "openai-chat",
@@ -149,7 +188,13 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
         });
         return;
       }
-      const body = withDefaultModel(translateCursorRequest(raw), backend.defaultModel);
+      if ("input" in raw && rejectInvalid(res, validateResponsesRequest(raw))) return;
+      // Validate the *translated* body: the hybrid's `input` items become chat
+      // `messages`, so an input list that translates to nothing (e.g. only
+      // unknown item types) is rejected here instead of failing deep in fusion.
+      const translated = translateCursorRequest(raw);
+      if (rejectInvalid(res, validateChatRequest(translated))) return;
+      const body = withDefaultModel(translated, backend.defaultModel);
       await handleModelCall(res, provenance, {
         dialect: "openai-chat",
         body,
@@ -169,6 +214,7 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
     if (method === "POST" && path === "/v1/messages/count_tokens") {
       const raw = await readJson(req, res);
       if (raw === NO_BODY) return;
+      if (rejectInvalid(res, validateCountTokensRequest(raw))) return;
       await pipeUpstream(res, handleCountTokens(raw as AnthropicRequest));
       return;
     }
@@ -176,6 +222,7 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
     if (method === "POST" && path === "/v1/messages") {
       const raw = await readJson(req, res);
       if (raw === NO_BODY) return;
+      if (rejectInvalid(res, validateAnthropicRequest(raw))) return;
       const body = raw as AnthropicRequest;
       await handleModelCall(res, provenance, {
         dialect: "anthropic-messages",
@@ -189,7 +236,28 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
     if (method === "POST" && path === "/v1/responses") {
       const raw = await readJson(req, res);
       if (raw === NO_BODY) return;
+      if (rejectInvalid(res, validateResponsesRequest(raw))) return;
       const body = raw as ResponsesRequest;
+      // A stock-model pick from a Codex client: the gateway does not serve
+      // this model itself, and the request carries the client's own ChatGPT
+      // auth — forward it verbatim to the Codex backend instead of silently
+      // folding it into the fused default.
+      const requestedModel = typeof body.model === "string" ? body.model : undefined;
+      if (
+        codexRelay !== undefined &&
+        backend.servesModel !== undefined &&
+        codexRelay.shouldRelayResponses(req.headers, requestedModel, (model) =>
+          backend.servesModel?.(model) ?? true
+        )
+      ) {
+        await handleModelCall(res, provenance, {
+          dialect: "openai-responses",
+          body,
+          defaultModel: backend.defaultModel,
+          invoke: (_callId, signal) => codexRelay.relayResponses(req.headers, body, signal)
+        });
+        return;
+      }
       await handleModelCall(res, provenance, {
         dialect: "openai-responses",
         body,
@@ -231,19 +299,50 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
 // ---- HTTP helpers (Node built-ins only) ----
 
 const NO_BODY = Symbol("no-body");
+const MAX_REQUEST_BODY_BYTES = 16 * 1024 * 1024;
 
 async function readBody(req: IncomingMessage): Promise<Buffer> {
   const chunks: Buffer[] = [];
-  for await (const chunk of req) chunks.push(chunk as Buffer);
+  let total = 0;
+  let tooLarge = false;
+  for await (const value of req) {
+    const chunk = value as Buffer;
+    total += chunk.length;
+    if (total > MAX_REQUEST_BODY_BYTES) {
+      tooLarge = true;
+      continue;
+    }
+    chunks.push(chunk);
+  }
+  if (tooLarge) throw new RequestBodyTooLargeError();
   return Buffer.concat(chunks);
 }
+
+class RequestBodyTooLargeError extends Error {}
 
 /**
  * Read and parse a JSON request body. On malformed JSON, write a 400 and
  * return the NO_BODY sentinel so the caller stops processing.
  */
 async function readJson(req: IncomingMessage, res: ServerResponse): Promise<unknown> {
-  const buffer = await readBody(req);
+  const declaredLength = Number(req.headers["content-length"]);
+  if (Number.isFinite(declaredLength) && declaredLength > MAX_REQUEST_BODY_BYTES) {
+    req.resume();
+    writeJson(res, 413, {
+      error: { message: "request body exceeds the 16 MiB limit", type: "payload_too_large" }
+    });
+    return NO_BODY;
+  }
+  let buffer: Buffer;
+  try {
+    buffer = await readBody(req);
+  } catch (error) {
+    if (!(error instanceof RequestBodyTooLargeError)) throw error;
+    writeJson(res, 413, {
+      error: { message: "request body exceeds the 16 MiB limit", type: "payload_too_large" }
+    });
+    return NO_BODY;
+  }
   if (buffer.length === 0) return {};
   try {
     return JSON.parse(buffer.toString("utf8")) as unknown;
@@ -251,6 +350,13 @@ async function readJson(req: IncomingMessage, res: ServerResponse): Promise<unkn
     writeJson(res, 400, { error: { message: "invalid JSON body", type: "bad_request" } });
     return NO_BODY;
   }
+}
+
+/** Write a structural-validation rejection (if any) and report whether one was written. */
+function rejectInvalid(res: ServerResponse, rejection: WireRejection | undefined): boolean {
+  if (rejection === undefined) return false;
+  writeJson(res, rejection.status, rejection.body);
+  return true;
 }
 
 function writeJson(res: ServerResponse, status: number, value: unknown): Buffer {
@@ -313,7 +419,8 @@ async function handleModelCall(
   res.once("close", onClose);
   try {
     const upstream = await route.invoke(callId, aborter.signal);
-    const body = await pipeUpstream(res, upstream);
+    // Only buffer the response body when a provenance sink will consume it.
+    const body = await pipeUpstream(res, upstream, sink !== undefined, aborter.signal);
     const result = {
       statusCode: upstream.status,
       responseBody: body,
@@ -339,7 +446,21 @@ async function handleModelCall(
   }
 }
 
-async function pipeUpstream(res: ServerResponse, upstream: Response): Promise<Buffer> {
+/**
+ * Cap on the body we buffer for provenance. A streamed turn is piped to the
+ * client regardless; this only bounds the in-memory copy kept for the
+ * provenance sink (request/response hashing + usage extraction), so a runaway
+ * upstream cannot grow gateway memory without bound. 2 MiB comfortably covers a
+ * fused chat completion (JSON or SSE); past it, provenance sees a truncated body.
+ */
+const PROVENANCE_BODY_CAP_BYTES = 2 * 1024 * 1024;
+
+async function pipeUpstream(
+  res: ServerResponse,
+  upstream: Response,
+  collectBody = false,
+  signal?: AbortSignal
+): Promise<Buffer> {
   res.statusCode = upstream.status;
   const contentType = upstream.headers.get("content-type");
   if (contentType !== null) res.setHeader("content-type", contentType);
@@ -349,15 +470,31 @@ async function pipeUpstream(res: ServerResponse, upstream: Response): Promise<Bu
     return Buffer.alloc(0);
   }
   const reader = body.getReader();
+  const onAbort = (): void => {
+    void reader.cancel(signal?.reason).catch(() => undefined);
+  };
+  signal?.addEventListener("abort", onAbort, { once: true });
   const chunks: Buffer[] = [];
+  let collectedBytes = 0;
   try {
     for (;;) {
       const { done, value } = await reader.read();
       if (done) break;
       if (value !== undefined) {
+        if (signal?.aborted === true || res.destroyed || res.writableEnded) {
+          await reader.cancel(signal?.reason).catch(() => undefined);
+          break;
+        }
         const chunk = Buffer.from(value);
-        chunks.push(chunk);
-        if (!res.write(chunk)) await once(res, "drain");
+        // Accumulate for provenance only when a sink wants it, and only up to
+        // the cap; the client always receives the full stream via res.write.
+        if (collectBody && collectedBytes < PROVENANCE_BODY_CAP_BYTES) {
+          chunks.push(chunk);
+          collectedBytes += chunk.length;
+        }
+        if (!res.write(chunk)) {
+          await Promise.race([once(res, "drain"), once(res, "close")]);
+        }
       }
     }
   } catch (error) {
@@ -366,26 +503,11 @@ async function pipeUpstream(res: ServerResponse, upstream: Response): Promise<Bu
     // disconnect for this request rather than a silently truncated body.
     res.destroy();
     throw error;
+  } finally {
+    signal?.removeEventListener("abort", onAbort);
   }
-  res.end();
+  if (!res.destroyed && !res.writableEnded) res.end();
   return Buffer.concat(chunks);
-}
-
-function authorized(req: IncomingMessage, token: string): boolean {
-  const auth = req.headers.authorization;
-  if (typeof auth === "string" && constantTimeEquals(auth, `Bearer ${token}`)) {
-    return true;
-  }
-  const apiKey = req.headers["x-api-key"];
-  return typeof apiKey === "string" && constantTimeEquals(apiKey, token);
-}
-
-/** Length-independent constant-time string comparison (avoids timing leaks). */
-function constantTimeEquals(a: string, b: string): boolean {
-  const aBuf = Buffer.from(a);
-  const bBuf = Buffer.from(b);
-  if (aBuf.length !== bBuf.length) return false;
-  return timingSafeEqual(aBuf, bBuf);
 }
 
 function errorMessage(error: unknown): string {

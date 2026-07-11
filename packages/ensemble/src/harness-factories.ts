@@ -1,9 +1,10 @@
-import { mkdirSync, writeFileSync } from "node:fs";
+import { writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { isFiniteK } from "@fusionkit/protocol";
 import type { JsonValue, ModelFusionStatus } from "@fusionkit/protocol";
-import { runCliCapture } from "@fusionkit/runtime-utils";
+import { ensureRunOutputDir, runCliCapture } from "@fusionkit/runtime-utils";
 import { envOf } from "@fusionkit/tracing";
+import { deriveSourceRepo } from "./source-repo.js";
 import { gitText } from "@fusionkit/workspace";
 import { createAgentHarness } from "./agent.js";
 import { createCommandHarness } from "./command.js";
@@ -136,10 +137,10 @@ export function descriptorFor(
     runtime: { id: "unified-local" },
     judge: {
       id: "fusionkit-judge",
-      model: options.judgeModel ?? options.models[0]?.model ?? "fusionkit/router",
+      model: options.judgeModel ?? options.models[0]?.model ?? "fusionkit/heuristic",
       synthesizer: createFusionKitJudgeSynthesizer({
         fusionBackendUrl: options.fusionBackendUrl,
-        model: options.judgeModel ?? options.models[0]?.model ?? "fusionkit/router",
+        model: options.judgeModel ?? options.models[0]?.model ?? "fusionkit/heuristic",
         apiKey: options.fusionApiKey,
         responseShape: responseShapeFor(kind),
         ...(options.trace !== undefined ? { trace: options.trace } : {}),
@@ -155,7 +156,7 @@ export function descriptorFor(
     },
     ...(options.signal !== undefined ? { signal: options.signal } : {}),
     prompt: options.prompt,
-    sourceRepo: "handoffkit",
+    sourceRepo: deriveSourceRepo(options.repo),
     baseGitSha: gitText(options.repo, ["rev-parse", "HEAD"]).trim(),
     workspace: options.repo,
     outputRoot: options.outputRoot,
@@ -188,7 +189,7 @@ async function defaultCursorRunner(input: CursorHarnessRunnerInput): Promise<Cur
     "--timeout-ms",
     String(input.timeoutMs ?? 60_000)
   ];
-  mkdirSync(input.outDir, { recursive: true });
+  ensureRunOutputDir(input.outDir);
   const result = await runCliCapture(process.execPath, args, {
     cwd: input.outDir,
     // The probe CLI enforces its own per-step timeout; this outer deadline is
@@ -244,7 +245,7 @@ export async function runUnifiedHarnessE2E(
   options: UnifiedHarnessE2EOptions
 ): Promise<UnifiedHarnessE2EResult> {
   const outputRoot = resolve(options.outputRoot);
-  mkdirSync(outputRoot, { recursive: true });
+  ensureRunOutputDir(outputRoot);
   const results: UnifiedHarnessMatrixResult[] = [];
   for (const kind of options.harnesses) {
     if (

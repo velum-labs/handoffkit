@@ -42,5 +42,8 @@
     "ai-sdk",
     "mlx",
     "local-model"
-  ]
+  ],
+  "scripts": {
+    "test": "node --test \"dist/test/*.test.js\""
+  }
 }

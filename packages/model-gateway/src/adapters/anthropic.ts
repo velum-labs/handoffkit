@@ -10,7 +10,14 @@
 
 import type { Backend } from "../backend.js";
 import { defaultFusionGatewayLogger } from "../logger.js";
+import { estimateTokens, randomId } from "@fusionkit/runtime-utils";
+import { SseDecoder, SseParseError } from "../sse/parse.js";
 import type { OpenAiChoice } from "./openai-chat-wire.js";
+import { droppedField } from "./dropped.js";
+import { unwrapUpstreamError } from "./upstream-error.js";
+import { composeServerToolStream, runBufferedServerToolLoop, serverToolMarkerOf } from "./server-tool-loop.js";
+import type { ExecutedSearch, ServerToolMarker } from "./server-tool-loop.js";
+import { resolveWebSearchExecutor } from "./web-search.js";
 
 const ENCODER = new TextEncoder();
 
@@ -35,19 +42,33 @@ type AnthropicContentBlock =
   | AnthropicToolResultBlock
   | { type: string; [key: string]: unknown };
 
+type AnthropicThinking = { type?: string; budget_tokens?: number; effort?: string };
+
 type AnthropicMessage = { role: "user" | "assistant"; content: string | AnthropicContentBlock[] };
 
+/**
+ * Optional object fields tolerate an explicit JSON `null` (some clients encode
+ * "unset" that way — Codex does on the Responses wire); reads must use
+ * null-tolerant guards so a null never crashes the turn.
+ */
 export type AnthropicRequest = {
   model?: string;
-  system?: string | AnthropicTextBlock[];
+  system?: string | AnthropicTextBlock[] | null;
   messages: AnthropicMessage[];
   max_tokens?: number;
   temperature?: number;
   top_p?: number;
+  top_k?: number;
+  thinking?: AnthropicThinking | null;
+  metadata?: Record<string, unknown> | null;
   stop_sequences?: string[];
   stream?: boolean;
   tools?: Array<{ type?: string; name: string; description?: string; input_schema?: unknown }>;
-  tool_choice?: { type: "auto" | "any" | "tool"; name?: string };
+  tool_choice?: {
+    type: "auto" | "any" | "tool" | "none";
+    name?: string;
+    disable_parallel_tool_use?: boolean;
+  } | null;
 };
 
 /**
@@ -64,29 +85,74 @@ function isAnthropicServerTool(tool: { type?: string }): boolean {
   return type.startsWith("web_search") || type.startsWith("code_execution");
 }
 
+/** A server web search tool declaration (`web_search_20250305` et al.) — the
+ *  one server tool the gateway can honor via its own web-search executor. */
+function isAnthropicWebSearchTool(tool: { type?: string }): boolean {
+  return (tool.type ?? "").startsWith("web_search");
+}
+
+/** The name the gateway-executed web search tool is projected under chat-side. */
+const WEB_SEARCH_TOOL_NAME = "web_search";
+
+const WEB_SEARCH_TOOL_DESCRIPTION =
+  "Search the web for current, factual information. The search runs server-side and " +
+  "returns result text with source URLs. Use it when the answer depends on information " +
+  "that may have changed since your training data.";
+
+const WEB_SEARCH_TOOL_PARAMETERS = {
+  type: "object",
+  properties: {
+    query: { type: "string", description: "The web search query." }
+  },
+  required: ["query"],
+  additionalProperties: false
+} as const;
+
+/** Options gating server-executed tool projection (on iff an executor exists). */
+export type AnthropicTranslationOptions = { serverTools?: boolean };
+
+/** Render an echoed `web_search_tool_result`'s content as a chat tool message.
+ *  Bulky opaque fields (`encrypted_content`) are stripped; the fused model
+ *  only needs the urls/titles to remember what the search found. */
+function webSearchResultText(content: unknown): string {
+  if (!Array.isArray(content)) return JSON.stringify(content ?? null);
+  const results = content.map((entry) => {
+    if (entry === null || typeof entry !== "object") return entry as unknown;
+    const { encrypted_content: _encrypted, ...rest } = entry as Record<string, unknown>;
+    return rest;
+  });
+  return JSON.stringify(results);
+}
+
 // ---- OpenAI shapes we read back ----
 
 type OpenAiUsage = { prompt_tokens?: number; completion_tokens?: number };
-type OpenAiChunk = { choices?: OpenAiChoice[]; usage?: OpenAiUsage };
+type OpenAiChunk = { choices?: OpenAiChoice[]; usage?: OpenAiUsage; error?: unknown };
 type OpenAiResponse = { id?: string; choices?: OpenAiChoice[]; usage?: OpenAiUsage };
 
 // ---- request translation ----
 
-function randomId(): string {
-  return Math.random().toString(36).slice(2, 12);
-}
-
 function systemText(system: AnthropicRequest["system"]): string {
-  if (system === undefined) return "";
+  if (system == null) return "";
   if (typeof system === "string") return system;
-  return system.map((block) => block.text).join("\n");
+  return system
+    .map((block) =>
+      block !== null && typeof block === "object" && typeof block.text === "string"
+        ? block.text
+        : ""
+    )
+    .join("\n");
 }
 
-function blockText(content: string | AnthropicContentBlock[] | undefined): string {
-  if (content === undefined) return "";
+function blockText(content: string | AnthropicContentBlock[] | null | undefined): string {
+  if (content == null) return "";
   if (typeof content === "string") return content;
   return content
-    .map((block) => (block.type === "text" ? (block as AnthropicTextBlock).text : ""))
+    .map((block) =>
+      block !== null && typeof block === "object" && block.type === "text"
+        ? (block as AnthropicTextBlock).text
+        : ""
+    )
     .join("");
 }
 
@@ -98,6 +164,8 @@ function mapToolChoice(
       return "auto";
     case "any":
       return "required";
+    case "none":
+      return "none";
     case "tool":
       return { type: "function", function: { name: choice.name ?? "" } };
     default: {
@@ -107,13 +175,36 @@ function mapToolChoice(
   }
 }
 
+function mapThinking(thinking: AnthropicThinking): string | undefined {
+  const effort = thinking.effort;
+  if (effort === "low" || effort === "medium" || effort === "high") return effort;
+  const budget = thinking.budget_tokens;
+  if (typeof budget === "number") {
+    if (budget <= 1_024) return "low";
+    if (budget <= 8_192) return "medium";
+    return "high";
+  }
+  if (thinking.type === "disabled") return undefined;
+  droppedField("anthropic", "thinking");
+  return undefined;
+}
+
+function toolResultContent(result: AnthropicToolResultBlock): string {
+  const text = blockText(result.content);
+  return result.is_error === true ? `[tool_error]\n${text}` : text;
+}
+
 /**
  * Translate an Anthropic Messages request to an OpenAI Chat Completions body.
  * The upstream model is always the backend's own model (Claude Code sends a
  * `claude-*` id the local server would not recognise); the requested id is
  * only echoed back in the response.
  */
-export function anthropicToChat(body: AnthropicRequest, backendModel: string | undefined): Record<string, unknown> {
+export function anthropicToChat(
+  body: AnthropicRequest,
+  backendModel: string | undefined,
+  options: AnthropicTranslationOptions = {}
+): Record<string, unknown> {
   const messages: Record<string, unknown>[] = [];
   const system = systemText(body.system);
   if (system.length > 0) messages.push({ role: "system", content: system });
@@ -128,6 +219,11 @@ export function anthropicToChat(body: AnthropicRequest, backendModel: string | u
     const imageParts: Record<string, unknown>[] = [];
     const toolCalls: Record<string, unknown>[] = [];
     const toolResults: { id: string; content: string }[] = [];
+    // Echoed gateway-executed (or genuinely provider-executed, in a resumed
+    // session) web searches: `server_tool_use` + `web_search_tool_result`
+    // blocks ride in the assistant message and round-trip losslessly.
+    const serverToolUses: Record<string, unknown>[] = [];
+    const serverToolResults: { id: string; content: string }[] = [];
 
     for (const block of message.content) {
       switch (block.type) {
@@ -153,19 +249,59 @@ export function anthropicToChat(body: AnthropicRequest, backendModel: string | u
         }
         case "tool_result": {
           const result = block as AnthropicToolResultBlock;
-          toolResults.push({ id: result.tool_use_id, content: blockText(result.content) });
+          toolResults.push({ id: result.tool_use_id, content: toolResultContent(result) });
           break;
         }
+        case "server_tool_use": {
+          const tool = block as unknown as AnthropicToolUseBlock;
+          serverToolUses.push({
+            id: tool.id,
+            type: "function",
+            function: { name: tool.name, arguments: JSON.stringify(tool.input ?? {}) }
+          });
+          break;
+        }
+        case "web_search_tool_result": {
+          const result = block as { tool_use_id?: string; content?: unknown };
+          serverToolResults.push({
+            id: result.tool_use_id ?? "",
+            content: webSearchResultText(result.content)
+          });
+          break;
+        }
+        case "thinking":
+          droppedField("anthropic", "thinking", "message");
+          break;
         default:
+          droppedField("anthropic", block.type, "message");
           break;
       }
     }
 
     if (message.role === "assistant") {
       const text = textParts.join("");
-      const assistant: Record<string, unknown> = { role: "assistant", content: text.length > 0 ? text : null };
-      if (toolCalls.length > 0) assistant.tool_calls = toolCalls;
-      messages.push(assistant);
+      if (imageParts.length > 0) {
+        droppedField("anthropic", "image", "assistant_message");
+      }
+      // Replay echoed server web searches as a chat tool exchange preceding
+      // the assistant's answer, so the fused model remembers what was
+      // searched and found rather than blindly repeating it.
+      if (serverToolUses.length > 0) {
+        messages.push({ role: "assistant", content: null, tool_calls: serverToolUses });
+        for (const use of serverToolUses) {
+          const result = serverToolResults.find((entry) => entry.id === use.id);
+          messages.push({
+            role: "tool",
+            tool_call_id: (use.id as string | undefined) ?? "",
+            content: result?.content ?? "[web search results not retained]"
+          });
+        }
+      }
+      if (text.length > 0 || toolCalls.length > 0 || serverToolUses.length === 0) {
+        const assistant: Record<string, unknown> = { role: "assistant", content: text.length > 0 ? text : null };
+        if (toolCalls.length > 0) assistant.tool_calls = toolCalls;
+        messages.push(assistant);
+      }
       continue;
     }
 
@@ -190,19 +326,41 @@ export function anthropicToChat(body: AnthropicRequest, backendModel: string | u
     messages,
     stream: body.stream === true
   };
-  if (typeof body.max_tokens === "number") chat.max_tokens = body.max_tokens;
+  // `max_completion_tokens`, not legacy `max_tokens`: OpenAI reasoning models
+  // reject the latter, and the other dialect adapters already emit the modern
+  // field (Claude Code always sends `max_tokens`, so this path is always hit).
+  if (typeof body.max_tokens === "number") chat.max_completion_tokens = body.max_tokens;
   if (typeof body.temperature === "number") chat.temperature = body.temperature;
   if (typeof body.top_p === "number") chat.top_p = body.top_p;
+  if (typeof body.top_k === "number") chat.top_k = body.top_k;
+  // Explicit nulls mean "unset" (see AnthropicRequest).
+  if (body.metadata != null) droppedField("anthropic", "metadata");
+  // `thinking: null` means "no extended thinking" — skip, never dereference
+  // (same failure class as the Responses adapter's `reasoning: null`).
+  if (body.thinking != null) {
+    const reasoningEffort = mapThinking(body.thinking);
+    if (reasoningEffort !== undefined) chat.reasoning_effort = reasoningEffort;
+  }
   if (Array.isArray(body.stop_sequences) && body.stop_sequences.length > 0) {
     chat.stop = body.stop_sequences;
   }
   if (Array.isArray(body.tools) && body.tools.length > 0) {
-    const excluded = body.tools.filter(isAnthropicServerTool);
-    if (excluded.length > 0 && process.env.FUSION_DEBUG) {
-      defaultFusionGatewayLogger.error(
-        `[fusion-debug] anthropic: excluding ${excluded.length} server-executed tool(s) ` +
-          `from the fused turn: ${excluded.map((tool) => tool.name).join(", ")}`
-      );
+    // Web search is honorable when an executor exists (the server-tool loop
+    // runs it); other server tools (`code_execution_*`) stay excluded.
+    const honorWebSearch = options.serverTools === true;
+    const excluded = body.tools.filter(
+      (tool) => isAnthropicServerTool(tool) && !(honorWebSearch && isAnthropicWebSearchTool(tool))
+    );
+    if (excluded.length > 0) {
+      for (const tool of excluded) {
+        droppedField("anthropic", tool.name ?? tool.type ?? "server_tool", "tools");
+      }
+      if (process.env.FUSION_DEBUG) {
+        defaultFusionGatewayLogger.error(
+          `[fusion-debug] anthropic: excluding ${excluded.length} server-executed tool(s) ` +
+            `from the fused turn: ${excluded.map((tool) => tool.name).join(", ")}`
+        );
+      }
     }
     const tools = body.tools
       .filter((tool) => !isAnthropicServerTool(tool) && typeof tool.name === "string" && tool.name.length > 0)
@@ -214,9 +372,26 @@ export function anthropicToChat(body: AnthropicRequest, backendModel: string | u
           parameters: tool.input_schema ?? { type: "object", properties: {} }
         }
       }));
+    if (
+      honorWebSearch &&
+      body.tools.some(isAnthropicWebSearchTool) &&
+      !tools.some((tool) => tool.function.name === WEB_SEARCH_TOOL_NAME)
+    ) {
+      tools.push({
+        type: "function",
+        function: {
+          name: WEB_SEARCH_TOOL_NAME,
+          description: WEB_SEARCH_TOOL_DESCRIPTION,
+          parameters: WEB_SEARCH_TOOL_PARAMETERS
+        }
+      });
+    }
     if (tools.length > 0) chat.tools = tools;
   }
-  if (body.tool_choice !== undefined) chat.tool_choice = mapToolChoice(body.tool_choice);
+  if (body.tool_choice != null) {
+    chat.tool_choice = mapToolChoice(body.tool_choice);
+    if (body.tool_choice.disable_parallel_tool_use === true) chat.parallel_tool_calls = false;
+  }
   if (body.stream === true) chat.stream_options = { include_usage: true };
   return chat;
 }
@@ -229,8 +404,9 @@ export function mapStopReason(finishReason: string | null | undefined): string {
       return "max_tokens";
     case "tool_calls":
       return "tool_use";
-    case "stop":
     case "content_filter":
+      return "refusal";
+    case "stop":
     case null:
     case undefined:
       return "end_turn";
@@ -239,7 +415,31 @@ export function mapStopReason(finishReason: string | null | undefined): string {
   }
 }
 
-export function chatToAnthropicMessage(openai: OpenAiResponse, model: string): Record<string, unknown> {
+/** The native Anthropic blocks for one gateway-executed web search: the
+ *  `server_tool_use` and its `web_search_tool_result`. Anthropic-executor
+ *  results pass through verbatim; other executors synthesize result blocks
+ *  from their citations. */
+function executedSearchBlocks(search: ExecutedSearch): Record<string, unknown>[] {
+  const resultContent: unknown =
+    search.status !== "completed"
+      ? { type: "web_search_tool_result_error", error_code: "unavailable" }
+      : (search.outcome?.anthropicResultBlocks ??
+        (search.outcome?.citations ?? []).map((citation) => ({
+          type: "web_search_result",
+          url: citation.url,
+          ...(citation.title !== undefined ? { title: citation.title } : {})
+        })));
+  return [
+    { type: "server_tool_use", id: search.itemId, name: WEB_SEARCH_TOOL_NAME, input: { query: search.query } },
+    { type: "web_search_tool_result", tool_use_id: search.itemId, content: resultContent }
+  ];
+}
+
+export function chatToAnthropicMessage(
+  openai: OpenAiResponse,
+  model: string,
+  searches: readonly ExecutedSearch[] = []
+): Record<string, unknown> {
   const choice = openai.choices?.[0];
   const message = choice?.message;
   const content: Record<string, unknown>[] = [];
@@ -251,6 +451,9 @@ export function chatToAnthropicMessage(openai: OpenAiResponse, model: string): R
         ? message.reasoning_content
         : "";
   if (reasoning.length > 0) content.push({ type: "thinking", thinking: reasoning, signature: "" });
+
+  // Gateway-executed searches happened before the terminal step's output.
+  for (const search of searches) content.push(...executedSearchBlocks(search));
 
   const text = typeof message?.content === "string" ? message.content : "";
   if (text.length > 0) content.push({ type: "text", text });
@@ -320,8 +523,16 @@ export function openAiSseToAnthropic(
   model: string
 ): ReadableStream<Uint8Array> {
   const reader = upstream.getReader();
-  const decoder = new TextDecoder();
-  const tools = new Map<number, number>();
+  const sseDecoder = new SseDecoder();
+  // OpenAI tool-call fragments map onto Anthropic `tool_use` content blocks.
+  // Fragments are keyed by `index` when present, else by `id`; an id/index-less
+  // fragment (Anthropic/Responses translations omit `index`) appends to the last
+  // open call. Keying everything to index 0 used to merge parallel index-less
+  // calls into one block — the same bug the shared assembler now avoids.
+  const toolBlockByIndex = new Map<number, number>();
+  const toolBlockById = new Map<string, number>();
+  const toolBlocks: number[] = [];
+  let lastToolBlock: number | undefined;
   const messageId = `msg_${randomId()}`;
   const state: StreamState = {
     started: false,
@@ -336,7 +547,6 @@ export function openAiSseToAnthropic(
     outputTokens: undefined,
     keepaliveTimer: undefined
   };
-  let buffer = "";
 
   type Controller = ReadableStreamDefaultController<Uint8Array>;
 
@@ -353,7 +563,8 @@ export function openAiSseToAnthropic(
           model,
           content: [],
           stop_reason: null,
-          stop_sequence: null
+          stop_sequence: null,
+          ...(state.inputTokens !== undefined ? { usage: { input_tokens: state.inputTokens } } : {})
         }
       })
     );
@@ -400,28 +611,116 @@ export function openAiSseToAnthropic(
     );
   };
 
-  const finalize = (controller: Controller, stopReason: string): void => {
-    if (state.finished) return;
-    state.finished = true;
-    if (state.keepaliveTimer !== undefined) clearInterval(state.keepaliveTimer);
+  const closeOpenBlocks = (controller: Controller): void => {
     closeThinking(controller);
     if (state.textOpen) {
       controller.enqueue(sse("content_block_stop", { type: "content_block_stop", index: state.textIndex }));
     }
-    for (const index of tools.values()) {
+    for (const index of toolBlocks) {
       controller.enqueue(sse("content_block_stop", { type: "content_block_stop", index }));
     }
+  };
+
+  const finalize = (controller: Controller, stopReason: string): void => {
+    if (state.finished) return;
+    state.finished = true;
+    if (state.keepaliveTimer !== undefined) clearInterval(state.keepaliveTimer);
+    closeOpenBlocks(controller);
     controller.enqueue(
       sse("message_delta", {
         type: "message_delta",
         delta: { stop_reason: stopReason, stop_sequence: null },
-        ...(state.outputTokens !== undefined ? { usage: { output_tokens: state.outputTokens } } : {})
+        ...(state.inputTokens !== undefined || state.outputTokens !== undefined
+          ? {
+              usage: {
+                ...(state.inputTokens !== undefined ? { input_tokens: state.inputTokens } : {}),
+                ...(state.outputTokens !== undefined ? { output_tokens: state.outputTokens } : {})
+              }
+            }
+          : {})
       })
     );
     controller.enqueue(sse("message_stop", { type: "message_stop" }));
   };
 
+  /**
+   * The upstream ended (reader closed or a `[DONE]` arrived) before any
+   * `finish_reason`. Truncation is an error, not a clean stop (WS5.2): emit an
+   * Anthropic `error` event rather than fabricating `stop_reason:"end_turn"`, so
+   * the caller sees a failed turn instead of silently accepting a partial answer.
+   */
+  const finalizeTruncated = (controller: Controller, detail: string): void => {
+    if (state.finished) return;
+    state.finished = true;
+    if (state.keepaliveTimer !== undefined) clearInterval(state.keepaliveTimer);
+    closeOpenBlocks(controller);
+    controller.enqueue(
+      sse("error", {
+        type: "error",
+        error: { type: "incomplete_stream", message: detail }
+      })
+    );
+  };
+
+  const finalizeUpstreamError = (controller: Controller, error: unknown): void => {
+    if (state.finished) return;
+    state.finished = true;
+    if (state.keepaliveTimer !== undefined) clearInterval(state.keepaliveTimer);
+    closeOpenBlocks(controller);
+    controller.enqueue(
+      sse("error", {
+        type: "error",
+        error: unwrapUpstreamError(JSON.stringify({ error }))
+      })
+    );
+  };
+
+  // The server-tool loop injects marker chunks around each gateway-executed
+  // web search; render them as native `server_tool_use` /
+  // `web_search_tool_result` blocks (each opened and closed immediately —
+  // their content is complete when the marker arrives).
+  const handleServerToolMarker = (controller: Controller, marker: ServerToolMarker): void => {
+    ensureStarted(controller);
+    closeThinking(controller);
+    if (marker.phase === "start") {
+      const index = state.nextIndex++;
+      controller.enqueue(
+        sse("content_block_start", {
+          type: "content_block_start",
+          index,
+          content_block: { type: "server_tool_use", id: marker.item_id, name: "web_search", input: {} }
+        })
+      );
+      controller.enqueue(
+        sse("content_block_delta", {
+          type: "content_block_delta",
+          index,
+          delta: { type: "input_json_delta", partial_json: JSON.stringify({ query: marker.query }) }
+        })
+      );
+      controller.enqueue(sse("content_block_stop", { type: "content_block_stop", index }));
+      return;
+    }
+    const index = state.nextIndex++;
+    const content: unknown =
+      marker.status === "failed"
+        ? { type: "web_search_tool_result_error", error_code: "unavailable" }
+        : (marker.result_blocks ?? []);
+    controller.enqueue(
+      sse("content_block_start", {
+        type: "content_block_start",
+        index,
+        content_block: { type: "web_search_tool_result", tool_use_id: marker.item_id, content }
+      })
+    );
+    controller.enqueue(sse("content_block_stop", { type: "content_block_stop", index }));
+  };
+
   const process = (controller: Controller, chunk: OpenAiChunk): void => {
+    if (chunk.error !== undefined && chunk.error !== null) {
+      finalizeUpstreamError(controller, chunk.error);
+      return;
+    }
     const choice = chunk.choices?.[0];
     if (choice === undefined) {
       if (chunk.usage?.prompt_tokens !== undefined) state.inputTokens = chunk.usage.prompt_tokens;
@@ -470,17 +769,23 @@ export function openAiSseToAnthropic(
 
     if (Array.isArray(delta.tool_calls)) {
       for (const call of delta.tool_calls) {
-        const openAiIndex = typeof call.index === "number" ? call.index : 0;
-        let index = tools.get(openAiIndex);
-        if (index === undefined) {
+        const indexKey = typeof call.index === "number" ? call.index : undefined;
+        const idKey = typeof call.id === "string" && call.id.length > 0 ? call.id : undefined;
+        let block =
+          indexKey !== undefined
+            ? toolBlockByIndex.get(indexKey)
+            : idKey !== undefined
+              ? toolBlockById.get(idKey)
+              : lastToolBlock;
+        if (block === undefined) {
           ensureStarted(controller);
           closeThinking(controller);
-          index = state.nextIndex++;
-          tools.set(openAiIndex, index);
+          block = state.nextIndex++;
+          toolBlocks.push(block);
           controller.enqueue(
             sse("content_block_start", {
               type: "content_block_start",
-              index,
+              index: block,
               content_block: {
                 type: "tool_use",
                 id: call.id ?? `toolu_${randomId()}`,
@@ -490,12 +795,15 @@ export function openAiSseToAnthropic(
             })
           );
         }
+        if (indexKey !== undefined && !toolBlockByIndex.has(indexKey)) toolBlockByIndex.set(indexKey, block);
+        if (idKey !== undefined && !toolBlockById.has(idKey)) toolBlockById.set(idKey, block);
+        lastToolBlock = block;
         const args = call.function?.arguments;
         if (typeof args === "string" && args.length > 0) {
           controller.enqueue(
             sse("content_block_delta", {
               type: "content_block_delta",
-              index,
+              index: block,
               delta: { type: "input_json_delta", partial_json: args }
             })
           );
@@ -510,59 +818,91 @@ export function openAiSseToAnthropic(
     }
   };
 
+  // Backpressure handshake: the pump awaits `resumePull` whenever the consumer's
+  // desired size drops to zero, and `pull` resolves it. This replaces the old
+  // "return when desiredSize changed" hack with an explicit pump that reads the
+  // upstream reader to completion while honoring backpressure.
+  let resumePull: (() => void) | undefined;
+  const awaitPull = (): Promise<void> =>
+    new Promise((resolve) => {
+      resumePull = resolve;
+    });
+
+  const handleEvent = (controller: Controller, data: string): void => {
+    if (data.length === 0) return;
+    if (data === "[DONE]") {
+      // A `[DONE]` without a prior finish_reason is truncation, not a clean stop.
+      if (!state.finished) finalizeTruncated(controller, "upstream sent [DONE] before a finish reason");
+      return;
+    }
+    let chunk: OpenAiChunk;
+    try {
+      chunk = JSON.parse(data) as OpenAiChunk;
+    } catch (error) {
+      // The live upstream stream is authoritative: a malformed payload is a
+      // stream error, never silently skipped (WS5). Surface it and stop.
+      const detail = error instanceof Error ? error.message : String(error);
+      throw new SseParseError(`malformed OpenAI SSE payload in Anthropic translation: ${detail}`, data.slice(0, 200));
+    }
+    const marker = serverToolMarkerOf(chunk);
+    if (marker !== undefined) {
+      handleServerToolMarker(controller, marker);
+      return;
+    }
+    process(controller, chunk);
+  };
+
+  const pump = async (controller: Controller): Promise<void> => {
+    try {
+      for (;;) {
+        if ((controller.desiredSize ?? 1) <= 0) await awaitPull();
+        const { done, value } = await reader.read();
+        if (done) {
+          for (const event of sseDecoder.flush()) handleEvent(controller, event.data);
+          // Upstream closed with no finish_reason: incomplete, not `end_turn`.
+          if (!state.finished) finalizeTruncated(controller, "upstream stream ended before a finish reason");
+          controller.close();
+          return;
+        }
+        if (value !== undefined) {
+          for (const event of sseDecoder.feed(value)) handleEvent(controller, event.data);
+        }
+      }
+    } catch (error) {
+      if (state.keepaliveTimer !== undefined) clearInterval(state.keepaliveTimer);
+      controller.error(error);
+      void reader.cancel(error).catch(() => undefined);
+    }
+  };
+
   return new ReadableStream<Uint8Array>({
     start(controller) {
       // Start the message immediately and keep the connection alive with `ping`
       // events while the upstream is still producing its first token. Claude
       // Code times out if it sees nothing during the fusion panel phase (the
-      // chat-layer keepalive comments are dropped by this translator).
+      // chat-layer keepalive comments are dropped by this translator, so this
+      // ping is the single keepalive that reaches the client).
       ensureStarted(controller);
       state.keepaliveTimer = setInterval(() => {
         if (state.finished) return;
+        // Honor backpressure: skip the ping if the consumer's queue is full.
+        if ((controller.desiredSize ?? 1) <= 0) return;
         try {
           controller.enqueue(sse("ping", { type: "ping" }));
         } catch {
           // controller closed
         }
       }, 3000);
+      void pump(controller);
     },
-    async pull(controller) {
-      // Keep reading upstream until at least one chunk is enqueued (or the
-      // stream closes). A pull that resolves without enqueuing anything can
-      // stall Node's webstreams pull scheduling permanently (e.g. a late
-      // upstream line after finalize already ran, once the keepalive timer is
-      // cleared) — see the identical loop in the Responses adapter.
-      for (;;) {
-        const sizeBefore = controller.desiredSize ?? 0;
-        const { done, value } = await reader.read();
-        if (done) {
-          if (!state.finished) finalize(controller, "end_turn");
-          controller.close();
-          return;
-        }
-        buffer += decoder.decode(value, { stream: true });
-        let newline = buffer.indexOf("\n");
-        while (newline >= 0) {
-          const line = buffer.slice(0, newline).trim();
-          buffer = buffer.slice(newline + 1);
-          newline = buffer.indexOf("\n");
-          if (!line.startsWith("data:")) continue;
-          const payload = line.slice(5).trim();
-          if (payload === "[DONE]") {
-            if (!state.finished) finalize(controller, "end_turn");
-            continue;
-          }
-          try {
-            process(controller, JSON.parse(payload) as OpenAiChunk);
-          } catch {
-            // ignore malformed lines; the upstream stream is authoritative
-          }
-        }
-        if ((controller.desiredSize ?? 0) !== sizeBefore) return;
-      }
+    pull() {
+      resumePull?.();
+      resumePull = undefined;
     },
     cancel(reason) {
       if (state.keepaliveTimer !== undefined) clearInterval(state.keepaliveTimer);
+      resumePull?.();
+      resumePull = undefined;
       return reader.cancel(reason);
     }
   });
@@ -571,10 +911,9 @@ export function openAiSseToAnthropic(
 // ---- token counting + discovery ----
 
 export function countTokensEstimate(body: AnthropicRequest): number {
-  let chars = systemText(body.system).length;
-  for (const message of body.messages) chars += blockText(message.content).length;
-  // A rough chars/4 heuristic; Claude Code uses this only for budgeting.
-  return Math.max(1, Math.ceil(chars / 4));
+  const parts: string[] = [systemText(body.system)];
+  for (const message of body.messages) parts.push(blockText(message.content));
+  return estimateTokens(...parts);
 }
 
 // ---- handlers (return a Response the server pipes) ----
@@ -595,15 +934,56 @@ export async function handleAnthropicMessages(
 ): Promise<Response> {
   const requestedModel = body.model ?? backend.defaultModel ?? "";
   const upstreamModel = backend.resolveModel?.(body.model) ?? backend.defaultModel;
-  const chat = anthropicToChat(body, upstreamModel);
-  const upstream = await backend.chat(chat, signal, { modelCallId, ...(panelDepth !== undefined ? { panelDepth } : {}) });
+  // Server-executed web search is honored when the caller declared the server
+  // tool, an executor is available, and no *client* tool already owns the
+  // projected name (a client `web_search` must keep round-tripping untouched).
+  const declaresWebSearch = body.tools?.some(isAnthropicWebSearchTool) === true;
+  const clientNameCollision =
+    body.tools?.some((tool) => !isAnthropicServerTool(tool) && tool.name === WEB_SEARCH_TOOL_NAME) === true;
+  const executor =
+    declaresWebSearch && !clientNameCollision ? resolveWebSearchExecutor("anthropic") : undefined;
+  const serverTools = executor !== undefined;
+  const chat = anthropicToChat(body, upstreamModel, { serverTools });
+  const requestOptions = {
+    modelCallId,
+    ...(panelDepth !== undefined ? { panelDepth } : {}),
+    // The streamed response is translated to Anthropic SSE by
+    // openAiSseToAnthropic, which emits its own `ping` keepalive.
+    ...(body.stream === true ? { translated: true } : {})
+  };
+  const upstream = await backend.chat(chat, signal, requestOptions);
 
   if (!upstream.ok) {
     const detail = await upstream.text();
-    return jsonResponse(upstream.status, {
-      type: "error",
-      error: { type: "api_error", message: detail.slice(0, 2000) }
-    });
+    return jsonResponse(upstream.status, { type: "error", error: unwrapUpstreamError(detail) });
+  }
+
+  if (executor !== undefined) {
+    const loopOptions = {
+      chat,
+      runStep: (stepChat: Record<string, unknown>) => backend.chat(stepChat, signal, requestOptions),
+      serverToolNames: new Set([WEB_SEARCH_TOOL_NAME]),
+      executor,
+      ...(signal !== undefined ? { signal } : {})
+    };
+    if (body.stream === true) {
+      const source = upstream.body;
+      if (source === null) return jsonResponse(502, { type: "error", error: { type: "api_error", message: "no upstream stream" } });
+      const composed = composeServerToolStream({ ...loopOptions, firstStep: upstream });
+      return new Response(openAiSseToAnthropic(composed, requestedModel), {
+        status: 200,
+        headers: { "content-type": "text/event-stream", "cache-control": "no-cache" }
+      });
+    }
+    const outcome = await runBufferedServerToolLoop({ ...loopOptions, firstStep: upstream });
+    if (outcome.kind === "upstream_error") {
+      const detail = await outcome.response.text();
+      return jsonResponse(outcome.response.status, {
+        type: "error",
+        error: { type: "api_error", message: detail.slice(0, 2000) }
+      });
+    }
+    return jsonResponse(200, chatToAnthropicMessage(outcome.openai as OpenAiResponse, requestedModel, outcome.searches));
   }
 
   if (body.stream === true) {

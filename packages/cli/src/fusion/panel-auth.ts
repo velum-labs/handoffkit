@@ -85,13 +85,13 @@ export type AuthOption = { value: AuthChoice; label: string; hint: string };
  * login is detected), then the API-key providers, then local. Hints note login
  * expiry and whether each API key env is set.
  */
-export function buildAuthOptions(
+export async function buildAuthOptions(
   env: Record<string, string | undefined> = process.env,
   host: HostInfo = detectHost()
-): AuthOption[] {
+): Promise<AuthOption[]> {
   const options: AuthOption[] = [];
 
-  const claude = detectSubscription("claude-code");
+  const claude = await detectSubscription("claude-code");
   if (claude.available) {
     options.push({
       value: "claude-code",
@@ -99,7 +99,7 @@ export function buildAuthOptions(
       hint: claude.expired ? "expired - run `claude` to refresh" : "logged in - anthropic models, no API key"
     });
   }
-  const codex = detectSubscription("codex");
+  const codex = await detectSubscription("codex");
   if (codex.available) {
     options.push({
       value: "codex",

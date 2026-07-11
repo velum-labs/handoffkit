@@ -2,7 +2,11 @@
  * Codex tool integration entry point. It exposes the Codex launcher and ensemble harness adapter used by the FusionKit CLI.
  */
 import { smokeModelForTool } from "@fusionkit/registry";
-import { FUSION_PANEL_MODEL, harnessDriversEnabled } from "@fusionkit/tools";
+import {
+  FUSION_PANEL_MODEL,
+  harnessDriversEnabled,
+  trimTrailingSlashes
+} from "@fusionkit/tools";
 import type { ToolIntegration } from "@fusionkit/tools";
 import { createDriverHarness } from "@fusionkit/ensemble";
 import type { HarnessAdapter, ToolHarnessResolveOptions } from "@fusionkit/ensemble";
@@ -126,7 +130,9 @@ function codexDriverHarness(options: ToolHarnessResolveOptions): HarnessAdapter 
         sandboxMode: options.panelTrust === "guarded" ? "workspace-write" : "danger-full-access",
         approvalPolicy: "never",
         provider: {
-          baseUrl: route.endpointUrl,
+          // codex-sdk appends `/responses`; the per-member dialect gateway's
+          // Responses route lives under `/v1`.
+          baseUrl: `${trimTrailingSlashes(route.endpointUrl)}/v1`,
           ...(options.fusionApiKey !== undefined ? { apiKey: options.fusionApiKey } : {})
         }
       })
@@ -160,12 +166,29 @@ export type {
 export {
   codexAgentRoles,
   codexAgentRoleToml,
+  codexAuthPath,
+  codexCatalogEntries,
   codexLaunchConfigToml,
+  codexListedStockSlugs,
   codexModelCatalogJson,
+  codexProfileFiles,
+  codexProfileFileToml,
   codexRoleDescription,
+  hasCodexLogin,
+  isCodexConfigFailure,
   launchCodex,
-  readCodexCatalogTemplate
+  readCodexCatalogTemplate,
+  readCodexModelsCache
 } from "./launch.js";
-export type { CodexAgentRole } from "./launch.js";
+export type { CodexAgentRole, CodexModelPreset } from "./launch.js";
+export {
+  CODEX_INSTALL_BEGIN,
+  CODEX_INSTALL_END,
+  CODEX_INSTALL_PROVIDER,
+  codexIntegrationBlock,
+  installCodexIntegration,
+  uninstallCodexIntegration
+} from "./install.js";
+export type { CodexInstallInput, CodexInstallProfile, CodexInstallResult } from "./install.js";
 export { codexDriverConfigSchema, createCodexDriver } from "./driver.js";
 export type { CodexDriverConfig } from "./driver.js";

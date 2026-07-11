@@ -35,7 +35,7 @@ import { exportRouterYaml } from "../fusion/stack.js";
 import { contextFor } from "../shared/context.js";
 import type { CommandContext } from "../shared/context.js";
 import { fail } from "../shared/errors.js";
-import { ON_RATE_LIMIT_OPTIONS, PANEL_TRUST_OPTIONS } from "../shared/options.js";
+import { ON_RATE_LIMIT_OPTIONS, PANEL_TRUST_MESSAGE, PANEL_TRUST_OPTIONS } from "../shared/options.js";
 import { argOrPick, canPickInteractively } from "../shared/pickers.js";
 
 import { runConfigEdit } from "./config-edit.js";
@@ -290,7 +290,7 @@ const TOP_LEVEL_HINTS: Record<(typeof SETTABLE_TOP_LEVEL)[number], string> = {
   port: "fixed gateway port (default: ephemeral)",
   onRateLimit: "rate-limit handoff: fusion | passthrough | fail",
   budgetUsd: "per-session USD spend cap",
-  panelTrust: "candidate autonomy: full | guarded",
+  panelTrust: "panel sandbox: full (no sandbox) | guarded (own worktree only)",
   reasoning: "narrate panel/judge in the tool (on/off)",
   reasoningModel: "model that writes the narration prose"
 };
@@ -372,7 +372,7 @@ async function promptConfigValue(address: ConfigPath): Promise<string> {
         });
       case "panelTrust":
         return select<string>({
-          message: "panel trust",
+          message: PANEL_TRUST_MESSAGE,
           options: PANEL_TRUST_OPTIONS,
           defaultIndex: 0
         });
@@ -513,7 +513,7 @@ export function registerConfig(program: Command): void {
     .option("--repo <dir>", "repo whose .fusionkit/ to read (default: cwd's git root)")
     .option("--json", "emit machine-readable JSON (includes provenance)")
     .action((opts: ConfigOpts, command: Command) => {
-      process.exit(runShow(opts, contextFor(command)));
+      process.exitCode = runShow(opts, contextFor(command));
     });
 
   config
@@ -522,7 +522,7 @@ export function registerConfig(program: Command): void {
     .option("--repo <dir>", "repo whose .fusionkit/ to read (default: cwd's git root)")
     .option("--json", "emit machine-readable JSON")
     .action((opts: ConfigOpts, command: Command) => {
-      process.exit(runPath(opts, contextFor(command)));
+      process.exitCode = runPath(opts, contextFor(command));
     });
 
   config
@@ -535,7 +535,7 @@ export function registerConfig(program: Command): void {
       const ctx = contextFor(command);
       const { root } = repoRootFor(opts);
       const resolved = await pathArgOrPick(path, loadConfigOrFail(root, ctx.presenter), "read");
-      process.exit(runGet(resolved, opts, ctx));
+      process.exitCode = runGet(resolved, opts, ctx);
     });
 
   config
@@ -556,7 +556,7 @@ export function registerConfig(program: Command): void {
         }
         resolvedValue = await promptConfigValue(parseConfigPath(resolvedPath));
       }
-      process.exit(runSet(resolvedPath, resolvedValue, opts, ctx));
+      process.exitCode = runSet(resolvedPath, resolvedValue, opts, ctx);
     });
 
   config
@@ -569,15 +569,15 @@ export function registerConfig(program: Command): void {
       const ctx = contextFor(command);
       const { root } = repoRootFor(opts);
       const resolved = await pathArgOrPick(path, loadConfigOrFail(root, ctx.presenter), "unset");
-      process.exit(runUnset(resolved, opts, ctx));
+      process.exitCode = runUnset(resolved, opts, ctx);
     });
 
   config
     .command("edit")
-    .description("interactively edit every setting (tool, budget, trust, reasoning, ...)")
+    .description("interactively edit every setting (tool, budget, sandbox, reasoning, ...)")
     .option("--repo <dir>", "repo whose .fusionkit/ to edit (default: cwd's git root)")
     .action(async (opts: ConfigOpts, command: Command) => {
-      process.exit(await runConfigEdit(opts, contextFor(command)));
+      process.exitCode = await runConfigEdit(opts, contextFor(command));
     });
 
   config
@@ -586,6 +586,6 @@ export function registerConfig(program: Command): void {
     .option("-o, --out <file>", "write the YAML to a file instead of stdout")
     .option("--repo <dir>", "repo whose .fusionkit/ to read (default: cwd's git root)")
     .action((opts: ConfigOpts, command: Command) => {
-      process.exit(runExportYaml(opts, contextFor(command)));
+      process.exitCode = runExportYaml(opts, contextFor(command));
     });
 }

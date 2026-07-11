@@ -1,7 +1,7 @@
 import type { ChildProcess } from "node:child_process";
 
 import { resolveCursorkitCli } from "@fusionkit/ensemble";
-import { freePort, spawnLogged, terminate, waitForOutput } from "@fusionkit/tools";
+import { reservePort, spawnLogged, terminate, waitForOutput } from "@fusionkit/tools";
 
 import { cursorBridgeEnv } from "./bridge-config.js";
 
@@ -19,7 +19,10 @@ export async function startCursorBridge(input: {
   caCertPath?: string;
   log: (line: string) => void;
 }): Promise<{ child: ChildProcess; port: number }> {
-  const port = await freePort();
+  // Hold the port until the bridge is about to bind it, so a concurrent picker
+  // cannot steal it in the gap between choosing and spawning.
+  const reservation = await reservePort();
+  const port = reservation.port;
   const env = cursorBridgeEnv({
     port,
     gatewayUrl: input.fusionUrl,
@@ -30,6 +33,7 @@ export async function startCursorBridge(input: {
     ...(input.caCertPath !== undefined ? { caCertPath: input.caCertPath } : {})
   });
   const { serveCli } = resolveCursorkitCli();
+  await reservation.release();
   const proc = spawnLogged(process.execPath, [serveCli, "serve"], {
     ...(input.logFile !== undefined ? { logFile: input.logFile } : {}),
     env

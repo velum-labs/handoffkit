@@ -34,5 +34,8 @@
     "runtime",
     "process-control",
     "utilities"
-  ]
+  ],
+  "scripts": {
+    "test": "node --test \"dist/test/*.test.js\""
+  }
 }

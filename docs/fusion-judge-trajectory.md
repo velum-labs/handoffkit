@@ -77,16 +77,16 @@ reconnect before the first byte.
 
 ## Observability
 
-Every component emits OpenTelemetry spans named by the fusion semantic
-conventions (`spec/fusion-trace/registry.json`), correlated by one trace id:
-a `fusion.turn.info` marker (with the environment snapshot), `fusion.candidate`
-spans with live `fusion.candidate.step` markers, GenAI `chat` spans for model
-calls, `fusion.tool.execution` markers, and the judge's
-`fusion.judge.thinking` markers (each tool-call step) under the terminal
-`fusion.judge` span. The judge span's end carries the final answer and marks
-the session succeeded in the collector. Run with `--observe` to launch the
-dashboard and export spans into it (standard
-`OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`).
+Every component emits OpenTelemetry spans and events named by the fusion
+semantic conventions (`spec/fusion-trace/registry.json`), correlated by one
+trace id: a `fusion.turn.info` event (with the environment snapshot),
+`fusion.candidate` spans with live `fusion.candidate.step` events, GenAI
+`chat` spans for model calls, `fusion.tool.execution` events, and the judge's
+`fusion.judge.thinking` events (each tool-call step) correlated to the
+terminal `fusion.judge` span. The judge span's end carries the final answer
+and marks the session succeeded in the collector. Run with `--observe` to
+launch the dashboard and export both signals into it (standard
+`OTEL_EXPORTER_OTLP_ENDPOINT`).
 
 ## Test drive
 
@@ -118,5 +118,5 @@ Real, self-contained drivers live in [scripts/](../scripts):
 - `node scripts/fusion-observe-verify.mjs`: boots the dashboard, runs a codex
   session, and verifies the collector captured the full correlated session.
 
-Each requires `uv`, a FusionKit checkout (`WARRANT_FUSION_FK_DIR` or the default
+Each requires `uv`, a FusionKit checkout (`FUSIONKIT_FUSION_FK_DIR` or the default
 path), and cloud API keys; they make real, billed model calls.

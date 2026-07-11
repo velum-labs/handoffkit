@@ -4,77 +4,56 @@
  */
 import "./quiet-warnings.js";
 import { PolicyDeniedError } from "@fusionkit/protocol";
+// Importing the cleanup registry installs the process-wide SIGINT/SIGTERM/exit
+// handlers once, so anything registered during a run (worktrees, supervised
+// process groups) is torn down on interrupt or normal exit.
+import { registerCleanup, runCleanups } from "@fusionkit/tools";
 
 import { uiStream } from "@fusionkit/cli-ui";
+import { CommanderError, type Command } from "commander";
 
 import { buildProgram } from "./cli.js";
 import { runCommandPalette } from "./commands/palette.js";
-import { CliError, exitWithCliError } from "./shared/errors.js";
+import { CliError, renderCliError } from "./shared/errors.js";
 import { emitJson, isJsonMode } from "./shared/context.js";
 import { readPackageVersion } from "./shared/package-version.js";
 import { PreflightError } from "./shared/preflight.js";
 import { captureCommand, initTelemetry, shutdownTelemetry } from "./telemetry/telemetry.js";
 
-/**
- * Opt-in product telemetry, wrapped around the whole invocation: one
- * `cli.command` record per run plus per-session aggregates from the span
- * listener. Every function below is a no-op unless the user opted in
- * (`fusionkit telemetry on`) — see docs/privacy.md.
- */
-async function withTelemetry(run: () => Promise<void>): Promise<void> {
-  initTelemetry();
-  const startedAt = Date.now();
-  const argv = process.argv.slice(2);
-  const command = argv.find((arg) => !arg.startsWith("-")) ?? "palette";
-  const settle = async (exitKind: string): Promise<void> => {
-    captureCommand({
-      command,
-      cliVersion: readPackageVersion(import.meta.url),
-      startedAt,
-      exitKind,
-      observe: argv.includes("--observe"),
-      local: argv.includes("--local")
-    });
-    await shutdownTelemetry();
-  };
-  try {
-    await run();
-    await settle(process.exitCode !== undefined && process.exitCode !== 0 ? "error" : "ok");
-  } catch (error) {
-    await settle(error instanceof Error ? error.constructor.name : "error");
-    throw error;
+/** Warn once when legacy WARRANT_* env vars are still set in the shell. */
+function warnLegacyWarrantEnv(): void {
+  if (Object.keys(process.env).some((key) => key.startsWith("WARRANT_"))) {
+    process.stderr.write(
+      "warning: WARRANT_* environment variables are no longer read; use FUSIONKIT_*\n"
+    );
   }
 }
 
-async function main(): Promise<void> {
-  await withTelemetry(async () => {
-    const program = buildProgram();
-    // Bare invocation: an interactive command palette on a TTY (pick an action,
-    // see the equivalent command); help on stdout otherwise (commander would
-    // print to stderr and exit non-zero by default).
-    if (process.argv.slice(2).length === 0) {
-      const paletteArgv = await runCommandPalette();
-      if (paletteArgv === undefined) {
-        program.outputHelp();
-        return;
-      }
-      await program.parseAsync([...process.argv.slice(0, 2), ...paletteArgv]);
-      return;
-    }
-    await program.parseAsync(process.argv);
-  });
+/** Space-joined command path from the root program down to the action command. */
+function commandPath(actionCommand: Command): string {
+  const parts: string[] = [];
+  let cmd: Command | undefined = actionCommand;
+  while (cmd !== undefined && cmd.parent != null) {
+    parts.unshift(cmd.name());
+    cmd = cmd.parent;
+  }
+  return parts.join(" ");
 }
 
-/** Structured failure for --json mode: `{ error: { code, message, details? } }`. */
-function jsonError(code: string, message: string, details?: string[]): never {
+function inferCommandFromArgv(): string {
+  const argv = process.argv.slice(2);
+  return argv.find((arg) => !arg.startsWith("-")) ?? "palette";
+}
+
+function renderJsonError(code: string, message: string, details?: string[]): number {
   emitJson({ error: { code, message, ...(details !== undefined ? { details } : {}) } });
-  process.exit(code === "policy-denied" ? 2 : 1);
+  return code === "policy-denied" ? 2 : 1;
 }
 
-main().catch((error: unknown) => {
+function classifyAndRenderError(error: unknown): number {
   if (error instanceof PolicyDeniedError) {
-    if (isJsonMode()) jsonError("policy-denied", "policy denied (fail closed)", [...error.reasons]);
-    exitWithCliError(
+    if (isJsonMode()) return renderJsonError("policy-denied", "policy denied (fail closed)", [...error.reasons]);
+    return renderCliError(
       new CliError({
         code: "policy-denied",
         message: "policy denied (fail closed)",
@@ -84,11 +63,9 @@ main().catch((error: unknown) => {
     );
   }
   if (error instanceof PreflightError) {
-    if (isJsonMode()) jsonError("preflight", error.message);
-    // "fusionkit preflight failed:" heading + "  - problem" lines: render the
-    // problems as panel evidence with doctor as the next command.
+    if (isJsonMode()) return renderJsonError("preflight", error.message);
     const [first, ...rest] = error.message.split("\n");
-    exitWithCliError(
+    return renderCliError(
       new CliError({
         code: "preflight",
         message: first ?? error.message,
@@ -97,9 +74,85 @@ main().catch((error: unknown) => {
       })
     );
   }
-  if (error instanceof CliError) exitWithCliError(error);
+  if (error instanceof CliError) return renderCliError(error);
+  if (error instanceof CommanderError) return error.exitCode;
   const message = error instanceof Error ? error.message : String(error);
-  if (isJsonMode()) jsonError("error", message);
+  if (isJsonMode()) return renderJsonError("error", message);
   uiStream().write(`error: ${message}\n`);
-  process.exit(1);
-});
+  return 1;
+}
+
+function exitKindFor(caughtError: unknown | undefined): string {
+  const code = process.exitCode;
+  if (code === undefined || code === 0) return "ok"; // includes --help/--version
+  if (caughtError !== undefined) {
+    return caughtError instanceof Error ? caughtError.constructor.name : "error";
+  }
+  return "error";
+}
+
+async function main(): Promise<void> {
+  warnLegacyWarrantEnv();
+  initTelemetry();
+  const startedAt = Date.now();
+  const argv = process.argv.slice(2);
+  let invokedCommand: string | undefined;
+  let caughtError: unknown;
+
+  // The telemetry epilogue must run on BOTH exit paths: the normal return path
+  // (main's finally) and the SIGINT/SIGTERM path, where the cleanup registry
+  // calls process.exit() directly and main's finally never resumes. Interactive
+  // fusion sessions end with Ctrl+C, so without this wiring those runs would
+  // ship no events at all. Single-flight: whichever path fires first wins.
+  let telemetrySettling: Promise<void> | undefined;
+  const settleTelemetry = (exitKind: string): Promise<void> => {
+    telemetrySettling ??= (async () => {
+      const command = invokedCommand ?? (argv.length === 0 ? "palette" : inferCommandFromArgv());
+      captureCommand({
+        command,
+        cliVersion: readPackageVersion(import.meta.url),
+        startedAt,
+        exitKind,
+        observe: argv.includes("--observe"),
+        local: argv.includes("--local")
+      });
+      await shutdownTelemetry();
+    })();
+    return telemetrySettling;
+  };
+  // Registered first so LIFO ordering runs it last, after the fusion stack's
+  // own teardown has ended its spans. If the normal path already settled (or
+  // is mid-flush when a signal lands), this returns the same single-flight
+  // promise, so the registry waits for the flush instead of racing it.
+  registerCleanup(() => settleTelemetry("interrupted"));
+
+  const program = buildProgram();
+  program.exitOverride();
+  program.hook("preAction", (_thisCommand, actionCommand) => {
+    invokedCommand = commandPath(actionCommand);
+  });
+
+  try {
+    try {
+      if (argv.length === 0) {
+        const paletteArgv = await runCommandPalette();
+        if (paletteArgv === undefined) {
+          program.outputHelp();
+        } else {
+          await program.parseAsync([...process.argv.slice(0, 2), ...paletteArgv]);
+        }
+      } else {
+        await program.parseAsync(process.argv);
+      }
+    } catch (error) {
+      caughtError = error;
+      process.exitCode = classifyAndRenderError(error);
+    }
+  } finally {
+    await settleTelemetry(exitKindFor(caughtError));
+    await runCleanups();
+  }
+  process.exit(process.exitCode ?? 0);
+}
+
+void main();

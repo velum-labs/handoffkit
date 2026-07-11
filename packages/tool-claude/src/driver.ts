@@ -204,6 +204,11 @@ class ClaudeSession implements SessionHandle {
     const options: Options = {
       cwd: this.#cwd,
       pathToClaudeCodeExecutable: this.#config.command,
+      // The gateway carries this cursor across front-door turns. Make the
+      // persistence requirement explicit: SDK defaults have changed across
+      // releases and an ephemeral session id cannot be resumed by the next
+      // candidate process.
+      persistSession: true,
       permissionMode: "default",
       canUseTool: this.#canUseTool(),
       abortController: controller,

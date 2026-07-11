@@ -59,9 +59,6 @@ jobs:
       - name: Standalone examples
         run: pnpm demo all
 
-      - name: Performance budgets (spec section 8.4)
-        run: pnpm bench
-
       - name: Audit dependencies
         run: pnpm audit --audit-level high
 
@@ -97,6 +94,104 @@ jobs:
 
       - name: Test
         run: pnpm test
+
+  stack-e2e:
+    name: cross-stack e2e (Node gateway + real Python engine + provider simulator)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Setup Node
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 22
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Pin pnpm
+        run: corepack prepare pnpm@10.33.4 --activate
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7.6.0
+
+      - name: Install (pnpm)
+        run: pnpm install --frozen-lockfile
+
+      # The real coding-agent CLIs: the stack-cli suite spawns the actual
+      # `claude`, `codex`, and `opencode` binaries against the sim-backed
+      # gateway (inert tokens; no real provider accounts are touched).
+      - name: Install real coding-agent CLIs
+        run: npm install -g @openai/codex @anthropic-ai/claude-code opencode-ai
+
+      # Cursor Agent cannot run model turns without a real Cursor login, but
+      # install/verify the official binary so its env-gated live suite can run
+      # unchanged on authenticated runners.
+      - name: Install Cursor Agent CLI
+        run: |
+          curl https://cursor.com/install -fsS | bash
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          "$HOME/.local/bin/cursor-agent" --version
+
+      - name: Sync uv workspace
+        run: uv sync --all-packages
+
+      - name: Build
+        run: pnpm build
+
+      # The cross-process suites: the Node testkit spawns the provider
+      # simulator + the real `fusionkit serve` engine, and the CLI's stack
+      # suites drive the real Node gateway front doors — and the real
+      # coding-agent binaries — through both. These self-skip where uv or the
+      # binaries are missing; this job exists to run them for real.
+      - name: Testkit harness suite
+        run: PORTLESS=0 node --test "packages/testkit/dist/test/*.test.js"
+
+      - name: Full-stack front-door matrix suite
+        run: PORTLESS=0 node --test packages/cli/dist/test/stack-e2e.test.js
+
+      - name: Full-stack depth suite
+        run: PORTLESS=0 node --test packages/cli/dist/test/stack-depth-e2e.test.js
+
+      - name: Gateway policy suite (failover / budget / sessions)
+        run: PORTLESS=0 node --test packages/cli/dist/test/stack-policies-e2e.test.js
+
+      - name: Managed harness k suite (finite + unbounded worktrees)
+        run: PORTLESS=0 node --test packages/cli/dist/test/stack-harness-k-e2e.test.js
+
+      - name: Chaos suite (stragglers / timeout / cancellation)
+        run: PORTLESS=0 node --test packages/cli/dist/test/stack-chaos-e2e.test.js
+
+      - name: Hostile-input fuzz suite (door validation invariants)
+        run: PORTLESS=0 node --test packages/cli/dist/test/stack-fuzz-e2e.test.js
+
+      - name: Concurrency suite (cross-talk / abort isolation)
+        run: PORTLESS=0 node --test packages/cli/dist/test/stack-concurrency-e2e.test.js
+
+      - name: Differential suite (JSON/SSE and cross-door parity)
+        run: PORTLESS=0 node --test packages/cli/dist/test/stack-differential-e2e.test.js
+
+      - name: Harness-core real SDK driver cutover suite
+        run: PORTLESS=0 node --test packages/cli/dist/test/stack-drivers-e2e.test.js
+
+      - name: Durable unbounded resume suite
+        run: PORTLESS=0 node --test packages/cli/dist/test/stack-resume-e2e.test.js
+
+      - name: Gateway authentication boundary suite
+        run: PORTLESS=0 node --test packages/cli/dist/test/stack-auth-e2e.test.js
+
+      - name: Real product CLI suite (fusionkit serve boots its own stack)
+        run: PORTLESS=0 node --test packages/cli/dist/test/stack-npm-cli-e2e.test.js
+
+      - name: Real coding-agent CLI suite (claude + codex + opencode binaries)
+        run: PORTLESS=0 node --test packages/cli/dist/test/stack-cli-e2e.test.js
+
+      - name: Real CLI command-surface suite
+        run: PORTLESS=0 node --test packages/cli/dist/test/cli-command-surfaces-e2e.test.js
 
   python:
     name: uv workspace (python/*)
@@ -169,43 +264,3 @@ jobs:
       - name: Tear down
         if: always()
         run: docker compose -f infra/hyperkit/grafana/compose.yaml down -v
-
-  docker:
-    name: legacy Warrant docker compose smoke
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-        with:
-          persist-credentials: false
-
-      - name: Build images
-        run: docker compose -f legacy/docker/docker-compose.yml build
-
-      - name: Boot plane, runner, and seeder
-        run: docker compose -f legacy/docker/docker-compose.yml up -d --wait plane runner
-
-      - name: Wait for seeded showcase runs
-        run: |
-          docker compose -f legacy/docker/docker-compose.yml up seed
-          # "done." is the seeder's documented completion line; asserting on
-          # it is the smoke contract, and a failure dumps the full logs.
-          docker compose -f legacy/docker/docker-compose.yml logs seed | grep -q "done." || (docker compose -f legacy/docker/docker-compose.yml logs && exit 1)
-
-      - name: Smoke-test the API and control panel
-        run: |
-          # These assert stable, documented surface: the health/ready JSON
-          # shapes are named constants in the plane and the UI title is part
-          # of the control panel's contract.
-          curl -fsS http://localhost:7172/v1/health
-          curl -fsS http://localhost:7172/v1/ready | grep -q '"ready":true'
-          curl -fsS http://localhost:7172/ui/ | grep -q "Warrant — Control Panel"
-          TOKEN=$(docker compose -f legacy/docker/docker-compose.yml exec plane warrant ui | grep "login token" | awk '{print $3}')
-          curl -fsS -H "Authorization: Bearer $TOKEN" http://localhost:7172/v1/runs | grep -q '"runId"'
-          curl -fsS -H "Authorization: Bearer $TOKEN" http://localhost:7172/v1/metrics | grep -q '"metrics"'
-          docker compose -f legacy/docker/docker-compose.yml exec plane warrant runs
-
-      - name: Tear down
-        if: always()
-        run: docker compose -f legacy/docker/docker-compose.yml down -v

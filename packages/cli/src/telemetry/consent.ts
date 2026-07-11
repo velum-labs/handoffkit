@@ -64,7 +64,11 @@ export function resolveTelemetry(env: NodeJS.ProcessEnv = process.env): Telemetr
   if (falsy(env.FUSIONKIT_TELEMETRY)) return { enabled: false, source: "env" };
   const file = readFile();
   if (truthy(env.FUSIONKIT_TELEMETRY)) {
-    return { enabled: true, source: "env", ...(file?.installId !== undefined ? { installId: file.installId } : {}) };
+    return {
+      enabled: true,
+      source: "env",
+      installId: file?.installId ?? randomUUID()
+    };
   }
   if (file !== undefined) {
     return {

@@ -4,24 +4,6 @@
     "rootDir": "src",
     "outDir": "dist"
   },
-  "include": [
-    "src/**/*.ts"
-  ],
-  "references": [
-    {
-      "path": "../../legacy/packages/plane"
-    },
-    {
-      "path": "../protocol"
-    },
-    {
-      "path": "../../legacy/packages/runner"
-    },
-    {
-      "path": "../../legacy/packages/sdk"
-    },
-    {
-      "path": "../workspace"
-    }
-  ]
+  "include": ["src/**/*.ts"],
+  "references": []
 }

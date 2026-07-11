@@ -145,8 +145,8 @@ function makeCodingRepo(): { root: string; repo: string; cleanup: () => void } {
   const repo = join(root, "repo");
   mkdirSync(repo);
   spawnSync("git", ["init", "--quiet", "--initial-branch=main"], { cwd: repo });
-  spawnSync("git", ["config", "user.email", "e2e@warrant.local"], { cwd: repo });
-  spawnSync("git", ["config", "user.name", "warrant-e2e"], { cwd: repo });
+  spawnSync("git", ["config", "user.email", "e2e@fusionkit.local"], { cwd: repo });
+  spawnSync("git", ["config", "user.name", "fusionkit-e2e"], { cwd: repo });
   writeFileSync(join(repo, "calculator.js"), "exports.add = (left, right) => left - right;\n");
   writeFileSync(
     join(repo, "calculator.test.js"),
@@ -499,7 +499,7 @@ test("unified acceptance suite passes every reachable front door against the rea
 });
 
 const LIVE_CLAUDE =
-  (process.env.FUSIONKIT_GATEWAY_LIVE_CLAUDE ?? process.env.WARRANT_GATEWAY_LIVE_CLAUDE) === "1"
+  (process.env.FUSIONKIT_GATEWAY_LIVE_CLAUDE ?? process.env.FUSIONKIT_GATEWAY_LIVE_CLAUDE) === "1"
     ? false
     : "set FUSIONKIT_GATEWAY_LIVE_CLAUDE=1 with a working claude CLI";
 
@@ -556,7 +556,7 @@ test(
 );
 
 const LIVE_CODEX =
-  (process.env.FUSIONKIT_GATEWAY_LIVE_CODEX ?? process.env.WARRANT_GATEWAY_LIVE_CODEX) === "1"
+  (process.env.FUSIONKIT_GATEWAY_LIVE_CODEX ?? process.env.FUSIONKIT_GATEWAY_LIVE_CODEX) === "1"
     ? false
     : "set FUSIONKIT_GATEWAY_LIVE_CODEX=1 with a working codex CLI";
 
@@ -629,7 +629,7 @@ test(
 // bridge, whose local model backend is pointed at this gateway. Requires a
 // logged-in cursor-agent (Cursorkit is bundled as an npm dependency).
 const LIVE_CURSOR =
-  (process.env.FUSIONKIT_GATEWAY_LIVE_CURSOR ?? process.env.WARRANT_GATEWAY_LIVE_CURSOR) === "1"
+  (process.env.FUSIONKIT_GATEWAY_LIVE_CURSOR ?? process.env.FUSIONKIT_GATEWAY_LIVE_CURSOR) === "1"
     ? false
     : "set FUSIONKIT_GATEWAY_LIVE_CURSOR=1 with a logged-in cursor-agent";
 
@@ -714,7 +714,7 @@ test(
           send("initialize", {
             protocolVersion: 1,
             clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false },
-            clientInfo: { name: "warrant-live", version: "0.1.0" }
+            clientInfo: { name: "fusionkit-live", version: "0.1.0" }
           }),
           60_000
         );

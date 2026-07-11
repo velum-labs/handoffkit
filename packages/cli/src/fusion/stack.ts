@@ -3,15 +3,19 @@
  * panel model plus synthesis, and the in-process gateway that turns it into the
  * judge-streamed-trajectory front door.
  */
+import { createHash } from "node:crypto";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+
+import { stringify } from "yaml";
 
 import { KernelBackend } from "@fusionkit/ensemble";
 import type { EnsembleModel, PanelTrust, UnifiedHarnessKind } from "@fusionkit/ensemble";
 import { fusionModelId, providerForAuthMode } from "@fusionkit/registry";
 import { createChatNarrationWriter, MlxBackend, OpenAiBackend, startGateway } from "@fusionkit/model-gateway";
 import type {
+  CodexRelayOptions,
   Gateway,
   LocalComputePricing,
   ModelPricing,
@@ -20,13 +24,14 @@ import type {
   SessionMetaInput,
   SessionStore
 } from "@fusionkit/model-gateway";
+import { harnessDriversEnabled } from "@fusionkit/tools";
 
 import { startFusionStepGateway } from "../gateway.js";
 import type { GatewayEnsembleConfig, GatewayRunnerConfig } from "../gateway.js";
 import { CliError } from "../shared/errors.js";
 import { createPortlessSession } from "../shared/portless.js";
 import type { PortlessSession } from "../shared/portless.js";
-import { freePort, spawnLogged, terminate, waitForHttp } from "../shared/proc.js";
+import { reservePort, spawnLogged, terminate, waitForHttp } from "../shared/proc.js";
 
 import { PROMPT_CONFIG_KEY, PROMPT_IDS } from "../fusion-config.js";
 import type { PromptOverrides } from "../fusion-config.js";
@@ -58,7 +63,7 @@ export type Router = {
   models: EnsembleModel[];
   /** The endpoint id used as the judge/synthesizer. */
   judgeModel: string;
-  /** Sorted endpoint ids — the router's discover-or-spawn identity token. */
+  /** Config-hash discover-or-spawn identity token (see computeRouterIdentity). */
   identity: string;
   close: () => Promise<void>;
 };
@@ -258,12 +263,66 @@ export function resolveNarratorModel(
   return { kind: "mlx", model: reasoningModel };
 }
 
+/** Hash the full effective router config so reuse only happens when nothing material changed. */
+export function computeRouterIdentity(input: {
+  specs: readonly PanelModelSpec[];
+  extraSpecs?: readonly PanelModelSpec[];
+  judgeId: string;
+  prompts?: PromptOverrides;
+  mlxUrls: Record<string, string>;
+  env?: NodeJS.ProcessEnv;
+}): string {
+  const env = input.env ?? process.env;
+  const presentKeyEnvs = [
+    ...new Set(
+      [...input.specs, ...(input.extraSpecs ?? [])].flatMap((spec) => {
+        const provider = spec.provider ?? "mlx";
+        const keyEnv = spec.keyEnv ?? defaultKeyEnv(provider);
+        return keyEnv !== undefined && (env[keyEnv] ?? "").length > 0 ? [keyEnv] : [];
+      })
+    )
+  ].sort();
+  const payload = {
+    endpoints: [...input.specs, ...(input.extraSpecs ?? [])].map((spec) => ({
+      id: spec.id,
+      model: spec.model,
+      provider: spec.provider ?? "mlx",
+      baseUrl: spec.baseUrl,
+      keyEnv: spec.keyEnv,
+      auth: spec.auth,
+      pricing: spec.pricing,
+      mlxUrl: input.mlxUrls[spec.id]
+    })),
+    judgeId: input.judgeId,
+    prompts: input.prompts ?? {},
+    presentKeyEnvs,
+    sampling: { temperature: 0.2, top_p: 0.9, max_tokens: 8192 }
+  };
+  return createHash("sha256").update(JSON.stringify(payload)).digest("hex").slice(0, 16);
+}
+
+function routerDiscoverIdentity(input: {
+  specs: readonly PanelModelSpec[];
+  extraSpecs?: readonly PanelModelSpec[];
+  judgeId: string;
+  prompts?: PromptOverrides;
+  mlxUrls: Record<string, string>;
+  env?: NodeJS.ProcessEnv;
+}): string {
+  const idPart = [...input.specs, ...(input.extraSpecs ?? [])]
+    .map((spec) => spec.id)
+    .sort()
+    .join(",");
+  return `${computeRouterIdentity(input)}:${idPart}`;
+}
+
 /**
  * Build the `fusionkit serve` config (YAML) for the consolidated router: one
  * endpoint per panel model. Cloud models call their provider directly (keyed by
  * `api_key_env`); MLX models are fronted as `openai-compatible` endpoints
  * pointing at their in-process gateway loopback URL. The judge endpoint doubles
- * as the synthesizer. Values are JSON-quoted (valid YAML flow scalars).
+ * as the synthesizer. Emitted with a real YAML serializer, so hostile model ids
+ * (`:`, quotes, metacharacters) cannot corrupt the document.
  */
 export function routerConfigYaml(input: {
   specs: PanelModelSpec[];
@@ -271,66 +330,55 @@ export function routerConfigYaml(input: {
   judgeId: string;
   prompts?: PromptOverrides;
 }): string {
-  const lines = ["endpoints:"];
-  for (const spec of input.specs) {
+  const endpoints = input.specs.map((spec) => {
     const provider = spec.provider ?? "mlx";
-    lines.push(`  - id: ${JSON.stringify(spec.id)}`);
-    lines.push(`    model: ${JSON.stringify(spec.model)}`);
+    const entry: Record<string, unknown> = {
+      id: spec.id,
+      model: spec.model
+    };
     if (spec.auth !== undefined) {
-      // Subscription endpoint: FusionKit reuses the local CLI login read-only.
-      // The auth-mode -> provider mapping comes from the subscription registry
-      // (claude-code speaks anthropic; codex has its own provider).
-      // base_url / api_key are intentionally omitted (fusionkit defaults them).
-      lines.push(`    provider: ${providerForAuthMode(spec.auth)}`);
-      lines.push("    auth:");
-      lines.push(`      mode: ${spec.auth}`);
+      entry.provider = providerForAuthMode(spec.auth);
+      entry.auth = { mode: spec.auth };
     } else if (provider === "mlx") {
-      lines.push("    provider: openai-compatible");
-      lines.push(`    base_url: ${JSON.stringify(input.mlxUrls[spec.id] ?? "")}`);
-      lines.push("    api_key: not-needed");
+      entry.provider = "openai-compatible";
+      entry.base_url = input.mlxUrls[spec.id] ?? "";
+      entry.api_key = "not-needed";
     } else {
-      // `base_url` is required by fusionkit's ModelEndpoint, so always emit one
-      // (the spec's, or the provider default).
       const baseUrl = spec.baseUrl ?? providerDefaultBaseUrl(provider);
-      lines.push(`    provider: ${provider}`);
-      lines.push(`    base_url: ${JSON.stringify(baseUrl)}`);
+      entry.provider = provider;
+      entry.base_url = baseUrl;
       const keyEnv = spec.keyEnv ?? defaultKeyEnv(provider);
-      if (keyEnv !== undefined) lines.push(`    api_key_env: ${JSON.stringify(keyEnv)}`);
+      if (keyEnv !== undefined) entry.api_key_env = keyEnv;
     }
     if (spec.pricing !== undefined) {
-      lines.push("    pricing:");
+      const pricing: Record<string, unknown> = {};
       if (spec.pricing.inputPer1mTokens !== undefined) {
-        lines.push(`      input_per_1m_tokens: ${spec.pricing.inputPer1mTokens}`);
+        pricing.input_per_1m_tokens = spec.pricing.inputPer1mTokens;
       }
       if (spec.pricing.outputPer1mTokens !== undefined) {
-        lines.push(`      output_per_1m_tokens: ${spec.pricing.outputPer1mTokens}`);
+        pricing.output_per_1m_tokens = spec.pricing.outputPer1mTokens;
       }
-      if (spec.pricing.currency !== undefined) {
-        lines.push(`      currency: ${JSON.stringify(spec.pricing.currency)}`);
-      }
+      if (spec.pricing.currency !== undefined) pricing.currency = spec.pricing.currency;
+      if (Object.keys(pricing).length > 0) entry.pricing = pricing;
     }
-  }
-  lines.push(`default_model: ${JSON.stringify(input.judgeId)}`);
-  lines.push(`judge_model: ${JSON.stringify(input.judgeId)}`);
-  lines.push(`synthesizer_model: ${JSON.stringify(input.judgeId)}`);
-  // Generous budget: reasoning models (gpt-5.x) spend tokens on reasoning before
-  // producing content, so a small cap can yield an empty answer.
-  lines.push("sampling: {temperature: 0.2, top_p: 0.9, max_tokens: 8192}");
-  // Committed `.fusionkit/prompts/*.md` overrides flow into the synthesizer's
-  // PromptOverrides here. JSON.stringify yields a valid YAML double-quoted
-  // scalar, so multi-line prompts are escaped safely.
+    return entry;
+  });
   const promptEntries = PROMPT_IDS.flatMap((id) => {
     const value = input.prompts?.[id];
     return value !== undefined ? [[PROMPT_CONFIG_KEY[id], value] as const] : [];
   });
-  if (promptEntries.length > 0) {
-    lines.push("prompts:");
-    for (const [key, value] of promptEntries) {
-      lines.push(`  ${key}: ${JSON.stringify(value)}`);
-    }
-  }
-  lines.push("");
-  return lines.join("\n");
+  const prompts =
+    promptEntries.length > 0 ? Object.fromEntries(promptEntries) : undefined;
+  return (
+    stringify({
+      endpoints,
+      default_model: input.judgeId,
+      judge_model: input.judgeId,
+      synthesizer_model: input.judgeId,
+      sampling: { temperature: 0.2, top_p: 0.9, max_tokens: 8192 },
+      ...(prompts !== undefined ? { prompts } : {})
+    }) + "\n"
+  );
 }
 
 function pricingOverrides(specs: readonly PanelModelSpec[]): Record<string, ModelPricing> {
@@ -357,6 +405,64 @@ function localComputePricing(specs: readonly PanelModelSpec[]): Record<string, L
     localCompute[spec.id] = spec.localCompute;
   }
   return localCompute;
+}
+
+/**
+ * Native harness drivers speak their tool's native model dialect (Claude
+ * Messages, Codex Responses, Cursor's OpenAI-compatible surface), while the
+ * consolidated Python router exposes Chat Completions. Put a real
+ * dialect-translating model gateway in front of each member endpoint so the
+ * driver reaches that member — not the fused front door — through its native
+ * protocol. The backend force-routes every request to the member's endpoint
+ * id; the driver may name either the endpoint or provider model.
+ */
+export async function startDriverEndpointGateways(input: {
+  models: readonly EnsembleModel[];
+  modelEndpoints: Readonly<Record<string, string>>;
+}): Promise<{
+  endpoints: Record<string, string>;
+  close: () => Promise<void>;
+}> {
+  const gateways: Gateway[] = [];
+  try {
+    const entries = await Promise.all(
+      input.models.map(async (model) => {
+        const routerUrl = input.modelEndpoints[model.id];
+        if (routerUrl === undefined) {
+          throw new Error(`no router endpoint configured for driver model "${model.id}"`);
+        }
+        const gateway = await startGateway({
+          backend: new KernelBackend(
+            new OpenAiBackend({
+              baseUrl: `${routerUrl.replace(/\/+$/, "")}/v1`,
+              forceModel: model.id,
+              defaultModel: model.id
+            }),
+            {
+              workflowIds: {
+                chat: `driver-member-${model.id}-turn`,
+                models: `driver-member-${model.id}-models`,
+                embeddings: `driver-member-${model.id}-embeddings`
+              }
+            }
+          ),
+          host: "127.0.0.1",
+          port: 0
+        });
+        gateways.push(gateway);
+        return [model.id, gateway.url()] as const;
+      })
+    );
+    return {
+      endpoints: Object.fromEntries(entries),
+      close: async () => {
+        await Promise.allSettled(gateways.map((gateway) => gateway.close()));
+      }
+    };
+  } catch (error) {
+    await Promise.allSettled(gateways.map((gateway) => gateway.close()));
+    throw error;
+  }
 }
 
 /**
@@ -413,7 +519,7 @@ export async function startRouter(options: {
   const allSpecs = [...specs, ...(options.extraSpecs ?? [])];
   const judgeSpec = judgeSpecFor(specs, options.judgeModel);
   const models: EnsembleModel[] = specs.map((spec) => ({ id: spec.id, model: spec.model }));
-  const identity = allSpecs.map((spec) => spec.id).sort().join(",");
+  let identity = "";
 
   const announceStart = (label: string): void => {
     if (report) report({ kind: "server.start", id: "router", label });
@@ -431,6 +537,7 @@ export async function startRouter(options: {
   // It calls providers directly and MLX over loopback (never a portless HTTPS
   // URL), so it needs no portless CA — and must keep its default certifi bundle
   // intact to verify real provider certificates.
+  // env-spread-allowed: the Python router is a trusted infra child that legitimately needs the user's provider keys
   const env: Record<string, string | undefined> = { ...process.env };
   if (options.fusionkitDir !== undefined) {
     loadEnvFileInto(join(options.fusionkitDir, ".env"), env);
@@ -482,20 +589,42 @@ export async function startRouter(options: {
       judgeId: judgeSpec.id,
       ...(options.prompts !== undefined ? { prompts: options.prompts } : {})
     });
+    identity = routerDiscoverIdentity({
+      specs,
+      extraSpecs: options.extraSpecs,
+      judgeId: judgeSpec.id,
+      prompts: options.prompts,
+      mlxUrls,
+      env
+    });
+    // The router serves this token back on /health, so a later run's
+    // discover-or-spawn probe compares real effective configs — not just
+    // endpoint id sets — before reusing the process.
+    env.FUSIONKIT_ROUTER_IDENTITY = identity;
     const configDir = mkdtempSync(join(tmpdir(), "fusion-router-"));
     const configPath = join(configDir, "router.yaml");
     writeFileSync(configPath, config);
     const runner = fusionkitPyCommand(options.fusionkitDir);
-    const port = await freePort();
-    const proc = spawnLogged(
-      runner.command,
-      [...runner.prefix, "serve", "--config", configPath, "--host", "127.0.0.1", "--port", String(port)],
-      {
-        ...(runner.cwd !== undefined ? { cwd: runner.cwd } : {}),
-        ...(options.logsDir !== undefined ? { logFile: join(options.logsDir, "router.log") } : {}),
-        env
-      }
-    );
+    // Hold the port until the instant before the router process binds it, so a
+    // concurrent picker cannot slip in between choosing and spawning.
+    const reservation = await reservePort();
+    const port = reservation.port;
+    const routerArgs = [
+      ...runner.prefix,
+      "serve",
+      "--config",
+      configPath,
+      "--host",
+      "127.0.0.1",
+      "--port",
+      String(port)
+    ];
+    await reservation.release();
+    const proc = spawnLogged(runner.command, routerArgs, {
+      ...(runner.cwd !== undefined ? { cwd: runner.cwd } : {}),
+      ...(options.logsDir !== undefined ? { logFile: join(options.logsDir, "router.log") } : {}),
+      env
+    });
     proc.child.once("exit", () => rmSync(configDir, { recursive: true, force: true }));
     const url = `http://127.0.0.1:${port}`;
     // Surface the engine's own boot chatter (uvx resolve/download on a cold
@@ -614,6 +743,12 @@ export type StartFusionStackOptions = {
    */
   harness?: UnifiedHarnessKind;
   endpoints?: Record<string, string>;
+  /**
+   * Codex backend relay config for the gateway (see `GatewayRunnerConfig`):
+   * keeps a Codex client's own stock models in the picker and working, using
+   * the auth the client itself attaches. Inert for non-Codex clients.
+   */
+  codexRelay?: CodexRelayOptions;
   fusionkitDir?: string;
   /** System-prompt overrides emitted into the router's synthesizer config. */
   prompts?: PromptOverrides;
@@ -689,32 +824,45 @@ export async function startFusionStack(options: StartFusionStackOptions): Promis
   let fusionBackendUrl: string;
   let reusedRouter = false;
   let routerClose: () => Promise<void> | void = () => {};
+  let driverEndpointClose: () => Promise<void> = async () => {};
 
   if (override) {
     modelEndpoints = options.endpoints as Record<string, string>;
     fusionBackendUrl = options.synthesisUrl as string;
   } else {
     // Discover-or-spawn the single router (models + synthesis), reusing a
-    // compatible running instance (same endpoint id set) across runs.
-    const expectedIdentity = [
-      ...options.models.map((spec) => spec.id),
-      ...(narratorSpec !== undefined ? [narratorSpec.id] : [])
-    ]
-      .sort()
-      .join(",");
+    // compatible running instance across runs. The identity is a hash of the
+    // full effective config (models, prompts, keys-present, sampling), served
+    // back by the router on /health — so changing a model, a prompt override,
+    // or an API key restarts the router instead of silently reusing a stale
+    // one. Mirror startRouter's env (parent env + the checkout's .env overlay)
+    // so both sides hash the same keys-present set. MLX panels hash their
+    // per-run gateway URLs and therefore never reuse: a previous run's
+    // in-process gateways died with that run's CLI.
+    const judgeSpec = judgeSpecFor(options.models, options.judgeModel);
+    // env-spread-allowed: identity hashing only records which key env vars are present
+    const identityEnv: Record<string, string | undefined> = { ...process.env };
+    if (options.fusionkitDir !== undefined) {
+      loadEnvFileInto(join(options.fusionkitDir, ".env"), identityEnv);
+    }
+    const expectedIdentity = routerDiscoverIdentity({
+      specs: options.models,
+      extraSpecs: narratorSpec !== undefined ? [narratorSpec] : undefined,
+      judgeId: judgeSpec.id,
+      prompts: options.prompts,
+      mlxUrls: {},
+      env: identityEnv
+    });
     const resolved = await portless.discoverOrSpawn({
       name: "router",
       identity: expectedIdentity,
+      replaceStale: true,
       healthCheck: async (loopbackUrl) => {
         try {
-          const response = await fetch(`${loopbackUrl}/v1/models`, { signal: AbortSignal.timeout(2000) });
+          const response = await fetch(`${loopbackUrl}/health`, { signal: AbortSignal.timeout(2000) });
           if (!response.ok) return undefined;
-          const body = (await response.json()) as { data?: Array<{ id?: string }> };
-          return (body.data ?? [])
-            .map((entry) => entry.id)
-            .filter((id): id is string => typeof id === "string" && id !== "fusionkit/router")
-            .sort()
-            .join(",");
+          const body = (await response.json()) as { identity?: unknown };
+          return typeof body.identity === "string" ? body.identity : undefined;
         } catch {
           return undefined;
         }
@@ -755,6 +903,25 @@ export async function startFusionStack(options: StartFusionStackOptions): Promis
       } else {
         options.log(`fusion: reusing running fusion router on ${resolved.loopbackUrl}`);
       }
+    }
+  }
+
+  const driverHarness =
+    options.harness === "codex" ||
+    options.harness === "claude-code" ||
+    options.harness === "cursor-acp" ||
+    options.harness === "cursor-desktop";
+  if (driverHarness && harnessDriversEnabled()) {
+    try {
+      const driverEndpoints = await startDriverEndpointGateways({
+        models,
+        modelEndpoints
+      });
+      modelEndpoints = driverEndpoints.endpoints;
+      driverEndpointClose = driverEndpoints.close;
+    } catch (error) {
+      await routerClose();
+      throw error;
     }
   }
 
@@ -847,6 +1014,7 @@ export async function startFusionStack(options: StartFusionStackOptions): Promis
       models,
       judgeModel: judgeModelName,
       ...(ensembleConfigs !== undefined ? { ensembles: ensembleConfigs } : {}),
+      ...(options.codexRelay !== undefined ? { codexRelay: options.codexRelay } : {}),
       modelEndpoints,
       ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),
       ...(Object.keys(pricing).length > 0 ? { pricing } : {}),
@@ -886,11 +1054,13 @@ export async function startFusionStack(options: StartFusionStackOptions): Promis
         await gateway.close();
         portless.unregister("gateway");
         await narrationClose();
+        await driverEndpointClose();
         await routerClose();
       }
     };
   } catch (error) {
     await narrationClose();
+    await driverEndpointClose();
     await routerClose();
     throw error;
   }

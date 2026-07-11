@@ -1,0 +1,34 @@
+---
+title: Examples
+description: Product examples and where the legacy demo suite lives.
+---
+
+The product examples focus on model fusion, local MLX, benchmark maintenance, and runtime-kernel workflows. They run from a repository checkout.
+
+## Run examples
+
+```bash
+pnpm build
+pnpm demo        # list registered demos
+pnpm demo 15     # FusionKit runtime kernel
+pnpm mlx         # Apple-Silicon managed-MLX smoke, when supported
+```
+
+## Product examples
+
+| Example | What it proves |
+| --- | --- |
+| `examples/runtime-kernel` | Explicit model-fusion operator graphs: direct fast path, rank/fuse workflow, trace, outcome, and replay record. |
+| `examples/mlx` | Managed MLX local serving and stress paths on supported Apple-Silicon machines. |
+| `examples/bench` | Maintainer performance-budget checks. |
+
+## Legacy examples
+
+Demos for the retained legacy platform live in `legacy/examples/` and are documented in `legacy/docs/guides/examples.md` for contributors. They are outside the FusionKit user path and require the legacy stack.
+
+## Adding a product example
+
+1. Create `examples/<name>` with its own package files and tests.
+2. Add it to `examples/manifest.json`.
+3. Reuse `@fusionkit/example-utils` for banners, manifests, and live-model config.
+4. Run `pnpm check`, `pnpm build`, and the relevant example/test command.

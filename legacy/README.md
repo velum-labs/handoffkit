@@ -1,3 +1,11 @@
+> **Frozen.** This tree is the legacy Warrant governance stack. It is not
+> built, not tested, not published from this repo, and not part of the
+> FusionKit product. The npm packages published from it
+> (`@fusionkit/sdk`, `@fusionkit/plane`, `@fusionkit/runner`,
+> `@fusionkit/handoff`, `@fusionkit/adapter-compute`,
+> `@fusionkit/session-vercel-sandbox`, `@fusionkit/session-hermetic`,
+> `@fusionkit/session-harness`) are deprecated.
+
 # Legacy quarantine
 
 This folder quarantines the legacy "Warrant" governed-execution stack.

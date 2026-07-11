@@ -16,7 +16,7 @@
  * unconditionally.
  */
 import {
-  emitFusionMarker,
+  emitFusionEvent,
   jsonAttr,
   startFusionSpan,
   withFusionBaggage
@@ -88,7 +88,7 @@ export function traceCandidate(ctx: CandidateTraceContext, input: CandidateTrace
     trajectoryId: input.candidateId,
     ...(ctx.turn !== undefined ? { turn: ctx.turn } : {})
   });
-  span.marker("panel-model", "fusion.candidate.started", {
+  span.event("panel-model", "fusion.candidate.started", {
     ...identity,
     [ATTR.FUSION_BRANCH_NAME]: input.branchName,
     [ATTR.FUSION_WORKTREE_PATH]: input.worktreePath
@@ -100,7 +100,7 @@ export function traceCandidate(ctx: CandidateTraceContext, input: CandidateTrace
     step(step: TrajectoryStep): void {
       if (emittedStepIndexes.has(step.index)) return;
       emittedStepIndexes.add(step.index);
-      emitFusionMarker("panel-model", "fusion.candidate.step", carrier, {
+      emitFusionEvent("panel-model", "fusion.candidate.step", carrier, {
         ...identity,
         [ATTR.FUSION_STEP]: jsonAttr(step),
         [ATTR.FUSION_STEP_INDEX]: step.index,

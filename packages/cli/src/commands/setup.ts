@@ -73,6 +73,6 @@ export function registerSetup(program: Command): void {
     .option("--force", "re-warm even if the engine is already cached")
     .option("--json", "emit machine-readable JSON")
     .action(async (opts: SetupOpts, command: Command) => {
-      process.exit(await runSetup(opts, contextFor(command)));
+      process.exitCode = await runSetup(opts, contextFor(command));
     });
 }

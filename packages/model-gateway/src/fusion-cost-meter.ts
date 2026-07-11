@@ -1,7 +1,9 @@
 import { ATTR } from "@fusionkit/protocol";
 import type { WireTrajectory } from "@fusionkit/protocol";
-import { emitFusionMarker, jsonAttr } from "@fusionkit/tracing";
+import { emitFusionEvent, jsonAttr } from "@fusionkit/tracing";
 import type { FusionTraceCarrier } from "@fusionkit/tracing";
+
+import { decodeBufferedSse } from "./sse/parse.js";
 
 import {
   addLedgerEntry,
@@ -27,7 +29,7 @@ import { errorEvent, sseResponse } from "./sse-wire.js";
 import type { FusionGatewayLogger } from "./logger.js";
 import type { SessionStore } from "./session-store.js";
 import type { FusionBackendKernelStateStore } from "./fusion-types.js";
-import { errorText } from "./fusion-session.js";
+import { errorText, PendingSessionWrites } from "./fusion-session.js";
 
 function recordOf(value: unknown): Record<string, unknown> | undefined {
   return typeof value === "object" && value !== null && !Array.isArray(value)
@@ -123,18 +125,17 @@ export function providerCostFromPayload(payload: unknown): ProviderCostMetadata 
 
 export function providerCostFromSse(text: string): ProviderCostMetadata | undefined {
   let providerCost: ProviderCostMetadata | undefined;
-  for (const line of text.split("\n")) {
-    const trimmed = line.trim();
-    if (!trimmed.startsWith("data:")) continue;
-    const payload = trimmed.slice(5).trim();
-    if (payload.length === 0 || payload === "[DONE]") continue;
+  for (const event of decodeBufferedSse(text)) {
+    if (event.data.length === 0 || event.data === "[DONE]") continue;
+    let parsed: unknown;
     try {
-      const parsed = JSON.parse(payload) as unknown;
-      const candidate = providerCostFromPayload(parsed);
-      if (candidate !== undefined) providerCost = candidate;
+      parsed = JSON.parse(event.data) as unknown;
     } catch {
-      // partial / non-JSON line
+      // Best-effort post-hoc metering: skip a non-JSON payload in a buffered scan.
+      continue;
     }
+    const candidate = providerCostFromPayload(parsed);
+    if (candidate !== undefined) providerCost = candidate;
   }
   return providerCost;
 }
@@ -155,6 +156,8 @@ export type FusionCostMeterOptions = {
   kernelStateStore: FusionBackendKernelStateStore;
   store?: SessionStore;
   logger: FusionGatewayLogger;
+  /** Shared in-flight write tracker (one per gateway; awaited on shutdown). */
+  pendingWrites?: PendingSessionWrites;
 };
 
 export class FusionCostMeter {
@@ -165,6 +168,7 @@ export class FusionCostMeter {
   readonly #kernelStateStore: FusionBackendKernelStateStore;
   readonly #store: SessionStore | undefined;
   readonly #logger: FusionGatewayLogger;
+  readonly #pendingWrites: PendingSessionWrites;
 
   constructor(options: FusionCostMeterOptions) {
     this.#budgetUsd = options.budgetUsd;
@@ -174,6 +178,7 @@ export class FusionCostMeter {
     this.#kernelStateStore = options.kernelStateStore;
     this.#store = options.store;
     this.#logger = options.logger;
+    this.#pendingWrites = options.pendingWrites ?? new PendingSessionWrites();
   }
 
   get budgetUsd(): number | undefined {
@@ -273,14 +278,16 @@ export class FusionCostMeter {
     });
     const total = addLedgerEntry(this.costFor(sessionId), entry);
     this.#kernelStateStore.setCost(sessionId, total);
-    try {
-      this.#store?.recordCostEntry(sessionId, entry, total);
-    } catch (error) {
-      this.#logger.error(`fusion: could not persist cost for session ${sessionId}: ${errorText(error)}`);
+    if (this.#store !== undefined) {
+      this.#pendingWrites.track(
+        this.#store.recordCostEntry(sessionId, entry, total).catch((error: unknown) => {
+          this.#logger.error(`fusion: could not persist cost for session ${sessionId}: ${errorText(error)}`);
+        })
+      );
     }
     const line = turnCostLine(entry, total.totalUsd);
     this.#logger.error(`fusion: ${input.stage} ${line}`);
-    emitFusionMarker("gateway", "fusion.cost", trace, {
+    emitFusionEvent("gateway", "fusion.cost", trace, {
       [ATTR.FUSION_SESSION_ID]: sessionId,
       [ATTR.FUSION_TURN]: input.turn,
       [ATTR.FUSION_COST_STAGE]: input.stage,

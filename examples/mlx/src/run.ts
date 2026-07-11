@@ -1,13 +1,13 @@
 /**
  * MLX generation smoke test.
  *
- * Provisions a Warrant-owned mlx-lm server and runs a single generateText call.
+ * Provisions a FusionKit-owned mlx-lm server and runs a single generateText call.
  * Apple Silicon only.
  *
- *   WARRANT_MLX_MODEL            HF repo id (default: registry gatewayDefaultModel)
- *   WARRANT_MLX_DIR              owned MLX directory override (default: ~/.warrant/mlx)
- *   WARRANT_MLX_IDLE_SHUTDOWN_MS idle shutdown (default: 0 — stay up through the run)
- *   WARRANT_MLX_PROMPT           prompt override
+ *   FUSIONKIT_MLX_MODEL            HF repo id (default: registry gatewayDefaultModel)
+ *   FUSIONKIT_MLX_DIR              owned MLX directory override (default: ~/.fusionkit/mlx)
+ *   FUSIONKIT_MLX_IDLE_SHUTDOWN_MS idle shutdown (default: 0 — stay up through the run)
+ *   FUSIONKIT_MLX_PROMPT           prompt override
  */
 import { generateText, jsonSchema, Output } from "ai";
 
@@ -76,11 +76,11 @@ function onServerEvent(event: ManagedServerEvent): void {
 }
 
 function parseIdleShutdownMs(): number {
-  const raw = process.env.WARRANT_MLX_IDLE_SHUTDOWN_MS;
+  const raw = process.env.FUSIONKIT_MLX_IDLE_SHUTDOWN_MS;
   if (raw === undefined || raw === "") return 0;
   const parsed = Number(raw);
   if (!Number.isFinite(parsed) || parsed < 0) {
-    throw new Error(`WARRANT_MLX_IDLE_SHUTDOWN_MS must be a non-negative number, got "${raw}"`);
+    throw new Error(`FUSIONKIT_MLX_IDLE_SHUTDOWN_MS must be a non-negative number, got "${raw}"`);
   }
   return parsed;
 }
@@ -97,10 +97,10 @@ function hintOnStartupFailure(error: unknown): void {
 async function main(): Promise<void> {
   assertPlatform();
 
-  const model = process.env.WARRANT_MLX_MODEL ?? DEFAULT_MODEL;
-  const dir = process.env.WARRANT_MLX_DIR;
+  const model = process.env.FUSIONKIT_MLX_MODEL ?? DEFAULT_MODEL;
+  const dir = process.env.FUSIONKIT_MLX_DIR;
   const idleShutdownMs = parseIdleShutdownMs();
-  const prompt = process.env.WARRANT_MLX_PROMPT ?? DEFAULT_PROMPT;
+  const prompt = process.env.FUSIONKIT_MLX_PROMPT ?? DEFAULT_PROMPT;
 
   console.log("");
   console.log("MLX generation smoke test");

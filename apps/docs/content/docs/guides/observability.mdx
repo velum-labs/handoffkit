@@ -1,0 +1,100 @@
+---
+title: Observability
+description: Watch sessions, trajectories, and the judge with --observe.
+---
+
+## The trace dashboard
+
+Pass `--observe` to boot a local dashboard (the **scope** app) that streams live
+fusion signals: sessions, environments, per-panel-model trajectories, and the
+judge's thinking-to-final flow:
+
+```bash
+fusionkit codex --observe
+```
+
+fusionkit exports the standard `OTEL_EXPORTER_OTLP_ENDPOINT` base into every
+spawned process (spans post to `/v1/traces`, events to `/v1/logs`), opens the
+dashboard in your browser, and tears it down on exit.
+
+## What gets traced
+
+Fusion traces with **OpenTelemetry**: every component emits real spans (units
+of work, on the traces signal) and events (live point-in-time signals, OTel
+log records with an `event_name`, on the logs signal) over OTLP/HTTP,
+correlated by one trace id and propagated with W3C `traceparent`/`baggage`.
+The vocabulary lives in the semantic-conventions registry
+(`spec/fusion-trace/registry.json`):
+
+- `fusion.turn.info` (an event with the environment snapshot)
+- `fusion.candidate` spans with live `fusion.candidate.step` events
+- GenAI `chat` spans for model calls (`gen_ai.*` attributes)
+- `fusion.tool.execution` and `fusion.cost` events
+- the judge's `fusion.judge.thinking` events under the terminal `fusion.judge`
+  span, whose end carries the final answer and marks the session succeeded
+
+Because the pipeline is standard OTLP, the same signals can be exported to any
+OTel backend instead (PostHog distributed tracing, Jaeger, Tempo) by setting
+`OTEL_EXPORTER_OTLP_ENDPOINT` — or the signal-specific
+`OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` / `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` (and
+`OTEL_EXPORTER_OTLP_HEADERS` for auth) — yourself; `--observe` only fills the
+default when the variables are unset.
+
+## Availability
+
+The dashboard is a separate app (it is not bundled inside the npm package). If it
+isn't available, fusionkit prints exactly how to enable it instead of failing
+with a filesystem error:
+
+```
+the observability dashboard is not available in this install.
+  It is a separate app and is not bundled with the npm package.
+  To enable --observe, install its dependencies once: cd <scope-app> && pnpm install
+```
+
+In this repository, the app lives at `apps/scope`.
+
+```bash
+cd apps/scope
+pnpm install
+pnpm test
+```
+
+When portless is enabled, the dashboard uses a stable local HTTPS name. Without
+portless, FusionKit prints the raw loopback URL. In both cases, the gateway,
+panel runner, Python synthesizer, and dashboard share the same trace id for a
+session.
+
+## Product telemetry (separate, opt-in)
+
+Tracing above is local-only plumbing. Anonymous product telemetry is a separate,
+strictly opt-in pipeline (`fusionkit telemetry on`), off by default, with a
+published allow-list of fields. See [Privacy](/docs/concepts/privacy) and
+`fusionkit telemetry status`. `DO_NOT_TRACK=1` forces it off.
+
+## Correlating a run
+
+Use the run id or trace id printed by the gateway to connect terminal output,
+session state, and dashboard events. Start with the session list when you are
+debugging after the process exits.
+
+```bash
+fusionkit sessions
+fusionkit sessions show <id>
+```
+
+The session record gives you the tool, panel, turn count, recent activity, and
+cost. The trace dashboard gives you the timing and event-level view for the same
+work.
+
+## Logs
+
+Every run writes per-process logs (panel servers, synthesizer, dashboard, cursor
+bridge) to a temporary run directory, and fusionkit prints the path:
+
+```
+fusion: logs in /tmp/fusionkit-fusion-XXXX/logs
+```
+
+On failure, the most diagnostic lines are surfaced inline and the full log path
+is included so you can dig in or share it.

@@ -101,7 +101,7 @@ function candidateEvidence(
 
 function createSynthesisWorktree(input: RunSynthesisInput): string | undefined {
   if (!input.workspace || !input.baseGitSha) return undefined;
-  const root = mkdtempSync(join(tmpdir(), `warrant-synthesis-${safeSegment(input.descriptor.id)}-`));
+  const root = mkdtempSync(join(tmpdir(), `fusionkit-synthesis-${safeSegment(input.descriptor.id)}-`));
   const worktree = join(root, "final");
   gitText(input.workspace, ["worktree", "add", "--detach", worktree, input.baseGitSha]);
   return worktree;

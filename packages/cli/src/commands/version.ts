@@ -63,6 +63,6 @@ export function registerVersion(program: Command): void {
     .description("show versions for fusionkit, the synthesizer, runners, agents, and tool packages")
     .option("--json", "emit machine-readable JSON")
     .action(async (_opts: { json?: boolean }, command: Command) => {
-      process.exit(await runVersion(contextFor(command)));
+      process.exitCode = await runVersion(contextFor(command));
     });
 }

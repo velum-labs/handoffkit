@@ -27,7 +27,7 @@ The most important operational fact is the process boundary. The Node CLI owns h
 
 ## Top-level repository layout
 
-The root `package.json` is a private pnpm workspace named `warrant`. It pins Node 22 or newer and pnpm 10.33.4. Its scripts are the standard maintainer commands: `pnpm check` runs repository invariants, `pnpm build` compiles TypeScript project references, `pnpm test` runs compiled Node tests and demo smoke tests, and `pnpm verify` runs all three in order.
+The root `package.json` is a private pnpm workspace named `fusionkit-monorepo`. It pins Node 22 or newer and pnpm 10.33.4. Its scripts are the standard maintainer commands: `pnpm check` runs repository invariants, `pnpm build` compiles TypeScript project references, `pnpm test` runs compiled Node tests and demo smoke tests, and `pnpm verify` runs all three in order.
 
 The root `pyproject.toml` is a virtual uv workspace. It is not a Python package by itself. It binds every package under `python/` into one lockfile and configures shared Ruff, Pyright, pytest, and coverage settings. `uv sync --all-packages` prepares the Python workspace, and `uv run pytest` runs the Python test suite.
 
@@ -149,13 +149,13 @@ await gateway.close();
 
 ### `@fusionkit/protocol`
 
-`@fusionkit/protocol` is the zero-runtime-dependency contract layer. It defines Warrant contracts, receipts, event chains, manifests, policies, checkpoints, handoff envelopes, model-fusion schemas, generated OpenAPI clients, hashing, signing, verification, generated trace conventions, and validation helpers.
+`@fusionkit/protocol` is the zero-runtime-dependency contract layer. It defines FusionKit model-fusion contracts, receipts, event chains, manifests, policies, checkpoints, handoff envelopes, model-fusion schemas, generated OpenAPI clients, hashing, signing, verification, generated trace conventions, and validation helpers.
 
 Validation and normalization exports include `parseHostAllowlistEntry`, `parsePoolName`, `parseSecretName`, `parseWorkspaceManifestPath`, `assertWireTrajectory`, `isWireTrajectory`, `normalizeWireTrajectories`, and the generated model-fusion assertion functions such as `assertHarnessRunRequestV1`, `assertHarnessRunResultV1`, `assertModelFusionRecord`, `assertEnsembleReceiptV1`, and `assertToolExecutionRecordV1`.
 
 Cryptographic and provenance exports include `canonicalize`, `sha256Hex`, `sha256PrefixedHex`, `hashCanonical`, `hashCanonicalSha256`, `requestHash`, `responseHash`, `artifactHash`, `schemaBundleHash`, `generateEd25519KeyPair`, `keyIdFromPublicPem`, `signData`, `verifyData`, `contractHash`, `signContract`, `appendEvent`, `verifyChain`, `signReceipt`, `verifyRunnerReceipt`, and `verifyReceiptBundle`.
 
-Trace exports are the generated fusion semantic-convention constants (`ATTR`, span/marker name lists, `EXPORTABLE_ATTRIBUTES`); the OpenTelemetry-backed span helpers live in `@fusionkit/tracing`.
+Trace exports are the generated fusion semantic-convention constants (`ATTR`, span/event name lists, `EXPORTABLE_ATTRIBUTES`); the OpenTelemetry-backed span and event helpers live in `@fusionkit/tracing`.
 
 Example:
 
@@ -339,7 +339,7 @@ console.log(Boolean(plane), Boolean(runner));
 
 `fusionkit_core.run_store` defines `FileSystemRunStore`, which persists run state, events, artifacts, tool pauses, idempotency records, and inspections to the local filesystem.
 
-`fusionkit_core.trace` defines `setup_fusion_tracing()`, `fusion_span()`, `start_fusion_span()`, `end_fusion_span()`, `emit_marker()`, `context_from_headers()`, and `candidate_baggage_of()` over the OpenTelemetry SDK.
+`fusionkit_core.trace` defines `setup_fusion_tracing()`, `fusion_span()`, `start_fusion_span()`, `end_fusion_span()`, `emit_event()`, `context_from_headers()`, and `candidate_baggage_of()` over the OpenTelemetry SDK.
 
 `fusionkit_core.artifacts` defines `hash_bytes()`, `hash_text()`, and `LocalArtifactStore`.
 

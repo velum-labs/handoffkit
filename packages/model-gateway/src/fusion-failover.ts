@@ -1,3 +1,4 @@
+import { decodeBufferedSse } from "./sse/parse.js";
 import type {
   FailoverCategory,
   ProxyFailure
@@ -61,38 +62,47 @@ export function failureFromErrorObject(err: Record<string, unknown>, status: num
 
 export function sseDataObjects(event: string): Array<Record<string, unknown>> {
   const objects: Array<Record<string, unknown>> = [];
-  for (const line of event.split("\n")) {
-    const trimmed = line.trim();
-    if (!trimmed.startsWith("data:")) continue;
-    const data = trimmed.slice(5).trim();
-    if (data.length === 0 || data === "[DONE]") continue;
+  for (const sseEvent of decodeBufferedSse(event)) {
+    if (sseEvent.data.length === 0 || sseEvent.data === "[DONE]") continue;
+    let json: unknown;
     try {
-      const json = JSON.parse(data);
-      if (json !== null && typeof json === "object") objects.push(json as Record<string, unknown>);
+      json = JSON.parse(sseEvent.data);
     } catch {
-      // partial / non-JSON line
+      // Best-effort scan over buffered text: skip a non-JSON payload.
+      continue;
     }
+    if (json !== null && typeof json === "object") objects.push(json as Record<string, unknown>);
   }
   return objects;
 }
 
+/** The failover error carried on a single decoded SSE data object, if any. */
+export function sseObjectError(object: Record<string, unknown>): ProxyFailure | undefined {
+  const err = object.error;
+  if (err !== null && typeof err === "object") {
+    return failureFromErrorObject(err as Record<string, unknown>, undefined);
+  }
+  return undefined;
+}
+
+/** Whether a single decoded SSE data object carries a non-empty content delta. */
+export function sseObjectHasContent(object: Record<string, unknown>): boolean {
+  if (!Array.isArray(object.choices)) return false;
+  const delta = (object.choices[0] as { delta?: { content?: unknown } } | undefined)?.delta;
+  return delta !== undefined && typeof delta.content === "string" && delta.content.length > 0;
+}
+
 export function sseEventError(event: string): ProxyFailure | undefined {
   for (const object of sseDataObjects(event)) {
-    const err = object.error;
-    if (err !== null && typeof err === "object") {
-      return failureFromErrorObject(err as Record<string, unknown>, undefined);
-    }
+    const failure = sseObjectError(object);
+    if (failure !== undefined) return failure;
   }
   return undefined;
 }
 
 function sseEventHasContent(event: string): boolean {
   for (const object of sseDataObjects(event)) {
-    if (!Array.isArray(object.choices)) continue;
-    const delta = (object.choices[0] as { delta?: { content?: unknown } } | undefined)?.delta;
-    if (delta !== undefined && typeof delta.content === "string" && delta.content.length > 0) {
-      return true;
-    }
+    if (sseObjectHasContent(object)) return true;
   }
   return false;
 }

@@ -16,7 +16,8 @@ import {
   FusionSessionManager,
   hasUsableCandidates,
   InMemoryFusionBackendKernelStateStore,
-  isHarnessNotification
+  isHarnessNotification,
+  PendingSessionWrites
 } from "./fusion-session.js";
 import { FusionCostMeter } from "./fusion-cost-meter.js";
 import { FusionTurnAssembler } from "./fusion-turn.js";
@@ -30,7 +31,14 @@ import type {
 } from "./fusion-types.js";
 import { defaultFusionGatewayLogger } from "./logger.js";
 
-export { InMemoryFusionBackendKernelStateStore } from "./fusion-session.js";
+function invalidRequest(message: string): Response {
+  return new Response(
+    JSON.stringify({ error: { message, type: "invalid_request_error", code: "invalid_request" } }),
+    { status: 400, headers: { "content-type": "application/json" } }
+  );
+}
+
+export { InMemoryFusionBackendKernelStateStore, PendingSessionWrites } from "./fusion-session.js";
 export type {
   ChatMessageLike,
   FusedModelRoute,
@@ -72,6 +80,7 @@ export class FusionBackend implements Backend {
   readonly #turns: FusionTurnAssembler;
   readonly #vendor: FusionVendorProxy;
   readonly #services: FrontdoorServices;
+  readonly #pendingWrites = new PendingSessionWrites();
 
   constructor(options: FusionBackendOptions) {
     this.defaultModel = options.defaultModel;
@@ -99,7 +108,8 @@ export class FusionBackend implements Backend {
       resumeId: options.resumeId,
       sessionMeta: options.sessionMeta ?? {},
       defaultModel: this.defaultModel,
-      logger
+      logger,
+      pendingWrites: this.#pendingWrites
     });
     this.#cost = new FusionCostMeter({
       budgetUsd: options.budgetUsd,
@@ -108,7 +118,8 @@ export class FusionBackend implements Backend {
       localModels: new Set(options.localModels ?? []),
       kernelStateStore,
       store: options.store,
-      logger
+      logger,
+      pendingWrites: this.#pendingWrites
     });
     this.#turns = new FusionTurnAssembler({
       stepUrl: options.stepUrl,
@@ -136,6 +147,15 @@ export class FusionBackend implements Backend {
     this.#services = this.#buildServices(logger);
   }
 
+  /**
+   * Await every session/turn/cost write still in flight. Persistence is
+   * detached from the request path, so hosts must call this on shutdown or
+   * the tail of the session store is silently dropped.
+   */
+  flush(): Promise<void> {
+    return this.#pendingWrites.flush();
+  }
+
   listModelIds(): readonly string[] {
     const fusion = this.defaultModel ?? this.#defaultRoute()?.modelId ?? FUSION_PANEL_MODEL;
     const ids = [fusion];
@@ -156,13 +176,37 @@ export class FusionBackend implements Backend {
     return this.defaultModel;
   }
 
+  /** Exact-id serve check: a fused route or a registered passthrough (no default fold). */
+  servesModel(model: string): boolean {
+    if (this.#fusedFor(model) !== undefined || this.#passthroughFor(model) !== undefined) return true;
+    // Single/implicit-ensemble configs register no explicit fused routes; the
+    // advertised default fused id (and its Claude alias) is still served here.
+    const fusionDefault = this.defaultModel ?? this.#defaultRoute()?.modelId ?? FUSION_PANEL_MODEL;
+    return model === fusionDefault || model === `${CLAUDE_ALIAS_PREFIX}${fusionDefault}`;
+  }
+
   async chat(body: unknown, signal?: AbortSignal, options: BackendRequestOptions = {}): Promise<Response> {
     const chat = (body ?? {}) as ChatBody;
-    const messages = Array.isArray(chat.messages) ? chat.messages : [];
+    // `FusionBackend` is public SDK surface, so it guards its own boundary in
+    // addition to the HTTP doors: a non-string `model` used to reach route
+    // resolution and explode as a 502 TypeError ("requested.startsWith is not
+    // a function"), and an empty fused turn leaked panel internals ("proposal
+    // mode (k=1) needs the caller's `messages`") as a 502. Both are caller
+    // errors and must answer 400 without any panel fanout.
+    if (chat.model !== undefined && typeof (chat.model as unknown) !== "string") {
+      return invalidRequest("`model` must be a string");
+    }
+    if (!Array.isArray(chat.messages)) {
+      return invalidRequest("`messages` is required and must be an array");
+    }
+    const messages = chat.messages;
+    if (messages.length === 0) {
+      return invalidRequest("the request contains no messages");
+    }
     const req: FrontdoorRequestValue = {
       requestId: newSpanId(),
       chat,
-      sessionKey: this.#sessions.sessionKey(messages, this.#sessionScope(chat.model)),
+      sessionKey: this.#sessions.resolveSessionId(messages, this.#sessionScope(chat.model)),
       turn: messages.filter(
         (message: ChatMessageLike) => message.role === "user" && !isHarnessNotification(message)
       ).length,
@@ -171,6 +215,7 @@ export class FusionBackend implements Backend {
         ? { panelDepth: options.panelDepth }
         : {}),
       ...(options.modelCallId !== undefined ? { modelCallId: options.modelCallId } : {}),
+      ...(options.translated === true ? { suppressChatKeepalive: true } : {}),
       ...(signal !== undefined ? { [FRONTDOOR_SIGNAL]: signal } : {})
     };
     return runFrontdoorRequest(this.#services, req);
@@ -222,6 +267,7 @@ export class FusionBackend implements Backend {
   async #resolvePanelCandidates(req: FrontdoorRequestValue): Promise<readonly WireTrajectory[]> {
     const session = this.#sessions.ensureSession(req.sessionKey);
     const route = this.#routeFor(req);
+    const signal = this.#signalFor(req);
     const turnCandidates = this.#sessions.ensureTurnCandidates({
       session,
       sessionKey: req.sessionKey,
@@ -237,10 +283,14 @@ export class FusionBackend implements Backend {
       // `runPanelRound`, not re-encoded here.
       ...(req.chat.tools !== undefined ? { tools: req.chat.tools } : {}),
       ...(req.chat.tool_choice !== undefined ? { toolChoice: req.chat.tool_choice } : {}),
-      ...(isFiniteK(route?.k) ? { k: route.k } : {})
+      ...(isFiniteK(route?.k) ? { k: route.k } : {}),
+      ...(signal !== undefined ? { signal } : {})
     });
-    const candidates = await withTimeout(turnCandidates, this.#panelTimeoutMs, "fusion panel", (error) =>
-      session.turnAborts.get(req.turn)?.abort(error)
+    const candidates = await withTimeout(
+      turnCandidates.candidates,
+      this.#panelTimeoutMs,
+      "fusion panel",
+      (error) => turnCandidates.abort(error)
     );
     // Finite-k rounds run a fresh panel per request, so each round's candidate
     // cost is new; drop the per-turn metering latch that exists to avoid

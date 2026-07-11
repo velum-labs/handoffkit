@@ -20,7 +20,7 @@ import { startOtlpCapture } from "./otlp-capture.mjs";
 import { startFusionStack } from "../packages/cli/dist/fusion-quickstart.js";
 import { BENCHMARK_PANEL_PRESETS } from "../packages/registry/dist/index.js";
 
-const FK_DIR = process.env.WARRANT_FUSION_FK_DIR ?? fileURLToPath(new URL("..", import.meta.url));
+const FK_DIR = process.env.FUSIONKIT_FUSION_FK_DIR ?? fileURLToPath(new URL("..", import.meta.url));
 const log = (line) => process.stderr.write(`${line}\n`);
 const E2E_PANEL = BENCHMARK_PANEL_PRESETS["gpt-opus-smoke"];
 if (E2E_PANEL === undefined) throw new Error("missing gpt-opus-smoke benchmark panel preset");
@@ -57,11 +57,11 @@ function materializeRepo(root) {
 async function main() {
   const root = mkdtempSync(join(tmpdir(), "fusion-claude-e2e-"));
   const repo = materializeRepo(join(root, "repo"));
-  // Capture the run's spans with an in-script OTLP collector: the in-process
-  // gateway/ensemble tracer and every spawned child (panel servers, the
-  // Python synthesis engine) export to it over standard OTLP/HTTP.
+  // Capture the run's spans + events with an in-script OTLP collector: the
+  // in-process gateway/ensemble tracer and every spawned child (panel
+  // servers, the Python synthesis engine) export to it over standard OTLP/HTTP.
   const capture = await startOtlpCapture();
-  process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT = capture.endpoint;
+  process.env.OTEL_EXPORTER_OTLP_ENDPOINT = capture.baseEndpoint;
   initFusionTracing({ serviceName: "fusion-e2e" });
 
   log(`repo: ${repo}`);
@@ -86,13 +86,13 @@ async function main() {
     const claudeExit = await new Promise((resolveExit) => {
       const child = spawn(
         "claude",
-        ["-p", "--dangerously-skip-permissions", "--model", "claude-warrant-local", task],
+        ["-p", "--dangerously-skip-permissions", "--model", "claude-fusionkit-local", task],
         {
           cwd: repo,
           env: {
             ...process.env,
             ANTHROPIC_BASE_URL: stack.fusionUrl,
-            ANTHROPIC_AUTH_TOKEN: "warrant-local",
+            ANTHROPIC_AUTH_TOKEN: "fusionkit-local",
             CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY: "1"
           },
           stdio: ["ignore", "pipe", "pipe"]
@@ -128,6 +128,7 @@ async function main() {
     log(`trace_ids: ${trace.traceIds.join(", ")}`);
     log(`scopes: ${JSON.stringify(trace.scopes)}`);
     log(`span_names: ${JSON.stringify(trace.counts)}`);
+    log(`event_names: ${JSON.stringify(trace.eventCounts)}`);
 
     log(`\nRESULT: ${test.status === 0 ? "GREEN (tests pass out of the box)" : "RED (tests still failing)"}`);
     process.exitCode = test.status === 0 ? 0 : 1;

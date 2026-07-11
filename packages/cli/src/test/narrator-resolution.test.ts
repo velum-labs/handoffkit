@@ -79,9 +79,9 @@ test("a narrator extra endpoint folds into the router config alongside the panel
     mlxUrls: {},
     judgeId: "gpt"
   });
-  assert.match(yaml, /id: "narrator"/);
-  assert.match(yaml, /model: "gpt-5\.5-mini"/);
+  assert.match(yaml, /id: narrator/);
+  assert.match(yaml, /model: gpt-5\.5-mini/);
   // The narrator never becomes the judge/synthesizer.
-  assert.match(yaml, /judge_model: "gpt"/);
-  assert.match(yaml, /synthesizer_model: "gpt"/);
+  assert.match(yaml, /judge_model: gpt/);
+  assert.match(yaml, /synthesizer_model: gpt/);
 });

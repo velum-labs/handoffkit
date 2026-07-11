@@ -69,6 +69,7 @@ test("WS7: a built model-call record carries real-lite provenance and validates"
   );
   assert.equal(record.schema_bundle_hash, MODEL_FUSION_SCHEMA_BUNDLE_HASH);
   assert.notEqual(record.producer_git_sha, "0".repeat(40), "no faked all-zero SHA");
+  assert.ok(record.producer_git_sha !== undefined, "producer_git_sha is set when git resolves");
   assert.ok(
     GIT_SHA.test(record.producer_git_sha) || record.producer_git_sha === "unknown",
     "producer_git_sha is a real SHA or the allowed sentinel"

@@ -58,7 +58,7 @@ export function createCommandHarness(options: CommandHarnessOptions): HarnessAda
       command: options.command,
       requiredEvidence: ["command output", "exit code", "tool execution record"]
     }),
-    run: async ({ descriptor, model, ordinal, worktree }) => {
+    run: async ({ descriptor, model, ordinal, worktree, signal }) => {
       const env =
         typeof options.env === "function"
           ? options.env({ model, ordinal, descriptorId: descriptor.id })
@@ -68,6 +68,10 @@ export function createCommandHarness(options: CommandHarnessOptions): HarnessAda
         cwd: worktree?.path ?? options.cwd ?? process.cwd(),
         timeoutMs: options.timeoutMs ?? descriptor.policy.timeoutMs,
         isolation: descriptor.runtime.isolation,
+        // Honor the per-candidate abort (panel cancel / straggler drop): without
+        // this a stuck command candidate keeps running past the straggler grace
+        // and holds a finished sibling's result hostage until the hard timeout.
+        ...(signal !== undefined ? { signal } : {}),
         env: {
           HARNESS_MODEL_ID: model.id,
           HARNESS_MODEL: model.model,

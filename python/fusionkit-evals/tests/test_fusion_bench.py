@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -350,9 +351,9 @@ async def test_fusion_bench_invokes_real_handoffkit_codex_harness_success_with_s
                 "PATH": f"{bin_dir}{os.pathsep}{os.environ.get('PATH', '')}",
                 "CODEX_API_KEY": "test-codex-key",
                 "OPENAI_API_KEY": None,
-                "WARRANT_CODEX_RESPONSES_BASE_URL": None,
+                "FUSIONKIT_CODEX_RESPONSES_BASE_URL": None,
                 "CODEX_RESPONSES_BASE_URL": None,
-                "WARRANT_CODEX_OPENAI_BASE_URL": None,
+                "FUSIONKIT_CODEX_OPENAI_BASE_URL": None,
                 "OPENAI_BASE_URL": None,
             },
         ),
@@ -388,6 +389,14 @@ async def test_fusion_bench_invokes_real_handoffkit_coding_harness_skip_records(
     repo = _git_repo(tmp_path / f"repo-{harness_kind}")
     empty_codex_home = tmp_path / "empty-codex-home"
     empty_codex_home.mkdir()
+    # Hermetic PATH: only the tools the handoff itself needs. A dev machine with
+    # a real `claude`/`codex` on PATH must still observe the "unavailable" skip.
+    bin_dir = tmp_path / f"bin-{harness_kind}"
+    bin_dir.mkdir()
+    for tool in ("node", "git"):
+        resolved = shutil.which(tool)
+        assert resolved is not None, f"{tool} is required to run this test"
+        (bin_dir / tool).symlink_to(resolved)
     runner = FusionBenchRunner(
         _engine(),
         run_root=tmp_path / "runs",
@@ -411,12 +420,13 @@ async def test_fusion_bench_invokes_real_handoffkit_coding_harness_skip_records(
             ],
             env={
                 "HANDOFFKIT_CLI": str(handoffkit_cli),
-                    "CODEX_HOME": str(empty_codex_home),
+                "PATH": str(bin_dir),
+                "CODEX_HOME": str(empty_codex_home),
                 "CODEX_API_KEY": None,
                 "OPENAI_API_KEY": None,
-                "WARRANT_CODEX_RESPONSES_BASE_URL": None,
+                "FUSIONKIT_CODEX_RESPONSES_BASE_URL": None,
                 "CODEX_RESPONSES_BASE_URL": None,
-                "WARRANT_CODEX_OPENAI_BASE_URL": None,
+                "FUSIONKIT_CODEX_OPENAI_BASE_URL": None,
                 "OPENAI_BASE_URL": None,
                 "AI_GATEWAY_API_KEY": None,
                 "AI_GATEWAY_BASE_URL": None,

@@ -137,5 +137,8 @@
     "orchestration",
     "judge",
     "synthesis"
-  ]
+  ],
+  "scripts": {
+    "test": "node --test \"dist/test/*.test.js\""
+  }
 }

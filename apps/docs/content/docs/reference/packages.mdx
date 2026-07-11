@@ -1,0 +1,44 @@
+---
+title: Package map
+description: What each product workspace package owns and where to start reading.
+---
+
+FusionKit is a pnpm + TypeScript workspace plus a uv + Python workspace. The packages below are the product surface used by the shipped `fusionkit` journey. Legacy governance packages live under `legacy/` and are outside the public user path.
+
+## Product TypeScript packages
+
+| Package | Responsibility |
+| --- | --- |
+| `@fusionkit/cli` | The `fusionkit` command line and primary product surface. |
+| `@fusionkit/model-gateway` | Dialect translation, streaming, sessions, cost metering, rate-limit handoff, passthrough models, and fused front-door routing. |
+| `@fusionkit/ensemble` | Panel orchestration, worktrees, runtime-kernel workflows, judge adapters, and advanced harness tooling. |
+| `@fusionkit/tools` | Tool integration contract and registry. |
+| `@fusionkit/tool-codex`, `tool-claude`, `tool-cursor`, `tool-opencode` | Per-tool launcher shims and ensemble harness adapters. |
+| `@fusionkit/protocol` | Model-fusion contracts, schemas, OpenAPI bindings, trace records, and generated SDK bindings. |
+| `@fusionkit/workspace` | Git capture, worktree materialization, output collection, and divergence-safe pull helpers. |
+| `@fusionkit/adapter-ai-sdk` | Managed MLX server and AI SDK model adapters used by local-model paths. |
+| `@fusionkit/kernel` | Runtime-kernel graph, scheduling, budget, streaming, and outcome primitives. |
+
+## Python packages
+
+| Package | Responsibility |
+| --- | --- |
+| `fusionkit` | PyPI CLI entrypoint for the raw router, setup, auth, prompts, and maintainer benchmark commands. |
+| `fusionkit-core` | Core fusion engine, provider clients, judge, config, run manager, artifacts, and metrics. |
+| `fusionkit-server` | FastAPI app and OpenAI-compatible HTTP routes. |
+| `fusionkit-mlx` | Optional MLX launcher utilities. |
+| `fusionkit-evals` | Benchmarks, public reports, prompt tuning, Pareto analysis, and hill climbing. |
+
+## Legacy archive
+
+The Warrant plane, runner, SDK, handoff SDK, compute adapter, and session backends are preserved under `legacy/`. They are not part of the normal `fusionkit codex` / `fusionkit serve` product path.
+
+## Adding a new tool
+
+Each coding tool is its own workspace package implementing a `ToolIntegration`:
+
+1. Create `packages/tool-<name>/` from an adjacent tool package.
+2. Export a `ToolIntegration` with a `launch(ctx)` implementation.
+3. Register it in the CLI tool registry.
+
+That registry entry wires the tool into launchers, local-model mode, preflight, and ensemble gateway support. The existing integrations are documented under [Tools](/docs/tools).

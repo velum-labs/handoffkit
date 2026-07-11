@@ -34,6 +34,7 @@
     "@fusionkit/tools": "workspace:*",
     "@fusionkit/tracing": "workspace:*",
     "@openai/codex-sdk": "0.142.5",
+    "smol-toml": "1.7.0",
     "zod": "4.4.3"
   },
   "keywords": [
@@ -45,5 +46,8 @@
     "codex",
     "harness",
     "adapter"
-  ]
+  ],
+  "scripts": {
+    "test": "node --test \"dist/test/*.test.js\""
+  }
 }

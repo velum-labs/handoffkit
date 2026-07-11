@@ -10,7 +10,7 @@ Code, Codex, opencode, and Cursor in plan mode) — without changing how people
 already use those tools. It builds on the existing local-serving and routing
 core (`mlxServer`/`ManagedModelServer`, `routedModel`/uniroute, the owned
 `velum-labs/mlx-lm` fork) and is delivered as a new package,
-`@fusionkit/model-gateway`, plus a `warrant local` CLI surface.
+`@fusionkit/model-gateway`, plus a `fusionkit local` CLI surface.
 
 ## 1. Goal
 
@@ -32,7 +32,7 @@ Non-negotiables (decided):
 - **Build native.** No LiteLLM / Bifrost / external gateway dependency. The
   translation layer is ours, in keeping with the repo's trusted-pin,
   auditable posture.
-- **Transparent launcher UX.** A `warrant local <tool> …` command ensures the
+- **Transparent launcher UX.** A `fusionkit local <tool> …` command ensures the
   model and gateway are up, applies the per-tool shim, then `exec`s the real
   binary with the user's original arguments.
 - **Full effort**, sequenced opencode → Claude Code → Codex → Cursor.
@@ -132,7 +132,7 @@ New package `@fusionkit/model-gateway`:
 
 Touched:
 
-- `packages/cli/src/index.ts` — new `warrant local` command group.
+- `packages/cli/src/index.ts` — new `fusionkit local` command group.
 - `velum-labs/mlx-lm` (owned fork) — add `/v1/embeddings`; tool-call/structured
   hardening; bump `MLX_LM_STRUCTURED_PIN` after review.
 - Reuse the transcript normalization patterns in
@@ -144,7 +144,7 @@ Touched:
 ### 5.1 opencode (first; essentially free)
 
 - Gateway: `/v1/chat/completions` + `/v1/models` passthrough.
-- Launcher `warrant local opencode …`: ensure gateway+model up; register a
+- Launcher `fusionkit local opencode …`: ensure gateway+model up; register a
   custom OpenAI provider at `http://127.0.0.1:<port>/v1` (or pass
   `-m provider/model`); `exec opencode "$@"`.
 - Validates the whole spine (lifecycle, backend, chat surface) with no
@@ -154,15 +154,15 @@ Touched:
 
 - Gateway: `/v1/messages` (+ `count_tokens`, + discovery `/v1/models` returning
   `claude`/`anthropic`-prefixed ids so the local model appears in `/model`).
-- Launcher `warrant local claude …`: set `ANTHROPIC_BASE_URL`,
+- Launcher `fusionkit local claude …`: set `ANTHROPIC_BASE_URL`,
   `ANTHROPIC_AUTH_TOKEN`; `exec claude "$@"`.
 - Hardest correctness: SSE event mapping and tool-call round-trips.
 
 ### 5.3 Codex (Responses adapter)
 
 - Gateway: `/v1/responses` (non-stream + stream).
-- Launcher `warrant local codex …`: write an ephemeral Codex config (own
-  `CODEX_HOME` or `--profile`) with `[model_providers.warrant-local]`
+- Launcher `fusionkit local codex …`: write an ephemeral Codex config (own
+  `CODEX_HOME` or `--profile`) with `[model_providers.fusionkit-local]`
   (`base_url`, `wire_api="responses"`, `requires_openai_auth=false`) and a
   profile selecting it; `exec codex "$@"`.
 - Highest-effort adapter (Responses semantics).
@@ -173,7 +173,7 @@ Touched:
   (Cursor blocks `localhost`).
 - `tunnel.ts`: pluggable tunnel provider (cloudflared/ngrok/bore), preserving
   host headers; ephemeral, authenticated, deny-by-default.
-- `warrant local cursor`: start gateway + tunnel; configure Cursor IDE Models
+- `fusionkit local cursor`: start gateway + tunnel; configure Cursor IDE Models
   settings (Override OpenAI Base URL = tunnel `…/v1`, custom model name, dummy
   key) — auto-write where a writable settings location exists, else print
   exact values and verify connectivity.
@@ -183,7 +183,7 @@ Touched:
 
 ## 6. Transparent launcher UX
 
-`warrant local <tool> [args…]`:
+`fusionkit local <tool> [args…]`:
 
 1. Resolve/start the local backend (mlx fork via `mlxServer`, configured
    OpenAI-compatible URL, or `routedModel`).
@@ -192,8 +192,8 @@ Touched:
 4. `exec` the real binary with the user's original args — identical UX, local
    brain.
 
-Plus `warrant local serve` (run the gateway standalone) and
-`warrant local status`.
+Plus `fusionkit local serve` (run the gateway standalone) and
+`fusionkit local status`.
 
 ## 7. Provenance integration
 

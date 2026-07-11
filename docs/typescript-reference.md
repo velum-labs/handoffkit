@@ -152,7 +152,7 @@ Wire trajectory exports include `assertWireTrajectory()`, `isWireTrajectory()`, 
 
 Key, contract, chain, and receipt exports include `generateEd25519KeyPair()`, `keyIdFromPublicPem()`, `signData()`, `verifyData()`, `contractHash()`, `signContract()`, `appendEvent()`, `verifyChain()`, `signReceipt()`, `verifyRunnerReceipt()`, `verifyReceiptBundle()`, `buildReceiptStory()`, and `summarizeRunEvent()`.
 
-Trace exports are the generated semantic-convention constants: `ATTR`, `FUSION_SPAN_NAMES`, `FUSION_MARKER_NAMES`, `FUSION_SCOPES`, and `EXPORTABLE_ATTRIBUTES`. The OTel-backed span helpers (`initFusionTracing()`, `startFusionSpan()`, `emitFusionMarker()`, `newSessionCarrier()`, carrier/header/env propagation, and the in-process span listener) live in `@fusionkit/tracing`.
+Trace exports are the generated semantic-convention constants: `ATTR`, `FUSION_SPAN_NAMES`, `FUSION_EVENT_NAMES`, `FUSION_SCOPES`, and `EXPORTABLE_ATTRIBUTES`. The OTel-backed helpers (`initFusionTracing()`, `startFusionSpan()`, `emitFusionEvent()`, `newSessionCarrier()`, carrier/header/env propagation, and the in-process span and event listeners) live in `@fusionkit/tracing`.
 
 Example:
 
@@ -197,7 +197,7 @@ console.log(outputs.files.length);
 
 `@fusionkit/tools` defines the interface between the CLI and per-harness packages. A tool integration tells the CLI how to launch a tool, whether it supports fusion or local modes, and whether it can provide an ensemble harness adapter.
 
-The important exports are the `ToolIntegration` type family, process helper types, `createToolRegistry()`, `ToolRegistry`, constants such as `FUSION_PANEL_MODEL`, `LOCAL_MODEL_LABEL`, and `CURSOR_BRIDGE_MODEL_NAME`, environment compatibility helpers such as `readEnv()`, `envFlagEnabled()`, and `legacyEnvName()`, plus `buildSkippedCandidate()`.
+The important exports are the `ToolIntegration` type family, process helper types, `createToolRegistry()`, `ToolRegistry`, constants such as `FUSION_PANEL_MODEL`, `LOCAL_MODEL_LABEL`, and `CURSOR_BRIDGE_MODEL_NAME`, environment compatibility helpers such as `readEnv()`, `envFlagEnabled()`, plus `buildSkippedCandidate()`.
 
 Example:
 
