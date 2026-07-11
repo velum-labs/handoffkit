@@ -41,6 +41,9 @@ function fakeProvider(state: { refreshes: number }): SubscriptionProvider {
     async fetchUsage() {
       return { windows: {}, observedAt: Date.now() / 1000, source: "usage" };
     },
+    async fetchAdminUsageCost() {
+      return { usage: {}, cost: {} };
+    },
     parseLimits(headers) {
       const value = headers.get("x-test-utilization");
       if (value === null) return undefined;
