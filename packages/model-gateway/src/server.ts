@@ -10,7 +10,7 @@ import {
 import type { AnthropicRequest } from "./adapters/anthropic.js";
 import { effectiveModel, isStream, withDefaultModel } from "./adapters/chat.js";
 import { authorizedRequest } from "./auth.js";
-import type { CodexBackendRelay } from "./codex-relay.js";
+import { CodexBackendRelay } from "./codex-relay.js";
 import type {
   SubscriptionRelay,
   SubscriptionRelayDialect
