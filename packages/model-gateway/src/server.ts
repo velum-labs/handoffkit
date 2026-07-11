@@ -11,6 +11,10 @@ import type { AnthropicRequest } from "./adapters/anthropic.js";
 import { effectiveModel, isStream, withDefaultModel } from "./adapters/chat.js";
 import { authorizedRequest } from "./auth.js";
 import type { CodexBackendRelay } from "./codex-relay.js";
+import type {
+  SubscriptionRelay,
+  SubscriptionRelayDialect
+} from "./subscription-relay.js";
 import { isCursorChatBody, translateCursorRequest } from "./adapters/cursor.js";
 import { handleResponses } from "./adapters/responses.js";
 import type { ResponsesRequest } from "./adapters/responses.js";
@@ -60,6 +64,11 @@ export type GatewayOptions = {
    * relayed ChatGPT token), so it is ignored when a gateway token is set.
    */
   codexRelay?: CodexBackendRelay;
+  /**
+   * Provider-native subscription relays. They share the gateway HTTP door,
+   * streaming/backpressure, ingress auth, and backend `servesModel` gate.
+   */
+  subscriptionRelays?: Partial<Record<SubscriptionRelayDialect, SubscriptionRelay>>;
 };
 
 export type Gateway = {
@@ -74,7 +83,12 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
   const { backend, authToken, provenance } = options;
   // With a gateway auth token, the Authorization header is the gateway's own
   // bearer, never a relayable ChatGPT token — the relay cannot work.
-  const codexRelay = authToken === undefined ? options.codexRelay : undefined;
+  const codexRelay =
+    authToken === undefined || options.codexRelay?.isPooled === true
+      ? options.codexRelay
+      : undefined;
+  const anthropicRelay = options.subscriptionRelays?.anthropic;
+  const codexSubscriptionRelay = options.subscriptionRelays?.codex ?? codexRelay;
 
   const server = createServer((req, res) => {
     void handle(req, res).catch((error: unknown) => {
@@ -102,7 +116,30 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
       return;
     }
 
-    if (method === "GET" && (path === "/v1/models" || path === "/models")) {
+    if (method === "GET" && path === "/usage") {
+      writeJson(res, 200, {
+        pools: [anthropicRelay?.snapshot?.(), codexSubscriptionRelay?.snapshot?.()].filter(
+          (snapshot) => snapshot !== undefined
+        )
+      });
+      return;
+    }
+
+    if (
+      method === "GET" &&
+      (path === "/backend-api/wham/usage" || path === "/api/codex/usage")
+    ) {
+      const snapshot = codexSubscriptionRelay?.snapshot?.();
+      writeJson(res, snapshot === undefined ? 404 : 200, snapshot ?? {
+        error: { message: "Codex subscription pool is not configured", type: "not_found" }
+      });
+      return;
+    }
+
+    if (
+      method === "GET" &&
+      (path === "/v1/models" || path === "/models" || path === "/backend-api/codex/models")
+    ) {
       // Claude Code's discovery probe carries `anthropic-version` and expects
       // the Anthropic-shaped model list; everyone else gets the OpenAI shape.
       if (req.headers["anthropic-version"] !== undefined) {
@@ -224,6 +261,23 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
       if (raw === NO_BODY) return;
       if (rejectInvalid(res, validateAnthropicRequest(raw))) return;
       const body = raw as AnthropicRequest;
+      const requestedModel = typeof body.model === "string" ? body.model : undefined;
+      if (
+        anthropicRelay !== undefined &&
+        anthropicRelay.shouldRelay(
+          req.headers,
+          requestedModel,
+          (model) => backend.servesModel?.(model) ?? false
+        )
+      ) {
+        await handleModelCall(res, provenance, {
+          dialect: "anthropic-messages",
+          body,
+          defaultModel: backend.defaultModel,
+          invoke: (_callId, signal) => anthropicRelay.relay(req.headers, body, signal)
+        });
+        return;
+      }
       await handleModelCall(res, provenance, {
         dialect: "anthropic-messages",
         body,
@@ -233,7 +287,10 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
       return;
     }
 
-    if (method === "POST" && path === "/v1/responses") {
+    if (
+      method === "POST" &&
+      (path === "/v1/responses" || path === "/backend-api/codex/responses")
+    ) {
       const raw = await readJson(req, res);
       if (raw === NO_BODY) return;
       if (rejectInvalid(res, validateResponsesRequest(raw))) return;
@@ -244,17 +301,17 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
       // folding it into the fused default.
       const requestedModel = typeof body.model === "string" ? body.model : undefined;
       if (
-        codexRelay !== undefined &&
-        backend.servesModel !== undefined &&
-        codexRelay.shouldRelayResponses(req.headers, requestedModel, (model) =>
-          backend.servesModel?.(model) ?? true
+        codexSubscriptionRelay !== undefined &&
+        codexSubscriptionRelay.shouldRelay(req.headers, requestedModel, (model) =>
+          backend.servesModel?.(model) ?? false
         )
       ) {
         await handleModelCall(res, provenance, {
           dialect: "openai-responses",
           body,
           defaultModel: backend.defaultModel,
-          invoke: (_callId, signal) => codexRelay.relayResponses(req.headers, body, signal)
+          invoke: (_callId, signal) =>
+            codexSubscriptionRelay.relay(req.headers, body, signal)
         });
         return;
       }
@@ -292,6 +349,12 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
       // Release a backend that owns a process (e.g. the MLX server) instead of
       // leaking it when the gateway shuts down.
       await backend.close?.();
+      const relays = new Set(
+        [codexRelay, anthropicRelay, codexSubscriptionRelay].filter(
+          (relay): relay is SubscriptionRelay => relay !== undefined
+        )
+      );
+      await Promise.all([...relays].map(async (relay) => relay.close?.()));
     }
   };
 }

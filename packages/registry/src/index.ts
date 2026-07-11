@@ -81,10 +81,32 @@ export function providerDiscovery(provider: string): ProviderDiscovery | undefin
 
 export type SubscriptionMode = "claude-code" | "codex";
 
+export type SubscriptionOAuthInfo = {
+  tokenEndpoint: string;
+  clientId: string;
+  usageEndpoint: string;
+  profileEndpoint?: string;
+  usagePathFallback?: string;
+};
+
+export type SubscriptionRateLimitInfo = {
+  headerPrefix: string;
+  activeLimitHeader?: string;
+  retryAfterHeader: string;
+};
+
+export type SubscriptionAdminInfo = {
+  keyEnv: string;
+  usageEndpoint: string;
+  costEndpoint: string;
+};
+
 export type SubscriptionInfo = {
   provider: string;
   /** Credential store location with a leading `~/` (expand against $HOME). */
   credentialsPath: string;
+  /** FusionKit-owned copies of enrolled credentials. */
+  poolDirectory: string;
   keychainService?: string;
   configPath?: string;
   modelsCachePath?: string;
@@ -95,6 +117,9 @@ export type SubscriptionInfo = {
   defaultInstructions?: string;
   defaultHeaders?: Record<string, string>;
   requestDefaults?: { stream?: boolean; store?: boolean; omitSampling?: boolean };
+  oauth: SubscriptionOAuthInfo;
+  rateLimit: SubscriptionRateLimitInfo;
+  admin: SubscriptionAdminInfo;
   /** Ordered env override chains for pointing the harness at another endpoint (codex). */
   overrideEnv?: Record<string, readonly string[]>;
 };

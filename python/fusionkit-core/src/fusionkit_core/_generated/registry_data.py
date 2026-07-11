@@ -126,14 +126,31 @@ REGISTRY: Final[dict[str, Any]] = {
         "claude-code": {
             "provider": "anthropic",
             "credentialsPath": "~/.claude/.credentials.json",
+            "poolDirectory": "~/.fusionkit/subscriptions/claude-code",
             "keychainService": "Claude Code-credentials",
             "defaultModel": "claude-sonnet-4-5",
             "oauthBetaHeader": "oauth-2025-04-20",
             "spoofSystemPrompt": "You are Claude Code, Anthropic's official CLI for Claude.",
+            "oauth": {
+                "tokenEndpoint": "https://console.anthropic.com/v1/oauth/token",
+                "clientId": "9d1c250a-e61b-44d9-88ed-5944d1962f5e",
+                "usageEndpoint": "https://api.anthropic.com/api/oauth/usage",
+                "profileEndpoint": "https://api.anthropic.com/api/oauth/profile",
+            },
+            "rateLimit": {
+                "headerPrefix": "anthropic-ratelimit-unified",
+                "retryAfterHeader": "retry-after",
+            },
+            "admin": {
+                "keyEnv": "ANTHROPIC_ADMIN_KEY",
+                "usageEndpoint": "https://api.anthropic.com/v1/organizations/usage_report/messages",
+                "costEndpoint": "https://api.anthropic.com/v1/organizations/cost_report",
+            },
         },
         "codex": {
             "provider": "codex",
             "credentialsPath": "~/.codex/auth.json",
+            "poolDirectory": "~/.fusionkit/subscriptions/codex",
             "configPath": "~/.codex/config.toml",
             "modelsCachePath": "~/.codex/models_cache.json",
             "authFileName": "auth.json",
@@ -147,6 +164,22 @@ REGISTRY: Final[dict[str, Any]] = {
                 "stream": True,
                 "store": False,
                 "omitSampling": True,
+            },
+            "oauth": {
+                "tokenEndpoint": "https://auth.openai.com/oauth/token",
+                "clientId": "app_EMoamEEZ73f0CkXaXp7hrann",
+                "usageEndpoint": "https://chatgpt.com/backend-api/wham/usage",
+                "usagePathFallback": "/api/codex/usage",
+            },
+            "rateLimit": {
+                "headerPrefix": "x-codex",
+                "activeLimitHeader": "x-codex-active-limit",
+                "retryAfterHeader": "retry-after",
+            },
+            "admin": {
+                "keyEnv": "OPENAI_ADMIN_KEY",
+                "usageEndpoint": "https://api.openai.com/v1/organization/usage/completions",
+                "costEndpoint": "https://api.openai.com/v1/organization/costs",
             },
             "overrideEnv": {
                 "responsesBaseUrl": [
