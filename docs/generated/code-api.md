@@ -176,7 +176,7 @@ adapters, ACP helpers, provenance records, and trajectory capture.
 - `export type { CodexCatalogEntry, CodexRelayAuth, CodexRelayOptions, CodexStockEntry } from "./codex-relay.js";`
 - `export { defaultSubscriptionCredentialPath, defaultSubscriptionPoolDirectory, enrollCurrentSubscription, loadSubscriptionCredential, persistSubscriptionCredential, subscriptionCredentialLabel } from "./subscription-credentials.js";`
 - `export { subscriptionProvider } from "./subscription-provider.js";`
-- `export type { SubscriptionProvider } from "./subscription-provider.js";`
+- `export type { AdminUsageCost, AdminUsageRange, SubscriptionProvider } from "./subscription-provider.js";`
 - `export { RateLimitTracker, SubscriptionPool, SubscriptionPoolExhaustedError } from "./subscription-pool.js";`
 - `export type { SubscriptionPoolOptions } from "./subscription-pool.js";`
 - `export { AnthropicBackendRelay, forwardRelayHeaders, RelayOnlyBackend } from "./subscription-relay.js";`

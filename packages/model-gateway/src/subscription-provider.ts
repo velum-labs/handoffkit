@@ -16,6 +16,16 @@ import type {
   SubscriptionFailure
 } from "./subscription-types.js";
 
+export type AdminUsageRange = {
+  startTime: number;
+  endTime?: number;
+};
+
+export type AdminUsageCost = {
+  usage: unknown;
+  cost: unknown;
+};
+
 export type SubscriptionProvider = {
   readonly mode: SubscriptionMode;
   readonly upstreamBaseUrl: string;
@@ -27,6 +37,11 @@ export type SubscriptionProvider = {
   parseLimits(headers: Headers, body?: unknown): AccountLimits | undefined;
   parseStreamEvent(payload: unknown): AccountLimits | undefined;
   classify(status: number, headers: Headers, body: unknown): SubscriptionFailure | undefined;
+  fetchAdminUsageCost(
+    adminKey: string,
+    range: AdminUsageRange,
+    signal?: AbortSignal
+  ): Promise<AdminUsageCost>;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -243,6 +258,20 @@ async function usageRequest(
   return response.json();
 }
 
+async function adminRequest(
+  endpoint: string,
+  query: URLSearchParams,
+  headers: Record<string, string>,
+  signal?: AbortSignal
+): Promise<unknown> {
+  const response = await fetch(`${endpoint}?${query.toString()}`, {
+    headers: { accept: "application/json", ...headers },
+    ...(signal !== undefined ? { signal } : {})
+  });
+  if (!response.ok) throw new Error(`Admin usage endpoint returned ${response.status}`);
+  return response.json();
+}
+
 function anthropicProvider(): SubscriptionProvider {
   const mode = "claude-code" as const;
   const info = subscriptionInfo(mode);
@@ -301,6 +330,24 @@ function anthropicProvider(): SubscriptionProvider {
         ...(retryAfter(headers) !== undefined ? { retryAfter: retryAfter(headers) } : {}),
         ...(Number.isFinite(resetsAt) ? { resetsAt } : {})
       };
+    },
+    fetchAdminUsageCost: async (adminKey, range, signal) => {
+      const query = new URLSearchParams({
+        starting_at: new Date(range.startTime * 1000).toISOString(),
+        bucket_width: "1d"
+      });
+      if (range.endTime !== undefined) {
+        query.set("ending_at", new Date(range.endTime * 1000).toISOString());
+      }
+      const headers = {
+        "x-api-key": adminKey,
+        "anthropic-version": "2023-06-01"
+      };
+      const [usage, cost] = await Promise.all([
+        adminRequest(info.admin.usageEndpoint, query, headers, signal),
+        adminRequest(info.admin.costEndpoint, query, headers, signal)
+      ]);
+      return { usage, cost };
     }
   };
 }
@@ -374,6 +421,20 @@ function codexProvider(): SubscriptionProvider {
         ...(retryAfter(headers) !== undefined ? { retryAfter: retryAfter(headers) } : {}),
         ...(resetsAt !== undefined ? { resetsAt } : {})
       };
+    },
+    fetchAdminUsageCost: async (adminKey, range, signal) => {
+      const query = new URLSearchParams({
+        start_time: String(Math.floor(range.startTime)),
+        bucket_width: "1d",
+        limit: "31"
+      });
+      if (range.endTime !== undefined) query.set("end_time", String(Math.floor(range.endTime)));
+      const headers = { authorization: `Bearer ${adminKey}` };
+      const [usage, cost] = await Promise.all([
+        adminRequest(info.admin.usageEndpoint, query, headers, signal),
+        adminRequest(info.admin.costEndpoint, query, headers, signal)
+      ]);
+      return { usage, cost };
     }
   };
 }

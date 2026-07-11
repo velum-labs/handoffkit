@@ -23,6 +23,12 @@ export type SubscriptionRelay = {
     body: AnthropicRequest | ResponsesRequest,
     signal?: AbortSignal
   ): Promise<Response>;
+  models?(headers: IncomingHttpHeaders, search: string, signal?: AbortSignal): Promise<Response>;
+  countTokens?(
+    headers: IncomingHttpHeaders,
+    body: AnthropicRequest,
+    signal?: AbortSignal
+  ): Promise<Response>;
   snapshot?(): SubscriptionPoolSnapshot | undefined;
   close?(): Promise<void> | void;
 };
@@ -145,23 +151,42 @@ export class AnthropicBackendRelay implements SubscriptionRelay {
     body: AnthropicRequest,
     signal?: AbortSignal
   ): Promise<Response> {
-    return this.#pool.execute(body.model, async (credential) => {
-      const forwarded = forwardRelayHeaders(headers);
-      delete forwarded.authorization;
-      delete forwarded.Authorization;
-      delete forwarded["x-api-key"];
-      Object.assign(forwarded, {
-        authorization: `Bearer ${credential.accessToken}`,
-        "anthropic-beta": subscriptionInfo("claude-code").oauthBetaHeader ?? "oauth-2025-04-20",
-        "content-type": "application/json"
-      });
+    return this.#pool.execute(body.model, (credential) => {
       return fetch(`${this.#backendUrl}/v1/messages`, {
         method: "POST",
-        headers: forwarded,
+        headers: this.#upstreamHeaders(headers, credential.accessToken),
         body: JSON.stringify(withAnthropicAccount(body, credential.accountId)),
         ...(signal !== undefined ? { signal } : {})
       });
     });
+  }
+
+  models(
+    headers: IncomingHttpHeaders,
+    search: string,
+    signal?: AbortSignal
+  ): Promise<Response> {
+    return this.#pool.execute(undefined, (credential) =>
+      fetch(`${this.#backendUrl}/v1/models${search}`, {
+        headers: this.#upstreamHeaders(headers, credential.accessToken),
+        ...(signal !== undefined ? { signal } : {})
+      })
+    );
+  }
+
+  countTokens(
+    headers: IncomingHttpHeaders,
+    body: AnthropicRequest,
+    signal?: AbortSignal
+  ): Promise<Response> {
+    return this.#pool.execute(body.model, (credential) =>
+      fetch(`${this.#backendUrl}/v1/messages/count_tokens`, {
+        method: "POST",
+        headers: this.#upstreamHeaders(headers, credential.accessToken),
+        body: JSON.stringify(withAnthropicAccount(body, credential.accountId)),
+        ...(signal !== undefined ? { signal } : {})
+      })
+    );
   }
 
   snapshot(): SubscriptionPoolSnapshot {
@@ -170,5 +195,21 @@ export class AnthropicBackendRelay implements SubscriptionRelay {
 
   close(): Promise<void> {
     return this.#pool.close();
+  }
+
+  #upstreamHeaders(
+    headers: IncomingHttpHeaders,
+    accessToken: string
+  ): Record<string, string> {
+    const forwarded = forwardRelayHeaders(headers);
+    delete forwarded.authorization;
+    delete forwarded.Authorization;
+    delete forwarded["x-api-key"];
+    Object.assign(forwarded, {
+      authorization: `Bearer ${accessToken}`,
+      "anthropic-beta": subscriptionInfo("claude-code").oauthBetaHeader ?? "oauth-2025-04-20",
+      "content-type": "application/json"
+    });
+    return forwarded;
   }
 }

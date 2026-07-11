@@ -23,7 +23,11 @@ export {
   subscriptionCredentialLabel
 } from "./subscription-credentials.js";
 export { subscriptionProvider } from "./subscription-provider.js";
-export type { SubscriptionProvider } from "./subscription-provider.js";
+export type {
+  AdminUsageCost,
+  AdminUsageRange,
+  SubscriptionProvider
+} from "./subscription-provider.js";
 export {
   RateLimitTracker,
   SubscriptionPool,

@@ -15,6 +15,10 @@ import type {
   SubscriptionRelay,
   SubscriptionRelayDialect
 } from "./subscription-relay.js";
+import type {
+  RateLimitWindow,
+  SubscriptionPoolSnapshot
+} from "./subscription-types.js";
 import { isCursorChatBody, translateCursorRequest } from "./adapters/cursor.js";
 import { handleResponses } from "./adapters/responses.js";
 import type { ResponsesRequest } from "./adapters/responses.js";
@@ -78,6 +82,47 @@ export type Gateway = {
   close(): Promise<void>;
 };
 
+function codexWindow(snapshot: SubscriptionPoolSnapshot, name: string): RateLimitWindow | undefined {
+  const member = snapshot.members.find((candidate) => candidate.active) ?? snapshot.members[0];
+  if (member?.limits === undefined) return undefined;
+  return Object.entries(member.limits.windows).find(([key]) => key.endsWith(`:${name}`) || key === name)?.[1];
+}
+
+function codexUsagePayload(snapshot: SubscriptionPoolSnapshot): Record<string, unknown> {
+  const member = snapshot.members.find((candidate) => candidate.active) ?? snapshot.members[0];
+  const primary = codexWindow(snapshot, "primary");
+  const secondary = codexWindow(snapshot, "secondary");
+  const now = Date.now() / 1000;
+  const wireWindow = (window: RateLimitWindow | undefined): Record<string, unknown> | null =>
+    window === undefined
+      ? null
+      : {
+          used_percent: window.utilization * 100,
+          ...(window.windowSeconds !== undefined
+            ? { limit_window_seconds: window.windowSeconds }
+            : {}),
+          ...(window.resetsAt !== undefined
+            ? {
+                reset_at: window.resetsAt,
+                reset_after_seconds: Math.max(0, window.resetsAt - now)
+              }
+            : {})
+        };
+  const reached = [primary, secondary].some(
+    (window) => window !== undefined && window.utilization >= 1
+  );
+  return {
+    plan_type: member?.limits?.planType ?? "unknown",
+    rate_limit: {
+      allowed: !reached,
+      limit_reached: reached,
+      primary_window: wireWindow(primary),
+      secondary_window: wireWindow(secondary)
+    },
+    ...(member?.limits?.credits !== undefined ? { credits: member.limits.credits } : {})
+  };
+}
+
 export async function startGateway(options: GatewayOptions): Promise<Gateway> {
   const host = options.host ?? "127.0.0.1";
   const { backend, authToken, provenance } = options;
@@ -130,9 +175,9 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
       (path === "/backend-api/wham/usage" || path === "/api/codex/usage")
     ) {
       const snapshot = codexSubscriptionRelay?.snapshot?.();
-      writeJson(res, snapshot === undefined ? 404 : 200, snapshot ?? {
+      writeJson(res, snapshot === undefined ? 404 : 200, snapshot === undefined ? {
         error: { message: "Codex subscription pool is not configured", type: "not_found" }
-      });
+      } : codexUsagePayload(snapshot));
       return;
     }
 
@@ -143,6 +188,10 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
       // Claude Code's discovery probe carries `anthropic-version` and expects
       // the Anthropic-shaped model list; everyone else gets the OpenAI shape.
       if (req.headers["anthropic-version"] !== undefined) {
+        if (anthropicRelay?.models !== undefined) {
+          await pipeUpstream(res, await anthropicRelay.models(req.headers, url.search));
+          return;
+        }
         await pipeUpstream(res, anthropicModelsResponse(backend.defaultModel, backend.listModelIds?.()));
         return;
       }
@@ -252,6 +301,13 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
       const raw = await readJson(req, res);
       if (raw === NO_BODY) return;
       if (rejectInvalid(res, validateCountTokensRequest(raw))) return;
+      if (anthropicRelay?.countTokens !== undefined) {
+        await pipeUpstream(
+          res,
+          await anthropicRelay.countTokens(req.headers, raw as AnthropicRequest)
+        );
+        return;
+      }
       await pipeUpstream(res, handleCountTokens(raw as AnthropicRequest));
       return;
     }

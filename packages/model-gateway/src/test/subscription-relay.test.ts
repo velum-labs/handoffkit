@@ -55,6 +55,18 @@ test("Anthropic relay strips ingress auth and transparently rotates pooled crede
     void (async () => {
       const authorization =
         typeof req.headers.authorization === "string" ? req.headers.authorization : undefined;
+      if (req.method === "GET" && req.url?.startsWith("/v1/models") === true) {
+        seen.push({
+          ...(authorization !== undefined ? { authorization } : {}),
+          ...(typeof req.headers["anthropic-beta"] === "string"
+            ? { beta: req.headers["anthropic-beta"] }
+            : {}),
+          body: null
+        });
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify({ data: [{ id: "claude-sonnet-4-5", type: "model" }] }));
+        return;
+      }
       seen.push({
         ...(authorization !== undefined ? { authorization } : {}),
         ...(typeof req.headers["anthropic-beta"] === "string"
@@ -126,6 +138,17 @@ test("Anthropic relay strips ingress auth and transparently rotates pooled crede
       ["Bearer oauth-a", "Bearer oauth-b"]
     );
     assert.ok(seen.every((request) => request.beta === "oauth-2025-04-20"));
+
+    const models = await fetch(`${gateway.url()}/v1/models`, {
+      headers: {
+        authorization: "Bearer proxy-secret",
+        "anthropic-version": "2023-06-01"
+      }
+    });
+    assert.equal(models.status, 200);
+    const catalog = (await models.json()) as { data: Array<{ id: string }> };
+    assert.equal(catalog.data[0]?.id, "claude-sonnet-4-5");
+    assert.equal(seen[2]?.authorization, "Bearer oauth-b");
 
     const usage = await fetch(`${gateway.url()}/usage`, {
       headers: { authorization: "Bearer proxy-secret" }
