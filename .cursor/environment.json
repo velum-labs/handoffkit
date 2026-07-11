@@ -1,4 +1,4 @@
 {
   "install": "pnpm install --frozen-lockfile && uv sync --all-packages",
-  "start": "mkdir -p ~/.aws && printf '[profile cursor-agent-infra]\nrole_arn = %s\ncredential_source = Environment\nexternal_id = %s\nregion = us-west-1\n' \"$CURSOR_AGENT_AWS_ROLE_ARN\" \"$CURSOR_AGENT_AWS_EXTERNAL_ID\" > ~/.aws/config"
+  "start": "mkdir -p ~/.aws && printf '[cursor-bootstrap]\naws_access_key_id = %s\naws_secret_access_key = %s\n' \"$CURSOR_AGENT_AWS_ACCESS_KEY_ID\" \"$CURSOR_AGENT_AWS_SECRET_ACCESS_KEY\" > ~/.aws/credentials && chmod 600 ~/.aws/credentials && printf '[profile cursor-agent-infra]\nrole_arn = %s\nsource_profile = cursor-bootstrap\nexternal_id = %s\nregion = us-east-1\n' \"$CURSOR_AGENT_AWS_ROLE_ARN\" \"$CURSOR_AGENT_AWS_EXTERNAL_ID\" > ~/.aws/config"
 }
