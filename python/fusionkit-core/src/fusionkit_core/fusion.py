@@ -13,6 +13,7 @@ from fusionkit_core.judge import (
 )
 from fusionkit_core.producers import ChatTrajectoryProducer
 from fusionkit_core.router import HeuristicRouter
+from fusionkit_core.trace import TraceContext
 from fusionkit_core.types import (
     ChatMessage,
     FusionAnalysis,
@@ -134,6 +135,7 @@ class FusionEngine:
         sample_count: int | None = None,
         tools: Sequence[ToolDefinition] | None = None,
         tool_choice: ToolChoice | None = None,
+        trace: TraceContext | None = None,
     ) -> FuseResult:
         """One OpenAI-compatible fusion *step* that may emit tool calls.
 
@@ -176,6 +178,7 @@ class FusionEngine:
             sampling=selected_sampling,
             tools=tools,
             tool_choice=tool_choice,
+            trace=trace,
         )
 
     def _fuse_synthesizer(self, tools: Sequence[ToolDefinition] | None) -> JudgeSynthesizer:
@@ -197,6 +200,7 @@ class FusionEngine:
         sample_count: int | None = None,
         tools: Sequence[ToolDefinition] | None = None,
         tool_choice: ToolChoice | None = None,
+        trace: TraceContext | None = None,
     ) -> AsyncIterator[StreamChunk | FuseResult]:
         """Stream the fused answer: real token streaming on the synthesizer turn.
 
@@ -236,6 +240,7 @@ class FusionEngine:
             sampling=selected_sampling,
             tools=tools,
             tool_choice=tool_choice,
+            trace=trace,
         ):
             yield item
 

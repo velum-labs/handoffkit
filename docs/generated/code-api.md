@@ -81,6 +81,8 @@ FusionKit ensemble runtime entry point. It exposes harness execution, panel work
 - `export { createKernelFuseStepRunner, KERNEL_FUSE_STEP_WORKFLOW } from "./kernel-gateway.js";`
 - `export type { FuseStepTransport } from "./kernel-gateway.js";`
 - `export type { GraphNodeInput, KernelWorkflow, WorkflowFactory } from "./kernel.js";`
+- `export { resolveTopology, topology, topologyHash } from "./topology-spec.js";`
+- `export type { ResolvedTopology, TopologySpec } from "./topology-spec.js";`
 - `export { artifactValue, candidatesFromInputs, consumeUsageFromOutput, createTaskArtifact, defineOperator, firstArtifactByType, operatorSpec, taskFromInputs } from "./kernel-helpers.js";`
 - `export type { CreateTaskArtifactInput } from "./kernel-helpers.js";`
 - `export { directModelWorkflow, executionSelectWorkflow, executionSelectRepairWorkflow, panelCaptureWorkflow, panelJudgeSynthWorkflow, rankFuseWorkflow, registerBuiltInWorkflows } from "./workflows.js";`
@@ -746,21 +748,17 @@ Public exports:
 - `PreparedTask`
 - `PromptEval`
 - `PromptVariant`
-- `ProportionCI`
 - `Sandbox`
 - `SandboxConfig`
 - `SandboxResult`
-- `SeedAggregate`
 - `SolutionRun`
 - `StubProposer`
 - `TaskOutcome`
 - `TaskSplit`
 - `TunerRuntime`
 - `TuningResult`
-- `aggregate_seeds`
 - `append_run`
 - `bank_signature`
-- `bootstrap_ci`
 - `build_candidate_bank`
 - `build_provenance`
 - `build_sandbox`
@@ -777,7 +775,6 @@ Public exports:
 - `mcnemar`
 - `normalize_lines`
 - `optimize`
-- `pass_at_k`
 - `prepare_tasks`
 - `regression_guard_tasks`
 - `retry_async`
@@ -785,7 +782,6 @@ Public exports:
 - `select_decision_tasks`
 - `split_dev_val`
 - `verify_solution`
-- `wilson_interval`
 - `CommandExternalBenchmarkExecutor`
 - `CommandHandoffKitExecutor`
 - `ComparisonBaselineRow`

@@ -1,0 +1,255 @@
+{
+  "capture": {
+    "best_single": 0.2807017543859649,
+    "capture": 1.5,
+    "fused_pass_rate": 0.38596491228070173,
+    "judge_id": "gpt55",
+    "mode": "judge_select_best_replay",
+    "n": 57,
+    "oracle": 0.3508771929824561,
+    "panel": "P1_public_complementarity",
+    "spend_usd": 1.6677187500000001
+  },
+  "headroom_pass": true,
+  "panels": [
+    {
+      "best_single": 0.2807017543859649,
+      "headroom": 0.07017543859649122,
+      "headroom_ci_high": 0.10526315789473684,
+      "headroom_ci_low": 0.017241379310344807,
+      "member_rates": {
+        "deepseek": 0.2631578947368421,
+        "kimi": 0.05263157894736842,
+        "qwen3": 0.2807017543859649
+      },
+      "members": [
+        "qwen3",
+        "deepseek",
+        "kimi"
+      ],
+      "n": 57,
+      "oracle": 0.3508771929824561,
+      "oracle_ci_high": 0.47368421052631576,
+      "oracle_ci_low": 0.22807017543859648,
+      "panel_id": "P1_public_complementarity"
+    },
+    {
+      "best_single": 0.4915254237288136,
+      "headroom": 0.05084745762711862,
+      "headroom_ci_high": 0.125,
+      "headroom_ci_low": 0.0,
+      "member_rates": {
+        "deepseek": 0.2711864406779661,
+        "gpt55": 0.4915254237288136,
+        "sonnet": 0.3898305084745763
+      },
+      "members": [
+        "gpt55",
+        "sonnet",
+        "deepseek"
+      ],
+      "n": 59,
+      "oracle": 0.5423728813559322,
+      "oracle_ci_high": 0.6825396825396826,
+      "oracle_ci_low": 0.3793103448275862,
+      "panel_id": "P2_top_public_average"
+    },
+    {
+      "best_single": 0.2807017543859649,
+      "headroom": 0.07017543859649122,
+      "headroom_ci_high": 0.10526315789473684,
+      "headroom_ci_low": 0.017241379310344807,
+      "member_rates": {
+        "deepseek": 0.2631578947368421,
+        "kimi": 0.05263157894736842,
+        "qwen3": 0.2807017543859649
+      },
+      "members": [
+        "kimi",
+        "qwen3",
+        "deepseek"
+      ],
+      "n": 57,
+      "oracle": 0.3508771929824561,
+      "oracle_ci_high": 0.47368421052631576,
+      "oracle_ci_low": 0.22807017543859648,
+      "panel_id": "P3_product_default_restricted"
+    }
+  ],
+  "per_model": [
+    {
+      "ci_high": 0.39598005438289097,
+      "ci_low": 0.17436824992508337,
+      "endpoint_id": "deepseek",
+      "model": "deepseek/deepseek-chat",
+      "n": 59,
+      "pass_rate": 0.2711864406779661,
+      "provider": "openrouter",
+      "provider_failures": 1,
+      "successes": 16
+    },
+    {
+      "ci_high": 0.6069240514915643,
+      "ci_low": 0.3617484128577001,
+      "endpoint_id": "gpt55",
+      "model": "gpt-5.5",
+      "n": 60,
+      "pass_rate": 0.48333333333333334,
+      "provider": "openai",
+      "provider_failures": 0,
+      "successes": 29
+    },
+    {
+      "ci_high": 0.14139625335019185,
+      "ci_low": 0.017745812831795674,
+      "endpoint_id": "kimi",
+      "model": "moonshotai/kimi-k2-thinking",
+      "n": 58,
+      "pass_rate": 0.05172413793103448,
+      "provider": "openrouter",
+      "provider_failures": 2,
+      "successes": 3
+    },
+    {
+      "ci_high": 0.3900895360189135,
+      "ci_low": 0.17132496487078852,
+      "endpoint_id": "qwen3",
+      "model": "qwen/qwen3-coder",
+      "n": 60,
+      "pass_rate": 0.26666666666666666,
+      "provider": "openrouter",
+      "provider_failures": 0,
+      "successes": 16
+    },
+    {
+      "ci_high": 0.5098263545959686,
+      "ci_low": 0.2708808958488824,
+      "endpoint_id": "sonnet",
+      "model": "claude-sonnet-4-6",
+      "n": 60,
+      "pass_rate": 0.38333333333333336,
+      "provider": "anthropic",
+      "provider_failures": 0,
+      "successes": 23
+    }
+  ],
+  "sign_agreement": {
+    "agreed": 10,
+    "passes": true,
+    "rows": [
+      {
+        "agreement": true,
+        "calibrated_n": 59,
+        "calibrated_phi": 0.6204222893813429,
+        "calibrated_sign": "positive",
+        "mapping_note": "public deepseek-v3.1-terminus vs calibrated deepseek-chat; public gpt-5 vs calibrated gpt-5.5",
+        "pair": "deepseek / gpt55",
+        "public_n": 1055,
+        "public_phi": 0.3909747733156425,
+        "public_sign": "positive"
+      },
+      {
+        "agreement": true,
+        "calibrated_n": 57,
+        "calibrated_phi": 0.3944053188733077,
+        "calibrated_sign": "positive",
+        "mapping_note": "public deepseek-v3.1-terminus vs calibrated deepseek-chat; public kimi-k2-0905 vs calibrated kimi-k2-thinking",
+        "pair": "deepseek / kimi",
+        "public_n": 1055,
+        "public_phi": 0.6597468871198204,
+        "public_sign": "positive"
+      },
+      {
+        "agreement": true,
+        "calibrated_n": 59,
+        "calibrated_phi": 0.5712209302325582,
+        "calibrated_sign": "positive",
+        "mapping_note": "public deepseek-v3.1-terminus vs calibrated deepseek-chat; public Qwen3-8B vs calibrated qwen3-coder",
+        "pair": "deepseek / qwen3",
+        "public_n": 1055,
+        "public_phi": 0.5939538692709097,
+        "public_sign": "positive"
+      },
+      {
+        "agreement": true,
+        "calibrated_n": 59,
+        "calibrated_phi": 0.6068146965479023,
+        "calibrated_sign": "positive",
+        "mapping_note": "public deepseek-v3.1-terminus vs calibrated deepseek-chat; public claude-sonnet-4 vs calibrated claude-sonnet-4-6",
+        "pair": "deepseek / sonnet",
+        "public_n": 1055,
+        "public_phi": 0.5997780285964966,
+        "public_sign": "positive"
+      },
+      {
+        "agreement": true,
+        "calibrated_n": 58,
+        "calibrated_phi": 0.25025239784318276,
+        "calibrated_sign": "positive",
+        "mapping_note": "public gpt-5 vs calibrated gpt-5.5; public kimi-k2-0905 vs calibrated kimi-k2-thinking",
+        "pair": "gpt55 / kimi",
+        "public_n": 1055,
+        "public_phi": 0.402780107770365,
+        "public_sign": "positive"
+      },
+      {
+        "agreement": true,
+        "calibrated_n": 60,
+        "calibrated_phi": 0.548050166253518,
+        "calibrated_sign": "positive",
+        "mapping_note": "public gpt-5 vs calibrated gpt-5.5; public Qwen3-8B vs calibrated qwen3-coder",
+        "pair": "gpt55 / qwen3",
+        "public_n": 1055,
+        "public_phi": 0.4308912618878928,
+        "public_sign": "positive"
+      },
+      {
+        "agreement": true,
+        "calibrated_n": 60,
+        "calibrated_phi": 0.6093721236796248,
+        "calibrated_sign": "positive",
+        "mapping_note": "public gpt-5 vs calibrated gpt-5.5; public claude-sonnet-4 vs calibrated claude-sonnet-4-6",
+        "pair": "gpt55 / sonnet",
+        "public_n": 1055,
+        "public_phi": 0.38775301388796574,
+        "public_sign": "positive"
+      },
+      {
+        "agreement": true,
+        "calibrated_n": 58,
+        "calibrated_phi": 0.3783937343321348,
+        "calibrated_sign": "positive",
+        "mapping_note": "public kimi-k2-0905 vs calibrated kimi-k2-thinking; public Qwen3-8B vs calibrated qwen3-coder",
+        "pair": "kimi / qwen3",
+        "public_n": 1055,
+        "public_phi": 0.5939538692709097,
+        "public_sign": "positive"
+      },
+      {
+        "agreement": true,
+        "calibrated_n": 58,
+        "calibrated_phi": 0.2987577586391815,
+        "calibrated_sign": "positive",
+        "mapping_note": "public kimi-k2-0905 vs calibrated kimi-k2-thinking; public claude-sonnet-4 vs calibrated claude-sonnet-4-6",
+        "pair": "kimi / sonnet",
+        "public_n": 1055,
+        "public_phi": 0.5833973323490307,
+        "public_sign": "positive"
+      },
+      {
+        "agreement": true,
+        "calibrated_n": 60,
+        "calibrated_phi": 0.5322873025539941,
+        "calibrated_sign": "positive",
+        "mapping_note": "public Qwen3-8B vs calibrated qwen3-coder; public claude-sonnet-4 vs calibrated claude-sonnet-4-6",
+        "pair": "qwen3 / sonnet",
+        "public_n": 1055,
+        "public_phi": 0.5550784793680592,
+        "public_sign": "positive"
+      }
+    ],
+    "total": 10
+  },
+  "total_spend_usd": 6.406194440800001,
+  "verdict": "PASS"
+}

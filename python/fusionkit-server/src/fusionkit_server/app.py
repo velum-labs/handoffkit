@@ -56,7 +56,12 @@ from fusionkit_core.run import (
     make_id,
 )
 from fusionkit_core.run_store import FileSystemRunStore
-from fusionkit_core.trace import context_from_headers
+from fusionkit_core.trace import (
+    TraceContext,
+    context_from_headers,
+    context_of_span,
+    fusion_span,
+)
 from fusionkit_core.types import (
     ChatMessage,
     ModelResponse,
@@ -312,6 +317,7 @@ def create_app(
 
     async def _handle_chat_completions(
         request: FusionRequest,
+        trace: TraceContext | None = None,
         *,
         record_run: bool = False,
     ) -> dict[str, Any] | JSONResponse | StreamingResponse:
@@ -347,6 +353,7 @@ def create_app(
                 sample_count=request.fusion.sample_count,
                 tools=_normalize_tools(request.tools),
                 tool_choice=_normalize_tool_choice(request.tool_choice),
+                trace=trace,
             )
             return StreamingResponse(
                 _fused_completion_sse(request.model, stream),
@@ -357,14 +364,14 @@ def create_app(
         # (OpenAI Chat Completions semantics) rather than executing in-process;
         # the caller posts `tool` results back on the next request.
         if request.tools:
-            return await _fusion_tool_step(kernel, config, request)
+            return await _fusion_tool_step(kernel, config, request, trace=trace)
         if record_run:
             resolved = await _resolve_native_chat(kernel, request, config)
             if isinstance(resolved, JSONResponse):
                 return resolved
             inspection, metadata = resolved
             return _openai_chat_response(request.model, inspection, metadata)
-        return await _lightweight_fusion_chat(kernel, config, request)
+        return await _lightweight_fusion_chat(kernel, config, request, trace=trace)
 
     @app.post("/v1/chat/completions", response_model=None)
     async def chat_completions(
@@ -372,7 +379,15 @@ def create_app(
         http_request: Request,
     ) -> dict[str, Any] | JSONResponse | StreamingResponse:
         record_run = http_request.headers.get("x-fusionkit-record") == "1"
-        return await _handle_chat_completions(request, record_run=record_run)
+        parent = context_from_headers(dict(http_request.headers))
+        with fusion_span(
+            "server",
+            "fusion.chat",
+            parent,
+            {"gen_ai.request.model": request.model},
+        ) as request_span:
+            trace = context_of_span(request_span, parent)
+            return await _handle_chat_completions(request, trace, record_run=record_run)
 
     @app.post("/v1/cursor/chat/completions", response_model=None)
     async def cursor_chat_completions(
@@ -408,10 +423,16 @@ def create_app(
                 "request body could not be validated as a chat completion request",
                 status_code=400,
             )
-        return await _handle_chat_completions(
-            request,
-            record_run=raw_request.headers.get("x-fusionkit-record") == "1",
-        )
+        record_run = raw_request.headers.get("x-fusionkit-record") == "1"
+        parent = context_from_headers(dict(raw_request.headers))
+        with fusion_span(
+            "server",
+            "fusion.chat.cursor",
+            parent,
+            {"gen_ai.request.model": request.model},
+        ) as request_span:
+            trace = context_of_span(request_span, parent)
+            return await _handle_chat_completions(request, trace, record_run=record_run)
 
     @app.post("/v1/fusion/trajectories:fuse", response_model=None)
     async def fuse_trajectories(
@@ -568,6 +589,8 @@ async def _lightweight_fusion_chat(
     kernel: FusionKernel,
     config: FusionConfig,
     request: FusionRequest,
+    *,
+    trace: TraceContext | None = None,
 ) -> dict[str, Any] | JSONResponse:
     """Non-streaming fused chat without event-sourced run recording."""
     try:
@@ -577,6 +600,7 @@ async def _lightweight_fusion_chat(
             sampling=_request_sampling(config, request),
             panel_models=request.fusion.panel_models,
             sample_count=request.fusion.sample_count,
+            trace=trace,
         )
     except ProviderCallError as exc:
         return _provider_error_response(exc)
@@ -606,6 +630,8 @@ async def _fusion_tool_step(
     kernel: FusionKernel,
     config: FusionConfig,
     request: FusionRequest,
+    *,
+    trace: TraceContext | None = None,
 ) -> dict[str, Any] | JSONResponse:
     """Non-streaming fused step that may return ``tool_calls`` to the caller.
 
@@ -624,6 +650,7 @@ async def _fusion_tool_step(
             sample_count=request.fusion.sample_count,
             tools=_normalize_tools(request.tools),
             tool_choice=_normalize_tool_choice(request.tool_choice),
+            trace=trace,
         )
     except ProviderCallError as exc:
         return _provider_error_response(exc)

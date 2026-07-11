@@ -1,0 +1,61 @@
+diff --git a/seaborn/_core/plot.py b/seaborn/_core/plot.py
+index 4f0290a4..b9facb46 100644
+--- a/seaborn/_core/plot.py
++++ b/seaborn/_core/plot.py
+@@ -1632,17 +1632,45 @@ class Plotter:
+             for axis in "xy":
+                 axis_key = sub[axis]
+ 
+-                # Axis limits
+-                if axis_key in p._limits:
+-                    convert_units = getattr(ax, f"{axis}axis").convert_units
+-                    a, b = p._limits[axis_key]
+-                    lo = a if a is None else convert_units(a)
+-                    hi = b if b is None else convert_units(b)
+-                    if isinstance(a, str):
+-                        lo = cast(float, lo) - 0.5
+-                    if isinstance(b, str):
+-                        hi = cast(float, hi) + 0.5
+-                    ax.set(**{f"{axis}lim": (lo, hi)})
++                # Handle Nominal scales the same way as categorical plots
++                from seaborn._core.scales import Nominal
++                if axis_key in p._scales and isinstance(p._scales[axis_key], Nominal):
++                    # For Nominal scales, we need to determine the number of categories
++                    # Use the plot's data directly since layers may not be available yet
++                    
++                    # Get the data for this axis from the plot's data
++                    if axis_key in p._data.frame:
++                        data_series = p._data.frame[axis_key]
++                        
++                        # Get unique categories
++                        from seaborn._core.rules import categorical_order
++                        categories = categorical_order(data_series)
++                        n_categories = len(categories)
++                        
++                        if n_categories > 0:
++                            # Set limits to +/- 0.5 from first and last category
++                            # Disable autoscaling to prevent matplotlib from overriding our limits
++                            getattr(ax, f"{axis}axis")._set_autoscale_on(False)
++                            ax.set(**{f"{axis}lim": (-0.5, n_categories - 0.5)})
++                    
++                    # Disable grid for Nominal scales
++                    ax.grid(False)
++                    
++                    # Invert y-axis for Nominal scales on y-axis
++                    if axis == "y":
++                        ax.invert_yaxis()
++                else:
++                    # Original logic for non-Nominal scales
++                    if axis_key in p._limits:
++                        convert_units = getattr(ax, f"{axis}axis").convert_units
++                        a, b = p._limits[axis_key]
++                        lo = a if a is None else convert_units(a)
++                        hi = b if b is None else convert_units(b)
++                        if isinstance(a, str):
++                            lo = cast(float, lo) - 0.5
++                        if isinstance(b, str):
++                            hi = cast(float, hi) + 0.5
++                        ax.set(**{f"{axis}lim": (lo, hi)})
+ 
+         engine_default = None if p._target is not None else "tight"
+         layout_engine = p._layout_spec.get("engine", engine_default)

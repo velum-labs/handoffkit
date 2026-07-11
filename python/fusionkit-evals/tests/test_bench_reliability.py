@@ -5,12 +5,6 @@ import json
 import pytest
 from fusionkit_evals.bench_history import BenchRunRecord, append_run, drift_vs_previous, load_runs
 from fusionkit_evals.bench_runtime import classify_exception, is_transient, retry_async
-from fusionkit_evals.bench_stats import (
-    aggregate_seeds,
-    bootstrap_ci,
-    pass_at_k,
-    wilson_interval,
-)
 from fusionkit_evals.benchmark_panel import DECORRELATED_PEER_PANEL
 from fusionkit_evals.checkers import check_output
 from fusionkit_evals.code_extract import extract_code
@@ -32,6 +26,12 @@ from fusionkit_evals.sandbox import (
     SandboxConfig,
     SandboxUnavailable,
     build_sandbox,
+)
+from hyperkit.stats import (
+    aggregate_seeds,
+    bootstrap_ci,
+    pass_at_k,
+    wilson_interval,
 )
 
 # --- sandbox -----------------------------------------------------------------

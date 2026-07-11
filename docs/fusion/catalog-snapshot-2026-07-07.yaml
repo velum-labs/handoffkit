@@ -1,0 +1,1333 @@
+retrieved_at: '2026-07-07T04:52:40Z'
+source_url: https://openrouter.ai/api/v1/models
+total_rows_in_api: 343
+filter_ledger:
+- filter: open_weights_only
+  rule: Keep rows with hugging_face_id or a publicly open-weights family; exclude closed-only
+    endpoints.
+  rows_before: 343
+  rows_after: 191
+  rows_removed: 152
+- filter: context_length
+  rule: Keep rows with context_length >= 128000 tokens.
+  rows_before: 191
+  rows_after: 165
+  rows_removed: 26
+- filter: recency
+  rule: Keep rows with OpenRouter created timestamp on or after 2025-07-07; flag 2025-07-07
+    through 2026-01-06 as aging.
+  rows_before: 165
+  rows_after: 122
+  rows_removed: 43
+- filter: coding_capable
+  rule: Keep explicit coding models or frontier-class general/reasoning OSS families; exclude
+    specialist, vision-only/multimodal without coding claim, guard/safety, roleplay, embedding,
+    and tiny variants.
+  rows_before: 122
+  rows_after: 59
+  rows_removed: 63
+- filter: free_and_duplicate_variants
+  rule: Exclude :free variants, moving aliases, preview/experimental aliases, and superseded
+    dated service variants where a canonical paid slug exists.
+  rows_before: 59
+  rows_after: 34
+  rows_removed: 25
+candidates:
+- slug: deepseek/deepseek-v3.2
+  display_name: 'DeepSeek: DeepSeek V3.2'
+  retrieved_at: '2026-07-07'
+  source_url: https://openrouter.ai/api/v1/models
+  pricing:
+    input_per_m: 0.2288
+    output_per_m: 0.3432
+  context_length: 131072
+  max_completion_tokens: 64000
+  reasoning_controls: reasoning, include_reasoning
+  providers:
+  - id: StreamLake
+    quantization: fp8
+    is_pinned: true
+  - id: Baidu
+    quantization: fp8
+    is_pinned: false
+  - id: SiliconFlow
+    quantization: fp8
+    is_pinned: false
+  license: open-weights
+  vendor_updated: 2025-12
+  coding_evidence:
+  - benchmark: "livecodebench"
+    score: 0.833
+    harness: "LLM Stats LiveCodeBench leaderboard (rolling pass_at_1; row: DeepSeek-V3.2)"
+    as_of: "leaderboard retrieved 2026-07-07"
+    url: "https://llm-stats.com/benchmarks/livecodebench"
+    trust: "third-party"
+    saturated: false
+  lineage:
+    base_family: deepseek-v3
+    teacher: uncertain
+    notes: 'Derived from OpenRouter model card/slug. Hugging Face id: deepseek-ai/DeepSeek-V3.2.'
+  aggregate_mean: 83.3
+  flags:
+  - aging
+- slug: deepseek/deepseek-v4-flash
+  display_name: 'DeepSeek: DeepSeek V4 Flash'
+  retrieved_at: '2026-07-07'
+  source_url: https://openrouter.ai/api/v1/models
+  pricing:
+    input_per_m: 0.09
+    output_per_m: 0.18
+  context_length: 1048576
+  max_completion_tokens: 16384
+  reasoning_controls: reasoning, include_reasoning
+  providers:
+  - id: DeepInfra
+    quantization: fp4
+    is_pinned: false
+  - id: GMICloud
+    quantization: fp8
+    is_pinned: false
+  - id: Baidu
+    quantization: fp8
+    is_pinned: false
+  license: open-weights
+  vendor_updated: 2026-04
+  coding_evidence:
+  - benchmark: "livecodebench"
+    score: 0.916
+    harness: "LLM Stats LiveCodeBench leaderboard (rolling pass_at_1; row: DeepSeek-V4-Flash-Max; max-effort variant of catalog slug)"
+    as_of: "leaderboard retrieved 2026-07-07"
+    url: "https://llm-stats.com/benchmarks/livecodebench"
+    trust: "third-party"
+    saturated: false
+  - benchmark: "swe-bench-pro"
+    score: 49.1
+    harness: "BenchLM SWE-bench Pro 2026 leaderboard (repository task completion; row: DeepSeek V4 Flash)"
+    as_of: "2026-07-06"
+    url: "https://benchlm.ai/benchmarks/swePro"
+    trust: "third-party"
+    saturated: false
+  - benchmark: "artificial_analysis_coding_index"
+    score: 56.1676376751283
+    harness: "Artificial Analysis Coding Index (Terminal-Bench v2.1 + SciCode; row: DeepSeek V4 Flash max)"
+    as_of: "leaderboard retrieved 2026-07-07"
+    url: "https://artificialanalysis.ai/models/capabilities/coding"
+    trust: "third-party"
+    saturated: false
+  lineage:
+    base_family: deepseek-v4
+    teacher: uncertain
+    notes: 'Derived from OpenRouter model card/slug. Hugging Face id: deepseek-ai/DeepSeek-V4-Flash.'
+  aggregate_mean: 65.62254589170944
+  flags: []
+- slug: deepseek/deepseek-v4-pro
+  display_name: 'DeepSeek: DeepSeek V4 Pro'
+  retrieved_at: '2026-07-07'
+  source_url: https://openrouter.ai/api/v1/models
+  pricing:
+    input_per_m: 0.435
+    output_per_m: 0.87
+  context_length: 1048576
+  max_completion_tokens: 384000
+  reasoning_controls: reasoning, include_reasoning
+  providers:
+  - id: DeepSeek
+    quantization: unknown
+    is_pinned: true
+  - id: StreamLake
+    quantization: fp8
+    is_pinned: false
+  - id: Baidu
+    quantization: fp8
+    is_pinned: false
+  license: open-weights
+  vendor_updated: 2026-04
+  coding_evidence:
+  - benchmark: "livecodebench"
+    score: 0.935
+    harness: "LLM Stats LiveCodeBench leaderboard (rolling pass_at_1; row: DeepSeek-V4-Pro-Max; max-effort variant of catalog slug)"
+    as_of: "leaderboard retrieved 2026-07-07"
+    url: "https://llm-stats.com/benchmarks/livecodebench"
+    trust: "third-party"
+    saturated: false
+  - benchmark: "swe-bench-pro"
+    score: 52.1
+    harness: "BenchLM SWE-bench Pro 2026 leaderboard (repository task completion; row: DeepSeek V4 Pro)"
+    as_of: "2026-07-06"
+    url: "https://benchlm.ai/benchmarks/swePro"
+    trust: "third-party"
+    saturated: false
+  - benchmark: "artificial_analysis_coding_index"
+    score: 59.3632958801498
+    harness: "Artificial Analysis Coding Index (Terminal-Bench v2.1 + SciCode; row: DeepSeek V4 Pro max)"
+    as_of: "leaderboard retrieved 2026-07-07"
+    url: "https://artificialanalysis.ai/models/capabilities/coding"
+    trust: "third-party"
+    saturated: false
+  lineage:
+    base_family: deepseek-v4
+    teacher: uncertain
+    notes: 'Derived from OpenRouter model card/slug. Hugging Face id: deepseek-ai/DeepSeek-V4-Pro.'
+  aggregate_mean: 68.3210986267166
+  flags: []
+- slug: minimax/minimax-m2.7
+  display_name: 'MiniMax: MiniMax M2.7'
+  retrieved_at: '2026-07-07'
+  source_url: https://openrouter.ai/api/v1/models
+  pricing:
+    input_per_m: 0.18
+    output_per_m: 0.72
+  context_length: 204800
+  max_completion_tokens: 196608
+  reasoning_controls: reasoning, include_reasoning
+  providers:
+  - id: Mara
+    quantization: unknown
+    is_pinned: false
+  - id: DeepInfra
+    quantization: fp8
+    is_pinned: false
+  - id: Novita
+    quantization: fp8
+    is_pinned: false
+  license: open-weights
+  vendor_updated: 2026-03
+  coding_evidence:
+  - benchmark: "swe-bench-pro"
+    score: 56.2
+    harness: "BenchLM SWE-bench Pro 2026 leaderboard (repository task completion; row: MiniMax M2.7)"
+    as_of: "2026-07-06"
+    url: "https://benchlm.ai/benchmarks/swePro"
+    trust: "third-party"
+    saturated: false
+  lineage:
+    base_family: minimax-m2
+    teacher: uncertain
+    notes: 'Derived from OpenRouter model card/slug. Hugging Face id: MiniMaxAI/MiniMax-M2.7.'
+  aggregate_mean: 56.2
+  flags: []
+- slug: minimax/minimax-m3
+  display_name: 'MiniMax: MiniMax M3'
+  retrieved_at: '2026-07-07'
+  source_url: https://openrouter.ai/api/v1/models
+  pricing:
+    input_per_m: 0.3
+    output_per_m: 1.2
+  context_length: 1048576
+  max_completion_tokens: 512000
+  reasoning_controls: reasoning, include_reasoning
+  providers:
+  - id: Minimax
+    quantization: fp8
+    is_pinned: false
+  - id: Novita
+    quantization: fp8
+    is_pinned: false
+  - id: AtlasCloud
+    quantization: fp8
+    is_pinned: false
+  license: open-weights
+  vendor_updated: 2026-05
+  coding_evidence:
+  - benchmark: "swe-bench-pro"
+    score: 59.0
+    harness: "BenchLM SWE-bench Pro 2026 leaderboard (repository task completion; row: MiniMax M3)"
+    as_of: "2026-07-06"
+    url: "https://benchlm.ai/benchmarks/swePro"
+    trust: "third-party"
+    saturated: false
+  - benchmark: "artificial_analysis_coding_index"
+    score: 58.5691496740186
+    harness: "Artificial Analysis Coding Index (Terminal-Bench v2.1 + SciCode; row: MiniMax-M3)"
+    as_of: "leaderboard retrieved 2026-07-07"
+    url: "https://artificialanalysis.ai/models/capabilities/coding"
+    trust: "third-party"
+    saturated: false
+  lineage:
+    base_family: minimax-m3
+    teacher: uncertain
+    notes: 'Derived from OpenRouter model card/slug. Hugging Face id: MiniMaxAI/Minimax-M3.'
+  aggregate_mean: 58.7845748370093
+  flags: []
+- slug: mistralai/devstral-2512
+  display_name: 'Mistral: Devstral 2 2512'
+  retrieved_at: '2026-07-07'
+  source_url: https://openrouter.ai/api/v1/models
+  pricing:
+    input_per_m: 0.4
+    output_per_m: 2.0
+  context_length: 262144
+  max_completion_tokens: null
+  reasoning_controls: none-declared
+  providers:
+  - id: Mistral
+    quantization: unknown
+    is_pinned: false
+  license: open-weights
+  vendor_updated: 2025-12
+  coding_evidence:
+  - benchmark: "livecodebench"
+    score: 51.8
+    harness: "BenchmarkList LiveCodeBench implementation (model page aggregate; row: devstral-2512)"
+    as_of: "leaderboard retrieved 2026-07-07"
+    url: "https://benchmarklist.com/models/mistralai-devstral-2512/"
+    trust: "third-party"
+    saturated: false
+  lineage:
+    base_family: devstral-2
+    teacher: uncertain
+    notes: 'Derived from OpenRouter model card/slug. Hugging Face id: mistralai/Devstral-2-123B-Instruct-2512.'
+  aggregate_mean: 51.8
+  flags:
+  - aging
+- slug: mistralai/mistral-large-2512
+  display_name: 'Mistral: Mistral Large 3 2512'
+  retrieved_at: '2026-07-07'
+  source_url: https://openrouter.ai/api/v1/models
+  pricing:
+    input_per_m: 0.5
+    output_per_m: 1.5
+  context_length: 262144
+  max_completion_tokens: null
+  reasoning_controls: none-declared
+  providers:
+  - id: Mistral
+    quantization: unknown
+    is_pinned: false
+  license: Apache-2.0
+  vendor_updated: 2025-12
+  coding_evidence:
+  - benchmark: "livecodebench"
+    score: 46.5
+    harness: "VerdictPal model benchmark table citing Artificial Analysis LiveCodeBench run for Mistral Large 3"
+    as_of: "2026-06-24"
+    url: "https://verdictpal.com/models/mistral-large-3"
+    trust: "third-party"
+    saturated: false
+  lineage:
+    base_family: mistral-large-3
+    teacher: uncertain
+    notes: Derived from OpenRouter model card/slug.
+  aggregate_mean: 46.5
+  flags:
+  - aging
+- slug: mistralai/mistral-small-2603
+  display_name: 'Mistral: Mistral Small 4'
+  retrieved_at: '2026-07-07'
+  source_url: https://openrouter.ai/api/v1/models
+  pricing:
+    input_per_m: 0.15
+    output_per_m: 0.6
+  context_length: 262144
+  max_completion_tokens: null
+  reasoning_controls: reasoning, include_reasoning
+  providers:
+  - id: Mistral
+    quantization: unknown
+    is_pinned: false
+  - id: Venice
+    quantization: fp8
+    is_pinned: false
+  license: open-weights
+  vendor_updated: 2026-03
+  coding_evidence:
+  - benchmark: "livecodebench"
+    score: 0.636
+    harness: "LLM Stats LiveCodeBench leaderboard (rolling pass_at_1; row: Mistral Small 4)"
+    as_of: "leaderboard retrieved 2026-07-07"
+    url: "https://llm-stats.com/benchmarks/livecodebench"
+    trust: "third-party"
+    saturated: false
+  lineage:
+    base_family: mistral-small-4
+    teacher: uncertain
+    notes: 'Derived from OpenRouter model card/slug. Hugging Face id: mistralai/Mistral-Small-4-119B-2603.'
+  aggregate_mean: 63.6
+  flags: []
+- slug: moonshotai/kimi-k2-thinking
+  display_name: 'MoonshotAI: Kimi K2 Thinking'
+  retrieved_at: '2026-07-07'
+  source_url: https://openrouter.ai/api/v1/models
+  pricing:
+    input_per_m: 0.6
+    output_per_m: 2.5
+  context_length: 262144
+  max_completion_tokens: 100352
+  reasoning_controls: thinking variant; reasoning, include_reasoning
+  providers:
+  - id: Novita
+    quantization: bf16
+    is_pinned: false
+  - id: Google
+    quantization: unknown
+    is_pinned: false
+  license: open-weights
+  vendor_updated: 2025-11
+  coding_evidence:
+  - benchmark: "livecodebench"
+    score: 0.831
+    harness: "LLM Stats LiveCodeBench v6 leaderboard (pass@1; row: Kimi K2-Thinking-0905; dated variant of catalog slug)"
+    as_of: "leaderboard retrieved 2026-07-07"
+    url: "https://llm-stats.com/benchmarks/livecodebench-v6"
+    trust: "third-party"
+    saturated: true
+  lineage:
+    base_family: kimi-k2
+    teacher: uncertain
+    notes: 'Derived from OpenRouter model card/slug. Hugging Face id: moonshotai/Kimi-K2-Thinking.'
+  aggregate_mean: null
+  flags:
+  - aging
+- slug: moonshotai/kimi-k2.6
+  display_name: 'MoonshotAI: Kimi K2.6'
+  retrieved_at: '2026-07-07'
+  source_url: https://openrouter.ai/api/v1/models
+  pricing:
+    input_per_m: 0.66
+    output_per_m: 3.41
+  context_length: 262144
+  max_completion_tokens: 262144
+  reasoning_controls: reasoning, include_reasoning
+  providers:
+  - id: Inceptron
+    quantization: int4
+    is_pinned: false
+  - id: Decart
+    quantization: fp4
+    is_pinned: true
+  - id: Chutes
+    quantization: int4
+    is_pinned: false
+  license: open-weights
+  vendor_updated: 2026-04
+  coding_evidence:
+  - benchmark: "livecodebench"
+    score: 0.896
+    harness: "LLM Stats LiveCodeBench v6 leaderboard (pass@1; row: Kimi K2.6)"
+    as_of: "leaderboard retrieved 2026-07-07"
+    url: "https://llm-stats.com/benchmarks/livecodebench-v6"
+    trust: "third-party"
+    saturated: true
+  - benchmark: "swe-bench-pro"
+    score: 58.6
+    harness: "BenchLM SWE-bench Pro 2026 leaderboard (repository task completion; row: Kimi K2.6)"
+    as_of: "2026-07-06"
+    url: "https://benchlm.ai/benchmarks/swePro"
+    trust: "third-party"
+    saturated: false
+  - benchmark: "artificial_analysis_coding_index"
+    score: 61.7691427382439
+    harness: "Artificial Analysis Coding Index (Terminal-Bench v2.1 + SciCode; row: Kimi K2.6)"
+    as_of: "leaderboard retrieved 2026-07-07"
+    url: "https://artificialanalysis.ai/models/capabilities/coding"
+    trust: "third-party"
+    saturated: false
+  lineage:
+    base_family: kimi-k2
+    teacher: uncertain
+    notes: 'Derived from OpenRouter model card/slug. Hugging Face id: moonshotai/Kimi-K2.6.'
+  aggregate_mean: 60.184571369121954
+  flags: []
+- slug: moonshotai/kimi-k2.7-code
+  display_name: 'MoonshotAI: Kimi K2.7 Code'
+  retrieved_at: '2026-07-07'
+  source_url: https://openrouter.ai/api/v1/models
+  pricing:
+    input_per_m: 0.74
+    output_per_m: 3.5
+  context_length: 262144
+  max_completion_tokens: 16384
+  reasoning_controls: reasoning, include_reasoning
+  providers:
+  - id: DeepInfra
+    quantization: fp4
+    is_pinned: false
+  - id: Inceptron
+    quantization: int4
+    is_pinned: false
+  - id: Parasail
+    quantization: int4
+    is_pinned: false
+  license: open-weights
+  vendor_updated: 2026-06
+  coding_evidence:
+  - benchmark: "livecodebench"
+    score: 89.6
+    harness: "Vendor-reported LiveCodeBench v6 claim for Kimi K2.7 Code, reported by VM0 from Moonshot release materials"
+    as_of: "leaderboard retrieved 2026-07-07"
+    url: "https://www.vm0.ai/en/models/kimi-k2-7-code"
+    trust: "vendor-claimed"
+    saturated: true
+  - benchmark: "swe-bench-pro"
+    score: 58.6
+    harness: "Vendor-reported SWE-bench Pro claim for Kimi K2.7 Code, reported by VM0 from Moonshot release materials"
+    as_of: "leaderboard retrieved 2026-07-07"
+    url: "https://www.vm0.ai/en/models/kimi-k2-7-code"
+    trust: "vendor-claimed"
+    saturated: false
+  lineage:
+    base_family: kimi-k2
+    teacher: uncertain
+    notes: 'Derived from OpenRouter model card/slug. Hugging Face id: moonshotai/Kimi-K2.7-Code.'
+  aggregate_mean: null
+  flags: []
+- slug: nex-agi/nex-n2-pro
+  display_name: 'Nex AGI: Nex-N2-Pro'
+  retrieved_at: '2026-07-07'
+  source_url: https://openrouter.ai/api/v1/models
+  pricing:
+    input_per_m: 0.25
+    output_per_m: 1.0
+  context_length: 262144
+  max_completion_tokens: 262144
+  reasoning_controls: reasoning, include_reasoning
+  providers:
+  - id: Nex AGI
+    quantization: fp8
+    is_pinned: false
+  - id: SiliconFlow
+    quantization: unknown
+    is_pinned: false
+  license: open-weights
+  vendor_updated: 2026-06
+  coding_evidence:
+  - benchmark: "swe-bench-pro"
+    score: 58.8
+    harness: "Vendor-reported Nex-N2-Pro benchmark table (SWE-Bench Pro row)"
+    as_of: "leaderboard retrieved 2026-07-07"
+    url: "https://huggingface.co/nex-agi/Nex-N2-Pro/blob/main/README.md"
+    trust: "vendor-claimed"
+    saturated: false
+  lineage:
+    base_family: nex-n2
+    teacher: uncertain
+    notes: 'Derived from OpenRouter model card/slug. Hugging Face id: nex-agi/Nex-N2-Pro.
+      Model card says it is built on Qwen3.5 architecture.'
+  aggregate_mean: null
+  flags: []
+- slug: nousresearch/hermes-4-405b
+  display_name: 'Nous: Hermes 4 405B'
+  retrieved_at: '2026-07-07'
+  source_url: https://openrouter.ai/api/v1/models
+  pricing:
+    input_per_m: 1.0
+    output_per_m: 3.0
+  context_length: 131072
+  max_completion_tokens: null
+  reasoning_controls: reasoning, include_reasoning
+  providers:
+  - id: Nebius
+    quantization: fp8
+    is_pinned: false
+  license: open-weights
+  vendor_updated: 2025-08
+  coding_evidence:
+  - benchmark: "livecodebench"
+    score: 61.3
+    harness: "Vendor-reported Hermes 4 405B LiveCodeBench score summarized from Nous benchmark materials"
+    as_of: "leaderboard retrieved 2026-07-07"
+    url: "https://llmindex.net/models/hermes-4-405b"
+    trust: "vendor-claimed"
+    saturated: false
+  lineage:
+    base_family: llama-3.1-hermes-4-405b
+    teacher: uncertain
+    notes: 'Derived from OpenRouter model card/slug. Hugging Face id: NousResearch/Hermes-4-405B.
+      Model card says it is built on Meta-Llama-3.1.'
+  aggregate_mean: null
+  flags:
+  - aging
+- slug: nousresearch/hermes-4-70b
+  display_name: 'Nous: Hermes 4 70B'
+  retrieved_at: '2026-07-07'
+  source_url: https://openrouter.ai/api/v1/models
+  pricing:
+    input_per_m: 0.13
+    output_per_m: 0.4
+  context_length: 131072
+  max_completion_tokens: null
+  reasoning_controls: reasoning, include_reasoning
+  providers:
+  - id: Nebius
+    quantization: fp8
+    is_pinned: false
+  license: open-weights
+  vendor_updated: 2025-08
+  coding_evidence:
+  - benchmark: "livecodebench"
+    score: 65.3
+    harness: "Easy Benchmarks model page (LiveCodeBench row; Hermes 4 70B reasoning variant)"
+    as_of: "leaderboard retrieved 2026-07-07"
+    url: "https://easy-benchmarks.com/models/hermes-4-llama-3-1-70b-reasoning"
+    trust: "third-party"
+    saturated: false
+  - benchmark: "artificial_analysis_coding_index"
+    score: 9.2
+    harness: "Puter model page citing Artificial Analysis Coding Index for Hermes 4 70B non-reasoning"
+    as_of: "leaderboard retrieved 2026-07-07"
+    url: "https://developer.puter.com/ai/nousresearch/hermes-4-70b/"
+    trust: "third-party"
+    saturated: false
+  lineage:
+    base_family: llama-3.1-hermes-4-70b
+    teacher: uncertain
+    notes: 'Derived from OpenRouter model card/slug. Hugging Face id: NousResearch/Hermes-4-70B.
+      Model card says it is built on Meta-Llama-3.1.'
+  aggregate_mean: 37.25
+  flags:
+  - aging
+- slug: nvidia/llama-3.3-nemotron-super-49b-v1.5
+  display_name: 'NVIDIA: Llama 3.3 Nemotron Super 49B V1.5'
+  retrieved_at: '2026-07-07'
+  source_url: https://openrouter.ai/api/v1/models
+  pricing:
+    input_per_m: 0.4
+    output_per_m: 0.4
+  context_length: 131072
+  max_completion_tokens: 16384
+  reasoning_controls: reasoning, include_reasoning
+  providers:
+  - id: DeepInfra
+    quantization: fp8
+    is_pinned: false
+  license: open-weights
+  vendor_updated: 2025-10
+  coding_evidence: []
+  lineage:
+    base_family: llama-3.3-nemotron
+    teacher: uncertain
+    notes: 'Derived from OpenRouter model card/slug. Hugging Face id: nvidia/Llama-3_3-Nemotron-Super-49B-v1_5.'
+  aggregate_mean: null
+  flags:
+  - aging
+  - aggregate-none
+- slug: nvidia/nemotron-3-super-120b-a12b
+  display_name: 'NVIDIA: Nemotron 3 Super'
+  retrieved_at: '2026-07-07'
+  source_url: https://openrouter.ai/api/v1/models
+  pricing:
+    input_per_m: 0.08
+    output_per_m: 0.45
+  context_length: 1000000
+  max_completion_tokens: null
+  reasoning_controls: reasoning, include_reasoning
+  providers:
+  - id: DekaLLM
+    quantization: fp8
+    is_pinned: false
+  - id: DeepInfra
+    quantization: bf16
+    is_pinned: true
+  - id: DigitalOcean
+    quantization: unknown
+    is_pinned: false
+  license: open-weights
+  vendor_updated: 2026-03
+  coding_evidence:
+  - benchmark: "livecodebench"
+    score: 0.812
+    harness: "LLM Stats LiveCodeBench leaderboard (rolling pass_at_1; row: Nemotron 3 Super 120B A12B)"
+    as_of: "leaderboard retrieved 2026-07-07"
+    url: "https://llm-stats.com/benchmarks/livecodebench"
+    trust: "third-party"
+    saturated: false
+  lineage:
+    base_family: nemotron-3-super
+    teacher: uncertain
+    notes: 'Derived from OpenRouter model card/slug. Hugging Face id: nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-FP8.'
+  aggregate_mean: 81.2
+  flags: []
+- slug: nvidia/nemotron-3-ultra-550b-a55b
+  display_name: 'NVIDIA: Nemotron 3 Ultra'
+  retrieved_at: '2026-07-07'
+  source_url: https://openrouter.ai/api/v1/models
+  pricing:
+    input_per_m: 0.5
+    output_per_m: 2.2
+  context_length: 1000000
+  max_completion_tokens: 16384
+  reasoning_controls: reasoning, include_reasoning
+  providers:
+  - id: DeepInfra
+    quantization: fp4
+    is_pinned: false
+  - id: Together
+    quantization: unknown
+    is_pinned: false
+  - id: Nebius
+    quantization: fp4
+    is_pinned: false
+  license: open-weights
+  vendor_updated: 2026-06
+  coding_evidence:
+  - benchmark: "livecodebench"
+    score: 0.89
+    harness: "LLM Stats LiveCodeBench v6 leaderboard (pass@1; row: Nemotron 3 Ultra 550B A55B)"
+    as_of: "leaderboard retrieved 2026-07-07"
+    url: "https://llm-stats.com/benchmarks/livecodebench-v6"
+    trust: "third-party"
+    saturated: true
+  - benchmark: "artificial_analysis_coding_index"
+    score: 49.2652413649605
+    harness: "Artificial Analysis Coding Index (Terminal-Bench v2.1 + SciCode; row: Nemotron 3 Ultra)"
+    as_of: "leaderboard retrieved 2026-07-07"
+    url: "https://artificialanalysis.ai/models/capabilities/coding"
+    trust: "third-party"
+    saturated: false
+  lineage:
+    base_family: nemotron-3-ultra
+    teacher: uncertain
+    notes: 'Derived from OpenRouter model card/slug. Hugging Face id: nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B-BF16.'
+  aggregate_mean: 49.2652413649605
+  flags: []
+- slug: openai/gpt-oss-120b
+  display_name: 'OpenAI: gpt-oss-120b'
+  retrieved_at: '2026-07-07'
+  source_url: https://openrouter.ai/api/v1/models
+  pricing:
+    input_per_m: 0.03
+    output_per_m: 0.15
+  context_length: 131072
+  max_completion_tokens: 131072
+  reasoning_controls: reasoning, include_reasoning
+  providers:
+  - id: Mara
+    quantization: unknown
+    is_pinned: false
+  - id: DekaLLM
+    quantization: bf16
+    is_pinned: false
+  - id: DeepInfra
+    quantization: bf16
+    is_pinned: false
+  license: open-weights
+  vendor_updated: 2025-08
+  coding_evidence:
+  - benchmark: "livecodebench"
+    score: 0.819
+    harness: "LLM Stats LiveCodeBench v6 leaderboard (pass@1; row: GPT OSS 120B High)"
+    as_of: "leaderboard retrieved 2026-07-07"
+    url: "https://llm-stats.com/benchmarks/livecodebench-v6"
+    trust: "third-party"
+    saturated: true
+  - benchmark: "aider-polyglot"
+    score: 41.8
+    harness: "Aider official polyglot coding leaderboard (225 Exercism tasks; row: gpt-oss-120b high; diff edit format)"
+    as_of: "2025-08-06"
+    url: "https://aider.chat/docs/leaderboards/"
+    trust: "third-party"
+    saturated: false
+  lineage:
+    base_family: gpt-oss
+    teacher: uncertain
+    notes: 'Derived from OpenRouter model card/slug. Hugging Face id: openai/gpt-oss-120b.'
+  aggregate_mean: 41.8
+  flags:
+  - aging
+- slug: poolside/laguna-m.1
+  display_name: 'Poolside: Laguna M.1'
+  retrieved_at: '2026-07-07'
+  source_url: https://openrouter.ai/api/v1/models
+  pricing:
+    input_per_m: 0.2
+    output_per_m: 0.4
+  context_length: 262144
+  max_completion_tokens: 32768
+  reasoning_controls: reasoning, include_reasoning
+  providers:
+  - id: Poolside
+    quantization: fp4
+    is_pinned: false
+  license: open-weights
+  vendor_updated: 2026-04
+  coding_evidence:
+  - benchmark: "swe-bench-pro"
+    score: 49.2
+    harness: "BenchLM SWE-bench Pro 2026 leaderboard (repository task completion; row: Laguna M.1)"
+    as_of: "2026-07-06"
+    url: "https://benchlm.ai/benchmarks/swePro"
+    trust: "third-party"
+    saturated: false
+  lineage:
+    base_family: laguna-m
+    teacher: uncertain
+    notes: 'Derived from OpenRouter model card/slug. Hugging Face id: poolside/Laguna-M.1.'
+  aggregate_mean: 49.2
+  flags: []
+- slug: qwen/qwen3-235b-a22b-2507
+  display_name: 'Qwen: Qwen3 235B A22B Instruct 2507'
+  retrieved_at: '2026-07-07'
+  source_url: https://openrouter.ai/api/v1/models
+  pricing:
+    input_per_m: 0.09
+    output_per_m: 0.1
+  context_length: 262144
+  max_completion_tokens: 16384
+  reasoning_controls: none-declared
+  providers:
+  - id: DeepInfra
+    quantization: fp8
+    is_pinned: false
+  - id: Novita
+    quantization: fp8
+    is_pinned: false
+  - id: Parasail
+    quantization: fp8
+    is_pinned: false
+  license: open-weights
+  vendor_updated: 2025-07
+  coding_evidence:
+  - benchmark: "livecodebench"
+    score: 0.518
+    harness: "LLM Stats LiveCodeBench v6 leaderboard (pass@1; row: Qwen3-235B-A22B-Instruct-2507)"
+    as_of: "leaderboard retrieved 2026-07-07"
+    url: "https://llm-stats.com/benchmarks/livecodebench-v6"
+    trust: "third-party"
+    saturated: true
+  - benchmark: "aider-polyglot"
+    score: 59.6
+    harness: "Aider official polyglot coding leaderboard (225 Exercism tasks; row: Qwen3 235B A22B diff, no think, Alibaba API)"
+    as_of: "2025-05-09"
+    url: "https://aider.chat/docs/leaderboards/"
+    trust: "third-party"
+    saturated: false
+  lineage:
+    base_family: qwen3
+    teacher: uncertain
+    notes: 'Derived from OpenRouter model card/slug. Hugging Face id: Qwen/Qwen3-235B-A22B-Instruct-2507.'
+  aggregate_mean: 59.6
+  flags:
+  - aging
+- slug: qwen/qwen3-235b-a22b-thinking-2507
+  display_name: 'Qwen: Qwen3 235B A22B Thinking 2507'
+  retrieved_at: '2026-07-07'
+  source_url: https://openrouter.ai/api/v1/models
+  pricing:
+    input_per_m: 0.1495
+    output_per_m: 1.495
+  context_length: 262144
+  max_completion_tokens: null
+  reasoning_controls: thinking variant; reasoning, include_reasoning
+  providers:
+  - id: Alibaba
+    quantization: unknown
+    is_pinned: false
+  - id: DeepInfra
+    quantization: fp8
+    is_pinned: false
+  - id: Novita
+    quantization: fp8
+    is_pinned: false
+  license: open-weights
+  vendor_updated: 2025-07
+  coding_evidence:
+  - benchmark: "livecodebench"
+    score: 0.741
+    harness: "LLM Stats LiveCodeBench v6 leaderboard (pass@1; row: Qwen3-235B-A22B-Thinking-2507)"
+    as_of: "leaderboard retrieved 2026-07-07"
+    url: "https://llm-stats.com/benchmarks/livecodebench-v6"
+    trust: "third-party"
+    saturated: true
+  lineage:
+    base_family: qwen3
+    teacher: uncertain
+    notes: 'Derived from OpenRouter model card/slug. Hugging Face id: Qwen/Qwen3-235B-A22B-Thinking-2507.'
+  aggregate_mean: null
+  flags:
+  - aging
+- slug: qwen/qwen3-coder
+  display_name: 'Qwen: Qwen3 Coder 480B A35B'
+  retrieved_at: '2026-07-07'
+  source_url: https://openrouter.ai/api/v1/models
+  pricing:
+    input_per_m: 0.22
+    output_per_m: 1.8
+  context_length: 1048576
+  max_completion_tokens: 65536
+  reasoning_controls: none-declared
+  providers:
+  - id: Google
+    quantization: unknown
+    is_pinned: false
+  - id: DeepInfra
+    quantization: fp4
+    is_pinned: false
+  - id: Venice
+    quantization: fp8
+    is_pinned: false
+  license: open-weights
+  vendor_updated: 2025-07
+  coding_evidence:
+  - benchmark: "swe-bench-pro"
+    score: 38.7
+    harness: "evals.report Qwen 3 Coder 480B model page (reported SWE-bench Pro % resolved; status: Official)"
+    as_of: "2025-07-22"
+    url: "https://evals.report/models/alibaba-qwen3-coder-480b"
+    trust: "vendor-claimed"
+    saturated: false
+  - benchmark: "aider-polyglot"
+    score: 61.8
+    harness: "evals.report Qwen 3 Coder 480B model page (reported Aider Polyglot % correct; status: Unverified)"
+    as_of: "2025-07-22"
+    url: "https://evals.report/models/alibaba-qwen3-coder-480b"
+    trust: "vendor-claimed"
+    saturated: false
+  - benchmark: "livecodebench"
+    score: 58.5
+    harness: "evals.report Qwen 3 Coder 480B model page (reported LiveCodeBench pass@1; status: Unverified)"
+    as_of: "2025-07-22"
+    url: "https://evals.report/models/alibaba-qwen3-coder-480b"
+    trust: "vendor-claimed"
+    saturated: false
+  lineage:
+    base_family: qwen3-coder
+    teacher: uncertain
+    notes: 'Derived from OpenRouter model card/slug. Hugging Face id: Qwen/Qwen3-Coder-480B-A35B-Instruct.'
+  aggregate_mean: null
+  flags:
+  - aging
+- slug: qwen/qwen3-max
+  display_name: 'Qwen: Qwen3 Max'
+  retrieved_at: '2026-07-07'
+  source_url: https://openrouter.ai/api/v1/models
+  pricing:
+    input_per_m: 0.78
+    output_per_m: 3.9
+  context_length: 262144
+  max_completion_tokens: 32768
+  reasoning_controls: none-declared
+  providers:
+  - id: Alibaba
+    quantization: unknown
+    is_pinned: false
+  license: open-weights
+  vendor_updated: 2025-09
+  coding_evidence:
+  - benchmark: "livecodebench"
+    score: 0.69
+    harness: "LLM Stats LiveCodeBench v6 leaderboard (pass@1; row: Qwen3 Max)"
+    as_of: "leaderboard retrieved 2026-07-07"
+    url: "https://llm-stats.com/benchmarks/livecodebench-v6"
+    trust: "third-party"
+    saturated: true
+  lineage:
+    base_family: qwen3-max
+    teacher: uncertain
+    notes: Derived from OpenRouter model card/slug.
+  aggregate_mean: null
+  flags:
+  - aging
+- slug: qwen/qwen3-max-thinking
+  display_name: 'Qwen: Qwen3 Max Thinking'
+  retrieved_at: '2026-07-07'
+  source_url: https://openrouter.ai/api/v1/models
+  pricing:
+    input_per_m: 0.78
+    output_per_m: 3.9
+  context_length: 262144
+  max_completion_tokens: 32768
+  reasoning_controls: thinking variant; reasoning, include_reasoning
+  providers:
+  - id: Alibaba
+    quantization: unknown
+    is_pinned: false
+  license: open-weights
+  vendor_updated: 2026-02
+  coding_evidence:
+  - benchmark: "livecodebench"
+    score: 87.7
+    harness: "Vendor-reported Alibaba Cloud Community LiveCodeBench v6 score for Qwen3-Max-Thinking default scaling; article also reports 91.4 with heavy test-time scaling"
+    as_of: "leaderboard retrieved 2026-07-07"
+    url: "https://www.alibabacloud.com/blog/pushing-qwen3-max-thinking-beyond-its-limits_602834"
+    trust: "vendor-claimed"
+    saturated: true
+  lineage:
+    base_family: qwen3-max
+    teacher: uncertain
+    notes: Derived from OpenRouter model card/slug.
+  aggregate_mean: null
+  flags: []
+- slug: qwen/qwen3.7-max
+  display_name: 'Qwen: Qwen3.7 Max'
+  retrieved_at: '2026-07-07'
+  source_url: https://openrouter.ai/api/v1/models
+  pricing:
+    input_per_m: 1.25
+    output_per_m: 3.75
+  context_length: 1000000
+  max_completion_tokens: 65536
+  reasoning_controls: reasoning, include_reasoning
+  providers:
+  - id: Alibaba
+    quantization: unknown
+    is_pinned: true
+  license: open-weights
+  vendor_updated: 2026-05
+  coding_evidence:
+  - benchmark: "livecodebench"
+    score: 0.916
+    harness: "LLM Stats LiveCodeBench v6 leaderboard (pass@1; row: Qwen3.7 Max)"
+    as_of: "leaderboard retrieved 2026-07-07"
+    url: "https://llm-stats.com/benchmarks/livecodebench-v6"
+    trust: "third-party"
+    saturated: true
+  - benchmark: "swe-bench-pro"
+    score: 60.6
+    harness: "BenchLM SWE-bench Pro 2026 leaderboard (repository task completion; row: Qwen3.7 Max)"
+    as_of: "2026-07-06"
+    url: "https://benchlm.ai/benchmarks/swePro"
+    trust: "third-party"
+    saturated: false
+  - benchmark: "artificial_analysis_coding_index"
+    score: 65.9687543348592
+    harness: "Artificial Analysis Coding Index (Terminal-Bench v2.1 + SciCode; row: Qwen3.7 Max)"
+    as_of: "leaderboard retrieved 2026-07-07"
+    url: "https://artificialanalysis.ai/models/capabilities/coding"
+    trust: "third-party"
+    saturated: false
+  lineage:
+    base_family: qwen3.7
+    teacher: uncertain
+    notes: Derived from OpenRouter model card/slug.
+  aggregate_mean: 63.2843771674296
+  flags: []
+- slug: qwen/qwen3.7-plus
+  display_name: 'Qwen: Qwen3.7 Plus'
+  retrieved_at: '2026-07-07'
+  source_url: https://openrouter.ai/api/v1/models
+  pricing:
+    input_per_m: 0.32
+    output_per_m: 1.28
+  context_length: 1000000
+  max_completion_tokens: 65536
+  reasoning_controls: reasoning, include_reasoning
+  providers:
+  - id: Alibaba
+    quantization: unknown
+    is_pinned: false
+  license: open-weights
+  vendor_updated: 2026-06
+  coding_evidence:
+  - benchmark: "livecodebench"
+    score: 0.896
+    harness: "LLM Stats LiveCodeBench v6 leaderboard (pass@1; row: Qwen3.7-Plus)"
+    as_of: "leaderboard retrieved 2026-07-07"
+    url: "https://llm-stats.com/benchmarks/livecodebench-v6"
+    trust: "third-party"
+    saturated: true
+  - benchmark: "swe-bench-pro"
+    score: 57.6
+    harness: "BenchLM SWE-bench Pro 2026 leaderboard (repository task completion; row: Qwen3.7 Plus)"
+    as_of: "2026-07-06"
+    url: "https://benchlm.ai/benchmarks/swePro"
+    trust: "third-party"
+    saturated: false
+  - benchmark: "artificial_analysis_coding_index"
+    score: 46.5
+    harness: "Easy Benchmarks model page citing Artificial Analysis Coding Index (row: Qwen3.7 Plus)"
+    as_of: "leaderboard retrieved 2026-07-07"
+    url: "https://easy-benchmarks.com/models/qwen3-7-plus"
+    trust: "third-party"
+    saturated: false
+  lineage:
+    base_family: qwen3.7
+    teacher: uncertain
+    notes: Derived from OpenRouter model card/slug.
+  aggregate_mean: 52.05
+  flags: []
+- slug: xiaomi/mimo-v2.5-pro
+  display_name: 'Xiaomi: MiMo-V2.5-Pro'
+  retrieved_at: '2026-07-07'
+  source_url: https://openrouter.ai/api/v1/models
+  pricing:
+    input_per_m: 0.435
+    output_per_m: 0.87
+  context_length: 1048576
+  max_completion_tokens: 131072
+  reasoning_controls: reasoning, include_reasoning
+  providers:
+  - id: Xiaomi
+    quantization: fp8
+    is_pinned: false
+  - id: AtlasCloud
+    quantization: fp8
+    is_pinned: false
+  - id: Novita
+    quantization: unknown
+    is_pinned: false
+  license: open-weights
+  vendor_updated: 2026-04
+  coding_evidence:
+  - benchmark: "livecodebench"
+    score: 0.396
+    harness: "LLM Stats LiveCodeBench v6 leaderboard (pass@1; row: MiMo-V2.5-Pro)"
+    as_of: "leaderboard retrieved 2026-07-07"
+    url: "https://llm-stats.com/benchmarks/livecodebench-v6"
+    trust: "third-party"
+    saturated: true
+  - benchmark: "swe-bench-pro"
+    score: 57.2
+    harness: "BenchLM SWE-bench Pro 2026 leaderboard (repository task completion; row: MiMo-V2.5-Pro)"
+    as_of: "2026-07-06"
+    url: "https://benchlm.ai/benchmarks/swePro"
+    trust: "third-party"
+    saturated: false
+  - benchmark: "artificial_analysis_coding_index"
+    score: 60.189520044389
+    harness: "Artificial Analysis Coding Index (Terminal-Bench v2.1 + SciCode; row: MiMo-V2.5-Pro)"
+    as_of: "leaderboard retrieved 2026-07-07"
+    url: "https://artificialanalysis.ai/models/capabilities/coding"
+    trust: "third-party"
+    saturated: false
+  lineage:
+    base_family: mimo-v2.5
+    teacher: uncertain
+    notes: 'Derived from OpenRouter model card/slug. Hugging Face id: XiaomiMiMo/MiMo-V2.5-Pro.'
+  aggregate_mean: 58.6947600221945
+  flags: []
+- slug: z-ai/glm-4.7
+  display_name: 'Z.ai: GLM 4.7'
+  retrieved_at: '2026-07-07'
+  source_url: https://openrouter.ai/api/v1/models
+  pricing:
+    input_per_m: 0.4
+    output_per_m: 1.75
+  context_length: 202752
+  max_completion_tokens: 131072
+  reasoning_controls: reasoning, include_reasoning
+  providers:
+  - id: DeepInfra
+    quantization: fp4
+    is_pinned: false
+  - id: StreamLake
+    quantization: fp8
+    is_pinned: false
+  - id: AtlasCloud
+    quantization: fp8
+    is_pinned: false
+  license: open-weights
+  vendor_updated: 2025-12
+  coding_evidence:
+  - benchmark: "livecodebench"
+    score: 0.849
+    harness: "LLM Stats LiveCodeBench v6 leaderboard (pass@1; row: GLM-4.7)"
+    as_of: "leaderboard retrieved 2026-07-07"
+    url: "https://llm-stats.com/benchmarks/livecodebench-v6"
+    trust: "third-party"
+    saturated: true
+  - benchmark: "swe-bench-pro"
+    score: 40.6
+    harness: "DataLearner coding leaderboard (SWE-Bench Pro - Public row for GLM-4.7)"
+    as_of: "leaderboard retrieved 2026-07-07"
+    url: "https://www.datalearner.com/en/leaderboards/category/code?benchmark=SWE-bench+Multilingual&modelType=chatLLM"
+    trust: "third-party"
+    saturated: false
+  lineage:
+    base_family: glm-4.7
+    teacher: uncertain
+    notes: 'Derived from OpenRouter model card/slug. Hugging Face id: zai-org/GLM-4.7.'
+  aggregate_mean: 40.6
+  flags:
+  - aging
+- slug: z-ai/glm-4.7-flash
+  display_name: 'Z.ai: GLM 4.7 Flash'
+  retrieved_at: '2026-07-07'
+  source_url: https://openrouter.ai/api/v1/models
+  pricing:
+    input_per_m: 0.06
+    output_per_m: 0.4
+  context_length: 202752
+  max_completion_tokens: 16384
+  reasoning_controls: reasoning, include_reasoning
+  providers:
+  - id: DeepInfra
+    quantization: bf16
+    is_pinned: false
+  - id: Cloudflare
+    quantization: unknown
+    is_pinned: false
+  - id: Novita
+    quantization: bf16
+    is_pinned: false
+  license: open-weights
+  vendor_updated: 2026-01
+  coding_evidence:
+  - benchmark: "livecodebench"
+    score: 64.0
+    harness: "Vendor-reported GLM-4.7-Flash LiveCodeBench v6 benchmark table summarized by Awesome Agents"
+    as_of: "leaderboard retrieved 2026-07-07"
+    url: "https://awesomeagents.ai/models/glm-4-7-flash/"
+    trust: "vendor-claimed"
+    saturated: false
+  lineage:
+    base_family: glm-4.7
+    teacher: uncertain
+    notes: 'Derived from OpenRouter model card/slug. Hugging Face id: zai-org/GLM-4.7-Flash.'
+  aggregate_mean: null
+  flags: []
+- slug: z-ai/glm-5
+  display_name: 'Z.ai: GLM 5'
+  retrieved_at: '2026-07-07'
+  source_url: https://openrouter.ai/api/v1/models
+  pricing:
+    input_per_m: 0.6
+    output_per_m: 1.92
+  context_length: 202752
+  max_completion_tokens: null
+  reasoning_controls: reasoning, include_reasoning
+  providers:
+  - id: GMICloud
+    quantization: fp8
+    is_pinned: false
+  - id: DeepInfra
+    quantization: fp4
+    is_pinned: false
+  - id: StreamLake
+    quantization: fp8
+    is_pinned: false
+  license: open-weights
+  vendor_updated: 2026-02
+  coding_evidence:
+  - benchmark: "swe-bench-pro"
+    score: 55.1
+    harness: "BenchLM SWE-bench Pro 2026 leaderboard (repository task completion; row: GLM-5)"
+    as_of: "2026-07-06"
+    url: "https://benchlm.ai/benchmarks/swePro"
+    trust: "third-party"
+    saturated: false
+  lineage:
+    base_family: glm-5
+    teacher: uncertain
+    notes: 'Derived from OpenRouter model card/slug. Hugging Face id: zai-org/GLM-5.'
+  aggregate_mean: 55.1
+  flags: []
+- slug: z-ai/glm-5-turbo
+  display_name: 'Z.ai: GLM 5 Turbo'
+  retrieved_at: '2026-07-07'
+  source_url: https://openrouter.ai/api/v1/models
+  pricing:
+    input_per_m: 1.2
+    output_per_m: 4.0
+  context_length: 262144
+  max_completion_tokens: 131072
+  reasoning_controls: reasoning, include_reasoning
+  providers:
+  - id: AtlasCloud
+    quantization: fp8
+    is_pinned: false
+  - id: Z.AI
+    quantization: unknown
+    is_pinned: false
+  license: open-weights
+  vendor_updated: 2026-03
+  coding_evidence: []
+  lineage:
+    base_family: glm-5
+    teacher: uncertain
+    notes: Derived from OpenRouter model card/slug.
+  aggregate_mean: null
+  flags:
+  - aggregate-none
+- slug: z-ai/glm-5.1
+  display_name: 'Z.ai: GLM 5.1'
+  retrieved_at: '2026-07-07'
+  source_url: https://openrouter.ai/api/v1/models
+  pricing:
+    input_per_m: 0.966
+    output_per_m: 3.036
+  context_length: 202752
+  max_completion_tokens: 128000
+  reasoning_controls: reasoning, include_reasoning
+  providers:
+  - id: StreamLake
+    quantization: fp8
+    is_pinned: false
+  - id: DigitalOcean
+    quantization: unknown
+    is_pinned: false
+  - id: GMICloud
+    quantization: fp8
+    is_pinned: false
+  license: open-weights
+  vendor_updated: 2026-04
+  coding_evidence:
+  - benchmark: "swe-bench-pro"
+    score: 58.4
+    harness: "BenchLM SWE-bench Pro 2026 leaderboard (repository task completion; row: GLM-5.1)"
+    as_of: "2026-07-06"
+    url: "https://benchlm.ai/benchmarks/swePro"
+    trust: "third-party"
+    saturated: false
+  lineage:
+    base_family: glm-5
+    teacher: uncertain
+    notes: 'Derived from OpenRouter model card/slug. Hugging Face id: zai-org/GLM-5.1.'
+  aggregate_mean: 58.4
+  flags: []
+- slug: z-ai/glm-5.2
+  display_name: 'Z.ai: GLM 5.2'
+  retrieved_at: '2026-07-07'
+  source_url: https://openrouter.ai/api/v1/models
+  pricing:
+    input_per_m: 0.9086
+    output_per_m: 2.8556
+  context_length: 1048576
+  max_completion_tokens: 131072
+  reasoning_controls: reasoning, include_reasoning
+  providers:
+  - id: Novita
+    quantization: fp8
+    is_pinned: true
+  - id: StreamLake
+    quantization: fp8
+    is_pinned: false
+  - id: DeepInfra
+    quantization: fp4
+    is_pinned: false
+  license: open-weights
+  vendor_updated: 2026-06
+  coding_evidence:
+  - benchmark: "swe-bench-pro"
+    score: 62.1
+    harness: "BenchLM SWE-bench Pro 2026 leaderboard (repository task completion; row: GLM-5.2)"
+    as_of: "2026-07-06"
+    url: "https://benchlm.ai/benchmarks/swePro"
+    trust: "third-party"
+    saturated: false
+  - benchmark: "artificial_analysis_coding_index"
+    score: 68.7560688028853
+    harness: "Artificial Analysis Coding Index (Terminal-Bench v2.1 + SciCode; row: GLM-5.2 max)"
+    as_of: "leaderboard retrieved 2026-07-07"
+    url: "https://artificialanalysis.ai/models/capabilities/coding"
+    trust: "third-party"
+    saturated: false
+  lineage:
+    base_family: glm-5
+    teacher: uncertain
+    notes: 'Derived from OpenRouter model card/slug. Hugging Face id: zai-org/GLM-5.2.'
+  aggregate_mean: 65.42803440144264
+  flags: []
+- slug: z-ai/glm-5v-turbo
+  display_name: 'Z.ai: GLM 5V Turbo'
+  retrieved_at: '2026-07-07'
+  source_url: https://openrouter.ai/api/v1/models
+  pricing:
+    input_per_m: 1.2
+    output_per_m: 4.0
+  context_length: 202752
+  max_completion_tokens: 131072
+  reasoning_controls: reasoning, include_reasoning
+  providers:
+  - id: Z.AI
+    quantization: fp8
+    is_pinned: false
+  license: open-weights
+  vendor_updated: 2026-04
+  coding_evidence: []
+  lineage:
+    base_family: glm-5
+    teacher: uncertain
+    notes: Derived from OpenRouter model card/slug.
+  aggregate_mean: null
+  flags:
+  - aggregate-none

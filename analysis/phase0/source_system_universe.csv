@@ -1,0 +1,281 @@
+source_id,system_id,display_name,base_engine,family,model_key,pass_rate,n_tasks
+swe_verified,20251127_openhands_claude-opus-4-5,20251127_openhands_claude-opus-4-5 [20251127_openhands_claude-opus-4-5],system/openhands,openhands,,0.776,500
+swe_verified,20250819_ACoder,ACoder [20250819_ACoder],anthropic/claude-opus-4+anthropic/claude-sonnet-4+google/gemini-2.5-pro+openai/gpt-5,acoder,claude-4-sonnet; claude-4.1-opus; gpt-5-0807-global; gemini-2.5-pro-06-17,0.764,500
+swe_verified,20250206_agentscope,AgentScope [20250206_agentscope],anthropic/claude-sonnet-4,agentscope,claude-3-5-sonnet-20241022,0.634,500
+swe_verified,20250214_agentless_lite_o3_mini,Agentless Lite + O3 Mini (20250214) [20250214_agentless_lite_o3_mini],o3-mini,agentless,o3-mini,0.424,500
+swe_verified,20250514_aime_coder,Aime-coder v1 + Anthopic Claude 3.7 Sonnet [20250514_aime_coder],anthropic/claude-3.7-sonnet,aime,claude-3-7-sonnet-20250219,0.664,500
+swe_verified,20250527_amazon.nova-premier-v1.0,Amazon Nova Premier 1.0 (2025-04-30) [20250527_amazon.nova-premier-v1.0],amazon-nova-premier-v1-0,amazon,amazon.nova-premier-v1:0,0.424,500
+swe_verified,20250405_amazon-q-developer-agent-20250405-dev,Amazon Q Developer Agent (v20250405-dev) [20250405_amazon-q-developer-agent-20250405-dev],system/amazon-q,amazon-q,,0.654,500
+swe_verified,20250924_artemis_agent_v2,Artemis Agent v2 (2025-09-24) [20250924_artemis_agent_v2],anthropic/claude-sonnet-4,artemis,claude-sonnet-4-20250514,0.57,500
+swe_verified,20250902_atlassian-rovo-dev,Atlassian Rovo Dev (2025-09-02) [20250902_atlassian-rovo-dev],anthropic/claude-sonnet-4+openai/gpt-5,atlassian,claude-sonnet-4-20250514; gpt-5,0.768,500
+swe_verified,20250316_augment_agent_v0,Augment Agent v0 [20250316_augment_agent_v0],system/augment,augment,,0.654,500
+swe_verified,20250610_augment_agent_v1,Augment Agent v1 [20250610_augment_agent_v1],system/augment,augment,,0.704,500
+swe_verified,20250122_autocoderover-v2.1-claude-3-5-sonnet-20241022,AutoCodeRover-v2.1 (Claude-3.5-Sonnet-20241022) [20250122_autocoderover-v2.1-claude-3-5-sonnet-20241022],anthropic/claude-sonnet-4,autocoderover,claude-3-5-sonnet-20241022,0.516,500
+swe_verified,20250110_blackboxai_agent_v1.1,Blackbox AI Agent [20250110_blackboxai_agent_v1.1],system/blackbox,blackbox,,0.628,500
+swe_verified,20250710_bloop,Bloop [20250710_bloop],anthropic/claude-sonnet-4,bloop,claude-4-sonnet-20250514,0.712,500
+swe_verified,20250120_Bracket,Bracket.sh [20250120_Bracket],system/bracket,bracket,,0.532,500
+swe_verified,20250118_codeshellagent_gemini_2.0_flash_experimental,CodeShellAgent + Gemini 2.0 Flash (Experimental) [20250118_codeshellagent_gemini_2.0_flash_experimental],gemini-2-0-flash-exp,codeshellagent,gemini-2.0-flash-exp,0.442,500
+swe_verified,20250804_codesweep_sweagent_kimi_k2_instruct,CodeSweep - SWE-agent - Kimi K2 Instruct [20250804_codesweep_sweagent_kimi_k2_instruct],moonshot/kimi-k2,swe-agent,kimi-k2-instruct,0.534,500
+swe_verified,20250629_deepswerl_r2eagent_tts,DeepSWE-Preview + TTS(Bo16) [20250629_deepswerl_r2eagent_tts],https-huggingface-co-agentica-org-deepswe-preview,deepswe,https://huggingface.co/agentica-org/DeepSWE-Preview,0.588,500
+swe_verified,20250629_deepswerl_r2eagent,DeepSWE-Preview [20250629_deepswerl_r2eagent],https-huggingface-co-agentica-org-deepswe-preview,deepswe,https://huggingface.co/agentica-org/DeepSWE-Preview,0.422,500
+swe_verified,20250228_epam-ai-run-claude-3-5-sonnet,EPAM AI/Run Developer Agent v20250219 + Anthopic Claude 3.5 Sonnet [20250228_epam-ai-run-claude-3-5-sonnet],anthropic/claude-sonnet-4,epam-ai-run,claude-3-5-sonnet-20241022,0.628,500
+swe_verified,20250804_epam-ai-run-claude-4-sonnet,EPAM AI/Run Developer Agent v20250719 + Claude 4 Sonnet [20250804_epam-ai-run-claude-4-sonnet],anthropic/claude-sonnet-4,epam-ai-run,claude-sonnet-4-20250514,0.768,500
+swe_verified,20250901_entroPO_R2E_QwenCoder30BA3B,EntroPO + R2E + Qwen3-Coder-30B-A3B-Instruct [20250901_entroPO_R2E_QwenCoder30BA3B],qwen/qwen3-coder,entropo,Qwen3-Coder-30B-A3B-Instruct,0.522,500
+swe_verified,20250901_entroPO_R2E_QwenCoder30BA3B_tts,EntroPO + R2E + Qwen3-Coder-30B-A3B-Instruct [20250901_entroPO_R2E_QwenCoder30BA3B_tts],qwen/qwen3-coder,entropo,Qwen3-Coder-30B-A3B-Instruct,0.604,500
+swe_verified,20251110_frogboss-32b,FrogBoss-32B-2510 [20251110_frogboss-32b],frogboss-32b-2510,frogboss,FrogBoss-32B-2510,0.536,500
+swe_verified,20251110_frogmini-14b,FrogMini-14B-2510 [20251110_frogmini-14b],frogmini-14b-2510,frogmini,FrogMini-14B-2510,0.45,500
+swe_verified,20250731_harness_ai,Harness AI [20250731_harness_ai],anthropic/claude-sonnet-4,harness,claude-sonnet-4-20250514,0.748,500
+swe_verified,20250915_JoyCode,JoyCode + Claude 4 Sonnet + GPT-4.1 [20250915_JoyCode],anthropic/claude-sonnet-4+openai/gpt-4.1,joycode,claude-4-sonnet; gpt-4.1,0.746,500
+swe_verified,20250110_learn_by_interact_claude3.5,Learn-by-interact [20250110_learn_by_interact_claude3.5],anthropic/claude-sonnet-4,learn,claude-3-5-sonnet-20241022,0.602,500
+swe_verified,20251014_Lingxi_kimi_k2,Lingxi v1.5 x Kimi K2 [20251014_Lingxi_kimi_k2],moonshot/kimi-k2,lingxi,kimi-k2-0905-preview,0.712,500
+swe_verified,20250720_Lingxi-v1.5_claude-4-sonnet-20250514,Lingxi-v1.5_claude-4-sonnet-20250514 [20250720_Lingxi-v1.5_claude-4-sonnet-20250514],anthropic/claude-sonnet-4,lingxi,claude-4-sonnet-20250514,0.746,500
+swe_verified,20250627_agentless_MCTS-Refine-7B,MCTS-Refine-7B [20250627_agentless_MCTS-Refine-7B],mcts-refine-7b,agentless,MCTS-Refine-7B,0.232,500
+swe_verified,20250611_moatless_claude-4-sonnet-20250514,Moatless Tools + Claude 4 Sonnet [20250611_moatless_claude-4-sonnet-20250514],anthropic/claude-sonnet-4,tools,claude-4-sonnet-20250514,0.708,500
+swe_verified,20250410_cortexa,Nemotron-CORTEXA [20250410_cortexa],anthropic/claude-sonnet-4+deepseek/deepseek-v3+gpt-4-turbo-2024-04-09+gpt-4o-2024-05-13+meta-llama-llama-3-1-405b-instruct+meta-llama-llama-3-3-70b-instruct+nv-embedcode+o3-mini+qwen-qwen2-5-72b-instruct,nemotron,NV-EmbedCode; claude-3-5-sonnet-20241022; deepseek-v3; o3-mini; gpt-4o-2024-05-13; gpt-4-turbo-2024-04-09; Qwen/Qwen2.5-72B-Instruct; meta-llama/Llama-3.1-405B-Instruct; meta-llama/Llama-3.3-70B-Instruct,0.582,500
+swe_verified,20250516_cortexa_o3,Nemotron-CORTEXA [20250516_cortexa_o3],anthropic/claude-3.7-sonnet+deepseek/deepseek-v3+gpt-4-turbo-2024-04-09+gpt-4o-2024-05-13+meta-llama-llama-3-1-405b-instruct+meta-llama-llama-3-3-70b-instruct+nv-embedcode+o1+o3+o3-mini+openai/gpt-4.1+qwen-qwen2-5-72b-instruct,nemotron,NV-EmbedCode; o3; o3-mini; o1; gpt-4.1; gpt-4o-2024-05-13; gpt-4-turbo-2024-04-09; claude-3-7-sonnet-20250219; deepseek-v3; Qwen/Qwen2.5-72B-Instruct; meta-llama/Llama-3.1-405B-Instruct; meta-llama/Llama-3.3-70B-Instruct,0.682,500
+swe_verified,20250203_openhands_4x_scaled,OpenHands + 4x Scaled (2024-02-03) [20250203_openhands_4x_scaled],system/openhands,openhands,,0.608,500
+swe_verified,20250524_openhands_claude_4_sonnet,OpenHands + Claude 4 Sonnet [20250524_openhands_claude_4_sonnet],anthropic/claude-sonnet-4,openhands,claude-4-sonnet-20250514,0.704,500
+swe_verified,20250520_openhands_devstral_small,OpenHands + DevStral Small 2505 [20250520_openhands_devstral_small],mistralai-devstral-small-2505,openhands,mistralai/Devstral-Small-2505,0.468,500
+swe_verified,20250807_openhands_gpt5,OpenHands + GPT-5 [20250807_openhands_gpt5],openai/gpt-5,openhands,openai/gpt-5-2025-08-07,0.718,500
+swe_verified,20250716_openhands_kimi_k2,OpenHands + Kimi K2 [20250716_openhands_kimi_k2],moonshot/kimi-k2,openhands,moonshot/kimi-k2-0711-preview,0.654,500
+swe_verified,20250415_openhands,OpenHands [20250415_openhands],system/openhands,openhands,,0.658,500
+swe_verified,20250528_patchpilot_Co-PatcheR,PatchPilot + Co-PatcheR [20250528_patchpilot_Co-PatcheR],system/patchpilot,patchpilot,,0.46,500
+swe_verified,20250503_patchpilot-v1.1-o4-mini,PatchPilot-v1.1 [20250503_patchpilot-v1.1-o4-mini],openai/o4-mini,patchpilot,o4-mini,0.646,500
+swe_verified,20250715_qodo_command,Qodo Command [20250715_qodo_command],anthropic/claude-sonnet-4+gpt-4o,qodo,claude-sonnet-4-20250514; gpt-4o,0.712,500
+swe_verified,20250603_Refact_Agent_claude-4-sonnet,Refact.ai Agent + Claude 4 Sonnet + o4-mini [20250603_Refact_Agent_claude-4-sonnet],anthropic/claude-sonnet-4+openai/o4-mini,refact,claude-4-sonnet; o4-mini,0.744,500
+swe_verified,20250515_Refact_Agent,Refact.ai Agent [20250515_Refact_Agent],anthropic/claude-3.7-sonnet+o3+openai/o4-mini,refact,claude-3-7-sonnet-20250219; o3; o4-mini,0.704,500
+swe_verified,20250306_SWE-Fixer_Qwen2.5-7b-retriever_Qwen2.5-72b-editor,SWE-Fixer (Qwen2.5-7b retriever + Qwen2.5-72b editor) [20250306_SWE-Fixer_Qwen2.5-7b-retriever_Qwen2.5-72b-editor],qwen-2-5,swe,Qwen 2.5,0.328,500
+swe_verified,20250226_swerl_llama3_70b,SWE-RL (Llama3-SWE-RL-70B + Agentless Mini) (20250226) [20250226_swerl_llama3_70b],llama3-swe-rl-70b,agentless,Llama3-SWE-RL-70B,0.412,500
+swe_verified,20250405_swe-rizzo_claude37,SWE-Rizzo [20250405_swe-rizzo_claude37],system/swe,swe,,0.566,500
+swe_verified,20250225_sweagent_claude-3-7-sonnet,SWE-agent + Claude 3.7 Sonnet w/ Review Heavy [20250225_sweagent_claude-3-7-sonnet],anthropic/claude-3.7-sonnet,swe-agent,claude-3-7-sonnet-20250219,0.624,500
+swe_verified,20250522_sweagent_claude-4-sonnet-20250514,SWE-agent + Claude 4 Sonnet [20250522_sweagent_claude-4-sonnet-20250514],anthropic/claude-sonnet-4,swe-agent,claude-4-sonnet-20250514,0.666,500
+swe_verified,20250725_sweagent_devstral_small_2507,SWE-agent + DevStral Small 2507 [20250725_sweagent_devstral_small_2507],devstral-small-2507,swe-agent,devstral-small-2507,0.38,500
+swe_verified,20250511_sweagent_lm_32b,SWE-agent + SWE-agent-LM-32B [20250511_sweagent_lm_32b],qwen-2-5,swe-agent,Qwen 2.5,0.402,500
+swe_verified,20251103_SalesforceAIResearch_SAGE_OpenHands,Salesforce AI Research SAGE (OpenHands) [20251103_SalesforceAIResearch_SAGE_OpenHands],anthropic/claude-sonnet-4+openai/gpt-5,openhands,claude-sonnet-4.5; gpt-5,0.738,500
+swe_verified,20251021_SalesforceAIResearch_SAGE_bash_only,Salesforce AI Research SAGE (bash-only) [20251021_SalesforceAIResearch_SAGE_bash_only],anthropic/claude-sonnet-4+openai/gpt-5,salesforce-sage,claude-sonnet-4.5; gpt-5,0.73,500
+swe_verified,20250616_Skywork-SWE-32B+TTS_Bo8,Skywork-SWE-32B + TTS(Bo8) [20250616_Skywork-SWE-32B+TTS_Bo8],qwen/qwen2.5-coder,skywork,Qwen2.5-Coder-32B-Instruct,0.47,500
+swe_verified,20250616_Skywork-SWE-32B,Skywork-SWE-32B [20250616_Skywork-SWE-32B],qwen/qwen2.5-coder,skywork,Qwen2.5-Coder-32B-Instruct,0.38,500
+swe_verified,20251205_sonar-foundation-agent_claude-opus-4-5,Sonar Foundation Agent + Claude 4.5 Opus [20251205_sonar-foundation-agent_claude-opus-4-5],anthropic/claude-opus-4,sonar-foundation-agent,claude-opus-4-5,0.792,500
+swe_verified,20251103_sonar-foundation-agent_claude-sonnet-4-5,Sonar Foundation Agent + Claude 4.5 Sonnet [20251103_sonar-foundation-agent_claude-sonnet-4-5],anthropic/claude-sonnet-4,sonar-foundation-agent,claude-sonnet-4-5,0.748,500
+swe_verified,20250612_trae,TRAE + Claude Sonnet 4 + Opus 4 + Sonnet 3.7 + Gemini 2.5 Pro [20250612_trae],anthropic/claude-3.7-sonnet+anthropic/claude-opus-4+anthropic/claude-sonnet-4+google/gemini-2.5-pro,trae,claude-4-sonnet-20250522; claude-4-opus-20250522; claude-3-7-sonnet-20250219; gemini-2.5-pro-preview-06-05,0.752,500
+swe_verified,20250928_trae_doubao_seed_code,TRAE + Doubao-Seed-Code [20250928_trae_doubao_seed_code],doubao-seed-1-6+doubao-seed-code,trae,Doubao-Seed-Code; Doubao-Seed-1.6,0.788,500
+swe_verified,20250519_trae,TRAE [20250519_trae],system/trae,trae,,0.706,500
+swe_verified,20250224_tools_claude-3-7-sonnet,Tools + Claude 3.7 Sonnet (2025-02-24) [20250224_tools_claude-3-7-sonnet],system/tools,tools,,0.632,500
+swe_verified,20250522_tools_claude-4-opus,Tools + Claude 4 Opus (2025-05-22) [20250522_tools_claude-4-opus],anthropic/claude-opus-4,tools,claude-4-opus-20250514,0.732,500
+swe_verified,20250522_tools_claude-4-sonnet,Tools + Claude 4 Sonnet (2025-05-22) [20250522_tools_claude-4-sonnet],anthropic/claude-sonnet-4,tools,claude-4-sonnet-20250514,0.724,500
+swe_verified,20250117_wandb_programmer_o1_crosscheck5,W&B Programmer O1 crosscheck5 [20250117_wandb_programmer_o1_crosscheck5],o1-preview,w,o1-preview,0.646,500
+swe_verified,20250623_warp,Warp [20250623_warp],anthropic/claude-3.7-sonnet+anthropic/claude-sonnet-4+google/gemini-2.5-pro+openai/gpt-4.1,warp,claude-sonnet-4-20250514; claude-3-7-sonnet-20250219; gemini-2.5-pro; gpt-4.1-2025-04-14,0.71,500
+swe_verified,20250901_warp,Warp [20250901_warp],anthropic/claude-sonnet-4+openai/gpt-5,warp,gpt-5; claude-sonnet-4-20250514,0.756,500
+swe_verified,20250430_zencoder_ai,Zencoder (2025-04-30) [20250430_zencoder_ai],anthropic/claude-3.7-sonnet+openai/o4-mini,zencoder,claude-3-7-sonnet-20250219; o4-mini,0.7,500
+swe_verified,20250519_devlo,devlo [20250519_devlo],anthropic/claude-3.7-sonnet+google/gemini-2.5-pro+o3,devlo,claude-3-7-sonnet-20250219; o3; gemini-2.5-pro,0.702,500
+swe_verified,20251215_livesweagent_claude-opus-4-5,live-SWE-agent + Claude 4.5 Opus medium (20251101) [20251215_livesweagent_claude-opus-4-5],anthropic/claude-opus-4,swe-agent,claude-opus-4-5-20251101,0.792,500
+swe_verified,20251120_livesweagent_gemini-3-pro-preview,live-SWE-agent + Gemini 3 Pro Preview (2025-11-18) [20251120_livesweagent_gemini-3-pro-preview],google/gemini-3,swe-agent,gemini-3-pro-preview,0.774,500
+swe_verified,20250112_ugaiforge,ugaiforge [20250112_ugaiforge],system/ugaiforge,ugaiforge,,0.416,500
+swe_test,20250131_amazon-q-developer-agent-20241202-dev,Amazon Q Developer Agent (v20241202-dev) [20250131_amazon-q-developer-agent-20241202-dev],system/amazon-q,amazon-q,,0.299913,2294
+swe_test,20250522_amazon-q-developer-agent-20250405-dev,Amazon Q Developer Agent (v20250405-dev) [20250522_amazon-q-developer-agent-20250405-dev],system/amazon-q,amazon-q,,0.370968,2294
+swe_test,20250605_atlassian-rovo-dev,Atlassian Rovo Dev (2025-06-05) [20250605_atlassian-rovo-dev],system/atlassian,atlassian,,0.419791,2294
+swe_test,20250227_sweagent-claude-3-7-20250219,SWE-agent 1.0 (Claude 3.7 Sonnet) [20250227_sweagent-claude-3-7-20250219],anthropic/claude-3.7-sonnet,swe-agent,claude-3-7-sonnet-20250219,0.338274,2294
+swe_test,20251027_salesforce_SAGE,Salesforce AI Research SAGE (bash-only) [20251027_salesforce_SAGE],anthropic/claude-sonnet-4+openai/gpt-5,salesforce-sage,claude-sonnet-4.5; gpt-5,0.442459,2294
+swe_test,20251219_sonar-foundation-agent_claude-opus-4-5,Sonar Foundation Agent + Claude 4.5 Opus [20251219_sonar-foundation-agent_claude-opus-4-5],anthropic/claude-opus-4,sonar-foundation-agent,claude-opus-4-5,0.526155,2294
+terminalbench,Factory Droid :: claude-opus-4-5-20251101@anthropic,Factory Droid :: claude-opus-4-5-20251101@anthropic,anthropic/claude-opus-4,Factory Droid,claude-opus-4-5-20251101@anthropic,0.631461,89
+terminalbench,Factory Droid :: claude-opus-4-6@anthropic,Factory Droid :: claude-opus-4-6@anthropic,anthropic/claude-opus-4,Factory Droid,claude-opus-4-6@anthropic,0.698876,89
+terminalbench,Factory Droid :: gemini-3-pro-preview@google,Factory Droid :: gemini-3-pro-preview@google,google/gemini-3,Factory Droid,gemini-3-pro-preview@google,0.611236,89
+terminalbench,Factory Droid :: gpt-5.2@openai,Factory Droid :: gpt-5.2@openai,openai/gpt-5,Factory Droid,gpt-5.2@openai,0.649438,89
+terminalbench,Factory Droid :: gpt-5.3-codex@openai,Factory Droid :: gpt-5.3-codex@openai,openai/gpt-5,Factory Droid,gpt-5.3-codex@openai,0.773034,89
+terminalbench,Junie :: gemini-3-flash-preview@gemini,Junie :: gemini-3-flash-preview@gemini,google/gemini-3,Junie,gemini-3-flash-preview@gemini,0.642697,89
+terminalbench,TerminalBenchAgent :: claude-sonnet-4-5@anthropic,TerminalBenchAgent :: claude-sonnet-4-5@anthropic,anthropic/claude-sonnet-4,TerminalBenchAgent,claude-sonnet-4-5@anthropic,0.465169,89
+terminalbench,ante :: gemini-3-pro-preview@Google,ante :: gemini-3-pro-preview@Google,google/gemini-3,ante,gemini-3-pro-preview@Google,0.647191,89
+terminalbench,aone-agent :: Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8@modelscope,aone-agent :: Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8@modelscope,qwen/qwen3-coder,aone-agent,Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8@modelscope,0.27191,89
+terminalbench,claude-code :: GLM-4.7@z-ai,claude-code :: GLM-4.7@z-ai,zai/glm-4.7,claude-code,GLM-4.7@z-ai,0.332584,89
+terminalbench,claude-code :: claude-haiku-4-5-20251001@anthropic,claude-code :: claude-haiku-4-5-20251001@anthropic,anthropic/claude-haiku-4,claude-code,claude-haiku-4-5-20251001@anthropic,0.275281,89
+terminalbench,claude-code :: claude-opus-4-1-20250805@anthropic,claude-code :: claude-opus-4-1-20250805@anthropic,anthropic/claude-opus-4,claude-code,claude-opus-4-1-20250805@anthropic,0.348315,89
+terminalbench,claude-code :: claude-opus-4-5-20251101@anthropic,claude-code :: claude-opus-4-5-20251101@anthropic,anthropic/claude-opus-4,claude-code,claude-opus-4-5-20251101@anthropic,0.521348,89
+terminalbench,claude-code :: claude-opus-4-6@anthropic,claude-code :: claude-opus-4-6@anthropic,anthropic/claude-opus-4,claude-code,claude-opus-4-6@anthropic,0.579775,89
+terminalbench,claude-code :: claude-sonnet-4-5-20250929@anthropic,claude-code :: claude-sonnet-4-5-20250929@anthropic,anthropic/claude-sonnet-4,claude-code,claude-sonnet-4-5-20250929@anthropic,0.400562,89
+terminalbench,claude-code :: minimax-m2.1@minimax,claude-code :: minimax-m2.1@minimax,minimax/minimax-m2,claude-code,minimax-m2.1@minimax,0.366292,89
+terminalbench,claude-code-enhanced :: claude-opus-4-6@anthropic,claude-code-enhanced :: claude-opus-4-6@anthropic,anthropic/claude-opus-4,claude-code-enhanced,claude-opus-4-6@anthropic,0.668727,89
+terminalbench,codex :: gpt-5-codex@openai,codex :: gpt-5-codex@openai,openai/gpt-5,codex,gpt-5-codex@openai,0.443258,89
+terminalbench,codex :: gpt-5-mini@openai,codex :: gpt-5-mini@openai,openai/gpt-5,codex,gpt-5-mini@openai,0.318539,89
+terminalbench,codex :: gpt-5-nano@openai,codex :: gpt-5-nano@openai,openai/gpt-5,codex,gpt-5-nano@openai,0.114607,89
+terminalbench,codex :: gpt-5.1-codex-max@openai,codex :: gpt-5.1-codex-max@openai,openai/gpt-5,codex,gpt-5.1-codex-max@openai,0.604494,89
+terminalbench,codex :: gpt-5.1-codex-mini@openai,codex :: gpt-5.1-codex-mini@openai,openai/gpt-5,codex,gpt-5.1-codex-mini@openai,0.431461,89
+terminalbench,codex :: gpt-5.1-codex@openai,codex :: gpt-5.1-codex@openai,openai/gpt-5,codex,gpt-5.1-codex@openai,0.577528,89
+terminalbench,codex :: gpt-5.2@openai,codex :: gpt-5.2@openai,openai/gpt-5,codex,gpt-5.2@openai,0.629213,89
+terminalbench,codex :: gpt-5@openai,codex :: gpt-5@openai,openai/gpt-5,codex,gpt-5@openai,0.496067,89
+terminalbench,deepagent-harbor :: gpt-5.2-codex@openai,deepagent-harbor :: gpt-5.2-codex@openai,openai/gpt-5,deepagent-harbor,gpt-5.2-codex@openai,0.665169,89
+terminalbench,final :: claude-4.5-sonnet@anthropic,final :: claude-4.5-sonnet@anthropic,anthropic/claude-sonnet-4,final,claude-4.5-sonnet@anthropic,0.426966,89
+terminalbench,forge :: gemini-3.1-pro-preview@Google,forge :: gemini-3.1-pro-preview@Google,google/gemini-3,forge,gemini-3.1-pro-preview@Google,0.78427,89
+terminalbench,gemini-cli :: gemini-2.5-flash@gemini,gemini-cli :: gemini-2.5-flash@gemini,google/gemini-2.5-flash,gemini-cli,gemini-2.5-flash@gemini,0.154494,89
+terminalbench,gemini-cli :: gemini-2.5-pro@gemini,gemini-cli :: gemini-2.5-pro@gemini,google/gemini-2.5-pro,gemini-cli,gemini-2.5-pro@gemini,0.195506,89
+terminalbench,gemini-cli :: gemini-3-flash-preview@Google,gemini-cli :: gemini-3-flash-preview@Google,google/gemini-3,gemini-cli,gemini-3-flash-preview@Google,0.474157,89
+terminalbench,gemini-cli :: gemini-3-flash-preview@google,gemini-cli :: gemini-3-flash-preview@google,google/gemini-3,gemini-cli,gemini-3-flash-preview@google,0.510112,89
+terminalbench,goose :: claude-haiku-4-5@anthropic,goose :: claude-haiku-4-5@anthropic,anthropic/claude-haiku-4,goose,claude-haiku-4-5@anthropic,0.355056,89
+terminalbench,goose :: claude-opus-4-5@anthropic,goose :: claude-opus-4-5@anthropic,anthropic/claude-opus-4,goose,claude-opus-4-5@anthropic,0.543258,89
+terminalbench,goose :: claude-sonnet-4-5@anthropic,goose :: claude-sonnet-4-5@anthropic,anthropic/claude-sonnet-4,goose,claude-sonnet-4-5@anthropic,0.431461,89
+terminalbench,ii-agent-simple :: gemini-3-pro-preview@gemini,ii-agent-simple :: gemini-3-pro-preview@gemini,google/gemini-3,ii-agent-simple,gemini-3-pro-preview@gemini,0.617978,89
+terminalbench,judy :: claude-opus-4.6@anthropic,judy :: claude-opus-4.6@anthropic,anthropic/claude-opus-4,judy,claude-opus-4.6@anthropic,0.719101,89
+terminalbench,letta-code :: claude-opus-4-5@anthropic,letta-code :: claude-opus-4-5@anthropic,anthropic/claude-opus-4,letta-code,claude-opus-4-5@anthropic,0.591011,89
+terminalbench,letta-code :: gemini-3-pro-preview@google,letta-code :: gemini-3-pro-preview@google,google/gemini-3,letta-code,gemini-3-pro-preview@google,0.559551,89
+terminalbench,letta-code :: gpt-5.1-codex@openai,letta-code :: gpt-5.1-codex@openai,openai/gpt-5,letta-code,gpt-5.1-codex@openai,0.534831,89
+terminalbench,mini-swe-agent :: claude-haiku-4-5-20251001@anthropic,mini-swe-agent :: claude-haiku-4-5-20251001@anthropic,anthropic/claude-haiku-4,mini-swe-agent,claude-haiku-4-5-20251001@anthropic,0.298315,89
+terminalbench,mini-swe-agent :: claude-opus-4-1-20250805@anthropic,mini-swe-agent :: claude-opus-4-1-20250805@anthropic,anthropic/claude-opus-4,mini-swe-agent,claude-opus-4-1-20250805@anthropic,0.350562,89
+terminalbench,mini-swe-agent :: claude-sonnet-4-5-20250929@anthropic,mini-swe-agent :: claude-sonnet-4-5-20250929@anthropic,anthropic/claude-sonnet-4,mini-swe-agent,claude-sonnet-4-5-20250929@anthropic,0.425281,89
+terminalbench,mini-swe-agent :: gemini-2.5-flash@gemini,mini-swe-agent :: gemini-2.5-flash@gemini,google/gemini-2.5-flash,mini-swe-agent,gemini-2.5-flash@gemini,0.170787,89
+terminalbench,mini-swe-agent :: gemini-2.5-pro@gemini,mini-swe-agent :: gemini-2.5-pro@gemini,google/gemini-2.5-pro,mini-swe-agent,gemini-2.5-pro@gemini,0.260674,89
+terminalbench,mini-swe-agent :: gpt-5-codex@openai,mini-swe-agent :: gpt-5-codex@openai,openai/gpt-5,mini-swe-agent,gpt-5-codex@openai,0.413483,89
+terminalbench,mini-swe-agent :: gpt-5-mini@openai,mini-swe-agent :: gpt-5-mini@openai,openai/gpt-5,mini-swe-agent,gpt-5-mini@openai,0.222472,89
+terminalbench,mini-swe-agent :: gpt-5-nano@openai,mini-swe-agent :: gpt-5-nano@openai,openai/gpt-5,mini-swe-agent,gpt-5-nano@openai,0.069663,89
+terminalbench,mini-swe-agent :: gpt-5@openai,mini-swe-agent :: gpt-5@openai,openai/gpt-5,mini-swe-agent,gpt-5@openai,0.339326,89
+terminalbench,mini-swe-agent :: grok-4-0709@xai,mini-swe-agent :: grok-4-0709@xai,xai/grok-4,mini-swe-agent,grok-4-0709@xai,0.253933,89
+terminalbench,mini-swe-agent :: grok-code-fast-1@xai,mini-swe-agent :: grok-code-fast-1@xai,xai/grok-code-fast,mini-swe-agent,grok-code-fast-1@xai,0.258427,89
+terminalbench,mini-swe-agent :: openai/gpt-oss-120b@together_ai,mini-swe-agent :: openai/gpt-oss-120b@together_ai,openai/gpt-oss-120b,mini-swe-agent,openai/gpt-oss-120b@together_ai,0.142072,89
+terminalbench,mini-swe-agent :: openai/gpt-oss-20b@together_ai,mini-swe-agent :: openai/gpt-oss-20b@together_ai,openai/gpt-oss-20b,mini-swe-agent,openai/gpt-oss-20b@together_ai,0.033708,89
+terminalbench,mux :: claude-opus-4-5@anthropic,mux :: claude-opus-4-5@anthropic,anthropic/claude-opus-4,mux,claude-opus-4-5@anthropic,0.58427,89
+terminalbench,mux :: claude-opus-4-6@anthropic,mux :: claude-opus-4-6@anthropic,anthropic/claude-opus-4,mux,claude-opus-4-6@anthropic,0.665169,89
+terminalbench,mux :: gpt-5.2@openai,mux :: gpt-5.2@openai,openai/gpt-5,mux,gpt-5.2@openai,0.606742,89
+terminalbench,mux :: gpt-5.3-codex@openai,mux :: gpt-5.3-codex@openai,openai/gpt-5,mux,gpt-5.3-codex@openai,0.685393,89
+terminalbench,opencode :: claude-opus-4-5@anthropic,opencode :: claude-opus-4-5@anthropic,anthropic/claude-opus-4,opencode,claude-opus-4-5@anthropic,0.516854,89
+terminalbench,openhands :: Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8@together_ai,openhands :: Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8@together_ai,qwen/qwen3-coder,openhands,Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8@together_ai,0.255431,89
+terminalbench,openhands :: claude-haiku-4-5-20251001@anthropic,openhands :: claude-haiku-4-5-20251001@anthropic,anthropic/claude-haiku-4,openhands,claude-haiku-4-5-20251001@anthropic,0.139326,89
+terminalbench,openhands :: claude-opus-4-1-20250805@anthropic,openhands :: claude-opus-4-1-20250805@anthropic,anthropic/claude-opus-4,openhands,claude-opus-4-1-20250805@anthropic,0.368539,89
+terminalbench,openhands :: claude-opus-4-5-20251101@anthropic,openhands :: claude-opus-4-5-20251101@anthropic,anthropic/claude-opus-4,openhands,claude-opus-4-5-20251101@anthropic,0.519101,89
+terminalbench,openhands :: claude-sonnet-4-5-20250929@anthropic,openhands :: claude-sonnet-4-5-20250929@anthropic,anthropic/claude-sonnet-4,openhands,claude-sonnet-4-5-20250929@anthropic,0.425843,89
+terminalbench,openhands :: gemini-2.5-flash@gemini,openhands :: gemini-2.5-flash@gemini,google/gemini-2.5-flash,openhands,gemini-2.5-flash@gemini,0.164045,89
+terminalbench,openhands :: gemini-2.5-pro@gemini,openhands :: gemini-2.5-pro@gemini,google/gemini-2.5-pro,openhands,gemini-2.5-pro@gemini,0.164045,89
+terminalbench,openhands :: gpt-5-mini@openai,openhands :: gpt-5-mini@openai,openai/gpt-5,openhands,gpt-5-mini@openai,0.292135,89
+terminalbench,openhands :: gpt-5-nano@openai,openhands :: gpt-5-nano@openai,openai/gpt-5,openhands,gpt-5-nano@openai,0.098876,89
+terminalbench,openhands :: gpt-5@openai,openhands :: gpt-5@openai,openai/gpt-5,openhands,gpt-5@openai,0.438202,89
+terminalbench,openhands :: grok-4-0709@xai,openhands :: grok-4-0709@xai,xai/grok-4,openhands,grok-4-0709@xai,0.27191,89
+terminalbench,openhands :: moonshotai/Kimi-K2-Instruct-0905@together_ai,openhands :: moonshotai/Kimi-K2-Instruct-0905@together_ai,moonshot/kimi-k2,openhands,moonshotai/Kimi-K2-Instruct-0905@together_ai,0.270911,89
+terminalbench,ruley :: gemini-3-pro-preview@Google,ruley :: gemini-3-pro-preview@Google,google/gemini-3,ruley,gemini-3-pro-preview@Google,0.622472,89
+terminalbench,ruley :: gpt-5.3-codex@OpenAI,ruley :: gpt-5.3-codex@OpenAI,openai/gpt-5,ruley,gpt-5.3-codex@OpenAI,0.703371,89
+terminalbench,sage :: gemini-3-pro-preview@Google,sage :: gemini-3-pro-preview@Google,google/gemini-3,sage,gemini-3-pro-preview@Google,0.651685,89
+terminalbench,simple_codex :: gpt-5.3-codex@openai,simple_codex :: gpt-5.3-codex@openai,openai/gpt-5,simple_codex,gpt-5.3-codex@openai,0.750562,89
+terminalbench,spoox-m :: gpt-5-mini@openai,spoox-m :: gpt-5-mini@openai,openai/gpt-5,spoox-m,gpt-5-mini@openai,0.348315,89
+terminalbench,terminus-2 :: Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8@together_ai,terminus-2 :: Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8@together_ai,qwen/qwen3-coder,terminus-2,Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8@together_ai,0.238951,89
+terminalbench,terminus-2 :: accounts/fireworks/models/glm-4p6@fireworks_ai,terminus-2 :: accounts/fireworks/models/glm-4p6@fireworks_ai,accounts-fireworks-models-glm-4p6-fireworks-ai,terminus-2,accounts/fireworks/models/glm-4p6@fireworks_ai,0.245318,89
+terminalbench,terminus-2 :: accounts/fireworks/models/minimax-m2@fireworks_ai,terminus-2 :: accounts/fireworks/models/minimax-m2@fireworks_ai,minimax/minimax-m2,terminus-2,accounts/fireworks/models/minimax-m2@fireworks_ai,0.300375,89
+terminalbench,terminus-2 :: claude-haiku-4-5-20251001@anthropic,terminus-2 :: claude-haiku-4-5-20251001@anthropic,anthropic/claude-haiku-4,terminus-2,claude-haiku-4-5-20251001@anthropic,0.283146,89
+terminalbench,terminus-2 :: claude-opus-4-1-20250805@anthropic,terminus-2 :: claude-opus-4-1-20250805@anthropic,anthropic/claude-opus-4,terminus-2,claude-opus-4-1-20250805@anthropic,0.379775,89
+terminalbench,terminus-2 :: claude-opus-4-5-20251101@anthropic,terminus-2 :: claude-opus-4-5-20251101@anthropic,anthropic/claude-opus-4,terminus-2,claude-opus-4-5-20251101@anthropic,0.577528,89
+terminalbench,terminus-2 :: claude-opus-4-6@anthropic,terminus-2 :: claude-opus-4-6@anthropic,anthropic/claude-opus-4,terminus-2,claude-opus-4-6@anthropic,0.629213,89
+terminalbench,terminus-2 :: claude-sonnet-4-5-20250929@anthropic,terminus-2 :: claude-sonnet-4-5-20250929@anthropic,anthropic/claude-sonnet-4,terminus-2,claude-sonnet-4-5-20250929@anthropic,0.42809,89
+terminalbench,terminus-2 :: deepseek-v3.2@deepseek,terminus-2 :: deepseek-v3.2@deepseek,deepseek/deepseek-v3,terminus-2,deepseek-v3.2@deepseek,0.395506,89
+terminalbench,terminus-2 :: gemini-2.5-flash@gemini,terminus-2 :: gemini-2.5-flash@gemini,google/gemini-2.5-flash,terminus-2,gemini-2.5-flash@gemini,0.168539,89
+terminalbench,terminus-2 :: gemini-2.5-pro@gemini,terminus-2 :: gemini-2.5-pro@gemini,google/gemini-2.5-pro,terminus-2,gemini-2.5-pro@gemini,0.326404,89
+terminalbench,terminus-2 :: gemini-3-flash-preview@gemini,terminus-2 :: gemini-3-flash-preview@gemini,google/gemini-3,terminus-2,gemini-3-flash-preview@gemini,0.516854,89
+terminalbench,terminus-2 :: gemini-3-pro-preview@gemini,terminus-2 :: gemini-3-pro-preview@gemini,google/gemini-3,terminus-2,gemini-3-pro-preview@gemini,0.568539,89
+terminalbench,terminus-2 :: glm-4.7@z-ai,terminus-2 :: glm-4.7@z-ai,zai/glm-4.7,terminus-2,glm-4.7@z-ai,0.333895,89
+terminalbench,terminus-2 :: glm-5@z-ai,terminus-2 :: glm-5@z-ai,glm-5-z-ai,terminus-2,glm-5@z-ai,0.524157,89
+terminalbench,terminus-2 :: gpt-5-codex@openai,terminus-2 :: gpt-5-codex@openai,openai/gpt-5,terminus-2,gpt-5-codex@openai,0.43427,89
+terminalbench,terminus-2 :: gpt-5-mini@openai,terminus-2 :: gpt-5-mini@openai,openai/gpt-5,terminus-2,gpt-5-mini@openai,0.240449,89
+terminalbench,terminus-2 :: gpt-5-nano@openai,terminus-2 :: gpt-5-nano@openai,openai/gpt-5,terminus-2,gpt-5-nano@openai,0.078652,89
+terminalbench,terminus-2 :: gpt-5.1-codex@openai,terminus-2 :: gpt-5.1-codex@openai,openai/gpt-5,terminus-2,gpt-5.1-codex@openai,0.368539,89
+terminalbench,terminus-2 :: gpt-5.1@openai,terminus-2 :: gpt-5.1@openai,openai/gpt-5,terminus-2,gpt-5.1@openai,0.475843,89
+terminalbench,terminus-2 :: gpt-5.2@openai,terminus-2 :: gpt-5.2@openai,openai/gpt-5,terminus-2,gpt-5.2@openai,0.540449,89
+terminalbench,terminus-2 :: gpt-5.3-codex@openai,terminus-2 :: gpt-5.3-codex@openai,openai/gpt-5,terminus-2,gpt-5.3-codex@openai,0.647191,89
+terminalbench,terminus-2 :: gpt-5@openai,terminus-2 :: gpt-5@openai,openai/gpt-5,terminus-2,gpt-5@openai,0.351685,89
+terminalbench,terminus-2 :: grok-4-0709@xai,terminus-2 :: grok-4-0709@xai,xai/grok-4,terminus-2,grok-4-0709@xai,0.231461,89
+terminalbench,terminus-2 :: grok-code-fast-1@xai,terminus-2 :: grok-code-fast-1@xai,xai/grok-code-fast,terminus-2,grok-code-fast-1@xai,0.141573,89
+terminalbench,terminus-2 :: kimi-k2.5@kimi,terminus-2 :: kimi-k2.5@kimi,moonshot/kimi-k2,terminus-2,kimi-k2.5@kimi,0.432022,89
+terminalbench,terminus-2 :: minimax-m2.1@openai,terminus-2 :: minimax-m2.1@openai,minimax/minimax-m2,terminus-2,minimax-m2.1@openai,0.292135,89
+terminalbench,terminus-2 :: minimax-m2.5@Minimax,terminus-2 :: minimax-m2.5@Minimax,minimax/minimax-m2,terminus-2,minimax-m2.5@Minimax,0.422472,89
+terminalbench,terminus-2 :: moonshotai/Kimi-K2-Instruct-0905@together_ai,terminus-2 :: moonshotai/Kimi-K2-Instruct-0905@together_ai,moonshot/kimi-k2,terminus-2,moonshotai/Kimi-K2-Instruct-0905@together_ai,0.277903,89
+terminalbench,terminus-2 :: moonshotai/Kimi-K2-Thinking@together_ai,terminus-2 :: moonshotai/Kimi-K2-Thinking@together_ai,moonshot/kimi-k2,terminus-2,moonshotai/Kimi-K2-Thinking@together_ai,0.357303,89
+terminalbench,terminus-2 :: openai/gpt-oss-120b@together_ai,terminus-2 :: openai/gpt-oss-120b@together_ai,openai/gpt-oss-120b,terminus-2,openai/gpt-oss-120b@together_ai,0.186891,89
+terminalbench,terminus-2 :: openai/gpt-oss-20b@together_ai,terminus-2 :: openai/gpt-oss-20b@together_ai,openai/gpt-oss-20b,terminus-2,openai/gpt-oss-20b@together_ai,0.030712,89
+terminalbench,terminus-3-3 :: claude-opus-4-6@anthropic,terminus-3-3 :: claude-opus-4-6@anthropic,anthropic/claude-opus-4,terminus-3-3,claude-opus-4-6@anthropic,0.747191,89
+terminalbench,terminus-3-3 :: gemini-3.1-pro-preview@Google,terminus-3-3 :: gemini-3.1-pro-preview@Google,google/gemini-3,terminus-3-3,gemini-3.1-pro-preview@Google,0.748315,89
+llmrouterbench_livecodebench,DeepHermes-3-Llama-3-8B-Preview,DeepHermes-3-Llama-3-8B-Preview,deephermes-3-llama-3-8b,llmrouterbench,DeepHermes-3-Llama-3-8B-Preview,0.130806,1055
+llmrouterbench_livecodebench,DeepSeek-R1-0528-Qwen3-8B,DeepSeek-R1-0528-Qwen3-8B,deepseek/deepseek-r1-qwen3-8b,llmrouterbench,DeepSeek-R1-0528-Qwen3-8B,0.647393,1055
+llmrouterbench_livecodebench,DeepSeek-R1-Distill-Qwen-7B,DeepSeek-R1-Distill-Qwen-7B,deepseek/deepseek-r1-distill-qwen-7b,llmrouterbench,DeepSeek-R1-Distill-Qwen-7B,0.411374,1055
+llmrouterbench_livecodebench,Fin-R1,Fin-R1,fin-r1,llmrouterbench,Fin-R1,0.068246,1055
+llmrouterbench_livecodebench,GLM-Z1-9B-0414,GLM-Z1-9B-0414,zai/glm-z1-9b,llmrouterbench,GLM-Z1-9B-0414,0.615166,1055
+llmrouterbench_livecodebench,Intern-S1-mini,Intern-S1-mini,internlm/intern-s1-mini,llmrouterbench,Intern-S1-mini,0.262559,1055
+llmrouterbench_livecodebench,Llama-3.1-8B-Instruct,Llama-3.1-8B-Instruct,meta/llama-3.1-8b,llmrouterbench,Llama-3.1-8B-Instruct,0.167773,1055
+llmrouterbench_livecodebench,Llama-3.1-8B-UltraMedical,Llama-3.1-8B-UltraMedical,meta/llama-3.1-8b-ultramedical,llmrouterbench,Llama-3.1-8B-UltraMedical,0.133649,1055
+llmrouterbench_livecodebench,Llama-3.1-Nemotron-Nano-8B-v1,Llama-3.1-Nemotron-Nano-8B-v1,nvidia/llama-3.1-nemotron-nano,llmrouterbench,Llama-3.1-Nemotron-Nano-8B-v1,0.460664,1055
+llmrouterbench_livecodebench,MiMo-7B-RL-0530,MiMo-7B-RL-0530,mimo-7b,llmrouterbench,MiMo-7B-RL-0530,0.064455,1055
+llmrouterbench_livecodebench,MiniCPM4.1-8B,MiniCPM4.1-8B,minicpm4.1-8b,llmrouterbench,MiniCPM4.1-8B,0.636967,1055
+llmrouterbench_livecodebench,NVIDIA-Nemotron-Nano-9B-v2,NVIDIA-Nemotron-Nano-9B-v2,nvidia-nemotron-nano-9b-v2,llmrouterbench,NVIDIA-Nemotron-Nano-9B-v2,0.654976,1055
+llmrouterbench_livecodebench,OpenThinker3-7B,OpenThinker3-7B,openthinker3-7b,llmrouterbench,OpenThinker3-7B,0.441706,1055
+llmrouterbench_livecodebench,Qwen2.5-Coder-7B-Instruct,Qwen2.5-Coder-7B-Instruct,qwen/qwen2.5-coder,llmrouterbench,Qwen2.5-Coder-7B-Instruct,0.278673,1055
+llmrouterbench_livecodebench,Qwen3-8B,Qwen3-8B,qwen/qwen3-8b,llmrouterbench,Qwen3-8B,0.676777,1055
+llmrouterbench_livecodebench,claude-sonnet-4,claude-sonnet-4,anthropic/claude-sonnet-4,llmrouterbench,claude-sonnet-4,0.581043,1055
+llmrouterbench_livecodebench,cogito-v1-preview-llama-8B,cogito-v1-preview-llama-8B,cogito-v1-llama-8b,llmrouterbench,cogito-v1-preview-llama-8B,0.172512,1055
+llmrouterbench_livecodebench,deepseek-r1-0528,deepseek-r1-0528,deepseek/deepseek-r1,llmrouterbench,deepseek-r1-0528,0.800948,1055
+llmrouterbench_livecodebench,deepseek-v3-0324,deepseek-v3-0324,deepseek/deepseek-v3,llmrouterbench,deepseek-v3-0324,0.666351,1055
+llmrouterbench_livecodebench,deepseek-v3.1-terminus,deepseek-v3.1-terminus,deepseek/deepseek-v3,llmrouterbench,deepseek-v3.1-terminus,0.672986,1055
+llmrouterbench_livecodebench,gemini-2.5-flash,gemini-2.5-flash,google/gemini-2.5-flash,llmrouterbench,gemini-2.5-flash,0.6,1055
+llmrouterbench_livecodebench,gemini-2.5-pro,gemini-2.5-pro,google/gemini-2.5-pro,llmrouterbench,gemini-2.5-pro,0.791469,1055
+llmrouterbench_livecodebench,gemma-2-9b-it,gemma-2-9b-it,google/gemma-2-9b,llmrouterbench,gemma-2-9b-it,0.172512,1055
+llmrouterbench_livecodebench,glm-4-9b-chat,glm-4-9b-chat,zai/glm-4-9b,llmrouterbench,glm-4-9b-chat,0.16872,1055
+llmrouterbench_livecodebench,glm-4.6,glm-4.6,zai/glm-4.6,llmrouterbench,glm-4.6,0.63128,1055
+llmrouterbench_livecodebench,gpt-4.1,gpt-4.1,openai/gpt-4.1,llmrouterbench,gpt-4.1,0.545972,1055
+llmrouterbench_livecodebench,gpt-5,gpt-5,openai/gpt-5,llmrouterbench,gpt-5,0.864455,1055
+llmrouterbench_livecodebench,gpt-5-chat,gpt-5-chat,openai/gpt-5,llmrouterbench,gpt-5-chat,0.621801,1055
+llmrouterbench_livecodebench,granite-3.3-8b-instruct,granite-3.3-8b-instruct,ibm/granite-3.3-8b,llmrouterbench,granite-3.3-8b-instruct,0.14218,1055
+llmrouterbench_livecodebench,intern-s1,intern-s1,internlm/intern-s1,llmrouterbench,intern-s1,0.491943,1055
+llmrouterbench_livecodebench,intern-s1-new,intern-s1-new,internlm/intern-s1,llmrouterbench,intern-s1-new,0.756398,1055
+llmrouterbench_livecodebench,internlm3-8b-instruct,internlm3-8b-instruct,internlm/internlm3-8b,llmrouterbench,internlm3-8b-instruct,0.212322,1055
+llmrouterbench_livecodebench,kimi-k2-0905,kimi-k2-0905,moonshot/kimi-k2,llmrouterbench,kimi-k2-0905,0.672986,1055
+llmrouterbench_livecodebench,qwen3-235b-a22b-2507,qwen3-235b-a22b-2507,qwen/qwen3-235b-a22b,llmrouterbench,qwen3-235b-a22b-2507,0.641706,1055
+llmrouterbench_livecodebench,qwen3-235b-a22b-no-thinking,qwen3-235b-a22b-no-thinking,qwen/qwen3-235b-a22b,llmrouterbench,qwen3-235b-a22b-no-thinking,0.50237,1055
+llmrouterbench_livecodebench,qwen3-235b-a22b-thinking,qwen3-235b-a22b-thinking,qwen/qwen3-235b-a22b,llmrouterbench,qwen3-235b-a22b-thinking,0.781043,1055
+llmrouterbench_livecodebench,qwen3-235b-a22b-thinking-2507,qwen3-235b-a22b-thinking-2507,qwen/qwen3-235b-a22b,llmrouterbench,qwen3-235b-a22b-thinking-2507,0.783886,1055
+llmrouterbench_swebench,claude-opus-4.1,claude-opus-4.1,anthropic/claude-opus-4,llmrouterbench,claude-opus-4.1,0.416,500
+llmrouterbench_swebench,claude-sonnet-4,claude-sonnet-4,anthropic/claude-sonnet-4,llmrouterbench,claude-sonnet-4,0.346,500
+llmrouterbench_swebench,deepseek-r1-0528,deepseek-r1-0528,deepseek/deepseek-r1,llmrouterbench,deepseek-r1-0528,0.286,500
+llmrouterbench_swebench,deepseek-v3-0324,deepseek-v3-0324,deepseek/deepseek-v3,llmrouterbench,deepseek-v3-0324,0.25,500
+llmrouterbench_swebench,deepseek-v3.1-terminus,deepseek-v3.1-terminus,deepseek/deepseek-v3,llmrouterbench,deepseek-v3.1-terminus,0.254,500
+llmrouterbench_swebench,gemini-2.5-flash,gemini-2.5-flash,google/gemini-2.5-flash,llmrouterbench,gemini-2.5-flash,0.182,500
+llmrouterbench_swebench,gemini-2.5-pro,gemini-2.5-pro,google/gemini-2.5-pro,llmrouterbench,gemini-2.5-pro,0.346,500
+llmrouterbench_swebench,glm-4.6,glm-4.6,zai/glm-4.6,llmrouterbench,glm-4.6,0.218,500
+llmrouterbench_swebench,gpt-5,gpt-5,openai/gpt-5,llmrouterbench,gpt-5,0.158,500
+llmrouterbench_swebench,gpt-5-chat,gpt-5-chat,openai/gpt-5,llmrouterbench,gpt-5-chat,0.088,500
+llmrouterbench_swebench,intern-s1,intern-s1,internlm/intern-s1,llmrouterbench,intern-s1,0.078,500
+llmrouterbench_swebench,kimi-k2-0905,kimi-k2-0905,moonshot/kimi-k2,llmrouterbench,kimi-k2-0905,0.234,500
+llmrouterbench_swebench,qwen3-235b-a22b-2507,qwen3-235b-a22b-2507,qwen/qwen3-235b-a22b,llmrouterbench,qwen3-235b-a22b-2507,0.162,500
+llmrouterbench_swebench,qwen3-235b-a22b-thinking-2507,qwen3-235b-a22b-thinking-2507,qwen/qwen3-235b-a22b,llmrouterbench,qwen3-235b-a22b-thinking-2507,0.214,500
+llmrouterbench_mbpp,DeepHermes-3-Llama-3-8B-Preview,DeepHermes-3-Llama-3-8B-Preview,deephermes-3-llama-3-8b,llmrouterbench,DeepHermes-3-Llama-3-8B-Preview,0.540041,974
+llmrouterbench_mbpp,DeepSeek-R1-0528-Qwen3-8B,DeepSeek-R1-0528-Qwen3-8B,deepseek/deepseek-r1-qwen3-8b,llmrouterbench,DeepSeek-R1-0528-Qwen3-8B,0.350103,974
+llmrouterbench_mbpp,DeepSeek-R1-Distill-Qwen-7B,DeepSeek-R1-Distill-Qwen-7B,deepseek/deepseek-r1-distill-qwen-7b,llmrouterbench,DeepSeek-R1-Distill-Qwen-7B,0.535934,974
+llmrouterbench_mbpp,Fin-R1,Fin-R1,fin-r1,llmrouterbench,Fin-R1,0.689938,974
+llmrouterbench_mbpp,GLM-Z1-9B-0414,GLM-Z1-9B-0414,zai/glm-z1-9b,llmrouterbench,GLM-Z1-9B-0414,0.629363,974
+llmrouterbench_mbpp,Intern-S1-mini,Intern-S1-mini,internlm/intern-s1-mini,llmrouterbench,Intern-S1-mini,0.440452,974
+llmrouterbench_mbpp,Llama-3.1-8B-Instruct,Llama-3.1-8B-Instruct,meta/llama-3.1-8b,llmrouterbench,Llama-3.1-8B-Instruct,0.606776,974
+llmrouterbench_mbpp,Llama-3.1-8B-UltraMedical,Llama-3.1-8B-UltraMedical,meta/llama-3.1-8b-ultramedical,llmrouterbench,Llama-3.1-8B-UltraMedical,0.539014,974
+llmrouterbench_mbpp,Llama-3.1-Nemotron-Nano-8B-v1,Llama-3.1-Nemotron-Nano-8B-v1,nvidia/llama-3.1-nemotron-nano,llmrouterbench,Llama-3.1-Nemotron-Nano-8B-v1,0.61499,974
+llmrouterbench_mbpp,MiMo-7B-RL-0530,MiMo-7B-RL-0530,mimo-7b,llmrouterbench,MiMo-7B-RL-0530,0.567762,974
+llmrouterbench_mbpp,MiniCPM4.1-8B,MiniCPM4.1-8B,minicpm4.1-8b,llmrouterbench,MiniCPM4.1-8B,0.340862,974
+llmrouterbench_mbpp,NVIDIA-Nemotron-Nano-9B-v2,NVIDIA-Nemotron-Nano-9B-v2,nvidia-nemotron-nano-9b-v2,llmrouterbench,NVIDIA-Nemotron-Nano-9B-v2,0.420945,974
+llmrouterbench_mbpp,OpenThinker3-7B,OpenThinker3-7B,openthinker3-7b,llmrouterbench,OpenThinker3-7B,0.11807,974
+llmrouterbench_mbpp,Qwen2.5-Coder-7B-Instruct,Qwen2.5-Coder-7B-Instruct,qwen/qwen2.5-coder,llmrouterbench,Qwen2.5-Coder-7B-Instruct,0.759754,974
+llmrouterbench_mbpp,Qwen3-8B,Qwen3-8B,qwen/qwen3-8b,llmrouterbench,Qwen3-8B,0.547228,974
+llmrouterbench_mbpp,cogito-v1-preview-llama-8B,cogito-v1-preview-llama-8B,cogito-v1-llama-8b,llmrouterbench,cogito-v1-preview-llama-8B,0.519507,974
+llmrouterbench_mbpp,gemma-2-9b-it,gemma-2-9b-it,google/gemma-2-9b,llmrouterbench,gemma-2-9b-it,0.62423,974
+llmrouterbench_mbpp,glm-4-9b-chat,glm-4-9b-chat,zai/glm-4-9b,llmrouterbench,glm-4-9b-chat,0.628337,974
+llmrouterbench_mbpp,granite-3.3-8b-instruct,granite-3.3-8b-instruct,ibm/granite-3.3-8b,llmrouterbench,granite-3.3-8b-instruct,0.365503,974
+llmrouterbench_mbpp,internlm3-8b-instruct,internlm3-8b-instruct,internlm/internlm3-8b,llmrouterbench,internlm3-8b-instruct,0.605344,973
+llmrouterbench_humaneval,DeepHermes-3-Llama-3-8B-Preview,DeepHermes-3-Llama-3-8B-Preview,deephermes-3-llama-3-8b,llmrouterbench,DeepHermes-3-Llama-3-8B-Preview,0.512195,164
+llmrouterbench_humaneval,DeepSeek-R1-0528-Qwen3-8B,DeepSeek-R1-0528-Qwen3-8B,deepseek/deepseek-r1-qwen3-8b,llmrouterbench,DeepSeek-R1-0528-Qwen3-8B,0.25,164
+llmrouterbench_humaneval,DeepSeek-R1-Distill-Qwen-7B,DeepSeek-R1-Distill-Qwen-7B,deepseek/deepseek-r1-distill-qwen-7b,llmrouterbench,DeepSeek-R1-Distill-Qwen-7B,0.45122,164
+llmrouterbench_humaneval,Fin-R1,Fin-R1,fin-r1,llmrouterbench,Fin-R1,0.77439,164
+llmrouterbench_humaneval,GLM-Z1-9B-0414,GLM-Z1-9B-0414,zai/glm-z1-9b,llmrouterbench,GLM-Z1-9B-0414,0.603659,164
+llmrouterbench_humaneval,Intern-S1-mini,Intern-S1-mini,internlm/intern-s1-mini,llmrouterbench,Intern-S1-mini,0.432927,164
+llmrouterbench_humaneval,Llama-3.1-8B-Instruct,Llama-3.1-8B-Instruct,meta/llama-3.1-8b,llmrouterbench,Llama-3.1-8B-Instruct,0.615854,164
+llmrouterbench_humaneval,Llama-3.1-8B-UltraMedical,Llama-3.1-8B-UltraMedical,meta/llama-3.1-8b-ultramedical,llmrouterbench,Llama-3.1-8B-UltraMedical,0.560976,164
+llmrouterbench_humaneval,Llama-3.1-Nemotron-Nano-8B-v1,Llama-3.1-Nemotron-Nano-8B-v1,nvidia/llama-3.1-nemotron-nano,llmrouterbench,Llama-3.1-Nemotron-Nano-8B-v1,0.628049,164
+llmrouterbench_humaneval,MiMo-7B-RL-0530,MiMo-7B-RL-0530,mimo-7b,llmrouterbench,MiMo-7B-RL-0530,0.52439,164
+llmrouterbench_humaneval,MiniCPM4.1-8B,MiniCPM4.1-8B,minicpm4.1-8b,llmrouterbench,MiniCPM4.1-8B,0.329268,164
+llmrouterbench_humaneval,NVIDIA-Nemotron-Nano-9B-v2,NVIDIA-Nemotron-Nano-9B-v2,nvidia-nemotron-nano-9b-v2,llmrouterbench,NVIDIA-Nemotron-Nano-9B-v2,0.481707,164
+llmrouterbench_humaneval,OpenThinker3-7B,OpenThinker3-7B,openthinker3-7b,llmrouterbench,OpenThinker3-7B,0.073171,164
+llmrouterbench_humaneval,Qwen2.5-Coder-7B-Instruct,Qwen2.5-Coder-7B-Instruct,qwen/qwen2.5-coder,llmrouterbench,Qwen2.5-Coder-7B-Instruct,0.77439,164
+llmrouterbench_humaneval,Qwen3-8B,Qwen3-8B,qwen/qwen3-8b,llmrouterbench,Qwen3-8B,0.621951,164
+llmrouterbench_humaneval,cogito-v1-preview-llama-8B,cogito-v1-preview-llama-8B,cogito-v1-llama-8b,llmrouterbench,cogito-v1-preview-llama-8B,0.695122,164
+llmrouterbench_humaneval,gemma-2-9b-it,gemma-2-9b-it,google/gemma-2-9b,llmrouterbench,gemma-2-9b-it,0.646341,164
+llmrouterbench_humaneval,glm-4-9b-chat,glm-4-9b-chat,zai/glm-4-9b,llmrouterbench,glm-4-9b-chat,0.743902,164
+llmrouterbench_humaneval,gpt-4.1,gpt-4.1,openai/gpt-4.1,llmrouterbench,gpt-4.1,0.908537,164
+llmrouterbench_humaneval,gpt-5-chat,gpt-5-chat,openai/gpt-5,llmrouterbench,gpt-5-chat,0.786585,164
+llmrouterbench_humaneval,granite-3.3-8b-instruct,granite-3.3-8b-instruct,ibm/granite-3.3-8b,llmrouterbench,granite-3.3-8b-instruct,0.512195,164
+llmrouterbench_humaneval,internlm3-8b-instruct,internlm3-8b-instruct,internlm/internlm3-8b,llmrouterbench,internlm3-8b-instruct,0.658537,164

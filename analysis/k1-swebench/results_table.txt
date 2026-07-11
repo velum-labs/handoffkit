@@ -1,0 +1,23 @@
+instances: n=10
+row               resolved    rate  wilson95
+solo-terminus         6/10   60.0%  [31.3%, 83.2%]
+solo-qwen3            4/10   40.0%  [16.8%, 68.7%]
+fused                 5/10   50.0%  [23.7%, 76.3%]
+oracle(solo)          6/10   60.0%  [31.3%, 83.2%]
+
+best solo: solo-terminus (6/10)
+headroom (oracle - best solo): +0 instances (+0.0%)
+fused - best solo: -1 instances (-10.0%)
+
+per-instance grid (1=resolved):
+instance                                      solo-terminus     solo-qwen3          fused
+astropy__astropy-14508                                    1              0              0
+django__django-11532                                      0              0              0
+django__django-11734                                      0              0              0
+django__django-12125                                      0              0              1
+django__django-13417                                      1              1              1
+django__django-13741                                      1              1              1
+django__django-14034                                      0              0              0
+pylint-dev__pylint-7080                                   1              0              0
+scikit-learn__scikit-learn-25973                          1              1              1
+scikit-learn__scikit-learn-26323                          1              1              1

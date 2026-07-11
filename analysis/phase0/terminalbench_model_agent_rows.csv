@@ -1,0 +1,110 @@
+agent,model,base_group,rows,latest_utc
+terminus-2,openai/gpt-oss-20b@together_ai,,932,2025-11-01T20:03:42.340461+00:00
+terminus-2,Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8@together_ai,qwen/qwen3-coder family,929,2025-11-01T19:46:56.489737+00:00
+terminus-2,openai/gpt-oss-120b@together_ai,,925,2025-11-01T19:59:56.995481+00:00
+terminus-2,moonshotai/Kimi-K2-Instruct-0905@together_ai,moonshot/kimi-k2 family,923,2025-11-01T19:48:10.572411+00:00
+terminus-2,accounts/fireworks/models/glm-4p6@fireworks_ai,,904,2025-11-02T22:38:06.717327+00:00
+terminus-2,accounts/fireworks/models/minimax-m2@fireworks_ai,,902,2025-11-02T22:40:32.721579+00:00
+terminus-2,moonshotai/Kimi-K2-Thinking@together_ai,moonshot/kimi-k2 family,892,2025-11-11T09:30:25.582218+00:00
+mini-swe-agent,openai/gpt-oss-20b@together_ai,,888,2025-11-04T08:36:08.418247+00:00
+mini-swe-agent,openai/gpt-oss-120b@together_ai,,887,2025-11-04T09:10:09.269611+00:00
+openhands,Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8@together_ai,qwen/qwen3-coder family,878,2025-11-04T09:02:58.056955+00:00
+openhands,moonshotai/Kimi-K2-Instruct-0905@together_ai,moonshot/kimi-k2 family,875,2025-11-04T09:36:51.114294+00:00
+forge,gemini-3.1-pro-preview@Google,google/gemini-3-pro,445,2026-02-26T18:39:19.912021+00:00
+mux,claude-opus-4-6@anthropic,anthropic/claude-opus-4 family,445,2026-02-10T02:56:54.136854+00:00
+gemini-cli,gemini-3-flash-preview@Google,google/gemini-3-pro,445,2026-03-05T21:50:25.753118+00:00
+codex,gpt-5.1-codex@openai,openai/gpt-5 family,445,2025-11-16T20:50:38.416425+00:00
+claude-code,GLM-4.7@z-ai,,445,2026-02-07T07:15:22.083773+00:00
+ii-agent-simple,gemini-3-pro-preview@gemini,google/gemini-3-pro,445,2025-12-21T04:41:30.761815+00:00
+terminus-3-3,gemini-3.1-pro-preview@Google,google/gemini-3-pro,445,2026-02-20T03:50:03.061583+00:00
+judy,claude-opus-4.6@anthropic,anthropic/claude-opus-4 family,445,2026-02-13T06:11:33.746629+00:00
+goose,claude-haiku-4-5@anthropic,anthropic/claude-haiku-4 family,445,2025-12-03T12:13:23.878745+00:00
+letta-code,claude-opus-4-5@anthropic,anthropic/claude-opus-4 family,445,2025-12-15T05:45:18.213969+00:00
+codex,gpt-5.1-codex-mini@openai,openai/gpt-5 family,445,2025-11-17T22:53:05.625308+00:00
+codex,gpt-5.1-codex-max@openai,openai/gpt-5 family,445,2025-11-25T01:01:45.767332+00:00
+mini-swe-agent,grok-code-fast-1@xai,,445,2025-11-03T21:49:49.915746+00:00
+Factory Droid,gpt-5.3-codex@openai,openai/gpt-5 family,445,2026-02-22T13:15:15.355549+00:00
+mini-swe-agent,grok-4-0709@xai,xai/grok-4,445,2025-11-03T22:34:47.069115+00:00
+Factory Droid,claude-opus-4-6@anthropic,anthropic/claude-opus-4 family,445,2026-01-30T05:07:15.989111+00:00
+Factory Droid,claude-opus-4-5-20251101@anthropic,anthropic/claude-opus-4 family,445,2025-12-10T15:57:44.629391+00:00
+letta-code,gpt-5.1-codex@openai,openai/gpt-5 family,445,2025-12-15T13:18:11.970404+00:00
+mini-swe-agent,gpt-5-mini@openai,openai/gpt-5 family,445,2025-11-03T21:50:59.741798+00:00
+mini-swe-agent,gpt-5-nano@openai,openai/gpt-5 family,445,2025-11-03T21:51:04.7939+00:00
+terminus-2,gemini-3-pro-preview@gemini,google/gemini-3-pro,445,
+Junie,gemini-3-flash-preview@gemini,google/gemini-3-pro,445,2025-12-22T23:19:11.941036+00:00
+terminus-2,deepseek-v3.2@deepseek,deepseek/deepseek-v3-chat,445,2026-02-08T07:09:58.264277+00:00
+claude-code,claude-opus-4-5-20251101@anthropic,anthropic/claude-opus-4 family,445,2025-12-18T12:59:01.329954+00:00
+mini-swe-agent,gemini-2.5-flash@gemini,google/gemini-2.5-flash,445,2025-11-03T21:49:59.571311+00:00
+claude-code,minimax-m2.1@minimax,,445,2025-12-22T07:50:19.994882+00:00
+openhands,gemini-2.5-flash@gemini,google/gemini-2.5-flash,445,2025-11-04T08:26:12.898176+00:00
+ruley,gemini-3-pro-preview@Google,google/gemini-3-pro,445,2026-02-05T07:24:48.443143+00:00
+sage,gemini-3-pro-preview@Google,google/gemini-3-pro,445,2026-02-13T21:23:14.527062+00:00
+terminus-2,claude-opus-4-5-20251101@anthropic,anthropic/claude-opus-4 family,445,
+terminus-2,claude-opus-4-6@anthropic,anthropic/claude-opus-4 family,445,
+claude-code,claude-opus-4-6@anthropic,anthropic/claude-opus-4 family,445,2026-02-07T08:06:31.347669+00:00
+terminus-2,gpt-5.1-codex@openai,openai/gpt-5 family,445,
+terminus-2,gpt-5.1@openai,openai/gpt-5 family,445,
+terminus-2,gpt-5.3-codex@openai,openai/gpt-5 family,445,2026-02-05T08:27:28.700766+00:00
+terminus-2,grok-code-fast-1@xai,,445,
+terminus-2,minimax-m2.5@Minimax,,445,2026-02-18T02:26:25.149625+00:00
+TerminalBenchAgent,claude-sonnet-4-5@anthropic,anthropic/claude-sonnet-4 family,445,2025-12-21T07:16:27.914934+00:00
+openhands,claude-opus-4-1-20250805@anthropic,anthropic/claude-opus-4 family,445,2025-11-04T08:56:18.995672+00:00
+openhands,gpt-5-mini@openai,openai/gpt-5 family,445,2025-11-04T02:32:57.787676+00:00
+letta-code,gemini-3-pro-preview@google,google/gemini-3-pro,445,2025-12-13T17:48:40.883624+00:00
+openhands,claude-opus-4-5-20251101@anthropic,anthropic/claude-opus-4 family,445,2026-01-04T08:34:57.593747+00:00
+codex,gpt-5.2@openai,openai/gpt-5 family,445,2025-12-18T13:23:48.032572+00:00
+spoox-m,gpt-5-mini@openai,openai/gpt-5 family,445,2025-11-30T19:06:58.736701+00:00
+mux,gpt-5.3-codex@openai,openai/gpt-5 family,445,2026-02-08T22:38:36.540953+00:00
+ruley,gpt-5.3-codex@OpenAI,openai/gpt-5 family,445,2026-02-09T09:46:50.430642+00:00
+openhands,gpt-5@openai,openai/gpt-5 family,445,2025-11-04T04:05:40.441503+00:00
+openhands,gemini-2.5-pro@gemini,google/gemini-2.5-pro,445,2025-11-04T03:21:22.334992+00:00
+mini-swe-agent,gpt-5@openai,openai/gpt-5 family,445,2025-11-03T21:50:51.996061+00:00
+gemini-cli,gemini-3-flash-preview@google,google/gemini-3-pro,445,2025-12-23T09:04:20.490158+00:00
+Factory Droid,gemini-3-pro-preview@google,google/gemini-3-pro,445,2025-12-23T21:34:40.462352+00:00
+goose,claude-sonnet-4-5@anthropic,anthropic/claude-sonnet-4 family,445,2025-12-04T06:31:58.859887+00:00
+terminus-2,gemini-3-flash-preview@gemini,google/gemini-3-pro,445,2026-01-08T00:18:17.347537+00:00
+ante,gemini-3-pro-preview@Google,google/gemini-3-pro,444,2026-01-01T13:49:12.805357+00:00
+mini-swe-agent,claude-opus-4-1-20250805@anthropic,anthropic/claude-opus-4 family,444,2025-11-04T09:14:15.680053+00:00
+terminus-2,gpt-5.2@openai,openai/gpt-5 family,444,2025-12-12T23:41:57.726958+00:00
+Factory Droid,gpt-5.2@openai,openai/gpt-5 family,444,2025-12-19T05:09:27.956664+00:00
+openhands,grok-4-0709@xai,xai/grok-4,444,2025-11-04T03:47:15.744282+00:00
+openhands,gpt-5-nano@openai,openai/gpt-5 family,444,2025-11-04T04:05:46.496618+00:00
+mini-swe-agent,claude-haiku-4-5-20251001@anthropic,anthropic/claude-haiku-4 family,444,2025-11-04T09:16:12.616014+00:00
+openhands,claude-haiku-4-5-20251001@anthropic,anthropic/claude-haiku-4 family,444,2025-11-04T08:45:27.630949+00:00
+mini-swe-agent,gpt-5-codex@openai,openai/gpt-5 family,444,2025-11-04T09:09:45.229429+00:00
+mini-swe-agent,gemini-2.5-pro@gemini,google/gemini-2.5-pro,444,2025-11-03T21:48:19.171565+00:00
+simple_codex,gpt-5.3-codex@openai,openai/gpt-5 family,443,2026-02-05T17:18:05.12463+00:00
+terminus-2,claude-opus-4-1-20250805@anthropic,anthropic/claude-opus-4 family,443,2025-10-31T14:07:25.364448+00:00
+openhands,claude-sonnet-4-5-20250929@anthropic,anthropic/claude-sonnet-4 family,443,2025-11-04T06:59:57.332597+00:00
+goose,claude-opus-4-5@anthropic,anthropic/claude-opus-4 family,442,2025-12-06T15:37:38.115171+00:00
+terminus-2,gemini-2.5-pro@gemini,google/gemini-2.5-pro,442,
+terminus-3-3,claude-opus-4-6@anthropic,anthropic/claude-opus-4 family,442,2026-02-13T06:12:54.397853+00:00
+terminus-2,glm-5@z-ai,,442,2026-02-14T17:31:15.551722+00:00
+aone-agent,Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8@modelscope,qwen/qwen3-coder family,442,2025-12-26T02:25:31.158862+00:00
+mini-swe-agent,claude-sonnet-4-5-20250929@anthropic,anthropic/claude-sonnet-4 family,442,2025-11-04T08:10:03.745868+00:00
+codex,gpt-5-nano@openai,openai/gpt-5 family,440,2025-11-05T08:48:52.734267+00:00
+terminus-2,claude-sonnet-4-5-20250929@anthropic,anthropic/claude-sonnet-4 family,440,
+gemini-cli,gemini-2.5-flash@gemini,google/gemini-2.5-flash,439,2025-11-05T09:15:33.519851+00:00
+terminus-2,claude-haiku-4-5-20251001@anthropic,anthropic/claude-haiku-4 family,439,
+codex,gpt-5@openai,openai/gpt-5 family,439,2025-11-05T09:18:02.301118+00:00
+terminus-2,gemini-2.5-flash@gemini,google/gemini-2.5-flash,439,2025-10-31T10:19:08.133014+00:00
+terminus-2,minimax-m2.1@openai,,438,
+terminus-2,gpt-5-mini@openai,openai/gpt-5 family,438,2025-10-31T06:55:22.291303+00:00
+terminus-2,gpt-5@openai,openai/gpt-5 family,438,2025-10-31T12:33:07.225745+00:00
+claude-code,claude-haiku-4-5-20251001@anthropic,anthropic/claude-haiku-4 family,438,2025-11-05T09:17:43.407085+00:00
+gemini-cli,gemini-2.5-pro@gemini,google/gemini-2.5-pro,437,2025-11-05T09:18:16.915148+00:00
+claude-code,claude-sonnet-4-5-20250929@anthropic,anthropic/claude-sonnet-4 family,437,2025-11-05T09:15:37.081902+00:00
+claude-code,claude-opus-4-1-20250805@anthropic,anthropic/claude-opus-4 family,437,2025-11-05T09:17:41.096733+00:00
+terminus-2,gpt-5-codex@openai,openai/gpt-5 family,437,
+codex,gpt-5-mini@openai,openai/gpt-5 family,437,2025-11-05T09:15:33.761708+00:00
+terminus-2,gpt-5-nano@openai,openai/gpt-5 family,436,2025-10-31T09:36:30.090894+00:00
+terminus-2,grok-4-0709@xai,xai/grok-4,436,
+codex,gpt-5-codex@openai,openai/gpt-5 family,436,2025-11-05T09:17:10.21734+00:00
+terminus-2,kimi-k2.5@kimi,moonshot/kimi-k2 family,435,2026-01-28T05:32:34.499688+00:00
+deepagent-harbor,gpt-5.2-codex@openai,openai/gpt-5 family,433,2026-02-10T16:55:37.276466+00:00
+terminus-2,glm-4.7@z-ai,,427,2026-01-27T19:34:32.983995+00:00
+claude-code-enhanced,claude-opus-4-6@anthropic,anthropic/claude-opus-4 family,398,2026-02-19T03:09:07.002038+00:00
+final,claude-4.5-sonnet@anthropic,,322,2025-12-09T20:33:05.009934+00:00
+mux,gpt-5.2@openai,openai/gpt-5 family,89,2026-01-16T01:08:11.604134+00:00
+opencode,claude-opus-4-5@anthropic,anthropic/claude-opus-4 family,89,2026-01-12T01:05:35.768353+00:00
+mux,claude-opus-4-5@anthropic,anthropic/claude-opus-4 family,89,2026-01-16T00:24:54.927838+00:00
