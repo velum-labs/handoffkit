@@ -21,8 +21,14 @@ import { createPortlessSession, reapService } from "../shared/portless.js";
 /** The portless service name (`subscriptions.fusion.localhost`). */
 export const SUBSCRIPTION_PROXY_SERVICE = "subscriptions";
 
-const ROOT = join(homedir(), ".fusionkit", "subscriptions");
-const STATE_PATH = join(ROOT, "proxy.json");
+/** State directory (honoring `FUSIONKIT_SUBSCRIPTIONS_DIR` for tests). */
+function stateRoot(): string {
+  return process.env.FUSIONKIT_SUBSCRIPTIONS_DIR ?? join(homedir(), ".fusionkit", "subscriptions");
+}
+
+function statePath(): string {
+  return join(stateRoot(), "proxy.json");
+}
 
 export type SubscriptionProxyState = {
   token: string;
@@ -42,22 +48,24 @@ function isAlive(pid: number): boolean {
 }
 
 function readState(): SubscriptionProxyState | undefined {
-  if (!existsSync(STATE_PATH)) return undefined;
+  const path = statePath();
+  if (!existsSync(path)) return undefined;
   try {
-    return JSON.parse(readFileSync(STATE_PATH, "utf8")) as SubscriptionProxyState;
+    return JSON.parse(readFileSync(path, "utf8")) as SubscriptionProxyState;
   } catch {
     return undefined;
   }
 }
 
 function writeState(state: SubscriptionProxyState): void {
-  mkdirSync(ROOT, { recursive: true, mode: 0o700 });
-  writeFileSync(STATE_PATH, `${JSON.stringify(state, null, 2)}\n`, { mode: 0o600 });
-  chmodSync(STATE_PATH, 0o600);
+  const path = statePath();
+  mkdirSync(stateRoot(), { recursive: true, mode: 0o700 });
+  writeFileSync(path, `${JSON.stringify(state, null, 2)}\n`, { mode: 0o600 });
+  chmodSync(path, 0o600);
 }
 
 function clearState(): void {
-  rmSync(STATE_PATH, { force: true });
+  rmSync(statePath(), { force: true });
 }
 
 /** A registration handle returned to `proxy serve` for teardown on shutdown. */

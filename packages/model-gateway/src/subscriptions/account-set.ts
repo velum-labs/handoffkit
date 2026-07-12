@@ -346,7 +346,6 @@ export class SubscriptionAccountSet {
     if (this.#members.length === 0) throw new SubscriptionAccountSetExhaustedError(this.mode);
     const excluded = new Set<string>();
     const absorbed = new Set<string>();
-    let lastResponse: Response | undefined;
 
     while (excluded.size < this.#members.length) {
       const member = await this.#acquire(model, excluded);
@@ -361,12 +360,12 @@ export class SubscriptionAccountSet {
         const bodyLimits = this.#provider.parseLimits(response.headers, parsed);
         if (bodyLimits !== undefined) this.#tracker.update(member.id, bodyLimits);
         const failure = this.#provider.classify(response.status, response.headers, parsed);
-        lastResponse = new Response(text, {
+        const passthrough = new Response(text, {
           status: response.status,
           statusText: response.statusText,
           headers: response.headers
         });
-        if (failure === undefined || !isFailoverWorthy(failure.category)) return lastResponse;
+        if (failure === undefined || !isFailoverWorthy(failure.category)) return passthrough;
 
         if (failure.category === "transient") {
           if (!absorbed.has(member.id)) {
@@ -377,7 +376,7 @@ export class SubscriptionAccountSet {
           }
           // A short provider throttle is account-local and often prompt-cache
           // sensitive. Do not march the same burst through the whole pool.
-          return lastResponse;
+          return passthrough;
         }
 
         // Only an actual spent quota window rotates accounts. Authentication,
@@ -393,7 +392,10 @@ export class SubscriptionAccountSet {
       }
     }
 
-    if (lastResponse !== undefined) return lastResponse;
+    // The loop only falls through here after every member was rotated off a
+    // quota wall (throttles and non-failover responses return inline above), so
+    // surface exhaustion with the soonest reset rather than leaking a raw
+    // provider 429 that may carry no retry-after.
     throw new SubscriptionAccountSetExhaustedError(this.mode, this.#soonestReset(model));
   }
 

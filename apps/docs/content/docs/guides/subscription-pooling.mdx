@@ -81,12 +81,36 @@ These OAuth-scoped endpoints report subscription windows. The documented
 organization Admin usage APIs report API-platform billing and are not used for
 subscription routing.
 
+`fusionkit proxy stop` (and `fusionkit stop`, which reaps every background
+fusion service) shuts the proxy down.
+
+## Programmatic SDK
+
+The same capability is available without the CLI from the
+`@fusionkit/model-gateway/subscriptions` subpath:
+
+```ts
+import {
+  startSubscriptionProxy,
+  SubscriptionProxyClient
+} from "@fusionkit/model-gateway/subscriptions";
+
+const proxy = await startSubscriptionProxy({
+  accounts: { "claude-code": { source: { kind: "auto" } } }
+});
+console.log(proxy.url(), proxy.token, proxy.providers);
+
+const client = SubscriptionProxyClient.open({ baseUrl: proxy.url(), token: proxy.token });
+const usage = await client.usage(); // typed via the shared wire schema
+```
+
 ## Security and limits
 
 - The proxy binds to `127.0.0.1` by default and always requires its generated
   proxy token. Use additional network controls before binding off-loopback.
 - Account tokens are never returned by `/usage` or printed by status.
-- A spent quota window rotates to another eligible account. A short per-minute
+- A spent quota window rotates to another eligible account; when every eligible
+  account is spent the proxy returns `429` with `Retry-After`. A short per-minute
   throttle waits on the same account to avoid moving a burst through the pool.
 - IP-based throttles may affect every account and cannot be fixed by account
   rotation.
