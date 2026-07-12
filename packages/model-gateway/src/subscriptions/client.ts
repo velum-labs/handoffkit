@@ -1,3 +1,5 @@
+import { trimTrailingSlashes } from "@fusionkit/runtime-utils";
+
 import { subscriptionUsageResponseSchema, SUBSCRIPTION_USAGE_PATH } from "./wire.js";
 import type { SubscriptionUsageResponse } from "./wire.js";
 
@@ -21,7 +23,7 @@ export class SubscriptionProxyClient {
   readonly #timeoutMs: number;
 
   private constructor(options: SubscriptionProxyClientOptions) {
-    this.#baseUrl = options.baseUrl.replace(/\/+$/, "");
+    this.#baseUrl = trimTrailingSlashes(options.baseUrl);
     this.#token = options.token;
     this.#timeoutMs = options.timeoutMs ?? 3000;
   }
