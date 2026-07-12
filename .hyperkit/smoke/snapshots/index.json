@@ -1,0 +1,17 @@
+[
+  {
+    "cell_id": "7f491779f6aa",
+    "label": "smoke-solo-ds32",
+    "resolution_rate": 0.6666666666666666
+  },
+  {
+    "cell_id": "4f86ce161007",
+    "label": "smoke-fused-judge-synth",
+    "resolution_rate": 1.0
+  },
+  {
+    "cell_id": "5214ea808112",
+    "label": "smoke-exec-select-ds32",
+    "resolution_rate": 0.3333333333333333
+  }
+]

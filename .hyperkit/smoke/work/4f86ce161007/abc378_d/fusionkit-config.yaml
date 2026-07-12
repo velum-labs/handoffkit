@@ -1,0 +1,23 @@
+endpoints:
+- id: ds32
+  provider: openrouter
+  model: deepseek/deepseek-v3.2
+  base_url: https://openrouter.ai/api
+  api_key_env: OPENROUTER_API_KEY
+- id: qwen3t
+  provider: openrouter
+  model: qwen/qwen3-235b-a22b-thinking-2507
+  base_url: https://openrouter.ai/api
+  api_key_env: OPENROUTER_API_KEY
+default_model: qwen3t
+judge_model: qwen3t
+synthesizer_model: qwen3t
+panel_models:
+- ds32
+- qwen3t
+default_mode: panel
+harness_prompt_passthrough: true
+sampling:
+  temperature: 0.2
+  top_p: 0.95
+  max_tokens: 16384

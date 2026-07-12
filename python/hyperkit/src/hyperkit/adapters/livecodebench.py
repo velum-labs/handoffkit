@@ -227,7 +227,7 @@ class _Client:
         temperature: float,
         max_tokens: int,
         timeout_s: float = 900.0,
-        attempts: int = 4,
+        attempts: int = 3,
     ) -> dict[str, Any]:
         payload: dict[str, Any] = {
             "model": model,
@@ -308,6 +308,11 @@ class LivecodebenchAdapter:
         max_tokens = int(params.get("max_tokens", 16384))
         timeout_s = float(params.get("test_timeout_s", 8.0))
         model = str(params.get("model", target.model))
+        # Multi-stage SUTs (panel -> judge -> synth) legitimately take much
+        # longer per request than a single model; retrying a timed-out fused
+        # call re-bills the whole pipeline, so expensive cells set attempts=1-2.
+        request_timeout_s = float(params.get("request_timeout_s", 900.0))
+        attempts = int(params.get("attempts", 3))
 
         client = _Client(target.base_url, _resolve_api_key(target.base_url, params))
         sandbox = _Sandbox()
@@ -316,7 +321,12 @@ class LivecodebenchAdapter:
         for index in range(n_samples):
             temperature = temps[index % len(temps)]
             completion = client.complete(
-                model, prompt, temperature=temperature, max_tokens=max_tokens
+                model,
+                prompt,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                timeout_s=request_timeout_s,
+                attempts=attempts,
             )
             code = extract_code(completion["text"])
             public = run_tests(
@@ -366,7 +376,12 @@ class LivecodebenchAdapter:
                 stderr=failure["stderr"],
             )
             completion = client.complete(
-                model, repair_prompt, temperature=temps[0], max_tokens=max_tokens
+                model,
+                repair_prompt,
+                temperature=temps[0],
+                max_tokens=max_tokens,
+                timeout_s=request_timeout_s,
+                attempts=attempts,
             )
             repaired_code = extract_code(completion["text"])
             repaired_public = run_tests(

@@ -1,0 +1,47 @@
+{
+  "shard_id": "dd1ffc6096212a99",
+  "cell_id": "7f491779f6aa",
+  "generation": 0,
+  "benchmark": "livecodebench",
+  "instance_id": "abc390_g",
+  "sut_hash": "6d13f37c7b84a53b",
+  "status": "resolved",
+  "resolved": true,
+  "cost_usd": 0.00225892,
+  "tokens": 6074,
+  "steps": null,
+  "latency_s": 176.82721326200408,
+  "failure_mode": null,
+  "adapter_version": "1",
+  "dataset_hash": "48656f022bf30868",
+  "created_at": "2026-07-12T07:36:38.420661+00:00",
+  "raw": {
+    "resolved": true,
+    "selected_index": 0,
+    "selection": "first",
+    "repair_used": false,
+    "oracle_private": true,
+    "samples": [
+      {
+        "index": 0,
+        "temperature": 0.2,
+        "finish_reason": "stop",
+        "prompt_tokens": 410,
+        "completion_tokens": 5664,
+        "cost_usd": 0.00225892,
+        "public_passed": 3,
+        "public_total": 3,
+        "public_all": true,
+        "public_failure": null,
+        "private_passed_all": true,
+        "private_passed": 40,
+        "private_total": 40
+      }
+    ],
+    "selected_code": "MOD = 998244353\n\ndef main():\n    import sys\n    input = sys.stdin.read\n    N = int(input().strip())\n\n    # Precompute factorials and inverse factorials\n    fact = [1] * (N + 5)\n    inv_fact = [1] * (N + 5)\n    for i in range(2, N + 5):\n        fact[i] = fact[i-1] * i % MOD\n\n    def mod_pow(a, b):\n        res = 1\n        while b:\n            if b & 1:\n                res = res * a % MOD\n            a = a * a % MOD\n            b >>= 1\n        return res\n\n    inv_fact[N+4] = mod_pow(fact[N+4], MOD-2)\n    for i in range(N+4, 0, -1):\n        inv_fact[i-1] = inv_fact[i] * i % MOD\n\n    # Step 1: Digit lengths and groups\n    length_count = [0] * 7\n    sum_by_len = [0] * 7\n    for k in range(1, N+1):\n        d = len(str(k))\n        length_count[d] += 1\n        sum_by_len[d] = (sum_by_len[d] + k) % MOD\n\n    # Step 2: Build F(x) = product_{k=1..N} (1 + 10^{L_k} x)\n    # We only need coefficients f_t up to N-1\n    # We can use divide-and-conquer NTT\n    # But for simplicity, we'll use O(N^2) for small N? No, N up to 2e5.\n    # We need efficient method.\n    # Actually, since only 6 distinct lengths, we can compute F(x) as (1+10^1 x)^c1 * ... * (1+10^6 x)^c6\n    # using binomial theorem: (1+a x)^c = sum_{t=0..c} C(c,t) a^t x^t\n    # Then multiply these 6 polynomials with FFT.\n\n    from itertools import accumulate\n\n    # Precompute powers of 10^d\n    pow10 = [1] * (N + 5)\n    for i in range(1, N+5):\n        pow10[i] = pow10[i-1] * 10 % MOD\n\n    # Polynomial multiplication using NTT\n    # We'll use pypy's built-in or implement simple NTT\n    # For CP, use Python's numpy or manual NTT.\n    # Here, we'll use convolution via FFT with MOD.\n\n    # We'll use a simple NTT implementation for MOD=998244353, primitive root=3.\n    def ntt(a, invert):\n        n = len(a)\n        j = 0\n        for i in range(1, n):\n            bit = n >> 1\n            while j & bit:\n                j ^= bit\n                bit >>= 1\n            j ^= bit\n            if i < j:\n                a[i], a[j] = a[j], a[i]\n\n        length = 2\n        while length <= n:\n            wlen = pow(3, (MOD-1)//length, MOD)\n            if invert:\n                wlen = pow(wlen, MOD-2, MOD)\n            for i in range(0, n, length):\n                w = 1\n                for j in range(i, i + length//2):\n                    u = a[j]\n                    v = a[j + length//2] * w % MOD\n                    a[j] = (u + v) % MOD\n                    a[j + length//2] = (u - v + MOD) % MOD\n                    w = w * wlen % MOD\n            length <<= 1\n\n        if invert:\n            inv_n = pow(n, MOD-2, MOD)\n            for i in range(n):\n                a[i] = a[i] * inv_n % MOD\n\n    def multiply(a, b):\n        n = 1\n        while n < len(a) + len(b) - 1:\n            n <<= 1\n        fa = a + [0]*(n - len(a))\n        fb = b + [0]*(n - len(b))\n        ntt(fa, False)\n        ntt(fb, False)\n        for i in range(n):\n            fa[i] = fa[i] * fb[i] % MOD\n        ntt(fa, True)\n        return fa[:len(a)+len(b)-1]\n\n    # Build polynomials for each length d\n    polys = []\n    for d in range(1, 7):\n        c = length_count[d]\n        if c == 0:\n            continue\n        poly = [0] * (c + 1)\n        ad = pow10[d]  # 10^d % MOD\n        pow_ad = [1] * (c + 1)\n        for i in range(1, c+1):\n            pow_ad[i] = pow_ad[i-1] * ad % MOD\n        for t in range(c+1):\n            # C(c, t) * (10^d)^t\n            poly[t] = fact[c] * inv_fact[t] % MOD * inv_fact[c-t] % MOD * pow_ad[t] % MOD\n        polys.append(poly)\n\n    # Multiply all polynomials\n    from functools import reduce\n    F = [1]\n    for p in polys:\n        F = multiply(F, p)\n    # F now has degree at most N\n    # Extend to length N\n    F = F + [0] * (N - len(F) + 1)\n    f = F[:N]  # f[t] for t=0..N-1\n\n    # Step 4: w_u = u! (N-1-u)!\n    w = [0] * N\n    for u in range(N):\n        w[u] = fact[u] * fact[N-1-u] % MOD\n\n    # Step 5: w'[u] = w[N-1-u]\n    w_rev = [w[N-1-u] for u in range(N)]\n\n    # Step 6: convolution h = f * w_rev\n    h = multiply(f, w_rev)\n    # h length up to 2N-1, we need indices 0..N-1\n    h = h[:N]\n\n    # Step 7: g(r) = h[N-1-r]\n    g = [0] * N\n    for r in range(N):\n        g[r] = h[N-1-r] % MOD\n\n    # Step 8: H(d) = sum_{r=0..N-1} g(r) * (-10^d)^r\n    H_len = [0] * 7\n    for d in range(1, 7):\n        if length_count[d] == 0:\n            continue\n        ad = pow10[d]\n        pow_neg_ad = [1] * (N)\n        neg_ad = (-ad) % MOD\n        for r in range(1, N):\n            pow_neg_ad[r] = pow_neg_ad[r-1] * neg_ad % MOD\n        total = 0\n        for r in range(N):\n            total = (total + g[r] * pow_neg_ad[r]) % MOD\n        H_len[d] = total\n\n    # Step 9: Answer\n    ans = 0\n    for d in range(1, 7):\n        if length_count[d] == 0:\n            continue\n        ans = (ans + H_len[d] * sum_by_len[d]) % MOD\n\n    print(ans % MOD)\n\nif __name__ == \"__main__\":\n    main()",
+    "cost_usd": 0.00225892,
+    "tokens": 6074,
+    "difficulty": "hard",
+    "contest_date": "2025-01-25T00:00:00"
+  }
+}

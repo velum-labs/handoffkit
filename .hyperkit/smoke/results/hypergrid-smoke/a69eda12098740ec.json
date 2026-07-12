@@ -1,0 +1,47 @@
+{
+  "shard_id": "a69eda12098740ec",
+  "cell_id": "4f86ce161007",
+  "generation": 0,
+  "benchmark": "livecodebench",
+  "instance_id": "abc378_d",
+  "sut_hash": "2026527fc54e69b1",
+  "status": "resolved",
+  "resolved": true,
+  "cost_usd": 0.0,
+  "tokens": 37162,
+  "steps": null,
+  "latency_s": 592.6521028179995,
+  "failure_mode": null,
+  "adapter_version": "1",
+  "dataset_hash": "48656f022bf30868",
+  "created_at": "2026-07-12T07:45:04.831845+00:00",
+  "raw": {
+    "resolved": true,
+    "selected_index": 0,
+    "selection": "first",
+    "repair_used": false,
+    "oracle_private": true,
+    "samples": [
+      {
+        "index": 0,
+        "temperature": 0.2,
+        "finish_reason": "stop",
+        "prompt_tokens": 5310,
+        "completion_tokens": 31852,
+        "cost_usd": 0.0,
+        "public_passed": 3,
+        "public_total": 3,
+        "public_all": true,
+        "public_failure": null,
+        "private_passed_all": true,
+        "private_passed": 40,
+        "private_total": 40
+      }
+    ],
+    "selected_code": "import sys\n\ndef solve():\n    data = sys.stdin.read().split()\n    if not data:\n        print(0)\n        return\n    H = int(data[0])\n    W = int(data[1])\n    K = int(data[2])\n    grid = data[3:3+H]\n    \n    empty_cells = []\n    for i in range(H):\n        for j in range(W):\n            if grid[i][j] == '.':\n                empty_cells.append((i, j))\n    \n    directions = [(0, 1), (0, -1), (1, 0), (-1, 0)]\n    total_paths = 0\n    \n    for start_i, start_j in empty_cells:\n        start_mask = 1 << (start_i * W + start_j)\n        stack = [(start_i, start_j, start_mask, 0)]\n        \n        while stack:\n            i, j, visited, steps = stack.pop()\n            if steps == K:\n                total_paths += 1\n                continue\n            \n            for di, dj in directions:\n                ni, nj = i + di, j + dj\n                if 0 <= ni < H and 0 <= nj < W and grid[ni][nj] == '.':\n                    bit = 1 << (ni * W + nj)\n                    if not (visited & bit):\n                        stack.append((ni, nj, visited | bit, steps + 1))\n    \n    print(total_paths)\n\nif __name__ == \"__main__\":\n    solve()",
+    "cost_usd": 0.0,
+    "tokens": 37162,
+    "difficulty": "hard",
+    "contest_date": "2024-11-02T00:00:00"
+  }
+}

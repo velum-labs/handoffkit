@@ -1,0 +1,47 @@
+{
+  "shard_id": "8107d4cd135187d4",
+  "cell_id": "7f491779f6aa",
+  "generation": 0,
+  "benchmark": "livecodebench",
+  "instance_id": "abc378_d",
+  "sut_hash": "6d13f37c7b84a53b",
+  "status": "resolved",
+  "resolved": true,
+  "cost_usd": 0.0002263212,
+  "tokens": 1015,
+  "steps": null,
+  "latency_s": 17.365283413004363,
+  "failure_mode": null,
+  "adapter_version": "1",
+  "dataset_hash": "48656f022bf30868",
+  "created_at": "2026-07-12T07:33:58.957346+00:00",
+  "raw": {
+    "resolved": true,
+    "selected_index": 0,
+    "selection": "first",
+    "repair_used": false,
+    "oracle_private": true,
+    "samples": [
+      {
+        "index": 0,
+        "temperature": 0.2,
+        "finish_reason": "stop",
+        "prompt_tokens": 581,
+        "completion_tokens": 434,
+        "cost_usd": 0.0002263212,
+        "public_passed": 3,
+        "public_total": 3,
+        "public_all": true,
+        "public_failure": null,
+        "private_passed_all": true,
+        "private_passed": 40,
+        "private_total": 40
+      }
+    ],
+    "selected_code": "import sys\n\ndef solve():\n    input = sys.stdin.read\n    data = input().split()\n    \n    H, W, K = map(int, data[:3])\n    grid = data[3:]\n    \n    empty_cells = []\n    for i in range(H):\n        for j in range(W):\n            if grid[i][j] == '.':\n                empty_cells.append((i, j))\n    \n    # Directions: up, down, left, right\n    dirs = [(-1, 0), (1, 0), (0, -1), (0, 1)]\n    \n    answer = 0\n    \n    # Try each possible starting cell\n    for start_r, start_c in empty_cells:\n        # Use DFS with bitmask to track visited cells\n        # Since H, W <= 10, we can encode position (r, c) into a single integer: r * W + c\n        start_state = (start_r << 4) | start_c  # pack into 8 bits (since max 10 fits in 4 bits)\n        \n        stack = [(start_state, 1 << (start_r * W + start_c), 0)]  # (packed_pos, visited_mask, steps)\n        \n        while stack:\n            packed_pos, visited_mask, steps = stack.pop()\n            if steps == K:\n                answer += 1\n                continue\n            \n            r = packed_pos >> 4\n            c = packed_pos & 0xF\n            \n            for dr, dc in dirs:\n                nr, nc = r + dr, c + dc\n                if 0 <= nr < H and 0 <= nc < W and grid[nr][nc] == '.':\n                    bit = 1 << (nr * W + nc)\n                    if not (visited_mask & bit):\n                        new_packed = (nr << 4) | nc\n                        stack.append((new_packed, visited_mask | bit, steps + 1))\n    \n    print(answer)\n\nif __name__ == \"__main__\":\n    solve()",
+    "cost_usd": 0.0002263212,
+    "tokens": 1015,
+    "difficulty": "hard",
+    "contest_date": "2024-11-02T00:00:00"
+  }
+}

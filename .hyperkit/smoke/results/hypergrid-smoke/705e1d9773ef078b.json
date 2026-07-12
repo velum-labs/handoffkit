@@ -1,0 +1,62 @@
+{
+  "shard_id": "705e1d9773ef078b",
+  "cell_id": "5214ea808112",
+  "generation": 0,
+  "benchmark": "livecodebench",
+  "instance_id": "abc377_f",
+  "sut_hash": "6d13f37c7b84a53b",
+  "status": "unresolved",
+  "resolved": false,
+  "cost_usd": 0.000916776,
+  "tokens": 3471,
+  "steps": null,
+  "latency_s": 76.54522036699927,
+  "failure_mode": null,
+  "adapter_version": "1",
+  "dataset_hash": "48656f022bf30868",
+  "created_at": "2026-07-12T07:46:21.592633+00:00",
+  "raw": {
+    "resolved": false,
+    "selected_index": 0,
+    "selection": "public-exec",
+    "repair_used": false,
+    "oracle_private": false,
+    "samples": [
+      {
+        "index": 0,
+        "temperature": 0.2,
+        "finish_reason": "stop",
+        "prompt_tokens": 700,
+        "completion_tokens": 1203,
+        "cost_usd": 0.0005231772,
+        "public_passed": 3,
+        "public_total": 3,
+        "public_all": true,
+        "public_failure": null,
+        "private_passed_all": false,
+        "private_passed": 0,
+        "private_total": 40
+      },
+      {
+        "index": 1,
+        "temperature": 0.8,
+        "finish_reason": "stop",
+        "prompt_tokens": 700,
+        "completion_tokens": 868,
+        "cost_usd": 0.0003935988,
+        "public_passed": 0,
+        "public_total": 3,
+        "public_all": false,
+        "public_failure": null,
+        "private_passed_all": false,
+        "private_passed": 0,
+        "private_total": 40
+      }
+    ],
+    "selected_code": "import sys\n\ndef solve():\n    input = sys.stdin.read\n    data = input().split()\n    N = int(data[0])\n    M = int(data[1])\n    \n    rows = set()\n    cols = set()\n    diag1 = set()  # i + j\n    diag2 = set()  # i - j\n    \n    idx = 2\n    for _ in range(M):\n        a = int(data[idx]); b = int(data[idx+1])\n        idx += 2\n        rows.add(a)\n        cols.add(b)\n        diag1.add(a + b)\n        diag2.add(a - b)\n    \n    # Count squares attacked by existing pieces\n    attacked = 0\n    \n    # Rows\n    attacked += len(rows) * N\n    # Columns\n    attacked += len(cols) * N\n    # Diagonals (i + j constant)\n    for s in diag1:\n        # i + j = s, 1 <= i <= N, 1 <= j <= N\n        # i ranges from max(1, s - N) to min(N, s - 1)\n        low = max(1, s - N)\n        high = min(N, s - 1)\n        if low <= high:\n            attacked += (high - low + 1)\n    # Diagonals (i - j constant)\n    for d in diag2:\n        # i - j = d, 1 <= i <= N, 1 <= j <= N\n        # i ranges from max(1, 1 + d) to min(N, N + d)\n        low = max(1, 1 + d)\n        high = min(N, N + d)\n        if low <= high:\n            attacked += (high - low + 1)\n    \n    # Remove double-counted intersections\n    # Row ∩ Column\n    attacked -= len(rows) * len(cols)\n    # Row ∩ Diag1\n    for a in rows:\n        for s in diag1:\n            # i = a, i + j = s → j = s - a\n            if 1 <= s - a <= N:\n                attacked -= 1\n    # Row ∩ Diag2\n    for a in rows:\n        for d in diag2:\n            # i = a, i - j = d → j = a - d\n            if 1 <= a - d <= N:\n                attacked -= 1\n    # Column ∩ Diag1\n    for b in cols:\n        for s in diag1:\n            # j = b, i + j = s → i = s - b\n            if 1 <= s - b <= N:\n                attacked -= 1\n    # Column ∩ Diag2\n    for b in cols:\n        for d in diag2:\n            # j = b, i - j = d → i = d + b\n            if 1 <= d + b <= N:\n                attacked -= 1\n    # Diag1 ∩ Diag2\n    for s in diag1:\n        for d in diag2:\n            # i + j = s, i - j = d → 2i = s + d, 2j = s - d\n            if (s + d) % 2 == 0 and (s - d) % 2 == 0:\n                i = (s + d) // 2\n                j = (s - d) // 2\n                if 1 <= i <= N and 1 <= j <= N:\n                    attacked -= 1\n    \n    # Add back triple intersections\n    # Row ∩ Column ∩ Diag1\n    for a in rows:\n        for b in cols:\n            s = a + b\n            if s in diag1:\n                attacked += 1\n    # Row ∩ Column ∩ Diag2\n    for a in rows:\n        for b in cols:\n            d = a - b\n            if d in diag2:\n                attacked += 1\n    # Row ∩ Diag1 ∩ Diag2\n    for a in rows:\n        for s in diag1:\n            for d in diag2:\n                # i = a, i + j = s, i - j = d\n                if a + (s - a) == s and a - (a - d) == d:\n                    j1 = s - a\n                    j2 = a - d\n                    if j1 == j2 and 1 <= j1 <= N:\n                        attacked += 1\n    # Column ∩ Diag1 ∩ Diag2\n    for b in cols:\n        for s in diag1:\n            for d in diag2:\n                # j = b, i + j = s, i - j = d\n                i1 = s - b\n                i2 = d + b\n                if i1 == i2 and 1 <= i1 <= N:\n                    attacked += 1\n    \n    # Subtract quadruple intersection (Row ∩ Column ∩ Diag1 ∩ Diag2)\n    for a in rows:\n        for b in cols:\n            s = a + b\n            d = a - b\n            if s in diag1 and d in diag2:\n                attacked -= 1\n    \n    # Total squares\n    total_squares = N * N\n    # Occupied squares\n    occupied = M\n    # Safe squares = total - occupied - (attacked - occupied) because attacked includes occupied squares\n    safe = total_squares - attacked\n    \n    print(safe)\n\nif __name__ == \"__main__\":\n    solve()",
+    "cost_usd": 0.000916776,
+    "tokens": 3471,
+    "difficulty": "hard",
+    "contest_date": "2024-10-26T00:00:00"
+  }
+}

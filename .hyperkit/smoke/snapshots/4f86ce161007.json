@@ -1,0 +1,69 @@
+{
+  "sweep_id": "hypergrid-smoke",
+  "generation": 0,
+  "cell_id": "4f86ce161007",
+  "label": "smoke-fused-judge-synth",
+  "benchmark": "livecodebench",
+  "sut_kind": "fusionkit-serve",
+  "topology_hash": "2026527fc54e69b1",
+  "topology": "judge-synth",
+  "k": "",
+  "panel": "ds32+qwen3t",
+  "judge": "",
+  "commit": "",
+  "planned_shards": 3,
+  "completed_shards": 3,
+  "pending_shards": 0,
+  "running_shards": 0,
+  "resolved_shards": 2,
+  "errors": 1,
+  "resolution_rate": 1.0,
+  "wilson_low": 0.34237195288961925,
+  "wilson_high": 1.0,
+  "cost_usd": 0.0,
+  "cost_per_resolve": 0.0,
+  "latency_p50_seconds": 824.5923199370009,
+  "latency_p95_seconds": 3616.278248999006,
+  "delta_vs_best_single": 0.33333333333333337,
+  "rank": 1,
+  "pareto": true,
+  "params": {
+    "serve_config": {
+      "endpoints": [
+        {
+          "id": "ds32",
+          "provider": "openrouter",
+          "model": "deepseek/deepseek-v3.2",
+          "base_url": "https://openrouter.ai/api",
+          "api_key_env": "OPENROUTER_API_KEY"
+        },
+        {
+          "id": "qwen3t",
+          "provider": "openrouter",
+          "model": "qwen/qwen3-235b-a22b-thinking-2507",
+          "base_url": "https://openrouter.ai/api",
+          "api_key_env": "OPENROUTER_API_KEY"
+        }
+      ],
+      "default_model": "qwen3t",
+      "judge_model": "qwen3t",
+      "synthesizer_model": "qwen3t",
+      "panel_models": [
+        "ds32",
+        "qwen3t"
+      ],
+      "default_mode": "panel",
+      "harness_prompt_passthrough": true,
+      "sampling": {
+        "temperature": 0.2,
+        "top_p": 0.95,
+        "max_tokens": 16384
+      }
+    },
+    "panel": [
+      "ds32",
+      "qwen3t"
+    ],
+    "topology": "judge-synth"
+  }
+}

@@ -1,0 +1,47 @@
+{
+  "shard_id": "506a41ed8951d692",
+  "cell_id": "4f86ce161007",
+  "generation": 0,
+  "benchmark": "livecodebench",
+  "instance_id": "abc377_f",
+  "sut_hash": "2026527fc54e69b1",
+  "status": "resolved",
+  "resolved": true,
+  "cost_usd": 0.0,
+  "tokens": 58701,
+  "steps": null,
+  "latency_s": 824.5923199370009,
+  "failure_mode": null,
+  "adapter_version": "1",
+  "dataset_hash": "48656f022bf30868",
+  "created_at": "2026-07-12T07:47:43.550702+00:00",
+  "raw": {
+    "resolved": true,
+    "selected_index": 0,
+    "selection": "first",
+    "repair_used": false,
+    "oracle_private": true,
+    "samples": [
+      {
+        "index": 0,
+        "temperature": 0.2,
+        "finish_reason": "stop",
+        "prompt_tokens": 5575,
+        "completion_tokens": 53126,
+        "cost_usd": 0.0,
+        "public_passed": 3,
+        "public_total": 3,
+        "public_all": true,
+        "public_failure": null,
+        "private_passed_all": true,
+        "private_passed": 40,
+        "private_total": 40
+      }
+    ],
+    "selected_code": "import sys\n\ndef main():\n    data = sys.stdin.read().split()\n    if not data:\n        return\n    N = int(data[0])\n    M = int(data[1])\n    pieces = []\n    index = 2\n    for i in range(M):\n        a = int(data[index])\n        b = int(data[index + 1])\n        index += 2\n        pieces.append((a, b))\n    \n    R = set()\n    C = set()\n    S = set()\n    D = set()\n    \n    for a, b in pieces:\n        R.add(a)\n        C.add(b)\n        S.add(a + b)\n        D.add(a - b)\n    \n    def len_sum(s, N):\n        low = max(1, s - N)\n        high = min(N, s - 1)\n        if low > high:\n            return 0\n        return high - low + 1\n    \n    def len_diff(d, N):\n        low = max(1, 1 + d)\n        high = min(N, N + d)\n        if low > high:\n            return 0\n        return high - low + 1\n    \n    A_size = len(R) * N\n    B_size = len(C) * N\n    C_size = sum(len_sum(s, N) for s in S)\n    D_size = sum(len_diff(d, N) for d in D)\n    \n    AB = len(R) * len(C)\n    \n    AC = 0\n    for s in S:\n        low = max(1, s - N)\n        high = min(N, s - 1)\n        if low > high:\n            continue\n        count = 0\n        for r in R:\n            if low <= r <= high:\n                count += 1\n        AC += count\n    \n    AD = 0\n    for d in D:\n        low = max(1, d + 1)\n        high = min(N, d + N)\n        if low > high:\n            continue\n        count = 0\n        for r in R:\n            if low <= r <= high:\n                count += 1\n        AD += count\n    \n    BC = 0\n    for s in S:\n        low = max(1, s - N)\n        high = min(N, s - 1)\n        if low > high:\n            continue\n        count = 0\n        for c in C:\n            if low <= c <= high:\n                count += 1\n        BC += count\n    \n    BD = 0\n    for d in D:\n        low = max(1, 1 - d)\n        high = min(N, N - d)\n        if low > high:\n            continue\n        count = 0\n        for c in C:\n            if low <= c <= high:\n                count += 1\n        BD += count\n    \n    CD = 0\n    for s in S:\n        for d in D:\n            if (s + d) % 2 != 0:\n                continue\n            i_val = (s + d) // 2\n            j_val = (s - d) // 2\n            if 1 <= i_val <= N and 1 <= j_val <= N:\n                CD += 1\n    \n    ABC = 0\n    for i in R:\n        for j in C:\n            if (i + j) in S:\n                ABC += 1\n    \n    ABD = 0\n    for i in R:\n        for j in C:\n            if (i - j) in D:\n                ABD += 1\n    \n    ACD = 0\n    for s in S:\n        for d in D:\n            if (s + d) % 2 != 0:\n                continue\n            i_val = (s + d) // 2\n            j_val = (s - d) // 2\n            if 1 <= i_val <= N and 1 <= j_val <= N and i_val in R:\n                ACD += 1\n    \n    BCD = 0\n    for s in S:\n        for d in D:\n            if (s + d) % 2 != 0:\n                continue\n            i_val = (s + d) // 2\n            j_val = (s - d) // 2\n            if 1 <= i_val <= N and 1 <= j_val <= N and j_val in C:\n                BCD += 1\n    \n    ABCD = 0\n    for i in R:\n        for j in C:\n            if (i + j) in S and (i - j) in D:\n                ABCD += 1\n    \n    total_attacked = (A_size + B_size + C_size + D_size) - (AB + AC + AD + BC + BD + CD) + (ABC + ABD + ACD + BCD) - ABCD\n    answer = N * N - total_attacked\n    print(answer)\n\nif __name__ == \"__main__\":\n    main()",
+    "cost_usd": 0.0,
+    "tokens": 58701,
+    "difficulty": "hard",
+    "contest_date": "2024-10-26T00:00:00"
+  }
+}

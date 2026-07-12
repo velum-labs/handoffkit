@@ -1,0 +1,138 @@
+{
+  "sweep_id": "hypergrid-smoke",
+  "created_at": "2026-07-12T07:33:41.220258+00:00",
+  "max_vcpus": 64,
+  "spend_ceiling_usd": null,
+  "generations": [
+    {
+      "index": 0,
+      "reason": "plan",
+      "created_at": "2026-07-12T07:33:41.220240+00:00",
+      "cells": [
+        {
+          "sut": {
+            "kind": "solo-model",
+            "params": {
+              "provider": "openrouter",
+              "model": "deepseek/deepseek-v3.2"
+            }
+          },
+          "benchmark": "livecodebench",
+          "instances": [
+            "abc377_f",
+            "abc378_d",
+            "abc390_g"
+          ],
+          "manifest_ref": "/workspace/analysis/hypergrid/manifests/dev.txt",
+          "dataset_hash": "48656f022bf30868",
+          "params": {},
+          "resource": {
+            "vcpu": 1.0,
+            "memory_gb": 6.0,
+            "needs_docker": true,
+            "wall_clock_s": 3600
+          },
+          "label": "smoke-solo-ds32"
+        },
+        {
+          "sut": {
+            "kind": "fusionkit-serve",
+            "params": {
+              "serve_config": {
+                "endpoints": [
+                  {
+                    "id": "ds32",
+                    "provider": "openrouter",
+                    "model": "deepseek/deepseek-v3.2",
+                    "base_url": "https://openrouter.ai/api",
+                    "api_key_env": "OPENROUTER_API_KEY"
+                  },
+                  {
+                    "id": "qwen3t",
+                    "provider": "openrouter",
+                    "model": "qwen/qwen3-235b-a22b-thinking-2507",
+                    "base_url": "https://openrouter.ai/api",
+                    "api_key_env": "OPENROUTER_API_KEY"
+                  }
+                ],
+                "default_model": "qwen3t",
+                "judge_model": "qwen3t",
+                "synthesizer_model": "qwen3t",
+                "panel_models": [
+                  "ds32",
+                  "qwen3t"
+                ],
+                "default_mode": "panel",
+                "harness_prompt_passthrough": true,
+                "sampling": {
+                  "temperature": 0.2,
+                  "top_p": 0.95,
+                  "max_tokens": 16384
+                }
+              }
+            }
+          },
+          "benchmark": "livecodebench",
+          "instances": [
+            "abc377_f",
+            "abc378_d",
+            "abc390_g"
+          ],
+          "manifest_ref": "/workspace/analysis/hypergrid/manifests/dev.txt",
+          "dataset_hash": "48656f022bf30868",
+          "params": {
+            "panel": [
+              "ds32",
+              "qwen3t"
+            ],
+            "topology": "judge-synth"
+          },
+          "resource": {
+            "vcpu": 1.0,
+            "memory_gb": 6.0,
+            "needs_docker": true,
+            "wall_clock_s": 3600
+          },
+          "label": "smoke-fused-judge-synth"
+        },
+        {
+          "sut": {
+            "kind": "solo-model",
+            "params": {
+              "provider": "openrouter",
+              "model": "deepseek/deepseek-v3.2"
+            }
+          },
+          "benchmark": "livecodebench",
+          "instances": [
+            "abc377_f",
+            "abc378_d",
+            "abc390_g"
+          ],
+          "manifest_ref": "/workspace/analysis/hypergrid/manifests/dev.txt",
+          "dataset_hash": "48656f022bf30868",
+          "params": {
+            "n_samples": 2,
+            "temps": [
+              0.2,
+              0.8
+            ],
+            "selection": "public-exec",
+            "topology": "exec-select"
+          },
+          "resource": {
+            "vcpu": 1.0,
+            "memory_gb": 6.0,
+            "needs_docker": true,
+            "wall_clock_s": 3600
+          },
+          "label": "smoke-exec-select-ds32"
+        }
+      ],
+      "retired_cell_ids": [],
+      "experiment_id": "hypergrid-smoke",
+      "experiment_source_hash": "8fb9f7fe9592274e",
+      "repo_sha": null
+    }
+  ]
+}
