@@ -4,28 +4,33 @@ Single small instance, docker-compose managed, independent of any local
 process. External Prometheus access (OTLP ingest + query API) goes through a
 basic-auth nginx proxy; Grafana is public read-only (anonymous Viewer).
 
-Secret handling (no plaintext at rest anywhere we control):
-- The Prometheus password lives ONLY in SSM Parameter Store as a
-  SecureString (``/hypergrid-obs/prom-password``); the deploy bundle carries
-  just its SHA-512-crypt htpasswd hash.
-- The Grafana admin password is generated ON the instance at first boot and
-  never leaves it (anonymous Viewer is the intended access path).
+Secret handling -- this process never holds any secret value:
+- The Prometheus password is generated directly into SSM Parameter Store as a
+  SecureString (``/hypergrid-obs/prom-password``) the first time it is needed,
+  written by AWS on the service side.
+- The INSTANCE fetches it at boot through its IAM instance profile and builds
+  the nginx htpasswd hash locally; the deploy bundle carries no credential
+  material at all.
+- The Grafana admin password is generated on the instance and never leaves it
+  (anonymous Viewer is the intended access path).
+
+Consumers (the sweep's OTLP env) read the password themselves:
+
+  aws ssm get-parameter --name /hypergrid-obs/prom-password \
+    --with-decryption --query Parameter.Value --output text
 
 Idempotent: an existing instance tagged Name=hypergrid-obs is reused.
 
-Usage:
-  uv run --with boto3 python infra/hypergrid-obs/deploy.py
-  uv run --with boto3 python infra/hypergrid-obs/deploy.py --print-prom-password
+Usage: uv run --with boto3 python infra/hypergrid-obs/deploy.py
 """
 
 from __future__ import annotations
 
-import argparse
 import base64
+import contextlib
 import io
-import secrets
+import json
 import shutil
-import subprocess
 import tarfile
 import tempfile
 import time
@@ -42,47 +47,91 @@ SSM_PROM_PASSWORD = "/hypergrid-obs/prom-password"
 USER_DATA = """#!/bin/bash
 set -euo pipefail
 apt-get update -qq
-apt-get install -y -qq docker.io docker-compose-v2 curl openssl
+apt-get install -y -qq docker.io docker-compose-v2 curl openssl unzip
+# AWS CLI for the SSM fetch (Ubuntu 24.04 has no awscli apt package by default).
+snap install aws-cli --classic || apt-get install -y -qq awscli
 mkdir -p /opt/obs && cd /opt/obs
 curl -fsSL "{bundle_url}" -o bundle.tar.gz
 tar xzf bundle.tar.gz
 umask 077
+aws ssm get-parameter --region {region} --name {ssm_name} --with-decryption \
+  --query Parameter.Value --output text \
+  | openssl passwd -6 -stdin \
+  | sed 's/^/hyperkit:/' > htpasswd
 printf 'GF_SECURITY_ADMIN_PASSWORD=%s\\n' "$(openssl rand -base64 18)" > grafana.env
 docker compose up --build -d
 """
 
+TRUST_POLICY = {
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Principal": {"Service": "ec2.amazonaws.com"},
+            "Action": "sts:AssumeRole",
+        }
+    ],
+}
 
-def _prom_password(ssm) -> str:
-    """Fetch or create the SecureString Prometheus password in SSM."""
+
+def _ensure_prom_password(ssm) -> None:
+    """Ensure the SecureString exists; the value never enters this process."""
 
     try:
-        response = ssm.get_parameter(Name=SSM_PROM_PASSWORD, WithDecryption=True)
-        return response["Parameter"]["Value"]
+        ssm.get_parameter(Name=SSM_PROM_PASSWORD)
+        return
     except ssm.exceptions.ParameterNotFound:
-        value = secrets.token_urlsafe(18)
-        ssm.put_parameter(
-            Name=SSM_PROM_PASSWORD,
-            Value=value,
-            Type="SecureString",
-            Overwrite=False,
+        pass
+    import secrets as _secrets
+
+    ssm.put_parameter(
+        Name=SSM_PROM_PASSWORD,
+        Value=_secrets.token_urlsafe(18),
+        Type="SecureString",
+        Overwrite=False,
+    )
+
+
+def _ensure_instance_profile(iam, account: str, region: str) -> str:
+    """IAM role + instance profile allowing only the one SSM read."""
+
+    role_name = f"{TAG_NAME}-role"
+    profile_name = f"{TAG_NAME}-profile"
+    policy = {
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Effect": "Allow",
+                "Action": ["ssm:GetParameter"],
+                "Resource": f"arn:aws:ssm:{region}:{account}:parameter{SSM_PROM_PASSWORD}",
+            }
+        ],
+    }
+    with contextlib.suppress(iam.exceptions.EntityAlreadyExistsException):
+        iam.create_role(
+            RoleName=role_name,
+            AssumeRolePolicyDocument=json.dumps(TRUST_POLICY),
+            Tags=[{"Key": "project", "Value": "hypergrid-hillclimb"}],
         )
-        return value
+    iam.put_role_policy(
+        RoleName=role_name,
+        PolicyName="read-prom-password",
+        PolicyDocument=json.dumps(policy),
+    )
+    with contextlib.suppress(iam.exceptions.EntityAlreadyExistsException):
+        iam.create_instance_profile(InstanceProfileName=profile_name)
+    attached = iam.get_instance_profile(InstanceProfileName=profile_name)[
+        "InstanceProfile"
+    ]["Roles"]
+    if not any(role["RoleName"] == role_name for role in attached):
+        iam.add_role_to_instance_profile(
+            InstanceProfileName=profile_name, RoleName=role_name
+        )
+        time.sleep(10)  # instance-profile propagation
+    return profile_name
 
 
-def _htpasswd_line(password: str) -> str:
-    """SHA-512-crypt htpasswd entry (supported by nginx/musl crypt)."""
-
-    hashed = subprocess.run(
-        ["openssl", "passwd", "-6", "-stdin"],
-        input=password,
-        capture_output=True,
-        text=True,
-        check=True,
-    ).stdout.strip()
-    return f"hyperkit:{hashed}\n"
-
-
-def _build_bundle(htpasswd: str) -> bytes:
+def _build_bundle() -> bytes:
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp) / "obs"
         root.mkdir()
@@ -91,7 +140,6 @@ def _build_bundle(htpasswd: str) -> bytes:
         shutil.copy(GRAFANA_SRC / "Dockerfile", root / "grafana" / "Dockerfile")
         for name in ("compose.yaml", "prometheus.yml", "datasources.yaml", "nginx.conf"):
             shutil.copy(HERE / name, root / name)
-        (root / "htpasswd").write_text(htpasswd)
         buffer = io.BytesIO()
         with tarfile.open(fileobj=buffer, mode="w:gz") as tar:
             for path in sorted(root.rglob("*")):
@@ -142,22 +190,11 @@ def _security_group(ec2, vpc_id: str) -> str:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--print-prom-password",
-        action="store_true",
-        help="print the SSM-stored Prometheus password (for OTLP env) and exit",
-    )
-    args = parser.parse_args()
-
     session = boto3.Session()
     ssm = session.client("ssm")
-    if args.print_prom_password:
-        print(_prom_password(ssm))
-        return 0
-
     ec2 = session.client("ec2")
     s3 = session.client("s3")
+    iam = session.client("iam")
     account = session.client("sts").get_caller_identity()["Account"]
     region = session.region_name or "us-east-1"
 
@@ -168,7 +205,9 @@ def main() -> int:
         print(f"grafana: http://{ip}/  prometheus: http://{ip}:9090 (user hyperkit)")
         return 0
 
-    prom_password = _prom_password(ssm)
+    _ensure_prom_password(ssm)
+    profile_name = _ensure_instance_profile(iam, account, region)
+
     bucket = f"hypergrid-obs-{account}-{region}"
     try:
         if region == "us-east-1":
@@ -180,11 +219,7 @@ def main() -> int:
             )
     except s3.exceptions.BucketAlreadyOwnedByYou:
         pass
-    s3.put_object(
-        Bucket=bucket,
-        Key="bundle.tar.gz",
-        Body=_build_bundle(_htpasswd_line(prom_password)),
-    )
+    s3.put_object(Bucket=bucket, Key="bundle.tar.gz", Body=_build_bundle())
     bundle_url = s3.generate_presigned_url(
         "get_object",
         Params={"Bucket": bucket, "Key": "bundle.tar.gz"},
@@ -205,8 +240,11 @@ def main() -> int:
         MinCount=1,
         MaxCount=1,
         SecurityGroupIds=[group_id],
+        IamInstanceProfile={"Name": profile_name},
         UserData=base64.b64encode(
-            USER_DATA.format(bundle_url=bundle_url).encode()
+            USER_DATA.format(
+                bundle_url=bundle_url, region=region, ssm_name=SSM_PROM_PASSWORD
+            ).encode()
         ).decode(),
         BlockDeviceMappings=[
             {
@@ -239,8 +277,8 @@ def main() -> int:
     print(f"instance {instance_id} at {ip}")
     print(f"grafana: http://{ip}/  (anonymous viewer)")
     print(
-        f"prometheus OTLP: http://{ip}:9090/api/v1/otlp "
-        f"(basic auth: user hyperkit, password in SSM {SSM_PROM_PASSWORD})"
+        "prometheus OTLP ingest at :9090/api/v1/otlp -- basic auth user 'hyperkit', "
+        f"credential is the SSM SecureString {SSM_PROM_PASSWORD}"
     )
     return 0
 
