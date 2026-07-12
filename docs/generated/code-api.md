@@ -172,8 +172,6 @@ adapters, ACP helpers, provenance records, and trajectory capture.
 
 - `export { startGateway } from "./server.js";`
 - `export type { Gateway, GatewayOptions } from "./server.js";`
-- `export { CodexBackendRelay, codexRelayAuth } from "./codex-relay.js";`
-- `export type { CodexCatalogEntry, CodexRelayAuth, CodexRelayOptions, CodexStockEntry } from "./codex-relay.js";`
 - `export { joinPath, ModelRoutedBackend, OpenAiBackend, PANEL_DEPTH_HEADER, parsePanelDepth } from "./backend.js";`
 - `export type { Backend, BackendRequestOptions, ModelRoutedBackendOptions, OpenAiBackendOptions } from "./backend.js";`
 - `export { FusionBackend } from "./fusion-backend.js";`
@@ -298,6 +296,9 @@ it without cycles.
 - `export function providerDiscovery(provider: string): ProviderDiscovery | undefined ...`
   Live model-discovery capability for a provider, or undefined.
 - `export type SubscriptionMode ...`
+- `export type SubscriptionOAuthInfo ...`
+- `export type SubscriptionRateLimitInfo ...`
+- `export type SubscriptionAdminInfo ...`
 - `export type SubscriptionInfo ...`
 - `export const SUBSCRIPTIONS: Readonly<Record<SubscriptionMode, SubscriptionInfo>> ...`
 - `export function subscriptionInfo(mode: SubscriptionMode): SubscriptionInfo ...`

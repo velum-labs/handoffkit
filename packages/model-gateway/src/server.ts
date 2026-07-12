@@ -10,7 +10,17 @@ import {
 import type { AnthropicRequest } from "./adapters/anthropic.js";
 import { effectiveModel, isStream, withDefaultModel } from "./adapters/chat.js";
 import { authorizedRequest } from "./auth.js";
-import type { CodexBackendRelay } from "./codex-relay.js";
+import { CodexBackendRelay } from "./subscriptions/codex-relay.js";
+import { SubscriptionAccountSetExhaustedError } from "./subscriptions/account-set.js";
+import type {
+  SubscriptionRelay,
+  SubscriptionRelayDialect
+} from "./subscriptions/relay.js";
+import type {
+  RateLimitWindow,
+  SubscriptionAccountSetSnapshot
+} from "./subscriptions/types.js";
+import { snapshotsToUsage } from "./subscriptions/wire.js";
 import { isCursorChatBody, translateCursorRequest } from "./adapters/cursor.js";
 import { handleResponses } from "./adapters/responses.js";
 import type { ResponsesRequest } from "./adapters/responses.js";
@@ -60,6 +70,11 @@ export type GatewayOptions = {
    * relayed ChatGPT token), so it is ignored when a gateway token is set.
    */
   codexRelay?: CodexBackendRelay;
+  /**
+   * Provider-native subscription relays. They share the gateway HTTP door,
+   * streaming/backpressure, ingress auth, and backend `servesModel` gate.
+   */
+  subscriptionRelays?: Partial<Record<SubscriptionRelayDialect, SubscriptionRelay>>;
 };
 
 export type Gateway = {
@@ -69,21 +84,68 @@ export type Gateway = {
   close(): Promise<void>;
 };
 
+function codexWindow(snapshot: SubscriptionAccountSetSnapshot, name: string): RateLimitWindow | undefined {
+  const member = snapshot.members.find((candidate) => candidate.active) ?? snapshot.members[0];
+  if (member?.limits === undefined) return undefined;
+  return Object.entries(member.limits.windows).find(([key]) => key.endsWith(`:${name}`) || key === name)?.[1];
+}
+
+function codexUsagePayload(snapshot: SubscriptionAccountSetSnapshot): Record<string, unknown> {
+  const member = snapshot.members.find((candidate) => candidate.active) ?? snapshot.members[0];
+  const primary = codexWindow(snapshot, "primary");
+  const secondary = codexWindow(snapshot, "secondary");
+  const now = Date.now() / 1000;
+  const wireWindow = (window: RateLimitWindow | undefined): Record<string, unknown> | null =>
+    window === undefined
+      ? null
+      : {
+          used_percent: window.utilization * 100,
+          ...(window.windowSeconds !== undefined
+            ? { limit_window_seconds: window.windowSeconds }
+            : {}),
+          ...(window.resetsAt !== undefined
+            ? {
+                reset_at: window.resetsAt,
+                reset_after_seconds: Math.max(0, window.resetsAt - now)
+              }
+            : {})
+        };
+  const reached = [primary, secondary].some(
+    (window) => window !== undefined && window.utilization >= 1
+  );
+  return {
+    plan_type: member?.limits?.planType ?? "unknown",
+    rate_limit: {
+      allowed: !reached,
+      limit_reached: reached,
+      primary_window: wireWindow(primary),
+      secondary_window: wireWindow(secondary)
+    },
+    ...(member?.limits?.credits !== undefined ? { credits: member.limits.credits } : {})
+  };
+}
+
 export async function startGateway(options: GatewayOptions): Promise<Gateway> {
   const host = options.host ?? "127.0.0.1";
   const { backend, authToken, provenance } = options;
-  // With a gateway auth token, the Authorization header is the gateway's own
-  // bearer, never a relayable ChatGPT token — the relay cannot work.
-  const codexRelay = authToken === undefined ? options.codexRelay : undefined;
+  // Client-forwarded Codex auth and server-owned subscription accounts are
+  // distinct trust models. Gateway auth disables only the client-forwarded
+  // relay; a server-owned account set remains available behind the proxy key.
+  const codexClientRelay = authToken === undefined ? options.codexRelay : undefined;
+  const anthropicRelay = options.subscriptionRelays?.anthropic;
+  const codexSubscriptionRelay = options.subscriptionRelays?.codex;
+  const codexCatalogRelay =
+    codexSubscriptionRelay instanceof CodexBackendRelay
+      ? codexSubscriptionRelay
+      : codexClientRelay;
+  const codexRequestRelay = codexSubscriptionRelay ?? codexClientRelay;
 
   const server = createServer((req, res) => {
     void handle(req, res).catch((error: unknown) => {
       // This catch must never throw: a throw here becomes an unhandled
       // rejection that kills the process hosting the gateway (and, for the
       // in-process fusion gateway, the whole CLI).
-      writeErrorSafely(res, 502, {
-        error: { message: errorMessage(error), type: "upstream_error" }
-      });
+      writeGatewayError(res, error);
     });
   });
 
@@ -102,18 +164,45 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
       return;
     }
 
-    if (method === "GET" && (path === "/v1/models" || path === "/models")) {
+    if (method === "GET" && path === "/usage") {
+      writeJson(
+        res,
+        200,
+        snapshotsToUsage([anthropicRelay?.snapshot?.(), codexSubscriptionRelay?.snapshot?.()])
+      );
+      return;
+    }
+
+    if (
+      method === "GET" &&
+      (path === "/backend-api/wham/usage" || path === "/api/codex/usage")
+    ) {
+      const snapshot = codexSubscriptionRelay?.snapshot?.();
+      writeJson(res, snapshot === undefined ? 404 : 200, snapshot === undefined ? {
+        error: { message: "Codex subscription pool is not configured", type: "not_found" }
+      } : codexUsagePayload(snapshot));
+      return;
+    }
+
+    if (
+      method === "GET" &&
+      (path === "/v1/models" || path === "/models" || path === "/backend-api/codex/models")
+    ) {
       // Claude Code's discovery probe carries `anthropic-version` and expects
       // the Anthropic-shaped model list; everyone else gets the OpenAI shape.
       if (req.headers["anthropic-version"] !== undefined) {
+        if (anthropicRelay?.models !== undefined) {
+          await pipeUpstream(res, await anthropicRelay.models(req.headers, url.search));
+          return;
+        }
         await pipeUpstream(res, anthropicModelsResponse(backend.defaultModel, backend.listModelIds?.()));
         return;
       }
-      if (codexRelay !== undefined) {
+      if (codexCatalogRelay !== undefined) {
         // Codex parses the `models` key (its ModelInfo catalog — this is what
         // drives its /model picker); OpenAI-shape clients read `data`. Serving
         // both keys on one response keeps every client working.
-        const merged = await codexRelay.mergedCatalog(req.headers, url.search);
+        const merged = await codexCatalogRelay.mergedCatalog(req.headers, url.search);
         if (merged !== undefined) {
           const base = (await (await backend.models()).json()) as {
             data?: Array<{ id: string } & Record<string, unknown>>;
@@ -121,7 +210,7 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
           if (merged.etag !== undefined) res.setHeader("etag", merged.etag);
           writeJson(res, 200, {
             object: "list",
-            data: codexRelay.mergeDataIds(base.data ?? [], merged.models),
+            data: codexCatalogRelay.mergeDataIds(base.data ?? [], merged.models),
             models: merged.models
           });
           return;
@@ -215,6 +304,13 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
       const raw = await readJson(req, res);
       if (raw === NO_BODY) return;
       if (rejectInvalid(res, validateCountTokensRequest(raw))) return;
+      if (anthropicRelay?.countTokens !== undefined) {
+        await pipeUpstream(
+          res,
+          await anthropicRelay.countTokens(req.headers, raw as AnthropicRequest)
+        );
+        return;
+      }
       await pipeUpstream(res, handleCountTokens(raw as AnthropicRequest));
       return;
     }
@@ -224,6 +320,23 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
       if (raw === NO_BODY) return;
       if (rejectInvalid(res, validateAnthropicRequest(raw))) return;
       const body = raw as AnthropicRequest;
+      const requestedModel = typeof body.model === "string" ? body.model : undefined;
+      if (
+        anthropicRelay !== undefined &&
+        anthropicRelay.shouldRelay(
+          req.headers,
+          requestedModel,
+          (model) => backend.servesModel?.(model) ?? false
+        )
+      ) {
+        await handleModelCall(res, provenance, {
+          dialect: "anthropic-messages",
+          body,
+          defaultModel: backend.defaultModel,
+          invoke: (_callId, signal) => anthropicRelay.relay(req.headers, body, signal)
+        });
+        return;
+      }
       await handleModelCall(res, provenance, {
         dialect: "anthropic-messages",
         body,
@@ -233,7 +346,10 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
       return;
     }
 
-    if (method === "POST" && path === "/v1/responses") {
+    if (
+      method === "POST" &&
+      (path === "/v1/responses" || path === "/backend-api/codex/responses")
+    ) {
       const raw = await readJson(req, res);
       if (raw === NO_BODY) return;
       if (rejectInvalid(res, validateResponsesRequest(raw))) return;
@@ -244,17 +360,17 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
       // folding it into the fused default.
       const requestedModel = typeof body.model === "string" ? body.model : undefined;
       if (
-        codexRelay !== undefined &&
-        backend.servesModel !== undefined &&
-        codexRelay.shouldRelayResponses(req.headers, requestedModel, (model) =>
-          backend.servesModel?.(model) ?? true
+        codexRequestRelay !== undefined &&
+        codexRequestRelay.shouldRelay(req.headers, requestedModel, (model) =>
+          backend.servesModel?.(model) ?? false
         )
       ) {
         await handleModelCall(res, provenance, {
           dialect: "openai-responses",
           body,
           defaultModel: backend.defaultModel,
-          invoke: (_callId, signal) => codexRelay.relayResponses(req.headers, body, signal)
+          invoke: (_callId, signal) =>
+            codexRequestRelay.relay(req.headers, body, signal)
         });
         return;
       }
@@ -292,6 +408,12 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
       // Release a backend that owns a process (e.g. the MLX server) instead of
       // leaking it when the gateway shuts down.
       await backend.close?.();
+      const relays = new Set(
+        [codexClientRelay, anthropicRelay, codexSubscriptionRelay].filter(
+          (relay): relay is SubscriptionRelay => relay !== undefined
+        )
+      );
+      await Promise.all([...relays].map(async (relay) => relay.close?.()));
     }
   };
 }
@@ -385,6 +507,34 @@ function writeErrorSafely(res: ServerResponse, status: number, value: unknown): 
   return Buffer.alloc(0);
 }
 
+/**
+ * Map a gateway request failure to an HTTP response. Subscription account-set
+ * exhaustion becomes a real `429` with the soonest reset (so clients back off
+ * instead of seeing a generic `502`); everything else is an upstream `502`.
+ */
+function writeGatewayError(
+  res: ServerResponse,
+  error: unknown
+): { statusCode: number; payload: Buffer } {
+  if (error instanceof SubscriptionAccountSetExhaustedError) {
+    if (error.resetAt !== undefined && !res.headersSent) {
+      res.setHeader("retry-after", Math.max(0, Math.ceil(error.resetAt - Date.now() / 1000)));
+    }
+    const payload = writeErrorSafely(res, 429, {
+      error: {
+        message: error.message,
+        type: "rate_limit_error",
+        ...(error.resetAt !== undefined ? { resets_at: error.resetAt } : {})
+      }
+    });
+    return { statusCode: 429, payload };
+  }
+  const payload = writeErrorSafely(res, 502, {
+    error: { message: errorMessage(error), type: "upstream_error" }
+  });
+  return { statusCode: 502, payload };
+}
+
 type ModelCallRoute = {
   dialect: GatewayDialect;
   body: unknown;
@@ -429,10 +579,7 @@ async function handleModelCall(
     sink?.onModelCall?.(buildModelCallRecord(context, result));
     sink?.onModelCallRaw?.(context, result);
   } catch (error) {
-    const statusCode = 502;
-    const payload = writeErrorSafely(res, statusCode, {
-      error: { message: errorMessage(error), type: "upstream_error" }
-    });
+    const { statusCode, payload } = writeGatewayError(res, error);
     const result = {
       statusCode,
       responseBody: payload,

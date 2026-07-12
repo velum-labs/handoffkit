@@ -12,8 +12,8 @@
  */
 export { startGateway } from "./server.js";
 export type { Gateway, GatewayOptions } from "./server.js";
-export { CodexBackendRelay, codexRelayAuth } from "./codex-relay.js";
-export type { CodexCatalogEntry, CodexRelayAuth, CodexRelayOptions, CodexStockEntry } from "./codex-relay.js";
+// The subscription-pooling SDK is published under the `./subscriptions` subpath
+// (`@fusionkit/model-gateway/subscriptions`), not this core entrypoint.
 export {
   joinPath,
   ModelRoutedBackend,

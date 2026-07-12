@@ -1,0 +1,118 @@
+---
+title: Subscription pooling proxy
+description: Pool multiple Claude Code or Codex subscriptions behind one long-lived local endpoint.
+---
+
+FusionKit can expose a provider-native local proxy that selects among multiple
+Claude Code or Codex subscriptions. The proxy preserves each harness's native
+wire protocol and streaming behavior; it only replaces the ingress proxy token
+with the selected account's OAuth token.
+
+## Start with one account
+
+The official CLIs remain the login UI. Sign in normally, then start the proxy:
+
+```bash
+claude
+codex login
+fusionkit proxy serve
+```
+
+When no managed accounts exist yet, FusionKit imports the current official CLI
+login as a managed one-account set. The same selection and refresh path serves
+one or many accounts; single-account auth is not a separate mode.
+
+## Add accounts
+
+To grow that account set, sign into another account and enroll it:
+
+```bash
+claude
+fusionkit proxy add claude-code --name personal
+
+codex login
+fusionkit proxy add codex --name work
+```
+
+Pool copies live under `~/.fusionkit/subscriptions/<provider>/` with private
+permissions. FusionKit never modifies the canonical `~/.claude` or `~/.codex`
+credential store. It refreshes only the enrolled copies so idle accounts remain
+usable.
+
+## Start the endpoint
+
+```bash
+fusionkit proxy serve
+```
+
+The command prints:
+
+- `ANTHROPIC_BASE_URL` and `ANTHROPIC_AUTH_TOKEN` exports for Claude Code.
+- A Codex `model_providers` TOML block and `FUSIONKIT_PROXY_TOKEN`.
+
+The default is a sticky account policy, which keeps prompt-cache affinity until
+an account approaches 90% utilization. Other policies are available:
+
+```bash
+fusionkit proxy serve \
+  --strategy capacity_weighted \
+  --switch-threshold 0.9 \
+  --probe-interval 60
+```
+
+`--probe-interval 0` (the default) disables active probes. Passive rate-limit
+headers are still captured on every request.
+
+## Inspect limits
+
+```bash
+fusionkit proxy status
+fusionkit --json proxy status
+```
+
+Status reports each account's observed short and weekly windows, model-specific
+buckets, reset timestamps, credits, and cooldown state. The proxy uses the same
+first-party OAuth usage endpoints as the official clients:
+
+- Claude Code: `GET https://api.anthropic.com/api/oauth/usage`
+- Codex: `GET https://chatgpt.com/backend-api/wham/usage`
+
+These OAuth-scoped endpoints report subscription windows. The documented
+organization Admin usage APIs report API-platform billing and are not used for
+subscription routing.
+
+`fusionkit proxy stop` (and `fusionkit stop`, which reaps every background
+fusion service) shuts the proxy down.
+
+## Programmatic SDK
+
+The same capability is available without the CLI from the
+`@fusionkit/model-gateway/subscriptions` subpath:
+
+```ts
+import {
+  startSubscriptionProxy,
+  SubscriptionProxyClient
+} from "@fusionkit/model-gateway/subscriptions";
+
+const proxy = await startSubscriptionProxy({
+  accounts: { "claude-code": { source: { kind: "auto" } } }
+});
+console.log(proxy.url(), proxy.token, proxy.providers);
+
+const client = SubscriptionProxyClient.open({ baseUrl: proxy.url(), token: proxy.token });
+const usage = await client.usage(); // typed via the shared wire schema
+```
+
+## Security and limits
+
+- The proxy binds to `127.0.0.1` by default and always requires its generated
+  proxy token. Use additional network controls before binding off-loopback.
+- Account tokens are never returned by `/usage` or printed by status.
+- A spent quota window rotates to another eligible account; when every eligible
+  account is spent the proxy returns `429` with `Retry-After`. A short per-minute
+  throttle waits on the same account to avoid moving a burst through the pool.
+- IP-based throttles may affect every account and cannot be fixed by account
+  rotation.
+- Use only accounts you control and operate within provider terms and normal
+  request volumes.

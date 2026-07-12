@@ -5,16 +5,24 @@ import { z } from "zod";
 import { providerDefaultBaseUrl } from "@fusionkit/registry";
 import { trimTrailingSlashes } from "@fusionkit/runtime-utils";
 
-import type { FusionGatewayLogger } from "./logger.js";
-import { defaultFusionGatewayLogger } from "./logger.js";
+import type { FusionGatewayLogger } from "../logger.js";
+import { defaultFusionGatewayLogger } from "../logger.js";
+import type { SubscriptionAccountSet } from "./account-set.js";
+import { subscriptionProvider } from "./provider.js";
+import { forwardRelayHeaders } from "./relay.js";
+import type { SubscriptionRelay } from "./relay.js";
+import type { SubscriptionAccountSetSnapshot } from "./types.js";
 
 /**
  * The Codex backend relay: lets a Codex client keep its own stock models while
  * pointed at the FusionKit gateway as its (single) model provider.
  *
- * Codex attaches the user's own ChatGPT login (bearer token + account id) to
- * every request it sends its configured provider — i.e. this gateway. The
- * relay uses that:
+ * The relay supports two explicit credential trust models:
+ *
+ * - `client` forwards the ChatGPT login Codex attached to the request.
+ * - `accounts` selects from a server-owned {@link SubscriptionAccountSet}.
+ *
+ * In either mode:
  *
  * - `GET /v1/models`: forwarded to the ChatGPT Codex backend with the client's
  *   relayed auth, and the live stock catalog is merged behind the fusion/panel
@@ -27,8 +35,8 @@ import { defaultFusionGatewayLogger } from "./logger.js";
  *   backend, so a stock model pick behaves bit-for-bit like plain Codex —
  *   same auth, same billing, same responses.
  *
- * The relay never stores or mints credentials: it only forwards the auth
- * material the client itself attached to the request.
+ * Client mode never stores or mints credentials. Account-set mode strips
+ * ingress auth and injects the selected managed credential.
  */
 
 /** One model catalog entry in Codex's own `ModelInfo` wire shape. */
@@ -72,30 +80,19 @@ export type CodexRelayOptions = {
   /** Upstream fetch timeout (ms). Codex itself caps the whole refresh at 5s. */
   timeoutMs?: number;
   logger?: FusionGatewayLogger;
+  /** Credential trust model. Defaults to forwarding the Codex client's auth. */
+  auth?: CodexRelayAuthSource;
 };
+
+export type CodexRelayAuthSource =
+  | { kind: "client" }
+  | { kind: "accounts"; accounts: SubscriptionAccountSet };
 
 /** ChatGPT auth material relayed from the client's own request. */
 export type CodexRelayAuth = {
   authorization: string;
   accountId: string;
 };
-
-/**
- * Hop-by-hop / transport headers never forwarded upstream. Everything else is
- * relayed verbatim so the upstream sees the exact request Codex built
- * (auth, originator, OpenAI-Beta, session ids, user agent).
- */
-const DROP_HEADERS = new Set([
-  "host",
-  "connection",
-  "content-length",
-  "transfer-encoding",
-  "accept-encoding",
-  "keep-alive",
-  "proxy-authorization",
-  "te",
-  "upgrade"
-]);
 
 /**
  * Extract relayable ChatGPT auth from a request. Codex's ChatGPT-login auth
@@ -111,28 +108,20 @@ export function codexRelayAuth(headers: IncomingHttpHeaders): CodexRelayAuth | u
   return { authorization, accountId };
 }
 
-function forwardHeaders(headers: IncomingHttpHeaders): Record<string, string> {
-  const forwarded: Record<string, string> = {};
-  for (const [name, value] of Object.entries(headers)) {
-    if (DROP_HEADERS.has(name.toLowerCase())) continue;
-    if (typeof value === "string") forwarded[name] = value;
-    else if (Array.isArray(value)) forwarded[name] = value.join(", ");
-  }
-  return forwarded;
-}
-
 function entrySlug(entry: CodexCatalogEntry): string | undefined {
   return typeof entry.slug === "string" && entry.slug.length > 0 ? entry.slug : undefined;
 }
 
 const DEFAULT_RELAY_TIMEOUT_MS = 4500;
 
-export class CodexBackendRelay {
+export class CodexBackendRelay implements SubscriptionRelay {
+  readonly dialect = "codex" as const;
   readonly #backendUrl: string;
   readonly #catalog: CodexRelayOptions["catalog"];
   readonly #fallbackStock: () => CodexCatalogEntry[];
   readonly #timeoutMs: number;
   readonly #logger: FusionGatewayLogger;
+  readonly #auth: CodexRelayAuthSource;
 
   constructor(options: CodexRelayOptions) {
     this.#backendUrl = trimTrailingSlashes(options.backendUrl ?? providerDefaultBaseUrl("codex") ?? "");
@@ -140,6 +129,7 @@ export class CodexBackendRelay {
     this.#fallbackStock = options.fallbackStock ?? (() => []);
     this.#timeoutMs = options.timeoutMs ?? DEFAULT_RELAY_TIMEOUT_MS;
     this.#logger = options.logger ?? defaultFusionGatewayLogger;
+    this.#auth = options.auth ?? { kind: "client" };
   }
 
   /**
@@ -154,7 +144,7 @@ export class CodexBackendRelay {
     search: string
   ): Promise<{ models: CodexCatalogEntry[]; etag?: string } | undefined> {
     const auth = codexRelayAuth(headers);
-    if (auth !== undefined) {
+    if (auth !== undefined || this.#auth.kind === "accounts") {
       try {
         const upstream = await this.#fetchUpstreamModels(headers, search);
         const template = upstream.models[0];
@@ -178,11 +168,26 @@ export class CodexBackendRelay {
     headers: IncomingHttpHeaders,
     search: string
   ): Promise<{ models: CodexStockEntry[]; etag?: string }> {
-    const response = await fetch(`${this.#backendUrl}/models${search}`, {
-      method: "GET",
-      headers: forwardHeaders(headers),
-      signal: AbortSignal.timeout(this.#timeoutMs)
-    });
+    const request = async (injected?: Record<string, string>): Promise<Response> => {
+      const forwarded = forwardRelayHeaders(headers);
+      if (injected !== undefined) {
+        delete forwarded.authorization;
+        delete forwarded.Authorization;
+        delete forwarded["chatgpt-account-id"];
+        Object.assign(forwarded, injected);
+      }
+      return fetch(`${this.#backendUrl}/models${search}`, {
+        method: "GET",
+        headers: forwarded,
+        signal: AbortSignal.timeout(this.#timeoutMs)
+      });
+    };
+    const response =
+      this.#auth.kind === "client"
+        ? await request()
+        : await this.#auth.accounts.execute(undefined, (credential) =>
+            request(subscriptionProvider("codex").authHeaders(credential))
+          );
     if (!response.ok) {
       throw new Error(`upstream /models returned ${response.status}`);
     }
@@ -211,7 +216,15 @@ export class CodexBackendRelay {
   ): boolean {
     if (model === undefined || model.length === 0) return false;
     if (servesLocally(model)) return false;
-    return codexRelayAuth(headers) !== undefined;
+    return this.#auth.kind === "accounts" || codexRelayAuth(headers) !== undefined;
+  }
+
+  shouldRelay(
+    headers: IncomingHttpHeaders,
+    model: string | undefined,
+    servesLocally: (model: string) => boolean
+  ): boolean {
+    return this.shouldRelayResponses(headers, model, servesLocally);
   }
 
   /**
@@ -221,14 +234,49 @@ export class CodexBackendRelay {
    * unchanged. This is exactly the call plain Codex would have made.
    */
   async relayResponses(headers: IncomingHttpHeaders, body: unknown, signal?: AbortSignal): Promise<Response> {
-    const forwarded = forwardHeaders(headers);
-    forwarded["content-type"] = "application/json";
-    return fetch(`${this.#backendUrl}/responses`, {
-      method: "POST",
-      headers: forwarded,
-      body: JSON.stringify(body),
-      ...(signal !== undefined ? { signal } : {})
-    });
+    const request = (injected?: Record<string, string>): Promise<Response> => {
+      const forwarded = forwardRelayHeaders(headers);
+      if (injected !== undefined) {
+        delete forwarded.authorization;
+        delete forwarded.Authorization;
+        delete forwarded["chatgpt-account-id"];
+        Object.assign(forwarded, injected);
+      }
+      forwarded["content-type"] = "application/json";
+      return fetch(`${this.#backendUrl}/responses`, {
+        method: "POST",
+        headers: forwarded,
+        body: JSON.stringify(body),
+        ...(signal !== undefined ? { signal } : {})
+      });
+    };
+    if (this.#auth.kind === "client") return request();
+    const model =
+      typeof body === "object" &&
+      body !== null &&
+      "model" in body &&
+      typeof body.model === "string"
+        ? body.model
+        : undefined;
+    return this.#auth.accounts.execute(model, (credential) =>
+      request(subscriptionProvider("codex").authHeaders(credential))
+    );
+  }
+
+  relay(
+    headers: IncomingHttpHeaders,
+    body: Parameters<SubscriptionRelay["relay"]>[1],
+    signal?: AbortSignal
+  ): Promise<Response> {
+    return this.relayResponses(headers, body, signal);
+  }
+
+  snapshot(): SubscriptionAccountSetSnapshot | undefined {
+    return this.#auth.kind === "accounts" ? this.#auth.accounts.snapshot() : undefined;
+  }
+
+  close(): Promise<void> | undefined {
+    return this.#auth.kind === "accounts" ? this.#auth.accounts.close() : undefined;
   }
 
   /** Merge relayed stock slugs into an OpenAI-shape `data` model list. */

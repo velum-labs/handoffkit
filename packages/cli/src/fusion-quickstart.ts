@@ -31,7 +31,8 @@ import type { ToolLaunchContext } from "@fusionkit/tools";
 import { harnessSupportsFiniteK } from "@fusionkit/ensemble";
 import { isLookaheadK } from "@fusionkit/protocol";
 import { defaultSessionsDir, FileSystemSessionStore, formatUsd } from "@fusionkit/model-gateway";
-import type { CodexRelayOptions, SessionMetaInput, SessionSummary } from "@fusionkit/model-gateway";
+import type { SessionMetaInput, SessionSummary } from "@fusionkit/model-gateway";
+import type { CodexRelayOptions } from "@fusionkit/model-gateway/subscriptions";
 import { codexCatalogEntries, readCodexModelsCache } from "@fusionkit/tool-codex";
 import { cursorInstructions } from "@fusionkit/tool-cursor";
 
@@ -730,6 +731,9 @@ export async function runFusion(
       ...(options.port !== undefined ? { port: options.port } : {}),
       ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),
       ...(options.onRateLimit !== undefined ? { onRateLimit: options.onRateLimit } : {}),
+      ...(options.subscriptionAccounts !== undefined
+        ? { subscriptionAccounts: options.subscriptionAccounts }
+        : {}),
       ...(options.budgetUsd !== undefined ? { budgetUsd: options.budgetUsd } : {}),
       ...(options.panelTrust !== undefined ? { panelTrust: options.panelTrust } : {}),
       ...(options.subagents !== undefined ? { subagents: options.subagents } : {}),

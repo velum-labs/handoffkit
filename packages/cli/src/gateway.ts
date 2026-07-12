@@ -25,7 +25,6 @@ import type { ResumeCursor } from "@fusionkit/harness-core";
 import { ATTR, normalizeWireTrajectories } from "@fusionkit/protocol";
 import { emitFusionEvent, initFusionTracing, jsonAttr, newSessionCarrier, startFusionSpan } from "@fusionkit/tracing";
 import {
-  CodexBackendRelay,
   FusionBackend,
   installAcpAdapters,
   runAcpAgent,
@@ -36,7 +35,6 @@ import {
 import type {
   AcpRunner,
   ChatMessageLike,
-  CodexRelayOptions,
   FrontDoorRunner,
   FrontDoorRunnerResult,
   FusionGateway,
@@ -51,6 +49,12 @@ import type {
   SessionStore,
   WireTrajectory
 } from "@fusionkit/model-gateway";
+import { CodexBackendRelay, openSubscriptionRelays } from "@fusionkit/model-gateway/subscriptions";
+import type {
+  CodexRelayOptions,
+  SubscriptionAccountSetOptions
+} from "@fusionkit/model-gateway/subscriptions";
+import type { SubscriptionMode } from "@fusionkit/registry";
 import { bold, cyan, gray, uiStream } from "@fusionkit/cli-ui";
 import { registerCleanup } from "@fusionkit/runtime-utils";
 import { FUSION_PANEL_MODEL, harnessDriversEnabled, trimTrailingSlashes } from "@fusionkit/tools";
@@ -113,6 +117,13 @@ export type GatewayRunnerConfig = {
    * the gateway's own bearer, not a relayable ChatGPT token).
    */
   codexRelay?: CodexRelayOptions;
+  /**
+   * Optional provider-native subscription account sets. Static provider metadata
+   * comes from the registry; these options only control runtime policy/store.
+   */
+  subscriptionAccounts?: Partial<
+    Record<SubscriptionMode, Omit<SubscriptionAccountSetOptions, "mode">>
+  >;
   command?: string;
   timeoutMs?: number;
   /**
@@ -686,14 +697,23 @@ export async function startFusionStepGateway(input: {
   // Session persistence is detached from the request path; make sure the tail
   // of turn/cost writes lands before the process exits (WS10).
   registerCleanup(() => backend.flush());
+  const { relays: subscriptionRelays } = await openSubscriptionRelays({
+    accounts: config.subscriptionAccounts ?? {},
+    ...(config.codexRelay !== undefined
+      ? { codex: { logger: requestLogGatewayLogger, ...config.codexRelay } }
+      : {})
+  });
+  const codexRelay =
+    subscriptionRelays.codex === undefined && config.codexRelay !== undefined
+      ? new CodexBackendRelay({ logger: requestLogGatewayLogger, ...config.codexRelay })
+      : undefined;
   const gateway = await startGateway({
     backend,
     host: input.host,
     port: input.port,
     ...(input.authToken !== undefined ? { authToken: input.authToken } : {}),
-    ...(config.codexRelay !== undefined
-      ? { codexRelay: new CodexBackendRelay({ logger: requestLogGatewayLogger, ...config.codexRelay }) }
-      : {})
+    ...(codexRelay !== undefined ? { codexRelay } : {}),
+    ...(Object.keys(subscriptionRelays).length > 0 ? { subscriptionRelays } : {})
   });
   selfGatewayUrl = gateway.url();
   return gateway;

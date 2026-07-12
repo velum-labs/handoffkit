@@ -15,7 +15,6 @@ import type { EnsembleModel, PanelTrust, UnifiedHarnessKind } from "@fusionkit/e
 import { fusionModelId, providerForAuthMode } from "@fusionkit/registry";
 import { createChatNarrationWriter, MlxBackend, OpenAiBackend, startGateway } from "@fusionkit/model-gateway";
 import type {
-  CodexRelayOptions,
   Gateway,
   LocalComputePricing,
   ModelPricing,
@@ -24,6 +23,7 @@ import type {
   SessionMetaInput,
   SessionStore
 } from "@fusionkit/model-gateway";
+import type { CodexRelayOptions } from "@fusionkit/model-gateway/subscriptions";
 import { harnessDriversEnabled } from "@fusionkit/tools";
 
 import { startFusionStepGateway } from "../gateway.js";
@@ -761,6 +761,8 @@ export type StartFusionStackOptions = {
   timeoutMs?: number;
   /** WS5 rate-limit / credit failover policy (default `fusion`). */
   onRateLimit?: OnRateLimitPolicy;
+  /** Provider-native subscription account sets consumed by the gateway relay seam. */
+  subscriptionAccounts?: GatewayRunnerConfig["subscriptionAccounts"];
   /** WS7 budget cap (USD) for the session's gateway-observed cost. */
   budgetUsd?: number;
   /** WS4 durable session store; when set the gateway persists/resumes sessions. */
@@ -1025,6 +1027,9 @@ export async function startFusionStack(options: StartFusionStackOptions): Promis
         (spec.provider ?? "mlx") === "mlx" ? [spec.model, spec.id] : []
       ),
       ...(options.onRateLimit !== undefined ? { onRateLimit: options.onRateLimit } : {}),
+      ...(options.subscriptionAccounts !== undefined
+        ? { subscriptionAccounts: options.subscriptionAccounts }
+        : {}),
       ...(options.budgetUsd !== undefined ? { budgetUsd: options.budgetUsd } : {}),
       ...(options.sessionStore !== undefined ? { sessionStore: options.sessionStore } : {}),
       ...(options.resumeId !== undefined ? { resumeId: options.resumeId } : {}),

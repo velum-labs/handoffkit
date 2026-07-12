@@ -54,6 +54,44 @@ test("parseFusionConfig accepts a valid config", () => {
   assert.equal(config.port, 1234);
 });
 
+test("parseFusionConfig validates provider-native subscription pool policy", () => {
+  const config = parseFusionConfig(
+    {
+      version: FUSION_CONFIG_VERSION,
+      subscriptionAccounts: {
+        "claude-code": {
+          source: { kind: "auto" },
+          strategy: "capacity_weighted",
+          switchThreshold: 0.9,
+          probeIntervalMs: 60_000
+        },
+        codex: {
+          source: { kind: "directory", path: "/tmp/codex-accounts" },
+          strategy: "sticky"
+        }
+      }
+    },
+    "test"
+  );
+  assert.equal(config.subscriptionAccounts?.["claude-code"]?.strategy, "capacity_weighted");
+  assert.equal(config.subscriptionAccounts?.codex?.strategy, "sticky");
+  assert.deepEqual(config.subscriptionAccounts?.codex?.source, {
+    kind: "directory",
+    path: "/tmp/codex-accounts"
+  });
+  assert.throws(
+    () =>
+      parseFusionConfig(
+        {
+          version: FUSION_CONFIG_VERSION,
+          subscriptionAccounts: { codex: { switchThreshold: 1.5 } }
+        },
+        "test"
+      ),
+    /switchThreshold/
+  );
+});
+
 test("parseFusionConfig accepts a v3 ensembles map", () => {
   const config = parseFusionConfig(
     {

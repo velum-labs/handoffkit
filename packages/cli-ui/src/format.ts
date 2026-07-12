@@ -28,16 +28,26 @@ export function formatEta(seconds: number): string {
   return `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
 }
 
+/** Coarse "Nx" magnitude (`45s`, `12m`, `3h`, `2d`) for a duration in seconds. */
+function coarseDuration(seconds: number): string {
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours}h`;
+  const days = Math.round(hours / 24);
+  return `${days}d`;
+}
+
 /** A compact human-friendly "time ago" for a timestamp (epoch millis). */
 export function relativeTime(epochMs: number): string {
-  const seconds = Math.max(0, Math.round((Date.now() - epochMs) / 1000));
-  if (seconds < 60) return `${seconds}s ago`;
-  const minutes = Math.round(seconds / 60);
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.round(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.round(hours / 24);
-  return `${days}d ago`;
+  return `${coarseDuration(Math.max(0, Math.round((Date.now() - epochMs) / 1000)))} ago`;
+}
+
+/** A compact human-friendly "time until" for a future timestamp (epoch millis). */
+export function timeUntil(epochMs: number): string {
+  const seconds = Math.round((epochMs - Date.now()) / 1000);
+  return seconds <= 0 ? "now" : `in ${coarseDuration(seconds)}`;
 }
 
 /**

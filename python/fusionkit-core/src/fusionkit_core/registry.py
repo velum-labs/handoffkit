@@ -53,6 +53,18 @@ CLAUDE_CODE_KEYCHAIN_SERVICE: str = _CLAUDE_CODE["keychainService"]
 DEFAULT_CLAUDE_CREDENTIALS_PATH: str = _CLAUDE_CODE["credentialsPath"]
 DEFAULT_CODEX_CREDENTIALS_PATH: str = _CODEX["credentialsPath"]
 DEFAULT_CODEX_CONFIG_PATH: str = _CODEX["configPath"]
+SUBSCRIPTION_ACCOUNT_DIRECTORIES: dict[str, str] = {
+    mode: cast(str, info["accountsDirectory"]) for mode, info in _SUBSCRIPTIONS.items()
+}
+SUBSCRIPTION_OAUTH: dict[str, dict[str, str]] = {
+    mode: cast(dict[str, str], info["oauth"]) for mode, info in _SUBSCRIPTIONS.items()
+}
+SUBSCRIPTION_RATE_LIMIT: dict[str, dict[str, str]] = {
+    mode: cast(dict[str, str], info["rateLimit"]) for mode, info in _SUBSCRIPTIONS.items()
+}
+SUBSCRIPTION_ADMIN: dict[str, dict[str, str]] = {
+    mode: cast(dict[str, str], info["admin"]) for mode, info in _SUBSCRIPTIONS.items()
+}
 
 DEFAULT_CLAUDE_MODEL: str = _CLAUDE_CODE["defaultModel"]
 DEFAULT_CODEX_MODEL: str = _CODEX["defaultModel"]
@@ -229,6 +241,10 @@ __all__ = [
     "PROVIDER_DEFAULT_BASE_URL",
     "PROVIDER_KEY_ENV",
     "REGISTRY",
+    "SUBSCRIPTION_ADMIN",
+    "SUBSCRIPTION_OAUTH",
+    "SUBSCRIPTION_ACCOUNT_DIRECTORIES",
+    "SUBSCRIPTION_RATE_LIMIT",
     "default_model_for_auth_choice",
     "default_pricing_for",
     "fusion_mode_for_model",
