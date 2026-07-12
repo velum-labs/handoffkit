@@ -130,9 +130,14 @@ def analyze(workdir: Path) -> dict[str, Any]:
     # Prune flags: Wilson-dominated by best solo open.
     for row in rows:
         row["flags"] = []
-        if best_solo and row["n"] and row is not best_solo and row["hi"] is not None:
-            if row["hi"] < (best_solo["lo"] or 0):
-                row["flags"].append("PRUNE:wilson-dominated-by-best-solo")
+        if (
+            best_solo
+            and row["n"]
+            and row is not best_solo
+            and row["hi"] is not None
+            and row["hi"] < (best_solo["lo"] or 0)
+        ):
+            row["flags"].append("PRUNE:wilson-dominated-by-best-solo")
         if row["errors"] > max(2, 0.1 * max(row["n"], 1)):
             row["flags"].append("FORENSICS:high-error-count")
 

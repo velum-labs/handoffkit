@@ -5,15 +5,24 @@ services:
     image: prom/prometheus:v3.5.0
     command:
       - --config.file=/etc/prometheus/prometheus.yml
-      - --web.config.file=/etc/prometheus/web.yml
       - --web.enable-otlp-receiver
       - --storage.tsdb.retention.time=60d
+    # Not published on the host: all external access goes through the
+    # basic-auth nginx proxy; Grafana queries it over the compose network.
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    restart: unless-stopped
+
+  prometheus-auth:
+    image: nginx:1.27-alpine
     ports:
       - "9090:9090"
     volumes:
-      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      - ./web.yml:/etc/prometheus/web.yml:ro
-      - prometheus-data:/prometheus
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./htpasswd:/etc/nginx/htpasswd:ro
+    depends_on:
+      - prometheus
     restart: unless-stopped
 
   grafana:
@@ -25,9 +34,11 @@ services:
       GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
       GF_PLUGINS_DISABLE_PLUGINS: grafana-lokiexplore-app
       GF_PLUGINS_PREINSTALL_DISABLED: "true"
-      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
       GF_USERS_ALLOW_SIGN_UP: "false"
-      PROM_PASSWORD: ${PROM_PASSWORD}
+    env_file:
+      # Written on the instance at first boot (random admin password);
+      # never part of the deploy bundle.
+      - ./grafana.env
     volumes:
       - ./datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml:ro
     depends_on:

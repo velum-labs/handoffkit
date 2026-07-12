@@ -15,11 +15,11 @@ import typer
 import hyperkit.adapters  # noqa: F401  (registers built-in benchmark adapters)
 import hyperkit.suts  # noqa: F401  (registers built-in SUTs)
 from hyperkit.cloud.controller import main as controller_main
-from hyperkit.local_controller import run_local_controller
 from hyperkit.core.aggregate import format_table
 from hyperkit.core.experiments import load_experiment
 from hyperkit.core.models import TopologySpec
 from hyperkit.core.sweep import SweepEngine
+from hyperkit.local_controller import run_local_controller
 from hyperkit.replay import ReplayRow, replay_reports
 
 app = typer.Typer(no_args_is_help=True, help="hyperkit experiment platform")

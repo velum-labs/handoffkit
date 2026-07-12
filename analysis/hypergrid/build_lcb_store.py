@@ -16,7 +16,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 MANIFESTS = [HERE / "manifests" / name for name in ("dev.txt", "holdout.txt", "spare.txt")]
-JSONL_NAMES = ["test.jsonl", "test2.jsonl", "test3.jsonl", "test4.jsonl", "test5.jsonl", "test6.jsonl"]
+JSONL_NAMES = [f"test{n}.jsonl" for n in ("", "2", "3", "4", "5", "6")]
 KEEP_FIELDS = (
     "question_id",
     "question_content",
