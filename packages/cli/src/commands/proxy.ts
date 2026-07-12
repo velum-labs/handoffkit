@@ -16,10 +16,13 @@ import {
   RelayOnlyBackend,
   startGateway,
   type SubscriptionAccountSetSnapshot,
+  type SubscriptionMemberStatus,
   type SubscriptionSelectionStrategy
 } from "@fusionkit/model-gateway";
 import type { SubscriptionMode } from "@fusionkit/registry";
 import { registerCleanup } from "@fusionkit/runtime-utils";
+import { cyan, dim, relativeTime, timeUntil } from "@fusionkit/cli-ui";
+import type { Presenter } from "@fusionkit/cli-ui";
 import type { Command } from "commander";
 
 import { contextFor } from "../shared/context.js";
@@ -91,37 +94,61 @@ function parseNumber(value: string, label: string, options: { min: number; max: 
   return parsed;
 }
 
-function usageBar(utilization: number): string {
-  const width = 20;
-  const filled = Math.round(Math.max(0, Math.min(1, utilization)) * width);
-  return `[${"#".repeat(filled)}${"-".repeat(width - filled)}] ${(utilization * 100).toFixed(1)}%`;
+/** One member's status line: `● label`, plus cooldown/expiry tags. */
+function memberHealth(member: SubscriptionMemberStatus): {
+  kind: "ok" | "warn" | "pending";
+  detail: string;
+} {
+  const now = Date.now();
+  if (member.coolingUntil !== undefined && member.coolingUntil * 1000 > now) {
+    return { kind: "warn", detail: `cooling down, resets ${timeUntil(member.coolingUntil * 1000)}` };
+  }
+  if (member.expiresAt !== undefined && member.expiresAt * 1000 <= now) {
+    return { kind: "pending", detail: "token expired, re-login" };
+  }
+  return { kind: "ok", detail: member.active ? "active" : "ready" };
 }
 
-function renderSnapshots(snapshots: SubscriptionAccountSetSnapshot[]): string {
-  const lines: string[] = [];
-  for (const pool of snapshots) {
-    lines.push(`${pool.mode} (${pool.strategy}, switch at ${(pool.switchThreshold * 100).toFixed(0)}%)`);
-    if (pool.members.length === 0) {
-      lines.push("  no enrolled accounts");
+/** Per-window rows for a member's rate-limit table (utilization + reset). */
+function windowRows(member: SubscriptionMemberStatus): string[][] {
+  return Object.entries(member.limits?.windows ?? {}).map(([key, window]) => [
+    key,
+    `${(window.utilization * 100).toFixed(0)}%`,
+    window.resetsAt !== undefined ? `resets ${timeUntil(window.resetsAt * 1000)}` : dim("—")
+  ]);
+}
+
+/** Render every account set through the shared presenter primitives. */
+function presentSnapshots(
+  presenter: Presenter,
+  snapshots: readonly SubscriptionAccountSetSnapshot[]
+): void {
+  for (const set of snapshots) {
+    presenter.blank();
+    presenter.heading(set.mode);
+    presenter.keyValue([
+      { label: "strategy", value: set.strategy },
+      { label: "switch at", value: `${(set.switchThreshold * 100).toFixed(0)}%` },
+      { label: "accounts", value: String(set.members.length) }
+    ]);
+    if (set.members.length === 0) {
+      presenter.note("no accounts available — sign in or run `fusionkit proxy add`");
       continue;
     }
-    for (const member of pool.members) {
-      const marker = member.active ? "*" : "-";
-      const cooling =
-        member.coolingUntil !== undefined && member.coolingUntil > Date.now() / 1000
-          ? ` cooling until ${new Date(member.coolingUntil * 1000).toISOString()}`
-          : "";
-      lines.push(`  ${marker} ${member.label}${cooling}`);
-      for (const [key, window] of Object.entries(member.limits?.windows ?? {})) {
-        const reset =
-          window.resetsAt === undefined
-            ? ""
-            : ` reset ${new Date(window.resetsAt * 1000).toISOString()}`;
-        lines.push(`      ${key.padEnd(18)} ${usageBar(window.utilization)}${reset}`);
+    for (const member of set.members) {
+      const health = memberHealth(member);
+      const label = member.active ? `${member.label} ${dim("(active)")}` : member.label;
+      presenter.status(health.kind, label, health.detail);
+      const rows = windowRows(member);
+      if (rows.length > 0) {
+        presenter.table(rows, {
+          head: ["window", "used", "reset"],
+          indent: 4,
+          align: ["left", "right", "left"]
+        });
       }
     }
   }
-  return lines.join("\n");
 }
 
 async function readLiveUsage(): Promise<{
@@ -201,18 +228,25 @@ async function serveProxy(options: ProxyServeOptions, command: Command): Promise
   if (ctx.json) {
     ctx.emit({ ...runtime, token: config.token, providers: Object.keys(relays) });
   } else {
-    ctx.presenter.success(`subscription proxy listening at ${runtime.url}`);
-    ctx.presenter.line(`export ANTHROPIC_BASE_URL=${runtime.url}`);
-    ctx.presenter.line(`export ANTHROPIC_AUTH_TOKEN=${config.token}`);
-    ctx.presenter.blank();
-    ctx.presenter.line(`export FUSIONKIT_PROXY_TOKEN=${config.token}`);
-    ctx.presenter.line("[model_providers.fusionkit-subscriptions]");
-    ctx.presenter.line('name = "openai"');
-    ctx.presenter.line(`base_url = "${runtime.url}/backend-api/codex"`);
-    ctx.presenter.line('wire_api = "responses"');
-    ctx.presenter.line('env_key = "FUSIONKIT_PROXY_TOKEN"');
-    ctx.presenter.line("requires_openai_auth = false");
-    ctx.presenter.blank();
+    ctx.presenter.success(`subscription proxy listening at ${cyan(runtime.url)}`);
+    if (relays.anthropic !== undefined) {
+      ctx.presenter.box("Claude Code", [
+        `export ANTHROPIC_BASE_URL=${runtime.url}`,
+        `export ANTHROPIC_AUTH_TOKEN=${config.token}`
+      ]);
+    }
+    if (relays.codex !== undefined) {
+      ctx.presenter.box("Codex (~/.codex/config.toml)", [
+        `export FUSIONKIT_PROXY_TOKEN=${config.token}`,
+        "",
+        "[model_providers.fusionkit-subscriptions]",
+        'name = "openai"',
+        `base_url = "${runtime.url}/backend-api/codex"`,
+        'wire_api = "responses"',
+        'env_key = "FUSIONKIT_PROXY_TOKEN"',
+        "requires_openai_auth = false"
+      ]);
+    }
     ctx.presenter.note("Press Ctrl+C to stop; use a process supervisor for a login-persistent service.");
   }
 
@@ -271,14 +305,17 @@ export function registerProxy(program: Command): void {
         ctx.presenter.note("subscription proxy is not running");
         return;
       }
-      ctx.presenter.line(
-        `proxy ${status.runtime.url} pid=${status.runtime.pid} started=${status.runtime.startedAt}`
-      );
-      ctx.presenter.line(
-        status.accountSets.length > 0
-          ? renderSnapshots(status.accountSets)
-          : "usage unavailable"
-      );
+      ctx.presenter.header("subscription proxy");
+      ctx.presenter.keyValue([
+        { label: "endpoint", value: cyan(status.runtime.url) },
+        { label: "pid", value: String(status.runtime.pid) },
+        { label: "uptime", value: relativeTime(Date.parse(status.runtime.startedAt)) }
+      ]);
+      if (status.accountSets.length === 0) {
+        ctx.presenter.note("live usage unavailable (the proxy did not report account sets)");
+        return;
+      }
+      presentSnapshots(ctx.presenter, status.accountSets);
     });
 
   proxy
