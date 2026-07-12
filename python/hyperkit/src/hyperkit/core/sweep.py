@@ -11,6 +11,7 @@ from __future__ import annotations
 import inspect
 from collections.abc import Sequence
 from dataclasses import dataclass
+from fnmatch import fnmatch
 from pathlib import Path
 
 from hyperkit.core import registry
@@ -154,8 +155,20 @@ class SweepEngine:
         present = self.store.present_ids(lock.sweep_id)
         return [s for s in self.all_shards() if s.shard_id not in present]
 
-    def apply(self, backend_name: str | None = None) -> int:
-        """Submit only missing shards to a compute backend (resume-safe)."""
+    def apply(
+        self,
+        backend_name: str | None = None,
+        *,
+        rung: int | None = None,
+        only: str | None = None,
+    ) -> int:
+        """Submit only missing shards to a compute backend (resume-safe).
+
+        ``rung`` limits each cell to its first N instances (successive-halving
+        budgets: promote a survivor by re-applying with a larger rung; already
+        completed shards dedupe via the store). ``only`` is a glob over cell
+        labels so different cell families can run at different rungs.
+        """
 
         lock = load_lock(self.lock_path)
         resolved_name = backend_name or self.backend_name
@@ -164,6 +177,12 @@ class SweepEngine:
         else:
             backend = registry.get_backend(resolved_name)
         pending = self.pending_shards()
+        if only is not None:
+            pending = [s for s in pending if fnmatch(s.cell.label or s.cell.cell_id, only)]
+        if rung is not None:
+            pending = [
+                s for s in pending if s.cell.instances.index(s.instance_id) < rung
+            ]
         backend.submit([(s.cell, s.instance_id) for s in pending], lock.sweep_id)
         return len(pending)
 

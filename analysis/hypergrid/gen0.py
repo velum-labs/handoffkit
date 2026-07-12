@@ -139,18 +139,19 @@ def build_serve_config(
         }
         for endpoint_id in sorted(members)
     ]
+    # FusionConfig is flat: fusion fields sit at the top level beside endpoints
+    # (see configs/benchmark-panel.gpt-opus.yaml).
     config: dict[str, Any] = {
         "endpoints": endpoints,
-        "fusion": {
-            "default_model": judge,
-            "judge_model": judge,
-            "synthesizer_model": synthesizer,
-            "panel_models": list(panel),
-            "default_mode": "panel",
-        },
+        "default_model": judge,
+        "judge_model": judge,
+        "synthesizer_model": synthesizer,
+        "panel_models": list(panel),
+        "default_mode": "panel",
+        "harness_prompt_passthrough": True,
+        "sampling": {"temperature": 0.2, "top_p": 0.95, "max_tokens": 16384},
     }
-    for key, value in (overrides or {}).items():
-        config["fusion"][key] = value
+    config.update(overrides or {})
     return config
 
 

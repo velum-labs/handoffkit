@@ -1,0 +1,29 @@
+apiVersion: 1
+
+deleteDatasources:
+  - name: Amazon Managed Prometheus
+    orgId: 1
+  - name: CloudWatch
+    orgId: 1
+  - name: Athena
+    orgId: 1
+  - name: X-Ray
+    orgId: 1
+  - name: Local seeded Prometheus
+    orgId: 1
+
+datasources:
+  - name: Hypergrid Prometheus
+    uid: amp
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: false
+    basicAuth: true
+    basicAuthUser: hyperkit
+    secureJsonData:
+      basicAuthPassword: $PROM_PASSWORD
+    jsonData:
+      httpMethod: POST
+      timeInterval: 5s

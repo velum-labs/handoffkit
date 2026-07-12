@@ -1,0 +1,12 @@
+# Cloud observability Prometheus for hypergrid sweeps: OTLP ingest only
+# (runner telemetry + local-controller CellSnapshot gauges), no scraping,
+# no synthetic seed rules -- real sweep data only.
+global:
+  evaluation_interval: 5s
+  scrape_interval: 5s
+
+otlp:
+  # Keep hyperkit label cardinality; translation matches the AMP strategy the
+  # dashboards were written against (UnderscoreEscapingWithSuffixes default).
+  promote_resource_attributes:
+    - service.name

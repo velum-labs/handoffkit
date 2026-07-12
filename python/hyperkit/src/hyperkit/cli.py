@@ -69,10 +69,17 @@ def extend(
 def apply(
     workdir: Annotated[Path, typer.Option()] = Path(".hyperkit"),
     backend: Annotated[str, typer.Option()] = "aws-batch",
+    rung: Annotated[
+        int | None,
+        typer.Option(help="limit each cell to its first N instances (halving budget)"),
+    ] = None,
+    only: Annotated[
+        str | None, typer.Option(help="glob over cell labels to submit")
+    ] = None,
 ) -> None:
     """Submit missing shards only; safe to call repeatedly (resume semantics)."""
 
-    count = SweepEngine(workdir, backend=backend).apply(backend)
+    count = SweepEngine(workdir, backend=backend).apply(backend, rung=rung, only=only)
     typer.echo(f"submitted {count} missing shards via {backend}")
 
 
