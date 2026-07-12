@@ -6,13 +6,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 
+import { startGateway } from "../index.js";
 import {
   AnthropicBackendRelay,
   RelayOnlyBackend,
-  startGateway,
   SubscriptionAccountSet,
   subscriptionProvider
-} from "../index.js";
+} from "../subscriptions/index.js";
 
 async function body(req: IncomingMessage): Promise<string> {
   const chunks: Buffer[] = [];

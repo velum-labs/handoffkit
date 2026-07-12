@@ -10,15 +10,17 @@ import {
 import type { AnthropicRequest } from "./adapters/anthropic.js";
 import { effectiveModel, isStream, withDefaultModel } from "./adapters/chat.js";
 import { authorizedRequest } from "./auth.js";
-import { CodexBackendRelay } from "./codex-relay.js";
+import { CodexBackendRelay } from "./subscriptions/codex-relay.js";
+import { SubscriptionAccountSetExhaustedError } from "./subscriptions/account-set.js";
 import type {
   SubscriptionRelay,
   SubscriptionRelayDialect
-} from "./subscription-relay.js";
+} from "./subscriptions/relay.js";
 import type {
   RateLimitWindow,
   SubscriptionAccountSetSnapshot
-} from "./subscription-types.js";
+} from "./subscriptions/types.js";
+import { snapshotsToUsage } from "./subscriptions/wire.js";
 import { isCursorChatBody, translateCursorRequest } from "./adapters/cursor.js";
 import { handleResponses } from "./adapters/responses.js";
 import type { ResponsesRequest } from "./adapters/responses.js";
@@ -143,9 +145,7 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
       // This catch must never throw: a throw here becomes an unhandled
       // rejection that kills the process hosting the gateway (and, for the
       // in-process fusion gateway, the whole CLI).
-      writeErrorSafely(res, 502, {
-        error: { message: errorMessage(error), type: "upstream_error" }
-      });
+      writeGatewayError(res, error);
     });
   });
 
@@ -165,11 +165,11 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
     }
 
     if (method === "GET" && path === "/usage") {
-      writeJson(res, 200, {
-        accountSets: [anthropicRelay?.snapshot?.(), codexSubscriptionRelay?.snapshot?.()].filter(
-          (snapshot) => snapshot !== undefined
-        )
-      });
+      writeJson(
+        res,
+        200,
+        snapshotsToUsage([anthropicRelay?.snapshot?.(), codexSubscriptionRelay?.snapshot?.()])
+      );
       return;
     }
 
@@ -507,6 +507,34 @@ function writeErrorSafely(res: ServerResponse, status: number, value: unknown): 
   return Buffer.alloc(0);
 }
 
+/**
+ * Map a gateway request failure to an HTTP response. Subscription account-set
+ * exhaustion becomes a real `429` with the soonest reset (so clients back off
+ * instead of seeing a generic `502`); everything else is an upstream `502`.
+ */
+function writeGatewayError(
+  res: ServerResponse,
+  error: unknown
+): { statusCode: number; payload: Buffer } {
+  if (error instanceof SubscriptionAccountSetExhaustedError) {
+    if (error.resetAt !== undefined && !res.headersSent) {
+      res.setHeader("retry-after", Math.max(0, Math.ceil(error.resetAt - Date.now() / 1000)));
+    }
+    const payload = writeErrorSafely(res, 429, {
+      error: {
+        message: error.message,
+        type: "rate_limit_error",
+        ...(error.resetAt !== undefined ? { resets_at: error.resetAt } : {})
+      }
+    });
+    return { statusCode: 429, payload };
+  }
+  const payload = writeErrorSafely(res, 502, {
+    error: { message: errorMessage(error), type: "upstream_error" }
+  });
+  return { statusCode: 502, payload };
+}
+
 type ModelCallRoute = {
   dialect: GatewayDialect;
   body: unknown;
@@ -551,10 +579,7 @@ async function handleModelCall(
     sink?.onModelCall?.(buildModelCallRecord(context, result));
     sink?.onModelCallRaw?.(context, result);
   } catch (error) {
-    const statusCode = 502;
-    const payload = writeErrorSafely(res, statusCode, {
-      error: { message: errorMessage(error), type: "upstream_error" }
-    });
+    const { statusCode, payload } = writeGatewayError(res, error);
     const result = {
       statusCode,
       responseBody: payload,

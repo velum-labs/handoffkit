@@ -18,7 +18,7 @@ import {
   type SubscriptionMode
 } from "@fusionkit/registry";
 
-import type { SubscriptionCredential } from "./subscription-types.js";
+import type { SubscriptionCredential } from "./types.js";
 
 const execFileAsync = promisify(execFile);
 

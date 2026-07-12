@@ -8,7 +8,7 @@ import {
   resolveSubscriptionAccounts,
   SubscriptionAccountSet,
   subscriptionProvider
-} from "../index.js";
+} from "../subscriptions/index.js";
 
 const FUTURE_CODEX_TOKEN =
   "eyJhbGciOiJub25lIn0.eyJleHAiOjk5OTk5OTk5OTl9.";

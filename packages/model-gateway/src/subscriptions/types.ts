@@ -1,6 +1,6 @@
 import type { SubscriptionMode } from "@fusionkit/registry";
 
-import type { FailoverCategory } from "./fusion-types.js";
+import type { FailoverCategory } from "../fusion-types.js";
 
 export type SubscriptionSelectionStrategy = "sticky" | "round_robin" | "capacity_weighted";
 

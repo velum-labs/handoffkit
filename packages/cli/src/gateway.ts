@@ -25,10 +25,8 @@ import type { ResumeCursor } from "@fusionkit/harness-core";
 import { ATTR, normalizeWireTrajectories } from "@fusionkit/protocol";
 import { emitFusionEvent, initFusionTracing, jsonAttr, newSessionCarrier, startFusionSpan } from "@fusionkit/tracing";
 import {
-  CodexBackendRelay,
   FusionBackend,
   installAcpAdapters,
-  openSubscriptionRelays,
   runAcpAgent,
   runFrontDoorAcceptance,
   startFusionGateway,
@@ -37,7 +35,6 @@ import {
 import type {
   AcpRunner,
   ChatMessageLike,
-  CodexRelayOptions,
   FrontDoorRunner,
   FrontDoorRunnerResult,
   FusionGateway,
@@ -50,9 +47,13 @@ import type {
   PassthroughModel,
   SessionMetaInput,
   SessionStore,
-  SubscriptionAccountSetOptions,
   WireTrajectory
 } from "@fusionkit/model-gateway";
+import { CodexBackendRelay, openSubscriptionRelays } from "@fusionkit/model-gateway/subscriptions";
+import type {
+  CodexRelayOptions,
+  SubscriptionAccountSetOptions
+} from "@fusionkit/model-gateway/subscriptions";
 import type { SubscriptionMode } from "@fusionkit/registry";
 import { bold, cyan, gray, uiStream } from "@fusionkit/cli-ui";
 import { registerCleanup } from "@fusionkit/runtime-utils";

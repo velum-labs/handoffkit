@@ -2,14 +2,14 @@ import type { SubscriptionMode } from "@fusionkit/registry";
 
 import { CodexBackendRelay } from "./codex-relay.js";
 import type { CodexCatalogEntry, CodexRelayOptions } from "./codex-relay.js";
-import { SubscriptionAccountSet } from "./subscription-pool.js";
-import type { SubscriptionAccountSetOptions } from "./subscription-pool.js";
-import { subscriptionProvider } from "./subscription-provider.js";
-import { AnthropicBackendRelay } from "./subscription-relay.js";
+import { SubscriptionAccountSet } from "./account-set.js";
+import type { SubscriptionAccountSetOptions } from "./account-set.js";
+import { subscriptionProvider } from "./provider.js";
+import { AnthropicBackendRelay } from "./relay.js";
 import type {
   SubscriptionRelay,
   SubscriptionRelayDialect
-} from "./subscription-relay.js";
+} from "./relay.js";
 
 export type SubscriptionAccountConfigs = Partial<
   Record<SubscriptionMode, Omit<SubscriptionAccountSetOptions, "mode">>

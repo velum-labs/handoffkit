@@ -29,11 +29,11 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
+import type { OnRateLimitPolicy } from "@fusionkit/model-gateway";
 import type {
-  OnRateLimitPolicy,
   SubscriptionAccountSource,
   SubscriptionSelectionStrategy
-} from "@fusionkit/model-gateway";
+} from "@fusionkit/model-gateway/subscriptions";
 import { DEFAULT_ENSEMBLE_NAME } from "@fusionkit/registry";
 import type { SubscriptionMode } from "@fusionkit/registry";
 

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { subscriptionProvider } from "../index.js";
+import { subscriptionProvider } from "../subscriptions/index.js";
 
 test("Anthropic adapter parses first-party unified subscription windows", () => {
   const provider = subscriptionProvider("claude-code");

@@ -3,11 +3,11 @@ import type { IncomingHttpHeaders } from "node:http";
 import { providerDefaultBaseUrl, subscriptionInfo } from "@fusionkit/registry";
 import { trimTrailingSlashes } from "@fusionkit/runtime-utils";
 
-import type { AnthropicRequest } from "./adapters/anthropic.js";
-import type { ResponsesRequest } from "./adapters/responses.js";
-import type { Backend } from "./backend.js";
-import type { SubscriptionAccountSet } from "./subscription-pool.js";
-import type { SubscriptionAccountSetSnapshot } from "./subscription-types.js";
+import type { AnthropicRequest } from "../adapters/anthropic.js";
+import type { ResponsesRequest } from "../adapters/responses.js";
+import type { Backend } from "../backend.js";
+import type { SubscriptionAccountSet } from "./account-set.js";
+import type { SubscriptionAccountSetSnapshot } from "./types.js";
 
 export type SubscriptionRelayDialect = "anthropic" | "codex";
 

@@ -12,65 +12,8 @@
  */
 export { startGateway } from "./server.js";
 export type { Gateway, GatewayOptions } from "./server.js";
-export { CodexBackendRelay, codexRelayAuth } from "./codex-relay.js";
-export type {
-  CodexCatalogEntry,
-  CodexRelayAuth,
-  CodexRelayAuthSource,
-  CodexRelayOptions,
-  CodexStockEntry
-} from "./codex-relay.js";
-export {
-  defaultSubscriptionCredentialPath,
-  defaultSubscriptionAccountDirectory,
-  enrollCurrentSubscription,
-  loadSubscriptionCredential,
-  persistSubscriptionCredential,
-  subscriptionCredentialLabel
-} from "./subscription-credentials.js";
-export { resolveSubscriptionAccounts } from "./subscription-account-source.js";
-export type {
-  ResolvedSubscriptionAccounts,
-  SubscriptionAccountSource
-} from "./subscription-account-source.js";
-export { openSubscriptionRelays } from "./subscription-gateway.js";
-export type {
-  OpenSubscriptionRelaysOptions,
-  OpenSubscriptionRelaysResult,
-  SubscriptionAccountConfigs
-} from "./subscription-gateway.js";
-export { subscriptionProvider } from "./subscription-provider.js";
-export type {
-  AdminUsageCost,
-  AdminUsageRange,
-  SubscriptionProvider
-} from "./subscription-provider.js";
-export {
-  RateLimitTracker,
-  SubscriptionAccountSet,
-  SubscriptionAccountSetExhaustedError
-} from "./subscription-pool.js";
-export type { SubscriptionAccountSetOptions } from "./subscription-pool.js";
-export {
-  AnthropicBackendRelay,
-  forwardRelayHeaders,
-  RelayOnlyBackend
-} from "./subscription-relay.js";
-export type {
-  AnthropicRelayOptions,
-  SubscriptionRelay,
-  SubscriptionRelayDialect
-} from "./subscription-relay.js";
-export type {
-  AccountLimits,
-  CreditSnapshot,
-  RateLimitWindow,
-  SubscriptionAccountSetSnapshot,
-  SubscriptionCredential,
-  SubscriptionFailure,
-  SubscriptionMemberStatus,
-  SubscriptionSelectionStrategy
-} from "./subscription-types.js";
+// The subscription-pooling SDK is published under the `./subscriptions` subpath
+// (`@fusionkit/model-gateway/subscriptions`), not this core entrypoint.
 export {
   joinPath,
   ModelRoutedBackend,

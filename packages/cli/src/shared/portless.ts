@@ -362,6 +362,37 @@ async function replaceStaleRoute(
 }
 
 /**
+ * Reap a single named fusion service: terminate the owning pid of its
+ * `<name>.fusion.<tld>` route and drop the route. Returns true when a live
+ * route was stopped. A no-op (false) when portless is unavailable or no route
+ * exists — callers keep a loopback fallback for that case.
+ */
+export async function reapService(name: string, log?: (line: string) => void): Promise<boolean> {
+  const portless = await loadPortless();
+  if (portless === undefined) return false;
+  const store = new portless.RouteStore(stateDir(), {
+    onWarning: (message) => log?.(`fusion: portless: ${message}`)
+  });
+  const hostname = hostnameFor(portless, name);
+  const route = store.loadRoutes().find((candidate) => candidate.hostname === hostname);
+  if (route === undefined) return false;
+  let stopped = false;
+  try {
+    process.kill(route.pid, "SIGTERM");
+    stopped = true;
+    log?.(`fusion: stopped ${route.hostname} (pid ${route.pid})`);
+  } catch {
+    // process already gone; still drop the stale route below
+  }
+  try {
+    store.removeRoute(route.hostname);
+  } catch {
+    // best-effort
+  }
+  return stopped;
+}
+
+/**
  * Reap fusion singleton services: terminate the owning pid of every registered
  * `*.fusion.<tld>` / `scope.<tld>` route and drop the route. Returns the number
  * of services stopped. A no-op when portless is unavailable.

@@ -1,42 +1,28 @@
-import { randomBytes } from "node:crypto";
-import {
-  chmodSync,
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  rmSync,
-  writeFileSync
-} from "node:fs";
-import { homedir } from "node:os";
-import { join } from "node:path";
-
 import {
   enrollCurrentSubscription,
-  openSubscriptionRelays,
-  RelayOnlyBackend,
-  startGateway,
+  startSubscriptionProxy,
+  SubscriptionProxyClient,
   type SubscriptionAccountSetSnapshot,
   type SubscriptionMemberStatus,
   type SubscriptionSelectionStrategy
-} from "@fusionkit/model-gateway";
+} from "@fusionkit/model-gateway/subscriptions";
 import type { SubscriptionMode } from "@fusionkit/registry";
 import { registerCleanup } from "@fusionkit/runtime-utils";
 import { cyan, dim, relativeTime, timeUntil } from "@fusionkit/cli-ui";
 import type { Presenter } from "@fusionkit/cli-ui";
 import type { Command } from "commander";
 
+import {
+  discoverProxy,
+  registerRunningProxy,
+  stopProxy
+} from "../fusion/subscription-proxy.js";
 import { contextFor } from "../shared/context.js";
 
-type ProxyConfig = {
-  token: string;
-};
-
-type ProxyRuntime = {
-  pid: number;
-  url: string;
-  port: number;
-  startedAt: string;
-};
+/** Portless is on unless the flag disables it or `PORTLESS=0` is set. */
+function portlessEnabled(flag: boolean | undefined): boolean {
+  return flag ?? process.env.PORTLESS !== "0";
+}
 
 type ProxyServeOptions = {
   host: string;
@@ -45,34 +31,8 @@ type ProxyServeOptions = {
   strategy: string;
   switchThreshold: string;
   probeInterval: string;
+  portless?: boolean;
 };
-
-const PROXY_ROOT = join(homedir(), ".fusionkit", "subscriptions");
-const PROXY_CONFIG_PATH = join(PROXY_ROOT, "proxy.json");
-const PROXY_RUNTIME_PATH = join(PROXY_ROOT, "runtime.json");
-
-function readJson<T>(path: string): T | undefined {
-  if (!existsSync(path)) return undefined;
-  try {
-    return JSON.parse(readFileSync(path, "utf8")) as T;
-  } catch {
-    return undefined;
-  }
-}
-
-function writePrivateJson(path: string, value: unknown): void {
-  mkdirSync(PROXY_ROOT, { recursive: true, mode: 0o700 });
-  writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600 });
-  chmodSync(path, 0o600);
-}
-
-function proxyConfig(explicitToken?: string): ProxyConfig {
-  const stored = readJson<ProxyConfig>(PROXY_CONFIG_PATH);
-  const token = explicitToken ?? stored?.token ?? `fk-proxy-${randomBytes(24).toString("base64url")}`;
-  const config = { token };
-  writePrivateJson(PROXY_CONFIG_PATH, config);
-  return config;
-}
 
 function parseMode(value: string): SubscriptionMode {
   if (value === "claude-code" || value === "codex") return value;
@@ -94,7 +54,7 @@ function parseNumber(value: string, label: string, options: { min: number; max: 
   return parsed;
 }
 
-/** One member's status line: `● label`, plus cooldown/expiry tags. */
+/** One member's health kind + detail for a `status` row. */
 function memberHealth(member: SubscriptionMemberStatus): {
   kind: "ok" | "warn" | "pending";
   detail: string;
@@ -151,28 +111,6 @@ function presentSnapshots(
   }
 }
 
-async function readLiveUsage(): Promise<{
-  runtime?: ProxyRuntime;
-  accountSets: SubscriptionAccountSetSnapshot[];
-}> {
-  const runtime = readJson<ProxyRuntime>(PROXY_RUNTIME_PATH);
-  const config = readJson<ProxyConfig>(PROXY_CONFIG_PATH);
-  if (runtime === undefined || config === undefined) return { accountSets: [] };
-  try {
-    const response = await fetch(`${runtime.url}/usage`, {
-      headers: { authorization: `Bearer ${config.token}` },
-      signal: AbortSignal.timeout(3000)
-    });
-    if (!response.ok) return { runtime, accountSets: [] };
-    const payload = (await response.json()) as {
-      accountSets?: SubscriptionAccountSetSnapshot[];
-    };
-    return { runtime, accountSets: payload.accountSets ?? [] };
-  } catch {
-    return { runtime, accountSets: [] };
-  }
-}
-
 async function serveProxy(options: ProxyServeOptions, command: Command): Promise<void> {
   const ctx = contextFor(command);
   const host = options.host;
@@ -182,66 +120,53 @@ async function serveProxy(options: ProxyServeOptions, command: Command): Promise
     min: 0.01,
     max: 1
   });
-  const probeSeconds = parseNumber(options.probeInterval, "probe interval", {
-    min: 0,
-    max: 86_400
-  });
-  const config = proxyConfig(options.authToken);
+  const probeSeconds = parseNumber(options.probeInterval, "probe interval", { min: 0, max: 86_400 });
   const policy = {
     source: { kind: "auto" as const },
     strategy,
     switchThreshold,
     ...(probeSeconds > 0 ? { probeIntervalMs: probeSeconds * 1000 } : {})
   };
-  const { relays } = await openSubscriptionRelays({
-    accounts: {
-      "claude-code": policy,
-      codex: policy
-    }
-  });
 
-  if (relays.anthropic === undefined && relays.codex === undefined) {
-    throw new Error(
-      "no subscription accounts are available; sign in with `claude` or `codex login`, or enroll an additional account with `fusionkit proxy add`"
-    );
-  }
-
-  const gateway = await startGateway({
-    backend: new RelayOnlyBackend(),
+  const proxy = await startSubscriptionProxy({
+    accounts: { "claude-code": policy, codex: policy },
     host,
     port,
-    authToken: config.token,
-    subscriptionRelays: relays
+    ...(options.authToken !== undefined ? { token: options.authToken } : {})
   });
-  const runtime: ProxyRuntime = {
-    pid: process.pid,
-    url: gateway.url(),
-    port: gateway.port(),
-    startedAt: new Date().toISOString()
-  };
-  writePrivateJson(PROXY_RUNTIME_PATH, runtime);
+  const registration = await registerRunningProxy({
+    loopbackUrl: proxy.url(),
+    port: proxy.port(),
+    token: proxy.token,
+    portless: portlessEnabled(options.portless)
+  });
   registerCleanup(async () => {
-    rmSync(PROXY_RUNTIME_PATH, { force: true });
-    await gateway.close();
+    await registration.release();
+    await proxy.close();
   });
 
   if (ctx.json) {
-    ctx.emit({ ...runtime, token: config.token, providers: Object.keys(relays) });
+    ctx.emit({
+      url: registration.url,
+      port: proxy.port(),
+      token: proxy.token,
+      providers: proxy.providers
+    });
   } else {
-    ctx.presenter.success(`subscription proxy listening at ${cyan(runtime.url)}`);
-    if (relays.anthropic !== undefined) {
+    ctx.presenter.success(`subscription proxy listening at ${cyan(registration.url)}`);
+    if (proxy.providers.includes("anthropic")) {
       ctx.presenter.box("Claude Code", [
-        `export ANTHROPIC_BASE_URL=${runtime.url}`,
-        `export ANTHROPIC_AUTH_TOKEN=${config.token}`
+        `export ANTHROPIC_BASE_URL=${registration.url}`,
+        `export ANTHROPIC_AUTH_TOKEN=${proxy.token}`
       ]);
     }
-    if (relays.codex !== undefined) {
+    if (proxy.providers.includes("codex")) {
       ctx.presenter.box("Codex (~/.codex/config.toml)", [
-        `export FUSIONKIT_PROXY_TOKEN=${config.token}`,
+        `export FUSIONKIT_PROXY_TOKEN=${proxy.token}`,
         "",
         "[model_providers.fusionkit-subscriptions]",
         'name = "openai"',
-        `base_url = "${runtime.url}/backend-api/codex"`,
+        `base_url = "${registration.url}/backend-api/codex"`,
         'wire_api = "responses"',
         'env_key = "FUSIONKIT_PROXY_TOKEN"',
         "requires_openai_auth = false"
@@ -250,10 +175,8 @@ async function serveProxy(options: ProxyServeOptions, command: Command): Promise
     ctx.presenter.note("Press Ctrl+C to stop; use a process supervisor for a login-persistent service.");
   }
 
-  // Commander actions normally return after setup, and the top-level CLI then
-  // runs cleanups and exits explicitly. Keep the serve action pending so this
-  // is a real long-lived endpoint; the process-wide signal handler performs
-  // the registered cleanup on SIGINT/SIGTERM.
+  // Keep the action pending so this is a real long-lived endpoint; the
+  // process-wide signal handler runs the registered cleanup on SIGINT/SIGTERM.
   await new Promise<never>(() => undefined);
 }
 
@@ -268,13 +191,10 @@ export function registerProxy(program: Command): void {
     .option("--host <host>", "bind host", "127.0.0.1")
     .option("--port <port>", "bind port", "8790")
     .option("--auth-token <token>", "stable ingress proxy token")
-    .option(
-      "--strategy <strategy>",
-      "sticky | round_robin | capacity_weighted",
-      "sticky"
-    )
+    .option("--strategy <strategy>", "sticky | round_robin | capacity_weighted", "sticky")
     .option("--switch-threshold <ratio>", "proactive utilization threshold", "0.9")
     .option("--probe-interval <seconds>", "usage endpoint poll interval (0 disables)", "0")
+    .option("--no-portless", "bind loopback only (skip the stable portless route)")
     .action(serveProxy);
 
   proxy
@@ -296,48 +216,48 @@ export function registerProxy(program: Command): void {
     .description("show proxy health and per-account subscription windows")
     .action(async (_options: unknown, command: Command) => {
       const ctx = contextFor(command);
-      const status = await readLiveUsage();
-      if (ctx.json) {
-        ctx.emit(status);
+      const state = discoverProxy();
+      if (state === undefined) {
+        if (ctx.json) ctx.emit({ running: false });
+        else ctx.presenter.note("subscription proxy is not running");
         return;
       }
-      if (status.runtime === undefined) {
-        ctx.presenter.note("subscription proxy is not running");
+      const client = SubscriptionProxyClient.open({ baseUrl: state.url, token: state.token });
+      let usage;
+      try {
+        usage = await client.usage();
+      } catch {
+        usage = undefined;
+      }
+      if (ctx.json) {
+        ctx.emit({ running: true, url: state.url, pid: state.pid, usage });
         return;
       }
       ctx.presenter.header("subscription proxy");
       ctx.presenter.keyValue([
-        { label: "endpoint", value: cyan(status.runtime.url) },
-        { label: "pid", value: String(status.runtime.pid) },
-        { label: "uptime", value: relativeTime(Date.parse(status.runtime.startedAt)) }
+        { label: "endpoint", value: cyan(state.url) },
+        { label: "pid", value: String(state.pid) },
+        { label: "uptime", value: relativeTime(Date.parse(state.startedAt)) }
       ]);
-      if (status.accountSets.length === 0) {
-        ctx.presenter.note("live usage unavailable (the proxy did not report account sets)");
+      if (usage === undefined) {
+        ctx.presenter.note("live usage unavailable (the proxy did not answer)");
         return;
       }
-      presentSnapshots(ctx.presenter, status.accountSets);
+      presentSnapshots(ctx.presenter, usage.accountSets);
     });
 
   proxy
     .command("stop")
     .description("stop the running subscription proxy")
-    .action((_options: unknown, command: Command) => {
+    .action(async (_options: unknown, command: Command) => {
       const ctx = contextFor(command);
-      const runtime = readJson<ProxyRuntime>(PROXY_RUNTIME_PATH);
-      if (runtime === undefined) {
-        if (ctx.json) ctx.emit({ stopped: false });
-        else ctx.presenter.note("subscription proxy is not running");
+      const result = await stopProxy();
+      if (ctx.json) {
+        ctx.emit(result);
         return;
       }
-      try {
-        process.kill(runtime.pid, "SIGTERM");
-        rmSync(PROXY_RUNTIME_PATH, { force: true });
-        if (ctx.json) ctx.emit({ stopped: true, pid: runtime.pid });
-        else ctx.presenter.success(`stopped subscription proxy pid=${runtime.pid}`);
-      } catch {
-        rmSync(PROXY_RUNTIME_PATH, { force: true });
-        if (ctx.json) ctx.emit({ stopped: false, stale: true });
-        else ctx.presenter.note("removed stale subscription proxy state");
-      }
+      if (result.stopped) ctx.presenter.success(`stopped subscription proxy${result.pid !== undefined ? ` pid=${result.pid}` : ""}`);
+      else if (result.stale) ctx.presenter.note("removed stale subscription proxy state");
+      else ctx.presenter.note("subscription proxy is not running");
     });
 }

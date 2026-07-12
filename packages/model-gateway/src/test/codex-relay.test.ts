@@ -3,8 +3,10 @@ import { createServer } from "node:http";
 import type { IncomingMessage, Server } from "node:http";
 import { test } from "node:test";
 
-import { CodexBackendRelay, codexRelayAuth, startGateway } from "../index.js";
-import type { Backend, CodexCatalogEntry, Gateway } from "../index.js";
+import { startGateway } from "../index.js";
+import type { Backend, Gateway } from "../index.js";
+import { CodexBackendRelay, codexRelayAuth } from "../subscriptions/index.js";
+import type { CodexCatalogEntry } from "../subscriptions/index.js";
 
 /**
  * Regression (ENG-620): a Codex client pointed at the gateway keeps its own

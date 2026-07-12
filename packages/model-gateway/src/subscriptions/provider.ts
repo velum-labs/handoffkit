@@ -7,14 +7,14 @@ import {
 import {
   loadSubscriptionCredential,
   persistSubscriptionCredential
-} from "./subscription-credentials.js";
+} from "./credentials.js";
 import type {
   AccountLimits,
   CreditSnapshot,
   RateLimitWindow,
   SubscriptionCredential,
   SubscriptionFailure
-} from "./subscription-types.js";
+} from "./types.js";
 
 export type AdminUsageRange = {
   startTime: number;

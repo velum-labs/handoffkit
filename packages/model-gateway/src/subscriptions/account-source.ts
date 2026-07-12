@@ -6,7 +6,7 @@ import type { SubscriptionMode } from "@fusionkit/registry";
 import {
   defaultSubscriptionAccountDirectory,
   enrollCurrentSubscription
-} from "./subscription-credentials.js";
+} from "./credentials.js";
 
 export type SubscriptionAccountSource =
   | { kind: "auto"; directory?: string; canonicalPath?: string }

@@ -9,18 +9,18 @@ import { join } from "node:path";
 
 import type { SubscriptionMode } from "@fusionkit/registry";
 
-import { isFailoverWorthy } from "./fusion-failover.js";
-import { resolveSubscriptionAccounts } from "./subscription-account-source.js";
-import type { SubscriptionAccountSource } from "./subscription-account-source.js";
-import { subscriptionCredentialLabel } from "./subscription-credentials.js";
-import type { SubscriptionProvider } from "./subscription-provider.js";
+import { isFailoverWorthy } from "../fusion-failover.js";
+import { resolveSubscriptionAccounts } from "./account-source.js";
+import type { SubscriptionAccountSource } from "./account-source.js";
+import { subscriptionCredentialLabel } from "./credentials.js";
+import type { SubscriptionProvider } from "./provider.js";
 import type {
   AccountLimits,
   SubscriptionCredential,
   SubscriptionMemberStatus,
   SubscriptionAccountSetSnapshot,
   SubscriptionSelectionStrategy
-} from "./subscription-types.js";
+} from "./types.js";
 
 export type SubscriptionAccountSetOptions = {
   mode: SubscriptionMode;

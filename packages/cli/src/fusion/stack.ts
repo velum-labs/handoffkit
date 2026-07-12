@@ -15,7 +15,6 @@ import type { EnsembleModel, PanelTrust, UnifiedHarnessKind } from "@fusionkit/e
 import { fusionModelId, providerForAuthMode } from "@fusionkit/registry";
 import { createChatNarrationWriter, MlxBackend, OpenAiBackend, startGateway } from "@fusionkit/model-gateway";
 import type {
-  CodexRelayOptions,
   Gateway,
   LocalComputePricing,
   ModelPricing,
@@ -24,6 +23,7 @@ import type {
   SessionMetaInput,
   SessionStore
 } from "@fusionkit/model-gateway";
+import type { CodexRelayOptions } from "@fusionkit/model-gateway/subscriptions";
 import { harnessDriversEnabled } from "@fusionkit/tools";
 
 import { startFusionStepGateway } from "../gateway.js";

@@ -7,12 +7,12 @@ import { test } from "node:test";
 
 import {
   RateLimitTracker,
+  sanitizeSubscriptionLabel,
   SubscriptionAccountSet,
   type AccountLimits,
   type SubscriptionCredential,
   type SubscriptionProvider
-} from "../index.js";
-import { sanitizeSubscriptionLabel } from "../subscription-credentials.js";
+} from "../subscriptions/index.js";
 
 type FakeCredentialFile = {
   accessToken: string;
