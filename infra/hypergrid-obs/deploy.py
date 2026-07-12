@@ -42,7 +42,7 @@ HERE = Path(__file__).resolve().parent
 GRAFANA_SRC = HERE.parent / "hyperkit" / "grafana"
 TAG_NAME = "hypergrid-obs"
 INSTANCE_TYPE = "t3.small"
-SSM_PROM_PASSWORD = "/hypergrid-obs/prom-password"
+SSM_PROM_PARAM = "/hypergrid-obs/prom-password"
 
 USER_DATA = """#!/bin/bash
 set -euo pipefail
@@ -78,14 +78,14 @@ def _ensure_prom_password(ssm) -> None:
     """Ensure the SecureString exists; the value never enters this process."""
 
     try:
-        ssm.get_parameter(Name=SSM_PROM_PASSWORD)
+        ssm.get_parameter(Name=SSM_PROM_PARAM)
         return
     except ssm.exceptions.ParameterNotFound:
         pass
     import secrets as _secrets
 
     ssm.put_parameter(
-        Name=SSM_PROM_PASSWORD,
+        Name=SSM_PROM_PARAM,
         Value=_secrets.token_urlsafe(18),
         Type="SecureString",
         Overwrite=False,
@@ -103,7 +103,7 @@ def _ensure_instance_profile(iam, account: str, region: str) -> str:
             {
                 "Effect": "Allow",
                 "Action": ["ssm:GetParameter"],
-                "Resource": f"arn:aws:ssm:{region}:{account}:parameter{SSM_PROM_PASSWORD}",
+                "Resource": f"arn:aws:ssm:{region}:{account}:parameter{SSM_PROM_PARAM}",
             }
         ],
     }
@@ -243,7 +243,7 @@ def main() -> int:
         IamInstanceProfile={"Name": profile_name},
         UserData=base64.b64encode(
             USER_DATA.format(
-                bundle_url=bundle_url, region=region, ssm_name=SSM_PROM_PASSWORD
+                bundle_url=bundle_url, region=region, ssm_name=SSM_PROM_PARAM
             ).encode()
         ).decode(),
         BlockDeviceMappings=[
@@ -278,7 +278,7 @@ def main() -> int:
     print(f"grafana: http://{ip}/  (anonymous viewer)")
     print(
         "prometheus OTLP ingest at :9090/api/v1/otlp -- basic auth user 'hyperkit', "
-        f"credential is the SSM SecureString {SSM_PROM_PASSWORD}"
+        f"credential is the SSM SecureString {SSM_PROM_PARAM}"
     )
     return 0
 
