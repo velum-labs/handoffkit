@@ -158,10 +158,43 @@ class SweepEngine:
         """Submit only missing shards to a compute backend (resume-safe)."""
 
         lock = load_lock(self.lock_path)
-        backend = registry.get_backend(backend_name or self.backend_name)
+        resolved_name = backend_name or self.backend_name
+        if resolved_name == "local":
+            backend = self._local_backend()
+        else:
+            backend = registry.get_backend(resolved_name)
         pending = self.pending_shards()
         backend.submit([(s.cell, s.instance_id) for s in pending], lock.sweep_id)
         return len(pending)
+
+    def _local_backend(self):
+        """In-process backend bound to this engine's store and lock state.
+
+        Imported lazily to keep core -> backends acyclic at module load.
+        """
+
+        from hyperkit.backends.local import LocalComputeBackend, default_max_workers
+        from hyperkit.core.orchestrator import RunOrchestrator
+
+        lock = load_lock(self.lock_path)
+        generation_of = {
+            cell.cell_id: gen.index for gen in lock.generations for cell in gen.cells
+        }
+
+        def orchestrator_for(cell: Cell) -> RunOrchestrator:
+            # Fresh SUT instance per shard: stateful SUTs (fusionkit-serve holds
+            # a subprocess handle) must not be shared across worker threads.
+            sut = type(registry.get_sut(cell.sut.kind))()
+            return RunOrchestrator(
+                sweep_id=lock.sweep_id,
+                generation=generation_of.get(cell.cell_id, 0),
+                adapter=registry.get_benchmark(cell.benchmark),
+                sut=sut,
+                store=self.store,
+                work_root=self.workdir / "work",
+            )
+
+        return LocalComputeBackend(orchestrator_for, max_workers=default_max_workers())
 
     # --- status / collect ---------------------------------------------------
 

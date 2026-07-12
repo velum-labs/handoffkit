@@ -47,7 +47,7 @@ class SwebenchAdapter:
         return SwebenchGrader()
 
     def run_instance(
-        self, instance_id: str, target: SUTTarget, workdir: Path
+        self, instance_id: str, target: SUTTarget, workdir: Path, params: dict[str, Any]
     ) -> dict[str, Any]:  # pragma: no cover - requires Docker + billed models
         """Run mini-SWE-agent on one instance, grade with the official harness.
 

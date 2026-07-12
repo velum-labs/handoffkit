@@ -5,6 +5,11 @@ services:
     image: prom/prometheus:v3.5.0
     command:
       - --config.file=/etc/prometheus/prometheus.yml
+      # Accept OTLP metrics from local hyperkit runs (runner telemetry +
+      # local-controller CellSnapshot gauges) on /api/v1/otlp/v1/metrics.
+      - --web.enable-otlp-receiver
+    ports:
+      - "127.0.0.1:${PROMETHEUS_PORT:-19090}:9090"
     volumes:
       - ./local/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./local/seed-rules.yml:/etc/prometheus/seed-rules.yml:ro

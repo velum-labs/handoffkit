@@ -24,8 +24,9 @@ class Adapter:
     def resource_profile(self) -> ResourceProfile:
         return ResourceProfile(needs_docker=False)
 
-    def run_instance(self, instance_id: str, target: SUTTarget, workdir: Path):
+    def run_instance(self, instance_id: str, target: SUTTarget, workdir: Path, params: dict):
         assert target.base_url == "http://fake/v1"
+        assert params == {"knob": 1}
         return {"answer": "ok", "tokens": 12, "cost_usd": 0.01}
 
     def grader(self) -> Grader:
@@ -74,6 +75,7 @@ def test_orchestrator_is_idempotent_and_checkpoints(
         benchmark="fake",
         instances=["i"],
         dataset_hash="data",
+        params={"knob": 1},
     )
     first = orchestrator.run(cell, "i")
     second = orchestrator.run(cell, "i")

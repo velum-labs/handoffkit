@@ -15,6 +15,7 @@ import typer
 import hyperkit.adapters  # noqa: F401  (registers built-in benchmark adapters)
 import hyperkit.suts  # noqa: F401  (registers built-in SUTs)
 from hyperkit.cloud.controller import main as controller_main
+from hyperkit.local_controller import run_local_controller
 from hyperkit.core.aggregate import format_table
 from hyperkit.core.experiments import load_experiment
 from hyperkit.core.models import TopologySpec
@@ -104,6 +105,21 @@ def controller() -> None:
     """Run the stateless S3/SQS hypergrid snapshot controller."""
 
     raise typer.Exit(controller_main())
+
+
+@app.command("local-controller")
+def local_controller(
+    workdir: Annotated[
+        list[Path], typer.Option(help="sweep workdir(s) to watch (repeatable)")
+    ],
+    poll: Annotated[float, typer.Option(help="poll interval seconds")] = 10.0,
+    once: Annotated[bool, typer.Option("--once", help="one reconcile pass, then exit")] = False,
+) -> None:
+    """Publish live CellSnapshot gauges from local sweeps (filesystem twin of
+    the cloud controller). Set OTEL_EXPORTER_OTLP_ENDPOINT to a Prometheus
+    OTLP receiver, e.g. http://127.0.0.1:19090/api/v1/otlp."""
+
+    raise typer.Exit(run_local_controller(list(workdir), poll_interval=poll, once=once))
 
 
 @app.command("replay-swebench")
