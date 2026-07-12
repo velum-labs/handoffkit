@@ -1,0 +1,43 @@
+# LiveCodeBench code_generation_lite release_v6 -- DRAFT spare manifest
+# window >= 2024-08-01, stdin-only, no starter_code, medium/hard
+# seed 20260712, 40 instances. DO NOT EDIT after lock.
+abc399_e
+abc397_b
+abc384_e
+abc393_d
+abc377_d
+abc388_f
+arc191_d
+arc195_e
+abc375_d
+arc194_a
+abc388_e
+abc386_e
+abc374_d
+abc399_c
+arc183_b
+abc372_g
+abc389_g
+abc383_e
+abc381_e
+abc390_f
+abc393_f
+abc376_b
+abc372_c
+abc368_f
+abc387_c
+arc195_a
+abc383_b
+abc370_f
+abc393_e
+arc195_d
+abc392_c
+arc186_a
+arc184_c
+arc189_c
+arc194_e
+abc379_c
+abc374_g
+abc386_c
+abc379_d
+abc372_d

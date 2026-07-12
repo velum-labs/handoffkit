@@ -70,7 +70,9 @@ class FakeAdapter:
     name = "benchmark"
     version = "7"
 
-    def run_instance(self, instance_id: str, sut_endpoint: str, workdir: Path) -> dict[str, Any]:
+    def run_instance(
+        self, instance_id: str, sut_endpoint: str, workdir: Path, params: dict[str, Any]
+    ) -> dict[str, Any]:
         assert sut_endpoint == "http://sut/v1"
         workdir.mkdir(parents=True, exist_ok=True)
         (workdir / "report.json").write_text('{"ok": true}')

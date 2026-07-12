@@ -32,7 +32,7 @@ class TerminalBenchAdapter:
         return TerminalBenchGrader()
 
     def run_instance(
-        self, instance_id: str, target: SUTTarget, workdir: Path
+        self, instance_id: str, target: SUTTarget, workdir: Path, params: dict[str, Any]
     ) -> dict[str, Any]:  # pragma: no cover - Docker + billed models
         workdir.mkdir(parents=True, exist_ok=True)
         subprocess.run(

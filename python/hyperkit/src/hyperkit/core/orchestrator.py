@@ -63,7 +63,7 @@ class RunOrchestrator:
         with shard_span(attributes):
             try:
                 target = self.sut.start(cell.sut, workdir)
-                raw = self.adapter.run_instance(instance_id, target, workdir)
+                raw = self.adapter.run_instance(instance_id, target, workdir, dict(cell.params))
                 graded = self.adapter.grader().grade(instance_id, raw)
                 resolved = bool(graded.get("resolved", False))
                 status = ShardStatus.RESOLVED if resolved else ShardStatus.UNRESOLVED

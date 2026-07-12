@@ -19,6 +19,7 @@ from hyperkit.core.aggregate import format_table
 from hyperkit.core.experiments import load_experiment
 from hyperkit.core.models import TopologySpec
 from hyperkit.core.sweep import SweepEngine
+from hyperkit.local_controller import run_local_controller
 from hyperkit.replay import ReplayRow, replay_reports
 
 app = typer.Typer(no_args_is_help=True, help="hyperkit experiment platform")
@@ -68,10 +69,17 @@ def extend(
 def apply(
     workdir: Annotated[Path, typer.Option()] = Path(".hyperkit"),
     backend: Annotated[str, typer.Option()] = "aws-batch",
+    rung: Annotated[
+        int | None,
+        typer.Option(help="limit each cell to its first N instances (halving budget)"),
+    ] = None,
+    only: Annotated[
+        str | None, typer.Option(help="glob over cell labels to submit")
+    ] = None,
 ) -> None:
     """Submit missing shards only; safe to call repeatedly (resume semantics)."""
 
-    count = SweepEngine(workdir, backend=backend).apply(backend)
+    count = SweepEngine(workdir, backend=backend).apply(backend, rung=rung, only=only)
     typer.echo(f"submitted {count} missing shards via {backend}")
 
 
@@ -104,6 +112,21 @@ def controller() -> None:
     """Run the stateless S3/SQS hypergrid snapshot controller."""
 
     raise typer.Exit(controller_main())
+
+
+@app.command("local-controller")
+def local_controller(
+    workdir: Annotated[
+        list[Path], typer.Option(help="sweep workdir(s) to watch (repeatable)")
+    ],
+    poll: Annotated[float, typer.Option(help="poll interval seconds")] = 10.0,
+    once: Annotated[bool, typer.Option("--once", help="one reconcile pass, then exit")] = False,
+) -> None:
+    """Publish live CellSnapshot gauges from local sweeps (filesystem twin of
+    the cloud controller). Set OTEL_EXPORTER_OTLP_ENDPOINT to a Prometheus
+    OTLP receiver, e.g. http://127.0.0.1:19090/api/v1/otlp."""
+
+    raise typer.Exit(run_local_controller(list(workdir), poll_interval=poll, once=once))
 
 
 @app.command("replay-swebench")

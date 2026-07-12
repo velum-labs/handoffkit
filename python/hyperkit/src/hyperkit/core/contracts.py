@@ -41,6 +41,11 @@ class BenchmarkAdapter(Protocol):
     the benchmark's own harness/scaffold against an opaque SUT endpoint; grading
     and parsing normalize to a ShardResult. Reading committed artifacts (the
     acceptance path) uses ``parse_report`` without running anything.
+
+    ``params`` carries the cell's harness-side coordinates (``Cell.params`` --
+    already part of cell identity): sample counts, selection policies,
+    temperatures, and similar knobs that belong to the harness rather than the
+    SUT. Adapters that have no harness knobs simply ignore it.
     """
 
     name: str
@@ -51,7 +56,11 @@ class BenchmarkAdapter(Protocol):
     def resource_profile(self) -> ResourceProfile: ...
 
     def run_instance(
-        self, instance_id: str, target: SUTTarget, workdir: Path
+        self,
+        instance_id: str,
+        target: SUTTarget,
+        workdir: Path,
+        params: dict[str, Any],
     ) -> dict[str, Any]: ...
 
     def grader(self) -> Grader: ...
