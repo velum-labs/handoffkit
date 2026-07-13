@@ -13,9 +13,8 @@ The `fusionkit` CLI boots the panel, synthesizer, and gateway, then launches you
 | `fusionkit claude [args...]` | Launch Claude Code backed by the panel. See [Claude Code](/docs/tools/claude-code). |
 | `fusionkit cursor [args...]` | Launch Cursor backed by the panel; add `--ide` for the desktop proxy. See [Cursor](/docs/tools/cursor). |
 | `fusionkit serve [args...]` | Run only the gateway and print setup snippets for OpenAI-compatible tools. |
-| `fusionkit fusion [tool] [args...]` | Generic launcher; omit `tool` on a TTY to pick interactively. |
 
-FusionKit's own flags come before anything forwarded to the tool; with the generic `fusionkit fusion [tool]` form they must also come before the tool name.
+FusionKit's own flags come before anything forwarded to the tool.
 
 ```bash
 fusionkit codex --local
@@ -33,7 +32,7 @@ fusionkit codex --yes -- "fix the build"
 | `fusionkit init` | Scaffold a committed `.fusionkit/` folder for this repo. |
 | `fusionkit install codex` | Add FusionKit to your real `~/.codex/config.toml` (managed block: gateway provider + one profile per ensemble); pair with `fusionkit serve --port <n>` and launch via `codex --profile fusion-panel`. |
 | `fusionkit uninstall codex` | Remove the managed FusionKit block from `~/.codex/config.toml`. |
-| `fusionkit stop` | Reap persistent portless singleton services (router, dashboard, ...) left by prior runs. `fusionkit fusion stop` is the same command. |
+| `fusionkit stop` | Reap persistent portless singleton services (router, dashboard, ...) left by prior runs. |
 | `fusionkit telemetry <status\|on\|off\|inspect>` | Inspect and control anonymous, opt-in product telemetry (off by default). `inspect` prints exactly what a session event would contain. |
 | `fusionkit version` | Print the npm CLI and pinned PyPI synthesizer versions. |
 | `fusionkit completion <bash\|zsh\|fish>` | Print a static shell completion script. |

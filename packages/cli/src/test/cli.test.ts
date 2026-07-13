@@ -255,7 +255,7 @@ test("help prints usage and lists the top-level commands", () => {
   const result = fusionkit(["help"]);
   assert.equal(result.status, 0);
   assert.match(result.stdout, /real model fusion behind your coding agent/);
-  for (const command of ["codex", "claude", "cursor", "serve", "opencode", "fusion", "init", "ensemble"]) {
+  for (const command of ["codex", "claude", "cursor", "serve", "opencode", "init", "ensemble"]) {
     assert.match(result.stdout, new RegExp(`\\b${command}\\b`));
   }
   assert.doesNotMatch(result.stdout, /^  local\b/m);
@@ -265,7 +265,6 @@ test("help prints usage and lists the top-level commands", () => {
     "cursor",
     "serve",
     "opencode",
-    "fusion",
     "init",
     "setup",
     "doctor",
@@ -313,7 +312,7 @@ test("completion bash includes top-level commands from the Commander tree", () =
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /complete -F _fusionkit_completion fusionkit/);
   assert.match(result.stdout, /fusionkit __complete/);
-  for (const command of ["codex", "claude", "cursor", "serve", "opencode", "fusion", "doctor", "ensemble"]) {
+  for (const command of ["codex", "claude", "cursor", "serve", "opencode", "doctor", "ensemble"]) {
     assert.match(result.stdout, new RegExp(`\\b${command}\\b`));
   }
 });
@@ -520,12 +519,10 @@ test("public URL is scoped to direct mode", () => {
   assert.match(result.stderr, /--public-url requires --direct/);
 });
 
-test("fusion help documents the flags-before-tool contract", () => {
-  const result = fusionkit(["fusion", "--help"]);
-  assert.equal(result.status, 0);
-  assert.match(result.stdout, /must precede the tool name/);
-  assert.match(result.stdout, /--direct\s+back the tool with one local model directly/);
-  assert.match(result.stdout, /run the panel on local MLX models \(Apple Silicon\s+only\) instead of cloud providers/);
+test("the removed fusion dispatcher is rejected", () => {
+  const result = fusionkit(["fusion"]);
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /unknown command ['"]fusion['"]/);
 });
 
 test("init help does not expose removed governance plane flags", () => {

@@ -6,8 +6,7 @@ import type { SessionIsolation } from "@fusionkit/protocol";
 import type { HarnessLiveSmokeTarget } from "../dashboard.js";
 import { toolRegistry } from "../tools.js";
 
-import type { FusionTool, PanelAuthMode, PanelModelSpec, PanelProvider } from "../fusion-quickstart.js";
-import { FUSION_TOOLS } from "../fusion-quickstart.js";
+import type { PanelAuthMode, PanelModelSpec, PanelProvider } from "../fusion-quickstart.js";
 import { PANEL_AUTH_MODES, PANEL_PROVIDERS, panelProviderForAuthMode } from "../fusion/env.js";
 
 import { fail } from "./errors.js";
@@ -192,13 +191,6 @@ export function parsePanelTrust(value: string | undefined): PanelTrust | undefin
     fail(`--panel-trust must be one of ${PANEL_TRUST_LEVELS.join(" | ")}`);
   }
   return value as PanelTrust;
-}
-
-export function parseFusionTool(value: string | undefined): FusionTool {
-  if (value === undefined || !(FUSION_TOOLS as readonly string[]).includes(value)) {
-    fail(`--tool must be one of ${FUSION_TOOLS.join(" | ")}`);
-  }
-  return value as FusionTool;
 }
 
 /**

@@ -10,7 +10,7 @@ the older **Warrant governance / VM isolation stack** in-tree under
 The Node `@fusionkit/cli` command tree (`packages/cli/src/cli.ts`) registers the
 FusionKit product commands only:
 
-- `codex` / `claude` / `cursor` / `serve` plus generic `fusion [tool]`
+- `codex` / `claude` / `cursor` / `serve`
 - `init`, `setup`, `doctor`, `status`, `config`, `prompts`, `proxy`,
   `sessions`, `models`, `ensemble`, `install` / `uninstall`, `local`,
   `completion` (plus the hidden `complete`), `runtime`, `telemetry`,

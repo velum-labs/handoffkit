@@ -120,7 +120,7 @@ ports, e.g. in CI), pass `--no-portless` or set `PORTLESS=0`. When portless is
 not installed (Node `<24`) the stack transparently falls back to ports.
 
 Reap persistent singletons left running by prior runs with the top-level
-`fusionkit stop` (or the equivalent `fusionkit fusion stop`).
+`fusionkit stop`.
 
 ## Legacy Docker compose
 

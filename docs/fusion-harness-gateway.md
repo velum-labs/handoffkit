@@ -20,9 +20,9 @@ cd your-git-repo
 fusionkit codex                      # or: claude | cursor | serve
 ```
 
-`fusionkit codex` spawns everything and launches the agent for you. There is no manual
-gateway, no separate model servers, no juggling terminals. Omit the tool on a
-TTY to pick interactively. In one command it:
+`fusionkit codex` spawns everything and launches the agent for you. There is no
+manual gateway, no separate model servers, and no juggling terminals. In one
+command it:
 
 1. starts the model panel, a **cloud** three-vendor trio by default (`gpt`,
    `sonnet`, and `gemini`), or the local MLX trio with `--local` on Apple Silicon,
@@ -40,8 +40,7 @@ TTY to pick interactively. In one command it:
 One Ctrl+C tears the whole stack (router + gateway + any Cursorkit bridge) down.
 With [portless](https://github.com/vercel-labs/portless) the gateway, router,
 and dashboard come up at stable HTTPS names and are reused across runs; the
-router persists between runs (reap it with `fusionkit stop`, or the equivalent
-`fusionkit fusion stop`).
+router persists between runs (reap it with `fusionkit stop`).
 
 ### Prerequisites
 

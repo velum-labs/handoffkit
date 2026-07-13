@@ -62,7 +62,6 @@ with the throttled vendor excluded. The operators capture no per-turn closures.
 | `fusionkit codex` | CLI -> FusionBackend -> `fusion-frontdoor-turn` graph (panel -> fuse -> finalize) | Kernel-native | done |
 | `fusionkit claude` | Same stack, Anthropic dialect | Kernel-native | done; dialect adapter only |
 | `fusionkit cursor` | Same stack, Cursor bridge/ACP/IDE | Kernel-native | done; Cursor adapter only |
-| `fusionkit fusion <tool>` | Generic dispatcher to `runFusion` | Kernel-native | done |
 | `fusionkit serve` | Fusion gateway dispatches every turn into a named workflow | Kernel-native | done |
 | `fusionkit <tool> --direct` | kernel-wrapped local gateway over direct backend | Kernel-wrapped | native `direct-model-turn` |
 | `fusionkit ensemble run` | `runEnsemble` wrapper -> legacy operator | Kernel-wrapped | decomposed `ensemble-run` |
