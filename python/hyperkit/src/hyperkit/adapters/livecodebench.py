@@ -262,7 +262,13 @@ class _Client:
                     "cost_usd": float(usage.get("cost") or 0.0),
                     "finish_reason": choice.get("finish_reason"),
                 }
-            except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, OSError) as exc:
+            except (
+                json.JSONDecodeError,
+                urllib.error.URLError,
+                urllib.error.HTTPError,
+                TimeoutError,
+                OSError,
+            ) as exc:
                 last_error = exc
                 retryable = True
                 if isinstance(exc, urllib.error.HTTPError):

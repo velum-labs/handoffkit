@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import urllib.request
 from pathlib import Path
 from typing import Any
 
@@ -76,6 +77,66 @@ def test_run_tests_reports_first_failure() -> None:
     )
     assert result["all_passed"] is False
     assert result["failure"]["actual"].strip() == "wrong"
+
+
+class _Response:
+    def __init__(self, body: bytes) -> None:
+        self.body = body
+
+    def __enter__(self) -> _Response:
+        return self
+
+    def __exit__(self, *_: object) -> None:
+        return None
+
+    def read(self) -> bytes:
+        return self.body
+
+
+def test_client_retries_malformed_provider_json(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    bodies = iter(
+        [
+            b"  \n",
+            json.dumps(
+                {
+                    "choices": [
+                        {
+                            "message": {"content": "ok"},
+                            "finish_reason": "stop",
+                        }
+                    ],
+                    "usage": {
+                        "prompt_tokens": 1,
+                        "completion_tokens": 1,
+                        "cost": 0.001,
+                    },
+                }
+            ).encode(),
+        ]
+    )
+    calls = 0
+
+    def urlopen(*_: object, **__: object) -> _Response:
+        nonlocal calls
+        calls += 1
+        return _Response(next(bodies))
+
+    monkeypatch.setattr(urllib.request, "urlopen", urlopen)
+    monkeypatch.setattr("hyperkit.adapters.livecodebench.time.sleep", lambda _: None)
+
+    result = _Client("https://provider.example/v1", "key").complete(
+        "model",
+        "prompt",
+        temperature=0.2,
+        max_tokens=16,
+        attempts=2,
+    )
+
+    assert calls == 2
+    assert result["text"] == "ok"
+    assert result["cost_usd"] == 0.001
 
 
 PROBLEM = {
