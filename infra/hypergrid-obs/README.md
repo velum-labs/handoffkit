@@ -69,3 +69,30 @@ sudo sh -c 'printf "nameserver 100.100.100.100\n" > /etc/resolver/ts.net'
 sudo dscacheutil -flushcache
 sudo killall -HUP mDNSResponder
 ```
+
+## Agent sessions (Cursor cloud sandboxes)
+
+`./join-tailnet.sh` makes tailnet access reproducible from agent sandboxes.
+Verified working from a Cursor Firecracker VM on 2026-07-13: install + join +
+direct WireGuard data path all succeed (UDP is not blocked). Two environment
+facts it handles:
+
+- **No kernel TUN driver** in the sandbox kernel, so tailscaled runs in
+  userspace-networking mode with local proxies. All tailnet traffic must go
+  through them: `curl --proxy socks5h://localhost:1055 ...`, or
+  `HTTPS_PROXY=http://localhost:1056` scoped to the one process that needs the
+  tailnet (e.g. the `hyperkit local-controller` pushing OTLP). MagicDNS names
+  only resolve through the proxy (`socks5h`, not `socks5`).
+- **Auth key from SSM**: prefers `/hypergrid-obs/agent-auth-key` (create a
+  reusable ephemeral key tagged e.g. `tag:hyperkit-agent` for agent
+  enrollments) and falls back to `/hypergrid-obs/tailscale-auth-key`.
+  Ephemeral nodes disappear shortly after a sandbox dies, so repeated agent
+  sessions do not accumulate.
+
+**Tailnet ACL prerequisite (one-time admin action):** the agents' tag needs a
+grant to `tag:hyperkit-observability` on tcp/443 (Grafana) and tcp/9090
+(Prometheus). Without it the join succeeds but the observability node is not
+visible to agent nodes — observed exactly this on first verification: the
+agent node enrolled (and could reach `tag:server` peers directly), while
+`hypergrid-obs` stayed invisible because tag-to-tag access is not implicit,
+even for nodes sharing the same tag.
