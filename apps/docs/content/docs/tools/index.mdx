@@ -16,9 +16,9 @@ learns that fusion happened. Three agents have first-class launchers:
 You only need the agent you plan to launch. `fusionkit doctor` checks which
 binaries are on your PATH before a run.
 
-opencode is also supported in local mode (`fusionkit local opencode`), which
-backs it with a single local model and no fusion. It does not have a fused
-top-level launcher yet.
+opencode is also supported in direct mode (`fusionkit opencode --direct`),
+which backs it with a single local model and no fusion. It does not support a
+fused launch yet.
 
 ## What every launcher shares
 
@@ -31,6 +31,7 @@ argument (or after `--`) goes to the agent untouched:
 
 ```bash
 fusionkit codex --local                    # --local is a FusionKit flag
+fusionkit codex --direct                   # one local model, no fusion
 fusionkit claude --repo /path              # --repo is a FusionKit flag
 fusionkit codex --yes -- "fix the build"   # "fix the build" goes to codex
 ```
@@ -50,6 +51,7 @@ The behavior below works the same way in all three tools:
 | Observability | `--observe` boots the local trace dashboard. |
 | Sub-agents | Each named ensemble becomes a delegable sub-agent unless you pass `--no-subagents`. |
 | Local panel | `--local` swaps the cloud panel for on-device MLX models on Apple Silicon. |
+| Direct model | `--direct` bypasses fusion and backs the agent with one local model. |
 
 The per-tool pages cover what differs: how each agent is wired to the gateway,
 which environment the launcher sets, how the model picker is populated, and the

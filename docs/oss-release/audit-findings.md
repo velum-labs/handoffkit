@@ -157,7 +157,7 @@ receipt with resume hint) is genuinely good. What breaks the magic:
 | 8.4 | **Same command, different products:** Node `fusionkit serve` (full stack orchestration) vs Python `fusionkit serve` (raw uvicorn router) share a name | `fusion-quickstart.ts:689-697` vs `main.py:150-169` | P1 |
 | 8.5 | Python `--help` lists 10 maintainer/benchmark commands (`fusion-hillclimb`, `tune-prompts`, `public-bench`, …) as top-level peers of `serve`/`init`; root help string is "Local model fusion toolkit." (undersells) | `python/fusionkit-cli/src/fusionkit_cli/main.py:63,447-1168` | P1 |
 | 8.6 | `doctor` prints "ready. Try: fusionkit codex" (exit 0) even when all provider keys are missing — only uv absence is a hard fail | `packages/cli/src/commands/doctor.ts:272-283` | P1 |
-| 8.7 | Naming confusion: `fusionkit local <tool>` (single local model, no fusion) vs `--local` flag (MLX *panel* with fusion) | `docs/cli.md` | P2 |
+| 8.7 | Resolved: the single-model path is now `fusionkit <tool> --direct`; `--local` remains the fused MLX panel flag. | `docs/cli.md` | — |
 | 8.8 | No shell completions; no update notifications; flag-order rule ("fusionkit flags before tool name") is a recurring paper cut; several env vars (`FUSIONKIT_NO_TUI`, `FUSIONKIT_SKIP_KEY_VALIDATION`, `FUSIONKIT_CONFIG`) undocumented in help | CLI sources | P2 |
 | 8.9 | Good bones worth keeping/extending: stderr/stdout contract (human UI vs machine payloads), `--json` on most inspection commands, Ink TTY / plain non-TTY split, exit codes 0/1/2/130 | `packages/cli-ui/` | — |
 

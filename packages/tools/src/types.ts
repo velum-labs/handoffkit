@@ -174,9 +174,9 @@ export type ToolDashboardMetadata = {
 
 /**
  * A single tool integration: its launcher (used by `fusionkit <tool>` and
- * `fusionkit local <tool>`) plus, optionally, its ensemble harness factory (used
- * by the harness gateway / e2e matrix). One package implements one of these and
- * the CLI registers it.
+ * `fusionkit <tool> --direct`) plus, optionally, its ensemble harness factory
+ * (used by the harness gateway / e2e matrix). One package implements one of
+ * these and the CLI registers it.
  */
 export type ToolIntegration = {
   /** Stable id (e.g. "codex"). */

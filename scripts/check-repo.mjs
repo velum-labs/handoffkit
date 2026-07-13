@@ -434,7 +434,7 @@ const TRUSTED_THIRD_PARTY = new Map([
   ["@anthropic-ai/claude-agent-sdk", "0.3.198"],
   // Cloudflare Quick Tunnel wrapper (unjs): auto-provisions the public HTTPS
   // tunnel behind the OOTB Cursor BYOK flow (`fusionkit serve --expose`,
-  // `fusionkit local cursor`). Downloads the official cloudflared binary at
+  // `fusionkit cursor --direct`). Downloads the official cloudflared binary at
   // runtime (no install scripts).
   ["untun", "0.1.3"],
   ["@openai/codex-sdk", "0.142.5"],

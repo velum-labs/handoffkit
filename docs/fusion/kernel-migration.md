@@ -64,7 +64,7 @@ with the throttled vendor excluded. The operators capture no per-turn closures.
 | `fusionkit cursor` | Same stack, Cursor bridge/ACP/IDE | Kernel-native | done; Cursor adapter only |
 | `fusionkit fusion <tool>` | Generic dispatcher to `runFusion` | Kernel-native | done |
 | `fusionkit serve` | Fusion gateway dispatches every turn into a named workflow | Kernel-native | done |
-| `fusionkit local <tool>` | kernel-wrapped local gateway over direct backend | Kernel-wrapped | native `direct-model-turn` |
+| `fusionkit <tool> --direct` | kernel-wrapped local gateway over direct backend | Kernel-wrapped | native `direct-model-turn` |
 | `fusionkit ensemble run` | `runEnsemble` wrapper -> legacy operator | Kernel-wrapped | decomposed `ensemble-run` |
 | `fusionkit ensemble e2e` | `runUnifiedHarnessE2E` -> `runEnsemble` wrapper | Kernel-wrapped | e2e adapter -> decomposed workflow |
 | Node `/v1/chat/completions` | protocol adapter -> backend.chat | Only fused panel capture | backend execution via workflow |
@@ -382,7 +382,7 @@ Make `runEnsemble` call `ensemble-run`. The first version can use a
 
 ### Phase 4: local mode
 
-Make `fusionkit local` and local serve use `direct-model-turn`.
+Make `fusionkit <tool> --direct` and direct serve use `direct-model-turn`.
 
 ### Phase 5: Python behind an operator
 

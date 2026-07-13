@@ -82,7 +82,7 @@ sequenceDiagram
 
 `@fusionkit/cli` is the primary product surface and publishes the `fusionkit` binary. Its entry script is `packages/cli/src/index.ts`, which builds the Commander program and handles top-level process errors. The command tree is built by `buildProgram()` in `packages/cli/src/cli.ts`.
 
-The package owns launcher commands such as `codex`, `claude`, `cursor`, and `serve`; the generic `fusion` command group; `local`; `models`; `runtime`; `sessions`; `config`; `setup`; `doctor`; `status`; and lower-level ensemble helpers. The product path depends heavily on `registerFusion`, `registerEnsemble`, `registerLocal`, `registerModels`, `registerSessions`, `registerConfig`, `registerSetup`, and `registerDoctor`.
+The package owns launcher commands such as `codex`, `claude`, `cursor`, and `serve` (including their `--direct` mode); the generic `fusion` command group; `models`; `runtime`; `sessions`; `config`; `setup`; `doctor`; `status`; and lower-level ensemble helpers. The product path depends heavily on `registerFusion`, `registerEnsemble`, `registerModels`, `registerSessions`, `registerConfig`, `registerSetup`, and `registerDoctor`.
 
 Important behavior includes preflight validation through `PreflightError`, version reporting that names both the npm CLI and pinned PyPI synthesizer, bare invocation help, and fail-closed policy error reporting for governed execution paths.
 

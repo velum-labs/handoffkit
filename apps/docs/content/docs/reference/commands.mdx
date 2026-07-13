@@ -111,14 +111,14 @@ fusionkit codex --continue
 fusionkit codex --resume 1a2b3c
 ```
 
-## Model cache and local commands
+## Model cache and direct mode
 
 | Command | What it does |
 | --- | --- |
 | `fusionkit models list` | Show the curated MLX catalog, downloaded state, sizes, and RAM fit. |
 | `fusionkit models download <model>` | Download a local model. |
 | `fusionkit models rm <model>` | Remove a downloaded local model. |
-| `fusionkit local <codex\|claude\|cursor\|opencode\|serve>` | Back a vendor agent with one local OpenAI-compatible model and no fusion. Use `--local` on launch commands for a fused local panel. Supports `--public-url <url>` (or `FUSIONKIT_PUBLIC_URL`) for a Cursor tunnel URL, `--ide`, and `--auth-token <token>`. |
+| `fusionkit <tool> --direct` | Back a vendor agent with one local OpenAI-compatible model and no fusion. Use `--local` instead for a fused local panel. Direct Cursor mode supports `--public-url <url>` (or `FUSIONKIT_PUBLIC_URL`) for the tunnel URL. |
 
 ## Advanced runtime command
 
@@ -128,6 +128,7 @@ fusionkit codex --resume 1a2b3c
 
 | Flag | Effect |
 | --- | --- |
+| `--direct` | Bypass the panel, judge, and synthesis and use one local model directly. |
 | `--local` / `--no-local` | Use the on-device MLX panel, or override a `local: true` config default. |
 | `--model ID=PROVIDER:MODEL` | Define a panel member. Repeat for multiple members. |
 | `--model-endpoint ID=URL` | Use a pre-running OpenAI-compatible endpoint as a panel member. |
@@ -169,7 +170,7 @@ The Node gateway exposes `fusion-panel` for synthesized ensemble answers. It als
 | `FUSIONKIT_TELEMETRY` | `1`/`0` overrides the stored product-telemetry consent for one invocation. |
 | `FUSIONKIT_TELEMETRY_PATH` | Telemetry consent file override (default `~/.fusionkit/telemetry.json`). |
 | `FUSIONKIT_CATALOG_PATH` | Local MLX model catalog cache override (default `~/.fusionkit/catalog.json`). |
-| `FUSIONKIT_PUBLIC_URL` | Public tunnel URL for Cursor when using `fusionkit local` (same as `--public-url`). |
+| `FUSIONKIT_PUBLIC_URL` | Public tunnel URL for direct Cursor mode (`fusionkit cursor --direct`; same as `--public-url`). |
 | `FUSIONKIT_WEB_SEARCH` | Set to `0` to disable gateway-executed web search entirely. |
 | `FUSIONKIT_WEB_SEARCH_OPENAI_MODEL` | Model for OpenAI-delegated searches (default `gpt-5.5`). |
 | `FUSIONKIT_WEB_SEARCH_ANTHROPIC_MODEL` | Model for Anthropic-delegated searches (default `claude-haiku-4-5`). |

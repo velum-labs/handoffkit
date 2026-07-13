@@ -105,10 +105,10 @@ working directory, and does not replace the normal `fusionkit` binary. Set
 - `fusionkit config show | path | export-yaml` — inspect the one config source of truth.
 - `fusionkit sessions [show|rm]` — list, inspect, and remove durable gateway sessions (`--resume` / `--continue` rehydrate them).
 - `fusionkit models list | download | rm` — manage the local MLX model cache.
-- `fusionkit local <tool>` — back an agent with a single local model instead of the panel.
+- `fusionkit <tool> --direct` — back an agent with one local model, bypassing the panel, judge, and synthesis.
 - `fusionkit version` — show versions for the CLI, synthesizer, runners, agents, and tool packages (`--json` for scripts).
 
-Useful flags: `--local`, `--observe`, `--model ID=PROVIDER:MODEL`,
+Useful flags: `--local`, `--direct`, `--observe`, `--model ID=PROVIDER:MODEL`,
 `--judge-model`, `--repo <dir>`, `--yes`. fusionkit's own flags must precede the
 tool name; everything after the tool is forwarded to it.
 
@@ -156,6 +156,6 @@ Each coding tool is its own workspace package implementing a single
 3. Register it in [`packages/cli/src/tools.ts`](src/tools.ts) by adding it to the
    `createToolRegistry([...])` list.
 
-That single registry entry wires the tool into the `fusionkit <tool>` launcher,
-`fusionkit local <tool>`, the interactive picker, preflight, and (when it has a
+That single registry entry wires the tool into the `fusionkit <tool>` launcher
+(including `--direct`), the interactive picker, preflight, and (when it has a
 harness) the ensemble gateway — no other switch statements to update.
