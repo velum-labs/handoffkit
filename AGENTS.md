@@ -33,9 +33,25 @@ TypeScript workspace (`package.json` scripts):
 - Test: `pnpm test` (Node test runner over built `dist/`, so build first)
 
 Python workspace (`pyproject.toml`):
-- Sync: `uv sync --all-packages`
+- Sync: `uv sync --all-packages --extra aws` (keeps Hyperkit's AWS backend installed)
 - Lint: `uv run ruff check .`  |  Type-check: `uv run pyright`
 - Tests: `uv run pytest tests -q` (FusionKit) and `uv run pytest python -q` (uniroute)
+
+### Hyperkit environment (`velum-mini`)
+
+This worker is configured for local Hyperkit orchestration and AWS-backed runs:
+
+- `AWS_PROFILE=cursor-agent-infra`, `AWS_DEFAULT_REGION=us-east-1`, and
+  `AWS_REGION=us-east-1` are loaded for new shells. The profile assumes the
+  `cursor-agent-infra` role through the local `cursor-bootstrap` profile.
+- `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, and `OPENROUTER_API_KEY` are loaded
+  from `~/.config/hyperkit/secrets.env` (mode `0600`). `GEMINI_API_KEY` is not
+  configured.
+- Never print, copy into repository files, or commit credential values. Check
+  availability by testing whether a variable is set, without echoing its value.
+- Local credentials are not automatically inherited by AWS Batch containers;
+  cloud jobs must receive provider keys through the stack's Secrets Manager
+  integration.
 
 ### Docker (legacy `warrant` compose stack)
 
@@ -69,8 +85,8 @@ uv run --package fusionkit fusionkit serve -c <config.yaml> --host 127.0.0.1 --p
 
 Then POST to `/v1/chat/completions` with model `fusionkit/panel` to trigger
 panel fanout + synthesis (per-endpoint ids also work for passthrough). Notes:
-- A real provider key is required. Only `OPENAI_API_KEY` is typically set here;
-  `ANTHROPIC_API_KEY` / `GEMINI_API_KEY` are not.
+- Real provider keys are required. `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, and
+  `OPENROUTER_API_KEY` are configured on `velum-mini`; `GEMINI_API_KEY` is not.
 - `gpt-5.5` is a real model on the provided OpenAI account.
 - The committed `.fusionkit/fusion.json` panel currently uses OpenRouter
   (`moonshotai/kimi-k2-thinking`, `qwen/qwen3-coder`) and requires
