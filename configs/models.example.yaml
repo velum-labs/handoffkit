@@ -110,6 +110,27 @@ endpoints:
       output_per_1m_tokens: null
       currency: USD
     tags: [compatible, example]
+  # CLIProxyAPI (github.com/router-for-me/CLIProxyAPI): a local OpenAI-
+  # compatible proxy fronting OAuth subscription accounts (Gemini/Antigravity,
+  # Grok, Kimi, pooled Codex/Claude) with multi-account rotation. The api key
+  # is the proxy's own ingress key; base_url defaults to http://127.0.0.1:8317
+  # (see docs/cliproxy-upstream.md, and the ToS caveat below — personal/local
+  # use only). Pricing stays null: subscriptions have no per-token billing.
+  - id: cliproxy-example
+    provider: cliproxy
+    model: gemini-3.1-pro-preview
+    base_url: http://127.0.0.1:8317
+    api_key_env: CLIPROXY_API_KEY
+    max_context: 1000000
+    capabilities:
+      structured_output: null
+      tool_calls: true
+      streaming: true
+    pricing:
+      input_per_1m_tokens: null
+      output_per_1m_tokens: null
+      currency: USD
+    tags: [subscription, cliproxy]
   # --- Subscription endpoints ----------------------------------------------
   # These reuse the OAuth login already stored by the Claude Code / Codex CLIs
   # (read-only; FusionKit never refreshes or writes the tokens back). The CLI
@@ -155,7 +176,7 @@ endpoints:
 default_model: qwen-fast
 judge_model: qwen-fast
 synthesizer_model: qwen-fast
-default_mode: router
+default_mode: heuristic
 sample_count: 4
 self_temperatures: [0.2, 0.4, 0.6, 0.8]
 # Subscription endpoints are first-class panel members: once configured they
