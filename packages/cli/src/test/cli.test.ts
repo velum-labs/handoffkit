@@ -308,8 +308,9 @@ test("doctor warns when another fusionkit binary is first on PATH", () => {
   }
 });
 
-test("removed maintainer commands are rejected", () => {
+test("removed redundant and maintainer commands are rejected", () => {
   for (const args of [
+    ["status"],
     ["runtime"],
     ["ensemble", "run"],
     ["ensemble", "handoff"],
