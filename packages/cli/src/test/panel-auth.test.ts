@@ -56,6 +56,12 @@ test("specForAuthChoice maps API-key providers to a keyEnv, no auth", () => {
     provider: "openrouter",
     keyEnv: "OPENROUTER_API_KEY"
   });
+  assert.deepEqual(specForAuthChoice("cliproxy", "cp", "gemini-3.1-pro-preview"), {
+    id: "cp",
+    model: "gemini-3.1-pro-preview",
+    provider: "cliproxy",
+    keyEnv: "CLIPROXY_API_KEY"
+  });
 });
 
 test("specForAuthChoice maps local to the mlx provider", () => {
@@ -75,12 +81,20 @@ test("defaultModelForAuthChoice gives a per-choice default", () => {
 
 // --- buildAuthOptions: combinable methods, gated by detection --------------
 
-test("buildAuthOptions always offers API-key providers and local", async () => {
+test("buildAuthOptions always offers API-key providers, cliproxy, and local", async () => {
   process.env.HOME = freshHome();
   const values = (await buildAuthOptions({})).map((option) => option.value);
-  for (const expected of ["openai", "anthropic", "google", "openrouter", "local"] as const) {
+  for (const expected of ["openai", "anthropic", "google", "openrouter", "cliproxy", "local"] as const) {
     assert.ok(values.includes(expected), `expected ${expected} in ${values.join(", ")}`);
   }
+});
+
+test("buildAuthOptions cliproxy hint reflects the ingress key env", async () => {
+  process.env.HOME = freshHome();
+  const set = (await buildAuthOptions({ CLIPROXY_API_KEY: "x" })).find((o) => o.value === "cliproxy");
+  const unset = (await buildAuthOptions({})).find((o) => o.value === "cliproxy");
+  assert.match(set?.hint ?? "", /is set/);
+  assert.match(unset?.hint ?? "", /set CLIPROXY_API_KEY/);
 });
 
 test("buildAuthOptions hint reflects whether the API key env is set", async () => {

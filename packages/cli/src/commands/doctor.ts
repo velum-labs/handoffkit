@@ -14,6 +14,7 @@ import type { Presenter, StatusKind } from "@fusionkit/cli-ui";
 import { resolveWebSearchExecutor } from "@fusionkit/model-gateway";
 
 import {
+  cliproxyBaseUrl,
   DEFAULT_CLOUD_PANEL,
   DEFAULT_TRIO,
   defaultKeyEnv,
@@ -219,6 +220,57 @@ async function reportLocalMlx(
   return { modelsDownloaded: downloaded.length };
 }
 
+/**
+ * Report on a configured CLIProxyAPI upstream (the local OpenAI-compatible
+ * proxy fronting OAuth subscription accounts). Only shown when the user has
+ * opted in — the ingress key env is set or a panel member uses the provider —
+ * so machines that never touch cliproxy see nothing.
+ */
+async function reportCliproxy(
+  presenter: Presenter,
+  report: DoctorEntry[],
+  config: FusionConfig | undefined
+): Promise<void> {
+  const keyEnv = defaultKeyEnv("cliproxy") ?? "CLIPROXY_API_KEY";
+  const referenced = configuredPanels(config).some((spec) => spec.provider === "cliproxy");
+  if (!keyPresent(keyEnv) && !referenced) return;
+
+  presenter.blank();
+  presenter.heading("CLIProxyAPI (subscription proxy upstream)");
+  const base = cliproxyBaseUrl();
+  const push = (entry: Omit<DoctorEntry, "section">): void => {
+    report.push({ section: "cliproxy", ...entry });
+  };
+  try {
+    const response = await fetch(`${base}/v1/models`, {
+      headers: { authorization: `Bearer ${process.env[keyEnv] ?? ""}` },
+      signal: AbortSignal.timeout(2500)
+    });
+    if (response.ok) {
+      const body = (await response.json()) as { data?: unknown };
+      const count = Array.isArray(body.data) ? body.data.length : 0;
+      const detail = `${count} model${count === 1 ? "" : "s"} available`;
+      presenter.status("ok", `reachable at ${base}`, detail);
+      push({ label: "cliproxy reachable", ok: true, detail });
+      return;
+    }
+    if (response.status === 401 || response.status === 403) {
+      const hint = keyPresent(keyEnv)
+        ? `the proxy rejected ${keyEnv} — make sure it matches an api-keys entry in the proxy's config`
+        : `export ${keyEnv}=... with one of the proxy's api-keys values`;
+      presenter.status("fail", `key rejected at ${base}`, `HTTP ${response.status}`, hint);
+      push({ label: "cliproxy key", ok: false, detail: `HTTP ${response.status}`, hint });
+      return;
+    }
+    presenter.status("warn", `unexpected answer from ${base}`, `HTTP ${response.status}`);
+    push({ label: "cliproxy reachable", ok: false, detail: `HTTP ${response.status}` });
+  } catch {
+    const hint = "start CLIProxyAPI (see docs/cliproxy-upstream.md), or point CLIPROXY_BASE_URL at it";
+    presenter.status("fail", `not reachable at ${base}`, undefined, hint);
+    push({ label: "cliproxy reachable", ok: false, detail: "unreachable", hint });
+  }
+}
+
 /** `fusionkit doctor` — a proactive environment checklist with fix hints. */
 async function runDoctor(opts: { provision?: boolean }, ctx: CommandContext): Promise<number> {
   // Match runtime: a project .env makes provider keys available without export.
@@ -324,6 +376,8 @@ async function runDoctor(opts: { provision?: boolean }, ctx: CommandContext): Pr
   const anyCredentials = acceptedKeyEnvs.some((name) => keyPresent(name));
   const missingDefaultKeys = defaultCredentialChecks.filter((check) => !check.present);
   const presentDefaultKeys = defaultCredentialChecks.filter((check) => check.present);
+
+  await reportCliproxy(presenter, report, config);
 
   // Gateway-executed web search: which provider serves each caller dialect.
   presenter.blank();

@@ -17,7 +17,15 @@ from fusionkit_core.registry import sampling_overrides_for_model
 
 FusionMode = Literal["single", "self", "panel", "heuristic"]
 ProviderKind = Literal[
-    "openai", "anthropic", "google", "openrouter", "openai-compatible", "mlx-lm", "custom", "codex"
+    "openai",
+    "anthropic",
+    "google",
+    "openrouter",
+    "cliproxy",
+    "openai-compatible",
+    "mlx-lm",
+    "custom",
+    "codex",
 ]
 SubscriptionAuthMode = Literal["api_key", "claude-code", "codex"]
 

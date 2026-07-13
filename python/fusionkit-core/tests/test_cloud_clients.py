@@ -61,6 +61,7 @@ def _endpoint(provider: ProviderKind, model: str = "model") -> ModelEndpoint:
 def test_build_client_dispatches_each_provider() -> None:
     assert isinstance(build_client(_endpoint("openai")), OpenAICompatibleClient)
     assert isinstance(build_client(_endpoint("openrouter")), OpenAICompatibleClient)
+    assert isinstance(build_client(_endpoint("cliproxy")), OpenAICompatibleClient)
     assert isinstance(build_client(_endpoint("openai-compatible")), OpenAICompatibleClient)
     assert isinstance(build_client(_endpoint("mlx-lm")), OpenAICompatibleClient)
     assert isinstance(build_client(_endpoint("custom")), OpenAICompatibleClient)

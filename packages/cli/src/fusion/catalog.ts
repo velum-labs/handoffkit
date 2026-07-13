@@ -28,7 +28,7 @@ import {
   providerDiscovery
 } from "@fusionkit/registry";
 
-import { defaultKeyEnv } from "./env.js";
+import { cliproxyBaseUrl, defaultKeyEnv } from "./env.js";
 import type { PanelProvider } from "./env.js";
 import { LOCAL_CATALOG_REPOS } from "./local-catalog.js";
 import { defaultModelForAuthChoice } from "./panel-auth.js";
@@ -51,7 +51,13 @@ type CatalogFile = {
 };
 
 /** Cloud providers whose model list can be fetched (openai-compatible has no fixed list). */
-export const CATALOG_PROVIDERS: readonly PanelProvider[] = ["openai", "anthropic", "google", "openrouter"];
+export const CATALOG_PROVIDERS: readonly PanelProvider[] = [
+  "openai",
+  "anthropic",
+  "google",
+  "openrouter",
+  "cliproxy"
+];
 
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 const FETCH_TIMEOUT_MS = 5_000;
@@ -314,6 +320,21 @@ async function fetchGoogle(): Promise<CatalogModel[]> {
     .filter((model) => chatIds.has(model.id));
 }
 
+/**
+ * The model list of a locally running CLIProxyAPI: the merged catalog of every
+ * OAuth account / upstream the proxy is configured with (account ground truth,
+ * like the keyed provider listings). Requires the proxy's ingress key.
+ */
+async function fetchCliproxy(): Promise<CatalogModel[]> {
+  const key = process.env[defaultKeyEnv("cliproxy") ?? "CLIPROXY_API_KEY"] ?? "";
+  const body = await fetchJson(`${cliproxyBaseUrl()}/v1/models`, {
+    Authorization: `Bearer ${key}`
+  });
+  return parseOpenAiModels(body)
+    .map((id) => ({ id }))
+    .sort((left, right) => left.id.localeCompare(right.id));
+}
+
 async function fetchOpenRouter(): Promise<CatalogModel[]> {
   const body = await fetchJson("https://openrouter.ai/api/v1/models", {});
   const data = Array.isArray(body.data) ? (body.data as JsonRecord[]) : [];
@@ -362,6 +383,11 @@ export async function refreshCatalog(provider: PanelProvider): Promise<CatalogMo
     case "openrouter":
       // Public listing with pricing built in; no fallback needed.
       models = await fetchOpenRouter();
+      break;
+    case "cliproxy":
+      // A local proxy: its listing is the only source (models.dev knows
+      // nothing about a user's proxy), so a failed fetch degrades to the cache.
+      models = await fetchCliproxy();
       break;
     case "mlx":
       models = await fetchMlxCommunity();
@@ -452,9 +478,12 @@ async function fetchProviderModels(
   discovery: NonNullable<ReturnType<typeof providerDiscovery>>,
   key: string,
   fetchImpl: typeof fetch,
-  timeoutMs: number
+  timeoutMs: number,
+  env: Record<string, string | undefined>
 ): Promise<string[]> {
-  const baseUrl = providerDefaultBaseUrl(provider);
+  // cliproxy runs locally, so its base URL honors the CLIPROXY_BASE_URL
+  // override; every other provider discovers against its registry default.
+  const baseUrl = provider === "cliproxy" ? cliproxyBaseUrl(env) : providerDefaultBaseUrl(provider);
   if (baseUrl === undefined) return [];
   const url = `${baseUrl}${discovery.path}`;
   const headers: Record<string, string> = { ...discovery.extraHeaders };
@@ -528,7 +557,8 @@ export async function listModelsForAuth(
       discovery,
       key,
       fetchImpl,
-      opts.timeoutMs ?? FETCH_TIMEOUT_MS
+      opts.timeoutMs ?? FETCH_TIMEOUT_MS,
+      env
     );
     const ordered = finalize(ids, choice);
     if (ordered.length === 0) return curated;

@@ -37,6 +37,7 @@ import { PROMPT_CONFIG_KEY, PROMPT_IDS } from "../fusion-config.js";
 import type { PromptOverrides } from "../fusion-config.js";
 
 import {
+  cliproxyBaseUrl,
   defaultKeyEnv,
   fusionkitPyCommand,
   loadEnvFileInto,
@@ -344,7 +345,12 @@ export function routerConfigYaml(input: {
       entry.base_url = input.mlxUrls[spec.id] ?? "";
       entry.api_key = "not-needed";
     } else {
-      const baseUrl = spec.baseUrl ?? providerDefaultBaseUrl(provider);
+      // cliproxy is a locally run proxy, so its default base URL honors the
+      // CLIPROXY_BASE_URL override (a non-default host/port) instead of the
+      // registry constant; every other provider keeps its registry default.
+      const defaultBaseUrl =
+        provider === "cliproxy" ? cliproxyBaseUrl() : providerDefaultBaseUrl(provider);
+      const baseUrl = spec.baseUrl ?? defaultBaseUrl;
       entry.provider = provider;
       entry.base_url = baseUrl;
       const keyEnv = spec.keyEnv ?? defaultKeyEnv(provider);

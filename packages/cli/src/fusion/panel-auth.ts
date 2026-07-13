@@ -20,9 +20,10 @@ export type AuthChoice =
   | "anthropic"
   | "google"
   | "openrouter"
+  | "cliproxy"
   | "local";
 
-type ApiKeyProvider = "openai" | "anthropic" | "google" | "openrouter";
+type ApiKeyProvider = "openai" | "anthropic" | "google" | "openrouter" | "cliproxy";
 
 function apiKeyEnvFor(provider: ApiKeyProvider): string {
   const keyEnv = defaultKeyEnv(provider);
@@ -58,6 +59,7 @@ export function specForAuthChoice(choice: AuthChoice, id: string, model: string)
     case "anthropic":
     case "google":
     case "openrouter":
+    case "cliproxy":
       return { id, model, provider: choice, keyEnv: apiKeyEnvFor(choice) };
     case "local":
       return { id, model, provider: "mlx" };
@@ -118,6 +120,19 @@ export async function buildAuthOptions(
       hint: (isSet ? `${keyEnv} is set` : `set ${keyEnv}`) + reach
     });
   }
+
+  // CLIProxyAPI: a local OpenAI-compatible proxy that fronts OAuth subscription
+  // accounts (Gemini/Antigravity, Grok, Kimi, and pooled Codex/Claude). Offered
+  // like an API-key provider: the "key" is the proxy's own ingress key.
+  const cliproxyKeyEnv = apiKeyEnvFor("cliproxy");
+  const cliproxySet = (env[cliproxyKeyEnv] ?? "").length > 0;
+  options.push({
+    value: "cliproxy",
+    label: "CLIProxyAPI (local proxy)",
+    hint:
+      (cliproxySet ? `${cliproxyKeyEnv} is set` : `set ${cliproxyKeyEnv}`) +
+      " — subscription models (Gemini, Grok, Kimi, …) via a local OAuth proxy"
+  });
 
   const localHint = host.appleSilicon
     ? `${Math.round(host.totalRamGB)}GB RAM, no keys`
