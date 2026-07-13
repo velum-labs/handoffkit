@@ -43,7 +43,7 @@ def test_dashboards_only_query_supported_metrics() -> None:
     )
 
     assert result.returncode == 0, result.stderr
-    assert "validated 115 dashboard queries across 10 dashboards" in result.stdout
+    assert "validated 122 dashboard queries across 10 dashboards" in result.stdout
 
 
 def test_hypergrid_dynamics_business_charts_contract() -> None:
