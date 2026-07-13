@@ -108,7 +108,10 @@ at any time.
 
 ### 4. Node testkit — `packages/testkit` (`@fusionkit/testkit`, never published)
 
-The same tooling from the Node side, for cross-process tests:
+The same tooling from the Node side, for cross-process tests. (Do not confuse
+it with `legacy/packages/testkit`, the old in-process plane/runner fixture
+package for the frozen Warrant stack — the root `packages/testkit` is a
+different package that reuses the name.)
 
 - `startProviderSim()` — spawns the simulator, returns a handle that scripts
   it over the control plane (`queue` accepts plain strings or behaviors) and
@@ -279,7 +282,10 @@ PORTLESS=0 node --test packages/cli/dist/test/stack-e2e.test.js
 ```
 
 CI runs the Python layers in the `python` job, and the cross-stack suites in
-the dedicated `stack-e2e` job (Node + uv toolchains installed together).
+the dedicated `stack-e2e` job (Node + uv toolchains installed together). A
+separate `observability` job validates the Hyperkit Grafana dashboards: it
+boots seeded Prometheus and Grafana and executes every panel query via
+`scripts/validate_hyperkit_dashboards.py` (see [Hyperkit](hyperkit.md)).
 
 ## Proving the tests can fail — the mutation pass
 

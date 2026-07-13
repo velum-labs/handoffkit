@@ -21,25 +21,40 @@ This map ties every major repository area to the documentation that owns it. Use
 | `legacy/packages/handoff` | `legacy/docs/handoff-sdk.md`, `docs/typescript-reference.md`, public Handoff SDK | Continuations, checkpoints, `continueIn`, review, pull, tools, routing, triggers, and policies. |
 | `legacy/packages/adapter-compute` | `docs/typescript-reference.md`, public Adapters | ComputeSDK-shaped sandbox surface backed by governed sessions. |
 | `legacy/packages/session-*` | `docs/typescript-reference.md`, `legacy/docs/architecture.md`, public Self-hosting | Hermetic sessions, Vercel Sandbox sessions, AI SDK harness sessions, transcript recording, and auth helpers. |
-| `packages/testkit` and `packages/example-utils` | `docs/typescript-reference.md`, `docs/apps-and-examples.md` | Test fixtures, in-process stacks, git fixtures, example manifests, narration, and mock models. |
+| `packages/testkit` | `docs/testing.md`, `docs/typescript-reference.md` | Cross-stack E2E tooling: provider-simulator handle, real engine process, sim-backed router configs, SSE observation, and skip-gating. The legacy in-process plane/runner fixtures live in `legacy/packages/testkit`. |
+| `packages/example-utils` | `docs/typescript-reference.md`, `docs/apps-and-examples.md` | Example manifest parsing, narration, mock models, and live-model helpers. |
+| `packages/cli-ui` | `docs/typescript-reference.md`, `docs/generated/code-api.md` | Terminal presentation layer: Ink and plain presenters, prompts, and formatting. |
+| `packages/harness-core` | `docs/typescript-reference.md`, `docs/generated/code-api.md` | Coding-agent harness contract: drivers, events, errors, approvals, status probes, and the driver registry. |
+| `packages/registry` | `docs/typescript-reference.md`, `docs/specs-and-apis.md` | Typed accessors over the generated `spec/registry/*.json` data: providers, catalogs, capabilities, and pricing. |
+| `packages/runtime-utils` | `docs/typescript-reference.md`, `docs/generated/code-api.md` | Shared runtime primitives: supervised spawn, cleanup, timeouts, ids, and token estimates. |
+| `packages/tracing` | `docs/specs-and-apis.md`, `docs/typescript-reference.md` | OpenTelemetry-backed fusion span/event helpers, trace carriers, and in-process listeners. |
 | `python/fusionkit-core` | `docs/python-reference.md`, `docs/generated/code-api.md`, `docs/specs-and-apis.md` | Config, clients, fusion engine, judge, run manager, contracts, run store, providers, prompts, traces, artifacts, metrics, and producers. |
 | `python/fusionkit-server` | `docs/python-reference.md`, `docs/generated/code-api.md`, public Inference endpoint, public API Reference | FastAPI app, OpenAI-compatible routes, trajectory fusion route, and native run endpoints. |
 | `python/fusionkit-cli` | `docs/python-reference.md`, `docs/generated/code-api.md`, public Inference endpoint | Python CLI commands, auth commands, prompt dumping, benchmarks, tuning, and hill climbing. |
 | `python/fusionkit-evals` | `docs/python-reference.md`, `docs/generated/code-api.md`, benchmark docs | Fusion bench, public bench, prompt tuning, hill climbing, scoring, reports, adapters, and execution selection. |
 | `python/fusionkit-mlx` | `docs/python-reference.md`, `docs/generated/code-api.md`, public Models and panels | Optional MLX launch helpers and local model serving integration. |
+| `python/fusionkit-testkit` | `docs/testing.md`, `docs/python-reference.md` | Scriptable provider simulator (`fusionkit-sim`), config builders, engine process harness, pytest fixtures, and the provider test matrix. |
+| `python/hyperkit` | `docs/hyperkit.md`, `docs/python-reference.md` | SUT-agnostic experiment platform: `hyperkit` CLI, benchmark adapters, AWS Batch and local backends, and observability. |
 | `python/uniroute` and `python/uniroute-mlx` | `docs/python-reference.md`, `docs/generated/code-api.md` | Routing research packages, local model bridge, router cards, evaluation helpers, and tests. |
 | `apps/docs` | `docs/apps-and-examples.md`, `apps/docs/README.md`, public Documentation taxonomy | Public docs site structure, MDX content, OpenAPI generation, Fumadocs setup, Mermaid, build, and deployment. |
 | `apps/scope` | `docs/apps-and-examples.md`, public Observability | Trace dashboard, local install, tests, trace and session correlation, and observability workflow. |
-| `examples/*` | `docs/apps-and-examples.md`, public Examples | Every runnable example, scope, command, expected behavior, and maintenance rules. |
+| `examples/*` | `docs/apps-and-examples.md`, public Examples | The product examples: `examples/runtime-kernel` (demo id 15 in `examples/manifest.json`) and the `examples/mlx` infra tools. Legacy demos live under `legacy/examples/` and are not in the manifest. |
 | `spec/model-fusion-contract` | `docs/specs-and-apis.md`, public API Reference | Schemas, fixtures, OpenAPI, generated bindings, contract records, and code generation workflow. |
 | `spec/fusion-trace` | `docs/specs-and-apis.md`, public Observability | OpenTelemetry semantic-conventions registry (span names, attribute keys, sensitivity classes) and generated bindings. |
+| `spec/registry/*` | `docs/specs-and-apis.md`, `docs/model-catalog.md` | Registry source data: providers, subscriptions, model and local catalogs, capabilities, pricing, and fusion defaults consumed by the generated registry bindings. |
 | `spec/*.md` | `docs/documentation-taxonomy.md` | Design archive material that should not be treated as current product truth unless promoted. |
 | `scripts/*` | `docs/operations-and-scripts.md` | Checks, demos, releases, code generation, e2e harnesses, local servers, and monorepo helpers. |
 | `release/*` | `docs/operations-and-scripts.md`, `docs/releasing.md`, `docs/release-publishing.md` | Release state, package lists, dependency graph, desired state, and publish metadata. |
-| `.github/workflows/*` | `docs/operations-and-scripts.md`, release docs | CI, build, tests, demos, release workflows, docs deployment, and local equivalents. |
+| `.github/workflows/*` | `docs/operations-and-scripts.md`, release docs | CI (`ci.yml` jobs: check, scope, stack-e2e, python, observability) plus the `release-packages.yml`, `pypi-release.yml`, and `model-fusion-protocol-release.yml` release workflows, and their local equivalents. |
 | `.fusionkit/*` | `docs/configuration.md`, public Configuration | Committed example config, prompt overrides, source of truth, and derived YAML behavior. |
 | `.cursor/skills/*` and `.cursor/plans/*` | `docs/documentation-taxonomy.md` | Internal agent skills and planning artifacts, not public documentation. |
-| `tests/*`, `test/*`, package tests | `docs/operations-and-scripts.md`, package references | Test ownership, local commands, and verification expectations for changed surfaces. |
+| `tests/*`, `test/*`, package tests | `docs/testing.md`, `docs/operations-and-scripts.md`, package references | Test ownership, local commands, and verification expectations for changed surfaces. |
+| `lab/` | `lab/AGENTS.md` | Shared Hyperkit experiment lab: registry, journal, experiment folders, and operating procedures. |
+| `infra/hyperkit`, `infra/hypergrid-batch`, `infra/hypergrid-obs` | `docs/hyperkit.md`, `infra/hyperkit/README.md`, `infra/hypergrid-obs/README.md` | Hyperkit Terraform stack and Grafana dashboards, hypergrid AWS Batch deploy script, and the hypergrid observability compose stack. |
+| `docker/hyperkit-runner` and `docker/hyperkit-controller` | `docs/hyperkit.md` | Container images for Hyperkit cloud runners and the controller. |
+| `analysis/` | analysis folder READMEs and `docs/documentation-taxonomy.md` | Analysis working sets and reports from past experiment rounds; historical evidence, not product docs. |
+| `labruns/` | `lab/AGENTS.md` | Persisted lab run artifacts organized by quarter. |
+| `configs/` | `docs/configuration.md`, `docs/benchmarking-runbook.md` | Example fusion and benchmark-panel YAML configs. |
 
 ## Coverage rules
 

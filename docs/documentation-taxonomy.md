@@ -28,12 +28,15 @@ A page belongs in the public site when it helps a user install, run, configure, 
 | `repository-reference.md` | Reference | Whole-repository map across packages, apps, specs, scripts, examples, and verification. |
 | `source-symbol-index.md` | Reference | Source-grounded TypeScript export and Python symbol inventory. |
 | `generated/code-api.md` | Reference | Generated API reference; do not edit by hand. |
+| `generated/expected-behaviors.md` | Reference | Generated expected-behavior inventory from `spec/testing/expected-behaviors.json`; do not edit by hand. |
 | `typescript-reference.md` | Reference | TypeScript package ownership, public symbols, and examples. |
 | `python-reference.md` | Reference | Python packages, modules, symbols, CLI ownership, and examples. |
 | `specs-and-apis.md` | Reference | Protocol schemas, generated bindings, routes, trace conventions, and schema workflow. |
 | `apps-and-examples.md` | Reference | Apps and product/legacy example map. |
 | `operations-and-scripts.md` | Operations | Root scripts, release files, CI mapping, dependency policy, and verification strategy. |
 | `getting-started.md` | Task guide | Contributor setup, local verification, portless behavior, demos, and Python workspace setup. |
+| `testing.md` | Task guide | Living test-tooling doc: provider simulator, testkits, coverage matrix, mutation pass, and rules for new tests. |
+| `hyperkit.md` | Reference | Living reference for the Hyperkit experiment platform: boundary, CLI, adapters, backends, and observability. |
 | `quickstart-inference.md` | Task guide mirror | In-repo mirror of the public raw endpoint workflow. |
 | `quickstart-harness.md` | Task guide mirror | In-repo mirror of the public coding-harness workflow. |
 | `quickstart-handoff.md` | Task guide mirror | In-repo mirror of rate-limit failover; not legacy handoff SDK. |
@@ -42,6 +45,7 @@ A page belongs in the public site when it helps a user install, run, configure, 
 | `privacy.md` | Privacy and policy | Local session storage, consent, retention, provider egress, failover expansion, and no telemetry. |
 | `model-catalog.md` | Reference | Provider matrix, default panels, local MLX, mixed panels, pricing, and budgets. |
 | `fusion-harness-gateway.md` | Concepts and architecture | Product gateway architecture, dialects, streaming, wiring, and front-door behavior. |
+| `subscription-pooling.md` | Concepts and architecture | Provider-native relays, credential pools, usage windows, and quota-aware rotation. |
 | `fusion-judge-trajectory.md` | Concepts and architecture | Trajectory fusion model, judge synthesis, OTel trace spans, and e2e drivers. |
 | `scope.md` | Orientation | Product package boundary versus retained legacy governance and VM packages. |
 | `packages.md` | Reference | Short package guide for readers who do not need full package references. |
@@ -51,6 +55,10 @@ A page belongs in the public site when it helps a user install, run, configure, 
 | `model-fusion-protocol-release.md` | Operations | Protocol release process and propagation. |
 | `model-fusion-learnings.md` | Design archive | Durable lessons from model-fusion implementation work. |
 | `planning/ensemble-product-plan.md` | Design archive | Historical ensemble product plan retained with stale-content context. |
+| `planning/tracing-and-telemetry-plan.md` | Design archive | Historical tracing and telemetry plan. |
+| `oss-release/README.md` | Internal/design archive | OSS release working-set index for maintainers. |
+| `oss-release/workstreams.md` | Internal/design archive | OSS release workstream tracking notes. |
+| `oss-release/audit-findings.md` | Internal/design archive | OSS release audit findings; internal working notes. |
 | `specs/harness-prompt-passthrough.md` | Design archive | Implemented harness prompt pass-through design spec. |
 | `local-mlx-panel-demo.md` | Task guide | Local MLX panel demo behavior and setup. |
 | `fusionkit-handoff-executor.md` | Reference | Advanced maintainer eval executor for `fusionkit ensemble handoff`. |
@@ -70,6 +78,22 @@ A page belongs in the public site when it helps a user install, run, configure, 
 | `fusion/incomplete-work-inventory.md` | Internal/design archive | Internal incomplete-work inventory. |
 | `fusion/coding-capability-index-report.md` | Internal/design archive | Internal/design benchmark report; not public product proof. |
 | `fusion/MOA_IMPLEMENTATION_PROMPT.md` | Internal/design archive | Preserved agent prompt for auditability, not product truth. |
+| `fusion/capability-index-program.md` | Internal/design archive | Internal capability-index program notes. |
+| `fusion/capability-index-spec.md` | Internal/design archive | Internal capability-index specification draft. |
+| `fusion/capability-index-status.md` | Internal/design archive | Internal capability-index status tracking. |
+| `fusion/catalog-snapshot-2026-07-07.md` | Design archive | Dated model-catalog snapshot retained for historical comparison. |
+| `fusion/company-operating-system-2026-07.md` | Internal/design archive | Internal operating notes; not product documentation. |
+| `fusion/driver-topology-spec-2026-07.md` | Design archive | Dated driver-topology design spec. |
+| `fusion/ensemble-hypotheses-v0-2026-07.md` | Design archive | Dated ensemble hypothesis notes. |
+| `fusion/ensemble-launch-clean-room-2026-07.md` | Internal/design archive | Internal ensemble launch clean-room notes. |
+| `fusion/ensemble-literature-review-2026-07.md` | Design archive | Dated ensemble literature review. |
+| `fusion/k1-official-harness-plan-2026-07.md` | Design archive | Dated k=1 official-harness plan. |
+| `fusion/lab-loop-2026-07.md` | Design archive | Dated lab-loop design notes. |
+| `fusion/lab-loop-implementation-spec-2026-07.md` | Design archive | Dated lab-loop implementation spec. |
+| `fusion/oss-ensemble-launch-plan.md` | Internal/design archive | Internal OSS ensemble launch plan. |
+| `fusion/phase0-validation-report.md` | Internal/design archive | Internal phase-0 validation report. |
+| `fusion/strategy-rethink-2026-07.md` | Internal/design archive | Internal strategy notes; not product truth. |
+| `fusion/unicorn-roadmap-2026-07.md` | Internal/design archive | Internal roadmap notes; not product truth. |
 
 ## Legacy documentation inventory
 

@@ -27,21 +27,23 @@ The most important operational fact is the process boundary. The Node CLI owns h
 
 ## Top-level repository layout
 
-The root `package.json` is a private pnpm workspace named `fusionkit-monorepo`. It pins Node 22 or newer and pnpm 10.33.4. Its scripts are the standard maintainer commands: `pnpm check` runs repository invariants, `pnpm build` compiles TypeScript project references, `pnpm test` runs compiled Node tests and demo smoke tests, and `pnpm verify` runs all three in order.
+The root `package.json` is a private pnpm workspace named `fusionkit-monorepo`. Its `engines` field declares Node `>=22.0.0` and pnpm `>=10.33.4`, but the effective Node floor is `>=22.19.0`: `.npmrc` sets `engine-strict=true` and the pinned `undici` dependency requires Node `>=22.19.0`, so installs fail on older 22.x runtimes. Its scripts are the standard maintainer commands: `pnpm check` runs repository invariants, `pnpm build` compiles TypeScript project references, `pnpm test` runs compiled Node tests and demo smoke tests, and `pnpm verify` runs all three in order.
 
 The root `pyproject.toml` is a virtual uv workspace. It is not a Python package by itself. It binds every package under `python/` into one lockfile and configures shared Ruff, Pyright, pytest, and coverage settings. `uv sync --all-packages` prepares the Python workspace, and `uv run pytest` runs the Python test suite.
 
-The `packages/` directory contains the TypeScript workspace. Product packages include the CLI, ensemble runtime, model gateway, protocol, workspace helpers, tool integrations, local model adapter, and kernel. Legacy or platform packages include the plane, runner, SDK, handoff SDK, compute adapter, and session backends.
+The `packages/` directory contains the TypeScript workspace: the CLI, terminal UI (`cli-ui`), ensemble runtime, model gateway, protocol, registry, tracing, harness-core, runtime-utils, workspace helpers, tool integrations, local model adapter, kernel, and the private `testkit` and `example-utils` support packages. The legacy platform packages — plane, runner, SDK, handoff SDK, compute adapter, and session backends — live under `legacy/packages/`, outside the root pnpm workspace.
 
-The `python/` directory contains the Python implementation of the fusion engine, server, CLI, MLX helpers, evaluation tools, and UniRoute experiments. The PyPI package named `fusionkit` is the Python CLI and server driver. The Node CLI invokes this Python side through `uvx`.
+The `python/` directory contains the Python implementation of the fusion engine, server, CLI, MLX helpers, evaluation tools, the provider-simulator testkit, the Hyperkit experiment platform, and UniRoute experiments. The PyPI package named `fusionkit` is the Python CLI and server driver. The Node CLI invokes this Python side through `uvx`.
 
 The `apps/` directory contains two standalone apps. `apps/docs` is the Fumadocs documentation site. `apps/scope` is the local observability UI for fusion traces and run inspection. These apps have their own package manifests and are not part of the root pnpm workspace.
 
 The `spec/` directory contains JSON Schemas, OpenAPI contracts, generated TypeScript and Python bindings, fixtures, fusion trace contracts, and dated design specifications. Schema changes should be treated as protocol changes and coordinated with generated code.
 
-The `examples/` directory contains runnable demo packages. Most are legacy Warrant platform examples. The FusionKit-specific examples are especially useful for runtime-kernel, MLX, and benchmark workflows.
+The `examples/` directory contains the product examples only: `examples/runtime-kernel` (the manifest-driven demo) and the `examples/mlx` infra tools. The legacy Warrant examples, including the `bench` performance-budget demo, live under `legacy/examples/` and are not listed in `examples/manifest.json`.
 
 The `docs/` directory is the maintainer documentation layer. The public site under `apps/docs/content/docs/` is the canonical user-facing layer when the two overlap.
+
+Several other top-level directories support the experiment platform: `lab/` is the shared Hyperkit experiment lab (see `lab/AGENTS.md`), `infra/` holds Hyperkit Terraform, hypergrid Batch, and observability deploy assets, `docker/` holds the Hyperkit runner and controller images, `analysis/` and `labruns/` hold experiment analysis working sets and lab run artifacts, and `configs/` holds example fusion and benchmark-panel YAML configs.
 
 ## Product architecture
 
@@ -238,11 +240,11 @@ for (const tool of tools) {
 
 ### `@fusionkit/adapter-ai-sdk`
 
-`@fusionkit/adapter-ai-sdk` connects app-owned AI SDK loops to FusionKit and Warrant capabilities. It exposes governed remote tools, swarm tools, handoff-aware models, routed models, worktree agents, and managed MLX server helpers.
+`@fusionkit/adapter-ai-sdk` is the AI SDK side of FusionKit local-model flows. It contains managed MLX local-model helpers and worktree agent utilities. The governed helpers (`remoteTools`, `swarmTools`, `handoffModel`, `routedModel`) moved to the legacy `@fusionkit/handoff` package.
 
-Important exports include `remoteTools`, `swarmTools`, `handoffModel`, `withModel`, `loadRouterCard`, `routedModel`, `withRoutedModel`, `runWorktreeAgent`, `worktreeDiff`, `defaultMlxDir`, `MlxCapabilityError`, `MlxEnv`, `managedModelServer`, and `mlxServer`.
+Important exports include `runWorktreeAgent`, `worktreeDiff`, `defaultMlxDir`, `MlxCapabilityError`, `MlxEnv`, `managedModelServer`, and `mlxServer`.
 
-Use this package when an application owns the loop but wants selected calls or tools to run through FusionKit or governed sessions.
+Use this package when an application needs the managed MLX server path or worktree agent utilities.
 
 Example:
 
@@ -275,7 +277,21 @@ if (issues.length > 0) {
 }
 ```
 
+### Product support packages
+
+`@fusionkit/cli-ui` is the terminal presentation layer for the CLI: one presenter contract with an Ink (React) implementation for interactive TTYs and a plain-text implementation for CI and pipes, plus prompt, wizard, fuzzy-match, and formatting helpers.
+
+`@fusionkit/harness-core` is the single coding-agent harness contract: driver, instance, and session interfaces, the canonical harness event union, a tagged error taxonomy with derived retryability, approval policies, status probes, and the `DriverRegistry`. The `tool-*` packages implement it; the panel fanout and launchers consume it.
+
+`@fusionkit/registry` provides typed accessors over the generated registry data in `spec/registry/*.json`: provider metadata, subscription auth metadata, the model and local catalogs, capability quirks, and default pricing. The Python workspace consumes the same data through generated bindings, so the two stacks cannot drift.
+
+`@fusionkit/runtime-utils` holds shared runtime primitives: supervised process spawning, cleanup registration, timeout defaults, random ids, and token estimation.
+
+`@fusionkit/tracing` is the OpenTelemetry-backed tracing layer: `initFusionTracing()`, typed span and event helpers over the fusion semantic conventions, the serializable trace carrier, and in-process span/event listeners.
+
 ### Legacy and platform TypeScript packages
+
+The packages in this section live under `legacy/packages/`, outside the root pnpm workspace.
 
 `@fusionkit/plane` is the Warrant control plane. It exports `Plane`, `startPlaneServer`, `defaultPolicy`, `evaluatePolicy`, `ClaimTokenService`, `ContractService`, `ReceiptService`, `SqliteStore`, `SecretStore`, key-management helpers, authorization helpers, `IdpVerifier`, `RateLimiter`, `Metrics`, retention helpers, and domain error types. It owns policy evaluation, approval records, receipt countersignature, secret release, audit export, metrics, and durable SQLite storage.
 
@@ -293,7 +309,7 @@ if (issues.length > 0) {
 
 `@fusionkit/session-harness` exports `AiSdkHarnessBackend`, `harnessBackend`, `isAgentRunFor`, Pi harness helpers, auth helpers, and `TranscriptRecorder`. It drives vendor harnesses through AI SDK harness bindings inside governed sessions.
 
-`@fusionkit/testkit` exports `git`, `makeRepo`, `uploadWorkspace`, `mockRunRequest`, `withStackAndRepo`, and `startStack`. It is the shared fixture package for in-process plane and runner tests.
+The legacy fixture package at `legacy/packages/testkit` exports `git`, `makeRepo`, `uploadWorkspace`, `mockRunRequest`, `withStackAndRepo`, and `startStack` for in-process plane and runner tests. It is distinct from the root `packages/testkit`: that `@fusionkit/testkit` is the cross-stack E2E tooling exporting `startProviderSim`, `startEngine`, `simRouterConfigYaml`, `scriptFusedTurn`, `parseSse`, and `detectStackTooling` (see [Testing](testing.md)).
 
 `@fusionkit/example-utils` exports demo manifest parsing, mock model helpers, live model helpers, and narration utilities used by examples.
 
@@ -412,6 +428,14 @@ uv run --package fusionkit fusionkit fusion-hillclimb --config .fusionkit/fusion
 
 Use this package only on machines that can run MLX. The Node CLI should fail early with platform guidance when a user requests local MLX on an unsupported platform.
 
+### `fusionkit-testkit`
+
+`fusionkit-testkit` is the never-published test tooling package: a scriptable, observable provider simulator that speaks every provider wire dialect FusionKit ships a client for, config builders that point real engine configs at it, a real `fusionkit serve` child-process harness, and workspace-wide pytest fixtures. The standalone simulator runs as `fusionkit-sim`. See [Testing](testing.md).
+
+### `hyperkit`
+
+`hyperkit` is the system-under-test-agnostic experiment platform. It ships the `hyperkit` CLI (plan, extend, apply, resume, status, collect, pull, controller, local-controller, replay-swebench), benchmark adapters (`livecodebench`, `swebench`, `terminal_bench`), and AWS Batch and local compute backends. FusionKit registers its `fusionkit-serve` SUT through the `hyperkit.suts` entry point. See [Hyperkit](hyperkit.md).
+
 ### `uniroute` and `uniroute-mlx`
 
 `uniroute` is a NumPy implementation of dynamic-pool UniRoute model routing. It exposes routers, synthetic data helpers, trial utilities, k-means helpers, learned maps, evaluation helpers, and a `uniroute-demo` script.
@@ -469,19 +493,16 @@ uv run pytest tests/test_model_fusion_contract.py
 
 ## Examples
 
-Every package under `examples/` is runnable through the root demo harness when it is non-interactive. `scripts/demo.mjs` and `examples/manifest.json` coordinate example execution.
+`scripts/demo.mjs` and `examples/manifest.json` coordinate example execution. The manifest currently lists one demo: `examples/runtime-kernel` (id `15`), which demonstrates composing runtime-kernel workflows. The manifest's `infra` section lists `examples/mlx`, the Apple Silicon managed-MLX smoke and stress tools run through `pnpm mlx` and `pnpm mlx:stress` rather than the demo harness.
 
-The FusionKit-oriented examples are `examples/runtime-kernel`, `examples/mlx`, and `examples/bench`. `runtime-kernel` demonstrates composing runtime-kernel workflows. `mlx` is an Apple Silicon smoke test for the owned MLX server path. `bench` is an executable performance-budget benchmark.
-
-The governance and platform examples document retained Warrant functionality. `governed-run` demonstrates a governed run and offline-verifiable receipt. `dry-run` shows disclosure before execution. `offline-verify` proves receipt tamper evidence. `consent-secrets` demonstrates consent-gated secret release. `egress-policy` demonstrates deny-by-default network policy. `handoff` demonstrates continuation handoff. `parallel-fanout` demonstrates parallel continuation and review. `model-escalation` demonstrates deterministic local-to-cloud routing. `ai-sdk-loop` demonstrates app-owned AI SDK loops with governed remote tools. `swarm` demonstrates a cloud orchestrator harness driving local workers. `compute-sandbox` shows a ComputeSDK-shaped sandbox. `hermetic-session` shows the just-bash session backend. `microvm-isolation-bench` measures local and optional live Vercel Sandbox isolation timings. `control-panel` and `seed` support interactive UI exploration. `golden-interface` presents a higher-level interface over Warrant primitives.
+The legacy Warrant examples live under `legacy/examples/` and are not runnable through `pnpm demo`. They document retained Warrant functionality: `governed-run` (governed run with offline-verifiable receipt), `dry-run`, `offline-verify`, `consent-secrets`, `egress-policy`, `handoff`, `parallel-fanout`, `model-escalation`, `ai-sdk-loop` (app-owned AI SDK loops with governed remote tools from legacy `@fusionkit/handoff`), `swarm`, `compute-sandbox`, `hermetic-session`, `microvm-isolation-bench`, `control-panel`, `seed`, `golden-interface`, and the `bench` performance-budget benchmark (formerly `examples/bench`).
 
 Example:
 
 ```bash
 pnpm build
 pnpm demo all
-pnpm demo runtime-kernel
-pnpm demo governed-run
+pnpm demo 15   # runtime-kernel
 ```
 
 ## Scripts and automation
@@ -516,7 +537,7 @@ Runtime sessions are stored outside the repository under `~/.fusionkit/sessions/
 
 Release state lives under `release/`. Changes to this directory should be reviewed as release workflow changes, not product behavior changes.
 
-CI lives under `.github/workflows/`. The workflows cover repository checks, TypeScript build and tests, Python tests, demo smoke tests, npm release, PyPI release, and docs deployment.
+CI lives under `.github/workflows/`. `ci.yml` runs five jobs: `check` (repository checks, build, tests, demo smoke), `scope` (the observability app), `stack-e2e` (cross-stack Node gateway + real Python engine + provider simulator suites), `python` (the uv workspace), and `observability` (Hyperkit Grafana dashboard validation). The release workflows are `release-packages.yml` (npm), `pypi-release.yml`, and `model-fusion-protocol-release.yml`.
 
 ## Testing and verification
 

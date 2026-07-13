@@ -2,7 +2,7 @@
 
 This page documents the TypeScript workspace under `packages/`. It is intended for maintainers who need to find the right package, understand the public exports, and make changes without accidentally crossing product boundaries.
 
-The workspace uses ESM, TypeScript project references, pnpm, Node 22 or newer, and package entry points rooted at `packages/<name>/src/index.ts` unless noted otherwise. Tests usually live under `packages/<name>/src/test/` and run after `pnpm build` through the root `pnpm test` command.
+The workspace uses ESM, TypeScript project references, pnpm, Node 22 (effectively `>=22.19.0`, since `.npmrc` sets `engine-strict=true` and the pinned `undici` requires it), and package entry points rooted at `packages/<name>/src/index.ts` unless noted otherwise. Tests usually live under `packages/<name>/src/test/` and run after `pnpm build` through the root `pnpm test` command.
 
 ## Product package flow
 
@@ -28,7 +28,7 @@ The FusionKit product path starts in `@fusionkit/cli`. The CLI registers tool in
 
 `@fusionkit/cli` publishes the `fusionkit` binary and is the single user-facing Node entry point. The binary entry file is `packages/cli/src/index.ts`. It imports `buildProgram()` from `packages/cli/src/cli.ts`, prints help on bare invocation, parses the command line, and maps known failures to stable process exits.
 
-`buildProgram()` constructs the Commander tree. It sets the command name, description, combined npm and PyPI version string, positional option behavior, and command groups. It calls the command registration helpers in a fixed order: ensemble, local, fusion, models, runtime, sessions, config, setup, doctor, and deployment. If a new product command needs to appear in the root CLI, this is the file that proves it is registered.
+`buildProgram()` constructs the Commander tree. It sets the command name, description, combined npm and PyPI version string, positional option behavior, and command groups. It calls the command registration helpers in a fixed order: fusion, setup, doctor, config, prompts, proxy, sessions, models, ensemble, install, local, completion, complete (hidden), runtime, telemetry, version, and stop. If a new product command needs to appear in the root CLI, this is the file that proves it is registered.
 
 The important behavior around errors is also part of the public user experience. `PolicyDeniedError` prints a fail-closed policy denial and exits with status 2. `PreflightError` prints a direct environment or prerequisite error and exits with status 1. Unknown errors print as `error: <message>` and exit with status 1.
 
@@ -234,9 +234,9 @@ console.log(opencodeTool.modes);
 
 ## `@fusionkit/adapter-ai-sdk`
 
-`@fusionkit/adapter-ai-sdk` connects app-owned AI SDK loops with FusionKit and Warrant primitives. It is not the main CLI path, but it is important for applications that want to route model calls, expose governed tools, or manage local MLX servers.
+`@fusionkit/adapter-ai-sdk` is the AI SDK side of FusionKit local-model flows: managed MLX local-model helpers and worktree agent utilities. It is not the main CLI path. The governed helpers (`remoteTools()`, `swarmTools()`, `handoffModel()`, `routedModel()`) moved to the legacy `@fusionkit/handoff` package.
 
-Important exports include `remoteTools()`, `swarmTools()`, `handoffModel()`, `withModel()`, `loadRouterCard()`, `routedModel()`, `withRoutedModel()`, `runWorktreeAgent()`, `worktreeDiff()`, `defaultMlxDir()`, `MlxCapabilityError`, `MlxEnv`, `managedModelServer()`, and `mlxServer()`.
+Important exports include `runWorktreeAgent()`, `worktreeDiff()`, `defaultMlxDir()`, `MlxCapabilityError`, `MlxEnv`, `managedModelServer()`, and `mlxServer()`.
 
 Example:
 
@@ -270,9 +270,37 @@ if (issues.length > 0) {
 }
 ```
 
+## `@fusionkit/cli-ui`
+
+`@fusionkit/cli-ui` is the fusionkit terminal UX layer: one presenter contract with two implementations — rich Ink (React) rendering on interactive TTYs and ordered plain-text lines everywhere else. All UI goes to stderr; stdout stays reserved for machine payloads and the launched tool's output.
+
+Important exports include `createPresenter()`, `InkPresenter`, `PlainPresenter`, prompt helpers (`select()`, `multiselect()`, `confirm()`, `text()`, `fuzzySelect()`), `runWizard()`, `fuzzyFilter()`/`fuzzyMatch()`, and the theme, runtime, and format helpers re-exported from the entry point.
+
+## `@fusionkit/harness-core`
+
+`@fusionkit/harness-core` is the single coding-agent harness contract: driver, instance, and session interfaces, the canonical harness event union (with raw provider envelopes), a tagged error taxonomy with derived retryability, deferred-based approvals with explicit policies, status probes with an identity-checked disk cache, and an explicit driver registry. The tool packages implement this contract; the panel fanout and launchers consume it.
+
+Important exports include `HARNESS_KINDS`, `isHarnessKind()`, `HarnessError`, `asHarnessError()`, `isRetryable()`, `PANEL_APPROVAL_POLICY`, `PendingRequests`, `createDeferred()`, `decideApproval()`, `readCachedStatus()`/`writeCachedStatus()`, `DriverRegistry`, and the `HarnessDriver`/`HarnessInstance`/`SessionHandle` type family.
+
+## `@fusionkit/registry`
+
+`@fusionkit/registry` provides typed accessors over the generated registry data in `spec/registry/*.json`: provider metadata (base URLs, key env vars, key probes, discovery), subscription auth metadata, the fusion model identity, the cloud and local model catalogs, model-family capability quirks, and default pricing. Both stacks are generated from the same JSON by `scripts/generate-registry.mjs`, so the Node and Python sides cannot drift. It has zero runtime dependencies.
+
+Important exports include `REGISTRY`, `PROVIDERS`, and the provider, catalog, capability, and pricing accessor types and helpers in `packages/registry/src/index.ts`.
+
+## `@fusionkit/runtime-utils`
+
+`@fusionkit/runtime-utils` holds shared runtime primitives used across product packages: `superviseSpawn()`/`terminateGroup()` for observable process management, `registerCleanup()`/`runCleanups()`, timeout defaults (`RUNTIME_TIMEOUT_MS`, `MANAGED_SERVER_DEFAULTS`, `CANDIDATE_ISOLATION_DEFAULTS`), `sleep()`, `randomId()`, and `estimateTokens()`.
+
+## `@fusionkit/tracing`
+
+`@fusionkit/tracing` is the OpenTelemetry-based tracing layer for the fusion stack. The OTel SDK is the engine (ids, W3C propagation, batching, OTLP export); this package owns the thin domain layer over the fusion semantic conventions in `spec/fusion-trace/registry.json`.
+
+Important exports include `initFusionTracing()`, `flushFusionTracing()`, `shutdownFusionTracing()`, `startFusionSpan()`, `emitFusionEvent()`, `newSessionCarrier()`, carrier helpers (`carrierFromHeaders()`, `carrierFromEnv()`, `headersOf()`, `envOf()`), and the in-process span/event listener registration (`addSpanListener()`, `addFusionEventListener()`).
+
 ## Governance and VM platform packages
 
-The packages in this section remain in the repository and are still documented, but they are outside the current FusionKit ensemble product path unless a page explicitly describes a bridge.
+The packages in this section live under `legacy/packages/` and are outside the root pnpm workspace (`pnpm-workspace.yaml` covers `packages/*` and `examples/*` only). They remain in the repository and are still documented, but they are outside the current FusionKit ensemble product path unless a page explicitly describes a bridge.
 
 `@fusionkit/plane` is the Warrant control plane. Its central exports are `Plane`, `startPlaneServer()`, `defaultPolicy()`, `evaluatePolicy()`, `ClaimTokenService`, `ContractService`, `ReceiptService`, `SqliteStore`, `SecretStore`, key provider types, `hashToken()`, `principalCan()`, `toPrincipal()`, `IdpVerifier`, `RateLimiter`, `createLogger()`, and `Metrics`. It owns contracts, policy decisions, approvals, secret release, receipt countersignature, rate limiting, audit export, retention, and control-plane HTTP serving.
 
@@ -308,18 +336,18 @@ console.log(Boolean(plane), Boolean(runner));
 
 ## Test and support packages
 
-`@fusionkit/testkit` exports `git()`, `makeRepo()`, `uploadWorkspace()`, `mockRunRequest()`, `withStackAndRepo()`, and `startStack()`. Use it for tests that need a real temporary git repo, an in-process plane, or a runner stack.
+`@fusionkit/testkit` (root `packages/testkit`, never published) is the cross-stack E2E tooling described in [Testing](testing.md). It exports `startProviderSim()`, `startEngine()`, `simRouterConfigYaml()`, `scriptFusedTurn()`/`judgeAnalysis()`, the `DOOR_PROFILES` door axis with `callDoor()`, real-CLI runners (`runClaudeCode()`, `runCodexExec()`, `runOpenCode()`), SSE observation helpers (`parseSse()`, `sseText()`, `sseReasoning()`, `sseDone()`), skip-gating (`detectStackTooling()`, `stackToolingSkip()`, `cliAvailable()`, `cliSkip()`), and process plumbing (`spawnCaptured()`, `waitForHttpReady()`, `freePort()`). The old in-process plane/runner fixtures (`git()`, `makeRepo()`, `startStack()`, `withStackAndRepo()`) live in `legacy/packages/testkit`.
 
 `@fusionkit/example-utils` exports demo manifest parsing, mock model helpers, live model helpers, and narration utilities. Use it when adding examples rather than duplicating manifest or narration code.
 
 Example:
 
 ```ts
-import { makeRepo, withStackAndRepo } from "@fusionkit/testkit";
+import { simRouterConfigYaml, startEngine, startProviderSim } from "@fusionkit/testkit";
 
-const repo = makeRepo();
-await withStackAndRepo({ repo }, async ({ stack }) => {
-  console.log(stack.planeUrl);
+const sim = await startProviderSim();
+const engine = await startEngine({
+  configYaml: simRouterConfigYaml({ simUrl: sim.url, members: [{ id: "m1", model: "m1" }] })
 });
 ```
 

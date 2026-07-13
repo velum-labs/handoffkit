@@ -11,8 +11,10 @@ The Node `@fusionkit/cli` command tree (`packages/cli/src/cli.ts`) registers the
 FusionKit product commands only:
 
 - `codex` / `claude` / `cursor` / `serve` plus generic `fusion [tool]`
-- `init`, `config`, `sessions`, `models`, `local`, `ensemble`, `doctor`,
-  `status`, `setup`, `prompts`, `version`, and runtime helpers
+- `init`, `setup`, `doctor`, `status`, `config`, `prompts`, `proxy`,
+  `sessions`, `models`, `ensemble`, `install` / `uninstall`, `local`,
+  `completion` (plus the hidden `complete`), `runtime`, `telemetry`,
+  `version`, and top-level `stop`
 
 No governance commands (`ui`, `runs`, `plane start`, `runner start`, Warrant
 continuation commands, receipt commands, pull, secrets) are registered in the
@@ -33,6 +35,7 @@ These packages must not depend directly or transitively on the legacy packages:
 | `@fusionkit/tools`, `tool-codex`, `tool-claude`, `tool-cursor`, `tool-opencode` | Per-harness adapters. |
 | `@fusionkit/adapter-ai-sdk` | Managed MLX local-model helpers and product-local AI SDK utilities. |
 | `@fusionkit/harness-core`, `runtime-utils`, `registry`, `kernel` | Shared product runtime, registry, and execution primitives. |
+| `@fusionkit/tracing` | OpenTelemetry-backed fusion span/event helpers and trace carriers. |
 
 ## Legacy quarantine
 
@@ -43,12 +46,15 @@ The legacy stack now lives under `legacy/`:
   `@fusionkit/session-hermetic`, `@fusionkit/session-vercel-sandbox`,
   and `@fusionkit/session-harness`.
 - `legacy/examples/`: governed-run, dry-run, consent, egress, handoff, swarm,
-  model-escalation, control-panel, seed, microVM isolation, and related demos.
+  model-escalation, control-panel, seed, microVM isolation, the `bench`
+  performance-budget demo, and related demos.
 - `legacy/docker/`: the Warrant compose stack and legacy-only Docker entrypoint.
 - `legacy/specs/`: the governed execution, local-first handoff, microVM, and
   secret-disclosure specs.
-- `packages/testkit` remains a private fixture package because the kept
-  `examples/bench` demo still uses the in-process plane/runner stack.
+- `legacy/packages/testkit`: the old in-process plane/runner fixture package,
+  still used by the legacy demos (including `legacy/examples/bench`). The root
+  `packages/testkit` is a different, repurposed package: private cross-stack
+  E2E tooling (provider simulator + real engine) for the product test suites.
 
 The legacy packages remain publishable from this monorepo for now. Their npm
 package names, scopes, repository identity, binaries, and release manifest
