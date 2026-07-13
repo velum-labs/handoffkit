@@ -2,7 +2,7 @@
   "annotations": {
     "list": []
   },
-  "description": "Interactive, data-driven views of Hyperkit hypergrid quality, cost, latency, search flow, ranking, and uncertainty.",
+  "description": "Live model screen: named anchor/open candidates, quality and confidence, paired gap, spend, latency, errors, and completion.",
   "editable": false,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
@@ -15,7 +15,7 @@
         "type": "prometheus",
         "uid": "amp"
       },
-      "description": "Cost versus resolution rate. Bubble area tracks completed shards; color tracks topology. Zoom, restore, and data-view controls support interactive exploration.",
+      "description": "Model quality versus spend. Labels are human-readable experiment cells; color distinguishes frozen anchors from open-weight candidates.",
       "fieldConfig": {
         "defaults": {},
         "overrides": []
@@ -34,7 +34,7 @@
         },
         "editorMode": "code",
         "followTheme": true,
-        "getOption": "const fieldValues = (field) => {\n  const raw = field?.values;\n  if (Array.isArray(raw)) return raw;\n  if (raw && typeof raw.toArray === 'function') return raw.toArray();\n  if (raw?.buffer) return Array.from(raw.buffer);\n  return raw ? Array.from(raw) : [];\n};\nconst rows = (refId) => context.panel.data.series.filter((frame) => frame.refId === refId).flatMap((frame) => {\n  const fields = frame.fields || [];\n  const numeric = fields.filter((field) => field.type === 'number' && field.name !== 'Time');\n  const valueField = fields.find((field) => field.name === 'Value') || numeric[numeric.length - 1];\n  return fieldValues(valueField).map((value, index) => {\n    const labels = { ...(frame.labels || {}), ...(valueField?.labels || {}) };\n    fields.filter((field) => field !== valueField && field.type !== 'time').forEach((field) => {\n      const candidate = fieldValues(field)[index];\n      if (candidate !== undefined && candidate !== null) labels[field.name] = String(candidate);\n    });\n    return { labels, value: Number(value) };\n  });\n});\nconst cells = new Map();\nconst add = (refId, key) => rows(refId).forEach(({ labels, value }) => {\n  const id = labels.cell_id;\n  if (!id) return;\n  const cell = cells.get(id) || { cell_id: id };\n  Object.assign(cell, labels, { [key]: value });\n  cells.set(id, cell);\n});\n[['cost', 'cost'], ['rate', 'rate'], ['p95', 'p95'], ['completed', 'completed'], ['low', 'low'], ['high', 'high'], ['rank', 'rank'], ['delta', 'delta']].forEach(([refId, key]) => add(refId, key));\nconst data = Array.from(cells.values()).filter((cell) => ['cost', 'rate', 'p95', 'completed', 'low', 'high', 'rank', 'delta'].every((key) => Number.isFinite(cell[key])));\nconst topologies = Array.from(new Set(data.map((cell) => cell.topology))).sort();\nconst colors = ['#73BF69', '#5794F2', '#FF9830', '#B877D9', '#F2495C', '#8AB8FF'];\nconst completed = data.map((cell) => cell.completed);\nconst minCompleted = Math.min(...completed);\nconst maxCompleted = Math.max(...completed);\nreturn {\n  animationDurationUpdate: 700,\n  color: colors,\n  grid: { left: 62, right: 28, top: 48, bottom: 65 },\n  legend: { top: 4, data: topologies },\n  toolbox: { right: 8, feature: { dataZoom: {}, dataView: { readOnly: true }, restore: {}, saveAsImage: {} } },\n  tooltip: {\n    trigger: 'item',\n    formatter: ({ data: cell }) => `<b>${cell.cell_id}</b><br/>topology: ${cell.topology}<br/>cost: $${cell.cost.toFixed(2)}<br/>resolution: ${(cell.rate * 100).toFixed(1)}%<br/>95% CI: ${(cell.low * 100).toFixed(1)}–${(cell.high * 100).toFixed(1)}%<br/>p95: ${cell.p95.toFixed(2)}s · completed: ${cell.completed}<br/>rank: ${cell.rank} · k: ${cell.k}<br/>panel: ${cell.panel} · commit: ${cell.commit}<br/>delta: ${(cell.delta * 100).toFixed(1)}pp`\n  },\n  xAxis: { type: 'value', name: 'Cost (USD)', nameLocation: 'middle', nameGap: 34, scale: true },\n  yAxis: { type: 'value', name: 'Resolution rate', axisLabel: { formatter: (value) => `${(value * 100).toFixed(0)}%` }, scale: true },\n  dataZoom: [{ type: 'inside', xAxisIndex: 0 }, { type: 'slider', xAxisIndex: 0, height: 18, bottom: 8 }],\n  series: topologies.map((topology, index) => ({\n    name: topology,\n    type: 'scatter',\n    data: data.filter((cell) => cell.topology === topology).map((cell) => ({ ...cell, value: [cell.cost, cell.rate, cell.completed] })),\n    symbolSize: (value) => 14 + 26 * (value[2] - minCompleted) / (maxCompleted - minCompleted || 1),\n    itemStyle: { color: colors[index % colors.length], opacity: 0.82, borderColor: '#ffffff', borderWidth: 1 },\n    emphasis: { focus: 'series', scale: 1.25 },\n    label: { show: true, position: 'top', formatter: ({ data: cell }) => cell.cell_id, fontSize: 10 }\n  }))\n};",
+        "getOption": "const fieldValues = (field) => {\n  const raw = field?.values;\n  if (Array.isArray(raw)) return raw;\n  if (raw && typeof raw.toArray === 'function') return raw.toArray();\n  if (raw?.buffer) return Array.from(raw.buffer);\n  return raw ? Array.from(raw) : [];\n};\nconst rows = (refId) => context.panel.data.series.filter((frame) => frame.refId === refId).flatMap((frame) => {\n  const fields = frame.fields || [];\n  const numeric = fields.filter((field) => field.type === 'number' && field.name !== 'Time');\n  const valueField = fields.find((field) => field.name === 'Value') || numeric[numeric.length - 1];\n  return fieldValues(valueField).map((value, index) => {\n    const labels = { ...(frame.labels || {}), ...(valueField?.labels || {}) };\n    fields.filter((field) => field !== valueField && field.type !== 'time').forEach((field) => {\n      const candidate = fieldValues(field)[index];\n      if (candidate !== undefined && candidate !== null) labels[field.name] = String(candidate);\n    });\n    return { labels, value: Number(value) };\n  });\n});\nconst cells = new Map();\nconst add = (refId, key) => rows(refId).forEach(({ labels, value }) => {\n  const id = labels.cell_id;\n  if (!id) return;\n  const cell = cells.get(id) || { cell_id: id };\n  Object.assign(cell, labels, { [key]: value });\n  cell.display = cell.cell_label || cell.model || id;\n  cells.set(id, cell);\n});\n[['cost', 'cost'], ['rate', 'rate'], ['p95', 'p95'], ['completed', 'completed'], ['planned', 'planned'], ['errors', 'errors'], ['low', 'low'], ['high', 'high'], ['rank', 'rank'], ['delta', 'delta']].forEach(([refId, key]) => add(refId, key));\nconst required = ['cost', 'rate', 'p95', 'completed', 'planned', 'errors', 'low', 'high', 'rank', 'delta'];\nconst data = Array.from(cells.values()).filter((cell) => required.every((key) => Number.isFinite(cell[key])));\nconst roles = Array.from(new Set(data.map((cell) => cell.cell_role || 'unknown'))).sort();\nconst colors = { anchor: '#F2495C', open: '#73BF69', compound: '#5794F2', unknown: '#8AB8FF' };\nconst completed = data.map((cell) => cell.completed);\nconst minCompleted = Math.min(...completed);\nconst maxCompleted = Math.max(...completed);\nreturn {\n  animationDurationUpdate: 700,\n  grid: { left: 62, right: 28, top: 48, bottom: 65 },\n  legend: { top: 4, data: roles },\n  toolbox: { right: 8, feature: { dataZoom: {}, dataView: { readOnly: true }, restore: {}, saveAsImage: {} } },\n  tooltip: {\n    trigger: 'item',\n    formatter: ({ data: cell }) => `<b>${cell.display}</b><br/>model: ${cell.model}<br/>role: ${cell.cell_role}<br/>resolution: ${(cell.rate * 100).toFixed(1)}% \u00b7 gap: ${(cell.delta * 100).toFixed(1)}pp<br/>95% CI: ${(cell.low * 100).toFixed(1)}\u2013${(cell.high * 100).toFixed(1)}%<br/>cost: $${cell.cost.toFixed(2)} \u00b7 p95: ${cell.p95.toFixed(1)}s<br/>progress: ${cell.completed}/${cell.planned} \u00b7 errors: ${cell.errors}`\n  },\n  xAxis: { type: 'value', name: 'Cost (USD)', nameLocation: 'middle', nameGap: 34, scale: true },\n  yAxis: { type: 'value', name: 'Resolution rate', axisLabel: { formatter: (value) => `${(value * 100).toFixed(0)}%` }, min: 0, max: 1 },\n  dataZoom: [{ type: 'inside', xAxisIndex: 0 }, { type: 'slider', xAxisIndex: 0, height: 18, bottom: 8 }],\n  series: roles.map((role) => ({\n    name: role,\n    type: 'scatter',\n    data: data.filter((cell) => (cell.cell_role || 'unknown') === role).map((cell) => ({ ...cell, value: [cell.cost, cell.rate, cell.completed] })),\n    symbolSize: (value) => 14 + 26 * (value[2] - minCompleted) / (maxCompleted - minCompleted || 1),\n    itemStyle: { color: colors[role] || colors.unknown, opacity: 0.86, borderColor: '#ffffff', borderWidth: 1 },\n    emphasis: { focus: 'series', scale: 1.25 },\n    label: { show: true, position: 'top', formatter: ({ data: cell }) => cell.display, fontSize: 10 }\n  }))\n};",
         "renderer": "canvas",
         "themeEditor": {
           "config": "{}",
@@ -53,7 +53,7 @@
           "expr": "hyperkit_cell_cost_usd{run_id=~\"$run_id\", benchmark=~\"$benchmark\", generation=~\"$generation\"}",
           "format": "table",
           "instant": true,
-          "legendFormat": "{{cell_id}}",
+          "legendFormat": "{{cell_label}}",
           "range": false,
           "refId": "cost"
         },
@@ -62,7 +62,7 @@
           "expr": "hyperkit_cell_resolution_rate{run_id=~\"$run_id\", benchmark=~\"$benchmark\", generation=~\"$generation\"}",
           "format": "table",
           "instant": true,
-          "legendFormat": "{{cell_id}}",
+          "legendFormat": "{{cell_label}}",
           "range": false,
           "refId": "rate"
         },
@@ -71,7 +71,7 @@
           "expr": "hyperkit_cell_latency_p95_seconds{run_id=~\"$run_id\", benchmark=~\"$benchmark\", generation=~\"$generation\"}",
           "format": "table",
           "instant": true,
-          "legendFormat": "{{cell_id}}",
+          "legendFormat": "{{cell_label}}",
           "range": false,
           "refId": "p95"
         },
@@ -80,16 +80,34 @@
           "expr": "hyperkit_cell_completed_shards{run_id=~\"$run_id\", benchmark=~\"$benchmark\", generation=~\"$generation\"}",
           "format": "table",
           "instant": true,
-          "legendFormat": "{{cell_id}}",
+          "legendFormat": "{{cell_label}}",
           "range": false,
           "refId": "completed"
+        },
+        {
+          "editorMode": "code",
+          "expr": "hyperkit_cell_planned_shards{run_id=~\"$run_id\", benchmark=~\"$benchmark\", generation=~\"$generation\"}",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "{{cell_label}}",
+          "range": false,
+          "refId": "planned"
+        },
+        {
+          "editorMode": "code",
+          "expr": "hyperkit_cell_errors{run_id=~\"$run_id\", benchmark=~\"$benchmark\", generation=~\"$generation\"}",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "{{cell_label}}",
+          "range": false,
+          "refId": "errors"
         },
         {
           "editorMode": "code",
           "expr": "hyperkit_cell_wilson_low{run_id=~\"$run_id\", benchmark=~\"$benchmark\", generation=~\"$generation\"}",
           "format": "table",
           "instant": true,
-          "legendFormat": "{{cell_id}}",
+          "legendFormat": "{{cell_label}}",
           "range": false,
           "refId": "low"
         },
@@ -98,7 +116,7 @@
           "expr": "hyperkit_cell_wilson_high{run_id=~\"$run_id\", benchmark=~\"$benchmark\", generation=~\"$generation\"}",
           "format": "table",
           "instant": true,
-          "legendFormat": "{{cell_id}}",
+          "legendFormat": "{{cell_label}}",
           "range": false,
           "refId": "high"
         },
@@ -107,7 +125,7 @@
           "expr": "hyperkit_cell_rank{run_id=~\"$run_id\", benchmark=~\"$benchmark\", generation=~\"$generation\"}",
           "format": "table",
           "instant": true,
-          "legendFormat": "{{cell_id}}",
+          "legendFormat": "{{cell_label}}",
           "range": false,
           "refId": "rank"
         },
@@ -116,7 +134,7 @@
           "expr": "hyperkit_cell_delta_vs_best_single{run_id=~\"$run_id\", benchmark=~\"$benchmark\", generation=~\"$generation\"}",
           "format": "table",
           "instant": true,
-          "legendFormat": "{{cell_id}}",
+          "legendFormat": "{{cell_label}}",
           "range": false,
           "refId": "delta"
         }
@@ -129,7 +147,7 @@
         "type": "prometheus",
         "uid": "amp"
       },
-      "description": "Each polyline is one cell across normalized quality, cost, latency, uplift, progress, and panel-size dimensions.",
+      "description": "Each model spans quality, paired gap, cost, latency, completion, and provider-error axes.",
       "fieldConfig": {
         "defaults": {},
         "overrides": []
@@ -148,7 +166,7 @@
         },
         "editorMode": "code",
         "followTheme": true,
-        "getOption": "const fieldValues = (field) => {\n  const raw = field?.values;\n  if (Array.isArray(raw)) return raw;\n  if (raw && typeof raw.toArray === 'function') return raw.toArray();\n  if (raw?.buffer) return Array.from(raw.buffer);\n  return raw ? Array.from(raw) : [];\n};\nconst rows = (refId) => context.panel.data.series.filter((frame) => frame.refId === refId).flatMap((frame) => {\n  const fields = frame.fields || [];\n  const numeric = fields.filter((field) => field.type === 'number' && field.name !== 'Time');\n  const valueField = fields.find((field) => field.name === 'Value') || numeric[numeric.length - 1];\n  return fieldValues(valueField).map((value, index) => {\n    const labels = { ...(frame.labels || {}), ...(valueField?.labels || {}) };\n    fields.filter((field) => field !== valueField && field.type !== 'time').forEach((field) => {\n      const candidate = fieldValues(field)[index];\n      if (candidate !== undefined && candidate !== null) labels[field.name] = String(candidate);\n    });\n    return { labels, value: Number(value) };\n  });\n});\nconst cells = new Map();\nconst add = (refId, key) => rows(refId).forEach(({ labels, value }) => {\n  const id = labels.cell_id;\n  if (!id) return;\n  const cell = cells.get(id) || { cell_id: id };\n  Object.assign(cell, labels, { [key]: value });\n  cells.set(id, cell);\n});\n[['rate', 'rate'], ['cost', 'cost'], ['p95', 'p95'], ['delta', 'delta'], ['completed', 'completed'], ['planned', 'planned']].forEach(([refId, key]) => add(refId, key));\nconst data = Array.from(cells.values()).filter((cell) => ['rate', 'cost', 'p95', 'delta', 'completed', 'planned'].every((key) => Number.isFinite(cell[key])));\nconst groups = Array.from(new Set(data.map((cell) => `g${cell.generation} · ${cell.topology}`))).sort();\nconst colors = ['#73BF69', '#5794F2', '#FF9830', '#B877D9', '#F2495C', '#8AB8FF', '#FADE2A'];\nreturn {\n  animationDurationUpdate: 700,\n  color: colors,\n  legend: { type: 'scroll', top: 3, data: groups },\n  tooltip: { trigger: 'item', formatter: ({ data: item }) => { const cell = item.meta; return `<b>${cell.cell_id}</b><br/>generation: ${cell.generation} · topology: ${cell.topology}<br/>rate: ${(cell.rate * 100).toFixed(1)}% · cost: $${cell.cost.toFixed(2)}<br/>p95: ${cell.p95.toFixed(2)}s · delta: ${(cell.delta * 100).toFixed(1)}pp<br/>progress: ${(cell.completed / cell.planned * 100).toFixed(0)}% · k: ${cell.k}<br/>panel: ${cell.panel} · commit: ${cell.commit}`; } },\n  parallel: { left: 62, right: 38, top: 62, bottom: 28, parallelAxisDefault: { nameLocation: 'end', nameGap: 14, splitNumber: 4 } },\n  parallelAxis: [\n    { dim: 0, name: 'Score / rate', min: 'dataMin', max: 'dataMax', axisLabel: { formatter: (value) => `${(value * 100).toFixed(0)}%` } },\n    { dim: 1, name: 'Cost $', min: 'dataMin', max: 'dataMax' },\n    { dim: 2, name: 'P95 s', min: 'dataMin', max: 'dataMax' },\n    { dim: 3, name: 'Delta', min: 'dataMin', max: 'dataMax', axisLabel: { formatter: (value) => `${(value * 100).toFixed(0)}pp` } },\n    { dim: 4, name: 'Progress', min: 0, max: 1, axisLabel: { formatter: (value) => `${(value * 100).toFixed(0)}%` } },\n    { dim: 5, name: 'K', type: 'value' }\n  ],\n  series: groups.map((group, index) => ({\n    name: group,\n    type: 'parallel',\n    lineStyle: { color: colors[index % colors.length], width: 2.4, opacity: 0.62 },\n    emphasis: { lineStyle: { width: 5, opacity: 1 } },\n    data: data.filter((cell) => `g${cell.generation} · ${cell.topology}` === group).map((cell) => ({ value: [cell.rate, cell.cost, cell.p95, cell.delta, cell.completed / cell.planned, Number(cell.k)], meta: cell }))\n  }))\n};",
+        "getOption": "const fieldValues = (field) => {\n  const raw = field?.values;\n  if (Array.isArray(raw)) return raw;\n  if (raw && typeof raw.toArray === 'function') return raw.toArray();\n  if (raw?.buffer) return Array.from(raw.buffer);\n  return raw ? Array.from(raw) : [];\n};\nconst rows = (refId) => context.panel.data.series.filter((frame) => frame.refId === refId).flatMap((frame) => {\n  const fields = frame.fields || [];\n  const numeric = fields.filter((field) => field.type === 'number' && field.name !== 'Time');\n  const valueField = fields.find((field) => field.name === 'Value') || numeric[numeric.length - 1];\n  return fieldValues(valueField).map((value, index) => {\n    const labels = { ...(frame.labels || {}), ...(valueField?.labels || {}) };\n    fields.filter((field) => field !== valueField && field.type !== 'time').forEach((field) => {\n      const candidate = fieldValues(field)[index];\n      if (candidate !== undefined && candidate !== null) labels[field.name] = String(candidate);\n    });\n    return { labels, value: Number(value) };\n  });\n});\nconst cells = new Map();\nconst add = (refId, key) => rows(refId).forEach(({ labels, value }) => {\n  const id = labels.cell_id;\n  if (!id) return;\n  const cell = cells.get(id) || { cell_id: id };\n  Object.assign(cell, labels, { [key]: value });\n  cell.display = cell.cell_label || cell.model || id;\n  cells.set(id, cell);\n});\n[['rate', 'rate'], ['cost', 'cost'], ['p95', 'p95'], ['delta', 'delta'], ['completed', 'completed'], ['planned', 'planned'], ['errors', 'errors']].forEach(([refId, key]) => add(refId, key));\nconst data = Array.from(cells.values()).filter((cell) => ['rate', 'cost', 'p95', 'delta', 'completed', 'planned', 'errors'].every((key) => Number.isFinite(cell[key])));\nconst roles = Array.from(new Set(data.map((cell) => cell.cell_role || 'unknown'))).sort();\nconst colors = { anchor: '#F2495C', open: '#73BF69', compound: '#5794F2', unknown: '#8AB8FF' };\nreturn {\n  animationDurationUpdate: 700,\n  legend: { type: 'scroll', top: 3, data: roles },\n  tooltip: { trigger: 'item', formatter: ({ data: item }) => { const cell = item.meta; return `<b>${cell.display}</b><br/>${cell.model}<br/>rate: ${(cell.rate * 100).toFixed(1)}% \u00b7 gap: ${(cell.delta * 100).toFixed(1)}pp<br/>cost: $${cell.cost.toFixed(2)} \u00b7 p95: ${cell.p95.toFixed(1)}s<br/>progress: ${cell.completed}/${cell.planned} \u00b7 errors: ${cell.errors}`; } },\n  parallel: { left: 62, right: 38, top: 62, bottom: 28, parallelAxisDefault: { nameLocation: 'end', nameGap: 14, splitNumber: 4 } },\n  parallelAxis: [\n    { dim: 0, name: 'Rate', min: 0, max: 1, axisLabel: { formatter: (value) => `${(value * 100).toFixed(0)}%` } },\n    { dim: 1, name: 'Gap', min: 'dataMin', max: 0, axisLabel: { formatter: (value) => `${(value * 100).toFixed(0)}pp` } },\n    { dim: 2, name: 'Cost $', min: 0, max: 'dataMax' },\n    { dim: 3, name: 'P95 s', min: 0, max: 'dataMax' },\n    { dim: 4, name: 'Progress', min: 0, max: 1, axisLabel: { formatter: (value) => `${(value * 100).toFixed(0)}%` } },\n    { dim: 5, name: 'Errors', min: 0, max: 'dataMax' }\n  ],\n  series: roles.map((role) => ({\n    name: role,\n    type: 'parallel',\n    lineStyle: { color: colors[role] || colors.unknown, width: 2.4, opacity: 0.68 },\n    emphasis: { lineStyle: { width: 5, opacity: 1 } },\n    data: data.filter((cell) => (cell.cell_role || 'unknown') === role).map((cell) => ({ value: [cell.rate, cell.delta, cell.cost, cell.p95, cell.completed / cell.planned, cell.errors], meta: cell }))\n  }))\n};",
         "renderer": "canvas",
         "themeEditor": {
           "config": "{}",
@@ -167,7 +185,7 @@
           "expr": "hyperkit_cell_resolution_rate{run_id=~\"$run_id\", benchmark=~\"$benchmark\", generation=~\"$generation\"}",
           "format": "table",
           "instant": true,
-          "legendFormat": "{{cell_id}}",
+          "legendFormat": "{{cell_label}}",
           "range": false,
           "refId": "rate"
         },
@@ -176,7 +194,7 @@
           "expr": "hyperkit_cell_cost_usd{run_id=~\"$run_id\", benchmark=~\"$benchmark\", generation=~\"$generation\"}",
           "format": "table",
           "instant": true,
-          "legendFormat": "{{cell_id}}",
+          "legendFormat": "{{cell_label}}",
           "range": false,
           "refId": "cost"
         },
@@ -185,7 +203,7 @@
           "expr": "hyperkit_cell_latency_p95_seconds{run_id=~\"$run_id\", benchmark=~\"$benchmark\", generation=~\"$generation\"}",
           "format": "table",
           "instant": true,
-          "legendFormat": "{{cell_id}}",
+          "legendFormat": "{{cell_label}}",
           "range": false,
           "refId": "p95"
         },
@@ -194,7 +212,7 @@
           "expr": "hyperkit_cell_delta_vs_best_single{run_id=~\"$run_id\", benchmark=~\"$benchmark\", generation=~\"$generation\"}",
           "format": "table",
           "instant": true,
-          "legendFormat": "{{cell_id}}",
+          "legendFormat": "{{cell_label}}",
           "range": false,
           "refId": "delta"
         },
@@ -203,7 +221,7 @@
           "expr": "hyperkit_cell_completed_shards{run_id=~\"$run_id\", benchmark=~\"$benchmark\", generation=~\"$generation\"}",
           "format": "table",
           "instant": true,
-          "legendFormat": "{{cell_id}}",
+          "legendFormat": "{{cell_label}}",
           "range": false,
           "refId": "completed"
         },
@@ -212,12 +230,21 @@
           "expr": "hyperkit_cell_planned_shards{run_id=~\"$run_id\", benchmark=~\"$benchmark\", generation=~\"$generation\"}",
           "format": "table",
           "instant": true,
-          "legendFormat": "{{cell_id}}",
+          "legendFormat": "{{cell_label}}",
           "range": false,
           "refId": "planned"
+        },
+        {
+          "editorMode": "code",
+          "expr": "hyperkit_cell_errors{run_id=~\"$run_id\", benchmark=~\"$benchmark\", generation=~\"$generation\"}",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "{{cell_label}}",
+          "range": false,
+          "refId": "errors"
         }
       ],
-      "title": "Cell Trade-space Parallel Coordinates",
+      "title": "Model Trade-space Parallel Coordinates",
       "type": "volkovlabs-echarts-panel"
     },
     {
@@ -225,7 +252,7 @@
         "type": "prometheus",
         "uid": "amp"
       },
-      "description": "Mean resolution rate for each topology and K combination; the color domain follows the filtered data.",
+      "description": "Current resolution rate by model and experimental role.",
       "fieldConfig": {
         "defaults": {},
         "overrides": []
@@ -244,7 +271,7 @@
         },
         "editorMode": "code",
         "followTheme": true,
-        "getOption": "const fieldValues = (field) => {\n  const raw = field?.values;\n  if (Array.isArray(raw)) return raw;\n  if (raw && typeof raw.toArray === 'function') return raw.toArray();\n  if (raw?.buffer) return Array.from(raw.buffer);\n  return raw ? Array.from(raw) : [];\n};\nconst points = context.panel.data.series.flatMap((frame) => {\n  const fields = frame.fields || [];\n  const valueField = fields.find((field) => field.name === 'Value') || fields.filter((field) => field.type === 'number' && field.name !== 'Time').slice(-1)[0];\n  return fieldValues(valueField).map((value, index) => {\n    const labels = { ...(frame.labels || {}), ...(valueField?.labels || {}) };\n    fields.filter((field) => field !== valueField && field.type !== 'time').forEach((field) => {\n      const candidate = fieldValues(field)[index];\n      if (candidate !== undefined && candidate !== null) labels[field.name] = String(candidate);\n    });\n    return { topology: labels.topology, k: labels.k, value: Number(value) };\n  });\n}).filter((point) => point.topology && point.k && Number.isFinite(point.value));\nconst topologies = Array.from(new Set(points.map((point) => point.topology))).sort();\nconst ks = Array.from(new Set(points.map((point) => point.k))).sort((a, b) => Number(a) - Number(b));\nconst values = points.map((point) => point.value);\nreturn {\n  animationDurationUpdate: 600,\n  grid: { left: 72, right: 22, top: 28, bottom: 70 },\n  tooltip: { position: 'top', formatter: ({ data }) => `<b>${topologies[data[1]]} · k=${ks[data[0]]}</b><br/>mean resolution: ${(data[2] * 100).toFixed(1)}%` },\n  xAxis: { type: 'category', name: 'K', data: ks, splitArea: { show: true } },\n  yAxis: { type: 'category', name: 'Topology', data: topologies, splitArea: { show: true } },\n  visualMap: { min: Math.min(...values), max: Math.max(...values), calculable: true, orient: 'horizontal', left: 'center', bottom: 4, inRange: { color: ['#1F3B73', '#5794F2', '#73BF69', '#FADE2A'] }, formatter: (value) => `${(value * 100).toFixed(0)}%` },\n  series: [{ name: 'Resolution rate', type: 'heatmap', data: points.map((point) => [ks.indexOf(point.k), topologies.indexOf(point.topology), point.value]), label: { show: true, formatter: ({ data }) => `${(data[2] * 100).toFixed(1)}%` }, emphasis: { itemStyle: { shadowBlur: 12, shadowColor: 'rgba(0,0,0,0.45)' } } }]\n};",
+        "getOption": "const fieldValues = (field) => {\n  const raw = field?.values;\n  if (Array.isArray(raw)) return raw;\n  if (raw && typeof raw.toArray === 'function') return raw.toArray();\n  if (raw?.buffer) return Array.from(raw.buffer);\n  return raw ? Array.from(raw) : [];\n};\nconst rows = (refId) => context.panel.data.series.filter((frame) => frame.refId === refId).flatMap((frame) => {\n  const fields = frame.fields || [];\n  const numeric = fields.filter((field) => field.type === 'number' && field.name !== 'Time');\n  const valueField = fields.find((field) => field.name === 'Value') || numeric[numeric.length - 1];\n  return fieldValues(valueField).map((value, index) => {\n    const labels = { ...(frame.labels || {}), ...(valueField?.labels || {}) };\n    fields.filter((field) => field !== valueField && field.type !== 'time').forEach((field) => {\n      const candidate = fieldValues(field)[index];\n      if (candidate !== undefined && candidate !== null) labels[field.name] = String(candidate);\n    });\n    return { labels, value: Number(value) };\n  });\n});\nconst cells = new Map();\nconst add = (refId, key) => rows(refId).forEach(({ labels, value }) => {\n  const id = labels.cell_id;\n  if (!id) return;\n  const cell = cells.get(id) || { cell_id: id };\n  Object.assign(cell, labels, { [key]: value });\n  cell.display = cell.cell_label || cell.model || id;\n  cells.set(id, cell);\n});\nrows('rate').forEach(({ labels, value }) => {\n  const id = labels.cell_id;\n  if (!id) return;\n  cells.set(id, { ...labels, cell_id: id, display: labels.cell_label || labels.model || id, rate: value });\n});\nconst data = Array.from(cells.values()).filter((cell) => Number.isFinite(cell.rate));\nconst roles = Array.from(new Set(data.map((cell) => cell.cell_role || 'unknown'))).sort();\nconst models = data.map((cell) => cell.display).sort();\nconst values = data.map((cell) => cell.rate);\nreturn {\n  animationDurationUpdate: 600,\n  grid: { left: 125, right: 22, top: 28, bottom: 70 },\n  tooltip: { position: 'top', formatter: ({ data: point }) => { const cell = point[3]; return `<b>${cell.display}</b><br/>${cell.model}<br/>role: ${cell.cell_role}<br/>resolution: ${(cell.rate * 100).toFixed(1)}%`; } },\n  xAxis: { type: 'category', name: 'Role', data: roles, splitArea: { show: true } },\n  yAxis: { type: 'category', name: 'Model', data: models, splitArea: { show: true } },\n  visualMap: { min: Math.min(...values), max: Math.max(...values), calculable: true, orient: 'horizontal', left: 'center', bottom: 4, inRange: { color: ['#1F3B73', '#5794F2', '#73BF69', '#FADE2A'] }, formatter: (value) => `${(value * 100).toFixed(0)}%` },\n  series: [{ name: 'Resolution rate', type: 'heatmap', data: data.map((cell) => [roles.indexOf(cell.cell_role || 'unknown'), models.indexOf(cell.display), cell.rate, cell]), label: { show: true, formatter: ({ data: point }) => `${(point[2] * 100).toFixed(1)}%` }, emphasis: { itemStyle: { shadowBlur: 12, shadowColor: 'rgba(0,0,0,0.45)' } } }]\n};",
         "renderer": "canvas",
         "themeEditor": {
           "config": "{}",
@@ -260,15 +287,15 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "avg by (topology, k) (hyperkit_cell_resolution_rate{run_id=~\"$run_id\", benchmark=~\"$benchmark\", generation=~\"$generation\"})",
+          "expr": "hyperkit_cell_resolution_rate{run_id=~\"$run_id\", benchmark=~\"$benchmark\", generation=~\"$generation\"}",
           "format": "table",
           "instant": true,
-          "legendFormat": "{{topology}} · k={{k}}",
+          "legendFormat": "{{cell_label}}",
           "range": false,
           "refId": "rate"
         }
       ],
-      "title": "Topology × K Resolution Heatmap",
+      "title": "Model Resolution Heatmap",
       "type": "volkovlabs-echarts-panel"
     },
     {
@@ -276,7 +303,7 @@
         "type": "prometheus",
         "uid": "amp"
       },
-      "description": "Completed shard volume flowing from search generation through topology into individual cells.",
+      "description": "Completed shard volume from generation through anchor/open role to named model.",
       "fieldConfig": {
         "defaults": {},
         "overrides": []
@@ -295,7 +322,7 @@
         },
         "editorMode": "code",
         "followTheme": true,
-        "getOption": "const fieldValues = (field) => {\n  const raw = field?.values;\n  if (Array.isArray(raw)) return raw;\n  if (raw && typeof raw.toArray === 'function') return raw.toArray();\n  if (raw?.buffer) return Array.from(raw.buffer);\n  return raw ? Array.from(raw) : [];\n};\nconst cells = context.panel.data.series.flatMap((frame) => {\n  const fields = frame.fields || [];\n  const valueField = fields.find((field) => field.name === 'Value') || fields.filter((field) => field.type === 'number' && field.name !== 'Time').slice(-1)[0];\n  return fieldValues(valueField).map((value, index) => {\n    const labels = { ...(frame.labels || {}), ...(valueField?.labels || {}) };\n    fields.filter((field) => field !== valueField && field.type !== 'time').forEach((field) => {\n      const candidate = fieldValues(field)[index];\n      if (candidate !== undefined && candidate !== null) labels[field.name] = String(candidate);\n    });\n    return { ...labels, value: Number(value) };\n  });\n}).filter((cell) => cell.cell_id && cell.generation && cell.topology && Number.isFinite(cell.value));\nconst linkTotals = new Map();\nconst addLink = (source, target, value) => {\n  const key = `${source}\\u0000${target}`;\n  const link = linkTotals.get(key) || { source, target, value: 0 };\n  link.value += value;\n  linkTotals.set(key, link);\n};\ncells.forEach((cell) => {\n  const generation = `Generation ${cell.generation}`;\n  const topology = `g${cell.generation} · ${cell.topology}`;\n  addLink(generation, topology, cell.value);\n  addLink(topology, cell.cell_id, cell.value);\n});\nconst nodes = Array.from(new Set(Array.from(linkTotals.values()).flatMap((link) => [link.source, link.target]))).map((name) => ({ name }));\nreturn {\n  animationDurationUpdate: 800,\n  tooltip: { trigger: 'item', formatter: (params) => params.dataType === 'edge' ? `<b>${params.data.source} → ${params.data.target}</b><br/>completed shards: ${params.data.value.toFixed(0)}` : `<b>${params.name}</b>` },\n  series: [{ type: 'sankey', data: nodes, links: Array.from(linkTotals.values()), left: 14, right: 130, top: 18, bottom: 18, nodeWidth: 18, nodeGap: 10, draggable: true, emphasis: { focus: 'adjacency' }, lineStyle: { color: 'gradient', curveness: 0.5, opacity: 0.55 }, label: { fontSize: 11 } }]\n};",
+        "getOption": "const fieldValues = (field) => {\n  const raw = field?.values;\n  if (Array.isArray(raw)) return raw;\n  if (raw && typeof raw.toArray === 'function') return raw.toArray();\n  if (raw?.buffer) return Array.from(raw.buffer);\n  return raw ? Array.from(raw) : [];\n};\nconst rows = (refId) => context.panel.data.series.filter((frame) => frame.refId === refId).flatMap((frame) => {\n  const fields = frame.fields || [];\n  const numeric = fields.filter((field) => field.type === 'number' && field.name !== 'Time');\n  const valueField = fields.find((field) => field.name === 'Value') || numeric[numeric.length - 1];\n  return fieldValues(valueField).map((value, index) => {\n    const labels = { ...(frame.labels || {}), ...(valueField?.labels || {}) };\n    fields.filter((field) => field !== valueField && field.type !== 'time').forEach((field) => {\n      const candidate = fieldValues(field)[index];\n      if (candidate !== undefined && candidate !== null) labels[field.name] = String(candidate);\n    });\n    return { labels, value: Number(value) };\n  });\n});\nconst cells = new Map();\nconst add = (refId, key) => rows(refId).forEach(({ labels, value }) => {\n  const id = labels.cell_id;\n  if (!id) return;\n  const cell = cells.get(id) || { cell_id: id };\n  Object.assign(cell, labels, { [key]: value });\n  cell.display = cell.cell_label || cell.model || id;\n  cells.set(id, cell);\n});\nrows('completed').forEach(({ labels, value }) => {\n  const id = labels.cell_id;\n  if (!id) return;\n  cells.set(id, { ...labels, cell_id: id, display: labels.cell_label || labels.model || id, completed: value });\n});\nconst data = Array.from(cells.values()).filter((cell) => Number.isFinite(cell.completed));\nconst links = new Map();\nconst addLink = (source, target, value) => {\n  const key = `${source}\\u0000${target}`;\n  const link = links.get(key) || { source, target, value: 0 };\n  link.value += value;\n  links.set(key, link);\n};\ndata.forEach((cell) => {\n  const generation = `Generation ${cell.generation}`;\n  const role = `${generation} \u00b7 ${cell.cell_role || 'unknown'}`;\n  addLink(generation, role, cell.completed);\n  addLink(role, cell.display, cell.completed);\n});\nconst values = Array.from(links.values());\nconst nodes = Array.from(new Set(values.flatMap((link) => [link.source, link.target]))).map((name) => ({ name }));\nreturn {\n  animationDurationUpdate: 800,\n  tooltip: { trigger: 'item', formatter: (params) => params.dataType === 'edge' ? `<b>${params.data.source} \u2192 ${params.data.target}</b><br/>completed shards: ${params.data.value.toFixed(0)}` : `<b>${params.name}</b>` },\n  series: [{ type: 'sankey', data: nodes, links: values, left: 14, right: 150, top: 18, bottom: 18, nodeWidth: 18, nodeGap: 10, draggable: true, emphasis: { focus: 'adjacency' }, lineStyle: { color: 'gradient', curveness: 0.5, opacity: 0.55 }, label: { fontSize: 11 } }]\n};",
         "renderer": "canvas",
         "themeEditor": {
           "config": "{}",
@@ -314,12 +341,12 @@
           "expr": "hyperkit_cell_completed_shards{run_id=~\"$run_id\", benchmark=~\"$benchmark\", generation=~\"$generation\"}",
           "format": "table",
           "instant": true,
-          "legendFormat": "{{cell_id}}",
+          "legendFormat": "{{cell_label}}",
           "range": false,
           "refId": "completed"
         }
       ],
-      "title": "Generation → Topology → Cell Flow",
+      "title": "Generation \u2192 Role \u2192 Model Flow",
       "type": "volkovlabs-echarts-panel"
     },
     {
@@ -327,7 +354,7 @@
         "type": "prometheus",
         "uid": "amp"
       },
-      "description": "Live ordering by resolution rate; dashboard refreshes animate rank changes.",
+      "description": "Human-readable model ordering with paired gap and provider-error context.",
       "fieldConfig": {
         "defaults": {},
         "overrides": []
@@ -346,7 +373,7 @@
         },
         "editorMode": "code",
         "followTheme": true,
-        "getOption": "const fieldValues = (field) => {\n  const raw = field?.values;\n  if (Array.isArray(raw)) return raw;\n  if (raw && typeof raw.toArray === 'function') return raw.toArray();\n  if (raw?.buffer) return Array.from(raw.buffer);\n  return raw ? Array.from(raw) : [];\n};\nconst rows = (refId) => context.panel.data.series.filter((frame) => frame.refId === refId).flatMap((frame) => {\n  const fields = frame.fields || [];\n  const valueField = fields.find((field) => field.name === 'Value') || fields.filter((field) => field.type === 'number' && field.name !== 'Time').slice(-1)[0];\n  return fieldValues(valueField).map((value, index) => {\n    const labels = { ...(frame.labels || {}), ...(valueField?.labels || {}) };\n    fields.filter((field) => field !== valueField && field.type !== 'time').forEach((field) => {\n      const candidate = fieldValues(field)[index];\n      if (candidate !== undefined && candidate !== null) labels[field.name] = String(candidate);\n    });\n    return { labels, value: Number(value) };\n  });\n});\nconst cells = new Map();\nrows('rate').forEach(({ labels, value }) => cells.set(labels.cell_id, { ...labels, rate: value }));\nrows('delta').forEach(({ labels, value }) => { const cell = cells.get(labels.cell_id); if (cell) Object.assign(cell, labels, { delta: value }); });\nconst data = Array.from(cells.values()).filter((cell) => Number.isFinite(cell.rate) && Number.isFinite(cell.delta)).sort((a, b) => a.rate - b.rate);\nconst palette = { star: '#73BF69', ring: '#5794F2', mesh: '#FF9830', tree: '#B877D9' };\nreturn {\n  animationDuration: 800,\n  animationDurationUpdate: 1200,\n  animationEasingUpdate: 'quinticInOut',\n  grid: { left: 118, right: 72, top: 20, bottom: 34 },\n  tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, formatter: (params) => { const cell = params[0].data.meta; return `<b>${cell.cell_id}</b><br/>resolution: ${(cell.rate * 100).toFixed(1)}%<br/>delta: ${(cell.delta * 100).toFixed(1)}pp<br/>generation: ${cell.generation} · topology: ${cell.topology}<br/>k: ${cell.k} · panel: ${cell.panel} · commit: ${cell.commit}`; } },\n  xAxis: { type: 'value', min: 'dataMin', max: 'dataMax', axisLabel: { formatter: (value) => `${(value * 100).toFixed(0)}%` } },\n  yAxis: { type: 'category', data: data.map((cell) => cell.cell_id), inverse: false, axisLabel: { fontSize: 10 } },\n  series: [{ name: 'Resolution rate', type: 'bar', realtimeSort: true, data: data.map((cell) => ({ value: cell.rate, meta: cell, itemStyle: { color: palette[cell.topology] || '#8AB8FF', borderRadius: [0, 4, 4, 0] } })), label: { show: true, position: 'right', formatter: ({ value }) => `${(value * 100).toFixed(1)}%` } }]\n};",
+        "getOption": "const fieldValues = (field) => {\n  const raw = field?.values;\n  if (Array.isArray(raw)) return raw;\n  if (raw && typeof raw.toArray === 'function') return raw.toArray();\n  if (raw?.buffer) return Array.from(raw.buffer);\n  return raw ? Array.from(raw) : [];\n};\nconst rows = (refId) => context.panel.data.series.filter((frame) => frame.refId === refId).flatMap((frame) => {\n  const fields = frame.fields || [];\n  const numeric = fields.filter((field) => field.type === 'number' && field.name !== 'Time');\n  const valueField = fields.find((field) => field.name === 'Value') || numeric[numeric.length - 1];\n  return fieldValues(valueField).map((value, index) => {\n    const labels = { ...(frame.labels || {}), ...(valueField?.labels || {}) };\n    fields.filter((field) => field !== valueField && field.type !== 'time').forEach((field) => {\n      const candidate = fieldValues(field)[index];\n      if (candidate !== undefined && candidate !== null) labels[field.name] = String(candidate);\n    });\n    return { labels, value: Number(value) };\n  });\n});\nconst cells = new Map();\nconst add = (refId, key) => rows(refId).forEach(({ labels, value }) => {\n  const id = labels.cell_id;\n  if (!id) return;\n  const cell = cells.get(id) || { cell_id: id };\n  Object.assign(cell, labels, { [key]: value });\n  cell.display = cell.cell_label || cell.model || id;\n  cells.set(id, cell);\n});\n[['rate', 'rate'], ['delta', 'delta'], ['errors', 'errors'], ['completed', 'completed'], ['planned', 'planned']].forEach(([refId, key]) => add(refId, key));\nconst data = Array.from(cells.values()).filter((cell) => ['rate', 'delta', 'errors', 'completed', 'planned'].every((key) => Number.isFinite(cell[key]))).sort((a, b) => a.rate - b.rate);\nconst colors = { anchor: '#F2495C', open: '#73BF69', compound: '#5794F2' };\nreturn {\n  animationDuration: 800,\n  animationDurationUpdate: 1200,\n  animationEasingUpdate: 'quinticInOut',\n  grid: { left: 145, right: 72, top: 20, bottom: 34 },\n  tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, formatter: (params) => { const cell = params[0].data.meta; return `<b>${cell.display}</b><br/>${cell.model}<br/>resolution: ${(cell.rate * 100).toFixed(1)}% \u00b7 gap: ${(cell.delta * 100).toFixed(1)}pp<br/>progress: ${cell.completed}/${cell.planned} \u00b7 errors: ${cell.errors}`; } },\n  xAxis: { type: 'value', min: 0, max: 1, axisLabel: { formatter: (value) => `${(value * 100).toFixed(0)}%` } },\n  yAxis: { type: 'category', data: data.map((cell) => cell.display), axisLabel: { fontSize: 10 } },\n  series: [{ name: 'Resolution rate', type: 'bar', realtimeSort: true, data: data.map((cell) => ({ value: cell.rate, meta: cell, itemStyle: { color: colors[cell.cell_role] || '#8AB8FF', borderRadius: [0, 4, 4, 0] } })), label: { show: true, position: 'right', formatter: ({ value }) => `${(value * 100).toFixed(1)}%` } }]\n};",
         "renderer": "canvas",
         "themeEditor": {
           "config": "{}",
@@ -365,7 +392,7 @@
           "expr": "hyperkit_cell_resolution_rate{run_id=~\"$run_id\", benchmark=~\"$benchmark\", generation=~\"$generation\"}",
           "format": "table",
           "instant": true,
-          "legendFormat": "{{cell_id}}",
+          "legendFormat": "{{cell_label}}",
           "range": false,
           "refId": "rate"
         },
@@ -374,12 +401,39 @@
           "expr": "hyperkit_cell_delta_vs_best_single{run_id=~\"$run_id\", benchmark=~\"$benchmark\", generation=~\"$generation\"}",
           "format": "table",
           "instant": true,
-          "legendFormat": "{{cell_id}}",
+          "legendFormat": "{{cell_label}}",
           "range": false,
           "refId": "delta"
+        },
+        {
+          "editorMode": "code",
+          "expr": "hyperkit_cell_errors{run_id=~\"$run_id\", benchmark=~\"$benchmark\", generation=~\"$generation\"}",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "{{cell_label}}",
+          "range": false,
+          "refId": "errors"
+        },
+        {
+          "editorMode": "code",
+          "expr": "hyperkit_cell_completed_shards{run_id=~\"$run_id\", benchmark=~\"$benchmark\", generation=~\"$generation\"}",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "{{cell_label}}",
+          "range": false,
+          "refId": "completed"
+        },
+        {
+          "editorMode": "code",
+          "expr": "hyperkit_cell_planned_shards{run_id=~\"$run_id\", benchmark=~\"$benchmark\", generation=~\"$generation\"}",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "{{cell_label}}",
+          "range": false,
+          "refId": "planned"
         }
       ],
-      "title": "Live Cell Ranking",
+      "title": "Live Model Ranking",
       "type": "volkovlabs-echarts-panel"
     },
     {
@@ -387,7 +441,7 @@
         "type": "prometheus",
         "uid": "amp"
       },
-      "description": "Wilson 95% confidence intervals with point estimates, sorted by resolution rate.",
+      "description": "Wilson 95% intervals by named model, colored by anchor/open role.",
       "fieldConfig": {
         "defaults": {},
         "overrides": []
@@ -406,7 +460,7 @@
         },
         "editorMode": "code",
         "followTheme": true,
-        "getOption": "const fieldValues = (field) => {\n  const raw = field?.values;\n  if (Array.isArray(raw)) return raw;\n  if (raw && typeof raw.toArray === 'function') return raw.toArray();\n  if (raw?.buffer) return Array.from(raw.buffer);\n  return raw ? Array.from(raw) : [];\n};\nconst rows = (refId) => context.panel.data.series.filter((frame) => frame.refId === refId).flatMap((frame) => {\n  const fields = frame.fields || [];\n  const valueField = fields.find((field) => field.name === 'Value') || fields.filter((field) => field.type === 'number' && field.name !== 'Time').slice(-1)[0];\n  return fieldValues(valueField).map((value, index) => {\n    const labels = { ...(frame.labels || {}), ...(valueField?.labels || {}) };\n    fields.filter((field) => field !== valueField && field.type !== 'time').forEach((field) => {\n      const candidate = fieldValues(field)[index];\n      if (candidate !== undefined && candidate !== null) labels[field.name] = String(candidate);\n    });\n    return { labels, value: Number(value) };\n  });\n});\nconst cells = new Map();\nconst add = (refId, key) => rows(refId).forEach(({ labels, value }) => {\n  const id = labels.cell_id;\n  if (!id) return;\n  const cell = cells.get(id) || { cell_id: id };\n  Object.assign(cell, labels, { [key]: value });\n  cells.set(id, cell);\n});\n[['rate', 'rate'], ['low', 'low'], ['high', 'high']].forEach(([refId, key]) => add(refId, key));\nconst data = Array.from(cells.values()).filter((cell) => ['rate', 'low', 'high'].every((key) => Number.isFinite(cell[key]))).sort((a, b) => a.rate - b.rate);\nconst colors = { star: '#73BF69', ring: '#5794F2', mesh: '#FF9830', tree: '#B877D9' };\nreturn {\n  animationDurationUpdate: 700,\n  grid: { left: 120, right: 28, top: 20, bottom: 42 },\n  tooltip: { trigger: 'item', formatter: ({ data: item }) => { const cell = item.meta; return `<b>${cell.cell_id}</b><br/>estimate: ${(cell.rate * 100).toFixed(1)}%<br/>Wilson 95% CI: ${(cell.low * 100).toFixed(1)}–${(cell.high * 100).toFixed(1)}%<br/>generation: ${cell.generation} · topology: ${cell.topology}<br/>k: ${cell.k} · panel: ${cell.panel} · commit: ${cell.commit}`; } },\n  xAxis: { type: 'value', name: 'Resolution rate (Wilson 95% CI)', nameLocation: 'middle', nameGap: 30, min: 'dataMin', max: 'dataMax', axisLabel: { formatter: (value) => `${(value * 100).toFixed(0)}%` } },\n  yAxis: { type: 'category', data: data.map((cell) => cell.cell_id), axisLabel: { fontSize: 10 } },\n  series: [\n    {\n      name: 'Wilson interval',\n      type: 'custom',\n      renderItem: (params, api) => {\n        const low = api.coord([api.value(0), api.value(2)]);\n        const high = api.coord([api.value(1), api.value(2)]);\n        const half = Math.max(4, api.size([0, 1])[1] * 0.22);\n        const style = api.style({ stroke: api.value(3), lineWidth: 2.2 });\n        return { type: 'group', children: [\n          { type: 'line', shape: { x1: low[0], y1: low[1], x2: high[0], y2: high[1] }, style },\n          { type: 'line', shape: { x1: low[0], y1: low[1] - half, x2: low[0], y2: low[1] + half }, style },\n          { type: 'line', shape: { x1: high[0], y1: high[1] - half, x2: high[0], y2: high[1] + half }, style }\n        ] };\n      },\n      encode: { x: [0, 1], y: 2 },\n      data: data.map((cell, index) => ({ value: [cell.low, cell.high, index, colors[cell.topology] || '#8AB8FF'], meta: cell }))\n    },\n    { name: 'Point estimate', type: 'scatter', symbolSize: 10, z: 4, data: data.map((cell, index) => ({ value: [cell.rate, index], meta: cell, itemStyle: { color: colors[cell.topology] || '#8AB8FF', borderColor: '#ffffff', borderWidth: 1.2 } })) }\n  ]\n};",
+        "getOption": "const fieldValues = (field) => {\n  const raw = field?.values;\n  if (Array.isArray(raw)) return raw;\n  if (raw && typeof raw.toArray === 'function') return raw.toArray();\n  if (raw?.buffer) return Array.from(raw.buffer);\n  return raw ? Array.from(raw) : [];\n};\nconst rows = (refId) => context.panel.data.series.filter((frame) => frame.refId === refId).flatMap((frame) => {\n  const fields = frame.fields || [];\n  const numeric = fields.filter((field) => field.type === 'number' && field.name !== 'Time');\n  const valueField = fields.find((field) => field.name === 'Value') || numeric[numeric.length - 1];\n  return fieldValues(valueField).map((value, index) => {\n    const labels = { ...(frame.labels || {}), ...(valueField?.labels || {}) };\n    fields.filter((field) => field !== valueField && field.type !== 'time').forEach((field) => {\n      const candidate = fieldValues(field)[index];\n      if (candidate !== undefined && candidate !== null) labels[field.name] = String(candidate);\n    });\n    return { labels, value: Number(value) };\n  });\n});\nconst cells = new Map();\nconst add = (refId, key) => rows(refId).forEach(({ labels, value }) => {\n  const id = labels.cell_id;\n  if (!id) return;\n  const cell = cells.get(id) || { cell_id: id };\n  Object.assign(cell, labels, { [key]: value });\n  cell.display = cell.cell_label || cell.model || id;\n  cells.set(id, cell);\n});\n[['rate', 'rate'], ['low', 'low'], ['high', 'high'], ['errors', 'errors']].forEach(([refId, key]) => add(refId, key));\nconst data = Array.from(cells.values()).filter((cell) => ['rate', 'low', 'high', 'errors'].every((key) => Number.isFinite(cell[key]))).sort((a, b) => a.rate - b.rate);\nconst colors = { anchor: '#F2495C', open: '#73BF69', compound: '#5794F2' };\nreturn {\n  animationDurationUpdate: 700,\n  grid: { left: 145, right: 28, top: 20, bottom: 42 },\n  tooltip: { trigger: 'item', formatter: ({ data: item }) => { const cell = item.meta; return `<b>${cell.display}</b><br/>${cell.model}<br/>estimate: ${(cell.rate * 100).toFixed(1)}%<br/>Wilson 95% CI: ${(cell.low * 100).toFixed(1)}\u2013${(cell.high * 100).toFixed(1)}%<br/>role: ${cell.cell_role} \u00b7 errors: ${cell.errors}`; } },\n  xAxis: { type: 'value', name: 'Resolution rate (Wilson 95% CI)', nameLocation: 'middle', nameGap: 30, min: 0, max: 1, axisLabel: { formatter: (value) => `${(value * 100).toFixed(0)}%` } },\n  yAxis: { type: 'category', data: data.map((cell) => cell.display), axisLabel: { fontSize: 10 } },\n  series: [\n    {\n      name: 'Wilson interval',\n      type: 'custom',\n      renderItem: (params, api) => {\n        const low = api.coord([api.value(0), api.value(2)]);\n        const high = api.coord([api.value(1), api.value(2)]);\n        const half = Math.max(4, api.size([0, 1])[1] * 0.22);\n        const style = api.style({ stroke: api.value(3), lineWidth: 2.2 });\n        return { type: 'group', children: [\n          { type: 'line', shape: { x1: low[0], y1: low[1], x2: high[0], y2: high[1] }, style },\n          { type: 'line', shape: { x1: low[0], y1: low[1] - half, x2: low[0], y2: low[1] + half }, style },\n          { type: 'line', shape: { x1: high[0], y1: high[1] - half, x2: high[0], y2: high[1] + half }, style }\n        ] };\n      },\n      encode: { x: [0, 1], y: 2 },\n      data: data.map((cell, index) => ({ value: [cell.low, cell.high, index, colors[cell.cell_role] || '#8AB8FF'], meta: cell }))\n    },\n    { name: 'Point estimate', type: 'scatter', symbolSize: 10, z: 4, data: data.map((cell, index) => ({ value: [cell.rate, index], meta: cell, itemStyle: { color: colors[cell.cell_role] || '#8AB8FF', borderColor: '#ffffff', borderWidth: 1.2 } })) }\n  ]\n};",
         "renderer": "canvas",
         "themeEditor": {
           "config": "{}",
@@ -425,7 +479,7 @@
           "expr": "hyperkit_cell_resolution_rate{run_id=~\"$run_id\", benchmark=~\"$benchmark\", generation=~\"$generation\"}",
           "format": "table",
           "instant": true,
-          "legendFormat": "{{cell_id}}",
+          "legendFormat": "{{cell_label}}",
           "range": false,
           "refId": "rate"
         },
@@ -434,7 +488,7 @@
           "expr": "hyperkit_cell_wilson_low{run_id=~\"$run_id\", benchmark=~\"$benchmark\", generation=~\"$generation\"}",
           "format": "table",
           "instant": true,
-          "legendFormat": "{{cell_id}}",
+          "legendFormat": "{{cell_label}}",
           "range": false,
           "refId": "low"
         },
@@ -443,12 +497,21 @@
           "expr": "hyperkit_cell_wilson_high{run_id=~\"$run_id\", benchmark=~\"$benchmark\", generation=~\"$generation\"}",
           "format": "table",
           "instant": true,
-          "legendFormat": "{{cell_id}}",
+          "legendFormat": "{{cell_label}}",
           "range": false,
           "refId": "high"
+        },
+        {
+          "editorMode": "code",
+          "expr": "hyperkit_cell_errors{run_id=~\"$run_id\", benchmark=~\"$benchmark\", generation=~\"$generation\"}",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "{{cell_label}}",
+          "range": false,
+          "refId": "errors"
         }
       ],
-      "title": "Resolution Confidence Forest",
+      "title": "Model Resolution Confidence",
       "type": "volkovlabs-echarts-panel"
     }
   ],
@@ -540,5 +603,5 @@
   "timezone": "browser",
   "title": "Hypergrid Dynamics",
   "uid": "hyperkit-hypergrid-dynamics",
-  "version": 1
+  "version": 2
 }

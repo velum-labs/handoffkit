@@ -46,7 +46,7 @@
         {
           "editorMode": "code",
           "expr": "hyperkit_cell_completed_shards{run_id=~\"$run_id\", benchmark=~\"$benchmark\", generation=~\"$generation\", cell_id=~\"$cell_id\"} / hyperkit_cell_planned_shards{run_id=~\"$run_id\", benchmark=~\"$benchmark\", generation=~\"$generation\", cell_id=~\"$cell_id\"}",
-          "legendFormat": "{{cell_id}}",
+          "legendFormat": "{{cell_label}}",
           "range": false,
           "instant": true,
           "refId": "A"
@@ -92,7 +92,7 @@
         {
           "editorMode": "code",
           "expr": "hyperkit_cell_resolution_rate{run_id=~\"$run_id\", benchmark=~\"$benchmark\", generation=~\"$generation\", cell_id=~\"$cell_id\"}",
-          "legendFormat": "{{cell_id}}",
+          "legendFormat": "{{cell_label}}",
           "range": false,
           "instant": true,
           "refId": "A"
@@ -138,7 +138,7 @@
         {
           "editorMode": "code",
           "expr": "hyperkit_cell_cost_usd{run_id=~\"$run_id\", benchmark=~\"$benchmark\", generation=~\"$generation\", cell_id=~\"$cell_id\"}",
-          "legendFormat": "{{cell_id}}",
+          "legendFormat": "{{cell_label}}",
           "range": false,
           "instant": true,
           "refId": "A"
@@ -184,7 +184,7 @@
         {
           "editorMode": "code",
           "expr": "hyperkit_cell_latency_p95_seconds{run_id=~\"$run_id\", benchmark=~\"$benchmark\", generation=~\"$generation\", cell_id=~\"$cell_id\"}",
-          "legendFormat": "{{cell_id}}",
+          "legendFormat": "{{cell_label}}",
           "range": false,
           "instant": true,
           "refId": "A"
@@ -349,7 +349,7 @@
         {
           "editorMode": "code",
           "expr": "hyperkit_cell_resolution_rate{run_id=~\"$run_id\", benchmark=~\"$benchmark\", generation=~\"$generation\", cell_id=~\"$cell_id\"}",
-          "legendFormat": "rate {{cell_id}}",
+          "legendFormat": "rate {{cell_label}}",
           "range": true,
           "instant": false,
           "refId": "A"
@@ -357,7 +357,7 @@
         {
           "editorMode": "code",
           "expr": "hyperkit_cell_wilson_low{run_id=~\"$run_id\", benchmark=~\"$benchmark\", generation=~\"$generation\", cell_id=~\"$cell_id\"}",
-          "legendFormat": "Wilson low {{cell_id}}",
+          "legendFormat": "Wilson low {{cell_label}}",
           "range": true,
           "instant": false,
           "refId": "B"
@@ -365,7 +365,7 @@
         {
           "editorMode": "code",
           "expr": "hyperkit_cell_wilson_high{run_id=~\"$run_id\", benchmark=~\"$benchmark\", generation=~\"$generation\", cell_id=~\"$cell_id\"}",
-          "legendFormat": "Wilson high {{cell_id}}",
+          "legendFormat": "Wilson high {{cell_label}}",
           "range": true,
           "instant": false,
           "refId": "C"

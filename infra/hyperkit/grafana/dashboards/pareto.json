@@ -207,7 +207,7 @@
         {
           "editorMode": "code",
           "expr": "hyperkit_cell_resolution_rate{run_id=~\"$run_id\", benchmark=~\"$benchmark\", generation=~\"$generation\"}",
-          "legendFormat": "{{cell_id}}",
+          "legendFormat": "{{cell_label}}",
           "range": false,
           "instant": true,
           "refId": "A"

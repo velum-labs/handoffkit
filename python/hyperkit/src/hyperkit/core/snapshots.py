@@ -24,6 +24,8 @@ class CellSnapshot(BaseModel):
     generation: int
     cell_id: str
     label: str
+    model: str = ""
+    cell_role: str = ""
     benchmark: str
     sut_kind: str
     topology_hash: str
@@ -59,6 +61,9 @@ class CellSnapshot(BaseModel):
             "hyperkit.generation": self.generation,
             "hyperkit.benchmark": self.benchmark,
             "hyperkit.cell.id": self.cell_id,
+            "hyperkit.cell.label": self.label,
+            "hyperkit.cell.role": self.cell_role,
+            "hyperkit.model": self.model,
             "hyperkit.topology.hash": self.topology_hash,
             "hyperkit.topology": self.topology,
             "hyperkit.k": self.k,
@@ -72,6 +77,9 @@ class CellSnapshot(BaseModel):
             "generation": self.generation,
             "benchmark": self.benchmark,
             "cell_id": self.cell_id,
+            "cell_label": self.label,
+            "cell_role": self.cell_role,
+            "model": self.model,
             "topology_hash": self.topology_hash,
             "topology": self.topology,
             "k": self.k,
@@ -154,6 +162,14 @@ def _snapshot(
         generation=generation,
         cell_id=cell.cell_id,
         label=cell.label or cell.cell_id,
+        model=_axis(params, "model"),
+        cell_role=(
+            "anchor"
+            if (cell.label or "").startswith("anchor-")
+            else "open"
+            if cell.sut.kind == "solo-model"
+            else "compound"
+        ),
         benchmark=cell.benchmark,
         sut_kind=cell.sut.kind,
         topology_hash=cell.sut.hash,

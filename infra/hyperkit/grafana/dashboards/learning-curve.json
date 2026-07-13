@@ -51,7 +51,7 @@
         {
           "editorMode": "code",
           "expr": "hyperkit_cell_resolution_rate{run_id=~\"$run_id\", benchmark=~\"$benchmark\", generation=~\"$generation\", cell_id=~\"$cell_id\"}",
-          "legendFormat": "{{cell_id}} rate",
+          "legendFormat": "{{cell_label}} rate",
           "range": true,
           "instant": false,
           "refId": "A"
@@ -59,7 +59,7 @@
         {
           "editorMode": "code",
           "expr": "hyperkit_cell_wilson_low{run_id=~\"$run_id\", benchmark=~\"$benchmark\", generation=~\"$generation\", cell_id=~\"$cell_id\"}",
-          "legendFormat": "{{cell_id}} Wilson low",
+          "legendFormat": "{{cell_label}} Wilson low",
           "range": true,
           "instant": false,
           "refId": "B"
@@ -67,7 +67,7 @@
         {
           "editorMode": "code",
           "expr": "hyperkit_cell_wilson_high{run_id=~\"$run_id\", benchmark=~\"$benchmark\", generation=~\"$generation\", cell_id=~\"$cell_id\"}",
-          "legendFormat": "{{cell_id}} Wilson high",
+          "legendFormat": "{{cell_label}} Wilson high",
           "range": true,
           "instant": false,
           "refId": "C"
@@ -119,7 +119,7 @@
         {
           "editorMode": "code",
           "expr": "hyperkit_cell_completed_shards{run_id=~\"$run_id\", benchmark=~\"$benchmark\", generation=~\"$generation\", cell_id=~\"$cell_id\"}",
-          "legendFormat": "{{cell_id}} completed",
+          "legendFormat": "{{cell_label}} completed",
           "range": true,
           "instant": false,
           "refId": "A"

@@ -64,6 +64,10 @@ def test_snapshots_rank_delta_pareto_and_progress() -> None:
     assert by_label["fused"].metric_attributes()["hyperkit.generation"] == 1
     assert by_label["fused"].metric_attributes()["run_id"] == "run"
     assert by_label["fused"].metric_attributes()["cell_id"] == fused.cell_id
+    assert by_label["fused"].metric_attributes()["cell_label"] == "fused"
+    assert by_label["fused"].metric_attributes()["cell_role"] == "compound"
+    assert by_label["solo"].metric_attributes()["cell_role"] == "open"
+    assert by_label["solo"].metric_attributes()["model"] == "solo"
 
 
 class _Recorder:

@@ -54,11 +54,11 @@ SUPPORTED_PANEL_TYPES = {
 }
 EXPECTED_BUSINESS_CHARTS = {
     "Quality / Cost Bubble Explorer": ("type: 'scatter'", "dataZoom", "toolbox"),
-    "Cell Trade-space Parallel Coordinates": ("type: 'parallel'", "parallelAxis"),
-    "Topology × K Resolution Heatmap": ("type: 'heatmap'", "visualMap"),
-    "Generation → Topology → Cell Flow": ("type: 'sankey'", "links"),
-    "Live Cell Ranking": ("type: 'bar'", "animationDurationUpdate"),
-    "Resolution Confidence Forest": ("type: 'custom'", "renderItem"),
+    "Model Trade-space Parallel Coordinates": ("type: 'parallel'", "parallelAxis"),
+    "Model Resolution Heatmap": ("type: 'heatmap'", "visualMap"),
+    "Generation → Role → Model Flow": ("type: 'sankey'", "links"),
+    "Live Model Ranking": ("type: 'bar'", "animationDurationUpdate"),
+    "Model Resolution Confidence": ("type: 'custom'", "renderItem"),
 }
 UNSAFE_CHART_CODE_PATTERN = re.compile(
     r"\b(?:eval|fetch|XMLHttpRequest|WebSocket|axios)\s*\(|https?://",
