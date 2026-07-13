@@ -37,7 +37,7 @@ _resolved = _meter.create_counter("hyperkit.shards.resolved")
 _errors = _meter.create_counter("hyperkit.shards.errors")
 _running = _meter.create_up_down_counter("hyperkit.shards.running")
 _latency = _meter.create_histogram("hyperkit.shard.latency", unit="s")
-_cost = _meter.create_counter("hyperkit.cost.usd", unit="USD")
+_cost = _meter.create_counter("hyperkit.cost.usd")
 _snapshots: dict[str, CellSnapshot] = {}
 _cell_gauges: list[Any] = []
 
@@ -92,7 +92,7 @@ def configure(service_name: str = "hyperkit-runner") -> None:
         _errors = _meter.create_counter("hyperkit.shards.errors")
         _running = _meter.create_up_down_counter("hyperkit.shards.running")
         _latency = _meter.create_histogram("hyperkit.shard.latency", unit="s")
-        _cost = _meter.create_counter("hyperkit.cost.usd", unit="USD")
+        _cost = _meter.create_counter("hyperkit.cost.usd")
         _cell_gauges = _create_cell_gauges(_meter)
 
 
