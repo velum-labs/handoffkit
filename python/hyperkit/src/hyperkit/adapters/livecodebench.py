@@ -19,8 +19,12 @@ Harness-side kernels are cell coordinates via ``Cell.params``:
 Problem data comes from a local store directory (``HYPERKIT_LCB_DIR``, default
 ``~/.cache/hyperkit/livecodebench``) with one ``<question_id>.json`` per
 instance holding the raw dataset row fields; see
-``analysis/hypergrid/build_lcb_store.py`` for the builder. The adapter is
-SUT-agnostic and never imports fusionkit.
+``analysis/hypergrid/build_lcb_store.py`` for the builder. When
+``HYPERKIT_LCB_S3_URI`` is set (``s3://bucket/prefix``), a missing problem
+file is fetched lazily from that prefix into the local store -- this is how
+cloud runners get exactly the one problem their shard needs without baking
+the multi-GB store into the image. The adapter is SUT-agnostic and never
+imports fusionkit.
 """
 
 from __future__ import annotations
@@ -282,7 +286,9 @@ class LivecodebenchAdapter:
         return TextManifest(ref)
 
     def resource_profile(self) -> ResourceProfile:
-        return ResourceProfile(vcpu=2.0, memory_gb=2.0, needs_docker=False, wall_clock_s=3600)
+        # 2 vCPU / 4 GB is the smallest Fargate-valid shape with headroom for
+        # an in-container fusionkit-serve SUT next to the harness.
+        return ResourceProfile(vcpu=2.0, memory_gb=4.0, needs_docker=False, wall_clock_s=3600)
 
     def grader(self) -> LivecodebenchGrader:
         return LivecodebenchGrader()
@@ -290,8 +296,11 @@ class LivecodebenchAdapter:
     def load_problem(self, instance_id: str) -> dict[str, Any]:
         path = _store_dir() / f"{instance_id}.json"
         if not path.exists():
+            _fetch_problem_from_s3(instance_id, path)
+        if not path.exists():
             raise FileNotFoundError(
-                f"LCB problem store missing {path}; run analysis/hypergrid/build_lcb_store.py"
+                f"LCB problem store missing {path}; run analysis/hypergrid/build_lcb_store.py "
+                "or set HYPERKIT_LCB_S3_URI"
             )
         return json.loads(path.read_text(encoding="utf-8"))
 
@@ -438,6 +447,30 @@ class LivecodebenchAdapter:
     def parse_report(self, report: dict[str, Any], instances: Sequence[str]) -> dict[str, bool]:
         outcomes = report.get("outcomes", {})
         return {inst: bool(outcomes.get(inst, False)) for inst in instances}
+
+
+def _fetch_problem_from_s3(instance_id: str, destination: Path) -> None:
+    """Best-effort lazy fetch of one problem file from HYPERKIT_LCB_S3_URI."""
+
+    uri = os.environ.get("HYPERKIT_LCB_S3_URI", "").rstrip("/")
+    if not uri.startswith("s3://"):
+        return
+    try:  # boto3 ships via the hyperkit[aws] extra; local runs may lack it
+        from importlib import import_module
+
+        boto3 = import_module("boto3")
+    except ModuleNotFoundError:
+        return
+    bucket, _, prefix = uri.removeprefix("s3://").partition("/")
+    key = f"{prefix}/{instance_id}.json" if prefix else f"{instance_id}.json"
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    tmp = destination.with_suffix(".tmp")
+    try:
+        boto3.client("s3").download_file(bucket, key, str(tmp))
+    except Exception:
+        tmp.unlink(missing_ok=True)
+        return
+    tmp.replace(destination)
 
 
 def _resolve_api_key(base_url: str, params: dict[str, Any]) -> str | None:
