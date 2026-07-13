@@ -232,6 +232,9 @@ def _cell_total_callback(_options: CallbackOptions):
                 "hyperkit.sweep.id": sweep_id,
                 "hyperkit.generation": generation,
                 "hyperkit.benchmark": benchmark,
+                "run_id": sweep_id,
+                "generation": generation,
+                "benchmark": benchmark,
             },
         )
         for (sweep_id, generation, benchmark), count in grouped.items()
