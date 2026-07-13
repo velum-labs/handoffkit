@@ -86,3 +86,7 @@ as a hosted feature. Use at your own risk.
 - The registry preset lives in `spec/registry/providers.json`
   (`providers.cliproxy`); regenerate bindings with
   `node scripts/generate-registry.mjs` after editing.
+- The upstream source is vendored read-only at `references/cliproxyapi/`
+  (pinned to the same commit as release v7.2.72, tracked via trackcn — see
+  `references/THIRD_PARTY.md`), so the wire formats, OAuth flows, and rotation
+  behavior we depend on can be studied and diffed offline when bumping the pin.

@@ -175,6 +175,7 @@ const requiredFiles = [
   "references/THIRD_PARTY.md",
   "references/opencode/LICENSE",
   "references/t3code/LICENSE",
+  "references/cliproxyapi/LICENSE",
   "CHANGELOG.md",
   "examples/manifest.json",
   "packages/example-utils/src/manifest.ts",
