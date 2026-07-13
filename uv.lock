@@ -25,6 +25,7 @@ members = [
 
 [manifest.dependency-groups]
 dev = [
+    { name = "boto3", specifier = ">=1.43.37" },
     { name = "coverage", specifier = ">=7.15.0" },
     { name = "datasets", specifier = "<6" },
     { name = "httpx", specifier = ">=0.28.1" },
