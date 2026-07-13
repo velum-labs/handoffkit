@@ -96,7 +96,8 @@ working directory, and does not replace the normal `fusionkit` binary. Set
 - `fusionkit codex | claude | cursor` — launch that agent backed by the panel.
 - `fusionkit serve` — just run the gateway and print setup snippets for any tool.
 - `fusionkit fusion [tool]` — the generic launcher (interactive picker on a TTY).
-- `fusionkit fusion stop` — reap portless singleton services (router, dashboard) left running by prior runs.
+- `fusionkit stop` — reap portless singleton services (router, dashboard) left running by prior runs (`fusionkit fusion stop` does the same).
+- `fusionkit proxy <serve|add|status|stop>` — long-lived Claude Code / Codex subscription pooling proxy.
 - `fusionkit init` — scaffold the committed `.fusionkit/` folder for this repo.
 - `fusionkit setup` — pre-provision the Python fusion engine so the first run is instant.
 - `fusionkit doctor` — check prerequisites with fix hints (`--provision` warms the engine too).
