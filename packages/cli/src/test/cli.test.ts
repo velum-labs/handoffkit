@@ -255,14 +255,16 @@ test("help prints usage and lists the top-level commands", () => {
   const result = fusionkit(["help"]);
   assert.equal(result.status, 0);
   assert.match(result.stdout, /real model fusion behind your coding agent/);
-  for (const command of ["codex", "claude", "cursor", "serve", "fusion", "init", "ensemble", "local"]) {
+  for (const command of ["codex", "claude", "cursor", "serve", "opencode", "fusion", "init", "ensemble"]) {
     assert.match(result.stdout, new RegExp(`\\b${command}\\b`));
   }
+  assert.doesNotMatch(result.stdout, /^  local\b/m);
   assertCommandOrder(result.stdout, [
     "codex",
     "claude",
     "cursor",
     "serve",
+    "opencode",
     "fusion",
     "init",
     "setup",
@@ -273,7 +275,6 @@ test("help prints usage and lists the top-level commands", () => {
     "sessions",
     "models",
     "ensemble",
-    "local",
     "completion",
     "runtime",
     "version"
@@ -312,7 +313,7 @@ test("completion bash includes top-level commands from the Commander tree", () =
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /complete -F _fusionkit_completion fusionkit/);
   assert.match(result.stdout, /fusionkit __complete/);
-  for (const command of ["codex", "claude", "cursor", "serve", "fusion", "doctor", "ensemble", "local"]) {
+  for (const command of ["codex", "claude", "cursor", "serve", "opencode", "fusion", "doctor", "ensemble"]) {
     assert.match(result.stdout, new RegExp(`\\b${command}\\b`));
   }
 });
@@ -489,30 +490,41 @@ test("gateway acp-registry rejects an unknown action", () => {
   assert.notEqual(result.status, 0);
 });
 
-test("local without a tool prints usage and fails", () => {
+test("the removed local subcommand is rejected", () => {
   const result = fusionkit(["local"]);
   assert.equal(result.status, 1);
-  assert.match(result.stderr, /usage: fusionkit local </);
+  assert.match(result.stderr, /unknown command ['"]local['"]/);
 });
 
-test("local rejects an unknown tool", () => {
-  const result = fusionkit(["local", "frobnicate"]);
+test("direct mode rejects the contradictory local-panel flag", () => {
+  const result = fusionkit(["codex", "--direct", "--local"]);
   assert.equal(result.status, 1);
-  assert.match(result.stderr, /usage: fusionkit local </);
+  assert.match(result.stderr, /--direct cannot be combined with --local or --no-local/);
 });
 
-test("local help documents the flags-before-tool contract", () => {
-  const result = fusionkit(["local", "--help"]);
-  assert.equal(result.status, 0);
-  assert.match(result.stdout, /must precede the tool name/);
-  assert.match(result.stdout, /single local MLX model \(no fusion\)/);
-  assert.match(result.stdout, /fusionkit codex --local/);
+test("direct mode rejects fusion-only options instead of ignoring them", () => {
+  const result = fusionkit(["codex", "--direct", "--model", "gpt=openai:gpt-5.5"]);
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /--model\/--models cannot be combined with --direct/);
+});
+
+test("direct-only tools require the direct flag", () => {
+  const result = fusionkit(["opencode"]);
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /opencode only supports direct mode/);
+});
+
+test("public URL is scoped to direct mode", () => {
+  const result = fusionkit(["codex", "--public-url", "https://example.test"]);
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /--public-url requires --direct/);
 });
 
 test("fusion help documents the flags-before-tool contract", () => {
   const result = fusionkit(["fusion", "--help"]);
   assert.equal(result.status, 0);
   assert.match(result.stdout, /must precede the tool name/);
+  assert.match(result.stdout, /--direct\s+back the tool with one local model directly/);
   assert.match(result.stdout, /run the panel on local MLX models \(Apple Silicon\s+only\) instead of cloud providers/);
 });
 

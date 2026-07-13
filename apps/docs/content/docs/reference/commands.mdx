@@ -88,14 +88,14 @@ fusionkit codex --continue
 fusionkit codex --resume 1a2b3c
 ```
 
-## Model cache and local commands
+## Model cache and direct mode
 
 | Command | What it does |
 | --- | --- |
 | `fusionkit models list` | Show the curated MLX catalog, downloaded state, sizes, and RAM fit. |
 | `fusionkit models download <model>` | Download a local model. |
 | `fusionkit models rm <model>` | Remove a downloaded local model. |
-| `fusionkit local <codex\|claude\|cursor\|opencode\|serve>` | Back a vendor agent with one local OpenAI-compatible model and no fusion. Use `--local` on launch commands for a fused local panel. |
+| `fusionkit <tool> --direct` | Back a vendor agent with one local OpenAI-compatible model and no fusion. Use `--local` instead for a fused local panel. |
 
 ## Advanced runtime command
 
@@ -105,6 +105,7 @@ fusionkit codex --resume 1a2b3c
 
 | Flag | Effect |
 | --- | --- |
+| `--direct` | Bypass the panel, judge, and synthesis and use one local model directly. |
 | `--local` / `--no-local` | Use the on-device MLX panel, or override a `local: true` config default. |
 | `--model ID=PROVIDER:MODEL` | Define a panel member. Repeat for multiple members. |
 | `--model-endpoint ID=URL` | Use a pre-running OpenAI-compatible endpoint as a panel member. |

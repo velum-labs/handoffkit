@@ -10,24 +10,18 @@ import type { PublicTunnel, StartPublicTunnelOptions } from "./shared/tunnel.js"
 import { toolRegistry } from "./tools.js";
 
 /**
- * `fusionkit local <tool>` — back a vendor agent harness with a locally running
- * model, with no change to how the tool is invoked. Each launcher ensures the
- * model gateway is up, applies the tool's native configuration shim
- * (environment, config file, or — for Cursor — IDE settings + a public
+ * `fusionkit <tool> --direct` — back a vendor agent harness with one locally
+ * running model, with no change to how the tool is invoked. Each launcher
+ * ensures the model gateway is up, applies the tool's native configuration
+ * shim (environment, config file, or — for Cursor — IDE settings + a public
  * tunnel), then execs the real binary with the user's own arguments.
  *
  * The per-tool launch + shim logic now lives in the `@fusionkit/tool-*`
  * packages; this dispatcher wires a started gateway into a ToolLaunchContext.
  */
 
-/** A launchable local tool id from the registry, or the `serve` pseudo-tool. */
-export type LocalTool = string;
-
-/** Launchable local tools (registry-derived) plus the `serve` pseudo-tool. */
-export const LOCAL_TOOLS: readonly LocalTool[] = [
-  ...toolRegistry.launchableLocal().map((tool) => tool.id),
-  "serve"
-];
+/** A tool launched directly against one local model, or the `serve` pseudo-tool. */
+export type DirectTool = string;
 
 function backendModel(config: BackendConfig): string {
   return config.kind === "mlx" ? config.model : config.defaultModel ?? LOCAL_MODEL_LABEL;
@@ -55,7 +49,7 @@ async function startLocalGateway(config: BackendConfig, authToken?: string): Pro
   return { url: gateway.url(), close: () => gateway.close() };
 }
 
-export type RunLocalOptions = {
+export type RunDirectOptions = {
   /** Public URL for Cursor's tunnel (or FUSIONKIT_PUBLIC_URL). */
   publicUrl?: string;
   /** Cursor only: wire the desktop IDE to the gateway via the local desktop proxy. */
@@ -75,10 +69,10 @@ export type RunLocalOptions = {
  * Start the gateway, apply the tool's shim, and exec the real binary. Returns
  * the child's exit code. `serve` runs the gateway in the foreground.
  */
-export async function runLocal(
-  tool: LocalTool,
+export async function runDirect(
+  tool: DirectTool,
   toolArgs: string[],
-  options: RunLocalOptions = {}
+  options: RunDirectOptions = {}
 ): Promise<number> {
   const log = options.log ?? ((line: string) => uiStream().write(`${line}\n`));
   const config = options.config ?? resolveBackendConfig();
@@ -112,7 +106,7 @@ export async function runLocal(
         // Degrade to the manual-tunnel instructions the launcher prints when
         // no public URL is available, instead of failing the whole launch.
         const first = (error instanceof Error ? error.message : String(error)).split("\n")[0];
-        log(`fusionkit local: automatic tunnel unavailable (${first})`);
+        log(`fusionkit --direct: automatic tunnel unavailable (${first})`);
       }
     }
     if (tool === "serve") {

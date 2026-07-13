@@ -28,7 +28,7 @@ The FusionKit product path starts in `@fusionkit/cli`. The CLI registers tool in
 
 `@fusionkit/cli` publishes the `fusionkit` binary and is the single user-facing Node entry point. The binary entry file is `packages/cli/src/index.ts`. It imports `buildProgram()` from `packages/cli/src/cli.ts`, prints help on bare invocation, parses the command line, and maps known failures to stable process exits.
 
-`buildProgram()` constructs the Commander tree. It sets the command name, description, combined npm and PyPI version string, positional option behavior, and command groups. It calls the command registration helpers in a fixed order: ensemble, local, fusion, models, runtime, sessions, config, setup, doctor, and deployment. If a new product command needs to appear in the root CLI, this is the file that proves it is registered.
+`buildProgram()` constructs the Commander tree. It sets the command name, description, combined npm and PyPI version string, positional option behavior, and command groups. It calls the command registration helpers in a fixed order, including fusion, models, runtime, sessions, config, setup, doctor, and ensemble. If a new product command needs to appear in the root CLI, this is the file that proves it is registered.
 
 The important behavior around errors is also part of the public user experience. `PolicyDeniedError` prints a fail-closed policy denial and exits with status 2. `PreflightError` prints a direct environment or prerequisite error and exits with status 1. Unknown errors print as `error: <message>` and exit with status 1.
 
@@ -38,8 +38,8 @@ Relevant files:
 | --- | --- |
 | `packages/cli/src/index.ts` | Binary entry point, help behavior, top-level error mapping. |
 | `packages/cli/src/cli.ts` | Commander program construction and registration order. |
-| `packages/cli/src/commands/fusion.ts` | Product launcher group for fused harness sessions. |
-| `packages/cli/src/commands/local.ts` | Single local model launcher path. |
+| `packages/cli/src/commands/fusion.ts` | Product launchers for fused sessions and single-model `--direct` mode. |
+| `packages/cli/src/local.ts` | Direct local-model gateway lifecycle. |
 | `packages/cli/src/commands/models.ts` | Local model cache commands. |
 | `packages/cli/src/commands/sessions.ts` | Session list, show, and removal commands. |
 | `packages/cli/src/commands/config.ts` | Configuration inspection and YAML export. |
