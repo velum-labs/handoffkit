@@ -34,3 +34,6 @@ release/state.json
 # analysis round caches (regenerable banks/logs; see capability-index-program.md)
 analysis/*/cache/
 /.hyperkit/
+
+# Shared HyperKit lab runtime state; intent and frozen locks stay tracked.
+lab/experiments/*/work/
