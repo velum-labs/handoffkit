@@ -43,7 +43,7 @@ fusionkit telemetry off      # opt out (deletes the install id)
 fusionkit telemetry inspect  # print what would be sent, sending nothing
 ```
 
-`DO_NOT_TRACK=1` and `FUSIONKIT_TELEMETRY=0` force telemetry off above any stored consent; consent lives in `~/.fusionkit/telemetry.json` (override with `FUSIONKIT_TELEMETRY_PATH`).
+`DO_NOT_TRACK=1` and `FUSIONKIT_TELEMETRY=0` force telemetry off above any stored consent; consent lives in `~/.fusionkit/telemetry.json` (override with `FUSIONKIT_TELEMETRY_PATH`). The PostHog endpoint itself can be redirected: `FUSIONKIT_POSTHOG_KEY` overrides the built-in project key and `FUSIONKIT_POSTHOG_HOST` the ingestion host.
 
 ## Tracing
 

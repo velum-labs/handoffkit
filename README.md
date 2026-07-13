@@ -52,12 +52,16 @@ The thesis is economic as much as architectural: several cheaper or open-weight 
 | `codex` / `claude` / `cursor` / `serve` | Main journey: run a fused panel behind a coding harness, or run just the gateway. |
 | `fusion [tool]` | Generic launcher behind the shortcuts; `fusion stop` reaps portless singleton services. |
 | `setup` | Pre-provision the pinned PyPI `fusionkit` engine into the `uvx` cache. |
-| `doctor`, `status` | Preflight readiness and preview the effective run plan; `doctor` exits nonzero when no credentials are present. |
+| `doctor`, `status` | Preflight readiness and preview the effective run plan; `doctor` exits nonzero only when not ready (no `uv`/`uvx`, or no credentials and no downloaded local MLX model). |
 | `init` | Scaffold `.fusionkit/fusion.json` and editable prompt files for a repo. |
 | `config` | `show`, `path`, `get`, `set`, `unset`, `edit`, and `export-yaml`. |
 | `prompts` | `list`, `edit`, and `reset` judge/synthesizer prompt overrides. |
 | `ensemble` | `list`, `add`, `edit`, `remove`, `rename`, `use`, plus advanced harness tooling. |
 | `sessions`, `models`, `local` | Manage durable sessions, local MLX model cache, and single-local-model runs. |
+| `stop` | Stop background fusion services (router, dashboard, ...); same reap as `fusion stop`. |
+| `install <tool>` / `uninstall <tool>` | Register FusionKit inside a tool's own config (currently `codex`: extra provider + one profile per ensemble). |
+| `proxy` | `serve`, `add`, `status`, and `stop` for the Claude Code / Codex subscription pooling relay. |
+| `telemetry` | `status`, `on`, `off`, and `inspect` for opt-in, anonymous product telemetry. |
 | `completion <shell>`, `runtime`, `version` | Shell completions, advanced runtime-kernel inspection, and version reporting. |
 
 ## Architecture
@@ -85,7 +89,7 @@ Panel members run in lightweight git worktrees so parallel candidates can inspec
 
 ## Development
 
-Prerequisites: Node >= 22, pnpm, git, and uv. The repo pins pnpm in `packageManager`.
+Prerequisites: Node >= 22.19.0 (`.npmrc` sets `engine-strict`, and the pinned `undici` requires it), pnpm, git, and uv. The repo pins pnpm in `packageManager`.
 
 ```bash
 corepack enable

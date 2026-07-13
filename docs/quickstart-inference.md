@@ -23,6 +23,10 @@ export OPENAI_API_KEY=...  ANTHROPIC_API_KEY=...  GEMINI_API_KEY=...
 `uvx` so the first real request is instant. Prerequisites: `uv` (ships `uvx`) and
 `git`. Run `fusionkit doctor` to verify them.
 
+The key trio above covers the **built-in default panel**. A repo's committed
+`.fusionkit/fusion.json` can require different keys — this repository's panel
+routes through OpenRouter, so it needs `OPENROUTER_API_KEY` instead.
+
 ## 2. Start the endpoint
 
 ```bash
@@ -40,8 +44,12 @@ Apple-Silicon MLX panel, or `--model ID=PROVIDER:MODEL` to pick the panel
 
 The gateway exposes the usual surface under `/v1`:
 `/v1/chat/completions`, `/v1/responses`, `/v1/messages`, `/v1/models`,
-`/v1/embeddings`, and `/health`. The fused model id is **`fusion-panel`**; each
-panel member is also addressable as a direct (non-fused) passthrough by its id.
+`/v1/embeddings`, and `/health`, plus a Cursor BYOK surface at
+`/v1/cursor/chat/completions` and `/v1/cursor/models`. The fused model id is
+**`fusion-panel`**; each panel member is also addressable as a direct
+(non-fused) passthrough by its id. For clients that cannot reach loopback
+(e.g. Cursor BYOK), `fusionkit serve --expose` publishes the gateway on a
+public HTTPS Quick Tunnel with a required (auto-generated) bearer token.
 
 ## 3. Call it with streaming
 

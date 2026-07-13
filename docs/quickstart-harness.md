@@ -26,6 +26,10 @@ export the provider keys for your panel:
 export OPENAI_API_KEY=...  ANTHROPIC_API_KEY=...  GEMINI_API_KEY=...
 ```
 
+That trio covers the built-in default panel; a repo's committed
+`.fusionkit/fusion.json` can require different keys (this repository's own
+panel routes through OpenRouter and needs `OPENROUTER_API_KEY`).
+
 ## 2. Run it
 
 ```bash
@@ -56,6 +60,12 @@ You don't edit any agent config. `fusionkit` sets up each harness for you:
 ```bash
 fusionkit cursor --ide          # turnkey Cursor IDE (no manual tunnel)
 ```
+
+For a **persistent** Codex integration (instead of the ephemeral per-run
+wiring), `fusionkit install codex` registers the FusionKit gateway as an extra
+provider plus one profile per ensemble in `~/.codex/config.toml`; pair it with
+a running `fusionkit serve` and launch `codex --profile fusion-panel`. Remove
+it any time with `fusionkit uninstall codex`.
 
 ## Picking the fused vs. passthrough model
 
