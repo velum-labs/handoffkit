@@ -50,7 +50,10 @@ The gateway exposes familiar routes under `/v1`.
 | `/v1/chat/completions` | OpenAI-compatible chat completions. |
 | `/v1/responses` | OpenAI Responses dialect used by Codex-style clients. |
 | `/v1/messages` | Anthropic Messages dialect used by Claude Code-style clients. |
+| `/v1/messages/count_tokens` | Anthropic token-count helper. |
 | `/v1/models` | Model listing in OpenAI or Anthropic shape. |
+| `/v1/cursor/chat/completions` | Cursor BYOK hybrid: accepts Cursor's Responses-shaped body on a Chat Completions path when Cursor's base URL override points at `.../v1/cursor`. |
+| `/v1/cursor/models` | Mirror of `/v1/models` for Cursor probing relative to its BYOK base URL. |
 | `/v1/embeddings` | Embeddings route when the configured backend supports it. |
 | `/health` | Unauthenticated health check. |
 

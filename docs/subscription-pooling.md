@@ -74,10 +74,14 @@ do not describe personal subscription windows.
 ## Credential lifecycle
 
 On first use, the current official CLI login is copied to a private,
-FusionKit-owned account file. `fusionkit proxy add` grows the same account set.
-The proxy may rotate one-time refresh tokens only in managed copies; it never
-writes the canonical official CLI store. Refreshes are single-flight per member
-and reset stale observed-window state.
+FusionKit-owned account file. `fusionkit proxy add` grows the same account set;
+it accepts only `claude-code` or `codex` as the provider argument. The managed
+account state lives under `~/.fusionkit/subscriptions` (override with
+`FUSIONKIT_SUBSCRIPTIONS_DIR`), and clients authenticate to the proxy with the
+bearer token `proxy serve` prints (the Codex snippet references it via the
+`FUSIONKIT_PROXY_TOKEN` env var). The proxy may rotate one-time refresh tokens
+only in managed copies; it never writes the canonical official CLI store.
+Refreshes are single-flight per member and reset stale observed-window state.
 
 The default sticky policy preserves account-scoped prompt caches. Quota
 rejection cools the member until its first-party reset timestamp and selects a

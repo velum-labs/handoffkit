@@ -75,7 +75,12 @@ The file is a default layer, not a lock. Any flag overrides it for one run.
 | `observe` | boolean | Boot the observability dashboard by default. |
 | `onRateLimit` | `fusion` \| `passthrough` \| `fail` | Vendor rate-limit behavior. Defaults to `fusion`. |
 | `budgetUsd` | number | Optional session spend cap in gateway-observed USD. |
+| `panelTrust` | `full` \| `guarded` | Panel model sandbox. `full` (the default when unset) lets models run any command and edit any file; `guarded` restricts each model to its own draft worktree. |
 | `k` | integer | Default step boundaries per panel member before aggregation (per-ensemble `k` overrides). See the ensemble field below. |
+| `reasoning` | boolean | Narrate panel/judge progress in the launched tool's thinking UI. Default `true`; `false` keeps the stream silent until the judge's first token. |
+| `reasoningModel` | string | Model that writes the narration prose: a panel member, a `provider/model` token, or a local MLX model path (Apple Silicon only). |
+| `subagents` | boolean | Auto-provision one native sub-agent per ensemble in the launched tool. Default on; `false` disables it. |
+| `subscriptionAccounts` | object | Provider-native subscription account sets consumed by the gateway, keyed by `claude-code` or `codex`, each with optional `source`, `strategy`, `switchThreshold`, and `probeIntervalMs`. See the [Subscription pooling guide](/docs/guides/subscription-pooling). |
 | `portless` | boolean | Use stable portless URLs when available. Defaults to `true`. |
 | `port` | number \| null | Fixed gateway port, otherwise ephemeral. |
 
@@ -125,6 +130,22 @@ fusionkit config export-yaml
 fusionkit config export-yaml -o router.yaml
 fusionkit serve --config router.yaml
 ```
+
+## Web search (gateway-executed)
+
+Codex and Claude Code both declare a server-executed web search tool (`web_search` on the Responses API, `web_search_20250305` on the Anthropic API). Behind FusionKit the gateway plays the server's role: it projects the tool to the fused panel, executes the search by delegating to a real provider's native web search when the fused model calls it, and feeds the results back in the caller's own dialect.
+
+Each dialect prefers its own provider — Codex searches via OpenAI, Claude Code via Anthropic — and falls back to the other when only one key is set. With neither key, the tool is dropped with a warning. Searches are capped at 8 per caller turn and 90 seconds each.
+
+Web search is configured through environment variables, not `fusion.json`:
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `FUSIONKIT_WEB_SEARCH` | on | Set to `0` to disable gateway web search entirely. |
+| `FUSIONKIT_WEB_SEARCH_OPENAI_MODEL` | `gpt-5.5` | Model used for OpenAI-delegated searches. |
+| `FUSIONKIT_WEB_SEARCH_ANTHROPIC_MODEL` | `claude-haiku-4-5` | Model used for Anthropic-delegated searches. |
+| `FUSIONKIT_WEB_SEARCH_OPENAI_URL` | `https://api.openai.com/v1` | Base URL for the OpenAI search side call. |
+| `FUSIONKIT_WEB_SEARCH_ANTHROPIC_URL` | `https://api.anthropic.com/v1` | Base URL for the Anthropic search side call. |
 
 ## Prompt overrides (`prompts/`)
 

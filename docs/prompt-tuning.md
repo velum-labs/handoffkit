@@ -29,8 +29,11 @@ prompt hash so repeats are free and the loop is resumable.
 
 ## Run it
 
+The preferred form is the nested `fusionkit bench tune-prompts` (top-level
+`tune-prompts` remains a hidden legacy alias):
+
 ```bash
-uv run --with 'datasets<4' fusionkit tune-prompts \
+uv run --with 'datasets<4' fusionkit bench tune-prompts \
   --config configs/benchmark-panel.example.yaml \
   --role synthesizer_system \
   --subset 40 \
@@ -38,6 +41,14 @@ uv run --with 'datasets<4' fusionkit tune-prompts \
   --prompts-out .fusionkit/prompts \
   --report out/tuning.md
 ```
+
+Other flags (see `tune_prompts()` in
+`python/fusionkit-cli/src/fusionkit_cli/commands/bench.py`): `--bank` (candidate
+bank path, built if missing), `--bank-max-tests` (cap tests/task when building
+the bank; 0 = all), `--val-fraction` (held-out validation split fraction),
+`--seed` (split seed), `--optimizer-model` (endpoint id, default judge),
+`--test-timeout-s`, `--concurrency`, `--cache-dir` (replay cache location), and
+`--ledger` (append the run to a history ledger).
 
 The bank is built on first run and reused after. Untrusted candidate/fused code
 runs in the sandbox (`BENCH_SANDBOX=local|docker`).

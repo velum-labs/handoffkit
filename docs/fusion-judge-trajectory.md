@@ -120,3 +120,6 @@ Real, self-contained drivers live in [scripts/](../scripts):
 
 Each requires `uv`, a FusionKit checkout (`FUSIONKIT_FUSION_FK_DIR` or the default
 path), and cloud API keys; they make real, billed model calls.
+`FUSIONKIT_FUSION_FK_DIR` is read only by these `scripts/fusion-*.mjs` e2e
+drivers; the CLI's own dev override for the Python engine checkout is
+`FUSIONKIT_DIR` (or the `--fusionkit-dir` flag).

@@ -15,7 +15,11 @@ fusion to help.
 
 - Borrow the harness: point each suite's official runner at the gateway base URL.
   The gateway already speaks OpenAI Chat, Anthropic Messages, and OpenAI Responses
-  and exposes itself as one model (`fusionkit/panel`).
+  and exposes itself as one model (`fusionkit/panel`). Exception: the in-repo
+  Aider-polyglot adapter is a within-run adaptation, not the official aider
+  harness, so its numbers are not comparable to the published aider leaderboard
+  (see its docstring in
+  `python/fusionkit-evals/src/fusionkit_evals/adapters/aider_polyglot_adapter.py`).
 - Borrow the baselines: read per-model scores (and cost) off the public
   leaderboard instead of running single models ourselves.
 - Lead with headroom: a fusion benchmark is a panel-diversity benchmark. Report
@@ -26,9 +30,10 @@ fusion to help.
 
 Historical two-member product defaults were lopsided: one member was far stronger,
 so the oracle ceiling barely exceeded the best single model. Benchmark fusion with
-a decorrelated peer panel instead (`decorrelated-peers`:
-gpt-5.5 + claude-opus-4-8 + gemini-3-pro). See
-`configs/benchmark-panel.example.yaml`.
+a decorrelated peer panel instead (the `decorrelated-peers` registry preset:
+gpt-5.5 + claude-opus-4.8 + gemini-3-pro). See
+`configs/benchmark-panel.example.yaml` (which spells the Anthropic model id
+`claude-opus-4-8`; copy the id from the artifact you use).
 
 ## Suites
 
@@ -53,18 +58,26 @@ gpt-5.5 + claude-opus-4-8 + gemini-3-pro). See
 ## Subset first
 
 The recommended first run is a small subset (10-20 tasks) to validate the
-pipeline before any full pass. Use `--subset`:
+pipeline before any full pass. Use `--subset`. The preferred command form is the
+nested `fusionkit bench public` (the top-level `public-bench` remains a hidden
+legacy alias); env setup mirrors the
+[benchmarking runbook](benchmarking-runbook.md): source `.env`, and run
+LiveCodeBench commands under `uv run --with 'datasets<4'`.
 
 ```bash
-fusionkit serve -c configs/benchmark-panel.example.yaml &
-fusionkit public-bench \
+uv run --package fusionkit fusionkit serve -c configs/benchmark-panel.example.yaml &
+uv run fusionkit bench public \
   --suite aider-polyglot \
   --panel decorrelated-peers \
   --subset 15 \
-  --runner-command "python tools/aider_gateway_adapter.py" \
+  --runner-command "python python/fusionkit-evals/src/fusionkit_evals/adapters/aider_polyglot_adapter.py" \
   --output out/aider.jsonl \
   --report out/aider-comparison.md
 ```
+
+Note the Aider adapter is a within-run adaptation (not the official aider
+harness); it requires a cloned polyglot-benchmark at `POLYGLOT_ROOT`,
+`FUSIONKIT_BENCH_CONFIG`, provider keys, and the per-language toolchains.
 
 ## Runner adapter contract
 

@@ -1,7 +1,8 @@
 # Model Fusion Protocol Release
 
 FusionKit is the v1 origin for the model-fusion protocol bundle. Release automation
-is intentionally scoped to the protocol package in this PR.
+(`.github/workflows/model-fusion-protocol-release.yml`) is intentionally scoped to
+the protocol package.
 
 ## Tag pattern
 
@@ -37,21 +38,24 @@ The release workflow:
 5. Builds the Python `velum-model-fusion-protocol` wheel and sdist using
    `scripts/build_protocol_python_package.py`, which stages JSON Schema/OpenAPI
    assets into the package build tree without committing duplicate contract copies.
-6. Publishes `@velum-labs/model-fusion-protocol` to private GitHub Packages.
+6. Publishes `@velum-labs/model-fusion-protocol` to public npm
+   (`registry.npmjs.org`) with `npm publish --access public --provenance`; the
+   package's `publishConfig` in `spec/model-fusion-contract/package.json` pins
+   the public registry, public access, and provenance.
 7. Publishes Python artifacts to a private PyPI-compatible registry when configured.
 8. Falls back to attaching Python wheel/sdist files to the GitHub Release when private
    registry secrets are absent.
 
-The Python fallback is intentional and safe: it avoids pretending GitHub Packages is
-a PyPI replacement while still preserving release artifacts for private distribution.
+The Python fallback is intentional and safe: it preserves release artifacts for
+private distribution when no private registry is configured.
 
 ## Required secrets
 
-No additional secret is needed for npm GitHub Packages publishing; the workflow uses
-`GITHUB_TOKEN` with `packages: write` and publishes with `--access restricted`.
-The restricted private package path intentionally omits npm provenance because npm
-only supports provenance for public packages. Add an explicit public/provenance
-publish path before using `npm publish --provenance`.
+npm publishing authenticates with the `NPM_TOKEN` repository secret
+(`NODE_AUTH_TOKEN` in the publish step). The workflow grants `id-token: write`
+and updates the npm CLI so OIDC trusted publishing works once a Trusted
+Publisher is configured on npmjs.com (see
+[release-publishing.md](release-publishing.md) for the token-bootstrap flow).
 
 For private Python publishing, configure all of:
 
@@ -79,7 +83,7 @@ uv run pyright
 
 `validate_protocol_package.py` checks:
 
-- npm package name, GitHub Packages registry, and generation scripts;
+- npm package name, public npm registry/access settings, and generation scripts;
 - Python package name/version and bundled contract assets;
 - package/OpenAPI/Python versions match;
 - OpenAPI 3.1 schema bundle hash matches the JSON Schema bundle;
@@ -91,9 +95,9 @@ TypeScript OpenAPI client/types, and repo-local generation for JSON Schema valid
 indexes plus Python OpenAPI operation metadata/client scaffolding. Consumers should
 use these generated outputs rather than copying service interfaces or record shapes.
 
-## Follow-up
+## Scope
 
-Existing FusionKit Python workspace packages are not published by this workflow. Add
-separate release automation for those packages when they have a versioning and
-private-registry policy. The protocol package remains the priority release artifact
-for cross-repo consumption.
+Existing FusionKit Python workspace packages are not published by this workflow;
+they ship through their own release automation (see
+[releasing.md](releasing.md)). The protocol package remains the priority release
+artifact for cross-repo consumption.

@@ -2,7 +2,7 @@
 
 This page documents the uv workspace under `python/`. The root `pyproject.toml` is virtual and exists to coordinate shared tooling, dependencies, lockfile state, Ruff, Pyright, pytest, and coverage. The repository itself is not a Python package.
 
-The Python workspace contains the FusionKit engine, the HTTP server, the PyPI CLI package named `fusionkit`, optional MLX helpers, evaluation tooling, and UniRoute routing experiments. The Node CLI invokes the Python server through `uvx` for the product path, while maintainers usually run the Python packages through `uv run`.
+The Python workspace contains the FusionKit engine, the HTTP server, the PyPI CLI package named `fusionkit`, optional MLX helpers, evaluation tooling, the provider-simulator testkit, the Hyperkit experiment platform, and UniRoute routing experiments. The Node CLI invokes the Python server through `uvx` for the product path, while maintainers usually run the Python packages through `uv run`.
 
 ## Workspace commands
 
@@ -32,8 +32,12 @@ uv run --package uniroute uniroute-demo
 | `fusionkit` | `fusionkit_cli` | PyPI command line interface for serving, setup, auth, prompts, benchmarks, tuning, and hill climbing. |
 | `fusionkit-evals` | `fusionkit_evals` | Benchmarks, public reports, prompt tuning, Pareto analysis, hill climbing, scoring, and sandbox execution. |
 | `fusionkit-mlx` | `fusionkit_mlx` | Optional MLX launcher utilities. |
+| `fusionkit-testkit` | `fusionkit_testkit` | Scriptable provider simulator, config builders, engine process harness, and pytest fixtures. |
+| `hyperkit` | `hyperkit` | SUT-agnostic experiment platform: `hyperkit` CLI, benchmark adapters, and compute backends. |
 | `uniroute` | `uniroute` | NumPy model routing algorithms and synthetic evaluation helpers. |
 | `uniroute-mlx` | `uniroute_mlx` | Local model and OpenAI-compatible bridge for UniRoute experiments. |
+
+The root `[tool.pyright]` include covers the FusionKit packages (`fusionkit-cli`, `fusionkit-core`, `fusionkit-evals`, `fusionkit-mlx`, `fusionkit-server`, `fusionkit-testkit`, `hyperkit`), the generated protocol Python package, `scripts`, and `tests`. `uniroute` and `uniroute-mlx` predate the merge and stay outside the Pyright scope, though they remain in pytest discovery.
 
 ## Request flow
 
@@ -309,6 +313,8 @@ Formatting and resolution helpers include `_format_hillclimb_report()`, `_format
 
 The onboarding module provides `global_config_path()`, `resolve_config_path()`, `default_write_path()`, `write_config()`, `detect_api_keys()`, `detect_codex_model()`, `subscription_endpoint()`, and `api_key_endpoint()`.
 
+`fusionkit_cli/hyperkit_plugin.py` registers the `fusionkit-serve` system-under-test with Hyperkit through the `hyperkit.suts` entry point declared in `python/fusionkit-cli/pyproject.toml`, so Hyperkit experiments can run the fusion engine without Hyperkit core importing FusionKit.
+
 Example:
 
 ```bash
@@ -347,6 +353,27 @@ Example:
 
 ```bash
 uv run --package fusionkit-mlx python -c "import fusionkit_mlx; print(fusionkit_mlx.__name__)"
+```
+
+## `fusionkit-testkit`
+
+`fusionkit-testkit` is the never-published test tooling package described in [Testing](testing.md). `fusionkit_testkit.server` implements the scriptable provider simulator, which speaks every provider wire dialect FusionKit ships a client for (OpenAI Chat Completions, Anthropic Messages, OpenAI Responses, Google GenAI) with a scriptable control plane and a journaled observation plane. `fusionkit_testkit.endpoints` builds production `ModelEndpoint`/`FusionConfig` objects pointed at the simulator, `fusionkit_testkit.engine.EngineProcess` runs the real `fusionkit serve` CLI as a child process, `fusionkit_testkit.scenarios` scripts whole fused turns, and `fusionkit_testkit.matrix` declares the provider test axis. The package registers a `pytest11` entry point so workspace tests can take `provider_sim` and `sim_stack` fixtures with zero wiring.
+
+The standalone simulator runs as a console script:
+
+```bash
+uv run --package fusionkit-testkit fusionkit-sim --port 0
+```
+
+## `hyperkit`
+
+`hyperkit` is the system-under-test-agnostic experiment platform; [Hyperkit](hyperkit.md) is its living reference. `hyperkit.core` owns code-defined experiments, materialized cells, content-addressed shards, resumable sweeps, and the benchmark/grader/SUT/backend protocols. The `hyperkit` Typer CLI exposes `plan`, `extend`, `apply`, `resume`, `status`, `collect`, `pull`, `controller`, `local-controller`, and `replay-swebench`. Benchmark adapters live under `hyperkit.adapters` (`livecodebench`, `swebench`, `terminal_bench`); compute backends live under `hyperkit.backends` (`aws_batch`, registered through the `hyperkit.backends` entry point, plus `local`). FusionKit plugs in as a SUT through the `hyperkit.suts` entry point in `python/fusionkit-cli` (`fusionkit_cli.hyperkit_plugin:factory`).
+
+Example:
+
+```bash
+uv run --package hyperkit hyperkit --help
+uv run --package hyperkit hyperkit status --workdir .hyperkit
 ```
 
 ## `uniroute`

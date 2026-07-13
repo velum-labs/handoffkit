@@ -19,6 +19,11 @@ printf '%s' "$BENCHMARK_TASK_JSON" | \
 
 Use `node packages/cli/dist/index.js ensemble handoff` before the CLI package is linked globally.
 
+`--harness` defaults to `mock`; valid values are `mock | command | claude-code | codex`
+(`packages/cli/src/commands/ensemble.ts`). Use `--harness command` together with
+`--command <cmd>` to run a custom executor script. The Python bench side plugs
+this executor in via `fusionkit fusion-bench --handoff-command "fusionkit ensemble handoff ..."`.
+
 ## Output contract
 
 Stdout is intentionally machine-only JSON:
@@ -63,18 +68,13 @@ Live Codex responses smoke evidence from the implementation pass:
 Run the repo gate:
 
 ```bash
-/opt/homebrew/bin/corepack pnpm check
-/opt/homebrew/bin/corepack pnpm build
-/opt/homebrew/bin/corepack pnpm test
+corepack pnpm check
+corepack pnpm build
+corepack pnpm test
 ```
 
-Known local verification from the implementation pass:
-
-```text
-# tests 278
-# pass 275
-# skipped 3
-```
+Exact test counts drift as suites grow; the gate is that check, build, and test
+all pass.
 
 ## Boundaries
 

@@ -14,6 +14,12 @@ Most users should run it through `@fusionkit/cli`; library users can import `sta
 import * as fusionkitPackage from "@fusionkit/model-gateway";
 ```
 
+The subscription pooling proxy (account enrollment, selection strategies, and the provider-native proxy server) ships on the `./subscriptions` export subpath:
+
+```ts
+import { startSubscriptionProxy } from "@fusionkit/model-gateway/subscriptions";
+```
+
 ## Docs
 
 - Product docs: https://fusionkit.velum-labs.com

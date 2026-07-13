@@ -60,7 +60,12 @@ includes per-field provenance).
 | `observe`         | boot the observability dashboard by default                        | `false` |
 | `onRateLimit`     | vendor rate-limit/credit handoff: `fusion` \| `passthrough` \| `fail` | `fusion` |
 | `budgetUsd`       | optional session spend cap in gateway-observed USD                 | unset |
-| `subagents`       | auto-provision one native sub-agent per ensemble in the launched tool | `true` |
+| `panelTrust`      | panel model sandbox: `full` (models may run any command and edit any file) \| `guarded` (each model only edits its own draft worktree) | `full` |
+| `k`               | step boundaries per panel member before aggregation (per-ensemble `k` overrides it) | unset (full rollouts) |
+| `reasoning`       | narrate panel/judge progress in the tool's thinking UI            | `true` |
+| `reasoningModel`  | model that writes the narration prose (panel member, `provider/model`, or local MLX path) | unset (templated prose) |
+| `subagents`       | auto-provision one native sub-agent per ensemble in the launched tool (only `false` disables) | `true` |
+| `subscriptionAccounts` | per-mode (`claude-code` \| `codex`) subscription account pooling: `source`, `strategy`, `switchThreshold`, `probeIntervalMs` | unset |
 | `portless`        | route services through portless stable URLs                        | `true`  |
 | `port`            | fixed gateway port (else ephemeral)                                | ephemeral |
 | prompts           | hydrated from `.fusionkit/prompts/` (never stored inline)          | built-in |
@@ -72,6 +77,13 @@ Each ensemble entry:
 | `panel`            | the panel members (`id`, `model`, `provider`, `keyEnv`/`auth`)      | required (the `default` ensemble may omit it → built-in trio) |
 | `judgeModel`       | the member used as judge (by member id or model name)               | first panel member |
 | `synthesizerModel` | the member used as synthesizer (by member id or model name)         | the judge |
+| `k`                | step boundaries per member for this ensemble (overrides the top-level `k`) | top-level `k` |
+
+`provider` accepts `mlx`, `openai`, `anthropic`, `google`, `openrouter`, or
+`openai-compatible`; `openrouter` members read `OPENROUTER_API_KEY` by default.
+`fusionkit config set` covers the scalar top-level fields (including
+`panelTrust`, `reasoning`, and `reasoningModel`) plus per-ensemble
+`ensembles.<name>.<key>` paths.
 
 A single-ensemble config may still use the flat `panel`/`judgeModel` shorthand
 (and every `v1`/`v2` file keeps loading): it upgrades in memory into
@@ -171,9 +183,11 @@ declared by `type` instead of a name (Codex's `tool_search`, the door to its
 deferred multi-agent tools) — the gateway projects every *client-executed*
 typed tool to the fused model under its type as the function name, and emits
 the model's calls back as the tool's native item (`tool_search_call`), which is
-the shape the CLI dispatches. Server-executed tools (`web_search`, Anthropic's
-`web_search_*`/`code_execution_*`) are excluded from the fused turn since
-nothing behind the gateway can run them.
+the shape the CLI dispatches. Server-executed web search (`web_search`,
+Anthropic's `web_search_*`) is executed by the gateway itself when a provider
+key exists (see [Web search](#web-search-gateway-executed) below); other
+server-executed tools (Anthropic's `code_execution_*`) stay excluded from the
+fused turn since nothing behind the gateway can run them.
 
 For Codex specifically this means fused-turn spawning works through its
 **tool-discovery loop**: `spawn_agent` & co. are deferred, so the synthesizer
@@ -252,7 +266,14 @@ the derived config:
 ```bash
 fusionkit config export-yaml                 # print the derived YAML to stdout
 fusionkit config export-yaml -o router.yaml  # write it to a file
-fusionkit serve --config router.yaml         # run the raw endpoint with it
+```
+
+The Node `fusionkit serve` takes no `--config` flag — it always derives the
+YAML in-process. To run the exported file, invoke the Python engine directly:
+
+```bash
+uvx fusionkit serve -c router.yaml           # or, from a checkout:
+uv run --package fusionkit fusionkit serve -c router.yaml
 ```
 
 `export-yaml` reuses the exact generator the live stack writes, so the exported

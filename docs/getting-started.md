@@ -21,7 +21,9 @@ the repository but are out of product scope; see [Product scope](scope.md).
 - `uv` for the Python workspace and for exercising the Python fusion endpoint.
 - Provider keys when you run real cloud panels. `OPENAI_API_KEY` is enough for an
   OpenAI-only config; the default cloud trio also looks for `ANTHROPIC_API_KEY`
-  and `GEMINI_API_KEY`.
+  and `GEMINI_API_KEY`. Those built-in defaults apply to fresh repos: this
+  repository's committed `.fusionkit/fusion.json` panel uses OpenRouter models,
+  so working inside this checkout needs `OPENROUTER_API_KEY`.
 - A coding harness CLI (`codex`, `claude`, or `cursor-agent`) when testing the
   harness-backed product path.
 - Docker only if you are explicitly working on the legacy compose stack. Docker
@@ -117,7 +119,8 @@ Then `fusionkit codex|claude|cursor|serve` print
 ports, e.g. in CI), pass `--no-portless` or set `PORTLESS=0`. When portless is
 not installed (Node `<24`) the stack transparently falls back to ports.
 
-Reap persistent singletons left running by prior runs with `fusionkit fusion stop`.
+Reap persistent singletons left running by prior runs with the top-level
+`fusionkit stop` (or the equivalent `fusionkit fusion stop`).
 
 ## Legacy Docker compose
 
@@ -134,13 +137,20 @@ Open the control panel at `http://localhost:7172/ui/`.
 
 ## Demo suite
 
-List and run standalone scenarios:
+List and run standalone scenarios (the manifest currently holds one demo,
+`runtime-kernel`, id `15`; `pnpm demo all` runs it):
 
 ```sh
 pnpm demo
-pnpm demo 01
-pnpm demo 08
+pnpm demo 15
+pnpm demo all
 ```
 
 The demo manifest lives at `examples/manifest.json`; shared narration and live
 model helpers live in `packages/example-utils`.
+
+## Experiment platform
+
+For benchmark experiments at scale, the Hyperkit experiment platform is
+documented in [Hyperkit](hyperkit.md), and the shared experiment lab's
+operating procedures live in [`lab/AGENTS.md`](../lab/AGENTS.md).

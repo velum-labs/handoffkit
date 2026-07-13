@@ -18,8 +18,14 @@ A panel is a list of members; each member has an `id`, a `model`, and a
 | `openai` | OpenAI models | `OPENAI_API_KEY` |
 | `anthropic` | Anthropic models | `ANTHROPIC_API_KEY` |
 | `google` | Google Gemini models | `GEMINI_API_KEY` |
+| `openrouter` | any model on OpenRouter (frontier and open-weight, one key) | `OPENROUTER_API_KEY` |
 | `openai-compatible` | Together / Fireworks / DeepInfra / self-hosted vLLM / any OpenAI-compatible endpoint (open-weight path) | per-endpoint (`--key-env`) |
 | `mlx` | local models on Apple Silicon | none |
+
+Instead of a provider + API key, a member may reuse a **subscription login**:
+`id=claude-code:MODEL` uses the local Claude Code login and `id=codex:MODEL`
+the Codex login (no `keyEnv`; see
+[subscription pooling](subscription-pooling.md)).
 
 Add members on the command line (flags apply to every launcher and to
 `fusionkit serve`):
@@ -70,6 +76,7 @@ local trio with `--local`, and manage the on-disk cache with `fusionkit models`:
 fusionkit codex --local                          # local MLX trio
 fusionkit models                                 # curated catalog + what's downloaded + RAM fit
 fusionkit models download mlx-community/Qwen3-1.7B-4bit
+fusionkit models download <repo> --force         # download even if it looks too large for this host
 fusionkit models rm mlx-community/Qwen3-1.7B-4bit
 ```
 

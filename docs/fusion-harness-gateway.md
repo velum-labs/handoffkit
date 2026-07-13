@@ -40,7 +40,8 @@ TTY to pick interactively. In one command it:
 One Ctrl+C tears the whole stack (router + gateway + any Cursorkit bridge) down.
 With [portless](https://github.com/vercel-labs/portless) the gateway, router,
 and dashboard come up at stable HTTPS names and are reused across runs; the
-router persists between runs (reap it with `fusionkit fusion stop`).
+router persists between runs (reap it with `fusionkit stop`, or the equivalent
+`fusionkit fusion stop`).
 
 ### Prerequisites
 
@@ -54,9 +55,10 @@ missing:
   `ANTHROPIC_API_KEY`, and `GEMINI_API_KEY`), not needed with `--local`,
 - a **git repository** (run inside it, or pass `--repo`),
 - optionally **[portless](https://github.com/vercel-labs/portless)** `>=0.14`
-  (Node `>=24`) for stable named URLs. With it installed, the gateway requires
-  the proxy to be running (`portless service install` + `portless trust`);
-  preflight fails fast otherwise. Use `--no-portless`/`PORTLESS=0` to use raw
+  (Node `>=24`) for stable named URLs. When portless is installed but its proxy
+  is not running, the session degrades to plain loopback URLs and logs a note
+  pointing at the one-time setup (`portless service install` + `portless
+  trust`); it never blocks a run. Use `--no-portless`/`PORTLESS=0` to use raw
   ports.
 
 ### Trajectory-level fusion
@@ -117,7 +119,9 @@ fusionkit codex \
   never the secret values.
 - You can mix local and cloud (e.g. `--model local=mlx:...:` alongside cloud).
 - For an already-running OpenAI-compatible server, skip provisioning entirely
-  with `--model-endpoint ID=URL` (repeatable) and `--judge-endpoint URL`.
+  with `--model-endpoint ID=URL` (repeatable). The judge endpoint is derived
+  from the panel specs (`--judge-model` picks a member by id or model name;
+  default: the first member) — there is no separate judge-endpoint flag.
 
 With SOTA models the coding-harness output becomes genuinely good, and you get
 real cross-vendor diversity across OpenAI, Anthropic, and Google panel members.
@@ -165,10 +169,13 @@ every front door normalizes to one `FrontDoorRunnerInput`, runs the same
 | OpenAI Responses | `POST /v1/responses` | Codex |
 | Anthropic Messages | `POST /v1/messages` (+ `/v1/messages/count_tokens`) | Claude Code |
 | OpenAI Chat | `POST /v1/chat/completions` | Cursorkit bridge, opencode, generic clients |
+| Cursor BYOK | `POST /v1/cursor/chat/completions` (+ `GET /v1/cursor/models`) | Cursor's custom-base-URL (BYOK) mode |
 | Generic ACP | JSON-RPC stdio (`initialize`/`session/new`/`session/prompt`) | ACP editors |
 
 `GET /v1/models` answers in either OpenAI or Anthropic shape (selected by the
-`anthropic-version` header). `GET /health` is unauthenticated.
+`anthropic-version` header). `GET /health` is unauthenticated. For BYOK clients
+that cannot reach loopback, `fusionkit serve --expose` publishes the gateway on
+a public HTTPS Quick Tunnel with a required (auto-generated) bearer token.
 
 ## Streaming is mandatory for some tools
 
@@ -212,7 +219,10 @@ requires_openai_auth = false
 ```
 
 `requires_openai_auth = false` lets Codex talk to the gateway with no API key.
-`fusionkit ensemble gateway codex-config` prints this snippet.
+`fusionkit ensemble gateway codex-config` prints this snippet. For a persistent
+integration in the user's real `~/.codex/config.toml` (an extra provider plus
+one profile per ensemble, paired with a running `fusionkit serve`), use
+`fusionkit install codex` / `fusionkit uninstall codex`.
 
 ## Claude Code provider wiring
 
@@ -265,7 +275,7 @@ Key points discovered:
 ```
 fusionkit ensemble gateway [serve] [opts]   front door: tools drive the fusion ensemble
   --fusion-backend URL    FusionKit/OpenAI-compatible backend URL (judge synthesis)
-  --harness TARGET        mock | command | codex | claude-code | cursor-acp | cursor-desktop (repeatable)
+  --harness TARGET        mock | command | codex | claude-code | cursor-acp (repeatable; cursor-desktop is `ensemble e2e` only)
   --model ID=MODEL        panel model mapping (repeatable)
   --command CMD           command harness script
   --repo DIR              workspace repository (default: .)

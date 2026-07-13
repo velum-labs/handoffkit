@@ -38,6 +38,11 @@ until a concrete search-state policy is supplied around it.
 
 ## Install / import surface
 
+The dependency-free runtime substrate lives in `@fusionkit/kernel`
+(`packages/kernel`); `@fusionkit/ensemble` re-exports it
+(`packages/ensemble/src/runtime.ts`) and owns the operators, workflow recipes,
+and schedulers on top. The imports below go through ensemble and work as shown.
+
 ```ts
 import { FusionRuntime } from "@fusionkit/ensemble/runtime";
 import { graph, refs } from "@fusionkit/ensemble/kernel";

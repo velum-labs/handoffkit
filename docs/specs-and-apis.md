@@ -36,14 +36,25 @@ The important record families are:
 | `harness-run-request.v1` | Describes a harness task submitted to a coding agent. |
 | `harness-run-result.v1` | Captures the final result of a harness execution. |
 | `harness-candidate-record.v1` | Records a candidate produced by a panel member. |
-| `trajectory.v1` | Captures steps, output, tool calls, status, and synthesis metadata. |
-| `judge-synthesis-record.v1` | Records judge input, rationale, selected output, and metrics. |
+| `trajectory.v1` | Captures steps, output, tool calls, status, and synthesis metadata. A fused (consolidated) trajectory also carries the folded fusion result — decision, rationale, and metrics — which replaced the former standalone `judge-synthesis-record.v1` schema. |
 | `benchmark-task-record.v1` | Describes a benchmark problem and scorer metadata. |
 | `tool-call-plan.v1` | Describes planned tool calls and policy expectations. |
 | `tool-execution-record.v1` | Records a tool execution, side effects, status, and output. |
 | `ensemble-receipt.v1` | Bundles a complete evidence set for ensemble execution. |
 
 Fixtures live under `spec/model-fusion-contract/fixture/`. Each schema should have minimal and realistic examples when the record is externally meaningful. Fixtures are not decorative examples. They are the safest source for documentation snippets because they should remain valid as schemas evolve.
+
+## Registry data
+
+`spec/registry/` is the source-of-truth JSON for cross-stack registry data: `providers.json` (base URLs, key env vars, key probes, discovery), `subscriptions.json` (Claude Code / Codex subscription auth metadata), `model-catalog.json` and `local-catalog.json` (cloud and local model catalogs), `model-capabilities.json` (model-family capability quirks), `pricing.json` (curated default pricing), and `fusion.json` (fusion defaults). `scripts/generate-registry.mjs` generates the `@fusionkit/registry` TypeScript bindings and the Python `fusionkit_core._generated.registry_data` module from the same files, so the two stacks cannot drift; `scripts/generate-pricing.mjs` and `scripts/generate-local-catalog.mjs` refresh and validate their respective files.
+
+## Expected-behavior inventory
+
+`spec/testing/expected-behaviors.json` is the complete claimed behavior inventory for the test matrix (see [Testing](testing.md)). `scripts/generate-expected-behaviors.mjs` renders it into the reviewable `docs/generated/expected-behaviors.md`; run `pnpm docs:generate-behaviors` to regenerate and `pnpm docs:check-behaviors` (part of `pnpm check`) to catch drift.
+
+## Design specs
+
+`spec/2026-06-13-local-model-harness-bridge-spec.md` is the dated local-model harness bridge design spec, retained alongside the machine-readable contracts.
 
 ## Generated TypeScript bindings
 

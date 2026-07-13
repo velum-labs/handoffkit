@@ -217,11 +217,23 @@ messages. The queue URL and ARN are available as
 
 ## Observability
 
-The custom Grafana image installs the Athena and X-Ray plugins and bakes in:
+The custom Grafana image installs the Athena and X-Ray plugins and bakes in the
+dashboards from `grafana/dashboards/`:
 
 - `Sweep Live`: completed/error shard counts, latency, and resolution rate.
 - `Fleet`: shard throughput/outcomes and ADOT receive/export health.
 - `Fusion Internal`: fusion-versus-solo resolution, outcomes, latency, and cost.
+- `Hypergrid Cell Drilldown`: per-cell progress, resolution rate, cost, latency,
+  outcome counts, and Wilson intervals.
+- `Hypergrid Generation Coverage`: search coverage, progress, and resolution
+  rate by generation.
+- `Hypergrid Dynamics`: interactive views of hypergrid quality, cost, latency,
+  search flow, ranking, and uncertainty.
+- `Hypergrid Explorer`: axis matrix and resolution rate by selected axes.
+- `Hypergrid Leaderboard`: the cell leaderboard.
+- `Hypergrid Learning Curve`: running resolution rate with Wilson bands and
+  completed shards over time.
+- `Hypergrid Pareto`: score/cost/latency frontier and score by cell.
 
 The provisioned data sources use the Fargate task role:
 

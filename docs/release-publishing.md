@@ -113,10 +113,10 @@ validators until that generated package is available.
 
 ## Python packages
 
-This repository's release workflow is npm-only. If HandoffKit later adds a
-Python package, publish it to a private PyPI-compatible registry (Cloudsmith,
-AWS CodeArtifact, Gemfury, or equivalent) via explicit secrets such as
-`PRIVATE_PYPI_REPOSITORY_URL`, `PRIVATE_PYPI_USERNAME`, and
-`PRIVATE_PYPI_PASSWORD`. If those secrets are absent, the workflow should build
-wheel/sdist artifacts and attach them to a GitHub Release instead of publishing
-to public PyPI.
+This repository's release workflow is npm-only. The protocol's Python package
+is published by `.github/workflows/model-fusion-protocol-release.yml`, which
+uploads to a private PyPI-compatible registry (Cloudsmith, AWS CodeArtifact,
+Gemfury, or equivalent) via the secrets `PRIVATE_PYPI_URL`,
+`PRIVATE_PYPI_USERNAME`, and `PRIVATE_PYPI_PASSWORD`. If those secrets are
+absent, the workflow builds wheel/sdist artifacts and attaches them to a GitHub
+Release instead of publishing to public PyPI.

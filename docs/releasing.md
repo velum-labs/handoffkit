@@ -18,7 +18,7 @@ flowchart TD
   protocol["fusionkit-protocol (npm + PyPI)"]
   fusionpy["fusionkit-pypi (5 PyPI pkgs)"]
   cursor["cursorkit (npm)"]
-  handoff["handoffkit (19 @fusionkit/* npm)"]
+  handoff["handoffkit (17 @fusionkit/* npm)"]
   mlx["mlx-lm (private PyPI)"]
   protocol --> fusionpy
   protocol --> cursor
@@ -26,9 +26,19 @@ flowchart TD
   fusionpy --> mlx
 ```
 
-`fusionkit-sandbox` is out of scope (publishes nothing). The Python `uniroute`
-packages, `apps/scope`/`apps/docs`, and the Docker image are `tracked` only:
-visible in plans for version awareness, never published by this tool.
+The Python `uniroute` packages, `apps/scope`/`apps/docs`, and the Docker image
+are `tracked` only: visible in plans for version awareness, never published by
+this tool.
+
+Each unit's `publishWorkflow` in `release/workspace.release.json` names a
+workflow in that unit's own repository. For `mlx-lm` that is
+`velum-private-release.yml` in the `velum-labs/mlx-lm` repo; it is not a
+workflow file in this repository.
+
+The protocol ships as two distinct packages: `spec/model-fusion-contract`
+publishes `@velum-labs/model-fusion-protocol` (the cross-repo
+`fusionkit-protocol` release unit above), while `packages/protocol` ships
+`@fusionkit/protocol` as part of the npm monorepo (handoffkit) release.
 
 ## State files
 
