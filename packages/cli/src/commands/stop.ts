@@ -9,7 +9,9 @@ import { registerPaletteAction } from "./palette.js";
 
 /** Reap persistent fusion services, including the subscription proxy. */
 export async function runFusionStop(): Promise<number> {
-  const log = (line: string): void => uiStream().write(`${dim(line)}\n`);
+  const log = (line: string): void => {
+    uiStream().write(`${dim(line)}\n`);
+  };
   const proxy = await stopProxy(log);
   const stoppedServices = await reapFusionServices(log);
   const stopped = stoppedServices + (proxy.stopped ? 1 : 0);
