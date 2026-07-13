@@ -146,6 +146,32 @@ async function launchDirect(
   if (opts.expose === true) {
     fail("--expose is unavailable with --direct; use --public-url for Cursor");
   }
+  const incompatible = [
+    ["--model/--models", opts.model ?? opts.models],
+    ["--model-endpoint", opts.modelEndpoint],
+    ["--key-env", opts.keyEnv],
+    ["--ensemble", opts.ensemble],
+    ["--judge-model", opts.judgeModel],
+    ["--synthesis-url", opts.synthesisUrl],
+    ["--fusionkit-dir", opts.fusionkitDir],
+    ["--repo", opts.repo],
+    ["--observe/--no-observe", opts.observe],
+    ["--reasoning/--no-reasoning", opts.reasoning],
+    ["--reasoning-model", opts.reasoningModel],
+    ["--subagents/--no-subagents", opts.subagents],
+    ["--port", opts.port],
+    ["--portless/--no-portless", opts.portless],
+    ["--on-rate-limit", opts.onRateLimit],
+    ["--budget", opts.budget],
+    ["--panel-trust", opts.panelTrust],
+    ["--k", opts.k],
+    ["--resume", opts.resume],
+    ["--continue", opts.continue]
+  ] as const;
+  const conflict = incompatible.find(([, value]) => value !== undefined);
+  if (conflict !== undefined) {
+    fail(`${conflict[0]} cannot be combined with --direct`);
+  }
   if (tool !== "serve" && !DIRECT_TOOLS.includes(tool)) {
     fail(`${tool} does not support --direct`);
   }

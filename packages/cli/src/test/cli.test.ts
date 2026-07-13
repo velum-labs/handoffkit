@@ -502,6 +502,12 @@ test("direct mode rejects the contradictory local-panel flag", () => {
   assert.match(result.stderr, /--direct cannot be combined with --local or --no-local/);
 });
 
+test("direct mode rejects fusion-only options instead of ignoring them", () => {
+  const result = fusionkit(["codex", "--direct", "--model", "gpt=openai:gpt-5.5"]);
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /--model\/--models cannot be combined with --direct/);
+});
+
 test("direct-only tools require the direct flag", () => {
   const result = fusionkit(["opencode"]);
   assert.equal(result.status, 1);
