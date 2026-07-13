@@ -9,7 +9,6 @@ import { registerDoctor } from "./commands/doctor.js";
 import { registerEnsemble } from "./commands/ensemble.js";
 import { registerFusion } from "./commands/fusion.js";
 import { registerInstall } from "./commands/install.js";
-import { registerLocal } from "./commands/local.js";
 import { registerModels } from "./commands/models.js";
 import { registerPrompts } from "./commands/prompts.js";
 import { registerProxy } from "./commands/proxy.js";
@@ -54,7 +53,6 @@ export function buildProgram(): Command {
   registerModels(program);
   registerEnsemble(program);
   registerInstall(program);
-  registerLocal(program);
   registerCompletion(program);
   registerComplete(program);
   registerRuntime(program);

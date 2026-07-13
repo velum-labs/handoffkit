@@ -7,12 +7,12 @@ import {
   cursorInstructions,
   opencodeConfig,
   opencodeModelArg,
-  runLocal
+  runDirect
 } from "../local.js";
 
 /**
- * M4 coverage: the pure shim builders for `fusionkit local`. The spawn/exec path
- * needs the real vendor binaries and is exercised manually, not in CI.
+ * Coverage for the pure shim builders used by `fusionkit <tool> --direct`. The
+ * spawn/exec path needs the real vendor binaries and is exercised manually.
  */
 
 test("claudeEnv points Claude Code at the gateway's Anthropic surface", () => {
@@ -62,10 +62,10 @@ test("cursorInstructions prints the gateway bearer token as the API key when set
   assert.ok(!text.includes("any non-empty value"));
 });
 
-test("local serve handles SIGINT through finally and closes the gateway", async () => {
+test("direct serve handles SIGINT through finally and closes the gateway", async () => {
   const listenersBefore = new Set(process.listeners("SIGINT"));
   let closeCalls = 0;
-  const pending = runLocal("serve", [], {
+  const pending = runDirect("serve", [], {
     config: {
       kind: "openai",
       baseUrl: "http://127.0.0.1:1/v1",
@@ -90,7 +90,7 @@ test("local serve handles SIGINT through finally and closes the gateway", async 
       | undefined;
     if (interrupt === undefined) await new Promise((resolve) => setTimeout(resolve, 5));
   }
-  assert.ok(interrupt !== undefined, "runLocal must install a SIGINT cleanup handler");
+  assert.ok(interrupt !== undefined, "runDirect must install a SIGINT cleanup handler");
   interrupt();
 
   assert.equal(await pending, 130);

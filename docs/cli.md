@@ -70,7 +70,6 @@ are honored, and piped answers still drive prompts
 | `sessions` | List, inspect, and remove durable gateway sessions: `sessions [list]` / `sessions show <id>` / `sessions rm <id>`. | `packages/cli/src/commands/sessions.ts` |
 | `models` | Manage the local MLX model cache: `models list` / `models download` / `models rm`. | `packages/cli/src/commands/models.ts` |
 | `ensemble` | Manage named ensembles (`list` / `add` / `edit` / `remove` / `rename` / `use`) plus advanced maintainer harness tooling: `ensemble run` / `handoff` / `dashboard` / `e2e` / `gateway`. | `packages/cli/src/commands/ensemble.ts`, `ensemble-config.ts` |
-| `local <tool>` | Back a vendor agent (claude / codex / opencode / cursor) with a single local MLX model and no fusion; for a fused local panel use `fusionkit codex --local`. | `packages/cli/src/commands/local.ts` |
 | `telemetry` | Inspect and control anonymous, opt-in product telemetry: `telemetry status` / `on` / `off` / `inspect` (prints exactly what a session event would contain). Off by default; `DO_NOT_TRACK` beats everything. | `packages/cli/src/commands/telemetry.ts` |
 | `completion <shell>` | Print a static shell completion script for bash, zsh, or fish (advanced). | `packages/cli/src/commands/completion.ts` |
 | `runtime` | Advanced maintainer inspection of runtime-kernel workflows and composition primitives. | `packages/cli/src/commands/runtime.ts` |
@@ -86,6 +85,7 @@ tool is forwarded to it.
 
 ```sh
 fusionkit codex --local                                 # local MLX trio (Apple Silicon)
+fusionkit codex --direct                                # one local model, no fusion
 fusionkit claude --repo /path/to/repo                   # fuse over another repo
 fusionkit codex --model gpt=openai:gpt-5.5 --model opus=anthropic:claude-opus-4-8
 fusionkit cursor --ide                                  # wire the Cursor IDE (no tunnel)
@@ -100,6 +100,7 @@ Shared flags (full list in `applyFusionOptions`):
 | `--key-env ID=ENV` | Env var holding a model's API key. | core |
 | `--ensemble NAME` | The session-default ensemble from `.fusionkit/fusion.json` (all defined ensembles still register as their own `fusion-<name>` models). | core |
 | `--judge-model MODEL` | Model used for judge synthesis (applies to the selected ensemble). | core |
+| `--direct` | Back the tool with one local model directly, bypassing the panel, judge, and synthesis. | core |
 | `--local` / `--no-local` | Run the panel on local MLX models (Apple Silicon only) instead of cloud providers. | core |
 | `--observe` / `--no-observe` | Boot the local scope dashboard and stream trace spans to it. | core |
 | `--repo DIR` | The coding workspace the panel fuses over. | core |

@@ -82,9 +82,8 @@ win. Pass `--no-subagents` to skip the scaffolding.
 
 - Only the agent chat/plan panel uses the fused model. Composer, inline edit,
   apply, and autocomplete stay on Cursor's own backend.
-- `fusionkit local cursor` backs Cursor with a single local model and no
-  fusion; because of the loopback restriction it needs `--public-url` or
-  `--ide`.
+- `fusionkit cursor --direct` backs Cursor with one local model and no fusion;
+  because of the loopback restriction it needs `--public-url` or `--ide`.
 
 ## Related pages
 

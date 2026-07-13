@@ -8,9 +8,11 @@ import { DEFAULT_REASONING_MODEL, FUSION_TOOLS, gitToplevel, pickTool, runFusion
 import type { FusionTool, RunFusionOptions } from "../fusion-quickstart.js";
 import { loadFusionConfig } from "../fusion-config.js";
 import type { FusionConfig } from "../fusion-config.js";
+import { runDirect } from "../local.js";
 import { configDefaultEnsembleName } from "../fusion/effective-config.js";
 import { runFusionInit } from "../fusion-init.js";
 import { toolRegistry } from "../tools.js";
+import { contextFor } from "../shared/context.js";
 import { fail } from "../shared/errors.js";
 import { warnPassthroughTypos } from "../shared/flag-suggest.js";
 
@@ -39,6 +41,8 @@ type FusionOpts = {
   synthesisUrl?: string;
   fusionkitDir?: string;
   repo?: string;
+  direct?: boolean;
+  publicUrl?: string;
   local?: boolean;
   observe?: boolean;
   reasoning?: boolean;
@@ -59,6 +63,16 @@ type FusionOpts = {
   continue?: boolean;
 };
 
+const DIRECT_TOOLS: readonly string[] = [
+  ...toolRegistry.launchableLocal().map((tool) => tool.id),
+  "serve"
+];
+
+const TOP_LEVEL_TOOLS: readonly string[] = [
+  ...FUSION_TOOLS,
+  ...DIRECT_TOOLS.filter((tool) => !(FUSION_TOOLS as readonly string[]).includes(tool))
+];
+
 /** Attach the panel/gateway flags shared by `fusion` and the per-tool launchers. */
 function applyFusionOptions(command: Command): Command {
   return command
@@ -74,6 +88,8 @@ function applyFusionOptions(command: Command): Command {
     .option("--synthesis-url <url>", "pre-running fusionkit serve for synthesis")
     .option("--fusionkit-dir <dir>", "local FusionKit checkout (dev override for the uvx synthesizer)")
     .option("--repo <dir>", "coding workspace the panel fuses over")
+    .option("--direct", "back the tool with one local model directly (no panel, judge, or synthesis)")
+    .option("--public-url <url>", "direct Cursor mode only: public tunnel URL (or FUSIONKIT_PUBLIC_URL)")
     .option("--local", "run the panel on local MLX models (Apple Silicon only) instead of cloud providers")
     .option("--no-local", "override a .fusionkit default of local=true")
     .option("--observe", "boot the local scope dashboard and stream live trace events")
@@ -116,6 +132,30 @@ function applyFusionOptions(command: Command): Command {
     .option("--continue", "resume the most recently active stored session")
     .allowUnknownOption()
     .passThroughOptions();
+}
+
+async function launchDirect(
+  tool: string,
+  args: string[],
+  opts: FusionOpts,
+  command: Command
+): Promise<number> {
+  if (opts.local !== undefined) {
+    fail("--direct cannot be combined with --local or --no-local; direct mode always uses one local model");
+  }
+  if (opts.expose === true) {
+    fail("--expose is unavailable with --direct; use --public-url for Cursor");
+  }
+  if (tool !== "serve" && !DIRECT_TOOLS.includes(tool)) {
+    fail(`${tool} does not support --direct`);
+  }
+  const ctx = contextFor(command);
+  return await runDirect(tool, args, {
+    log: (line) => ctx.presenter.note(line),
+    ...(opts.publicUrl !== undefined ? { publicUrl: opts.publicUrl } : {}),
+    ...(opts.ide === true ? { ide: true } : {}),
+    ...(opts.authToken !== undefined ? { authToken: opts.authToken } : {})
+  });
 }
 
 /** Build the flag-only `RunFusionOptions` (no config/defaults applied yet). */
@@ -283,11 +323,16 @@ export function registerFusion(program: Command): void {
   );
 
   // Top-level shortcuts: `fusionkit codex`, `fusionkit claude`, etc.
-  for (const tool of FUSION_TOOLS) {
+  for (const tool of TOP_LEVEL_TOOLS) {
+    const supportsFusion = (FUSION_TOOLS as readonly string[]).includes(tool);
     applyFusionOptions(
       program
         .command(tool)
-        .description(`real model fusion backs ${tool === "serve" ? "any tool (prints setup snippets)" : tool}`)
+        .description(
+          supportsFusion
+            ? `real model fusion backs ${tool === "serve" ? "any tool (prints setup snippets)" : tool}`
+            : `back ${tool} with one local model directly (--direct required)`
+        )
         .argument("[args...]", `arguments forwarded to ${tool}`)
     )
       .addHelpText(
@@ -297,6 +342,16 @@ export function registerFusion(program: Command): void {
       .action(async (args: string[], _opts: FusionOpts, command: Command) => {
         const opts = command.optsWithGlobals<FusionOpts>();
         warnPassthroughTypos(command, args, tool);
+        if (opts.direct === true) {
+          process.exitCode = await launchDirect(tool, args, opts, command);
+          return;
+        }
+        if (opts.publicUrl !== undefined) {
+          fail("--public-url requires --direct");
+        }
+        if (!supportsFusion) {
+          fail(`${tool} only supports direct mode; run \`fusionkit ${tool} --direct\``);
+        }
         const { options } = resolveContext(opts);
         if (options.expose === true && tool !== "serve") {
           fail("--expose only applies to `fusionkit serve` (launched agents reach the gateway on loopback)");
@@ -335,7 +390,10 @@ export function registerFusion(program: Command): void {
       let tool: FusionTool | undefined = opts.tool ? parseFusionTool(opts.tool) : undefined;
       let toolArgs = [...args];
       if (positionalTool !== undefined) {
-        if (tool === undefined && (FUSION_TOOLS as readonly string[]).includes(positionalTool)) {
+        const positionalIsTool =
+          (FUSION_TOOLS as readonly string[]).includes(positionalTool) ||
+          (opts.direct === true && DIRECT_TOOLS.includes(positionalTool));
+        if (tool === undefined && positionalIsTool) {
           tool = positionalTool as FusionTool;
         } else {
           toolArgs = [positionalTool, ...toolArgs];
@@ -343,6 +401,13 @@ export function registerFusion(program: Command): void {
       }
       const resolvedTool = tool ?? configTool ?? (process.stdin.isTTY ? await pickTool() : "codex");
       warnPassthroughTypos(command, toolArgs, resolvedTool);
+      if (opts.direct === true) {
+        process.exitCode = await launchDirect(resolvedTool, toolArgs, opts, command);
+        return;
+      }
+      if (opts.publicUrl !== undefined) {
+        fail("--public-url requires --direct");
+      }
       if (options.expose === true && resolvedTool !== "serve") {
         fail("--expose only applies to `fusionkit serve` (launched agents reach the gateway on loopback)");
       }
