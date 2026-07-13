@@ -1,7 +1,7 @@
 ---
 id: e002-sota-open-solo-screen
 owner: alen
-status: locked
+status: running
 benchmark: livecodebench
 claim: "SOTA anchors and open-weight solo floor on the hypergrid dev slice"
 sweep_id: e002-sota-open-solo-screen
