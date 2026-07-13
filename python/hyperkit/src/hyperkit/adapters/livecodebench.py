@@ -39,12 +39,12 @@ import subprocess
 import sys
 import tempfile
 import time
-import urllib.error
-import urllib.request
 import zlib
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any
+
+import httpx
 
 from hyperkit.core import registry
 from hyperkit.core.manifests import TextManifest
@@ -217,11 +217,33 @@ def run_tests(
 
 
 class _Client:
-    """Minimal OpenAI-compatible chat client (stdlib only, retrying)."""
+    """Minimal OpenAI-compatible chat client with retries and a hard deadline."""
 
-    def __init__(self, base_url: str, api_key: str | None):
+    def __init__(
+        self,
+        base_url: str,
+        api_key: str | None,
+        *,
+        transport: httpx.BaseTransport | None = None,
+        clock: Callable[[], float] = time.monotonic,
+    ):
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
+        self.transport = transport
+        self.clock = clock
+
+    def _read_json(self, response: httpx.Response, *, deadline: float) -> dict[str, Any]:
+        body = bytearray()
+        for chunk in response.iter_bytes():
+            if self.clock() >= deadline:
+                raise TimeoutError("chat completion exceeded its wall-clock deadline")
+            body.extend(chunk)
+        if self.clock() >= deadline:
+            raise TimeoutError("chat completion exceeded its wall-clock deadline")
+        data = json.loads(body)
+        if not isinstance(data, dict):
+            raise ValueError("chat completion response must be a JSON object")
+        return data
 
     def complete(
         self,
@@ -241,41 +263,40 @@ class _Client:
             # OpenRouter returns exact billed cost; other servers ignore this.
             "usage": {"include": True},
         }
-        body = json.dumps(payload).encode()
         headers = {"Content-Type": "application/json"}
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
         url = f"{self.base_url}/chat/completions"
         last_error: Exception | None = None
-        for attempt in range(attempts):
-            request = urllib.request.Request(url, data=body, headers=headers)
-            try:
-                with urllib.request.urlopen(request, timeout=timeout_s) as response:
-                    data = json.loads(response.read())
-                choice = (data.get("choices") or [{}])[0]
-                message = choice.get("message") or {}
-                usage = data.get("usage") or {}
-                return {
-                    "text": message.get("content") or "",
-                    "prompt_tokens": int(usage.get("prompt_tokens") or 0),
-                    "completion_tokens": int(usage.get("completion_tokens") or 0),
-                    "cost_usd": float(usage.get("cost") or 0.0),
-                    "finish_reason": choice.get("finish_reason"),
-                }
-            except (
-                json.JSONDecodeError,
-                urllib.error.URLError,
-                urllib.error.HTTPError,
-                TimeoutError,
-                OSError,
-            ) as exc:
-                last_error = exc
-                retryable = True
-                if isinstance(exc, urllib.error.HTTPError):
-                    retryable = exc.code in (408, 409, 429, 500, 502, 503, 504)
-                if not retryable or attempt == attempts - 1:
-                    raise
-                time.sleep(min(60.0, 2.0 * 2**attempt))
+        with httpx.Client(
+            headers=headers,
+            timeout=httpx.Timeout(timeout_s),
+            transport=self.transport,
+        ) as client:
+            for attempt in range(attempts):
+                try:
+                    deadline = self.clock() + timeout_s
+                    with client.stream("POST", url, json=payload) as response:
+                        response.raise_for_status()
+                        data = self._read_json(response, deadline=deadline)
+                    choice = (data.get("choices") or [{}])[0]
+                    message = choice.get("message") or {}
+                    usage = data.get("usage") or {}
+                    return {
+                        "text": message.get("content") or "",
+                        "prompt_tokens": int(usage.get("prompt_tokens") or 0),
+                        "completion_tokens": int(usage.get("completion_tokens") or 0),
+                        "cost_usd": float(usage.get("cost") or 0.0),
+                        "finish_reason": choice.get("finish_reason"),
+                    }
+                except (json.JSONDecodeError, httpx.HTTPError, TimeoutError, OSError) as exc:
+                    last_error = exc
+                    retryable = True
+                    if isinstance(exc, httpx.HTTPStatusError):
+                        retryable = exc.response.status_code in (408, 409, 429, 500, 502, 503, 504)
+                    if not retryable or attempt == attempts - 1:
+                        raise
+                    time.sleep(min(60.0, 2.0 * 2**attempt))
         raise RuntimeError(f"chat completion failed: {last_error}")
 
 

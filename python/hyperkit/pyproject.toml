@@ -19,6 +19,7 @@ classifiers = [
 # test). SUTs and adapters that need fusionkit register via entry-points from
 # their own packages.
 dependencies = [
+  "httpx>=0.28.1",
   "opentelemetry-api>=1.39.0",
   "opentelemetry-exporter-otlp-proto-http>=1.39.0",
   "opentelemetry-sdk>=1.39.0",
