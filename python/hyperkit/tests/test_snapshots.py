@@ -85,10 +85,12 @@ def test_snapshot_deltas_reconstruct_new_runner_counters(
     completed = _Recorder()
     resolved = _Recorder()
     errors = _Recorder()
+    running = _Recorder()
     cost = _Recorder()
     monkeypatch.setattr(telemetry, "_completed", completed)
     monkeypatch.setattr(telemetry, "_resolved", resolved)
     monkeypatch.setattr(telemetry, "_errors", errors)
+    monkeypatch.setattr(telemetry, "_running", running)
     monkeypatch.setattr(telemetry, "_cost", cost)
 
     telemetry.record_snapshot_deltas(previous, current)
@@ -97,5 +99,9 @@ def test_snapshot_deltas_reconstruct_new_runner_counters(
     assert completed.calls == [(1, current[0].metric_attributes())]
     assert resolved.calls == []
     assert errors.calls == []
+    assert running.calls == [
+        (0, current[0].metric_attributes()),
+        (0, current[0].metric_attributes()),
+    ]
     assert cost.calls == [(0.25, current[0].metric_attributes())]
 

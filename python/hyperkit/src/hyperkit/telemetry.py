@@ -153,6 +153,10 @@ def record_snapshot_deltas(
     for snapshot in current:
         prior = before.get((snapshot.sweep_id, snapshot.cell_id))
         attrs = snapshot.metric_attributes()
+        # Batch workers are not directly observable through the tailnet. Emit
+        # a zero-valued controller series so Fleet distinguishes "none running"
+        # from a missing telemetry path; pending work remains a separate gauge.
+        _running.add(0, attrs)
         completed = snapshot.completed_shards - (prior.completed_shards if prior else 0)
         resolved = snapshot.resolved_shards - (prior.resolved_shards if prior else 0)
         errors = snapshot.errors - (prior.errors if prior else 0)
