@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import os
 import threading
-from collections.abc import Iterator, Mapping
+from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from typing import Any
 
@@ -135,6 +135,36 @@ def set_cell_snapshots(snapshots: list[CellSnapshot]) -> None:
     with _lock:
         _snapshots.clear()
         _snapshots.update({snapshot.cell_id: snapshot for snapshot in snapshots})
+
+
+def record_snapshot_deltas(
+    previous: Sequence[CellSnapshot],
+    current: Sequence[CellSnapshot],
+) -> None:
+    """Reconstruct runner counters from durable S3 snapshots.
+
+    AWS Batch workers cannot reach a tailnet-only OTLP endpoint. The controller
+    therefore emits monotonic deltas as new S3 results appear, keeping the
+    runner-oriented Sweep Live and Fleet dashboards populated without making
+    workers or Prometheus publicly reachable.
+    """
+
+    before = {(snapshot.sweep_id, snapshot.cell_id): snapshot for snapshot in previous}
+    for snapshot in current:
+        prior = before.get((snapshot.sweep_id, snapshot.cell_id))
+        attrs = snapshot.metric_attributes()
+        completed = snapshot.completed_shards - (prior.completed_shards if prior else 0)
+        resolved = snapshot.resolved_shards - (prior.resolved_shards if prior else 0)
+        errors = snapshot.errors - (prior.errors if prior else 0)
+        cost = snapshot.cost_usd - (prior.cost_usd if prior else 0.0)
+        if completed > 0:
+            _completed.add(completed, attrs)
+        if resolved > 0:
+            _resolved.add(resolved, attrs)
+        if errors > 0:
+            _errors.add(errors, attrs)
+        if cost > 0:
+            _cost.add(cost, attrs)
 
 
 def _create_cell_gauges(meter: Any) -> list[Any]:

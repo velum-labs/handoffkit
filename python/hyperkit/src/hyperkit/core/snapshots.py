@@ -54,6 +54,7 @@ class CellSnapshot(BaseModel):
         """Bounded labels for Prometheus; full params stay in S3/Athena."""
 
         return {
+            # Canonical OTel semantic attributes.
             "hyperkit.sweep.id": self.sweep_id,
             "hyperkit.generation": self.generation,
             "hyperkit.benchmark": self.benchmark,
@@ -65,6 +66,19 @@ class CellSnapshot(BaseModel):
             "hyperkit.judge": self.judge,
             "hyperkit.commit": self.commit,
             "hyperkit.sut.kind": self.sut_kind,
+            # Dashboard compatibility labels. Grafana's provisioned dashboards
+            # predate the semantic names and select these concise labels.
+            "run_id": self.sweep_id,
+            "generation": self.generation,
+            "benchmark": self.benchmark,
+            "cell_id": self.cell_id,
+            "topology_hash": self.topology_hash,
+            "topology": self.topology,
+            "k": self.k,
+            "panel": self.panel,
+            "judge": self.judge,
+            "commit": self.commit,
+            "sut_kind": self.sut_kind,
         }
 
 

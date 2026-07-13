@@ -22,7 +22,7 @@ from urllib.parse import unquote_plus
 from hyperkit.backends.s3 import S3ResultStore
 from hyperkit.core.models import Cell, ShardResult
 from hyperkit.core.snapshots import CellSnapshot, build_cell_snapshots
-from hyperkit.telemetry import configure, set_cell_snapshots
+from hyperkit.telemetry import configure, record_snapshot_deltas, set_cell_snapshots
 
 _stop = False
 
@@ -105,6 +105,12 @@ class HypergridController:
             self.repository.results(sweep_id),
         )
         self.repository.put_snapshots(sweep_id, snapshots)
+        previous = [
+            snapshot
+            for (stored_sweep_id, _), snapshot in self.snapshots.items()
+            if stored_sweep_id == sweep_id
+        ]
+        record_snapshot_deltas(previous, snapshots)
         for snapshot in snapshots:
             self.snapshots[(sweep_id, snapshot.cell_id)] = snapshot
         set_cell_snapshots(list(self.snapshots.values()))
