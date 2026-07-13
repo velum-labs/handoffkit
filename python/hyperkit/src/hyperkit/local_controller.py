@@ -12,6 +12,7 @@ files, so restarting the controller (or the sweep) needs no repair.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import signal
 import time
@@ -68,7 +69,12 @@ def run_local_controller(
     poll_interval: float = 10.0,
     once: bool = False,
 ) -> int:
-    configure("hyperkit-controller")
+    identity_payload = "\0".join(sorted(str(workdir.resolve()) for workdir in workdirs))
+    identity = hashlib.sha256(identity_payload.encode()).hexdigest()[:16]
+    configure(
+        "hyperkit-controller",
+        service_instance_id=f"hyperkit-local-controller:{identity}",
+    )
     signal.signal(signal.SIGTERM, _stop_handler)
     signal.signal(signal.SIGINT, _stop_handler)
     while not _stop:

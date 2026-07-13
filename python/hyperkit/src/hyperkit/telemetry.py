@@ -42,7 +42,21 @@ _snapshots: dict[str, CellSnapshot] = {}
 _cell_gauges: list[Any] = []
 
 
-def configure(service_name: str = "hyperkit-runner") -> None:
+def _resource_attributes(
+    service_name: str,
+    service_instance_id: str | None,
+) -> dict[str, str]:
+    attributes = {"service.name": service_name}
+    if service_instance_id is not None:
+        attributes["service.instance.id"] = service_instance_id
+    return attributes
+
+
+def configure(
+    service_name: str = "hyperkit-runner",
+    *,
+    service_instance_id: str | None = None,
+) -> None:
     """Install private metric+trace exporters when an OTLP endpoint is configured.
 
     Providers stay private to hyperkit rather than replacing OTel's process-global
@@ -63,7 +77,7 @@ def configure(service_name: str = "hyperkit-runner") -> None:
         if not any((endpoint, metrics_endpoint, traces_endpoint)):
             return
 
-        resource = Resource.create({"service.name": service_name})
+        resource = Resource.create(_resource_attributes(service_name, service_instance_id))
         metric_exporter = OTLPMetricExporter(
             endpoint=metrics_endpoint
             or (f"{endpoint.rstrip('/')}/v1/metrics" if endpoint else None)
@@ -161,14 +175,13 @@ def record_snapshot_deltas(
         resolved = snapshot.resolved_shards - (prior.resolved_shards if prior else 0)
         errors = snapshot.errors - (prior.errors if prior else 0)
         cost = snapshot.cost_usd - (prior.cost_usd if prior else 0.0)
-        if completed > 0:
-            _completed.add(completed, attrs)
-        if resolved > 0:
-            _resolved.add(resolved, attrs)
-        if errors > 0:
-            _errors.add(errors, attrs)
-        if cost > 0:
-            _cost.add(cost, attrs)
+        # Register every counter in each controller process, even when no new
+        # events arrived since the persisted snapshot. This keeps instant
+        # dashboard queries present after a restart.
+        _completed.add(max(0, completed), attrs)
+        _resolved.add(max(0, resolved), attrs)
+        _errors.add(max(0, errors), attrs)
+        _cost.add(max(0.0, cost), attrs)
 
 
 def _create_cell_gauges(meter: Any) -> list[Any]:

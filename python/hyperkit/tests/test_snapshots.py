@@ -100,12 +100,26 @@ def test_snapshot_deltas_reconstruct_new_runner_counters(
     telemetry.record_snapshot_deltas(previous, current)
     telemetry.record_snapshot_deltas(current, current)
 
-    assert completed.calls == [(1, current[0].metric_attributes())]
-    assert resolved.calls == []
-    assert errors.calls == []
+    attributes = current[0].metric_attributes()
+    assert completed.calls == [(1, attributes), (0, attributes)]
+    assert resolved.calls == [(0, attributes), (0, attributes)]
+    assert errors.calls == [(0, attributes), (0, attributes)]
     assert running.calls == [
-        (0, current[0].metric_attributes()),
-        (0, current[0].metric_attributes()),
+        (0, attributes),
+        (0, attributes),
     ]
-    assert cost.calls == [(0.25, current[0].metric_attributes())]
+    assert cost.calls == [(0.25, attributes), (0.0, attributes)]
+
+
+def test_controller_resource_identity_is_stable_and_runner_identity_is_automatic() -> None:
+    assert telemetry._resource_attributes("hyperkit-runner", None) == {
+        "service.name": "hyperkit-runner"
+    }
+    assert telemetry._resource_attributes(
+        "hyperkit-controller",
+        "controller:bucket:root",
+    ) == {
+        "service.name": "hyperkit-controller",
+        "service.instance.id": "controller:bucket:root",
+    }
 

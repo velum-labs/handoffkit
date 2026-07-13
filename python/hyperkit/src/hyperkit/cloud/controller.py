@@ -198,7 +198,8 @@ def main() -> int:
     only_sweep = os.environ.get("HYPERKIT_SWEEP_ID")
     poll_interval = float(os.environ.get("HYPERKIT_POLL_INTERVAL", "30"))
 
-    configure("hyperkit-controller")
+    controller_identity = f"hyperkit-controller:{bucket}:{prefix or 'root'}"
+    configure("hyperkit-controller", service_instance_id=controller_identity)
     s3_client = _boto3_client("s3")
     sqs_client = _boto3_client("sqs") if queue_url else None
     controller = HypergridController(
