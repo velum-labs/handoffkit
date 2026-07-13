@@ -2,6 +2,7 @@
 
 These recipes show how to compose common FusionKit kernels with the TypeScript composition API.
 They mirror the tested paths in `packages/ensemble/src/test/runtime.test.ts`.
+The runtime substrate itself lives in `@fusionkit/kernel`; `@fusionkit/ensemble` re-exports it and owns the operators, workflows, and schedulers used below.
 
 ## Imports
 
@@ -19,6 +20,8 @@ import {
   StaticDAGScheduler,
   RankFuseScheduler,
   createTaskArtifact,
+  createRuntimeReplayRecord,
+  executionSelectRepairWorkflow,
   graph,
   refs
 } from "@fusionkit/ensemble";

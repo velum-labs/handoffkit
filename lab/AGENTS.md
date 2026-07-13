@@ -27,7 +27,7 @@ lab/
   REGISTRY.md               # generated index — NEVER edit by hand
   JOURNAL.md                # append-only cross-experiment log
   experiments/
-    e001-swebench-k-sweep/
+    eNNN-short-slug/        # e.g. e001-hypergrid-bringup
       experiment.md         # single source of truth (front matter + sections)
       experiment.py         # the hyperkit Experiment (or matrix .yaml)
       sweep.lock.json       # committed copy of the frozen plan
@@ -141,7 +141,8 @@ Only move forward (or to `abandoned`). Update `updated:` on every change.
 3. Commit `sweep.lock.json`, set status `locked`, regenerate registry, commit
    directly to main (no PR needed after the proposal is merged).
 4. Submit: `hyperkit apply --workdir work --backend aws-batch`. Set status
-   `running`, commit.
+   `running`, commit. (`--backend local` also works for zero-/low-cost smokes;
+   `aws-batch` is the production default.)
 
 ### C. Monitor and extend
 
@@ -199,6 +200,9 @@ Max 10 lines per entry. Never edit or delete an existing entry.
    go in JOURNAL.md or the proposal PR.
 3. Never run a sweep for an experiment whose proposal PR is unmerged.
 4. Never exceed `budget_usd`; always pass `--spend-ceiling-usd` at plan time.
+   Caveat (per `analysis/hypergrid/PLAN.md`): the engine records the ceiling
+   at plan time but does not yet enforce it at apply time — operators must
+   watch the cost ledger themselves.
 5. Never commit anything under `work/`, result payloads, or secrets.
 6. `sweep_id` always equals the experiment id — this is what makes Grafana's
    `run_id` label and Athena's `sweep_id` partition map 1:1 to registry rows.

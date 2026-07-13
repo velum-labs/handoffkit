@@ -13,8 +13,7 @@ benchmark tooling. Consume a versioned protocol artifact from this repo instead.
   source of truth. It references the JSON Schema records instead of copying durable
   record fields.
 - Protobuf/Buf is reserved for a later internal streaming, Connect, or gRPC boundary
-  if the service boundary hardens. It is not required for v1 and is not part of this
-  PR.
+  if the service boundary hardens. It is not required for v1.
 
 ## Service boundaries
 
@@ -29,12 +28,18 @@ The initial IDL prepares these minimum service seams:
 
 ## Package targets
 
-TypeScript consumers should target the npm package name
-`@velum-labs/model-fusion-protocol`, published to GitHub Packages while the repo remains
-private. The package should contain JSON Schemas, OpenAPI 3.1, and generated
-TypeScript SDK/types/validators. Service clients and request/response types are
-generated from OpenAPI with `openapi-typescript` and `openapi-fetch`; durable record
-validators are generated from the JSON Schema bundle with Ajv.
+External TypeScript consumers should target the npm package name
+`@velum-labs/model-fusion-protocol`, published to public npm
+(`registry.npmjs.org`) from `spec/model-fusion-contract`. The package contains
+JSON Schemas, OpenAPI 3.1, and generated TypeScript SDK/types/validators.
+Service clients and request/response types are generated from OpenAPI with
+`openapi-typescript` and `openapi-fetch`; durable record validators are
+generated from the JSON Schema bundle with Ajv.
+
+In-monorepo TypeScript consumers use `@fusionkit/protocol` (`packages/protocol`)
+instead, which ships within the npm monorepo release; the
+`@velum-labs/model-fusion-protocol` package from `spec/model-fusion-contract` is
+the cross-repo artifact for external consumers.
 
 Python consumers need a private PyPI-compatible path. Prefer Cloudsmith, AWS
 CodeArtifact, or Gemfury for private wheels. Short term, publish wheels to GitHub
@@ -73,10 +78,10 @@ then fails if the committed outputs drift.
 ## Correction from earlier proto-first direction
 
 An earlier scaffold treated protobuf/Buf as the service/SDK source. The v1 direction
-is now JSON Schema for durable records plus OpenAPI 3.1 for HTTP/JSON service APIs.
-This PR removes the proto/Buf v1 path and keeps protobuf as future-facing only.
+is now JSON Schema for durable records plus OpenAPI 3.1 for HTTP/JSON service APIs;
+protobuf is future-facing only.
 
-## Follow-up outside this PR
+## Consumer expectations
 
 - HandoffKit should replace any copied protocol models with generated OpenAPI
   `HarnessExecutorService` bindings and generated JSON Schema validators from the
@@ -86,5 +91,6 @@ This PR removes the proto/Buf v1 path and keeps protobuf as future-facing only.
   Schema validators.
 - MLX provider integrations should consume `MlxProviderService` bindings for
   provider metadata instead of cloning FusionKit types.
-- Release automation should publish the npm package and a private Python wheel from
-  this FusionKit contract origin, generated from JSON Schema and OpenAPI.
+- Release automation publishes the npm package and the Python distributions from
+  this FusionKit contract origin, generated from JSON Schema and OpenAPI (see
+  `docs/model-fusion-protocol-release.md`).
