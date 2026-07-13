@@ -7,6 +7,7 @@ added with the cloud backend; the offline commands here work today.
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Annotated
 
@@ -14,10 +15,13 @@ import typer
 
 import hyperkit.adapters  # noqa: F401  (registers built-in benchmark adapters)
 import hyperkit.suts  # noqa: F401  (registers built-in SUTs)
+from hyperkit.backends.s3 import S3ResultStore
 from hyperkit.cloud.controller import main as controller_main
 from hyperkit.core.aggregate import format_table
 from hyperkit.core.experiments import load_experiment
+from hyperkit.core.lock import load_lock
 from hyperkit.core.models import TopologySpec
+from hyperkit.core.store import ResultStore
 from hyperkit.core.sweep import SweepEngine
 from hyperkit.local_controller import run_local_controller
 from hyperkit.replay import ReplayRow, replay_reports
@@ -92,6 +96,39 @@ def resume(
 
     count = SweepEngine(workdir, backend=backend).apply(backend)
     typer.echo(f"resumed {count} missing shards via {backend} (frozen lock)")
+
+
+@app.command()
+def pull(
+    workdir: Annotated[Path, typer.Option()] = Path(".hyperkit"),
+    bucket: Annotated[
+        str | None,
+        typer.Option(help="S3 bucket (default: HYPERKIT_AWS_BUCKET / HYPERKIT_S3_BUCKET)"),
+    ] = None,
+    prefix: Annotated[str, typer.Option(help="S3 key prefix")] = "",
+) -> None:
+    """Mirror cloud ShardResults into the local store so status/collect and
+    offline analysis see the same checkpoint the runners wrote to S3."""
+
+    resolved_bucket = (
+        bucket
+        or os.environ.get("HYPERKIT_AWS_BUCKET")
+        or os.environ.get("HYPERKIT_S3_BUCKET")
+    )
+    if not resolved_bucket:
+        raise typer.BadParameter("provide --bucket or set HYPERKIT_AWS_BUCKET")
+    lock = load_lock(workdir / "sweep.lock.json")
+    remote = S3ResultStore(
+        resolved_bucket, prefix=prefix or os.environ.get("HYPERKIT_S3_PREFIX", "")
+    )
+    local = ResultStore(workdir / "results")
+    present = local.present_ids(lock.sweep_id)
+    pulled = 0
+    for result in remote.get_all(lock.sweep_id):
+        if result.shard_id not in present:
+            local.put(lock.sweep_id, result)
+            pulled += 1
+    typer.echo(f"pulled {pulled} new results from s3://{resolved_bucket}")
 
 
 @app.command()

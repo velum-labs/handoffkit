@@ -25,6 +25,7 @@ hyperkit = { workspace = true }
 # Dev tooling shared by all members; synced by default with `uv sync`.
 [dependency-groups]
 dev = [
+  "boto3>=1.43.37",
   "coverage>=7.15.0",
   "datasets<6",
   "httpx>=0.28.1",

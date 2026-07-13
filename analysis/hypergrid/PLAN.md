@@ -29,11 +29,22 @@ Adaptation decisions:
   live in separate stores; later experiments must NOT re-bill baselines — the
   supervisor reads across experiment workdirs for gap computations, and each
   design states which prior stores it references.
-- **Backend.** Lab procedure B assumes `--backend aws-batch` (velum-mini is
-  configured for AWS runs). If the Batch stack/runner image is unavailable in
-  the executing environment, `--backend local` with
-  `HYPERKIT_LOCAL_MAX_WORKERS` is the sanctioned variant; state the choice in
-  the proposal.
+- **Backend: AWS Batch (the requirement; deployed 2026-07-13).** Sweeps run
+  on the `hypergrid-batch` Fargate Spot substrate
+  (`infra/hypergrid-batch/deploy.py`, idempotent): ECR runner image, S3 lake
+  (`runs/` results + `lcb-store/` problems fetched lazily via
+  `HYPERKIT_LCB_S3_URI`), `OPENROUTER_API_KEY` injected from Secrets Manager,
+  2 vCPU / 4 GB job shape, 3 retries, 1 h timeout. Backend env:
+  `HYPERKIT_AWS_BUCKET=hypergrid-batch-052777341990-us-east-1`,
+  `HYPERKIT_AWS_BATCH_JOB_QUEUE=hypergrid-batch-queue`,
+  `HYPERKIT_AWS_BATCH_JOB_DEFINITION=hypergrid-batch-runner:<rev>`.
+  Analysis flow: `hyperkit pull` mirrors S3 results into the local store for
+  `collect`/`supervisor.py`; the S3-polling `hyperkit controller`
+  (`HYPERKIT_S3_BUCKET`, no SQS needed) feeds the tailnet Grafana. Validated
+  end-to-end with a 1-shard smoke (SUCCEEDED, $0.0013 metered, result
+  round-tripped through S3). `--backend local` remains the dev/smoke
+  fallback only. Rebuild + push the runner image (deploy script) whenever
+  hyperkit/fusionkit code that runs inside shards changes.
 - **Spend ceiling.** Always pass `--spend-ceiling-usd <budget_usd>` at plan
   time. Note: the engine records but does not yet enforce it at apply time —
   keep the supervisor's pre-apply cost estimate discipline until enforcement
