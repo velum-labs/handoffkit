@@ -51,17 +51,17 @@ The thesis is economic as much as architectural: several cheaper or open-weight 
 | --- | --- |
 | `codex` / `claude` / `cursor` / `serve` | Main journey: run a fused panel behind a coding harness, or run just the gateway. |
 | `setup` | Pre-provision the pinned PyPI `fusionkit` engine into the `uvx` cache. |
-| `doctor`, `status` | Preflight readiness and preview the effective run plan; `doctor` exits nonzero only when not ready (no `uv`/`uvx`, or no credentials and no downloaded local MLX model). |
+| `doctor` | Preflight readiness; exits nonzero only when not ready (no `uv`/`uvx`, or no credentials and no downloaded local MLX model). |
 | `init` | Scaffold `.fusionkit/fusion.json` and editable prompt files for a repo. |
-| `config` | `show`, `path`, `get`, `set`, `unset`, `edit`, and `export-yaml`. |
+| `config` | `show` (effective config + run preview), `path`, `get`, `set`, `unset`, `edit`, and `export-yaml`. |
 | `prompts` | `list`, `edit`, and `reset` judge/synthesizer prompt overrides. |
-| `ensemble` | `list`, `add`, `edit`, `remove`, `rename`, `use`, plus advanced harness tooling. |
-| `sessions`, `models`, `local` | Manage durable sessions, local MLX model cache, and single-local-model runs. |
-| `stop` | Stop background fusion services (router, dashboard, ...). |
+| `ensemble` | `list`, `add`, `edit`, `remove`, and `rename` named ensembles. |
+| `sessions`, `models` | Manage durable sessions and the local MLX model cache; launcher `--direct` mode handles single-local-model runs. |
+| `stop` | Stop all background fusion services (router, dashboard, subscription proxy, ...). |
 | `install <tool>` / `uninstall <tool>` | Register FusionKit inside a tool's own config (currently `codex`: extra provider + one profile per ensemble). |
 | `proxy` | `serve`, `add`, `status`, and `stop` for the Claude Code / Codex subscription pooling relay. |
 | `telemetry` | `status`, `on`, `off`, and `inspect` for opt-in, anonymous product telemetry. |
-| `completion <shell>`, `runtime`, `version` | Shell completions, advanced runtime-kernel inspection, and version reporting. |
+| `completion <shell>`, `version` | Shell completions and version reporting. |
 
 ## Architecture
 

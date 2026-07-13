@@ -102,7 +102,7 @@ test("config set rejects unknown paths with guidance", () => {
   assert.match(result.stderr, /budgetUsd/);
 });
 
-test("ensemble add/list/use/remove --json manage named ensembles end to end", () => {
+test("ensemble CRUD and config defaultEnsemble manage named ensembles end to end", () => {
   const repo = makeRepo(BASE_CONFIG);
 
   const add = runCli([
@@ -120,8 +120,8 @@ test("ensemble add/list/use/remove --json manage named ensembles end to end", ()
   assert.equal(add.status, 0, add.stderr);
   assert.equal(parseJson<{ modelId: string }>(add.stdout).modelId, "fusion-fast");
 
-  const use = runCli(["ensemble", "use", "fast", "--repo", repo, "--json"]);
-  assert.equal(use.status, 0, use.stderr);
+  const selectDefault = runCli(["config", "set", "defaultEnsemble", "fast", "--repo", repo, "--json"]);
+  assert.equal(selectDefault.status, 0, selectDefault.stderr);
 
   const list = runCli(["ensemble", "list", "--repo", repo, "--json"]);
   assert.equal(list.status, 0, list.stderr);
@@ -194,12 +194,14 @@ test("prompts reset --json removes an override", () => {
   assert.equal(parseJson<{ reset: boolean }>(result.stdout).reset, true);
 });
 
-test("status --json emits the dry-run preview shape", () => {
-  // status resolves the repo from cwd; without a git repo it reports no-repo.
-  const result = runCli(["status", "--json"]);
+test("config show --json carries the dry-run preview fields", () => {
+  const repo = makeRepo(BASE_CONFIG);
+  const result = runCli(["config", "show", "--repo", repo, "--json"]);
   assert.equal(result.status, 0, result.stderr);
-  const payload = parseJson<Record<string, unknown>>(result.stdout);
-  assert.ok("repo" in payload || "error" in payload);
+  const payload = parseJson<{ runPlan: { modelServers: number; tool: string; spawnsCloud: boolean } }>(
+    result.stdout
+  );
+  assert.deepEqual(payload.runPlan, { modelServers: 1, tool: "claude", spawnsCloud: true });
 });
 
 test("sessions list --json emits a sessions array", () => {
@@ -211,13 +213,6 @@ test("sessions list --json emits a sessions array", () => {
   });
   assert.equal(result.status, 0, result.stderr);
   assert.deepEqual(JSON.parse(result.stdout), { sessions: [] });
-});
-
-test("runtime list --json names the front-door workflows", () => {
-  const result = runCli(["runtime", "list", "--json"]);
-  assert.equal(result.status, 0, result.stderr);
-  const payload = parseJson<{ workflows: Array<{ id: string }> }>(result.stdout);
-  assert.ok(payload.workflows.some((workflow) => workflow.id === "fusion-frontdoor-request"));
 });
 
 test("--json errors are structured on stdout", () => {

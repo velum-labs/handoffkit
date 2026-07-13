@@ -11,9 +11,9 @@ The Node `@fusionkit/cli` command tree (`packages/cli/src/cli.ts`) registers the
 FusionKit product commands only:
 
 - `codex` / `claude` / `cursor` / `serve`
-- `init`, `setup`, `doctor`, `status`, `config`, `prompts`, `proxy`,
-  `sessions`, `models`, `ensemble`, `install` / `uninstall`, `local`,
-  `completion` (plus the hidden `complete`), `runtime`, `telemetry`,
+- `init`, `setup`, `doctor`, `config`, `prompts`, `proxy`,
+  `sessions`, `models`, `ensemble`, `install` / `uninstall`,
+  `completion` (plus its internal completion protocol), `telemetry`,
   `version`, and top-level `stop`
 
 No governance commands (`ui`, `runs`, `plane start`, `runner start`, Warrant

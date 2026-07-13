@@ -74,15 +74,12 @@ Built-ins:
 | `rank-fuse` | task -> panel -> rank -> select -> fuse |
 | `execution-select-repair` | task -> panel -> evidence -> select -> repair |
 
-## CLI discovery
+## Workflow discovery
 
-```bash
-fusionkit runtime list
-fusionkit runtime explain rank-fuse
-```
-
-The CLI explains built-in workflows. Running arbitrary graph JSON requires an
-application-provided operator registry, because operators are functions.
+Application code can call `registerBuiltInWorkflows()`, `listWorkflows()`, and
+`getWorkflow(id)` from `@fusionkit/ensemble`. Running arbitrary graph JSON
+requires an application-provided operator registry, because operators are
+functions.
 
 ## Evidence and leakage
 

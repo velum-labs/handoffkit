@@ -123,8 +123,8 @@ test("setup --help documents the warm-up and its flags", () => {
   assert.match(result.stdout, /--fusionkit-dir/);
 });
 
-test("doctor --help documents the --provision warm-up flag", () => {
+test("doctor --help no longer offers the removed --provision flag", () => {
   const result = runCli(["doctor", "--help"]);
   assert.equal(result.status, 0, result.stderr);
-  assert.match(result.stdout, /--provision/);
+  assert.doesNotMatch(result.stdout, /--provision/);
 });

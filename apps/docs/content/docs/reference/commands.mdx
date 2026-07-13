@@ -28,11 +28,10 @@ fusionkit codex --yes -- "fix the build"
 | --- | --- |
 | `fusionkit setup` | Pre-provision the pinned Python fusion engine into the `uvx` cache. Use `--force` to refresh it. |
 | `fusionkit doctor` | Check uv/uvx, agent binaries, provider keys, git, PATH collisions, and platform capability. It exits nonzero with "almost ready" when no usable credentials are present. |
-| `fusionkit status` | Show the effective config and a dry-run preview of what a run will do. |
 | `fusionkit init` | Scaffold a committed `.fusionkit/` folder for this repo. |
 | `fusionkit install codex` | Add FusionKit to your real `~/.codex/config.toml` (managed block: gateway provider + one profile per ensemble); pair with `fusionkit serve --port <n>` and launch via `codex --profile fusion-panel`. |
 | `fusionkit uninstall codex` | Remove the managed FusionKit block from `~/.codex/config.toml`. |
-| `fusionkit stop` | Reap persistent portless singleton services (router, dashboard, ...) left by prior runs. |
+| `fusionkit stop` | Stop all background fusion services, including the subscription proxy. |
 | `fusionkit telemetry <status\|on\|off\|inspect>` | Inspect and control anonymous, opt-in product telemetry (off by default). `inspect` prints exactly what a session event would contain. |
 | `fusionkit version` | Print the npm CLI and pinned PyPI synthesizer versions. |
 | `fusionkit completion <bash\|zsh\|fish>` | Print a static shell completion script. |
@@ -41,7 +40,7 @@ fusionkit codex --yes -- "fix the build"
 
 | Command | What it does |
 | --- | --- |
-| `fusionkit config show` | Print the effective config and where each value came from. |
+| `fusionkit config show` | Print the effective config, where each value came from, and the run plan. |
 | `fusionkit config path` | Print the `.fusionkit/fusion.json` path. |
 | `fusionkit config get <path>` | Read one stored config value. |
 | `fusionkit config set <path> <value>` | Set one value, validated before writing. |
@@ -68,9 +67,8 @@ Add `--ensemble <name>` to target per-ensemble prompt overrides.
 | `fusionkit ensemble edit <name>` | Add or remove members, or change the judge and synthesizer. |
 | `fusionkit ensemble remove <name>` | Delete an ensemble. |
 | `fusionkit ensemble rename <old> <new>` | Rename an ensemble and its prompt directory. |
-| `fusionkit ensemble use <name>` | Make an ensemble the session default. |
 
-Advanced maintainer subcommands also live under `ensemble`: `run`, `handoff`, `dashboard`, `e2e`, and `gateway`. The `ensemble gateway` group has its own subcommands: `serve` (the default), `acp` (an ACP local agent over JSON-RPC stdio), `acp-registry install` (registry-backed ACP adapters), `test` (the unified front-door acceptance suite), and `codex-config` (print a Codex provider config snippet).
+Set the session default with `fusionkit config set defaultEnsemble <name>`.
 
 ## Subscription pooling proxy
 
@@ -118,10 +116,6 @@ fusionkit codex --resume 1a2b3c
 | `fusionkit models download <model>` | Download a local model. |
 | `fusionkit models rm <model>` | Remove a downloaded local model. |
 | `fusionkit <tool> --direct` | Back a vendor agent with one local OpenAI-compatible model and no fusion. Use `--local` instead for a fused local panel. Direct Cursor mode supports `--public-url <url>` (or `FUSIONKIT_PUBLIC_URL`) for the tunnel URL. |
-
-## Advanced runtime command
-
-`fusionkit runtime` is an advanced maintainer surface for inspecting runtime-kernel workflows and composition primitives. Most users do not need it during the normal coding-agent journey.
 
 ## Common launch flags
 

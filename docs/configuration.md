@@ -102,7 +102,7 @@ fusionkit ensemble add deep                   # interactive panel builder on a T
 fusionkit ensemble add deep --model opus=anthropic:claude-opus-4-8 \
   --model gpt=openai:gpt-5.5 --judge claude-opus-4-8
 fusionkit ensemble edit deep --synthesizer claude-opus-4-8
-fusionkit ensemble use deep                   # sessions default to it (defaultEnsemble)
+fusionkit config set defaultEnsemble deep     # sessions default to it
 fusionkit ensemble rename deep review         # per-ensemble prompts move with it
 fusionkit ensemble remove review
 ```

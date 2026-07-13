@@ -73,7 +73,7 @@ function dynamicArgumentValues(path: readonly string[], depth: number): string[]
     return sessionIds();
   }
   if (group === "ensemble" && depth === 0) {
-    if (sub === "edit" || sub === "remove" || sub === "rm" || sub === "use" || sub === "rename") {
+    if (sub === "edit" || sub === "remove" || sub === "rm" || sub === "rename") {
       return ensembleNames();
     }
   }

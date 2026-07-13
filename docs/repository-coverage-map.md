@@ -7,7 +7,7 @@ This map ties every major repository area to the documentation that owns it. Use
 | Area | Primary docs | Coverage expectation |
 | --- | --- | --- |
 | `README.md` | Root README, `docs/README.md`, public Introduction | Product narrative, quick tour, install path, architecture summary, and links into deeper docs. |
-| `packages/cli` | `docs/cli.md`, `docs/typescript-reference.md`, `docs/generated/code-api.md`, public Command Reference | Commands, flags, setup, config, sessions, models, launchers, doctor, status, and error behavior. |
+| `packages/cli` | `docs/cli.md`, `docs/typescript-reference.md`, `docs/generated/code-api.md`, public Command Reference | Commands, flags, setup, config, sessions, models, launchers, doctor, and error behavior. |
 | `packages/model-gateway` | `docs/fusion-harness-gateway.md`, `docs/typescript-reference.md`, `docs/generated/code-api.md`, `docs/specs-and-apis.md`, public API Reference | Gateway routes, dialect adapters, streaming, sessions, cost, rate-limit handoff, provenance, frontdoor workflows, and trajectory capture. |
 | `packages/ensemble` | `docs/fusion-judge-trajectory.md`, `docs/fusion/runtime-kernel.md`, `docs/typescript-reference.md`, `docs/generated/code-api.md`, public Runtime Kernel | Panel execution, worktrees, harnesses, judge synthesis, kernel workflows, operators, schedulers, isolation, and tool execution. |
 | `packages/kernel` | `docs/typescript-reference.md`, `docs/fusion/runtime-kernel.md`, public Runtime Kernel | Dependency-free runtime substrate, artifacts, operators, graphs, validation, wire artifacts, and replay records. |

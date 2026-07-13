@@ -151,9 +151,8 @@ export type ToolDashboardLiveSmoke = {
 };
 
 /**
- * Dashboard metadata for a tool, used by `fusionkit ensemble dashboard` to build
- * the capability matrix, smoke records, and readiness rows from the registry
- * instead of a hardcoded per-tool table.
+ * Dashboard metadata used by the internal harness matrix to build capability,
+ * smoke, and readiness rows from the registry instead of a hardcoded table.
  */
 export type ToolDashboardMetadata = {
   /** Dashboard target id (e.g. "claude-code"), may differ from the tool id. */
@@ -175,8 +174,8 @@ export type ToolDashboardMetadata = {
 /**
  * A single tool integration: its launcher (used by `fusionkit <tool>` and
  * `fusionkit <tool> --direct`) plus, optionally, its ensemble harness factory
- * (used by the harness gateway / e2e matrix). One package implements one of
- * these and the CLI registers it.
+   * (used by internal harness tests). One package implements one of these and
+   * the CLI registers it.
  */
 export type ToolIntegration = {
   /** Stable id (e.g. "codex"). */
@@ -201,8 +200,6 @@ export type ToolIntegration = {
    * context (e.g. the Cursorkit endpoint placeholder).
    */
   setupSnippet?: (input: { gatewayUrl: string; note?: string }) => string;
-  /** Registry-backed ACP adapter id installed by `ensemble gateway acp-registry`. */
-  acpAdapterId?: string;
   /** Launch modes this tool supports. */
   modes: readonly ToolLaunchMode[];
   /** The unified harness kinds this tool's adapter answers for. */
@@ -217,8 +214,8 @@ export type ToolIntegration = {
   launch(ctx: ToolLaunchContext): Promise<number>;
   /** Build the ensemble harness adapter for one of this tool's kinds. */
   createHarness?(kind: UnifiedHarnessKind, options: ToolHarnessResolveOptions): HarnessAdapter;
-  /** Harness metadata for the gateway/e2e matrix (set when `createHarness` is). */
+  /** Harness metadata for internal gateway/matrix tests (set when `createHarness` is). */
   harness?: ToolHarnessMetadata;
-  /** Dashboard metadata for `ensemble dashboard` (set when the tool has a harness). */
+  /** Dashboard metadata for internal harness-matrix tests. */
   dashboard?: ToolDashboardMetadata;
 };

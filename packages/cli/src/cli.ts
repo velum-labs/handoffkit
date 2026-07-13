@@ -12,7 +12,6 @@ import { registerInstall } from "./commands/install.js";
 import { registerModels } from "./commands/models.js";
 import { registerPrompts } from "./commands/prompts.js";
 import { registerProxy } from "./commands/proxy.js";
-import { registerRuntime } from "./commands/runtime.js";
 import { registerSessions } from "./commands/sessions.js";
 import { registerSetup } from "./commands/setup.js";
 import { registerStop } from "./commands/stop.js";
@@ -55,7 +54,6 @@ export function buildProgram(): Command {
   registerInstall(program);
   registerCompletion(program);
   registerComplete(program);
-  registerRuntime(program);
   registerTelemetry(program);
   registerVersion(program);
   registerStop(program);

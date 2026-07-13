@@ -194,9 +194,9 @@ green under the new layout.
 
 Scope:
 1. Re-order command registration so `--help` reads as the user journey: codex /
-   claude / cursor / serve, then init / setup / doctor / status, then config /
-   prompts / sessions / models / ensemble, then maintainer (`runtime` hidden or
-   grouped). Add a 3-line quickstart to root help.
+   claude / cursor / serve, then init / setup / doctor / config, then prompts /
+   sessions / models / ensemble. Maintainer-only runtime and harness commands
+   were removed from the product CLI. Add a 3-line quickstart to root help.
 2. `doctor` readiness gate: exit non-zero (or clearly print "almost ready — no
    provider credentials") when zero keys and no Apple-Silicon local path; make
    the `setup` recommendation prominent when the engine isn't cached.

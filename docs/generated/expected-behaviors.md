@@ -139,7 +139,7 @@ environment-gated rows name the reason and exact live command.
 
 | ID | Expected behavior | Status | Evidence |
 |---|---|---|---|
-| `cli.management-surfaces` | The real CLI covers config, prompts, install/uninstall, telemetry, setup, doctor, completions, versions, and runtime registry. | required | `packages/cli/src/test/cli-command-surfaces-e2e.test.ts` — `config path/show/get/set/unset/export-yaml` |
+| `cli.management-surfaces` | The real CLI covers config, prompts, install/uninstall, telemetry, setup, doctor, completions, and versions. | required | `packages/cli/src/test/cli-command-surfaces-e2e.test.ts` — `config path/show/get/set/unset/export-yaml` |
 
 ## observability
 

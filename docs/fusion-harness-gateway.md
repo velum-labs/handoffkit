@@ -135,8 +135,9 @@ Notes:
   panel. The default product path is the cloud trio; `--local` is the
   zero-credential Apple Silicon path.
 
-For full control over the gateway itself (custom backends, ACP, acceptance
-suite), use `fusionkit ensemble gateway` directly as described below.
+The shipped CLI owns the complete stack through `fusionkit codex`, `claude`,
+`cursor`, and `serve`; lower-level gateway composition remains available as a
+TypeScript library for tests and custom integrations.
 
 ## Data flow
 
@@ -218,10 +219,9 @@ requires_openai_auth = false
 ```
 
 `requires_openai_auth = false` lets Codex talk to the gateway with no API key.
-`fusionkit ensemble gateway codex-config` prints this snippet. For a persistent
-integration in the user's real `~/.codex/config.toml` (an extra provider plus
-one profile per ensemble, paired with a running `fusionkit serve`), use
-`fusionkit install codex` / `fusionkit uninstall codex`.
+For a persistent integration in the user's real `~/.codex/config.toml` (an
+extra provider plus one profile per ensemble, paired with a running
+`fusionkit serve`), use `fusionkit install codex` / `fusionkit uninstall codex`.
 
 ## Claude Code provider wiring
 
@@ -268,25 +268,6 @@ Key points discovered:
   model name and runs the panel.
 - `cursor-agent acp` needs a logged-in Cursor session (`authenticate` with
   `methodId: "cursor_login"`); without it the flow is blocked, not failed.
-
-## CLI
-
-```
-fusionkit ensemble gateway [serve] [opts]   front door: tools drive the fusion ensemble
-  --fusion-backend URL    FusionKit/OpenAI-compatible backend URL (judge synthesis)
-  --harness TARGET        mock | command | codex | claude-code | cursor-acp (repeatable; cursor-desktop is `ensemble e2e` only)
-  --model ID=MODEL        panel model mapping (repeatable)
-  --command CMD           command harness script
-  --repo DIR              workspace repository (default: .)
-  --out DIR               output directory (default: ./.fusionkit/gateway)
-  --host H / --port N     bind address
-  --auth-token TOKEN      require a bearer token on the gateway
-
-fusionkit ensemble gateway acp [opts]            run the generic ACP stdio front door
-fusionkit ensemble gateway acp-registry install  install registry-backed ACP adapters
-fusionkit ensemble gateway codex-config          print a Codex Responses provider snippet
-fusionkit ensemble gateway test [opts]           run the unified front-door acceptance suite
-```
 
 ## Acceptance suite
 

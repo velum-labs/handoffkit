@@ -88,7 +88,7 @@ specific endpoint id for passthrough.
 ```sh
 fusionkit doctor
 fusionkit init
-fusionkit status
+fusionkit config show
 fusionkit codex      # or: fusionkit claude | fusionkit cursor
 fusionkit serve      # gateway/raw endpoint path
 ```

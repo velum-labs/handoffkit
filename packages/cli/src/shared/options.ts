@@ -1,10 +1,7 @@
-import type { EnsembleModel, PanelTrust, UnifiedHarnessKind } from "@fusionkit/ensemble";
+import type { PanelTrust } from "@fusionkit/ensemble";
 import type { OnRateLimitPolicy } from "@fusionkit/model-gateway";
 import { SESSION_ISOLATIONS } from "@fusionkit/protocol";
 import type { SessionIsolation } from "@fusionkit/protocol";
-
-import type { HarnessLiveSmokeTarget } from "../dashboard.js";
-import { toolRegistry } from "../tools.js";
 
 import type { PanelAuthMode, PanelModelSpec, PanelProvider } from "../fusion-quickstart.js";
 import { PANEL_AUTH_MODES, PANEL_PROVIDERS, panelProviderForAuthMode } from "../fusion/env.js";
@@ -23,52 +20,6 @@ export function parseIdValue(flag: string, spec: string): { id: string; value: s
     fail(`${flag} must be ID=VALUE, got "${spec}"`);
   }
   return { id: spec.slice(0, separator), value: spec.slice(separator + 1) };
-}
-
-/**
- * Map `--model ID=MODEL` specs to ensemble models, falling back to harness-aware
- * defaults when none are given.
- */
-export function ensembleModels(model: string[] | undefined, harness?: string): EnsembleModel[] {
-  const specs =
-    model ?? (harness === "command" ? ["command=local-shell"] : ["fast=fake-fast", "writer=fake-writer"]);
-  return specs.map((spec) => {
-    const separator = spec.indexOf("=");
-    if (separator <= 0 || separator === spec.length - 1) {
-      fail(`--model must be ID=MODEL, got "${spec}"`);
-    }
-    return { id: spec.slice(0, separator), model: spec.slice(separator + 1) };
-  });
-}
-
-export function liveSmokeTargets(targets: string[] | undefined): HarnessLiveSmokeTarget[] {
-  const valid = new Set(
-    toolRegistry
-      .dashboardTools()
-      .filter((tool) => tool.liveSmoke !== undefined)
-      .map((tool) => tool.id)
-  );
-  return (targets ?? []).map((target): HarnessLiveSmokeTarget => {
-    if (valid.has(target)) return target;
-    return fail(`--live-smoke must be one of ${[...valid].join(", ")}`);
-  });
-}
-
-export function unifiedHarnessKinds(targets: string[] | undefined): UnifiedHarnessKind[] {
-  const generic: UnifiedHarnessKind[] = ["mock", "command", "agent"];
-  const valid = new Set<UnifiedHarnessKind>([...generic, ...toolRegistry.harnessKinds()]);
-  return (targets ?? ["mock", "command"])
-    .flatMap((target) => target.split(","))
-    .map((target): UnifiedHarnessKind => {
-      if (valid.has(target as UnifiedHarnessKind)) return target as UnifiedHarnessKind;
-      return fail(`--harness must be one of ${[...valid].join(", ")}; got "${target}"`);
-    });
-}
-
-export function parseTimeoutMs(raw: string | undefined, fallback: number): number {
-  const timeoutMs = Number(raw ?? String(fallback));
-  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) fail("--timeout-ms must be positive");
-  return timeoutMs;
 }
 
 export function parsePort(raw: string | undefined, fallback: number): number {

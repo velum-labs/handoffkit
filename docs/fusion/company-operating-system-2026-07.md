@@ -253,8 +253,7 @@ full statistical treatment.
 
 ### 5.1 Per production turn — the record that feeds everything
 
-Written by the gateway (`packages/cli/src/gateway.ts` /
-`commands/ensemble-gateway.ts` path) for every request (G3):
+Written by the gateway (`packages/cli/src/gateway.ts`) for every request (G3):
 
 | Field group | Fields | Why we need it |
 |---|---|---|
