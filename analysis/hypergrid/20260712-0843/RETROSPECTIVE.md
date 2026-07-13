@@ -90,18 +90,27 @@ $5.08 gen-0 partial) of the $250 budget.
   (a) lean on multi-sample exec-select kernels rather than panel composition,
   and/or (b) reweight the dev slice toward medium difficulty.
 
-## Restart runbook (new env)
+## Restart runbook (new env) — superseded in part by the lab process
 
-1. Checkout `cursor/hypergrid-hillclimb-667a`; `uv sync --all-packages`;
+NOTE (2026-07-13): everything is merged to `main`, and the restart now runs
+under the shared lab workflow (`lab/AGENTS.md` + the lab-process section of
+`PLAN.md`): the screen re-registers as lab experiment e002 with
+`--sweep-id <experiment id>` and a merged proposal PR before spend. Steps 1-4
+below still apply verbatim.
+
+1. Start from `main`; `uv sync --all-packages`;
    `pnpm install --frozen-lockfile && pnpm build` (node >= 22.19).
 2. Download the 6 LCB jsonl shards (HF, ~4.3 GB, ~5 min) and run
    `uv run python analysis/hypergrid/build_lcb_store.py --jsonl-dir <dir>`.
-3. Re-run `infra/hypergrid-obs/deploy.py` after terminating the old instance
-   (fresh secrets) — or keep the instance and only rotate if desired.
+3. Re-deploy observability: `uv run --with boto3 python
+   infra/hypergrid-obs/deploy.py` (the old instance was destroyed; the
+   Prometheus password is the SSM SecureString `/hypergrid-obs/prom-password`,
+   fetched by consumers via `aws ssm get-parameter --with-decryption`; no
+   local secrets file exists anymore).
 4. Re-run the preflight (billed smokes ~ $0.02), commit `preflight.md`.
-5. `hyperkit plan analysis/hypergrid/gen0.py --workdir .hyperkit/gen0
-   --sweep-id hypergrid-gen0`; launch apply in tmux **with OTLP env set**;
-   launch `hyperkit local-controller` alongside.
+5. Register e002 per `lab/AGENTS.md` procedure A (proposal PR, wait for
+   merge), then lock and run per procedure B with OTLP env set in the sweep
+   shell; launch `hyperkit local-controller` alongside.
 6. Resume the loop per `.cursor/skills/hypergrid-hillclimb/SKILL.md`.
    Completed-shard results from this run are lost; the ~$5 re-spend is
    accepted.

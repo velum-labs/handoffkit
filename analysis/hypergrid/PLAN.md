@@ -1,9 +1,54 @@
 # Hypergrid Fusion Hill-Climb via Hyperkit — Plan
 
-Status: **approved, not started**. No billed experiment shards may run until the
-preflight gate below is committed and the supervising agent is explicitly told
-to start. This document is the durable copy of the plan; the run itself will
-add artifacts under `analysis/hypergrid/<run-id>/`.
+Status: **approved; first attempt (run 20260712-0843) abandoned mid gen-0 for
+an environment restart** (see `20260712-0843/RETROSPECTIVE.md`; $5.10 of $250
+spent). The restart operates under the shared lab process below. No billed
+shards may run before the preflight gate is committed and the relevant lab
+proposal PR is merged.
+
+## Lab process (adopted 2026-07-13, from PR #98)
+
+Experiment lifecycle and record-keeping follow `lab/AGENTS.md` (canonical) and
+the `lab-experiment` / `lab-report` skills. This plan remains the scientific
+roadmap; the lab holds the per-experiment claims, budgets, and conclusions.
+Adaptation decisions:
+
+- **Phase-level experiments.** The climb registers as separate lab experiments,
+  each with its own claim, budget, decision rule, and out-of-scope:
+  - `e001-hypergrid-bringup` — retroactive `abandoned` record of run
+    20260712-0843 (substrate bring-up + partial screen, $5.10).
+  - `e002` — SOTA anchors + open-weight solo screen (this plan's generation 0;
+    budget $65; decision rules: >25pp floor gap -> re-scope slice, <2pp ->
+    saturated slice).
+  - `e003` — kernel probes on the top-2 complementary solos (judge-synth,
+    judge-select, self-MoA, exec-select, exec-select+repair, exec-tie-judge).
+  - `e004` — compound search over the promising region (generations via
+    `hyperkit extend` within the experiment; supervisor-driven).
+  - `e005` — locked holdout final (incumbent + best solo open + anchors, once).
+- **Cross-experiment shard reads.** `sweep_id == experiment id`, so results
+  live in separate stores; later experiments must NOT re-bill baselines — the
+  supervisor reads across experiment workdirs for gap computations, and each
+  design states which prior stores it references.
+- **Backend.** Lab procedure B assumes `--backend aws-batch` (velum-mini is
+  configured for AWS runs). If the Batch stack/runner image is unavailable in
+  the executing environment, `--backend local` with
+  `HYPERKIT_LOCAL_MAX_WORKERS` is the sanctioned variant; state the choice in
+  the proposal.
+- **Spend ceiling.** Always pass `--spend-ceiling-usd <budget_usd>` at plan
+  time. Note: the engine records but does not yet enforce it at apply time —
+  keep the supervisor's pre-apply cost estimate discipline until enforcement
+  lands (candidate hyperkit patch).
+- **Claim registration brakes the loop.** A proposal PR must merge before any
+  spend on a new experiment; within a merged experiment, generation-level
+  `extend`s proceed autonomously (procedure C). A new question = a new
+  proposal, not an extend.
+- **No result payloads in git.** Frontier JSONs, logs, and caches stay out of
+  `lab/`; final numbers with CIs go in `experiment.md` Results (length caps),
+  long-form analysis links out (S3/Grafana/analysis docs). The
+  `analysis/hypergrid/<run-id>/` convention is retired for new work; this
+  directory remains for the plan, manifests, shared tooling
+  (`supervisor.py`, `gen0.py`, `build_lcb_store.py`), and the e001-era
+  artifacts.
 
 ## Preflight gate — verify access to every hyperkit capability before any experiment
 

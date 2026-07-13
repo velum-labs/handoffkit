@@ -14,41 +14,64 @@ description: >-
 
 Find the hyperpoint — kernel x panel x hyperparams x prompts, open-weight
 models only — that gets closest to the frozen SOTA anchors. Run from repo
-root. The plan of record is `analysis/hypergrid/PLAN.md`; the current run's
-artifacts live in `analysis/hypergrid/<run-id>/`.
+root. The plan of record is `analysis/hypergrid/PLAN.md`.
+
+**Division of labor with the lab:** experiment lifecycle (propose -> locked ->
+running -> analyzed, registry, journal, budgets, claim overlap) follows
+`lab/AGENTS.md` via the `lab-experiment` skill — this skill owns only the
+science between those states: what to measure, how to read it, and which cells
+the next `extend` adds. The climb's phases map to lab experiments per the
+"Lab process" section of PLAN.md (screen / kernel probes / compound search /
+holdout final).
 
 ## Iron laws
 
 1. Wins are claimed ONLY on the locked holdout (`manifests/holdout.txt`),
-   evaluated once per final incumbent. Dev results are navigation, not claims.
+   evaluated once per final incumbent, as its own lab experiment. Dev results
+   are navigation, not claims.
 2. Closed models (anchors) never appear inside a fused cell, a panel, a judge,
    a synthesizer, or the prompt-tuning loop. `build_serve_config` enforces
    this; never bypass it.
 3. Anchors are frozen: run once per split, never re-tuned, reused for every
-   generation's gap computation.
-4. Every generation ends with: ledger updated, artifacts + report committed
-   and pushed, PR updated.
-5. Budget gates are hard. Check `supervisor.py` total spend before every
-   apply; the locked-final reserve ($60) is inviolable.
+   generation's gap computation. Later experiments read them from the screen
+   experiment's store — never re-bill baselines.
+4. No spend on an experiment whose proposal PR is unmerged (lab hard rule 3).
+   Within a merged experiment, generation `extend`s proceed autonomously.
+5. Budget: pass `--spend-ceiling-usd` at plan time; check `supervisor.py`
+   total spend before every apply (the engine does not yet enforce the
+   ceiling); the locked-final reserve ($60) is inviolable; record `spent_usd`
+   in front matter at conclusion.
 6. Fix-forward on infrastructure failures, but never re-bill what a log read
    can explain: run forensics minions before re-running any billed shard.
+7. Every generation ends with: experiment.md `Design` note (one line per
+   extend), lock re-copied, commits pushed. Results/Decision only at
+   conclusion; no live numbers or result payloads in git.
 
-## The loop (one generation)
+## The loop (one generation, inside a merged lab experiment)
+
+Work from `lab/experiments/<id>/` with `--workdir work` and
+`--sweep-id <experiment id>` (lab rule 6).
 
 ```
-- [ ] 0. Re-read the self-prompt (below) + previous generation's report
-- [ ] 1. uv run hyperkit apply --workdir .hyperkit/<sweep> --backend local [--only GLOB] [--rung N]
-         (in tmux; HYPERKIT_LOCAL_MAX_WORKERS=8-12; local-controller session feeds Grafana)
+- [ ] 0. Re-read the self-prompt (below) + the experiment.md Design/Decision rule
+- [ ] 1. uv run hyperkit apply --workdir work --backend <aws-batch|local> [--only GLOB] [--rung N]
+         (local: tmux, HYPERKIT_LOCAL_MAX_WORKERS=8-12, OTLP env set in the SAME shell;
+          local-controller session feeds Grafana)
 - [ ] 2. Await completion (hyperkit status); watch Grafana + error shards while waiting
-- [ ] 3. uv run hyperkit collect --workdir .hyperkit/<sweep>
-- [ ] 4. uv run python analysis/hypergrid/supervisor.py --workdir .hyperkit/<sweep> --json <run-dir>/genN.json
+- [ ] 3. uv run hyperkit collect --workdir work
+- [ ] 4. uv run python analysis/hypergrid/supervisor.py --workdir work --json /tmp/genN.json
+         (JSON is working state, not a committed artifact)
 - [ ] 5. Fan out minions (see Delegation): forensics on every FORENSICS flag,
-         autopsies when the direction test fires, report draft
+         autopsies when the direction test fires
 - [ ] 6. Decide: prune / broaden / promote / escalate (rules in reference.md)
-- [ ] 7. Edit the experiment file to add the next generation's cells
-- [ ] 8. uv run hyperkit extend <experiment.py> --workdir .hyperkit/<sweep>
-- [ ] 9. Commit ledger + report + spec; push; update PR
+- [ ] 7. Edit experiment.py; uv run hyperkit extend experiment.py --workdir work
+- [ ] 8. cp work/sweep.lock.json sweep.lock.json; one Design line in experiment.md
+- [ ] 9. Commit + push (direct to main per lab procedure C)
 ```
+
+At experiment conclusion, switch to the `lab-experiment` skill's Conclude
+checklist (Results with CIs, Decision, Follow-ups, spent_usd, registry,
+journal-if-it-changes-shared-plans).
 
 ## Self-prompt (re-read at the top of EVERY generation)
 
@@ -93,9 +116,15 @@ committed runnable config.
 
 ## Operational notes
 
-- Sweeps, controller, and tunnels run in tmux sessions (`gen0-screen`,
-  `local-controller`, `grafana-tunnel`); cloud Grafana is the EC2 instance
-  tagged `hypergrid-obs` (redeploy: `infra/hypergrid-obs/deploy.py`).
+- Sweeps, controller, and tunnels run in tmux sessions; cloud Grafana is the
+  EC2 instance tagged `hypergrid-obs` (redeploy: `infra/hypergrid-obs/deploy.py`).
+  The OTLP basic-auth password is the SSM SecureString
+  `/hypergrid-obs/prom-password` — fetch with
+  `aws ssm get-parameter --name /hypergrid-obs/prom-password --with-decryption
+  --query Parameter.Value --output text`; export `OTEL_EXPORTER_OTLP_ENDPOINT`
+  + `OTEL_EXPORTER_OTLP_HEADERS` in the SAME shell as every `apply` (a sweep
+  launched without them silently starves the Sweep Live/Fleet dashboards —
+  this happened in e001).
 - Successive halving: `apply --rung 25|60|110` with `--only` per cell family;
   dataset_hash is pinned to the full dev manifest so promotion only runs new
   instances.
@@ -103,4 +132,4 @@ committed runnable config.
   params — multi-stage pipelines are slow and re-billing timeouts is waste.
 - Costs: `ShardResult.cost_usd` is exact for OpenRouter solo cells; fused
   serve cells meter tokens only — estimate their cost from tokens x registry
-  prices in the ledger.
+  prices when filling `spent_usd`.

@@ -52,15 +52,16 @@ rules as the fusion-hillclimb skill).
 
 ## Budget discipline
 
-- Phase gates: smoke <= $10, gen 0 <= $65, compound generations <= $100
-  cumulative, locked-final reserve $60 (never touched before the final).
-- Before every `apply`: estimate = shards x per-shard cost from the last
-  generation's metered `cost_usd` for that family; abort if estimate exceeds
-  the remaining phase budget.
-- Ledger: append one JSON line per apply to
-  `analysis/hypergrid/<run-id>/ledger.jsonl`:
-  `{"ts": ..., "action": "apply", "family": ..., "shards": N, "est_usd": X,
-  "metered_usd_after": Y}`.
+- Budgets live in each lab experiment's front matter (`budget_usd`), passed as
+  `--spend-ceiling-usd` at plan time. Guide rail across the campaign: screen
+  <= $65, kernel probes + compound search <= $100 cumulative, locked-final
+  reserve $60 (its own experiment; never touched before the final).
+- The engine records but does not yet enforce the ceiling: before every
+  `apply`, estimate = shards x per-shard cost from the last generation's
+  metered `cost_usd` for that family; abort if estimate exceeds the remaining
+  experiment budget.
+- `supervisor.py` total spend is the running meter; `spent_usd` in front
+  matter is set at conclusion (fused serve cells: tokens x registry prices).
 
 ## Minion prompts
 
