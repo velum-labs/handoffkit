@@ -148,14 +148,24 @@ def _ensure_instance_profile(
     }
     if permissions_boundary_arn:
         create_role_options["PermissionsBoundary"] = permissions_boundary_arn
-    with contextlib.suppress(iam.exceptions.EntityAlreadyExistsException):
+    try:
+        iam.get_role(RoleName=role_name)
+        role_exists = True
+    except iam.exceptions.NoSuchEntityException:
+        role_exists = False
+    if not role_exists:
         iam.create_role(**create_role_options)
-    iam.put_role_policy(
-        RoleName=role_name,
-        PolicyName="read-observability-secrets",
-        PolicyDocument=json.dumps(policy),
-    )
-    with contextlib.suppress(iam.exceptions.EntityAlreadyExistsException):
+        iam.put_role_policy(
+            RoleName=role_name,
+            PolicyName="read-observability-secrets",
+            PolicyDocument=json.dumps(policy),
+        )
+    try:
+        iam.get_instance_profile(InstanceProfileName=profile_name)
+        profile_exists = True
+    except iam.exceptions.NoSuchEntityException:
+        profile_exists = False
+    if not profile_exists:
         iam.create_instance_profile(InstanceProfileName=profile_name)
     attached = iam.get_instance_profile(InstanceProfileName=profile_name)["InstanceProfile"][
         "Roles"
