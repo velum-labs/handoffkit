@@ -77,6 +77,17 @@ class S3SweepRepository:
     def results(self, sweep_id: str) -> list[ShardResult]:
         return self.store.get_all(sweep_id)
 
+    def snapshots(self, sweep_id: str) -> list[CellSnapshot]:
+        prefix = self.store._key(f"runs/{sweep_id}/snapshots/")
+        out: list[CellSnapshot] = []
+        for item in self.store._list_objects(prefix):
+            key = item.get("Key", "")
+            if not key.endswith(".json"):
+                continue
+            response = self.store.client.get_object(Bucket=self.store.bucket, Key=key)
+            out.append(CellSnapshot.model_validate_json(response["Body"].read()))
+        return out
+
     def put_snapshots(self, sweep_id: str, snapshots: list[CellSnapshot]) -> None:
         for snapshot in snapshots:
             key = self.store._key(
@@ -104,13 +115,15 @@ class HypergridController:
             cells,
             self.repository.results(sweep_id),
         )
-        self.repository.put_snapshots(sweep_id, snapshots)
         previous = [
             snapshot
             for (stored_sweep_id, _), snapshot in self.snapshots.items()
             if stored_sweep_id == sweep_id
         ]
+        if not previous:
+            previous = self.repository.snapshots(sweep_id)
         record_snapshot_deltas(previous, snapshots)
+        self.repository.put_snapshots(sweep_id, snapshots)
         for snapshot in snapshots:
             self.snapshots[(sweep_id, snapshot.cell_id)] = snapshot
         set_cell_snapshots(list(self.snapshots.values()))
