@@ -19,15 +19,3 @@ variable "single_nat_gateway" {
   description = "Whether both private subnets share one NAT gateway."
   default     = false
 }
-
-variable "grafana_allowed_cidrs" {
-  type        = set(string)
-  description = "CIDRs allowed to reach the Grafana ALB."
-  default     = []
-}
-
-variable "grafana_listener_port" {
-  type        = number
-  description = "Public ALB listener port."
-  default     = 443
-}

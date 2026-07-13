@@ -1,8 +1,8 @@
 locals {
-  alb_name               = substr("${var.name}-grafana", 0, 32)
-  athena_output_location = "s3://${var.artifact_bucket_name}/athena-results/"
-  listener_is_https      = var.grafana_certificate_arn != null
-  service_namespace      = "${var.name}.local"
+  alb_name                = substr("${var.name}-grafana", 0, 32)
+  athena_output_location  = "s3://${var.artifact_bucket_name}/athena-results/"
+  service_namespace       = "${var.name}.local"
+  tailscale_parameter_arn = "arn:aws:ssm:${var.aws_region}:${var.account_id}:parameter${var.tailscale_auth_parameter_name}"
 }
 
 resource "aws_prometheus_workspace" "this" {
@@ -392,12 +392,93 @@ resource "aws_ecs_task_definition" "observability" {
   ]
 }
 
+data "aws_ami" "tailscale_connector" {
+  most_recent = true
+  owners      = ["099720109477"]
+
+  filter {
+    name   = "name"
+    values = ["ubuntu/images/hvm-ssd-gp3/ubuntu-noble-24.04-amd64-server-*"]
+  }
+
+  filter {
+    name   = "virtualization-type"
+    values = ["hvm"]
+  }
+}
+
+data "aws_iam_policy_document" "ec2_assume" {
+  statement {
+    effect  = "Allow"
+    actions = ["sts:AssumeRole"]
+
+    principals {
+      type        = "Service"
+      identifiers = ["ec2.amazonaws.com"]
+    }
+  }
+}
+
+resource "aws_iam_role" "tailscale_connector" {
+  name                 = substr("${var.name}-tailscale-connector", 0, 64)
+  assume_role_policy   = data.aws_iam_policy_document.ec2_assume.json
+  permissions_boundary = var.permissions_boundary_arn
+}
+
+data "aws_iam_policy_document" "tailscale_connector" {
+  statement {
+    actions   = ["ssm:GetParameter"]
+    resources = [local.tailscale_parameter_arn]
+  }
+}
+
+resource "aws_iam_role_policy" "tailscale_connector" {
+  name   = "read-tailscale-auth-key"
+  role   = aws_iam_role.tailscale_connector.id
+  policy = data.aws_iam_policy_document.tailscale_connector.json
+}
+
+resource "aws_iam_instance_profile" "tailscale_connector" {
+  name = substr("${var.name}-tailscale-connector", 0, 128)
+  role = aws_iam_role.tailscale_connector.name
+}
+
+resource "aws_security_group" "tailscale_connector" {
+  name_prefix = "${var.name}-tailscale-"
+  description = "Outbound-only Tailscale connector for internal Grafana"
+  vpc_id      = var.vpc_id
+
+  tags = {
+    Name = "${var.name}-tailscale-connector"
+  }
+
+  lifecycle {
+    create_before_destroy = true
+  }
+}
+
+resource "aws_vpc_security_group_egress_rule" "tailscale_connector" {
+  security_group_id = aws_security_group.tailscale_connector.id
+  cidr_ipv4         = "0.0.0.0/0"
+  ip_protocol       = "-1"
+  description       = "Tailscale coordination, DERP, and internal Grafana"
+}
+
+resource "aws_vpc_security_group_ingress_rule" "grafana_from_tailnet" {
+  security_group_id            = var.alb_security_group_id
+  referenced_security_group_id = aws_security_group.tailscale_connector.id
+  from_port                    = 80
+  to_port                      = 80
+  ip_protocol                  = "tcp"
+  description                  = "Grafana proxy traffic from the Tailscale connector"
+}
+
 resource "aws_lb" "grafana" {
   name                       = local.alb_name
-  internal                   = false
+  internal                   = true
   load_balancer_type         = "application"
   security_groups            = [var.alb_security_group_id]
-  subnets                    = var.public_subnet_ids
+  subnets                    = var.private_subnet_ids
   drop_invalid_header_fields = true
   enable_deletion_protection = true
 }
@@ -424,15 +505,64 @@ resource "aws_lb_target_group" "grafana" {
 
 resource "aws_lb_listener" "grafana" {
   load_balancer_arn = aws_lb.grafana.arn
-  port              = local.listener_is_https ? 443 : 80
-  protocol          = local.listener_is_https ? "HTTPS" : "HTTP"
-  certificate_arn   = var.grafana_certificate_arn
-  ssl_policy        = local.listener_is_https ? "ELBSecurityPolicy-TLS13-1-2-2021-06" : null
+  port              = 80
+  protocol          = "HTTP"
 
   default_action {
     type             = "forward"
     target_group_arn = aws_lb_target_group.grafana.arn
   }
+}
+
+resource "aws_instance" "tailscale_connector" {
+  ami                         = data.aws_ami.tailscale_connector.id
+  instance_type               = var.tailscale_connector_instance_type
+  subnet_id                   = var.public_subnet_ids[0]
+  associate_public_ip_address = true
+  vpc_security_group_ids      = [aws_security_group.tailscale_connector.id]
+  iam_instance_profile        = aws_iam_instance_profile.tailscale_connector.name
+
+  user_data = <<-EOT
+    #!/bin/bash
+    set -euo pipefail
+    apt-get update -qq
+    apt-get install -y -qq curl
+    curl -fsSL https://tailscale.com/install.sh | sh
+    snap install aws-cli --classic || apt-get install -y -qq awscli
+    tailscale_auth_key="$(
+      aws ssm get-parameter \
+        --region ${var.aws_region} \
+        --name ${var.tailscale_auth_parameter_name} \
+        --with-decryption \
+        --query Parameter.Value \
+        --output text
+    )"
+    tailscale up \
+      --auth-key="$tailscale_auth_key" \
+      --hostname=${var.tailscale_hostname} \
+      --accept-routes=false
+    unset tailscale_auth_key
+    tailscale serve --bg http://${aws_lb.grafana.dns_name}:80
+  EOT
+
+  metadata_options {
+    http_tokens = "required"
+  }
+
+  root_block_device {
+    encrypted   = true
+    volume_size = 8
+    volume_type = "gp3"
+  }
+
+  tags = {
+    Name = "${var.name}-tailscale-connector"
+  }
+
+  depends_on = [
+    aws_iam_role_policy.tailscale_connector,
+    aws_lb_listener.grafana,
+  ]
 }
 
 resource "aws_service_discovery_private_dns_namespace" "observability" {

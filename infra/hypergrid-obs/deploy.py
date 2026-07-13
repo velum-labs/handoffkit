@@ -1,8 +1,10 @@
 """Deploy the hypergrid observability stack (Prometheus + Grafana) to EC2.
 
 Single small instance, docker-compose managed, independent of any local
-process. External Prometheus access (OTLP ingest + query API) goes through a
-basic-auth nginx proxy; Grafana is public read-only (anonymous Viewer).
+process. Grafana is exposed only through Tailscale Serve. Prometheus access
+(OTLP ingest + query API) goes through a basic-auth nginx proxy and is
+reachable over the tailnet or from explicitly approved private VPC producers.
+Neither service has public application ingress.
 
 Secret handling -- this process never holds any secret value:
 - The Prometheus password is generated directly into SSM Parameter Store as a
@@ -13,6 +15,9 @@ Secret handling -- this process never holds any secret value:
   material at all.
 - The Grafana admin password is generated on the instance and never leaves it
   (anonymous Viewer is the intended access path).
+- The Tailscale auth key is read by the instance from
+  ``/hypergrid-obs/tailscale-auth-key`` and never enters this process, the
+  deployment bundle, user-data, or Terraform state.
 
 Consumers (the sweep's OTLP env) read the password themselves:
 
@@ -26,11 +31,15 @@ Usage: uv run --with boto3 python infra/hypergrid-obs/deploy.py
 
 from __future__ import annotations
 
+import argparse
 import base64
 import contextlib
 import io
+import ipaddress
 import json
+import re
 import shutil
+import sys
 import tarfile
 import tempfile
 import time
@@ -43,11 +52,15 @@ GRAFANA_SRC = HERE.parent / "hyperkit" / "grafana"
 TAG_NAME = "hypergrid-obs"
 INSTANCE_TYPE = "t3.small"
 SSM_PROM_PARAM = "/hypergrid-obs/prom-password"
+SSM_TAILSCALE_PARAM = "/hypergrid-obs/tailscale-auth-key"
+TAILSCALE_HOSTNAME = "hypergrid-obs"
+DEPLOYMENT_VERSION = "tailnet-v1"
 
 USER_DATA = """#!/bin/bash
 set -euo pipefail
 apt-get update -qq
 apt-get install -y -qq docker.io docker-compose-v2 curl openssl unzip
+curl -fsSL https://tailscale.com/install.sh | sh
 # AWS CLI for the SSM fetch (Ubuntu 24.04 has no awscli apt package by default).
 snap install aws-cli --classic || apt-get install -y -qq awscli
 mkdir -p /opt/obs && cd /opt/obs
@@ -58,8 +71,20 @@ aws ssm get-parameter --region {region} --name {ssm_name} --with-decryption \
   --query Parameter.Value --output text \
   | openssl passwd -6 -stdin \
   | sed 's/^/hyperkit:/' > htpasswd
+# nginx worker processes must be able to read the one-way password hash.
+chmod 0644 htpasswd
 printf 'GF_SECURITY_ADMIN_PASSWORD=%s\\n' "$(openssl rand -base64 18)" > grafana.env
 docker compose up --build -d
+tailscale_auth_key="$(
+  aws ssm get-parameter --region {region} --name {tailscale_ssm_name} \
+    --with-decryption --query Parameter.Value --output text
+)"
+tailscale up \
+  --auth-key="$tailscale_auth_key" \
+  --hostname={tailscale_hostname} \
+  --accept-routes=false
+unset tailscale_auth_key
+tailscale serve --bg http://127.0.0.1:3000
 """
 
 TRUST_POLICY = {
@@ -92,8 +117,14 @@ def _ensure_prom_password(ssm) -> None:
     )
 
 
-def _ensure_instance_profile(iam, account: str, region: str) -> str:
-    """IAM role + instance profile allowing only the one SSM read."""
+def _ensure_instance_profile(
+    iam,
+    account: str,
+    region: str,
+    tailscale_ssm_name: str,
+    permissions_boundary_arn: str | None,
+) -> str:
+    """IAM role + instance profile allowing only the required SSM reads."""
 
     role_name = f"{TAG_NAME}-role"
     profile_name = f"{TAG_NAME}-profile"
@@ -103,30 +134,34 @@ def _ensure_instance_profile(iam, account: str, region: str) -> str:
             {
                 "Effect": "Allow",
                 "Action": ["ssm:GetParameter"],
-                "Resource": f"arn:aws:ssm:{region}:{account}:parameter{SSM_PROM_PARAM}",
+                "Resource": [
+                    f"arn:aws:ssm:{region}:{account}:parameter{SSM_PROM_PARAM}",
+                    f"arn:aws:ssm:{region}:{account}:parameter{tailscale_ssm_name}",
+                ],
             }
         ],
     }
+    create_role_options = {
+        "RoleName": role_name,
+        "AssumeRolePolicyDocument": json.dumps(TRUST_POLICY),
+        "Tags": [{"Key": "project", "Value": "hypergrid-hillclimb"}],
+    }
+    if permissions_boundary_arn:
+        create_role_options["PermissionsBoundary"] = permissions_boundary_arn
     with contextlib.suppress(iam.exceptions.EntityAlreadyExistsException):
-        iam.create_role(
-            RoleName=role_name,
-            AssumeRolePolicyDocument=json.dumps(TRUST_POLICY),
-            Tags=[{"Key": "project", "Value": "hypergrid-hillclimb"}],
-        )
+        iam.create_role(**create_role_options)
     iam.put_role_policy(
         RoleName=role_name,
-        PolicyName="read-prom-password",
+        PolicyName="read-observability-secrets",
         PolicyDocument=json.dumps(policy),
     )
     with contextlib.suppress(iam.exceptions.EntityAlreadyExistsException):
         iam.create_instance_profile(InstanceProfileName=profile_name)
-    attached = iam.get_instance_profile(InstanceProfileName=profile_name)[
-        "InstanceProfile"
-    ]["Roles"]
+    attached = iam.get_instance_profile(InstanceProfileName=profile_name)["InstanceProfile"][
+        "Roles"
+    ]
     if not any(role["RoleName"] == role_name for role in attached):
-        iam.add_role_to_instance_profile(
-            InstanceProfileName=profile_name, RoleName=role_name
-        )
+        iam.add_role_to_instance_profile(InstanceProfileName=profile_name, RoleName=role_name)
         time.sleep(10)  # instance-profile propagation
     return profile_name
 
@@ -160,7 +195,104 @@ def _existing_instance(ec2) -> dict | None:
     return None
 
 
-def _security_group(ec2, vpc_id: str) -> str:
+def _instance_deployment_version(instance: dict) -> str | None:
+    return next(
+        (
+            tag["Value"]
+            for tag in instance.get("Tags", [])
+            if tag.get("Key") == "hypergrid-obs-deployment"
+        ),
+        None,
+    )
+
+
+def _app_ingress_permissions(
+    producer_cidrs: list[str], producer_security_groups: list[str]
+) -> list[dict]:
+    permissions: list[dict] = []
+    private_ipv4 = tuple(
+        ipaddress.ip_network(cidr) for cidr in ("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16")
+    )
+    for cidr in producer_cidrs:
+        network = ipaddress.ip_network(cidr, strict=False)
+        private = (
+            any(network.subnet_of(candidate) for candidate in private_ipv4)
+            if network.version == 4
+            else network.is_private
+        )
+        if not private:
+            raise ValueError("producer CIDRs must be private VPC networks")
+        permission: dict = {
+            "IpProtocol": "tcp",
+            "FromPort": 9090,
+            "ToPort": 9090,
+        }
+        if network.version == 4:
+            permission["IpRanges"] = [
+                {"CidrIp": str(network), "Description": "Private Prometheus producer"}
+            ]
+        else:
+            permission["Ipv6Ranges"] = [
+                {
+                    "CidrIpv6": str(network),
+                    "Description": "Private Prometheus producer",
+                }
+            ]
+        permissions.append(permission)
+    for group_id in producer_security_groups:
+        permissions.append(
+            {
+                "IpProtocol": "tcp",
+                "FromPort": 9090,
+                "ToPort": 9090,
+                "UserIdGroupPairs": [
+                    {
+                        "GroupId": group_id,
+                        "Description": "Private Prometheus producer",
+                    }
+                ],
+            }
+        )
+    return permissions
+
+
+def _reconcile_app_ingress(
+    ec2,
+    group: dict,
+    producer_cidrs: list[str],
+    producer_security_groups: list[str],
+) -> None:
+    """Remove application ingress and add only explicit private producers."""
+
+    group_id = group["GroupId"]
+
+    def exposes_app_port(permission: dict) -> bool:
+        protocol = permission.get("IpProtocol")
+        if protocol == "-1":
+            return True
+        if protocol != "tcp":
+            return False
+        start = permission.get("FromPort", 0)
+        end = permission.get("ToPort", 65535)
+        return any(start <= port <= end for port in (80, 9090))
+
+    stale = [
+        permission for permission in group.get("IpPermissions", []) if exposes_app_port(permission)
+    ]
+    if stale:
+        ec2.revoke_security_group_ingress(GroupId=group_id, IpPermissions=stale)
+
+    desired = _app_ingress_permissions(producer_cidrs, producer_security_groups)
+    if desired:
+        ec2.authorize_security_group_ingress(GroupId=group_id, IpPermissions=desired)
+
+
+def _security_group(
+    ec2,
+    vpc_id: str,
+    producer_cidrs: list[str],
+    producer_security_groups: list[str],
+) -> str:
     groups = ec2.describe_security_groups(
         Filters=[
             {"Name": "group-name", "Values": [TAG_NAME]},
@@ -168,28 +300,89 @@ def _security_group(ec2, vpc_id: str) -> str:
         ]
     )["SecurityGroups"]
     if groups:
-        return groups[0]["GroupId"]
-    group_id = ec2.create_security_group(
-        GroupName=TAG_NAME,
-        Description="hypergrid observability: grafana viewer + basic-auth prometheus",
-        VpcId=vpc_id,
-    )["GroupId"]
-    ec2.authorize_security_group_ingress(
-        GroupId=group_id,
-        IpPermissions=[
-            {
-                "IpProtocol": "tcp",
-                "FromPort": port,
-                "ToPort": port,
-                "IpRanges": [{"CidrIp": "0.0.0.0/0"}],
-            }
-            for port in (80, 9090)
-        ],
+        group = groups[0]
+    else:
+        group_id = ec2.create_security_group(
+            GroupName=TAG_NAME,
+            Description="Tailnet-only hypergrid observability",
+            VpcId=vpc_id,
+        )["GroupId"]
+        group = {"GroupId": group_id, "IpPermissions": []}
+    _reconcile_app_ingress(ec2, group, producer_cidrs, producer_security_groups)
+    return group["GroupId"]
+
+
+def _parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--vpc-id",
+        help="VPC for the observability host (defaults to the default VPC)",
     )
-    return group_id
+    parser.add_argument(
+        "--subnet-id",
+        help="Subnet for the observability host (must belong to --vpc-id)",
+    )
+    parser.add_argument(
+        "--producer-cidr",
+        action="append",
+        default=[],
+        help="Private CIDR allowed to send/query Prometheus; repeatable",
+    )
+    parser.add_argument(
+        "--producer-security-group",
+        action="append",
+        default=[],
+        help="VPC security group allowed to reach Prometheus; repeatable",
+    )
+    parser.add_argument(
+        "--tailscale-auth-parameter",
+        default=SSM_TAILSCALE_PARAM,
+        help="SSM SecureString containing a tagged, reusable, ephemeral Tailscale auth key",
+    )
+    parser.add_argument(
+        "--tailscale-hostname",
+        default=TAILSCALE_HOSTNAME,
+        help="MagicDNS hostname assigned to the observability node",
+    )
+    parser.add_argument(
+        "--tailscale-dns-suffix",
+        help="Tailnet DNS suffix for the HTTPS URL, for example tail1234.ts.net",
+    )
+    parser.add_argument(
+        "--iam-permissions-boundary-arn",
+        help="Permissions boundary required when creating the EC2 instance role",
+    )
+    args = parser.parse_args()
+    if re.fullmatch(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?", args.tailscale_hostname) is None:
+        parser.error("--tailscale-hostname must be a valid single DNS label")
+    if (
+        args.tailscale_dns_suffix
+        and re.fullmatch(r"[a-z0-9.-]+", args.tailscale_dns_suffix) is None
+    ):
+        parser.error("--tailscale-dns-suffix must be a valid DNS suffix")
+    if re.fullmatch(r"/[A-Za-z0-9_.\-/]+", args.tailscale_auth_parameter) is None:
+        parser.error("--tailscale-auth-parameter must be a valid SSM parameter name")
+    return args
+
+
+def _require_tailscale_parameter(ssm, name: str) -> None:
+    """Fail closed without decrypting or returning the auth key."""
+
+    try:
+        parameter = ssm.get_parameter(Name=name)["Parameter"]
+    except ssm.exceptions.ParameterNotFound as exc:
+        raise RuntimeError(f"required Tailscale auth-key parameter is missing: {name}") from exc
+    if parameter.get("Type") != "SecureString":
+        raise RuntimeError(f"Tailscale auth-key parameter must be SecureString: {name}")
 
 
 def main() -> int:
+    args = _parse_args()
+    tailscale_dns_name = (
+        f"{args.tailscale_hostname}.{args.tailscale_dns_suffix}"
+        if args.tailscale_dns_suffix
+        else args.tailscale_hostname
+    )
     session = boto3.Session()
     ssm = session.client("ssm")
     ec2 = session.client("ec2")
@@ -198,15 +391,43 @@ def main() -> int:
     account = session.client("sts").get_caller_identity()["Account"]
     region = session.region_name or "us-east-1"
 
+    _require_tailscale_parameter(ssm, args.tailscale_auth_parameter)
     existing = _existing_instance(ec2)
     if existing:
-        ip = existing.get("PublicIpAddress", "")
-        print(f"reusing instance {existing['InstanceId']} at {ip}")
-        print(f"grafana: http://{ip}/  prometheus: http://{ip}:9090 (user hyperkit)")
+        if _instance_deployment_version(existing) != DEPLOYMENT_VERSION:
+            raise RuntimeError(
+                f"existing instance {existing['InstanceId']} predates the "
+                "tailnet-only bootstrap; replace it before redeploying"
+            )
+        group_id = _security_group(
+            ec2,
+            existing["VpcId"],
+            args.producer_cidr,
+            args.producer_security_group,
+        )
+        attached_groups = {group["GroupId"] for group in existing.get("SecurityGroups", [])}
+        if group_id not in attached_groups:
+            raise RuntimeError(
+                f"existing instance {existing['InstanceId']} is not attached "
+                f"to the reconciled security group {group_id}"
+            )
+        print(f"reusing instance {existing['InstanceId']}")
+        print(
+            f"grafana: https://{tailscale_dns_name}/  "
+            f"prometheus: http://{tailscale_dns_name}:9090 (user hyperkit)"
+        )
+        if args.producer_cidr or args.producer_security_group:
+            print(f"private Prometheus: http://{existing['PrivateIpAddress']}:9090")
         return 0
 
     _ensure_prom_password(ssm)
-    profile_name = _ensure_instance_profile(iam, account, region)
+    profile_name = _ensure_instance_profile(
+        iam,
+        account,
+        region,
+        args.tailscale_auth_parameter,
+        args.iam_permissions_boundary_arn,
+    )
 
     bucket = f"hypergrid-obs-{account}-{region}"
     try:
@@ -229,12 +450,27 @@ def main() -> int:
     ami = ssm.get_parameter(
         Name="/aws/service/canonical/ubuntu/server/24.04/stable/current/amd64/hvm/ebs-gp3/ami-id"
     )["Parameter"]["Value"]
-    vpc_id = ec2.describe_vpcs(Filters=[{"Name": "isDefault", "Values": ["true"]}])[
-        "Vpcs"
-    ][0]["VpcId"]
-    group_id = _security_group(ec2, vpc_id)
+    if args.vpc_id:
+        vpc_id = args.vpc_id
+    elif args.subnet_id:
+        subnet = ec2.describe_subnets(SubnetIds=[args.subnet_id])["Subnets"][0]
+        vpc_id = subnet["VpcId"]
+    else:
+        vpc_id = ec2.describe_vpcs(Filters=[{"Name": "isDefault", "Values": ["true"]}])["Vpcs"][0][
+            "VpcId"
+        ]
+    if args.subnet_id and args.vpc_id:
+        subnet = ec2.describe_subnets(SubnetIds=[args.subnet_id])["Subnets"][0]
+        if subnet["VpcId"] != vpc_id:
+            raise ValueError("--subnet-id must belong to --vpc-id")
+    group_id = _security_group(
+        ec2,
+        vpc_id,
+        args.producer_cidr,
+        args.producer_security_group,
+    )
 
-    instance = ec2.run_instances(
+    run_options = dict(
         ImageId=ami,
         InstanceType=INSTANCE_TYPE,
         MinCount=1,
@@ -243,7 +479,11 @@ def main() -> int:
         IamInstanceProfile={"Name": profile_name},
         UserData=base64.b64encode(
             USER_DATA.format(
-                bundle_url=bundle_url, region=region, ssm_name=SSM_PROM_PARAM
+                bundle_url=bundle_url,
+                region=region,
+                ssm_name=SSM_PROM_PARAM,
+                tailscale_ssm_name=args.tailscale_auth_parameter,
+                tailscale_hostname=args.tailscale_hostname,
             ).encode()
         ).decode(),
         BlockDeviceMappings=[
@@ -258,30 +498,33 @@ def main() -> int:
                 "Tags": [
                     {"Key": "Name", "Value": TAG_NAME},
                     {"Key": "project", "Value": "hypergrid-hillclimb"},
+                    {"Key": "hypergrid-obs-deployment", "Value": DEPLOYMENT_VERSION},
                 ],
             }
         ],
         MetadataOptions={"HttpTokens": "required"},
-    )["Instances"][0]
+    )
+    if args.subnet_id:
+        run_options["SubnetId"] = args.subnet_id
+    instance = ec2.run_instances(**run_options)["Instances"][0]
     instance_id = instance["InstanceId"]
-    print(f"launched {instance_id}; waiting for public IP ...")
+    print(f"launched {instance_id}; waiting for bootstrap ...")
     ec2.get_waiter("instance_running").wait(InstanceIds=[instance_id])
-    ip = None
-    for _ in range(30):
-        described = ec2.describe_instances(InstanceIds=[instance_id])
-        info = described["Reservations"][0]["Instances"][0]
-        ip = info.get("PublicIpAddress")
-        if ip:
-            break
-        time.sleep(5)
-    print(f"instance {instance_id} at {ip}")
-    print(f"grafana: http://{ip}/  (anonymous viewer)")
+    print(f"instance {instance_id} is running")
+    print(f"grafana: https://{tailscale_dns_name}/  (tailnet anonymous viewer)")
     print(
-        "prometheus OTLP ingest at :9090/api/v1/otlp -- basic auth user 'hyperkit', "
+        f"prometheus: http://{tailscale_dns_name}:9090 "
+        "-- basic auth user 'hyperkit'; "
         f"credential is the SSM SecureString {SSM_PROM_PARAM}"
     )
+    if args.producer_cidr or args.producer_security_group:
+        print(f"private Prometheus: http://{instance['PrivateIpAddress']}:9090")
     return 0
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    try:
+        raise SystemExit(main())
+    except (RuntimeError, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        raise SystemExit(2) from None

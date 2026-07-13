@@ -28,7 +28,9 @@ services:
   grafana:
     build: ./grafana
     ports:
-      - "80:3000"
+      # Tailnet access is terminated by Tailscale Serve on the host. Never
+      # publish Grafana on the instance's public or VPC interfaces.
+      - "127.0.0.1:3000:3000"
     environment:
       GF_AUTH_ANONYMOUS_ENABLED: "true"
       GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer

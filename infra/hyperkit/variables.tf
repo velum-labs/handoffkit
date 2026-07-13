@@ -202,16 +202,27 @@ variable "batch_job_timeout_seconds" {
   default     = 21600
 }
 
-variable "grafana_allowed_cidrs" {
-  description = "CIDRs allowed to reach Grafana. Empty by default so the public ALB is not internet-accessible."
-  type        = set(string)
-  default     = []
+variable "tailscale_auth_parameter_name" {
+  description = "Existing SSM SecureString containing a tagged, reusable, ephemeral Tailscale auth key."
+  type        = string
+  default     = "/hypergrid-obs/tailscale-auth-key"
 }
 
-variable "grafana_certificate_arn" {
-  description = "ACM certificate ARN. When set, the ALB serves HTTPS on 443; otherwise it serves HTTP on 80."
+variable "tailscale_grafana_hostname" {
+  description = "MagicDNS hostname used by the Grafana Tailscale connector."
   type        = string
-  default     = null
+  default     = "hyperkit-grafana"
+}
+
+variable "tailscale_dns_suffix" {
+  description = "Tailnet DNS suffix used for the HTTPS Grafana URL, for example tail1234.ts.net."
+  type        = string
+}
+
+variable "tailscale_connector_instance_type" {
+  description = "EC2 instance type for the outbound-only Grafana Tailscale connector."
+  type        = string
+  default     = "t3.nano"
 }
 
 variable "grafana_desired_count" {

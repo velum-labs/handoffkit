@@ -1,6 +1,16 @@
 output "grafana_url" {
-  value       = "${local.listener_is_https ? "https" : "http"}://${aws_lb.grafana.dns_name}"
-  description = "Grafana URL."
+  value       = "https://${var.tailscale_hostname}.${var.tailscale_dns_suffix}"
+  description = "Tailnet-only Grafana URL."
+}
+
+output "grafana_internal_alb_dns_name" {
+  value       = aws_lb.grafana.dns_name
+  description = "Internal ALB DNS name used by the Tailscale connector."
+}
+
+output "tailscale_connector_instance_id" {
+  value       = aws_instance.tailscale_connector.id
+  description = "EC2 instance providing tailnet-only Grafana ingress."
 }
 
 output "amp_workspace_id" {

@@ -118,6 +118,9 @@ committed runnable config.
 
 - Sweeps, controller, and tunnels run in tmux sessions; cloud Grafana is the
   EC2 instance tagged `hypergrid-obs` (redeploy: `infra/hypergrid-obs/deploy.py`).
+  Grafana and Prometheus are tailnet-only; deployment requires the tagged
+  Tailscale auth key in the SSM SecureString
+  `/hypergrid-obs/tailscale-auth-key`.
   The OTLP basic-auth password is the SSM SecureString
   `/hypergrid-obs/prom-password` — fetch with
   `aws ssm get-parameter --name /hypergrid-obs/prom-password --with-decryption

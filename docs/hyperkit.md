@@ -75,8 +75,9 @@ The migration gate reproduces the committed 19/30 vs 16/30 confirmation table.
 - ECR runner image and image-cache storage;
 - Secrets Manager/IAM;
 - ADOT -> Prometheus/X-Ray streaming telemetry;
-- always-on Grafana dashboards for sweep progress, fleet health, and
-  FusionKit internals.
+- always-on, tailnet-only Grafana dashboards for sweep progress, fleet health,
+  and FusionKit internals. Batch/controller telemetry stays on the private VPC
+  path; an outbound-only Tailscale connector is the sole dashboard ingress.
 
 The S3 `ShardResult` is the checkpoint. Spot interruption or controller
 restart loses at most in-flight shards; `resume` submits only the missing set.

@@ -167,7 +167,7 @@ resource "aws_vpc_security_group_egress_rule" "controller" {
 
 resource "aws_security_group" "grafana_alb" {
   name_prefix = "${var.name}-grafana-alb-"
-  description = "CIDR-restricted ingress to the Grafana ALB"
+  description = "Tailnet connector ingress to the internal Grafana ALB"
   vpc_id      = aws_vpc.this.id
 
   tags = {
@@ -177,17 +177,6 @@ resource "aws_security_group" "grafana_alb" {
   lifecycle {
     create_before_destroy = true
   }
-}
-
-resource "aws_vpc_security_group_ingress_rule" "grafana_alb" {
-  for_each = var.grafana_allowed_cidrs
-
-  security_group_id = aws_security_group.grafana_alb.id
-  cidr_ipv4         = each.value
-  from_port         = var.grafana_listener_port
-  to_port           = var.grafana_listener_port
-  ip_protocol       = "tcp"
-  description       = "Grafana access from an approved CIDR"
 }
 
 resource "aws_vpc_security_group_egress_rule" "grafana_alb" {

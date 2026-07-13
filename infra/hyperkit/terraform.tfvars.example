@@ -43,11 +43,13 @@ batch_default_vcpus       = 2
 batch_default_memory_mib  = 8192
 batch_job_timeout_seconds = 21600
 
-# Empty means that the public ALB accepts no inbound connections. Use trusted
-# office/VPN egress ranges, never 0.0.0.0/0 for a production deployment.
-grafana_allowed_cidrs = ["203.0.113.10/32"]
-grafana_certificate_arn = "arn:aws:acm:us-east-1:123456789012:certificate/00000000-0000-0000-0000-000000000000"
-grafana_desired_count = 1
+# This existing SSM SecureString must contain a tagged reusable Tailscale auth
+# key. Terraform references its ARN but never reads its value into state.
+tailscale_auth_parameter_name     = "/hypergrid-obs/tailscale-auth-key"
+tailscale_grafana_hostname        = "hyperkit-grafana"
+tailscale_dns_suffix              = "example-tailnet.ts.net"
+tailscale_connector_instance_type = "t3.nano"
+grafana_desired_count             = 1
 
 budget_limit_usd               = 2500
 budget_alert_threshold_percent = 80

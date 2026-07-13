@@ -20,7 +20,7 @@ variable "vpc_id" {
 
 variable "public_subnet_ids" {
   type        = list(string)
-  description = "Public subnets for the ALB."
+  description = "Public subnets for the outbound-only Tailscale connector."
 }
 
 variable "private_subnet_ids" {
@@ -53,10 +53,40 @@ variable "grafana_admin_secret_arn" {
   description = "Secret ARN containing the Grafana admin password."
 }
 
-variable "grafana_certificate_arn" {
+variable "tailscale_auth_parameter_name" {
   type        = string
-  description = "Optional ACM certificate ARN."
-  default     = null
+  description = "Existing SSM SecureString containing a tagged, reusable, ephemeral Tailscale auth key."
+
+  validation {
+    condition     = can(regex("^/[A-Za-z0-9_.\\-/]+$", var.tailscale_auth_parameter_name))
+    error_message = "tailscale_auth_parameter_name must be a valid absolute SSM parameter name."
+  }
+}
+
+variable "tailscale_hostname" {
+  type        = string
+  description = "MagicDNS hostname for tailnet-only Grafana access."
+
+  validation {
+    condition     = can(regex("^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$", var.tailscale_hostname))
+    error_message = "tailscale_hostname must be a valid lowercase DNS label."
+  }
+}
+
+variable "tailscale_dns_suffix" {
+  type        = string
+  description = "Tailnet DNS suffix used for the HTTPS Grafana URL."
+
+  validation {
+    condition     = can(regex("^[a-z0-9.-]+\\.ts\\.net$", var.tailscale_dns_suffix))
+    error_message = "tailscale_dns_suffix must be a ts.net DNS suffix."
+  }
+}
+
+variable "tailscale_connector_instance_type" {
+  type        = string
+  description = "EC2 instance type for the outbound-only Tailscale connector."
+  default     = "t3.nano"
 }
 
 variable "desired_count" {

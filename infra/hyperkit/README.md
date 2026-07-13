@@ -10,7 +10,8 @@ hypergrid cells with a separate Fargate controller.
 - `network`: one VPC with public and private subnets in two availability zones,
   one NAT gateway per AZ by default, a no-ingress Batch security group, and
   no-ingress controller security group, plus security-group-to-security-group
-  rules for Grafana and OTLP.
+  rules for Grafana and OTLP. Grafana's ALB is internal; an outbound-only
+  Tailscale connector is its sole ingress path.
 - `storage`: a private, encrypted, versioned S3 artifact lake and a Glue
   `shard_results` table over `runs/<sweep_id>/results/*.json`. Partition
   projection avoids Glue partition crawlers; Athena queries must constrain
@@ -25,8 +26,10 @@ hypergrid cells with a separate Fargate controller.
   `r7i`/`m7i` choices, a 500 GiB or larger encrypted gp3 root/cache volume, a
   queue, and a privileged runner definition with the host Docker socket.
 - `observability`: Amazon Managed Service for Prometheus (AMP), an Athena
-  workgroup, X-Ray trace export, and a Grafana + ADOT task on Fargate behind a
-  CIDR-restricted public ALB. Cloud Map gives runners a private OTLP endpoint.
+  workgroup, X-Ray trace export, and a Grafana + ADOT task on Fargate behind an
+  internal ALB. An outbound-only EC2 connector terminates Tailscale HTTPS and
+  proxies to that ALB. Cloud Map gives runners a private OTLP endpoint, so
+  Batch and controller telemetry never traverses the tailnet or public internet.
 - `controller`: an encrypted SQS queue and DLQ fed by S3 result notifications,
   plus a one-task-by-default Fargate service on the observability ECS cluster.
   It reads run artifacts through a least-privilege task role and sends OTLP to
@@ -39,12 +42,19 @@ state backend rather than committing local state.
 ## Prerequisites
 
 - Terraform 1.6 or newer
+- A Tailscale tailnet with MagicDNS and HTTPS enabled
+- A tagged, reusable, ephemeral Tailscale auth key stored as the existing SSM SecureString
+  `/hypergrid-obs/tailscale-auth-key`
 - AWS CLI credentials able to manage VPC, IAM, Batch, ECS, ECR, AMP, Athena,
   Glue, S3, SQS, Secrets Manager, CloudWatch, X-Ray, ALB, Service Discovery,
-  and Budgets resources
+  SSM, EC2, and Budgets resources
 - Docker with BuildKit
-- An ACM certificate in the selected region for production HTTPS
-- Trusted office or VPN egress CIDRs for Grafana
+
+The auth key should carry a dedicated tag such as
+`tag:hyperkit-observability`. Give only the intended tailnet users access to
+that tag on TCP 443 (Grafana) and, for the lightweight benchmark stack, TCP
+9090 (Prometheus). Tailscale Serve manages the HTTPS certificate; no public
+ALB or ACM certificate is required.
 
 Copy and edit the example:
 
@@ -56,6 +66,10 @@ terraform fmt -recursive
 terraform validate
 terraform plan -out=tfplan
 ```
+
+Set `tailscale_dns_suffix` to the suffix shown by `tailscale status`, without
+the device name. For example, a device DNS name of
+`workstation.tail1234.ts.net` uses `tail1234.ts.net`.
 
 Review IAM and all replacement actions before applying. The example certificate
 ARN and documentation-only CIDR must be replaced.
@@ -270,20 +284,27 @@ python3 ../../scripts/validate_hyperkit_dashboards.py \
 `--allow-empty` still fails datasource and PromQL errors; it only permits an
 idle production workspace with no recent shard samples.
 
-`grafana_allowed_cidrs` defaults to empty, so the ALB has no ingress. Use only
-trusted `/32` or VPN ranges. Set `grafana_certificate_arn` for HTTPS; HTTP mode
-exists for isolated evaluation only because credentials would otherwise cross
-the network in plaintext. Grafana self-signup and anonymous access are disabled.
-For broader access, put an identity-aware proxy in front of the ALB rather than
-opening `0.0.0.0/0`.
+Grafana has no public listener. Its ALB is internal and accepts HTTP only from
+the outbound-only Tailscale connector security group; Tailscale Serve provides
+tailnet HTTPS at `https://<tailscale_grafana_hostname>.<tailscale_dns_suffix>`.
+Grafana self-signup and anonymous access remain disabled. Batch workers and the
+controller send OTLP to the private ADOT Cloud Map endpoint and do not need to
+join the tailnet.
+
+The connector reads the auth key directly from SSM through a one-parameter IAM
+policy. Terraform stores only the parameter name/ARN, never its value. If the
+parameter is missing, the connector cannot join the tailnet and Grafana remains
+inaccessible rather than falling back to public access. Rotate the SecureString
+before the Tailscale auth key expires so replacement connectors can enroll.
 
 ALB deletion protection is enabled. Disable it deliberately in the resource and
 apply that change before destroying the stack.
 
 ## Cost controls
 
-The largest always-on charges are two NAT gateways, the ALB, the observability
-and controller Fargate tasks, and AMP ingestion/storage. Set
+The largest always-on charges are two NAT gateways, the internal ALB, the
+observability and controller Fargate tasks, the small Tailscale connector EC2
+instance, and AMP ingestion/storage. Set
 `single_nat_gateway = true` only when accepting a cross-AZ egress dependency.
 Batch EC2 and its 500+ GiB gp3 volumes disappear at zero jobs because
 `min_vcpus = 0`; Spot instances, EBS, model-provider calls, CloudWatch logs,

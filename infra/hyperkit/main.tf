@@ -20,18 +20,15 @@ locals {
     { for environment_name, secret_name in var.controller_managed_secret_environment : environment_name => module.secrets.secret_arns_by_name[secret_name] },
     var.controller_external_secret_environment,
   )
-  grafana_listener_port = var.grafana_certificate_arn == null ? 80 : 443
 }
 
 module "network" {
   source = "./modules/network"
 
-  name                  = local.name
-  vpc_cidr              = var.vpc_cidr
-  availability_zones    = var.availability_zones
-  single_nat_gateway    = var.single_nat_gateway
-  grafana_allowed_cidrs = var.grafana_allowed_cidrs
-  grafana_listener_port = local.grafana_listener_port
+  name               = local.name
+  vpc_cidr           = var.vpc_cidr
+  availability_zones = var.availability_zones
+  single_nat_gateway = var.single_nat_gateway
 }
 
 module "storage" {
@@ -88,23 +85,26 @@ module "batch" {
 module "observability" {
   source = "./modules/observability"
 
-  name                      = local.name
-  aws_region                = var.aws_region
-  account_id                = data.aws_caller_identity.current.account_id
-  vpc_id                    = module.network.vpc_id
-  public_subnet_ids         = module.network.public_subnet_ids
-  private_subnet_ids        = module.network.private_subnet_ids
-  alb_security_group_id     = module.network.grafana_alb_security_group_id
-  service_security_group_id = module.network.observability_security_group_id
-  grafana_image             = "${module.registry.grafana_repository_url}:${var.grafana_image_tag}"
-  adot_collector_image      = var.adot_collector_image
-  grafana_admin_secret_arn  = local.grafana_admin_secret_arn
-  grafana_certificate_arn   = var.grafana_certificate_arn
-  desired_count             = var.grafana_desired_count
-  artifact_bucket_arn       = module.storage.bucket_arn
-  artifact_bucket_name      = module.storage.bucket_name
-  glue_database_name        = module.storage.glue_database_name
-  permissions_boundary_arn  = var.iam_permissions_boundary_arn
+  name                              = local.name
+  aws_region                        = var.aws_region
+  account_id                        = data.aws_caller_identity.current.account_id
+  vpc_id                            = module.network.vpc_id
+  public_subnet_ids                 = module.network.public_subnet_ids
+  private_subnet_ids                = module.network.private_subnet_ids
+  alb_security_group_id             = module.network.grafana_alb_security_group_id
+  service_security_group_id         = module.network.observability_security_group_id
+  grafana_image                     = "${module.registry.grafana_repository_url}:${var.grafana_image_tag}"
+  adot_collector_image              = var.adot_collector_image
+  grafana_admin_secret_arn          = local.grafana_admin_secret_arn
+  tailscale_auth_parameter_name     = var.tailscale_auth_parameter_name
+  tailscale_hostname                = var.tailscale_grafana_hostname
+  tailscale_dns_suffix              = var.tailscale_dns_suffix
+  tailscale_connector_instance_type = var.tailscale_connector_instance_type
+  desired_count                     = var.grafana_desired_count
+  artifact_bucket_arn               = module.storage.bucket_arn
+  artifact_bucket_name              = module.storage.bucket_name
+  glue_database_name                = module.storage.glue_database_name
+  permissions_boundary_arn          = var.iam_permissions_boundary_arn
 }
 
 resource "aws_budgets_budget" "monthly" {

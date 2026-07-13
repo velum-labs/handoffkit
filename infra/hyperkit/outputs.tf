@@ -54,8 +54,13 @@ output "batch_job_definition_name" {
 }
 
 output "grafana_url" {
-  description = "Grafana ALB URL. Access remains limited to grafana_allowed_cidrs."
+  description = "Tailnet-only Grafana URL served by the Tailscale connector."
   value       = module.observability.grafana_url
+}
+
+output "tailscale_connector_instance_id" {
+  description = "EC2 instance providing tailnet-only Grafana ingress."
+  value       = module.observability.tailscale_connector_instance_id
 }
 
 output "amp_workspace_id" {
