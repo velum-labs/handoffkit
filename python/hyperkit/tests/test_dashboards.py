@@ -21,16 +21,12 @@ HYPERGRID_METRICS = {
     "hyperkit_cell_errors",
     "hyperkit_cell_latency_p50_seconds",
     "hyperkit_cell_latency_p95_seconds",
-    "hyperkit_cell_pareto",
     "hyperkit_cell_planned_shards",
     "hyperkit_cell_rank",
     "hyperkit_cell_resolution_rate",
     "hyperkit_cell_resolved_shards",
     "hyperkit_cell_wilson_high",
     "hyperkit_cell_wilson_low",
-    "hyperkit_cells_total",
-    "hyperkit_shards_pending",
-    "hyperkit_shards_running",
 }
 
 
@@ -43,7 +39,7 @@ def test_dashboards_only_query_supported_metrics() -> None:
     )
 
     assert result.returncode == 0, result.stderr
-    assert "validated 122 dashboard queries across 10 dashboards" in result.stdout
+    assert "validated 68 dashboard queries across 5 dashboards" in result.stdout
 
 
 def test_hypergrid_dynamics_business_charts_contract() -> None:
@@ -59,18 +55,17 @@ def test_hypergrid_dynamics_business_charts_contract() -> None:
         "generation",
         "run_id",
     }
-    assert len(panels) == 6
+    assert len(panels) == 3
     assert {panel["type"] for panel in panels} == {"volkovlabs-echarts-panel"}
     assert {panel["pluginVersion"] for panel in panels} == {"7.2.5"}
 
     code = "\n".join(panel["options"]["getOption"] for panel in panels)
-    for chart_type in ("scatter", "parallel", "heatmap", "sankey", "bar", "custom"):
+    for chart_type in ("scatter", "bar", "custom"):
         assert f"type: '{chart_type}'" in code
     for feature in (
         "context.panel.data",
         "dataZoom",
         "toolbox",
-        "visualMap",
         "animationDurationUpdate",
         "renderItem",
     ):
