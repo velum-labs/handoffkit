@@ -94,6 +94,30 @@ test("routerConfigYaml emits the OpenRouter base URL and default key env", () =>
   assert.match(yaml, /model: deepseek\/deepseek-chat:free/);
 });
 
+test("routerConfigYaml emits the cliproxy base URL, honoring CLIPROXY_BASE_URL", () => {
+  const yaml = routerConfigYaml({
+    specs: [{ id: "cp", model: "gemini-3.1-pro-preview", provider: "cliproxy" }],
+    mlxUrls: {},
+    judgeId: "cp"
+  });
+  assert.match(yaml, /provider: cliproxy/);
+  // No trailing /v1: fusionkit's OpenAI-compatible client appends it.
+  assert.match(yaml, /base_url: http:\/\/127\.0\.0\.1:8317/);
+  assert.match(yaml, /api_key_env: CLIPROXY_API_KEY/);
+
+  process.env.CLIPROXY_BASE_URL = "http://127.0.0.1:9999";
+  try {
+    const overridden = routerConfigYaml({
+      specs: [{ id: "cp", model: "gemini-3.1-pro-preview", provider: "cliproxy" }],
+      mlxUrls: {},
+      judgeId: "cp"
+    });
+    assert.match(overridden, /base_url: http:\/\/127\.0\.0\.1:9999/);
+  } finally {
+    delete process.env.CLIPROXY_BASE_URL;
+  }
+});
+
 // --- login detection -------------------------------------------------------
 
 test("detectSubscription(codex) reads a temp auth.json", async () => {

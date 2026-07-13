@@ -1,0 +1,66 @@
+---
+title: CLIProxyAPI upstream
+description: Put Gemini, Grok, and Kimi subscription models on a fusion panel through a local CLIProxyAPI sidecar.
+---
+
+[CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) is an MIT-licensed
+local proxy that fronts OAuth subscription accounts — ChatGPT/Codex, Claude
+Code, Gemini (Antigravity), Grok, Kimi — behind an OpenAI-compatible API with
+multi-account rotation. FusionKit consumes it as the `cliproxy` provider, so
+subscription-backed models you already pay for can join any fusion panel.
+
+Use the built-in `fusionkit proxy serve` for Claude Code / Codex pooling (it is
+provider-native and quota-aware); use `cliproxy` for the providers FusionKit
+has no native OAuth adapter for — Gemini, Grok, Kimi — or when you already run
+CLIProxyAPI for other tools.
+
+## Install and sign in
+
+```bash
+fusionkit proxy cliproxy install
+export CLIPROXY_API_KEY=<printed ingress key>
+fusionkit proxy cliproxy login gemini   # or claude / codex / grok / kimi
+fusionkit proxy cliproxy serve
+```
+
+`install` downloads the pinned release, verifies its SHA-256 against the
+release checksums, and writes a loopback-only managed config under
+`~/.fusionkit/cliproxy/`. `login` runs the proxy's own OAuth flow; each account
+you add joins its rotation pool. `status` shows install state, reachability,
+and enrolled accounts.
+
+Already running CLIProxyAPI yourself? Skip all of this: export
+`CLIPROXY_API_KEY` (one of the proxy's `api-keys`) and, for a non-default
+host/port, `CLIPROXY_BASE_URL`.
+
+## Add panel members
+
+`fusionkit init` offers **CLIProxyAPI (local proxy)** as a per-member auth
+choice, and with `CLIPROXY_API_KEY` set the model picker lists the proxy's live
+model catalog. In `.fusionkit/fusion.json`:
+
+```json
+{
+  "ensembles": {
+    "default": {
+      "panel": [
+        { "id": "gpt", "model": "gpt-5.5", "provider": "openai" },
+        { "id": "gemini", "model": "gemini-3.1-pro-preview", "provider": "cliproxy" },
+        { "id": "kimi", "model": "kimi-k2.5", "provider": "cliproxy" }
+      ]
+    }
+  }
+}
+```
+
+Leave pricing unset for subscription-backed members: there is no per-token
+billing, so cost estimates stay "unknown" instead of reporting a wrong number.
+`fusionkit doctor` checks the proxy's reachability and key whenever cliproxy is
+in use.
+
+## Terms-of-service caveat
+
+CLIProxyAPI reuses subscription OAuth tokens through reverse-engineered
+endpoints, which the providers' terms restrict. This integration is for
+personal, local use only; the proxy binds loopback by default and is never a
+hosted feature. Use at your own risk.

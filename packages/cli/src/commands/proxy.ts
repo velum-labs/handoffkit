@@ -13,6 +13,16 @@ import type { Presenter } from "@fusionkit/cli-ui";
 import type { Command } from "commander";
 
 import {
+  CLIPROXY_LOGIN_FLAGS,
+  CLIPROXY_PINNED_VERSION,
+  cliproxyConfigPath,
+  cliproxyStatus,
+  installCliproxy,
+  runCliproxyLogin,
+  spawnCliproxy
+} from "../fusion/cliproxy.js";
+import { cliproxyBaseUrl, defaultKeyEnv } from "../fusion/env.js";
+import {
   discoverProxy,
   registerRunningProxy,
   stopProxy
@@ -180,9 +190,114 @@ async function serveProxy(options: ProxyServeOptions, command: Command): Promise
   await new Promise<never>(() => undefined);
 }
 
+/**
+ * `fusionkit proxy cliproxy` — the managed CLIProxyAPI sidecar: the local
+ * OpenAI-compatible proxy that fronts OAuth subscription accounts (Gemini/
+ * Antigravity, Grok, Kimi, and pooled Codex/Claude). Complements the built-in
+ * provider-native `fusionkit proxy serve` (Claude Code + Codex): use cliproxy
+ * for the providers FusionKit has no native OAuth adapter for.
+ */
+function registerCliproxy(proxy: Command): void {
+  const keyEnv = defaultKeyEnv("cliproxy") ?? "CLIPROXY_API_KEY";
+  const cliproxy = proxy
+    .command("cliproxy")
+    .description("manage the CLIProxyAPI sidecar (OAuth subscription models as a panel upstream)");
+
+  cliproxy
+    .command("install")
+    .description(`download and verify the pinned CLIProxyAPI release (v${CLIPROXY_PINNED_VERSION})`)
+    .option("--json", "emit machine-readable JSON")
+    .action(async (_options: unknown, command: Command) => {
+      const ctx = contextFor(command);
+      const result = await installCliproxy({
+        onProgress: (line) => {
+          if (!ctx.json) ctx.presenter.note(dim(line));
+        }
+      });
+      if (ctx.json) {
+        ctx.emit(result);
+        return;
+      }
+      ctx.presenter.success(
+        result.downloaded
+          ? `installed CLIProxyAPI v${result.version} at ${result.binary}`
+          : `CLIProxyAPI v${result.version} already installed at ${result.binary}`
+      );
+      ctx.presenter.box("next steps", [
+        `export ${keyEnv}=${result.ingressKey}`,
+        "fusionkit proxy cliproxy login gemini   # or claude / codex / grok / kimi",
+        "fusionkit proxy cliproxy serve"
+      ]);
+      ctx.presenter.note(
+        "subscription OAuth reuse is for personal/local use only — see docs/cliproxy-upstream.md"
+      );
+    });
+
+  cliproxy
+    .command("login <provider>")
+    .description(`OAuth a subscription account into the proxy (${Object.keys(CLIPROXY_LOGIN_FLAGS).join(", ")})`)
+    .option("--no-browser", "print the OAuth URL instead of opening a browser")
+    .action(async (provider: string, options: { browser?: boolean }, command: Command) => {
+      const ctx = contextFor(command);
+      const code = await runCliproxyLogin(provider, { noBrowser: options.browser === false });
+      if (code === 0) ctx.presenter.success(`${provider} account added to the cliproxy pool`);
+      process.exitCode = code;
+    });
+
+  cliproxy
+    .command("serve")
+    .description("run the managed CLIProxyAPI in the foreground")
+    .action(async (_options: unknown, command: Command) => {
+      const ctx = contextFor(command);
+      const child = spawnCliproxy();
+      ctx.presenter.note(
+        `CLIProxyAPI serving at ${cyan(cliproxyBaseUrl())} (config: ${dim(cliproxyConfigPath())}); Ctrl+C to stop`
+      );
+      const code = await new Promise<number>((resolve, reject) => {
+        child.once("error", reject);
+        child.once("exit", (exitCode) => resolve(exitCode ?? 0));
+      });
+      process.exitCode = code;
+    });
+
+  cliproxy
+    .command("status")
+    .description("show sidecar install state, reachability, and enrolled accounts")
+    .option("--json", "emit machine-readable JSON")
+    .action(async (_options: unknown, command: Command) => {
+      const ctx = contextFor(command);
+      const status = await cliproxyStatus();
+      if (ctx.json) {
+        ctx.emit(status);
+        return;
+      }
+      ctx.presenter.header("cliproxy");
+      ctx.presenter.keyValue([
+        { label: "pinned", value: `v${status.version}` },
+        { label: "installed", value: status.installed ? "yes" : "no (run `fusionkit proxy cliproxy install`)" },
+        { label: "endpoint", value: cyan(status.baseUrl) },
+        {
+          label: "reachable",
+          value: status.reachable
+            ? status.keyRejected === true
+              ? `yes — but the key was rejected (check ${keyEnv})`
+              : `yes — ${status.models ?? 0} model(s)`
+            : "no (run `fusionkit proxy cliproxy serve`)"
+        },
+        {
+          label: "accounts",
+          value:
+            status.accounts.length > 0
+              ? status.accounts.join(", ")
+              : "none (run `fusionkit proxy cliproxy login <provider>`)"
+        }
+      ]);
+    });
+}
+
 export function registerProxy(program: Command): void {
   const proxy = program.command("proxy").description(
-    "long-lived Claude Code and Codex subscription pooling proxy"
+    "subscription proxies: the built-in Claude Code / Codex pool, and the CLIProxyAPI sidecar"
   );
 
   proxy
@@ -245,6 +360,8 @@ export function registerProxy(program: Command): void {
       }
       presentSnapshots(ctx.presenter, usage.accountSets);
     });
+
+  registerCliproxy(proxy);
 
   proxy
     .command("stop")

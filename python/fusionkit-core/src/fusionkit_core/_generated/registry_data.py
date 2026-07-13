@@ -97,6 +97,26 @@ REGISTRY: Final[dict[str, Any]] = {
                 "pickerDefaultSource": "curated",
             },
         },
+        "cliproxy": {
+            "$comment": "CLIProxyAPI (github.com/router-for-me/CLIProxyAPI): a local OpenAI-compatible proxy fronting OAuth subscription accounts (Codex, Claude Code, Gemini/Antigravity, Grok, Kimi) with multi-account rotation. Personal/local use only.",
+            "baseUrl": "http://127.0.0.1:8317",
+            "keyEnv": "CLIPROXY_API_KEY",
+            "baseUrlEnv": "CLIPROXY_BASE_URL",
+            "apiCompatibility": "openai-chat-completions",
+            "keyProbe": {
+                "path": "/v1/models",
+                "auth": "bearer",
+                "invalidStatuses": [
+                    401,
+                    403,
+                ],
+            },
+            "discovery": {
+                "path": "/v1/models",
+                "auth": "bearer",
+                "responseShape": "openai",
+            },
+        },
         "codex": {
             "baseUrl": "https://chatgpt.com/backend-api/codex",
             "apiCompatibility": "openai-responses",
@@ -250,6 +270,7 @@ REGISTRY: Final[dict[str, Any]] = {
             "openai": "gpt-5.5",
             "google": "gemini-2.5-flash",
             "openrouter": "anthropic/claude-sonnet-4.5",
+            "cliproxy": "gemini-3.1-pro-preview",
             "local": "mlx-community/Qwen3-1.7B-4bit",
         },
         "curated": {
@@ -294,6 +315,15 @@ REGISTRY: Final[dict[str, Any]] = {
                 "qwen/qwen3-coder",
                 "x-ai/grok-4",
                 "meta-llama/llama-3.3-70b-instruct",
+            ],
+            "cliproxy": [
+                "gemini-3.1-pro-preview",
+                "gpt-5.5",
+                "gpt-5.5-codex",
+                "claude-sonnet-4-5",
+                "grok-4.3",
+                "kimi-k2.5",
+                "qwen3-coder",
             ],
         },
         "smokeModels": {

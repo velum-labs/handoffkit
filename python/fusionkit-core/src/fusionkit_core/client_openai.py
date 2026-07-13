@@ -33,9 +33,9 @@ from fusionkit_core.types import ChatMessage, ModelResponse, ProviderCost, Strea
 class OpenAICompatibleClient:
     """Client for any OpenAI Chat Completions compatible endpoint.
 
-    Covers the ``openai``, ``openrouter``, ``openai-compatible``, ``mlx-lm``
-    and ``custom`` providers, all of which speak the OpenAI Chat Completions
-    wire format.
+    Covers the ``openai``, ``openrouter``, ``cliproxy``, ``openai-compatible``,
+    ``mlx-lm`` and ``custom`` providers, all of which speak the OpenAI Chat
+    Completions wire format.
     """
 
     def __init__(self, endpoint: ModelEndpoint) -> None:

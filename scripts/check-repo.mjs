@@ -175,6 +175,7 @@ const requiredFiles = [
   "references/THIRD_PARTY.md",
   "references/opencode/LICENSE",
   "references/t3code/LICENSE",
+  "references/cliproxyapi/LICENSE",
   "CHANGELOG.md",
   "examples/manifest.json",
   "packages/example-utils/src/manifest.ts",
@@ -474,6 +475,11 @@ const TRUSTED_THIRD_PARTY = new Map([
   ["just-bash", "3.0.1"],
   ["minimatch", "10.2.5"],
   ["ms", "2.1.3"],
+  // Official OpenAI SDK: model listing (`client.models.list()`) against
+  // OpenAI-compatible base URLs (openai, openrouter, cliproxy) in the CLI's
+  // catalog and health probes. Inference already rides the Python engine's
+  // AsyncOpenAI; this keeps the Node-side /v1/models calls on the same SDK.
+  ["openai", "6.46.0"],
   ["pino", "10.3.1"],
   // Product telemetry engine: official PostHog server SDK (batched, async,
   // shutdown flush). Only the CLI's opt-in telemetry module uses it.

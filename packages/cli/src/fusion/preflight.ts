@@ -7,7 +7,7 @@ import { providerKeyProbe } from "@fusionkit/registry";
 
 import { toolRegistry } from "../tools.js";
 
-import { defaultKeyEnv, providerDefaultBaseUrl } from "./env.js";
+import { cliproxyBaseUrl, defaultKeyEnv, providerDefaultBaseUrl } from "./env.js";
 import type { FusionTool, PanelModelSpec, RunFusionOptions } from "./env.js";
 import { catalogEntry, detectHost, usableRamGB } from "./local-catalog.js";
 import type { HostInfo } from "./local-catalog.js";
@@ -143,7 +143,8 @@ function keyProbeFor(spec: PanelModelSpec, key: string): KeyProbe | undefined {
       throw new Error(`unknown probe auth style ${String(exhaustive)}`);
     }
   }
-  const base = spec.baseUrl ?? providerDefaultBaseUrl(provider);
+  const base =
+    spec.baseUrl ?? (provider === "cliproxy" ? cliproxyBaseUrl() : providerDefaultBaseUrl(provider));
   return { url: `${base}${probe.path}`, headers, invalidStatuses: [...probe.invalidStatuses] };
 }
 

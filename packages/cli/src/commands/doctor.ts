@@ -14,6 +14,7 @@ import type { Presenter, StatusKind } from "@fusionkit/cli-ui";
 import { resolveWebSearchExecutor } from "@fusionkit/model-gateway";
 
 import {
+  cliproxyBaseUrl,
   DEFAULT_CLOUD_PANEL,
   DEFAULT_TRIO,
   defaultKeyEnv,
@@ -25,6 +26,7 @@ import { loadFusionConfig, fusionConfigPath, FusionConfigError } from "../fusion
 import type { FusionConfig } from "../fusion-config.js";
 import { detectHost } from "../fusion/local-catalog.js";
 import { ownedMlxEnv } from "../fusion/mlx.js";
+import { probeOpenAiCompatibleModels } from "../fusion/openai-models.js";
 import { FUSIONKIT_PYPI_VERSION } from "../fusion/env.js";
 import { platformCapabilities } from "../fusion/platform.js";
 import { engineCached, provisionEngineWithProgress } from "../fusion/provision.js";
@@ -219,6 +221,66 @@ async function reportLocalMlx(
   return { modelsDownloaded: downloaded.length };
 }
 
+/**
+ * Report on a configured CLIProxyAPI upstream (the local OpenAI-compatible
+ * proxy fronting OAuth subscription accounts). Only shown when the user has
+ * opted in — the ingress key env is set or a panel member uses the provider —
+ * so machines that never touch cliproxy see nothing.
+ */
+async function reportCliproxy(
+  presenter: Presenter,
+  report: DoctorEntry[],
+  config: FusionConfig | undefined
+): Promise<void> {
+  const keyEnv = defaultKeyEnv("cliproxy") ?? "CLIPROXY_API_KEY";
+  const referenced = configuredPanels(config).some((spec) => spec.provider === "cliproxy");
+  if (!keyPresent(keyEnv) && !referenced) return;
+
+  presenter.blank();
+  presenter.heading("CLIProxyAPI (subscription proxy upstream)");
+  const base = cliproxyBaseUrl();
+  const push = (entry: Omit<DoctorEntry, "section">): void => {
+    report.push({ section: "cliproxy", ...entry });
+  };
+  const probe = await probeOpenAiCompatibleModels({
+    baseUrl: base,
+    apiKey: process.env[keyEnv] ?? "",
+    timeoutMs: 2500
+  });
+  switch (probe.kind) {
+    case "ok": {
+      const count = probe.models.length;
+      const detail = `${count} model${count === 1 ? "" : "s"} available`;
+      presenter.status("ok", `reachable at ${base}`, detail);
+      push({ label: "cliproxy reachable", ok: true, detail });
+      return;
+    }
+    case "unauthorized": {
+      const hint = keyPresent(keyEnv)
+        ? `the proxy rejected ${keyEnv} — make sure it matches an api-keys entry in the proxy's config`
+        : `export ${keyEnv}=... with one of the proxy's api-keys values`;
+      presenter.status("fail", `key rejected at ${base}`, `HTTP ${probe.status}`, hint);
+      push({ label: "cliproxy key", ok: false, detail: `HTTP ${probe.status}`, hint });
+      return;
+    }
+    case "http-error": {
+      presenter.status("warn", `unexpected answer from ${base}`, `HTTP ${probe.status}`);
+      push({ label: "cliproxy reachable", ok: false, detail: `HTTP ${probe.status}` });
+      return;
+    }
+    case "unreachable": {
+      const hint = "start CLIProxyAPI (see docs/cliproxy-upstream.md), or point CLIPROXY_BASE_URL at it";
+      presenter.status("fail", `not reachable at ${base}`, undefined, hint);
+      push({ label: "cliproxy reachable", ok: false, detail: "unreachable", hint });
+      return;
+    }
+    default: {
+      const exhaustive: never = probe;
+      throw new Error(`unknown probe outcome: ${String(exhaustive)}`);
+    }
+  }
+}
+
 /** `fusionkit doctor` — a proactive environment checklist with fix hints. */
 async function runDoctor(opts: { provision?: boolean }, ctx: CommandContext): Promise<number> {
   // Match runtime: a project .env makes provider keys available without export.
@@ -324,6 +386,8 @@ async function runDoctor(opts: { provision?: boolean }, ctx: CommandContext): Pr
   const anyCredentials = acceptedKeyEnvs.some((name) => keyPresent(name));
   const missingDefaultKeys = defaultCredentialChecks.filter((check) => !check.present);
   const presentDefaultKeys = defaultCredentialChecks.filter((check) => check.present);
+
+  await reportCliproxy(presenter, report, config);
 
   // Gateway-executed web search: which provider serves each caller dialect.
   presenter.blank();

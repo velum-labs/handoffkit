@@ -54,7 +54,7 @@ LocalModelClient = OpenAICompatibleClient
 def build_client(endpoint: ModelEndpoint) -> ChatClient:
     """Construct the right :class:`ChatClient` for an endpoint's provider."""
     match endpoint.provider:
-        case "openai" | "openrouter" | "openai-compatible" | "mlx-lm" | "custom":
+        case "openai" | "openrouter" | "cliproxy" | "openai-compatible" | "mlx-lm" | "custom":
             return OpenAICompatibleClient(endpoint)
         case "anthropic":
             return AnthropicModelClient(endpoint)
