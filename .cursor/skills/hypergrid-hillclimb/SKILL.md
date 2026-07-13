@@ -121,6 +121,13 @@ committed runnable config.
   Grafana and Prometheus are tailnet-only; deployment requires the tagged
   Tailscale auth key in the SSM SecureString
   `/hypergrid-obs/tailscale-auth-key`.
+  From an agent sandbox, join the tailnet with
+  `infra/hypergrid-obs/join-tailnet.sh` — sandboxes lack a kernel TUN driver,
+  so tailscaled runs in userspace mode and tailnet traffic must go through its
+  proxies (`curl --proxy socks5h://localhost:1055`, or
+  `HTTPS_PROXY=http://localhost:1056` scoped to the one process that needs
+  it). Requires the tailnet ACL grant described in
+  `infra/hypergrid-obs/README.md`.
   The OTLP basic-auth password is the SSM SecureString
   `/hypergrid-obs/prom-password` — fetch with
   `aws ssm get-parameter --name /hypergrid-obs/prom-password --with-decryption
