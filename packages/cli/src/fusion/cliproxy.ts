@@ -21,6 +21,7 @@ import { promisify } from "node:util";
 import { parse as parseYaml } from "yaml";
 
 import { cliproxyBaseUrl } from "./env.js";
+import { probeOpenAiCompatibleModels } from "./openai-models.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -257,21 +258,25 @@ export async function cliproxyStatus(): Promise<CliproxyStatus> {
     reachable: false,
     accounts
   };
-  try {
-    const response = await fetch(`${baseUrl}/v1/models`, {
-      headers: { authorization: `Bearer ${key}` },
-      signal: AbortSignal.timeout(2500)
-    });
-    if (response.ok) {
-      const body = (await response.json()) as { data?: unknown };
+  const probe = await probeOpenAiCompatibleModels({ baseUrl, apiKey: key, timeoutMs: 2500 });
+  switch (probe.kind) {
+    case "ok":
       status.reachable = true;
-      status.models = Array.isArray(body.data) ? body.data.length : 0;
-    } else if (response.status === 401 || response.status === 403) {
+      status.models = probe.models.length;
+      break;
+    case "unauthorized":
       status.reachable = true;
       status.keyRejected = true;
+      break;
+    case "http-error":
+      status.reachable = true;
+      break;
+    case "unreachable":
+      break;
+    default: {
+      const exhaustive: never = probe;
+      throw new Error(`unknown probe outcome: ${String(exhaustive)}`);
     }
-  } catch {
-    // not running / not reachable
   }
   return status;
 }

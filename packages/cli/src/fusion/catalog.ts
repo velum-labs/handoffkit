@@ -31,6 +31,7 @@ import {
 import { cliproxyBaseUrl, defaultKeyEnv } from "./env.js";
 import type { PanelProvider } from "./env.js";
 import { LOCAL_CATALOG_REPOS } from "./local-catalog.js";
+import { listOpenAiCompatibleModels } from "./openai-models.js";
 import { defaultModelForAuthChoice } from "./panel-auth.js";
 import type { AuthChoice } from "./panel-auth.js";
 
@@ -282,8 +283,11 @@ export function parseGoogleModels(json: unknown): string[] {
 
 async function fetchOpenAi(): Promise<CatalogModel[]> {
   const key = process.env[defaultKeyEnv("openai") ?? "OPENAI_API_KEY"] ?? "";
-  const body = await fetchJson("https://api.openai.com/v1/models", { Authorization: `Bearer ${key}` });
-  return parseOpenAiModels(body)
+  const data = await listOpenAiCompatibleModels({
+    baseUrl: "https://api.openai.com",
+    apiKey: key
+  });
+  return parseOpenAiModels({ data })
     .map((id) => ({ id }))
     .sort((left, right) => left.id.localeCompare(right.id));
 }
@@ -327,17 +331,18 @@ async function fetchGoogle(): Promise<CatalogModel[]> {
  */
 async function fetchCliproxy(): Promise<CatalogModel[]> {
   const key = process.env[defaultKeyEnv("cliproxy") ?? "CLIPROXY_API_KEY"] ?? "";
-  const body = await fetchJson(`${cliproxyBaseUrl()}/v1/models`, {
-    Authorization: `Bearer ${key}`
+  const data = await listOpenAiCompatibleModels({
+    baseUrl: cliproxyBaseUrl(),
+    apiKey: key
   });
-  return parseOpenAiModels(body)
+  return parseOpenAiModels({ data })
     .map((id) => ({ id }))
     .sort((left, right) => left.id.localeCompare(right.id));
 }
 
 async function fetchOpenRouter(): Promise<CatalogModel[]> {
-  const body = await fetchJson("https://openrouter.ai/api/v1/models", {});
-  const data = Array.isArray(body.data) ? (body.data as JsonRecord[]) : [];
+  // Public listing; the SDK's placeholder bearer credential is tolerated.
+  const data = await listOpenAiCompatibleModels({ baseUrl: "https://openrouter.ai/api" });
   return data
     .map((model) => {
       const pricing = (model.pricing ?? {}) as JsonRecord;
@@ -485,6 +490,21 @@ async function fetchProviderModels(
   // override; every other provider discovers against its registry default.
   const baseUrl = provider === "cliproxy" ? cliproxyBaseUrl(env) : providerDefaultBaseUrl(provider);
   if (baseUrl === undefined) return [];
+
+  // OpenAI-compatible listings (bearer `/v1/models`) go through the openai
+  // SDK against the provider's base URL; only the genuinely non-OpenAI
+  // catalog shapes (Anthropic, Google) stay on raw fetch.
+  if (discovery.responseShape === "openai" && discovery.auth === "bearer" && discovery.path === "/v1/models") {
+    const data = await listOpenAiCompatibleModels({
+      baseUrl,
+      apiKey: key,
+      fetchImpl,
+      timeoutMs,
+      ...(discovery.extraHeaders !== undefined ? { headers: discovery.extraHeaders } : {})
+    });
+    return parseOpenAiModels({ data });
+  }
+
   const url = `${baseUrl}${discovery.path}`;
   const headers: Record<string, string> = { ...discovery.extraHeaders };
   switch (discovery.auth) {

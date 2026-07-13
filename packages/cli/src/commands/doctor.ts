@@ -26,6 +26,7 @@ import { loadFusionConfig, fusionConfigPath, FusionConfigError } from "../fusion
 import type { FusionConfig } from "../fusion-config.js";
 import { detectHost } from "../fusion/local-catalog.js";
 import { ownedMlxEnv } from "../fusion/mlx.js";
+import { probeOpenAiCompatibleModels } from "../fusion/openai-models.js";
 import { FUSIONKIT_PYPI_VERSION } from "../fusion/env.js";
 import { platformCapabilities } from "../fusion/platform.js";
 import { engineCached, provisionEngineWithProgress } from "../fusion/provision.js";
@@ -241,33 +242,42 @@ async function reportCliproxy(
   const push = (entry: Omit<DoctorEntry, "section">): void => {
     report.push({ section: "cliproxy", ...entry });
   };
-  try {
-    const response = await fetch(`${base}/v1/models`, {
-      headers: { authorization: `Bearer ${process.env[keyEnv] ?? ""}` },
-      signal: AbortSignal.timeout(2500)
-    });
-    if (response.ok) {
-      const body = (await response.json()) as { data?: unknown };
-      const count = Array.isArray(body.data) ? body.data.length : 0;
+  const probe = await probeOpenAiCompatibleModels({
+    baseUrl: base,
+    apiKey: process.env[keyEnv] ?? "",
+    timeoutMs: 2500
+  });
+  switch (probe.kind) {
+    case "ok": {
+      const count = probe.models.length;
       const detail = `${count} model${count === 1 ? "" : "s"} available`;
       presenter.status("ok", `reachable at ${base}`, detail);
       push({ label: "cliproxy reachable", ok: true, detail });
       return;
     }
-    if (response.status === 401 || response.status === 403) {
+    case "unauthorized": {
       const hint = keyPresent(keyEnv)
         ? `the proxy rejected ${keyEnv} — make sure it matches an api-keys entry in the proxy's config`
         : `export ${keyEnv}=... with one of the proxy's api-keys values`;
-      presenter.status("fail", `key rejected at ${base}`, `HTTP ${response.status}`, hint);
-      push({ label: "cliproxy key", ok: false, detail: `HTTP ${response.status}`, hint });
+      presenter.status("fail", `key rejected at ${base}`, `HTTP ${probe.status}`, hint);
+      push({ label: "cliproxy key", ok: false, detail: `HTTP ${probe.status}`, hint });
       return;
     }
-    presenter.status("warn", `unexpected answer from ${base}`, `HTTP ${response.status}`);
-    push({ label: "cliproxy reachable", ok: false, detail: `HTTP ${response.status}` });
-  } catch {
-    const hint = "start CLIProxyAPI (see docs/cliproxy-upstream.md), or point CLIPROXY_BASE_URL at it";
-    presenter.status("fail", `not reachable at ${base}`, undefined, hint);
-    push({ label: "cliproxy reachable", ok: false, detail: "unreachable", hint });
+    case "http-error": {
+      presenter.status("warn", `unexpected answer from ${base}`, `HTTP ${probe.status}`);
+      push({ label: "cliproxy reachable", ok: false, detail: `HTTP ${probe.status}` });
+      return;
+    }
+    case "unreachable": {
+      const hint = "start CLIProxyAPI (see docs/cliproxy-upstream.md), or point CLIPROXY_BASE_URL at it";
+      presenter.status("fail", `not reachable at ${base}`, undefined, hint);
+      push({ label: "cliproxy reachable", ok: false, detail: "unreachable", hint });
+      return;
+    }
+    default: {
+      const exhaustive: never = probe;
+      throw new Error(`unknown probe outcome: ${String(exhaustive)}`);
+    }
   }
 }
 
