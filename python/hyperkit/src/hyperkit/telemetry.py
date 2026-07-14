@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import os
 import threading
-from collections.abc import Iterator, Mapping
+from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from typing import Any
 
@@ -37,12 +37,26 @@ _resolved = _meter.create_counter("hyperkit.shards.resolved")
 _errors = _meter.create_counter("hyperkit.shards.errors")
 _running = _meter.create_up_down_counter("hyperkit.shards.running")
 _latency = _meter.create_histogram("hyperkit.shard.latency", unit="s")
-_cost = _meter.create_counter("hyperkit.cost.usd", unit="USD")
+_cost = _meter.create_counter("hyperkit.cost.usd")
 _snapshots: dict[str, CellSnapshot] = {}
 _cell_gauges: list[Any] = []
 
 
-def configure(service_name: str = "hyperkit-runner") -> None:
+def _resource_attributes(
+    service_name: str,
+    service_instance_id: str | None,
+) -> dict[str, str]:
+    attributes = {"service.name": service_name}
+    if service_instance_id is not None:
+        attributes["service.instance.id"] = service_instance_id
+    return attributes
+
+
+def configure(
+    service_name: str = "hyperkit-runner",
+    *,
+    service_instance_id: str | None = None,
+) -> None:
     """Install private metric+trace exporters when an OTLP endpoint is configured.
 
     Providers stay private to hyperkit rather than replacing OTel's process-global
@@ -63,7 +77,7 @@ def configure(service_name: str = "hyperkit-runner") -> None:
         if not any((endpoint, metrics_endpoint, traces_endpoint)):
             return
 
-        resource = Resource.create({"service.name": service_name})
+        resource = Resource.create(_resource_attributes(service_name, service_instance_id))
         metric_exporter = OTLPMetricExporter(
             endpoint=metrics_endpoint
             or (f"{endpoint.rstrip('/')}/v1/metrics" if endpoint else None)
@@ -92,7 +106,7 @@ def configure(service_name: str = "hyperkit-runner") -> None:
         _errors = _meter.create_counter("hyperkit.shards.errors")
         _running = _meter.create_up_down_counter("hyperkit.shards.running")
         _latency = _meter.create_histogram("hyperkit.shard.latency", unit="s")
-        _cost = _meter.create_counter("hyperkit.cost.usd", unit="USD")
+        _cost = _meter.create_counter("hyperkit.cost.usd")
         _cell_gauges = _create_cell_gauges(_meter)
 
 
@@ -135,6 +149,39 @@ def set_cell_snapshots(snapshots: list[CellSnapshot]) -> None:
     with _lock:
         _snapshots.clear()
         _snapshots.update({snapshot.cell_id: snapshot for snapshot in snapshots})
+
+
+def record_snapshot_deltas(
+    previous: Sequence[CellSnapshot],
+    current: Sequence[CellSnapshot],
+) -> None:
+    """Reconstruct runner counters from durable S3 snapshots.
+
+    AWS Batch workers cannot reach a tailnet-only OTLP endpoint. The controller
+    therefore emits monotonic deltas as new S3 results appear, keeping the
+    runner-oriented Sweep Live and Fleet dashboards populated without making
+    workers or Prometheus publicly reachable.
+    """
+
+    before = {(snapshot.sweep_id, snapshot.cell_id): snapshot for snapshot in previous}
+    for snapshot in current:
+        prior = before.get((snapshot.sweep_id, snapshot.cell_id))
+        attrs = snapshot.metric_attributes()
+        # Batch workers are not directly observable through the tailnet. Emit
+        # a zero-valued controller series so Fleet distinguishes "none running"
+        # from a missing telemetry path; pending work remains a separate gauge.
+        _running.add(0, attrs)
+        completed = snapshot.completed_shards - (prior.completed_shards if prior else 0)
+        resolved = snapshot.resolved_shards - (prior.resolved_shards if prior else 0)
+        errors = snapshot.errors - (prior.errors if prior else 0)
+        cost = snapshot.cost_usd - (prior.cost_usd if prior else 0.0)
+        # Register every counter in each controller process, even when no new
+        # events arrived since the persisted snapshot. This keeps instant
+        # dashboard queries present after a restart.
+        _completed.add(max(0, completed), attrs)
+        _resolved.add(max(0, resolved), attrs)
+        _errors.add(max(0, errors), attrs)
+        _cost.add(max(0.0, cost), attrs)
 
 
 def _create_cell_gauges(meter: Any) -> list[Any]:
@@ -202,6 +249,9 @@ def _cell_total_callback(_options: CallbackOptions):
                 "hyperkit.sweep.id": sweep_id,
                 "hyperkit.generation": generation,
                 "hyperkit.benchmark": benchmark,
+                "run_id": sweep_id,
+                "generation": generation,
+                "benchmark": benchmark,
             },
         )
         for (sweep_id, generation, benchmark), count in grouped.items()

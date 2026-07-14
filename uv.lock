@@ -1157,6 +1157,7 @@ name = "hyperkit"
 version = "0.1.0"
 source = { editable = "python/hyperkit" }
 dependencies = [
+    { name = "httpx" },
     { name = "opentelemetry-api" },
     { name = "opentelemetry-exporter-otlp-proto-http" },
     { name = "opentelemetry-sdk" },
@@ -1173,6 +1174,7 @@ aws = [
 [package.metadata]
 requires-dist = [
     { name = "boto3", marker = "extra == 'aws'", specifier = ">=1.43.37" },
+    { name = "httpx", specifier = ">=0.28.1" },
     { name = "opentelemetry-api", specifier = ">=1.39.0" },
     { name = "opentelemetry-exporter-otlp-proto-http", specifier = ">=1.39.0" },
     { name = "opentelemetry-sdk", specifier = ">=1.39.0" },

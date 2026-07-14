@@ -4,6 +4,7 @@ import io
 import json
 from typing import Any
 
+import pytest
 from hyperkit.cloud.controller import (
     HypergridController,
     S3SweepRepository,
@@ -84,6 +85,31 @@ def test_controller_recomputes_and_persists_snapshots() -> None:
     assert by_label["driver"].rank == 1
     assert ("run", fused.cell_id) in controller.snapshots
     assert ("bucket", f"runs/run/snapshots/{fused.cell_id}.json") in s3.objects
+
+
+def test_controller_resumes_counter_deltas_from_persisted_snapshots(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    s3 = FakeS3()
+    repo = S3SweepRepository("bucket", client=s3)
+    cell = _cell("solo-model", "solo")
+    s3.put_object(
+        Bucket="bucket",
+        Key=f"runs/run/cells/{cell.cell_id}.json",
+        Body=json.dumps({"cell": cell.model_dump(mode="json"), "generation": 0}).encode(),
+    )
+    repo.store.put("run", _result(cell, "i1", True))
+    HypergridController(repo).reconcile("run")
+    calls: list[tuple[int, int]] = []
+
+    def capture(previous: list, current: list) -> None:
+        calls.append((len(previous), len(current)))
+
+    monkeypatch.setattr("hyperkit.cloud.controller.record_snapshot_deltas", capture)
+    HypergridController(repo).reconcile("run")
+
+    assert calls == [(1, 1)]
+    assert len(repo.snapshots("run")) == 1
 
 
 def test_s3_event_extracts_sweep_id() -> None:

@@ -22,7 +22,7 @@ from urllib.parse import unquote_plus
 from hyperkit.backends.s3 import S3ResultStore
 from hyperkit.core.models import Cell, ShardResult
 from hyperkit.core.snapshots import CellSnapshot, build_cell_snapshots
-from hyperkit.telemetry import configure, set_cell_snapshots
+from hyperkit.telemetry import configure, record_snapshot_deltas, set_cell_snapshots
 
 _stop = False
 
@@ -77,6 +77,17 @@ class S3SweepRepository:
     def results(self, sweep_id: str) -> list[ShardResult]:
         return self.store.get_all(sweep_id)
 
+    def snapshots(self, sweep_id: str) -> list[CellSnapshot]:
+        prefix = self.store._key(f"runs/{sweep_id}/snapshots/")
+        out: list[CellSnapshot] = []
+        for item in self.store._list_objects(prefix):
+            key = item.get("Key", "")
+            if not key.endswith(".json"):
+                continue
+            response = self.store.client.get_object(Bucket=self.store.bucket, Key=key)
+            out.append(CellSnapshot.model_validate_json(response["Body"].read()))
+        return out
+
     def put_snapshots(self, sweep_id: str, snapshots: list[CellSnapshot]) -> None:
         for snapshot in snapshots:
             key = self.store._key(
@@ -104,6 +115,14 @@ class HypergridController:
             cells,
             self.repository.results(sweep_id),
         )
+        previous = [
+            snapshot
+            for (stored_sweep_id, _), snapshot in self.snapshots.items()
+            if stored_sweep_id == sweep_id
+        ]
+        if not previous:
+            previous = self.repository.snapshots(sweep_id)
+        record_snapshot_deltas(previous, snapshots)
         self.repository.put_snapshots(sweep_id, snapshots)
         for snapshot in snapshots:
             self.snapshots[(sweep_id, snapshot.cell_id)] = snapshot
@@ -179,7 +198,8 @@ def main() -> int:
     only_sweep = os.environ.get("HYPERKIT_SWEEP_ID")
     poll_interval = float(os.environ.get("HYPERKIT_POLL_INTERVAL", "30"))
 
-    configure("hyperkit-controller")
+    controller_identity = f"hyperkit-controller:{bucket}:{prefix or 'root'}"
+    configure("hyperkit-controller", service_instance_id=controller_identity)
     s3_client = _boto3_client("s3")
     sqs_client = _boto3_client("sqs") if queue_url else None
     controller = HypergridController(

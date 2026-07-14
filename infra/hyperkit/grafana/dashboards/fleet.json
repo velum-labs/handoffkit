@@ -14,131 +14,15 @@
       },
       "fieldConfig": {
         "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "drawStyle": "line",
-            "fillOpacity": 15,
-            "lineWidth": 2,
-            "showPoints": "never"
-          }
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 9,
-        "w": 12,
-        "x": 0,
-        "y": 0
-      },
-      "id": 1,
-      "options": {
-        "legend": {
-          "calcs": [
-            "lastNotNull",
-            "max"
-          ],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "targets": [
-        {
-          "editorMode": "code",
-          "expr": "sum by (hyperkit_benchmark) (rate(hyperkit_shards_completed_total[$__rate_interval]))",
-          "legendFormat": "{{hyperkit_benchmark}}",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "Shard completion throughput",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "amp"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "drawStyle": "bars",
-            "fillOpacity": 35,
-            "lineWidth": 1,
-            "showPoints": "never",
-            "stacking": {
-              "group": "A",
-              "mode": "normal"
-            }
-          }
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 9,
-        "w": 12,
-        "x": 12,
-        "y": 0
-      },
-      "id": 2,
-      "options": {
-        "legend": {
-          "calcs": [
-            "sum"
-          ],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "targets": [
-        {
-          "editorMode": "code",
-          "expr": "sum by (hyperkit_benchmark) (rate(hyperkit_shards_resolved_total[$__rate_interval]))",
-          "legendFormat": "resolved {{hyperkit_benchmark}}",
-          "range": true,
-          "refId": "A"
-        },
-        {
-          "editorMode": "code",
-          "expr": "sum by (hyperkit_benchmark) (rate(hyperkit_shards_errors_total[$__rate_interval]))",
-          "legendFormat": "errors {{hyperkit_benchmark}}",
-          "range": true,
-          "refId": "B"
-        }
-      ],
-      "title": "Shard outcomes",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "amp"
-      },
-      "fieldConfig": {
-        "defaults": {
           "unit": "ops"
         },
         "overrides": []
       },
       "gridPos": {
-        "h": 8,
+        "h": 9,
         "w": 8,
         "x": 0,
-        "y": 9
+        "y": 0
       },
       "id": 3,
       "options": {
@@ -186,10 +70,10 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 8,
+        "h": 9,
         "w": 8,
         "x": 8,
-        "y": 9
+        "y": 0
       },
       "id": 4,
       "options": {
@@ -238,10 +122,10 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 8,
+        "h": 9,
         "w": 8,
         "x": 16,
-        "y": 9
+        "y": 0
       },
       "id": 5,
       "options": {
@@ -287,5 +171,5 @@
   "timezone": "browser",
   "title": "Fleet",
   "uid": "hyperkit-fleet",
-  "version": 1
+  "version": 2
 }
