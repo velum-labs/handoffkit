@@ -438,7 +438,7 @@
     "docs/documentation-taxonomy.md": {
       "dependsOn": [],
       "verified": {
-        "docs/documentation-taxonomy.md": "41d79cb8ac0d3a2dc95c36d3581a58c60bb33219"
+        "docs/documentation-taxonomy.md": "b8468d065cde7ccde4cb38472bb772c090ef59a5"
       },
       "verifiedAt": "2026-07-15"
     },
@@ -721,9 +721,9 @@
     "docs/README.md": {
       "dependsOn": [],
       "verified": {
-        "docs/README.md": "f295338135572eb565af41b7f485e91ac6d00b39"
+        "docs/README.md": "a8533fa220f05fca6f413447a140281f8488d9c9"
       },
-      "verifiedAt": "2026-07-13"
+      "verifiedAt": "2026-07-15"
     },
     "docs/release-publishing.md": {
       "dependsOn": [
