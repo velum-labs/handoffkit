@@ -57,6 +57,13 @@ def _experiment_source_hash(experiment: Experiment) -> str | None:
         return None
 
 
+def _materialize_adapter_resource(cell: Cell) -> Cell:
+    if "resource" in cell.model_fields_set:
+        return cell
+    resource = registry.get_benchmark(cell.benchmark).resource_profile()
+    return cell.model_copy(update={"resource": resource})
+
+
 class SweepEngine:
     """Orchestrates a sweep over a pluggable compute backend."""
 
@@ -82,7 +89,7 @@ class SweepEngine:
             )
         sweep_id = sweep_id or experiment.id
         ctx = _Context(self.store, sweep_id)
-        cells = list(experiment.cells(ctx))
+        cells = [_materialize_adapter_resource(cell) for cell in experiment.cells(ctx)]
         lock = new_lock(
             sweep_id,
             cells,
@@ -103,11 +110,12 @@ class SweepEngine:
     def extend(self, experiment: Experiment, *, from_results: bool = False) -> list[Cell]:
         lock = load_lock(self.lock_path)
         ctx = _Context(self.store, lock.sweep_id)
-        proposed = (
+        materialized = (
             list(experiment.on_results(self.store.get_all(lock.sweep_id), ctx))
             if from_results
             else list(experiment.cells(ctx))
         )
+        proposed = [_materialize_adapter_resource(cell) for cell in materialized]
         before_generations = len(lock.generations)
         lock, added = extend_lock(
             lock,

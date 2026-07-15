@@ -45,15 +45,15 @@ def test_decode_tests_splits_public_private() -> None:
     assert private[0]["input"] == "3\n"
 
 
-def test_decode_tests_private_falls_back_to_public() -> None:
+def test_decode_tests_fails_closed_without_private_tests() -> None:
     row = {
         "public_test_cases": json.dumps(
             [{"input": "1\n", "output": "2\n", "testtype": "stdin"}]
         ),
         "private_test_cases": "",
     }
-    public, private = decode_tests(row)
-    assert private == public
+    with pytest.raises(ValueError, match="private stdin"):
+        decode_tests(row)
 
 
 def test_run_tests_executes_and_normalizes() -> None:
@@ -65,6 +65,17 @@ def test_run_tests_executes_and_normalizes() -> None:
     ]
     result = run_tests(sandbox, code, tests, timeout_s=10.0)
     assert result["all_passed"] is True and result["passed"] == 2
+
+
+def test_run_tests_accepts_equivalent_numeric_output() -> None:
+    result = run_tests(
+        _Sandbox(),
+        "print('1.0   2e0')",
+        [{"input": "", "output": "1 2\n"}],
+        timeout_s=10.0,
+    )
+
+    assert result["all_passed"] is True
 
 
 def test_run_tests_reports_first_failure() -> None:
@@ -222,6 +233,31 @@ def test_selection_first_grades_sample_zero(
     assert raw["resolved"] is True
     assert raw["selected_index"] == 0
     assert raw["cost_usd"] == pytest.approx(0.001)
+    assert raw["samples"][0]["code"] == extract_code(GOOD)
+    assert (store / raw["candidate_artifact"]).exists()
+
+
+def test_final_score_requires_public_and_private_tests(
+    store: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    private_only = (
+        "```python\n"
+        "import sys\n"
+        "value = int(sys.stdin.read())\n"
+        "print(value * 2 if value != 2 else 5)\n"
+        "```"
+    )
+    _patch_completions(monkeypatch, [private_only])
+    raw = LivecodebenchAdapter().run_instance(
+        "q1",
+        SUTTarget(base_url="http://local/v1", model="m"),
+        store,
+        {"selection": "first"},
+    )
+
+    assert raw["samples"][0]["private_passed_all"] is True
+    assert raw["samples"][0]["public_all"] is False
+    assert raw["resolved"] is False
 
 
 def test_public_exec_selects_passing_sample(

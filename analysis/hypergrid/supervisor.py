@@ -60,22 +60,33 @@ def analyze(workdir: Path) -> dict[str, Any]:
     lock, results, cells = load(workdir)
     by_cell: dict[str, dict[str, Any]] = defaultdict(dict)  # cell -> instance -> result
     for result in results:
+        if result.instance_id in by_cell[result.cell_id]:
+            raise ValueError(
+                f"duplicate results for cell {result.cell_id} instance {result.instance_id}"
+            )
         by_cell[result.cell_id][result.instance_id] = result
 
     rows: list[dict[str, Any]] = []
     for cell_id, meta in cells.items():
         cell = meta["cell"]
         shard_map = by_cell.get(cell_id, {})
-        graded = {
-            inst: r for inst, r in shard_map.items() if r.status.value in ("resolved", "unresolved")
+        terminal = {
+            inst: result
+            for inst, result in shard_map.items()
+            if result.status.value in ("resolved", "unresolved", "error")
         }
-        errors = sum(1 for r in shard_map.values() if r.status.value == "error")
-        n = len(graded)
-        resolved = sum(1 for r in graded.values() if r.resolved)
+        completed = {
+            inst: result
+            for inst, result in terminal.items()
+            if result.status.value in ("resolved", "unresolved")
+        }
+        errors = sum(1 for result in terminal.values() if result.status.value == "error")
+        n = len(terminal)
+        resolved = sum(1 for result in terminal.values() if result.resolved)
         ci = wilson_interval(resolved, n) if n else None
         cost = sum(r.cost_usd or 0.0 for r in shard_map.values())
         oracle = sum(
-            1 for r in graded.values() if (r.raw or {}).get("oracle_private")
+            1 for result in terminal.values() if (result.raw or {}).get("oracle_private")
         )
         rows.append(
             {
@@ -85,21 +96,29 @@ def analyze(workdir: Path) -> dict[str, Any]:
                 "sut": cell.sut.kind,
                 "params": cell.params,
                 "n": n,
+                "completed": len(completed),
                 "errors": errors,
+                "missing": max(0, len(cell.instances) - len(terminal)),
                 "resolved": resolved,
                 "rate": resolved / n if n else None,
+                "completed_rate": resolved / len(completed) if completed else None,
                 "lo": ci.low if ci else None,
                 "hi": ci.high if ci else None,
                 "cost": cost,
                 "oracle_private": oracle,
-                "pass_vector": {inst: bool(r.resolved) for inst, r in graded.items()},
+                "adapter_versions": sorted(
+                    {result.adapter_version for result in terminal.values()}
+                ),
+                "pass_vector": {
+                    inst: bool(result.resolved) for inst, result in terminal.items()
+                },
             }
         )
 
     anchors = [r for r in rows if r["label"].startswith(ANCHOR_PREFIX) and r["n"]]
     opens = [r for r in rows if not r["label"].startswith(ANCHOR_PREFIX) and r["n"]]
     best_anchor = max(anchors, key=lambda r: r["rate"], default=None)
-    solo_opens = [r for r in opens if r["sut"] == "solo-model" and not r["params"]]
+    solo_opens = [r for r in opens if r["sut"] == "solo-model"]
     best_solo = max(solo_opens, key=lambda r: r["rate"], default=None)
 
     # Paired comparisons on shared instances.
@@ -107,10 +126,15 @@ def analyze(workdir: Path) -> dict[str, Any]:
         shared = set(a["pass_vector"]) & set(b["pass_vector"])
         b_only = sum(1 for i in shared if a["pass_vector"][i] and not b["pass_vector"][i])
         c_only = sum(1 for i in shared if b["pass_vector"][i] and not a["pass_vector"][i])
+        a_resolved = sum(1 for i in shared if a["pass_vector"][i])
+        b_resolved = sum(1 for i in shared if b["pass_vector"][i])
         return {
             "n_shared": len(shared),
             "a_only": b_only,
             "b_only": c_only,
+            "a_rate": a_resolved / len(shared) if shared else None,
+            "b_rate": b_resolved / len(shared) if shared else None,
+            "delta": (a_resolved - b_resolved) / len(shared) if shared else None,
             "p": mcnemar(b_only, c_only),
         }
 
@@ -118,13 +142,13 @@ def analyze(workdir: Path) -> dict[str, Any]:
         if best_anchor and row is not best_anchor and row["n"]:
             cmp = paired(row, best_anchor)
             row["vs_anchor"] = {
-                "gap": (row["rate"] or 0) - (best_anchor["rate"] or 0),
+                "gap": cmp["delta"],
                 **cmp,
             }
         if best_solo and row is not best_solo and row["n"]:
+            cmp = paired(row, best_solo)
             row["vs_best_solo"] = {
-                "delta": (row["rate"] or 0) - (best_solo["rate"] or 0),
-                **paired(row, best_solo),
+                **cmp,
             }
 
     # Prune flags: Wilson-dominated by best solo open.
@@ -140,6 +164,8 @@ def analyze(workdir: Path) -> dict[str, Any]:
             row["flags"].append("PRUNE:wilson-dominated-by-best-solo")
         if row["errors"] > max(2, 0.1 * max(row["n"], 1)):
             row["flags"].append("FORENSICS:high-error-count")
+        if len(row["adapter_versions"]) > 1:
+            row["flags"].append("FORENSICS:mixed-adapter-versions")
 
     # Complementarity: union coverage of top pairs among solo opens.
     pairs = []
@@ -151,13 +177,24 @@ def analyze(workdir: Path) -> dict[str, Any]:
             union = sum(
                 1 for inst in shared if a["pass_vector"][inst] or b["pass_vector"][inst]
             )
+            a_wins = sum(
+                1 for inst in shared if a["pass_vector"][inst] and not b["pass_vector"][inst]
+            )
+            b_wins = sum(
+                1 for inst in shared if b["pass_vector"][inst] and not a["pass_vector"][inst]
+            )
+            union_ci = wilson_interval(union, len(shared))
             pairs.append(
                 {
                     "pair": [a["label"], b["label"]],
                     "n": len(shared),
                     "union_rate": union / len(shared),
+                    "union_low": union_ci.low,
+                    "union_high": union_ci.high,
                     "a_rate": sum(1 for i2 in shared if a["pass_vector"][i2]) / len(shared),
                     "b_rate": sum(1 for i2 in shared if b["pass_vector"][i2]) / len(shared),
+                    "a_only": a_wins,
+                    "b_only": b_wins,
                 }
             )
     pairs.sort(key=lambda p: -p["union_rate"])
@@ -201,7 +238,9 @@ def print_report(report: dict[str, Any]) -> None:
     for pair in report["top_pairs"][:6]:
         print(
             f"  {pair['pair'][0]} + {pair['pair'][1]}: union {pair['union_rate']:.1%} "
-            f"(solo {pair['a_rate']:.1%} / {pair['b_rate']:.1%}, n={pair['n']})"
+            f"[{pair['union_low']:.1%}, {pair['union_high']:.1%}] "
+            f"(solo {pair['a_rate']:.1%} / {pair['b_rate']:.1%}, "
+            f"unique {pair['a_only']}/{pair['b_only']}, n={pair['n']})"
         )
 
 

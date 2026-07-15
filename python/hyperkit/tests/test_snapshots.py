@@ -70,6 +70,25 @@ def test_snapshots_rank_delta_pareto_and_progress() -> None:
     assert by_label["solo"].metric_attributes()["model"] == "solo"
 
 
+def test_snapshot_resolution_rate_counts_errors_as_failures() -> None:
+    solo = _cell("solo-model", "solo", "solo")
+    resolved = _result(solo, "i1", True, 0.25, 3.0)
+    error = ShardResult(
+        shard_id=f"{solo.cell_id}-i2",
+        cell_id=solo.cell_id,
+        generation=0,
+        benchmark="bench",
+        instance_id="i2",
+        sut_hash=solo.sut.hash,
+        status=ShardStatus.ERROR,
+    )
+
+    (snapshot,) = build_cell_snapshots("run", [(solo, 0)], [resolved, error])
+
+    assert snapshot.resolution_rate == 0.5
+    assert snapshot.errors == 1
+
+
 class _Recorder:
     def __init__(self) -> None:
         self.calls: list[tuple[float, dict]] = []

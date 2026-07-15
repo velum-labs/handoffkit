@@ -144,14 +144,9 @@ def _snapshot(
         for result in results
         if result.status in {ShardStatus.RESOLVED, ShardStatus.UNRESOLVED, ShardStatus.ERROR}
     ]
-    graded = [
-        result
-        for result in completed
-        if result.status in {ShardStatus.RESOLVED, ShardStatus.UNRESOLVED}
-    ]
-    resolved = sum(result.resolved for result in graded)
+    resolved = sum(result.resolved for result in completed)
     errors = sum(result.status == ShardStatus.ERROR for result in completed)
-    ci = wilson_interval(resolved, len(graded))
+    ci = wilson_interval(resolved, len(completed))
     cost = sum(result.cost_usd or 0.0 for result in completed)
     latencies = sorted(
         result.latency_s for result in completed if result.latency_s is not None

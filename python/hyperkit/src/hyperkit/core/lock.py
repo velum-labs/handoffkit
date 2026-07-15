@@ -16,10 +16,12 @@ from hyperkit.core.models import Cell, Generation, SweepLock
 
 
 def repo_sha(cwd: Path | None = None) -> str | None:
+    probe = (cwd or Path.cwd()).resolve()
+    while not probe.exists() and probe != probe.parent:
+        probe = probe.parent
     try:
         out = subprocess.run(
-            ["git", "rev-parse", "HEAD"],
-            cwd=str(cwd) if cwd else None,
+            ["git", "-C", str(probe), "rev-parse", "HEAD"],
             capture_output=True,
             text=True,
             check=True,

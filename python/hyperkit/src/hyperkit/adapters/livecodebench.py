@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import base64
 import contextlib
+import hashlib
 import json
 import os
 import pickle
@@ -43,6 +44,7 @@ import time
 import zlib
 from collections.abc import Callable, Sequence
 from concurrent.futures import ThreadPoolExecutor
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 
@@ -67,8 +69,10 @@ REPAIR_TEMPLATE = (
     "Problem:\n{problem}\n\n"
     "Your program:\n```python\n{code}\n```\n\n"
     "Failing test:\nstdin:\n{stdin}\n\nexpected stdout:\n{expected}\n\n"
-    "actual stdout:\n{actual}\n\nstderr:\n{stderr}\n\n"
-    "Fix the program. Respond with ONLY a single corrected Python code block."
+    "actual stdout:\n{actual}\n\nstderr:\n{stderr}\n\ntimed out: {timed_out}\n\n"
+    "The failing case is evidence, not a replacement specification. Fix the root cause while "
+    "preserving every previously passing behavior and the program's asymptotic complexity. "
+    "Respond with ONLY a single corrected Python code block."
 )
 
 _FENCED_PYTHON = re.compile(r"```(?:python|py)\s*\n(.*?)```", re.DOTALL | re.IGNORECASE)
@@ -108,12 +112,36 @@ def extract_code(text: str) -> str:
     return text.strip()
 
 
-def _normalize(output: str) -> str:
-    return "\n".join(line.rstrip() for line in output.strip("\n").splitlines()).strip()
+def _stripped_lines(output: str) -> list[str]:
+    return [line.strip() for line in output.strip().splitlines()]
+
+
+def _outputs_match(expected: str, actual: str) -> bool:
+    """Match LiveCodeBench's exact-lines then numeric-token semantics."""
+
+    expected_lines = _stripped_lines(expected)
+    actual_lines = _stripped_lines(actual)
+    if expected_lines == actual_lines:
+        return True
+    expected_tokens = " ".join(expected_lines).split()
+    actual_tokens = " ".join(actual_lines).split()
+    if len(expected_tokens) != len(actual_tokens):
+        return False
+    try:
+        return all(
+            Decimal(expected_token) == Decimal(actual_token)
+            for expected_token, actual_token in zip(
+                expected_tokens,
+                actual_tokens,
+                strict=True,
+            )
+        )
+    except InvalidOperation:
+        return False
 
 
 def decode_tests(row: dict[str, Any]) -> tuple[list[dict[str, str]], list[dict[str, str]]]:
-    """Decode (public, private) stdin tests; private falls back to public."""
+    """Decode public/private stdin tests, failing closed on corrupt fixtures."""
 
     public: list[dict[str, str]] = []
     with contextlib.suppress(KeyError, json.JSONDecodeError, TypeError):
@@ -132,7 +160,11 @@ def decode_tests(row: dict[str, Any]) -> tuple[list[dict[str, str]], list[dict[s
                 )
     public_stdin = [t for t in public if t.get("testtype") == "stdin"]
     private_stdin = [t for t in private if t.get("testtype") == "stdin"]
-    return public_stdin, (private_stdin or public_stdin)
+    if not public_stdin:
+        raise ValueError("LiveCodeBench problem has no decodable public stdin tests")
+    if not private_stdin:
+        raise ValueError("LiveCodeBench problem has no decodable private stdin tests")
+    return public_stdin, private_stdin
 
 
 class _Sandbox:
@@ -190,15 +222,23 @@ def run_tests(
     """Execute code on tests. Returns passes, total, first failure detail."""
 
     if not code.strip() or not tests:
-        return {"passed": 0, "total": len(tests), "all_passed": False, "failure": None}
+        return {
+            "passed": 0,
+            "total": len(tests),
+            "all_passed": False,
+            "failure": None,
+            "passed_indices": [],
+        }
     passed = 0
+    passed_indices: list[int] = []
     failure: dict[str, Any] | None = None
-    for test in tests:
+    for index, test in enumerate(tests):
         expected = test.get("output", "")
         result = sandbox.run(code, test.get("input", ""), timeout_s=timeout_s)
-        ok = result["ok"] and _normalize(expected) == _normalize(result["stdout"])
+        ok = result["ok"] and _outputs_match(expected, result["stdout"])
         if ok:
             passed += 1
+            passed_indices.append(index)
             continue
         if failure is None:
             failure = {
@@ -215,6 +255,7 @@ def run_tests(
         "total": len(tests),
         "all_passed": passed == len(tests),
         "failure": failure,
+        "passed_indices": passed_indices,
     }
 
 
@@ -270,15 +311,22 @@ class _Client:
             headers["Authorization"] = f"Bearer {self.api_key}"
         url = f"{self.base_url}/chat/completions"
         last_error: Exception | None = None
+        deadline = self.clock() + timeout_s
         with httpx.Client(
             headers=headers,
-            timeout=httpx.Timeout(timeout_s),
             transport=self.transport,
         ) as client:
             for attempt in range(attempts):
+                remaining = deadline - self.clock()
+                if remaining <= 0:
+                    raise TimeoutError("chat completion exceeded its wall-clock deadline")
                 try:
-                    deadline = self.clock() + timeout_s
-                    with client.stream("POST", url, json=payload) as response:
+                    with client.stream(
+                        "POST",
+                        url,
+                        json=payload,
+                        timeout=httpx.Timeout(remaining),
+                    ) as response:
                         response.raise_for_status()
                         data = self._read_json(response, deadline=deadline)
                     choice = (data.get("choices") or [{}])[0]
@@ -290,6 +338,12 @@ class _Client:
                         "completion_tokens": int(usage.get("completion_tokens") or 0),
                         "cost_usd": float(usage.get("cost") or 0.0),
                         "finish_reason": choice.get("finish_reason"),
+                        "response_id": data.get("id"),
+                        "response_model": data.get("model"),
+                        "provider": data.get("provider"),
+                        "reasoning": message.get("reasoning")
+                        or message.get("reasoning_content"),
+                        "reasoning_details": message.get("reasoning_details"),
                     }
                 except (json.JSONDecodeError, httpx.HTTPError, TimeoutError, OSError) as exc:
                     last_error = exc
@@ -298,8 +352,30 @@ class _Client:
                         retryable = exc.response.status_code in (408, 409, 429, 500, 502, 503, 504)
                     if not retryable or attempt == attempts - 1:
                         raise
-                    time.sleep(min(60.0, 2.0 * 2**attempt))
+                    backoff = min(60.0, 2.0 * 2**attempt)
+                    if self.clock() + backoff >= deadline:
+                        raise TimeoutError(
+                            "chat completion exceeded its wall-clock deadline"
+                        ) from exc
+                    time.sleep(backoff)
         raise RuntimeError(f"chat completion failed: {last_error}")
+
+
+def _sha256(value: str) -> str:
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+def _generation_status(completion: dict[str, Any]) -> str:
+    finish_reason = completion.get("finish_reason")
+    if finish_reason == "length":
+        return "truncated"
+    if finish_reason in {"error", "content_filter"}:
+        return "provider_error"
+    if not str(completion.get("text") or "").strip():
+        return "empty_final"
+    if finish_reason in {None, "stop"}:
+        return "ok"
+    return "incomplete"
 
 
 class LivecodebenchGrader:
@@ -309,9 +385,9 @@ class LivecodebenchGrader:
 
 class LivecodebenchAdapter:
     name = "livecodebench"
-    # v2: fair grading wall clock (30 s >= the 12 s CPU rlimit) and parallel
-    # sample draws. Grading semantics changed, so shard identity must too.
-    version = "2"
+    # v3: fail-closed fixtures, official output matching, public+private final
+    # grading, replayable candidate artifacts, and generation-only concurrency.
+    version = "3"
 
     def manifest(self, ref: str) -> TextManifest:
         return TextManifest(ref)
@@ -339,11 +415,12 @@ class LivecodebenchAdapter:
         self, instance_id: str, target: SUTTarget, workdir: Path, params: dict[str, Any]
     ) -> dict[str, Any]:
         problem = self.load_problem(instance_id)
-        prompt = (problem.get("question_content") or "") + PROMPT_SUFFIX
+        question = problem.get("question_content") or ""
         public_tests, private_tests = decode_tests(problem)
 
         n_samples = int(params.get("n_samples", 1))
         temps = [float(t) for t in params.get("temps", [0.2])] or [0.2]
+        prompt_variants = [str(value) for value in params.get("prompt_variants", [])]
         selection = str(params.get("selection", "first"))
         max_tokens = int(params.get("max_tokens", 16384))
         # Wall clock must exceed the CPU rlimit or grading becomes a lottery on
@@ -361,6 +438,15 @@ class LivecodebenchAdapter:
 
         def draw_sample(index: int) -> dict[str, Any]:
             temperature = temps[index % len(temps)]
+            prompt_variant = (
+                prompt_variants[index % len(prompt_variants)]
+                if prompt_variants
+                else ""
+            )
+            prompt = question
+            if prompt_variant:
+                prompt += f"\n\nStrategy for this attempt:\n{prompt_variant}"
+            prompt += PROMPT_SUFFIX
             completion = client.complete(
                 model,
                 prompt,
@@ -370,38 +456,59 @@ class LivecodebenchAdapter:
                 attempts=attempts,
             )
             code = extract_code(completion["text"])
-            public = run_tests(
-                sandbox, code, public_tests, timeout_s=timeout_s, stop_on_failure=False
-            )
             return {
                 "index": index,
                 "temperature": temperature,
+                "prompt_variant": prompt_variant or None,
+                "prompt_sha256": _sha256(prompt),
                 "code": code,
+                "code_sha256": _sha256(code),
+                "raw_text": completion["text"],
+                "generation_status": _generation_status(completion),
                 "finish_reason": completion["finish_reason"],
                 "prompt_tokens": completion["prompt_tokens"],
                 "completion_tokens": completion["completion_tokens"],
                 "cost_usd": completion["cost_usd"],
-                "public_passed": public["passed"],
-                "public_total": public["total"],
-                "public_all": public["all_passed"],
-                "public_failure": public["failure"],
+                "response_id": completion.get("response_id"),
+                "response_model": completion.get("response_model"),
+                "provider": completion.get("provider"),
+                "reasoning": completion.get("reasoning"),
+                "reasoning_details": completion.get("reasoning_details"),
             }
 
-        # Samples are independent: draw them concurrently so an n-sample cell's
-        # wall clock tracks the slowest single completion, not their sum
-        # (sequential 3x1800 s draws overran the 3600 s Batch limit in e003).
+        # Provider calls are independent and I/O-bound, so draw them
+        # concurrently. Execute candidate programs serially afterward: concurrent
+        # CPU-bound graders made the per-program CPU/wall limit load-dependent.
         if n_samples == 1:
             samples = [draw_sample(0)]
         else:
             with ThreadPoolExecutor(max_workers=n_samples) as pool:
                 samples = list(pool.map(draw_sample, range(n_samples)))
 
+        for sample in samples:
+            public = run_tests(
+                sandbox,
+                sample["code"],
+                public_tests,
+                timeout_s=timeout_s,
+                stop_on_failure=False,
+            )
+            sample["public_passed"] = public["passed"]
+            sample["public_total"] = public["total"]
+            sample["public_all"] = public["all_passed"]
+            sample["public_failure"] = public["failure"]
+            sample["public_passed_indices"] = public["passed_indices"]
+
         if selection == "first":
             selected = 0
         elif selection in ("public-exec", "public-exec-repair"):
             selected = max(
                 range(len(samples)),
-                key=lambda i: (samples[i]["public_passed"], -i),
+                key=lambda i: (
+                    samples[i]["generation_status"] == "ok",
+                    samples[i]["public_passed"],
+                    -i,
+                ),
             )
         else:
             raise ValueError(f"unknown selection policy: {selection}")
@@ -422,6 +529,7 @@ class LivecodebenchAdapter:
                 expected=failure["expected"],
                 actual=failure["actual"],
                 stderr=failure["stderr"],
+                timed_out=failure["timed_out"],
             )
             completion = client.complete(
                 model,
@@ -438,45 +546,84 @@ class LivecodebenchAdapter:
             repaired = {
                 "index": len(samples),
                 "temperature": temps[0],
+                "prompt_variant": "failure-directed-repair",
+                "prompt_sha256": _sha256(repair_prompt),
                 "code": repaired_code,
+                "code_sha256": _sha256(repaired_code),
+                "raw_text": completion["text"],
+                "generation_status": _generation_status(completion),
                 "finish_reason": completion["finish_reason"],
                 "prompt_tokens": completion["prompt_tokens"],
                 "completion_tokens": completion["completion_tokens"],
                 "cost_usd": completion["cost_usd"],
+                "response_id": completion.get("response_id"),
+                "response_model": completion.get("response_model"),
+                "provider": completion.get("provider"),
+                "reasoning": completion.get("reasoning"),
+                "reasoning_details": completion.get("reasoning_details"),
                 "public_passed": repaired_public["passed"],
                 "public_total": repaired_public["total"],
                 "public_all": repaired_public["all_passed"],
                 "public_failure": repaired_public["failure"],
+                "public_passed_indices": repaired_public["passed_indices"],
                 "repair_of": selected,
             }
             samples.append(repaired)
-            if repaired["public_passed"] > winner["public_passed"]:
+            if (
+                repaired["generation_status"] == "ok"
+                and repaired["public_passed"] > winner["public_passed"]
+                and set(winner["public_passed_indices"])
+                <= set(repaired["public_passed_indices"])
+            ):
                 selected = repaired["index"]
 
-        # Grade every candidate on private tests (selected one decides the
-        # shard; the rest provide oracle/regret diagnostics at zero API cost).
+        # Grade every candidate on private tests. Official correctness requires
+        # both visible and hidden tests; private-only diagnostics remain
+        # available to identify weak public tests and selection inversions.
         for sample in samples:
             private = run_tests(sandbox, sample["code"], private_tests, timeout_s=timeout_s)
             sample["private_passed_all"] = private["all_passed"]
             sample["private_passed"] = private["passed"]
             sample["private_total"] = private["total"]
+            sample["all_tests_passed"] = bool(
+                sample["generation_status"] == "ok"
+                and sample["public_all"]
+                and private["all_passed"]
+            )
 
-        resolved = bool(samples[selected]["private_passed_all"])
+        resolved = bool(samples[selected]["all_tests_passed"])
         total_cost = sum(float(s["cost_usd"]) for s in samples)
         total_tokens = sum(int(s["prompt_tokens"]) + int(s["completion_tokens"]) for s in samples)
-        # Drop code bodies from the checkpoint except the selected one.
-        slim = [
-            {**{k: v for k, v in s.items() if k != "code"}, "public_failure": None}
-            for s in samples
+        artifact_path = workdir / "livecodebench-candidates.json"
+        artifact_path.write_text(
+            json.dumps(
+                {
+                    "instance_id": instance_id,
+                    "problem_sha256": _sha256(
+                        json.dumps(problem, sort_keys=True, separators=(",", ":"))
+                    ),
+                    "selected_index": selected,
+                    "samples": samples,
+                },
+                indent=2,
+                sort_keys=True,
+            ),
+            encoding="utf-8",
+        )
+        checkpoint_samples = [
+            {key: value for key, value in sample.items() if key != "raw_text"}
+            for sample in samples
         ]
         return {
             "resolved": resolved,
             "selected_index": selected,
             "selection": selection,
             "repair_used": repair_used,
-            "oracle_private": any(s["private_passed_all"] for s in samples),
-            "samples": slim,
+            "oracle_private": any(s["all_tests_passed"] for s in samples),
+            "oracle_private_only": any(s["private_passed_all"] for s in samples),
+            "samples": checkpoint_samples,
             "selected_code": samples[selected]["code"],
+            "candidate_artifact": artifact_path.name,
             "cost_usd": total_cost,
             "tokens": total_tokens,
             "difficulty": problem.get("difficulty"),

@@ -24,7 +24,14 @@ def aggregate(
     results: Sequence[ShardResult],
 ) -> RunResult:
     by_cell: dict[str, list[ShardResult]] = {}
+    seen: set[tuple[str, str]] = set()
     for r in results:
+        key = (r.cell_id, r.instance_id)
+        if key in seen:
+            raise ValueError(
+                f"duplicate results for cell {r.cell_id} instance {r.instance_id}"
+            )
+        seen.add(key)
         by_cell.setdefault(r.cell_id, []).append(r)
 
     # Per-benchmark solo oracle: instances solved by any solo cell.
@@ -40,10 +47,21 @@ def aggregate(
     rows: list[dict[str, Any]] = []
     for cell in cells:
         shards = by_cell.get(cell.cell_id, [])
-        graded = [s for s in shards if s.status.value in {"resolved", "unresolved"}]
-        n = len(graded)
-        resolved = sum(1 for s in graded if s.resolved)
+        completed = [
+            shard
+            for shard in shards
+            if shard.status.value in {"resolved", "unresolved", "error"}
+        ]
+        graded = [
+            shard
+            for shard in completed
+            if shard.status.value in {"resolved", "unresolved"}
+        ]
+        n = len(completed)
+        resolved = sum(1 for shard in completed if shard.resolved)
+        errors = sum(1 for shard in completed if shard.status.value == "error")
         ci = wilson_interval(resolved, n) if n else None
+        completed_rate = resolved / len(graded) if graded else None
         row: dict[str, Any] = {
             "cell_id": cell.cell_id,
             "label": cell.label,
@@ -51,17 +69,25 @@ def aggregate(
             "sut": cell.sut.kind,
             "sut_hash": cell.sut.hash,
             "params": cell.params,
+            # Benchmark rates are intent-to-treat over every durable terminal
+            # attempt. Provider/infrastructure errors are failures, never
+            # silently removed from the denominator.
             "n_graded": n,
+            "n_completed": len(graded),
+            "n_errors": errors,
+            "n_present": len(shards),
+            "n_missing": max(0, len(cell.instances) - len(shards)),
             "n_instances": len(cell.instances),
             "resolved": resolved,
             "rate": (resolved / n) if n else None,
+            "completed_rate": completed_rate,
             "wilson_low": ci.low if ci else None,
             "wilson_high": ci.high if ci else None,
         }
         if not _is_solo(cell):
             oracle = solo_solved.get(cell.benchmark)
             if oracle is not None and n:
-                best = len(oracle & {s.instance_id for s in graded})
+                best = len(oracle & {s.instance_id for s in completed})
                 row["oracle"] = best
                 row["headroom"] = best - resolved
         rows.append(row)
