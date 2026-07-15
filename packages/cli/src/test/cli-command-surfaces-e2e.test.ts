@@ -222,12 +222,14 @@ test("setup and doctor validate the v4 Fusion/RouteKit composition", {
   );
 
   const doctor = runCli(["doctor", "--json"]);
-  assert.equal(doctor.status, 1, `${doctor.stdout}\n${doctor.stderr}`);
   const result = JSON.parse(doctor.stdout) as {
     ready?: boolean;
-    checks?: Array<{ label?: string; ok?: boolean }>;
+    checks?: Array<{ label?: string; ok?: boolean; required?: boolean }>;
   };
-  assert.equal(result.ready, false, "missing tool binaries keep doctor non-ready");
+  const selected = result.checks?.find((check) => check.label === "codex");
+  assert.equal(selected?.required, true);
+  assert.equal(result.ready, selected?.ok);
+  assert.equal(doctor.status, selected?.ok === true ? 0 : 1, `${doctor.stdout}\n${doctor.stderr}`);
   assert.ok(
     result.checks?.some(
       (check) => check.label === "embedded RouteKit config" && check.ok === true

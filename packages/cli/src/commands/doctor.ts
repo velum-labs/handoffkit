@@ -15,6 +15,7 @@ import { registerPaletteAction } from "./palette.js";
 type DoctorEntry = {
   label: string;
   ok: boolean;
+  required?: boolean;
   detail?: string;
   hint?: string;
 };
@@ -34,6 +35,7 @@ function requiredEndpointIds(
 async function runDoctor(command: Command): Promise<number> {
   const context = contextFor(command);
   const checks: DoctorEntry[] = [];
+  let selectedTool = "codex";
   const repo = gitToplevel(process.cwd());
   checks.push({
     label: "git repository",
@@ -57,6 +59,7 @@ async function runDoctor(command: Command): Promise<number> {
           hint: "run `fusionkit init`"
         });
       } else if (typeof config.router.config === "string") {
+        selectedTool = config.tool ?? selectedTool;
         const path = resolve(repo, config.router.config);
         const routekit = loadRouterConfig({ configPath: path });
         const available = new Set(
@@ -73,6 +76,7 @@ async function runDoctor(command: Command): Promise<number> {
             : {})
         });
       } else {
+        selectedTool = config.tool ?? selectedTool;
         const authToken =
           config.router.authEnv !== undefined
             ? process.env[config.router.authEnv]
@@ -138,25 +142,29 @@ async function runDoctor(command: Command): Promise<number> {
   for (const tool of toolRegistry.list()) {
     if (tool.binary === undefined) continue;
     const ok = hasBinary(tool.binary);
+    const required = tool.id === selectedTool;
     checks.push({
       label: tool.id,
       ok,
+      required,
       ...(ok ? { detail: probeBinaryVersion(tool.binary) ?? "installed" } : {}),
-      ...(!ok && tool.installHint !== undefined ? { hint: tool.installHint } : {})
+      ...(!ok && required && tool.installHint !== undefined ? { hint: tool.installHint } : {}),
+      ...(!ok && !required ? { detail: "optional, not installed" } : {})
     });
   }
-  if (context.json) context.emit({ ready: checks.every((check) => check.ok), checks });
+  const ready = checks.every((check) => check.ok || check.required === false);
+  if (context.json) context.emit({ ready, checks });
   else {
     for (const check of checks) {
       context.presenter.status(
-        check.ok ? "ok" : "fail",
+        check.ok ? "ok" : check.required === false ? "pending" : "fail",
         check.label,
         check.detail,
         check.hint
       );
     }
   }
-  return checks.every((check) => check.ok) ? 0 : 1;
+  return ready ? 0 : 1;
 }
 
 export function registerDoctor(program: Command): void {
