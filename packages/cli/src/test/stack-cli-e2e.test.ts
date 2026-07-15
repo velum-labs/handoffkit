@@ -2,7 +2,7 @@
  * REAL coding-agent CLIs against the full stack — no mocked tool clients.
  *
  * The actual `claude` (Claude Code) and `codex` (Codex CLI) binaries are
- * spawned and pointed at the REAL Node fusion gateway -> REAL Python engine
+ * spawned and pointed at the Node Fusion/RouteKit gateways -> Python sidecar
  * (`fusionkit serve`) -> scripted provider simulator. The CLIs speak their
  * own production wire dialects, advertise their own real toolsets, and — in
  * the tool-loop tests — EXECUTE the fused turn's committed tool calls on this

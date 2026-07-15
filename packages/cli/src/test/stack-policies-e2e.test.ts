@@ -1,7 +1,7 @@
 /**
  * Gateway policy suite through the whole real stack: WS5 rate-limit /
  * failover policies, WS7 budget caps, and WS4 session turn-caching — each on
- * its own configured stack (real gateway -> real Python engine -> scripted
+ * its own configured stack (Node RouteKit/Fusion gateways -> Python sidecar -> scripted
  * provider), asserted through responses, the wire journal, and the durable
  * session store.
  */

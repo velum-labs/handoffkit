@@ -13,15 +13,17 @@ Each package entry names responsibility, scope, entry points, relevant functions
 ```mermaid
 flowchart LR
   User[User or coding harness] --> CLI[Node CLI: @fusionkit/cli]
-  CLI --> Gateway[RouteKit model gateway]
+  CLI --> FusionGateway["Fusion front door: @fusionkit/gateway"]
   CLI --> Ensemble[Ensemble runner]
-  Gateway --> Providers[Provider adapters and accounts]
+  FusionGateway --> Sessions[Session store and aggregate cost ledger]
+  FusionGateway --> Ensemble
+  Ensemble --> RouteKitGateway["RouteKit gateway: @routekit/gateway"]
+  RouteKitGateway --> Providers[Provider adapters and accounts]
   Ensemble --> PythonServer[Python fusionkit-sidecar]
   Ensemble --> Tools[Tool adapters]
   PythonServer --> Core[fusionkit-core]
-  Core --> Gateway
+  Core --> RouteKitGateway
   Core --> Records[Protocol records and run store]
-  Gateway --> Sessions[Session store and cost ledger]
 ```
 
 The most important operational fact is the process boundary. Node owns harness UX, tool launchers, worktrees, sessions, the public gateway, provider accounts, routing, pricing, retries, and user configuration. Python is an internal synthesis sidecar: it receives trajectories, calls opaque RouteKit endpoint IDs for judge/synthesis, and owns fusion prompts and native run records.
@@ -50,7 +52,14 @@ Several other top-level directories support the experiment platform: `lab/` is t
 
 FusionKit supports two primary usage modes. In coding-harness mode, commands such as `fusionkit codex`, `fusionkit claude`, and `fusionkit cursor` launch an existing agent CLI and place a model ensemble behind it. In raw endpoint mode, `fusionkit serve` exposes an OpenAI-compatible endpoint that clients can call directly.
 
-The ensemble path begins in `@fusionkit/cli`. The CLI reads `.fusionkit/fusion.json`, delegates provider and local model configuration to RouteKit, runs preflight checks, starts the internal Python sidecar when needed, starts the public model gateway, and launches the selected harness integration. The gateway translates the harness dialect, records cost and session state, fans out panel calls through RouteKit, and sends completed trajectories to Python for fusion.
+The ensemble path begins in `@fusionkit/cli`. The CLI reads
+`.fusionkit/fusion.json`, delegates provider and local model configuration to
+RouteKit, runs preflight checks, starts the internal Python sidecar when
+needed, and launches the selected harness integration. Its public server is
+RouteKit's `startGateway()` configured with FusionKit's `FusionBackend`:
+RouteKit translates wire dialects and performs provider egress, while the
+Fusion backend records aggregate cost and session state, runs the panel, and
+sends completed trajectories to Python for synthesis.
 
 The Python side receives trajectories and synthesizes results. `fusionkit_core.fusion.FusionEngine` coordinates fusion-mode policy and judge synthesis. Its only production model client speaks RouteKit's neutral OpenAI-compatible gateway using opaque endpoint IDs. `fusionkit_core.run.FusionRunManager` creates durable native run records, tool policy pauses, idempotency records, and protocol artifacts.
 
@@ -58,7 +67,7 @@ The Python side receives trajectories and synthesizes results. `fusionkit_core.f
 sequenceDiagram
   participant User
   participant CLI as Node CLI
-  participant GW as Model gateway
+  participant GW as Node Fusion front door
   participant PY as Python synthesis sidecar
   participant RK as RouteKit gateway
   participant Models as Model endpoints
@@ -192,14 +201,19 @@ await materializeWorkspace({
 
 Important exports include `ToolIntegration`, `ToolLaunchSpec`, `ToolLaunchContext`, `AgentProfile`, `createToolRegistry`, and `createToolCapabilityMatrix`.
 
+### `@routekit/tool-registry`
+
+`@routekit/tool-registry` imports every shipped `@routekit/tool-*` integration,
+owns the single canonical `toolIntegrations` list, and exports the constructed
+`toolRegistry`. RouteKit and FusionKit consume the same instance; FusionKit's
+only product composition is passing it to `setToolDriverRegistry`.
+
 Example:
 
 ```ts
-import { createToolRegistry } from "@routekit/tools";
-import { codexTool } from "@routekit/tool-codex";
+import { toolRegistry } from "@routekit/tool-registry";
 
-const registry = createToolRegistry([codexTool]);
-console.log(registry.list().map((tool) => tool.id));
+console.log(toolRegistry.list().map((tool) => tool.id));
 ```
 
 ### Tool integration packages
@@ -272,7 +286,11 @@ if (issues.length > 0) {
 
 `@routekit/harness-core` is the product-neutral coding-agent harness contract: driver, instance, and session interfaces, canonical events, tagged errors, approval policies, status probes, and shared stream/process primitives. The `@routekit/tool-*` packages implement it; product orchestrators adapt those drivers.
 
-`@fusionkit/registry` provides typed accessors over the generated registry data in `spec/registry/*.json`: provider metadata, subscription auth metadata, the model and local catalogs, capability quirks, and default pricing. The Python workspace consumes the same data through generated bindings, so the two stacks cannot drift.
+`@fusionkit/registry` contains Fusion-only identities, aliases, and panel presets
+generated from `spec/registry/fusion.json`. `@routekit/registry` owns the
+product-neutral provider/auth metadata, model and local catalogs, capability
+quirks, discovery, and pricing generated from the other `spec/registry` sources.
+Python receives the matching split generated bindings.
 
 `@routekit/runtime` is the canonical owner for process supervision, child environments, cleanup, atomic files and locks, ports, and product-parameterized portless service registration.
 
@@ -300,7 +318,7 @@ The packages in this section live under `legacy/packages/`, outside the root pnp
 
 `@fusionkit/session-harness` exports `AiSdkHarnessBackend`, `harnessBackend`, `isAgentRunFor`, Pi harness helpers, auth helpers, and `TranscriptRecorder`. It drives vendor harnesses through AI SDK harness bindings inside governed sessions.
 
-The legacy fixture package at `legacy/packages/testkit` exports `git`, `makeRepo`, `uploadWorkspace`, `mockRunRequest`, `withStackAndRepo`, and `startStack` for in-process plane and runner tests. It is distinct from the root `packages/testkit`: that `@fusionkit/testkit` is the cross-stack E2E tooling exporting `startProviderSim`, `startEngine`, `simRouterConfigYaml`, `scriptFusedTurn`, `parseSse`, and `detectStackTooling` (see [Testing](testing.md)).
+The legacy fixture package at `legacy/packages/testkit` exports `git`, `makeRepo`, `uploadWorkspace`, `mockRunRequest`, `withStackAndRepo`, and `startStack` for in-process plane and runner tests. It is distinct from the root `packages/testkit`: that `@fusionkit/testkit` is the cross-stack E2E tooling exporting `startProviderSim`, `startEngine`, `simSidecarConfigYaml`, `scriptFusedTurn`, `parseSse`, and `detectStackTooling` (see [Testing](testing.md)).
 
 `@fusionkit/example-utils` exports demo manifest parsing, mock model helpers, live model helpers, and narration utilities used by examples.
 
@@ -531,7 +549,13 @@ Runtime sessions are stored outside the repository under `~/.fusionkit/sessions/
 
 Release state lives under `release/`. Changes to this directory should be reviewed as release workflow changes, not product behavior changes.
 
-CI lives under `.github/workflows/`. `ci.yml` runs five jobs: `check` (repository checks, build, tests, demo smoke), `scope` (the observability app), `stack-e2e` (cross-stack Node gateway + real Python engine + provider simulator suites), `python` (the uv workspace), and `observability` (Hyperkit Grafana dashboard validation). The release workflows are `release-packages.yml` (npm), `pypi-release.yml`, and `model-fusion-protocol-release.yml`.
+CI lives under `.github/workflows/`. `ci.yml` runs five jobs: `check`
+(repository checks, build, clean-install/OOTB smokes, tests, and demos), `scope`
+(the observability app), `stack-e2e` (Node RouteKit/Fusion gateways + internal
+Python sidecar + simulator suites), `python` (the uv workspace), and
+`observability` (Hyperkit Grafana dashboard validation). The release workflows
+are `release-packages.yml` (RouteKit and FusionKit npm packages),
+`pypi-release.yml`, and `model-fusion-protocol-release.yml`.
 
 ## Testing and verification
 
@@ -564,7 +588,12 @@ To add a new coding tool, create `packages/tool-<name>/`, implement a `ToolInteg
 
 To add a model-fusion contract field, update the JSON Schema, add or update fixtures, regenerate TypeScript and Python bindings, update protocol assertion exports, update server and client code, and run schema, TypeScript, and Python tests.
 
-To add a Python provider client, implement the `ChatClient` protocol, normalize messages and tools into the provider shape, normalize usage into `Usage`, map provider errors through `classify_provider_error()`, add config support in `ModelEndpoint`, and test both success and failure paths.
+To add a provider, implement its backend and wire normalization in
+`@routekit/gateway`, add RouteKit config/catalog support, and test success,
+streaming, usage, and failure behavior there. The Python sidecar remains
+provider-neutral and continues to call opaque endpoint IDs through
+`RouteKitClient`; it must not gain provider credentials or provider-specific
+clients.
 
 To add a runtime-kernel workflow, define artifact types and operator specs, validate the graph with graph-validation helpers, register the workflow, add a runnable example or test fixture, and document where the workflow sits in the fusion path.
 

@@ -37,16 +37,10 @@
       "path": "../telemetry-core"
     },
     {
-      "path": "../tool-claude"
-    },
-    {
       "path": "../tool-codex"
     },
     {
-      "path": "../tool-cursor"
-    },
-    {
-      "path": "../tool-opencode"
+      "path": "../tool-registry"
     },
     {
       "path": "../tools"

@@ -1,6 +1,6 @@
 /**
  * Cross-process depth suite: the product behaviors beyond single happy-path
- * turns, through the REAL gateway + REAL Python engine + scripted provider.
+ * turns, through the Node RouteKit/Fusion gateways + Python sidecar + simulator.
  *
  *  - multi-ensemble routing with per-ensemble judges and prompt overrides
  *    (asserted on the judge's actual wire request);

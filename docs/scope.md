@@ -10,15 +10,16 @@ the older **Warrant governance / VM isolation stack** in-tree under
 The Node `@fusionkit/cli` command tree (`packages/cli/src/cli.ts`) registers the
 FusionKit product commands only:
 
-- `codex` / `claude` / `cursor` / `serve`
-- `init`, `setup`, `doctor`, `config`, `prompts`, `proxy`,
-  `sessions`, `models`, `ensemble`, `install` / `uninstall`,
-  `completion` (plus its internal completion protocol), `telemetry`,
-  `version`, and top-level `stop`
+- `codex` / `claude` / `cursor` / `opencode` / `serve`
+- `init`, `setup`, `doctor`, `config`, `prompts`, `sessions`, `models`,
+  `ensemble`, `completion` (plus its internal completion protocol),
+  `telemetry`, `version`, and top-level `stop`
 
 No governance commands (`ui`, `runs`, `plane start`, `runner start`, Warrant
 continuation commands, receipt commands, pull, secrets) are registered in the
-product CLI.
+product CLI. Provider endpoints, accounts, proxies, Codex installation, and
+direct/single-model launches belong to the separately installed `routekit`
+command.
 
 ## Product packages
 
@@ -33,7 +34,7 @@ These packages must not depend directly or transitively on the legacy packages:
 | `@fusionkit/gateway` | Fusion frontdoor, panel/synthesis orchestration, sessions, budgets, and local lifecycle. |
 | `@fusionkit/protocol` | Model-fusion data contracts and generated SDK bindings. |
 | `@fusionkit/workspace` | Git workspace capture, worktree materialization, divergence-safe pull. |
-| `@routekit/tools`, `tool-codex`, `tool-claude`, `tool-cursor`, `tool-opencode` | Product-neutral launcher, driver, and capability integrations. |
+| `@routekit/tools`, `@routekit/tool-registry`, `@routekit/tool-codex`, `@routekit/tool-claude`, `@routekit/tool-cursor`, `@routekit/tool-opencode` | Product-neutral launcher, canonical registry composition, driver, and capability integrations. |
 | `@fusionkit/adapter-ai-sdk` | Managed MLX local-model helpers and product-local AI SDK utilities. |
 | `@routekit/harness-core` | Product-neutral harness driver contracts and shared event/process primitives. |
 | `@fusionkit/registry`, `@fusionkit/kernel` | Fusion-specific registry and execution primitives. |
@@ -60,9 +61,9 @@ The legacy stack now lives under `legacy/`:
   E2E tooling (simulated upstreams + real Python sidecar) for the product test
   suites.
 
-The legacy packages remain publishable from this monorepo for now. Their npm
-package names, scopes, repository identity, binaries, and release manifest
-entries are preserved; only filesystem paths changed.
+The legacy packages are outside the root pnpm workspace and
+`release/npm-packages.json`; current npm releases publish only the RouteKit and
+FusionKit packages under `packages/`.
 
 ## Current boundary
 
@@ -85,10 +86,10 @@ packages. Legacy-only surfaces moved out of product packages:
 
 These steps are intentionally not done yet:
 
-1. Unpublish or mark legacy packages private.
+1. Decide the archival/distribution policy for legacy packages.
 2. Extract legacy code to another repository.
 3. Remove legacy demos, Docker smoke, or publish manifest entries.
 
-Until those decisions are made, the repository continues to build, test, demo,
-and publish both product and legacy packages from one workspace while keeping the
-product dependency graph isolated.
+Until those decisions are made, the repository keeps the legacy code in-tree
+and documented separately while the product build and release graph remains
+isolated.

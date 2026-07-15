@@ -26,21 +26,52 @@
       "key": "fusionkit-pypi",
       "repo": "handoffkit",
       "ecosystem": "uv-monorepo",
-      "description": "FusionKit's slim Python sidecar runtime (fusionkit, fusionkit-core, fusionkit-server) plus separately installed maintainer packages (fusionkit-evals, fusionkit-mlx), published in lockstep.",
+      "description": "FusionKit's internal Python sidecar runtime (fusionkit-core -> fusionkit-server -> fusionkit) plus separately installed fusionkit-mlx and fusionkit-evals packages, published in lockstep.",
       "branch": "main",
       "tagPattern": "fusionkit-v{version}",
       "releaseTrigger": "github-release",
       "publishWorkflow": "pypi-release.yml",
-      "registries": [{ "kind": "pypi", "package": "fusionkit" }],
+      "registries": [
+        { "kind": "pypi", "package": "fusionkit-core" },
+        { "kind": "pypi", "package": "fusionkit-server" },
+        { "kind": "pypi", "package": "fusionkit" },
+        { "kind": "pypi", "package": "fusionkit-mlx" },
+        { "kind": "pypi", "package": "fusionkit-evals" }
+      ],
+      "packages": [
+        "fusionkit-core",
+        "fusionkit-server",
+        "fusionkit",
+        "fusionkit-mlx",
+        "fusionkit-evals"
+      ],
+      "binaries": [
+        { "name": "fusionkit-sidecar", "package": "fusionkit" },
+        { "name": "fusionkit-bench", "package": "fusionkit-evals" }
+      ],
+      "forbiddenBinaries": ["fusionkit"],
       "versionSources": [
         "python/fusionkit-core/pyproject.toml#project.version",
+        "python/fusionkit-server/pyproject.toml#project.version",
         "python/fusionkit-cli/pyproject.toml#project.version",
-        "python/fusionkit-evals/pyproject.toml#project.version",
         "python/fusionkit-mlx/pyproject.toml#project.version",
-      "python/fusionkit-server/pyproject.toml#project.version",
-      "packages/cli/src/fusion/env.ts#FUSIONKIT_PYPI_VERSION"
-    ],
-      "preflight": ["uv", "build", "--all-packages"],
+        "python/fusionkit-evals/pyproject.toml#project.version",
+        "packages/cli/src/fusion/env.ts#FUSIONKIT_PYPI_VERSION"
+      ],
+      "preflight": [
+        "uv",
+        "build",
+        "--package",
+        "fusionkit-core",
+        "--package",
+        "fusionkit-server",
+        "--package",
+        "fusionkit",
+        "--package",
+        "fusionkit-mlx",
+        "--package",
+        "fusionkit-evals"
+      ],
       "dependsOn": ["fusionkit-protocol"]
     },
     {
@@ -70,6 +101,11 @@
       "registries": [
         { "kind": "npm", "package": "@routekit/cli" },
         { "kind": "npm", "package": "@fusionkit/cli" }
+      ],
+      "packageManifest": "release/npm-packages.json",
+      "binaries": [
+        { "name": "routekit", "package": "@routekit/cli" },
+        { "name": "fusionkit", "package": "@fusionkit/cli" }
       ],
       "versionSources": ["package.json#version"],
       "preflight": ["pnpm", "check"],

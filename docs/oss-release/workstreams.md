@@ -1,5 +1,9 @@
 # OSS Release Remediation Workstreams
 
+> **Historical remediation record:** These briefs describe the July 2026
+> pre-split repository. Names and command surfaces are preserved as evidence,
+> not current product guidance.
+
 Each workstream below is written as a self-contained brief for a dedicated agent.
 Finding IDs (e.g. `2.1`) refer to [`audit-findings.md`](audit-findings.md).
 Decision IDs (`D1`–`D7`) refer to the decisions table in [`README.md`](README.md).

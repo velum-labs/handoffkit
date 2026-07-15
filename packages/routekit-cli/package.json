@@ -39,10 +39,8 @@
     "@routekit/router": "workspace:*",
     "@routekit/runtime": "workspace:*",
     "@routekit/telemetry-core": "workspace:*",
-    "@routekit/tool-claude": "workspace:*",
     "@routekit/tool-codex": "workspace:*",
-    "@routekit/tool-cursor": "workspace:*",
-    "@routekit/tool-opencode": "workspace:*",
+    "@routekit/tool-registry": "workspace:*",
     "@routekit/tools": "workspace:*",
     "commander": "14.0.3",
     "yaml": "2.9.0"

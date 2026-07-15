@@ -86,6 +86,9 @@
       "path": "packages/tool-opencode"
     },
     {
+      "path": "packages/tool-registry"
+    },
+    {
       "path": "packages/routekit-cli"
     },
     {

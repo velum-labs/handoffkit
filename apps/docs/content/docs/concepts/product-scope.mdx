@@ -22,7 +22,9 @@ fusionkit models
 fusionkit config show
 ```
 
-That path starts `@fusionkit/cli`, the Fusion Harness Gateway, tool integrations, the Python fusion server, and the configured model panel. It uses the repository you run it from as the coding workspace.
+That path starts `@fusionkit/cli`, the Node Fusion gateway, an embedded or
+external RouteKit router, tool integrations, and the internal Python synthesis
+sidecar. It uses the repository you run it from as the coding workspace.
 
 ## Product packages
 
@@ -38,7 +40,7 @@ The main product path uses these packages directly.
 | `@fusionkit/protocol` | Shared records, validators, hashes, and generated model-fusion contracts. |
 | `@fusionkit/workspace` | Git capture, materialization, safe paths, and output collection. |
 | `@routekit/tools` and `@routekit/tool-*` | Neutral registry and canonical Codex, Claude Code, Cursor, and OpenCode integrations. |
-| `fusionkit-core` and `fusionkit-server` | Python engine, provider clients, judge synthesis, run storage, and HTTP serving. |
+| `fusionkit-core` and `fusionkit-server` | Provider-neutral Python synthesis engine, RouteKit client, internal sidecar routes, and native run storage. |
 
 ## Platform depth
 

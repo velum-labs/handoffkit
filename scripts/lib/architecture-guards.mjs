@@ -26,6 +26,7 @@ export const CANONICAL_SHARED_PACKAGES = new Map([
   ["packages/tool-claude", "@routekit/tool-claude"],
   ["packages/tool-cursor", "@routekit/tool-cursor"],
   ["packages/tool-opencode", "@routekit/tool-opencode"],
+  ["packages/tool-registry", "@routekit/tool-registry"],
   ["packages/routekit-cli", "@routekit/cli"]
 ]);
 
@@ -117,6 +118,78 @@ export function fusionkitCompositionViolations(manifests) {
   return violations;
 }
 
+export function toolRegistryCompositionViolations(manifests) {
+  const byName = new Map(manifests.map((entry) => [entry.manifest.name, entry]));
+  const registry = byName.get("@routekit/tool-registry");
+  if (registry === undefined) return ["@routekit/tool-registry is missing from the workspace"];
+
+  const violations = [];
+  const registryDependencies = manifestDependencies(registry.manifest);
+  const integrationPackages = [...byName.keys()]
+    .filter((name) => /^@routekit\/tool-(?!registry$)/.test(name))
+    .sort();
+  for (const dependency of ["@routekit/tools", ...integrationPackages]) {
+    if (!registryDependencies.has(dependency)) {
+      violations.push(`@routekit/tool-registry must depend on ${dependency}`);
+    }
+  }
+
+  for (const consumerName of ["@routekit/cli", "@fusionkit/cli"]) {
+    const consumer = byName.get(consumerName);
+    if (consumer === undefined) {
+      violations.push(`${consumerName} is missing from the workspace`);
+    } else if (!manifestDependencies(consumer.manifest).has("@routekit/tool-registry")) {
+      violations.push(`${consumerName} must depend on @routekit/tool-registry`);
+    }
+  }
+
+  const fusionCli = byName.get("@fusionkit/cli");
+  if (fusionCli !== undefined) {
+    for (const dependency of manifestDependencies(fusionCli.manifest)) {
+      if (integrationPackages.includes(dependency)) {
+        violations.push(`@fusionkit/cli must compose tools through @routekit/tool-registry, not ${dependency}`);
+      }
+    }
+  }
+  return violations;
+}
+
+export function toolRegistryConsumerSourceViolations(file, source) {
+  const violations = [];
+  if (!/(?:from\s+|import\s*\()["']@routekit\/tool-registry["']/.test(source)) {
+    violations.push(`${file} must import @routekit/tool-registry`);
+  }
+  if (/(?:from\s+|import\s*\()["']@routekit\/tool-(?!registry["'])[^"']+["']/.test(source)) {
+    violations.push(`${file} must not import individual tool integrations`);
+  }
+  if (/\bcreateToolRegistry\s*\(/.test(source)) {
+    violations.push(`${file} must not construct a parallel tool registry`);
+  }
+  if (
+    file.endsWith("packages/cli/src/tools.ts") &&
+    !/\bsetToolDriverRegistry\s*\(\s*toolRegistry\s*\)/.test(source)
+  ) {
+    violations.push(`${file} must compose the canonical registry with setToolDriverRegistry`);
+  }
+  return violations;
+}
+
+export function toolRegistryConstructionViolations(sources) {
+  const owner = "packages/tool-registry/src/index.ts";
+  const constructions = sources.flatMap(({ file, source }) => {
+    if (file === "packages/tools/src/registry.ts") return [];
+    return [...source.matchAll(/\bcreateToolRegistry\s*\(/g)].map(() => file);
+  });
+  const violations = [];
+  if (constructions.filter((file) => file === owner).length !== 1) {
+    violations.push(`${owner} must construct the canonical registry exactly once`);
+  }
+  for (const file of constructions) {
+    if (file !== owner) violations.push(`${file} constructs a parallel tool registry`);
+  }
+  return violations;
+}
+
 export function routekitSourceViolations(file, source) {
   const violations = [];
   const normalized = file.split(sep).join("/");
@@ -133,7 +206,7 @@ export function routekitSourceViolations(file, source) {
   if (importPattern.test(source)) violations.push("imports @fusionkit/*");
 
   const neutralToolPackage =
-    /\/packages\/(?:harness-core|tools|tool-(?:codex|claude|cursor|opencode))\//.test(
+    /\/packages\/(?:harness-core|tools|tool-(?:codex|claude|cursor|opencode|registry))\//.test(
       `/${normalized}`
     );
   if (neutralToolPackage && /\b(?:fusionkit|fusion|fused)\b/i.test(source)) {

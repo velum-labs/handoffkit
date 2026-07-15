@@ -156,7 +156,7 @@
     {
       "id": "fusion.mode-panel",
       "category": "fusion",
-      "expectation": "fusionkit/panel performs panel fanout, judge, and synthesis.",
+      "expectation": "The internal panel fusion mode performs panel fanout, judge, and synthesis.",
       "status": "required",
       "testFile": "python/fusionkit-core/tests/test_core.py",
       "anchor": "test_fusion_engine_final_output_is_synthesized_not_top_trajectory"
@@ -164,7 +164,7 @@
     {
       "id": "fusion.mode-single",
       "category": "fusion",
-      "expectation": "fusionkit/single calls only the default model.",
+      "expectation": "The internal single fusion mode calls only the default endpoint.",
       "status": "required",
       "testFile": "python/fusionkit-core/tests/test_fusion_run.py",
       "anchor": "test_tracked_fusion_run_records_failure"

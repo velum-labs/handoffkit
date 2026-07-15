@@ -16,19 +16,22 @@ See also: [inference endpoint](quickstart-inference.md) ·
 ```bash
 pnpm add -g @fusionkit/cli      # or: npm i -g @fusionkit/cli
 fusionkit setup                 # pre-provision the Python engine (warm the uv cache)
-fusionkit doctor                # verify uv, git, your agent CLI, and provider keys
+fusionkit doctor                # verify uv, git, config, endpoints, and your agent CLI
 ```
 
-Install the agent CLI you want to use (`codex`, `claude`, or `cursor-agent`) and
-export the provider keys for your panel:
+Install the agent CLI you want to use (`codex`, `claude`, `cursor-agent`, or
+`opencode`), run `fusionkit init`, and configure RouteKit:
 
 ```bash
-export OPENAI_API_KEY=...  ANTHROPIC_API_KEY=...  GEMINI_API_KEY=...
+fusionkit init
+$EDITOR .routekit/router.yaml
+export PROVIDER_API_KEY=...      # the apiKeyEnv named by your endpoints
 ```
 
-That trio covers the built-in default panel; a repo's committed
-`.fusionkit/fusion.json` can require different keys (this repository's own
-panel routes through OpenRouter and needs `OPENROUTER_API_KEY`).
+FusionKit composes the endpoint IDs in `.fusionkit/fusion.json`; it does not
+read provider credentials or skip unavailable panel members. Use
+`routekit doctor` and `routekit endpoints health` for provider checks. This
+repository's committed router uses OpenRouter and needs `OPENROUTER_API_KEY`.
 
 ## 2. Run it
 
@@ -39,11 +42,11 @@ fusionkit codex                 # or: claude | cursor
 
 That single command spawns everything and tears it all down on one `Ctrl+C`:
 
-- the **model panel** (a decorrelated cloud trio by default, see the
-  [model catalog](model-catalog.md));
-- one **`fusionkit serve` router** that fronts each panel model and performs
-  judge synthesis;
-- the **harness gateway**, translating to the agent's dialect (OpenAI Responses
+- an embedded or external **RouteKit router** that owns endpoint routing and
+  provider egress;
+- the internal **Python synthesis sidecar**, which receives completed
+  trajectories and calls judge/synthesizer endpoint IDs through RouteKit;
+- the **Node Fusion gateway**, translating to the agent's dialect (OpenAI Responses
   for Codex, Anthropic Messages for Claude Code, OpenAI Chat for Cursor); and
 - the chosen **agent, pre-wired** to the gateway.
 

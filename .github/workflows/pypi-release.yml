@@ -21,14 +21,15 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  # Publish the three-package sidecar runtime and the separately installed eval
-  # and MLX maintainer packages. The workspace's other packages are not included.
+  # Build in dependency order: the three-package sidecar runtime, then the
+  # separately installed MLX and evaluation packages. Other workspace packages
+  # are not part of this release unit.
   FUSIONKIT_PACKAGES: >-
-    --package fusionkit
     --package fusionkit-core
-    --package fusionkit-evals
-    --package fusionkit-mlx
     --package fusionkit-server
+    --package fusionkit
+    --package fusionkit-mlx
+    --package fusionkit-evals
 
 jobs:
   release:
@@ -76,13 +77,25 @@ jobs:
       - name: Validate distribution metadata
         run: uv run --with twine python -m twine check dist/*
 
+      - name: Validate installed console scripts
+        run: |
+          uv venv .release-venv
+          uv pip install --python .release-venv/bin/python --no-deps dist/*.whl
+          test -x .release-venv/bin/fusionkit-sidecar
+          test -x .release-venv/bin/fusionkit-bench
+          if test -e .release-venv/bin/fusionkit; then
+            echo "the Python distributions must not install a fusionkit executable"
+            exit 1
+          fi
+
       - name: Publish to PyPI
         # Real publish only on a published GitHub Release; workflow_dispatch is
         # build/validate only. Uses an API token when PYPI_TOKEN is set (the
         # one-time bootstrap, before Trusted Publishers can be attached to
         # not-yet-existing projects); otherwise authenticates via OIDC trusted
-        # publishing. Remove the PYPI_TOKEN secret after bootstrap to go
-        # token-free.
+        # publishing for fusionkit-core, fusionkit-server, fusionkit,
+        # fusionkit-mlx, and fusionkit-evals. Remove the PYPI_TOKEN secret after
+        # every project has its Trusted Publisher configured to go token-free.
         if: github.event_name == 'release'
         env:
           UV_PUBLISH_TOKEN: ${{ secrets.PYPI_TOKEN }}

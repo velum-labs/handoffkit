@@ -581,10 +581,10 @@ Composable layers for realistic end-to-end tests (see docs/testing.md):
 - {@link startProviderSim}: the scriptable provider simulator
   (python/fusionkit-testkit) as a child process, driven over its HTTP
   control plane and observed through its wire journal.
-- {@link simRouterConfigYaml}: real `fusionkit serve` router configs whose
-  endpoints all point at the simulator.
-- {@link startEngine}: the REAL Python fusion engine as a child process —
-  the same entrypoint the production CLI spawns.
+- {@link simSidecarConfigYaml}: production-shaped sidecar config over opaque
+  simulator endpoint IDs.
+- {@link startEngine}: the internal Python synthesis sidecar as a child
+  process — the same entrypoint the production CLI spawns.
 - {@link parseSse} / {@link sseText}: structured SSE observation.
 - {@link detectStackTooling}: honest skip-gating for environments without
   the Python toolchain.
@@ -603,7 +603,7 @@ Composable layers for realistic end-to-end tests (see docs/testing.md):
 - `export type { ProviderSimHandle, SimCallFilter } from "./provider-sim.js";`
 - `export { detectStackTooling, repoRoot, stackToolingSkip, uvRunArgv } from "./python.js";`
 - `export type { StackTooling } from "./python.js";`
-- `export { CODEX_TEST_TOKEN_ENV, simRouterConfigYaml } from "./router-config.js";`
+- `export { CODEX_TEST_TOKEN_ENV, simSidecarConfigYaml } from "./router-config.js";`
 - `export type { SimEndpointSpec } from "./router-config.js";`
 - `export { judgeAnalysis, scriptFusedTurn } from "./scenarios.js";`
 - `export type { FusedTurnScript } from "./scenarios.js";`
@@ -654,6 +654,16 @@ No module JSDoc was found.
 - `export { launchOpencode, opencodeConfig, opencodeModelArg, opencodeProviderConfig } from "./launch.js";`
 - `export { createOpencodeDriver, opencodeDriverConfigSchema } from "./driver.js";`
 - `export type { OpencodeBackend, OpencodeBackendFactory, OpencodeDriverConfig, OpencodeDriverOptions, OpencodeTurnPart, OpencodeTurnResult } from "./driver.js";`
+
+### `packages/tool-registry/src/index.ts`
+
+Canonical registry of the coding-tool integrations shipped by RouteKit.
+
+Add a new integration to `toolIntegrations`; consumers receive it through
+`toolRegistry` without maintaining their own package imports or lists.
+
+- `export const toolIntegrations: readonly ToolIntegration[] ...`
+- `export const toolRegistry: ToolRegistry ...`
 
 ### `packages/tools/src/index.ts`
 

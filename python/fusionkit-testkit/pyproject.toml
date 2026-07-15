@@ -9,6 +9,7 @@ description = "Scriptable RouteKit-upstream simulator for FusionKit tests (never
 readme = "README.md"
 requires-python = ">=3.11"
 license = "Apache-2.0"
+license-files = ["LICENSE"]
 authors = [{ name = "Velum Labs" }]
 # The simulator itself (server/behaviors/wire_*) is stdlib-only on purpose: no
 # web framework in the test trust surface, and hand-rolled HTTP gives

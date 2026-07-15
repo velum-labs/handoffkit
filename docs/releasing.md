@@ -18,7 +18,7 @@ flowchart TD
   protocol["fusionkit-protocol (npm + PyPI)"]
   fusionpy["fusionkit-pypi (5 PyPI pkgs)"]
   cursor["cursorkit (npm)"]
-  handoff["handoffkit (17 @fusionkit/* npm)"]
+  handoff["handoffkit (19 @routekit/* + 10 @fusionkit/* npm)"]
   mlx["mlx-lm (private PyPI)"]
   protocol --> fusionpy
   protocol --> cursor
@@ -91,10 +91,11 @@ changes. `pnpm check` fails when the docs page drifts from `CHANGELOG.md`.
 
 ## Preflight
 
-Each unit's `preflight` command in `release/workspace.release.json` (e.g.
-`pnpm check` for handoffkit, `uv build --all-packages` for fusionkit-pypi) runs
-after the bump and before the commit, so a broken release candidate aborts
-before anything is pushed or published.
+Each unit's `preflight` command in `release/workspace.release.json` runs after
+the bump and before the commit, so a broken release candidate aborts before
+anything is pushed or published. HandoffKit runs `pnpm check`; the PyPI unit
+builds its five declared packages in dependency order rather than every uv
+workspace member.
 
 ## Agent / scripted usage
 
@@ -129,7 +130,7 @@ ship the new contract.
 Separate from releasing, for day-to-day iteration:
 
 ```bash
-node scripts/monorepo.mjs graph             # @fusionkit/* dep graph + manifest order check
+node scripts/monorepo.mjs graph             # @routekit/* + @fusionkit/* graph/order check
 node scripts/monorepo.mjs affected origin/main   # scoped build + test for changed packages
 node scripts/monorepo.mjs clean             # purge stale release-artifacts tarballs
 ```

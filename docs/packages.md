@@ -48,7 +48,8 @@ HTTP contracts, read [Specs and APIs](specs-and-apis.md).
 | `@fusionkit/kernel` | Dependency-free runtime kernel substrate: artifacts, operators, graphs, validation, wire artifacts, and replay records. | `packages/kernel/src/index.ts` |
 | `@routekit/harness-core` | Product-neutral coding-agent driver, event, error, approval, and status contracts. | `packages/harness-core/src/index.ts` |
 | `@routekit/tools` | Neutral launcher, canonical-driver, and capability registry. | `packages/tools/src/index.ts` |
-| `@routekit/tool-codex`, `tool-claude`, `tool-cursor`, `tool-opencode` | One launcher/serializer and one canonical driver per coding tool. | `packages/tool-<name>/src/index.ts` |
+| `@routekit/tool-registry` | Canonical registry composition for every shipped coding-tool integration; both CLIs consume this one registry. | `packages/tool-registry/src/index.ts` |
+| `@routekit/tool-codex`, `@routekit/tool-claude`, `@routekit/tool-cursor`, `@routekit/tool-opencode` | One launcher/serializer and one canonical driver per coding tool. | `packages/tool-<name>/src/index.ts` |
 
 ## Support packages
 

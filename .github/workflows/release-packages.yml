@@ -46,8 +46,8 @@ jobs:
 
       # The publish step performs the npm OIDC exchange via the npm CLI, which
       # must be >= 11.5.1 for trusted publishing. Trusted Publishers for the
-      # @fusionkit/* packages are configured on npmjs.com, so publishing is
-      # token-free via OIDC (provenance is emitted automatically).
+      # @routekit/* and @fusionkit/* packages are configured on npmjs.com, so
+      # publishing is token-free via OIDC (provenance is emitted automatically).
       - name: Update npm for OIDC trusted publishing
         run: npm install -g npm@latest
 
@@ -70,6 +70,12 @@ jobs:
 
       - name: Build
         run: corepack pnpm build
+
+      - name: Validate RouteKit clean install
+        run: node scripts/check-routekit-cli-pack.mjs
+
+      - name: Validate FusionKit clean install
+        run: node scripts/check-fusionkit-cli-pack.mjs
 
       - name: Test
         run: corepack pnpm test

@@ -38,8 +38,8 @@ fusionkit codex       # or claude | cursor | opencode | serve
 
 The launcher creates one neutral `ToolLaunchSpec` and one generic
 `AgentProfile` per ensemble. Tool-specific serialization and process launch are
-owned by `@routekit/tool-codex`, `tool-claude`, `tool-cursor`, and
-`tool-opencode`.
+owned by `@routekit/tool-codex`, `@routekit/tool-claude`,
+`@routekit/tool-cursor`, and `@routekit/tool-opencode`.
 
 The default ensemble is exposed as `fusion-panel`; other names are
 `fusion-<name>`.

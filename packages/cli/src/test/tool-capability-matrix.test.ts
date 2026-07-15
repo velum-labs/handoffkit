@@ -6,6 +6,7 @@ import { createToolCapabilityMatrix } from "@routekit/tools";
 import { toolRegistry } from "../tools.js";
 
 test("model by harness capability matrix covers every canonical routed tool", () => {
+  const toolIds = toolRegistry.list().map((tool) => tool.id);
   const matrix = createToolCapabilityMatrix(toolRegistry, [
     { id: "endpoint:opaque/a" },
     {
@@ -15,14 +16,14 @@ test("model by harness capability matrix covers every canonical routed tool", ()
   ]);
   assert.deepEqual(
     [...new Set(matrix.map((cell) => cell.toolId))],
-    ["codex", "claude", "cursor", "opencode"]
+    toolIds
   );
   assert.deepEqual(
     [...new Set(matrix.map((cell) => cell.modelId))],
     ["endpoint:opaque/a", "endpoint:opaque/b"]
   );
-  assert.equal(matrix.length, 2 * 4 * 4);
-  for (const toolId of ["codex", "claude", "cursor", "opencode"]) {
+  assert.equal(matrix.length, 2 * toolIds.length * 4);
+  for (const toolId of toolIds) {
     assert.equal(
       matrix.find(
         (cell) =>

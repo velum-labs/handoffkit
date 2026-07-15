@@ -8,7 +8,10 @@ import {
   isInternalWorkspaceDependency,
   routekitDependencyViolations,
   routekitProductionSources,
-  routekitSourceViolations
+  routekitSourceViolations,
+  toolRegistryCompositionViolations,
+  toolRegistryConstructionViolations,
+  toolRegistryConsumerSourceViolations
 } from "./lib/architecture-guards.mjs";
 
 // A deliberately curated manifest of files that must exist for the repo to
@@ -170,6 +173,12 @@ const requiredFiles = [
   "packages/tool-opencode/src/index.ts",
   "packages/tool-opencode/src/driver.ts",
   "packages/tool-opencode/src/launch.ts",
+  "packages/tool-registry/package.json",
+  "packages/tool-registry/LICENSE",
+  "packages/tool-registry/README.md",
+  "packages/tool-registry/tsconfig.json",
+  "packages/tool-registry/src/index.ts",
+  "packages/tool-registry/src/test/registry.test.ts",
   "packages/routekit-cli/package.json",
   "packages/routekit-cli/LICENSE",
   "packages/routekit-cli/src/index.ts",
@@ -546,10 +555,9 @@ const TRUSTED_THIRD_PARTY = new Map([
   ["just-bash", "3.0.1"],
   ["minimatch", "10.2.5"],
   ["ms", "2.1.3"],
-  // Official OpenAI SDK: model listing (`client.models.list()`) against
-  // OpenAI-compatible base URLs (openai, openrouter, cliproxy) in the CLI's
-  // catalog and health probes. Inference already rides the Python engine's
-  // AsyncOpenAI; this keeps the Node-side /v1/models calls on the same SDK.
+  // Official OpenAI SDK retained for packages that consume OpenAI-compatible
+  // discovery APIs. Public routing and provider egress belong to RouteKit;
+  // the internal Python sidecar has no provider implementation.
   ["openai", "6.46.0"],
   ["pino", "10.3.1"],
   // Product telemetry engine: official PostHog server SDK (batched, async,
@@ -650,6 +658,32 @@ for (const violation of canonicalSharedPackageViolations(workspaceManifests)) {
 }
 for (const violation of fusionkitCompositionViolations(workspaceManifests)) {
   fail(`FusionKit composition violation: ${violation}`);
+}
+for (const violation of toolRegistryCompositionViolations(workspaceManifests)) {
+  fail(`tool registry composition violation: ${violation}`);
+}
+for (const file of ["packages/routekit-cli/src/launch.ts", "packages/cli/src/tools.ts"]) {
+  const source = readFileSync(file, "utf8");
+  for (const violation of toolRegistryConsumerSourceViolations(file, source)) {
+    fail(`tool registry consumer violation: ${violation}`);
+  }
+}
+const productionSources = workspaceManifests.flatMap(({ dir }) =>
+  existsSync(join(dir, "src")) ? routekitProductionSources(dir) : []
+);
+for (const violation of toolRegistryConstructionViolations(productionSources)) {
+  fail(`tool registry construction violation: ${violation}`);
+}
+for (const file of [
+  "packages/tool-registry/package.json",
+  "packages/tool-registry/README.md",
+  "packages/tool-registry/tsconfig.json",
+  "packages/tool-registry/src/index.ts",
+  "packages/tool-registry/src/test/registry.test.ts"
+]) {
+  if (/(?:@fusionkit\/|\b(?:fusionkit|fusion|fused)\b)/i.test(readFileSync(file, "utf8"))) {
+    fail(`${file} must not contain FusionKit dependencies or vocabulary`);
+  }
 }
 
 // Shared process/config/CLI behavior has one public owner. These historical
@@ -776,9 +810,10 @@ const envSpreadListing = spawnSync(
   ["ls-files", "packages/*/src/**/*.ts"],
   { encoding: "utf8" }
 );
-// A deliberate exception (a *trusted* infra child we spawn ourselves, e.g.
-// the Python router that legitimately needs the user's provider keys) must
-// carry an `env-spread-allowed: <reason>` comment on the preceding line.
+// A deliberate exception for a trusted infrastructure child must carry an
+// `env-spread-allowed: <reason>` comment on the preceding line. The internal
+// Python sidecar is not such an exception: it receives a restricted environment
+// and calls opaque RouteKit endpoint IDs.
 if (envSpreadListing.status === 0) {
   const envSpreadPattern = /\.\.\.process\.env\b/;
   const waiverPattern = /env-spread-allowed:\s*\S/;

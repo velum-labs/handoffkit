@@ -2,15 +2,16 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { test } from "node:test";
+import { fileURLToPath } from "node:url";
 
+const packagesRoot = fileURLToPath(new URL("../../../", import.meta.url));
 const PACKAGE_DIRS = [
   "harness-core",
   "tools",
-  "tool-codex",
-  "tool-claude",
-  "tool-cursor",
-  "tool-opencode"
-] as const;
+  ...readdirSync(packagesRoot, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory() && entry.name.startsWith("tool-"))
+    .map((entry) => entry.name)
+];
 
 function productionSources(dir: string): string[] {
   const entries = readdirSync(dir, { withFileTypes: true });
@@ -22,7 +23,6 @@ function productionSources(dir: string): string[] {
 }
 
 test("neutral harness and tool packages cannot reach product packages", () => {
-  const packagesRoot = resolve(process.cwd(), "..");
   for (const packageDir of PACKAGE_DIRS) {
     const root = resolve(packagesRoot, packageDir);
     const manifest = readFileSync(resolve(root, "package.json"), "utf8");

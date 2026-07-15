@@ -143,18 +143,9 @@ importers:
       '@routekit/telemetry-core':
         specifier: workspace:*
         version: link:../telemetry-core
-      '@routekit/tool-claude':
+      '@routekit/tool-registry':
         specifier: workspace:*
-        version: link:../tool-claude
-      '@routekit/tool-codex':
-        specifier: workspace:*
-        version: link:../tool-codex
-      '@routekit/tool-cursor':
-        specifier: workspace:*
-        version: link:../tool-cursor
-      '@routekit/tool-opencode':
-        specifier: workspace:*
-        version: link:../tool-opencode
+        version: link:../tool-registry
       '@routekit/tools':
         specifier: workspace:*
         version: link:../tools
@@ -385,18 +376,12 @@ importers:
       '@routekit/telemetry-core':
         specifier: workspace:*
         version: link:../telemetry-core
-      '@routekit/tool-claude':
-        specifier: workspace:*
-        version: link:../tool-claude
       '@routekit/tool-codex':
         specifier: workspace:*
         version: link:../tool-codex
-      '@routekit/tool-cursor':
+      '@routekit/tool-registry':
         specifier: workspace:*
-        version: link:../tool-cursor
-      '@routekit/tool-opencode':
-        specifier: workspace:*
-        version: link:../tool-opencode
+        version: link:../tool-registry
       '@routekit/tools':
         specifier: workspace:*
         version: link:../tools
@@ -564,6 +549,24 @@ importers:
       zod:
         specifier: 4.4.3
         version: 4.4.3
+
+  packages/tool-registry:
+    dependencies:
+      '@routekit/tool-claude':
+        specifier: workspace:*
+        version: link:../tool-claude
+      '@routekit/tool-codex':
+        specifier: workspace:*
+        version: link:../tool-codex
+      '@routekit/tool-cursor':
+        specifier: workspace:*
+        version: link:../tool-cursor
+      '@routekit/tool-opencode':
+        specifier: workspace:*
+        version: link:../tool-opencode
+      '@routekit/tools':
+        specifier: workspace:*
+        version: link:../tools
 
   packages/tools:
     dependencies:

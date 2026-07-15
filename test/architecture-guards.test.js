@@ -6,7 +6,10 @@ import {
   canonicalSharedPackageViolations,
   fusionkitCompositionViolations,
   routekitDependencyViolations,
-  routekitSourceViolations
+  routekitSourceViolations,
+  toolRegistryCompositionViolations,
+  toolRegistryConstructionViolations,
+  toolRegistryConsumerSourceViolations
 } from "../scripts/lib/architecture-guards.mjs";
 
 function workspacePackage(name, dependencies = {}) {
@@ -85,6 +88,85 @@ test("FusionKit composition guard rejects a transitive RouteKit CLI dependency",
   bad[0].manifest.dependencies["@routekit/bad-wrapper"] = "workspace:*";
   assert.deepEqual(fusionkitCompositionViolations(bad), [
     "FusionKit dependency closure includes the RouteKit CLI: @fusionkit/cli -> @routekit/bad-wrapper -> @routekit/cli"
+  ]);
+});
+
+test("tool registry guard enforces one neutral composition point for both CLIs", () => {
+  const clean = [
+    workspacePackage("@routekit/tools"),
+    workspacePackage("@routekit/tool-codex"),
+    workspacePackage("@routekit/tool-claude"),
+    workspacePackage("@routekit/tool-cursor"),
+    workspacePackage("@routekit/tool-opencode"),
+    workspacePackage("@routekit/tool-registry", {
+      "@routekit/tools": "workspace:*",
+      "@routekit/tool-codex": "workspace:*",
+      "@routekit/tool-claude": "workspace:*",
+      "@routekit/tool-cursor": "workspace:*",
+      "@routekit/tool-opencode": "workspace:*"
+    }),
+    workspacePackage("@routekit/cli", {
+      "@routekit/tool-registry": "workspace:*"
+    }),
+    workspacePackage("@fusionkit/cli", {
+      "@routekit/tool-registry": "workspace:*"
+    })
+  ];
+  assert.deepEqual(toolRegistryCompositionViolations(clean), []);
+
+  clean.at(-1).manifest.dependencies["@routekit/tool-cursor"] = "workspace:*";
+  assert.deepEqual(toolRegistryCompositionViolations(clean), [
+    "@fusionkit/cli must compose tools through @routekit/tool-registry, not @routekit/tool-cursor"
+  ]);
+});
+
+test("tool registry source guard rejects parallel imports and construction", () => {
+  assert.deepEqual(
+    toolRegistryConsumerSourceViolations(
+      "packages/cli/src/tools.ts",
+      [
+        'import { setToolDriverRegistry } from "@fusionkit/ensemble";',
+        'import { toolRegistry } from "@routekit/tool-registry";',
+        "setToolDriverRegistry(toolRegistry);"
+      ].join("\n")
+    ),
+    []
+  );
+  assert.deepEqual(
+    toolRegistryConsumerSourceViolations(
+      "packages/routekit-cli/src/launch.ts",
+      [
+        'import { codexTool } from "@routekit/tool-codex";',
+        'import { createToolRegistry } from "@routekit/tools";',
+        "export const toolRegistry = createToolRegistry([codexTool]);"
+      ].join("\n")
+    ),
+    [
+      "packages/routekit-cli/src/launch.ts must import @routekit/tool-registry",
+      "packages/routekit-cli/src/launch.ts must not import individual tool integrations",
+      "packages/routekit-cli/src/launch.ts must not construct a parallel tool registry"
+    ]
+  );
+});
+
+test("tool registry construction guard allows exactly one production owner", () => {
+  const owner = {
+    file: "packages/tool-registry/src/index.ts",
+    source: "export const toolRegistry = createToolRegistry(toolIntegrations);"
+  };
+  assert.deepEqual(toolRegistryConstructionViolations([owner]), []);
+  assert.deepEqual(
+    toolRegistryConstructionViolations([
+      owner,
+      {
+        file: "packages/other/src/tools.ts",
+        source: "export const otherRegistry = createToolRegistry([]);"
+      }
+    ]),
+    ["packages/other/src/tools.ts constructs a parallel tool registry"]
+  );
+  assert.deepEqual(toolRegistryConstructionViolations([]), [
+    "packages/tool-registry/src/index.ts must construct the canonical registry exactly once"
   ]);
 });
 

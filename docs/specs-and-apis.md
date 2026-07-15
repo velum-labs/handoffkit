@@ -4,7 +4,11 @@ This page documents the repository's protocol contracts, HTTP APIs, generated bi
 
 ## Contract ownership
 
-FusionKit has two kinds of contracts. Runtime HTTP contracts are served by the model gateway and Python fusion server. Durable protocol contracts are JSON records that can be stored, validated, signed, compared, and exchanged between TypeScript and Python packages.
+FusionKit has two kinds of contracts. Public runtime HTTP contracts are served
+by the Node gateway; the internal Python sidecar serves only Fusion
+trajectory/native-run contracts. Durable protocol contracts are JSON records
+that can be stored, validated, signed, compared, and exchanged between
+TypeScript and Python packages.
 
 The durable protocol layer is more stable than the implementation that produces it. If a field is added to a schema, the change must flow through schema files, fixtures, generated TypeScript bindings, generated Python bindings, validation helpers, server code, tests, and documentation.
 
@@ -16,8 +20,8 @@ flowchart LR
   OpenAPI --> PY[Generated Python bindings]
   TS --> Protocol["@fusionkit/protocol"]
   PY --> Core["fusionkit_core.contracts"]
-  Protocol --> Gateway[Model gateway]
-  Core --> Server[Python server]
+  Protocol --> Gateway["Node gateway"]
+  Core --> Sidecar["Internal Python sidecar"]
 ```
 
 ## Model-fusion contract
@@ -46,7 +50,17 @@ Fixtures live under `spec/model-fusion-contract/fixture/`. Each schema should ha
 
 ## Registry data
 
-`spec/registry/` is the source-of-truth JSON for cross-stack registry data: `providers.json` (base URLs, key env vars, key probes, discovery), `subscriptions.json` (Claude Code / Codex subscription auth metadata), `model-catalog.json` and `local-catalog.json` (cloud and local model catalogs), `model-capabilities.json` (model-family capability quirks), `pricing.json` (curated default pricing), and `fusion.json` (fusion defaults). `scripts/generate-registry.mjs` generates the `@fusionkit/registry` TypeScript bindings and the Python `fusionkit_core._generated.registry_data` module from the same files, so the two stacks cannot drift; `scripts/generate-pricing.mjs` and `scripts/generate-local-catalog.mjs` refresh and validate their respective files.
+`spec/registry/` is the source-of-truth JSON for cross-stack registry data:
+`providers.json` (base URLs, key env vars, key probes, discovery),
+`subscriptions.json` (Claude Code / Codex subscription auth metadata),
+`model-catalog.json` and `local-catalog.json` (cloud and local model catalogs),
+`model-capabilities.json` (model-family capability quirks), `pricing.json`
+(curated default pricing), and `fusion.json` (Fusion identities, aliases, and
+panel presets). `scripts/generate-registry.mjs` emits neutral TypeScript data to
+`@routekit/registry`, Fusion-only TypeScript data to `@fusionkit/registry`, and
+the corresponding split Python generated modules. `scripts/generate-pricing.mjs`
+and `scripts/generate-local-catalog.mjs` refresh and validate their respective
+sources.
 
 ## Expected-behavior inventory
 
@@ -102,28 +116,32 @@ print(model.__name__, metadata.producer_version)
 
 FusionKit exposes several local HTTP surfaces. They are local development and harness APIs unless deployed explicitly.
 
-### Python fusion server
+### Internal Python synthesis sidecar
 
-The Python fusion server is created by `fusionkit_server.app.create_app()`. It exposes OpenAI-compatible chat and model-fusion endpoints.
+The sidecar is created by `fusionkit_server.app.create_app()`. It is not a
+public router and has no Chat Completions, model-listing, provider, or
+passthrough routes.
 
 | Route | Purpose |
 | --- | --- |
-| `/v1/chat/completions` | OpenAI-compatible chat route for direct model calls and fused responses. |
+| `/health` | Local process-readiness probe. |
 | `/v1/fusion/trajectories:fuse` | Trajectory fusion route used when candidates already exist. |
 | Native run routes | Create runs, inspect run state, page events, submit tool results, and inspect artifacts. |
 
 Example:
 
 ```bash
-uv run --package fusionkit-server python -m uvicorn fusionkit_server.app:create_app --factory --port 8000
-curl http://127.0.0.1:8000/v1/chat/completions \
-  -H 'content-type: application/json' \
-  -d '{"model":"fusion","messages":[{"role":"user","content":"hello"}]}'
+uv run --package fusionkit fusionkit-sidecar serve --config sidecar.yaml --port 8000
+curl http://127.0.0.1:8000/health
 ```
 
-### Model gateway
+### Node public gateway
 
-The model gateway is started by `startGateway()` from `@fusionkit/gateway`. It exposes the wire dialects expected by coding harnesses.
+The only production public server is RouteKit's `startGateway()` from
+`@routekit/gateway`, configured with FusionKit's `FusionBackend` from
+`@fusionkit/gateway`. RouteKit owns HTTP dialects and provider egress;
+FusionKit owns ensemble orchestration, durable sessions, and aggregate cost
+accounting.
 
 | Dialect | Route family | Used by |
 | --- | --- | --- |

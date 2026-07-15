@@ -2,9 +2,11 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 
 import { dirname, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
+import typescript from "typescript";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 const outFile = `${root}/docs/generated/code-api.md`;
+const symbolIndexFile = `${root}/docs/source-symbol-index.md`;
 const check = process.argv.includes("--check");
 
 function read(path) {
@@ -125,7 +127,165 @@ print(json.dumps(payload))
   }));
 }
 
-function render() {
+function walkSourceFiles(directory, extension) {
+  if (!existsSync(directory)) return [];
+  const output = [];
+  for (const entry of readdirSync(directory, { withFileTypes: true })) {
+    const path = `${directory}/${entry.name}`;
+    if (entry.isDirectory()) {
+      if (entry.name !== "test" && entry.name !== "tests" && entry.name !== "__pycache__") {
+        output.push(...walkSourceFiles(path, extension));
+      }
+    } else if (
+      entry.isFile() &&
+      entry.name.endsWith(extension) &&
+      !entry.name.endsWith(`.test${extension}`)
+    ) {
+      output.push(path);
+    }
+  }
+  return output;
+}
+
+function packageSourceRoots(base) {
+  if (!existsSync(`${root}/${base}`)) return [];
+  return readdirSync(`${root}/${base}`, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory() && existsSync(`${root}/${base}/${entry.name}/src`))
+    .map((entry) => `${base}/${entry.name}/src`)
+    .sort();
+}
+
+function declarationNames(statement) {
+  if (
+    typescript.isClassDeclaration(statement) ||
+    typescript.isFunctionDeclaration(statement) ||
+    typescript.isInterfaceDeclaration(statement) ||
+    typescript.isTypeAliasDeclaration(statement) ||
+    typescript.isEnumDeclaration(statement)
+  ) {
+    return statement.name === undefined ? [] : [statement.name.text];
+  }
+  if (typescript.isVariableStatement(statement)) {
+    return statement.declarationList.declarations.flatMap((declaration) =>
+      typescript.isIdentifier(declaration.name) ? [declaration.name.text] : []
+    );
+  }
+  return [];
+}
+
+function declarationKind(statement) {
+  if (typescript.isClassDeclaration(statement)) return "class";
+  if (typescript.isFunctionDeclaration(statement)) return "function";
+  if (typescript.isInterfaceDeclaration(statement)) return "interface";
+  if (typescript.isTypeAliasDeclaration(statement)) return "type";
+  if (typescript.isEnumDeclaration(statement)) return "enum";
+  if (typescript.isVariableStatement(statement)) {
+    return (statement.declarationList.flags & typescript.NodeFlags.Const) !== 0
+      ? "const"
+      : "variable";
+  }
+  return "declaration";
+}
+
+function hasExportModifier(statement) {
+  return statement.modifiers?.some(
+    (modifier) =>
+      modifier.kind === typescript.SyntaxKind.ExportKeyword ||
+      modifier.kind === typescript.SyntaxKind.DefaultKeyword
+  ) ?? false;
+}
+
+function tsSymbolSections() {
+  const sourceRoots = [
+    ...packageSourceRoots("packages"),
+    ...packageSourceRoots("legacy/packages")
+  ];
+  const sections = [];
+  for (const sourceRoot of sourceRoots) {
+    const modules = [];
+    for (const absoluteFile of walkSourceFiles(`${root}/${sourceRoot}`, ".ts").sort()) {
+      if (absoluteFile.endsWith(".d.ts")) continue;
+      const source = read(absoluteFile);
+      const sourceFile = typescript.createSourceFile(
+        absoluteFile,
+        source,
+        typescript.ScriptTarget.Latest,
+        true,
+        typescript.ScriptKind.TS
+      );
+      const locallyExported = new Set();
+      for (const statement of sourceFile.statements) {
+        if (typescript.isExportDeclaration(statement) && statement.moduleSpecifier === undefined) {
+          for (const element of statement.exportClause?.elements ?? []) {
+            locallyExported.add(element.propertyName?.text ?? element.name.text);
+          }
+        }
+      }
+      const symbols = [];
+      for (const statement of sourceFile.statements) {
+        const names = declarationNames(statement);
+        if (names.length === 0) continue;
+        for (const name of names) {
+          if (hasExportModifier(statement) || locallyExported.has(name)) {
+            symbols.push({ name, kind: declarationKind(statement) });
+          }
+        }
+      }
+      if (symbols.length > 0) {
+        modules.push({ file: relative(root, absoluteFile), symbols });
+      }
+    }
+    if (modules.length > 0) {
+      sections.push({ name: sourceRoot.replace(/\/src$/, ""), modules });
+    }
+  }
+  return sections;
+}
+
+function pythonSymbolSections() {
+  const script = `
+import ast
+import json
+from pathlib import Path
+import sys
+
+root = Path(sys.argv[1])
+source_roots = sorted((root / "python").glob("*/src"))
+generated = root / "packages/protocol/generated/python"
+if generated.exists():
+    source_roots.append(generated)
+
+sections = []
+for source_root in source_roots:
+    modules = []
+    for path in sorted(source_root.rglob("*.py")):
+        if "__pycache__" in path.parts or "tests" in path.parts:
+            continue
+        tree = ast.parse(path.read_text(), filename=str(path))
+        symbols = []
+        for node in tree.body:
+            if isinstance(node, ast.ClassDef):
+                symbols.append({"name": node.name, "kind": "class"})
+            elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                symbols.append({"name": node.name, "kind": "function"})
+        if symbols:
+            modules.append({"file": str(path.relative_to(root)), "symbols": symbols})
+    if modules:
+        sections.append({
+            "name": str(source_root.relative_to(root)).removesuffix("/src"),
+            "modules": modules,
+        })
+print(json.dumps(sections))
+`;
+  const py = spawnSync("python3", ["-c", script, root], {
+    cwd: root,
+    encoding: "utf8"
+  });
+  if (py.status !== 0) throw new Error(py.stderr || "failed to inspect Python symbols");
+  return JSON.parse(py.stdout);
+}
+
+function renderCodeApi() {
   const lines = [];
   lines.push("# Generated code API reference");
   lines.push("");
@@ -175,15 +335,60 @@ function render() {
   return `${lines.join("\n")}\n`;
 }
 
-const output = render();
-if (check) {
-  const current = existsSync(outFile) ? read(outFile) : "";
-  if (current !== output) {
-    console.error(`${relative(root, outFile)} is stale; run pnpm docs:generate-code`);
-    process.exit(1);
+function renderSymbolIndex() {
+  const lines = [
+    "# Source symbol index",
+    "",
+    "This index is generated from current source by `pnpm docs:generate-code`. Do not edit it by hand. It lists exported top-level TypeScript declarations and top-level Python classes/functions; tests are intentionally excluded.",
+    "",
+    "Use it with the narrative references when you need to find the module that owns a symbol. For comment-derived package entry-point documentation, see [Generated code API reference](generated/code-api.md).",
+    "",
+    "## TypeScript exported declarations",
+    ""
+  ];
+  for (const section of tsSymbolSections()) {
+    lines.push(`### \`${section.name}\``, "");
+    for (const module of section.modules) {
+      const symbols = module.symbols
+        .map((symbol) => `${symbol.name} (${symbol.kind})`)
+        .join(", ");
+      lines.push(`- \`${module.file}\`: ${symbols}`);
+    }
+    lines.push("");
   }
-} else {
-  mkdirSync(dirname(outFile), { recursive: true });
-  writeFileSync(outFile, output);
-  console.log(`generated ${relative(root, outFile)}`);
+  lines.push("## Python top-level symbols", "");
+  for (const section of pythonSymbolSections()) {
+    lines.push(`### \`${section.name}\``, "");
+    for (const module of section.modules) {
+      const symbols = module.symbols
+        .map((symbol) => {
+          const visibility = symbol.name.startsWith("_") ? "internal" : "public";
+          return `${symbol.name} (${symbol.kind}, ${visibility})`;
+        })
+        .join(", ");
+      lines.push(`- \`${module.file}\`: ${symbols}`);
+    }
+    lines.push("");
+  }
+  return `${lines.join("\n")}\n`;
 }
+
+const generatedFiles = [
+  { path: outFile, output: renderCodeApi() },
+  { path: symbolIndexFile, output: renderSymbolIndex() }
+];
+let stale = false;
+for (const generated of generatedFiles) {
+  if (check) {
+    const current = existsSync(generated.path) ? read(generated.path) : "";
+    if (current !== generated.output) {
+      console.error(`${relative(root, generated.path)} is stale; run pnpm docs:generate-code`);
+      stale = true;
+    }
+  } else {
+    mkdirSync(dirname(generated.path), { recursive: true });
+    writeFileSync(generated.path, generated.output);
+    console.log(`generated ${relative(root, generated.path)}`);
+  }
+}
+if (stale) process.exit(1);

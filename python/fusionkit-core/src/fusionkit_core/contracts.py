@@ -422,7 +422,7 @@ FUSION_RUN_STATE_TO_STATUS: dict[FusionRunState, Status] = {
 
 # Precomputed hash of the frozen model-fusion-contract schema bundle. The
 # canonical schema (spec/model-fusion-contract/schema) lives outside the packaged
-# wheel, so an installed package (e.g. `uvx fusionkit`) cannot locate it on disk.
+# wheel, so an installed `fusionkit-sidecar` package cannot locate it on disk.
 # We fall back to this constant there; a source checkout still recomputes from the
 # files. tests/ assert the two agree, so this can never silently drift from the
 # schema source. (Mirrors handoffkit's pinned MODEL_FUSION_SCHEMA_BUNDLE_HASH.)

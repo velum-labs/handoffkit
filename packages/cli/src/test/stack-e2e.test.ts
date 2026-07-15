@@ -1,7 +1,7 @@
 /**
  * Cross-process stack matrix: every gateway front door x {JSON, SSE,
  * multi-turn tool loop}, generated from the testkit's `DOOR_PROFILES` axis —
- * driving the REAL Node fusion gateway -> REAL Python engine
+ * driving the REAL Node RouteKit/Fusion gateways -> internal Python sidecar
  * (`fusionkit serve`) -> scripted provider simulator, with a panel spanning
  * every provider client family (`OpenAI`, Anthropic, Google, Codex). Nothing
  * between the tool's HTTP request and the provider wire is mocked; every wire

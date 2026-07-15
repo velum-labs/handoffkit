@@ -19,7 +19,8 @@ FusionKit is a pnpm + TypeScript workspace plus a uv + Python workspace. The pac
 | `@fusionkit/gateway` | Fusion front-door orchestration, sessions, aggregate cost accounting, trajectories, and managed local-model lifecycle. |
 | `@fusionkit/ensemble` | Panel orchestration, worktrees, runtime-kernel workflows, judge adapters, and advanced harness tooling. |
 | `@routekit/tools` | Product-neutral launcher, driver, and capability registry. |
-| `@routekit/tool-codex`, `tool-claude`, `tool-cursor`, `tool-opencode` | Canonical launcher and driver for each coding tool. |
+| `@routekit/tool-registry` | Canonical product-neutral registry consumed by both the RouteKit and FusionKit CLIs. |
+| `@routekit/tool-codex`, `@routekit/tool-claude`, `@routekit/tool-cursor`, `@routekit/tool-opencode` | Canonical launcher and driver for each coding tool. |
 | `@fusionkit/protocol` | Model-fusion contracts, schemas, OpenAPI bindings, trace records, and generated SDK bindings. |
 | `@fusionkit/workspace` | Git capture, worktree materialization, output collection, and divergence-safe pull helpers. |
 | `@fusionkit/adapter-ai-sdk` | Managed MLX server and AI SDK model adapters used by local-model paths. |
@@ -29,11 +30,12 @@ FusionKit is a pnpm + TypeScript workspace plus a uv + Python workspace. The pac
 
 | Package | Responsibility |
 | --- | --- |
-| `fusionkit` | PyPI CLI entrypoint for the raw router, setup, auth, prompts, and maintainer benchmark commands. |
-| `fusionkit-core` | Core fusion engine, provider clients, judge, config, run manager, artifacts, and metrics. |
-| `fusionkit-server` | FastAPI app and OpenAI-compatible HTTP routes. |
+| `fusionkit` | Internal PyPI runtime that installs only `fusionkit-sidecar`; the Node package owns the user-facing `fusionkit` executable. |
+| `fusionkit-core` | Provider-neutral fusion engine, RouteKit client, sidecar config, judge, run manager, artifacts, and metrics. |
+| `fusionkit-server` | Internal FastAPI sidecar with health, trajectory-fusion, and native-run routes; it has no public chat/model front door. |
 | `fusionkit-mlx` | Optional MLX launcher utilities. |
-| `fusionkit-evals` | Benchmarks, public reports, prompt tuning, Pareto analysis, and hill climbing. |
+| `fusionkit-evals` | Separately installed `fusionkit-bench`, public reports, prompt tuning, Pareto analysis, and hill climbing. |
+| `fusionkit-testkit` | Unpublished RouteKit-upstream simulator and sidecar process fixtures. |
 
 ## Legacy archive
 
@@ -45,8 +47,8 @@ Each coding tool is its own workspace package implementing a `ToolIntegration`:
 
 1. Create `packages/tool-<name>/` from an adjacent tool package.
 2. Export a `ToolIntegration` with a `launch(ctx)` implementation.
-3. Register it in the CLI tool registry.
+3. Add it to `toolIntegrations` in `@routekit/tool-registry`.
 
-That registry entry wires the tool into Fusion launchers and internal harness
-tests through one neutral `ToolLaunchSpec`. The existing integrations are documented under
-[Tools](/docs/tools).
+That one canonical entry wires the tool into both CLIs and internal harness
+composition through a neutral `ToolLaunchSpec`; consumers do not keep parallel
+imports or lists. The existing integrations are documented under [Tools](/docs/tools).

@@ -97,9 +97,11 @@ different package that reuses the name.)
   `describeJournal` / `reset`), with the child's log for diagnostics.
 - `scriptFusedTurn(sim, {...})` / `judgeAnalysis(...)` — one-call fused-turn
   scripting (mirrors the Python scenario helpers).
-- `simRouterConfigYaml(...)` — RouteKit router YAML for Node gateway tests.
-- `startEngine(...)` — the real Python sidecar as a child process via
-  `uv run --package fusionkit`, readiness-probed, log-captured.
+- `simSidecarConfigYaml(...)` — production-shaped internal sidecar YAML over a
+  RouteKit-compatible simulator URL and opaque endpoint IDs.
+- `startEngine(...)` — the internal Python sidecar as a child process via
+  `uv run --package fusionkit fusionkit-sidecar`, readiness-probed and
+  log-captured.
 - `parseSse` / `sseText` / `sseReasoning` / `sseDone` — structured SSE
   observation (mirrors `fusionkit_testkit.sse`), replacing per-file inline
   SSE splitters.

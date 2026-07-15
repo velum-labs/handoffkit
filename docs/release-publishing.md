@@ -1,8 +1,8 @@
 # Release publishing
 
-HandoffKit publishes its TypeScript workspace packages to the public npm
-registry (the `fusionkit` CLI plus the `@fusionkit/*` libraries it depends on)
-only from the canonical repository.
+HandoffKit publishes the RouteKit foundation (`@routekit/*`, including the
+`routekit` CLI) and FusionKit product packages (`@fusionkit/*`, including the
+`fusionkit` CLI) to the public npm registry only from the canonical repository.
 
 > For cutting releases across the whole velum-labs workspace (handoffkit,
 > cursorkit, fusionkit, mlx-lm) with the Terraform-style `plan`/`apply`
@@ -31,9 +31,10 @@ Forks and non-canonical mirrors cannot publish packages through this workflow.
 
 ## Published packages
 
-The publish list and order live in `release/npm-packages.json`. The CLI
-publishes as `@fusionkit/cli` (its bin is `fusionkit`); its libraries publish
-under the `@fusionkit/*` scope. Packages are published to:
+The complete publish list and explicit dependency order live in
+`release/npm-packages.json`. `@routekit/cli` installs `routekit`;
+`@fusionkit/cli` installs `fusionkit`. Packages publish under both
+`@routekit/*` and `@fusionkit/*` to:
 
 ```text
 https://registry.npmjs.org
@@ -54,29 +55,19 @@ Each publishable package must set:
 
 Packages not listed in `release/npm-packages.json` must remain `private: true`.
 
-## Authentication: trusted publishing (with one-time token bootstrap)
+## Authentication: trusted publishing
 
-The target steady state is **npm trusted publishing (OIDC)** with no stored token.
+Publishing uses **npm trusted publishing (OIDC)** with no stored token.
 The workflow already grants `id-token: write` and updates the npm CLI to a
 version that performs the OIDC exchange, so once a Trusted Publisher is
-configured on npmjs.com, `pnpm publish` authenticates via OIDC automatically
+configured on npmjs.com, `npm publish` authenticates via OIDC automatically
 (and provenance is generated automatically).
 
-npm has one catch: a Trusted Publisher can only be attached to a package that
-**already exists**, so the very first publish of new packages cannot use OIDC.
-The bootstrap flow is therefore:
-
-1. **First release with token.** Add an `NPM_TOKEN` repository secret (a granular
-   token scoped to the `@fusionkit` scope with write access, short expiry). The
-   first published GitHub Release creates all packages on npm. `NPM_TOKEN` is
-   written to `~/.npmrc` only on `release` events; `workflow_dispatch` packs a
-   dry-run and never needs it.
-2. **Configure Trusted Publishers.** On each package's
-   *Settings → Trusted Publisher* set org `velum-labs`, repository `handoffkit`,
-   workflow filename `release-packages.yml`, environment blank.
-3. **Drop the token.** Remove the `NPM_TOKEN` secret. Subsequent releases use
-   OIDC; the workflow needs no other change (the token step is a no-op without
-   the secret, and `pnpm publish` prefers OIDC when a Trusted Publisher exists).
+Every package in both scopes must configure *Settings → Trusted Publisher* with
+organization `velum-labs`, repository `handoffkit`, workflow filename
+`release-packages.yml`, and no environment. The workflow intentionally does not
+set `registry-url`, `NODE_AUTH_TOKEN`, or an npm auth line: any token entry can
+shadow OIDC.
 
 Workflow permissions: `id-token: write` (OIDC + provenance) and
 `contents: read` (checkout).
@@ -90,6 +81,8 @@ corepack pnpm install --frozen-lockfile
 node scripts/check-release-publish.mjs
 corepack pnpm check
 corepack pnpm build
+node scripts/check-routekit-cli-pack.mjs
+node scripts/check-fusionkit-cli-pack.mjs
 corepack pnpm test
 ```
 
@@ -97,7 +90,11 @@ corepack pnpm test
 
 - canonical repository and tag patterns;
 - public npm registry, public access, and provenance settings;
-- package metadata for every publishable workspace;
+- dependency-ordered package metadata, LICENSE/files/provenance fields, and the
+  `routekit`/`fusionkit` bins for every publishable workspace;
+- both clean-install package-closure smokes;
+- all five PyPI release packages plus the required `fusionkit-sidecar` and
+  `fusionkit-bench` binaries and forbidden Python `fusionkit` executable;
 - model-fusion OpenAPI snapshot hash and protocol package version;
 - generated TypeScript and Python OpenAPI client/model drift.
 
@@ -113,10 +110,12 @@ validators until that generated package is available.
 
 ## Python packages
 
-This repository's release workflow is npm-only. The protocol's Python package
-is published by `.github/workflows/model-fusion-protocol-release.yml`, which
-uploads to a private PyPI-compatible registry (Cloudsmith, AWS CodeArtifact,
-Gemfury, or equivalent) via the secrets `PRIVATE_PYPI_URL`,
-`PRIVATE_PYPI_USERNAME`, and `PRIVATE_PYPI_PASSWORD`. If those secrets are
-absent, the workflow builds wheel/sdist artifacts and attaches them to a GitHub
-Release instead of publishing to public PyPI.
+`.github/workflows/pypi-release.yml` publishes the internal Fusion sidecar
+runtime in dependency order (`fusionkit-core`, `fusionkit-server`, `fusionkit`)
+followed by `fusionkit-mlx` and `fusionkit-evals`. It verifies the wheels install
+`fusionkit-sidecar` and `fusionkit-bench` but no Python `fusionkit` executable.
+All five projects use PyPI Trusted Publishers after any one-time project
+bootstrap.
+
+The separate protocol Python package is published by
+`.github/workflows/model-fusion-protocol-release.yml`.

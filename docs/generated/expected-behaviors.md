@@ -48,8 +48,8 @@ environment-gated rows name the reason and exact live command.
 | `fusion.named-ensemble-isolation` | Selecting a named ensemble runs only its members and its judge. | required | `packages/cli/src/test/stack-depth-e2e.test.ts` — `multi-ensemble routing fans out only` |
 | `fusion.passthrough-bypasses-fusion` | Selecting an opaque RouteKit endpoint performs exactly one endpoint call and never invokes the judge. | required | `packages/cli/src/test/stack-e2e.test.ts` — `RouteKit endpoint passthrough routes each opaque id` |
 | `fusion.extension-metadata` | Terminal fused responses carry synthesis decision, input trajectory ids, contribution diagnostics, and usage. | required | `python/fusionkit-server/tests/test_trajectory_step.py` — `test_internal_trajectory_fuse_returns_synthesis_extension` |
-| `fusion.mode-panel` | fusionkit/panel performs panel fanout, judge, and synthesis. | required | `python/fusionkit-core/tests/test_core.py` — `test_fusion_engine_final_output_is_synthesized_not_top_trajectory` |
-| `fusion.mode-single` | fusionkit/single calls only the default model. | required | `python/fusionkit-core/tests/test_fusion_run.py` — `test_tracked_fusion_run_records_failure` |
+| `fusion.mode-panel` | The internal panel fusion mode performs panel fanout, judge, and synthesis. | required | `python/fusionkit-core/tests/test_core.py` — `test_fusion_engine_final_output_is_synthesized_not_top_trajectory` |
+| `fusion.mode-single` | The internal single fusion mode calls only the default endpoint. | required | `python/fusionkit-core/tests/test_fusion_run.py` — `test_tracked_fusion_run_records_failure` |
 | `fusion.mode-self` | fusionkit/self generates the configured number of samples and fuses them. | required | `python/fusionkit-core/tests/test_core.py` — `test_panel_runner_generates_self_fusion_candidates` |
 | `fusion.mode-heuristic` | fusionkit/heuristic deterministically routes simple and hard requests to the documented modes. | required | `python/fusionkit-core/tests/test_core_units.py` — `test_router_routes_hard_keywords_to_panel` |
 

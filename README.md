@@ -24,13 +24,18 @@ For model ensembles:
 
 ```bash
 npm install -g @fusionkit/cli
-fusionkit setup                      # one-time: warm the Python fusion engine
+fusionkit setup                      # one-time: warm the internal synthesis sidecar
 cd your-git-repo                     # FusionKit runs over the current git repo
-fusionkit doctor                     # verifies uv, agent CLIs, keys, PATH, and platform
+fusionkit doctor                     # verifies configs, endpoint IDs, uv, and agent CLIs
 fusionkit codex                      # or: fusionkit claude | fusionkit cursor | fusionkit serve
 ```
 
-For the built-in cloud trio, export any subset of `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, and `GEMINI_API_KEY`; missing members are skipped with a clear note. This repo's committed `.fusionkit/fusion.json` is different: it routes the panel through OpenRouter (`moonshotai/kimi-k2-thinking` + `qwen/qwen3-coder`), so set `OPENROUTER_API_KEY` here or run `fusionkit init` in your own repo to choose your panel.
+Run `fusionkit init`, then define models, URLs, and `apiKeyEnv` references in
+`.routekit/router.yaml`; `.fusionkit/fusion.json` composes those opaque endpoint
+IDs into ensembles. Every selected endpoint must be configured and available.
+This checkout's committed router uses OpenRouter
+(`moonshotai/kimi-k2-thinking` + `qwen/qwen3-coder`) and therefore requires
+`OPENROUTER_API_KEY`.
 
 Start here:
 
@@ -79,7 +84,9 @@ Three layers cooperate:
 
 1. **RouteKit SDKs** own RouterConfig loading, model routing, provider credentials, accounts, and the embedded router lifecycle.
 2. **Node `@fusionkit/cli`** owns Fusion v4 config, ensembles, harness launchers, the Fusion gateway, sessions, and observability.
-3. **Python `fusionkit`** performs judge/synthesis calls through the RouteKit gateway. Its provider implementation is retained temporarily and is the next deletion phase.
+3. **Python `fusionkit-sidecar`** is internal. It receives completed trajectories
+   and performs judge/synthesis calls through opaque RouteKit endpoint IDs; it
+   does not implement providers or expose the public chat/model gateway.
 
 Panel members run in lightweight git worktrees so parallel candidates can inspect or edit the same repo without trampling each other. The gateway reshapes the fused result back into the dialect your harness already expects. Maintainer architecture details live in [`docs/fusion-harness-gateway.md`](docs/fusion-harness-gateway.md) and [`docs/fusion-judge-trajectory.md`](docs/fusion-judge-trajectory.md).
 
@@ -89,12 +96,13 @@ Panel members run in lightweight git worktrees so parallel candidates can inspec
 | --- | --- |
 | [`packages/routekit-cli`](packages/routekit-cli) | The independent npm `@routekit/cli` router front door. |
 | [`packages/cli`](packages/cli) | The npm `@fusionkit/cli` front door. |
-| [`packages/model-gateway`](packages/model-gateway) | Dialect translation, fused/passthrough routing, streaming, sessions, and cost metering. |
+| [`packages/model-gateway`](packages/model-gateway) | RouteKit's neutral dialect translation, endpoint routing, provider egress, streaming, and per-call provenance/metering. |
+| [`packages/fusion-gateway`](packages/fusion-gateway) | Fusion front door, panel/synthesis orchestration, durable sessions, and aggregate budgets. |
 | [`packages/ensemble`](packages/ensemble) | Panel orchestration, worktrees, runtime-kernel workflows, judge adapters, and advanced harness tooling. |
 | [`packages/tool-*`](packages) + [`packages/tools`](packages/tools) | Per-harness launchers and the shared tool integration registry. |
 | [`packages/protocol`](packages/protocol) | Model-fusion contracts, schemas, traces, and generated bindings. |
 | [`packages/adapter-ai-sdk`](packages/adapter-ai-sdk) | Managed MLX server and AI SDK model adapters used by local-model paths. |
-| [`python/fusionkit-*`](python) | Python router, core fusion engine, CLI, MLX helpers, and eval tooling. |
+| [`python/fusionkit-*`](python) | Internal synthesis sidecar and core, optional MLX helpers, testkit, and separately installed evaluation tooling. |
 | [`apps/docs`](apps/docs) | Canonical Fumadocs user site. |
 | [`legacy/`](legacy) | Quarantined Warrant governance / VM-isolation stack; see [`legacy/README.md`](legacy/README.md) and [`docs/scope.md`](docs/scope.md). |
 

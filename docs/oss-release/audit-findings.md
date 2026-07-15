@@ -1,5 +1,9 @@
 # OSS Release Audit — Consolidated Findings
 
+> **Historical audit snapshot:** Findings below describe commit `dc2c8e4`
+> before the RouteKit/FusionKit split. Resolved command and ownership claims are
+> retained as evidence, not current product guidance.
+
 Date: 2026-07-05. Scope: entire repository at commit `dc2c8e4` on `main`.
 Method: six parallel deep audits (repo hygiene, TypeScript workspace, Python
 workspace, CLI UX/DX, documentation, public surface/security) plus git-history

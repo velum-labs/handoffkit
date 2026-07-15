@@ -35,9 +35,9 @@ async function listen(server: ReturnType<typeof createServer>): Promise<Listenin
 }
 
 /**
- * A mock `fusionkit serve` router. The vendor passthrough endpoint
- * (`/v1/chat/completions`) is driven by `vendor`; the fusion step
- * (`/v1/fusion/trajectories:fuse`) always returns a fused answer (JSON or SSE).
+ * A combined mock for the RouteKit chat upstream and internal Fusion sidecar.
+ * The chat endpoint is driven by `vendor`; the trajectory-fusion endpoint
+ * always returns a fused answer (JSON or SSE).
  */
 async function startRouter(
   vendor: (body: Record<string, unknown>, res: ServerResponse) => void

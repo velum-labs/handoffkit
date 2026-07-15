@@ -52,7 +52,7 @@ export type SimBehavior = {
 /** The provider wire dialects the simulator speaks (one per FusionKit client family). */
 export type SimDialect = "openai-chat" | "anthropic-messages" | "openai-responses" | "google-generate";
 
-/** One journal entry: what actually crossed the provider wire. */
+/** One journal entry: what actually crossed the simulated RouteKit wire. */
 export type SimJournalEntry = {
   seq: number;
   ts: number;
@@ -63,15 +63,10 @@ export type SimJournalEntry = {
   source: "queued" | "default";
   kind: "reply" | "tool_calls" | "error";
   status: number;
-  auth: {
-    authorization: string | null;
-    x_api_key: string | null;
-    x_goog_api_key: string | null;
-    chatgpt_account_id: string | null;
-  };
   request: Record<string, unknown>;
   reply_preview: string;
   tool_call_names: string[];
+  error_code: string | null;
 };
 
 /** What `queue` accepts: a full behavior, or a plain string as a text reply. */

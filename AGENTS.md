@@ -4,8 +4,9 @@
 
 This repo is a dual-stack monorepo: a **pnpm/TypeScript** workspace
 (`packages/*`, `examples/*`) and a **uv/Python** workspace (`python/*`). The
-shipped product is **FusionKit** (the `@fusionkit/cli` Node front door + the
-Python `fusionkit serve` fusion/synthesis engine). The `warrant` governance
+shipped products are **RouteKit** (the independent `@routekit/cli` Node router)
+and **FusionKit** (the `@fusionkit/cli` Node front door + internal Python
+`fusionkit-sidecar` synthesis process). The `warrant` governance
 stack in `docker-compose.yml` / `Dockerfile` is **legacy / out of product
 scope** (see `docs/scope.md`) and needs Docker, which is **not installed** here —
 skip it unless explicitly asked.
@@ -86,8 +87,10 @@ The Node process starts the internal Python sidecar and sends it completed
 trajectories. To debug only that internal process, use
 `uv run --package fusionkit fusionkit-sidecar serve -c <sidecar.yaml>` and
 probe `/health`; it intentionally has no public chat or model routes. Notes:
-- Real provider keys are required. `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, and
-  `OPENROUTER_API_KEY` are configured on `velum-mini`; `GEMINI_API_KEY` is not.
+- The RouteKit gateway needs the provider keys referenced by its router config;
+  the sidecar itself receives no provider credentials. `OPENAI_API_KEY`,
+  `ANTHROPIC_API_KEY`, and `OPENROUTER_API_KEY` are configured on `velum-mini`;
+  `GEMINI_API_KEY` is not.
 - `gpt-5.5` is a real model on the provided OpenAI account.
 - The committed `.fusionkit/fusion.json` panel currently uses OpenRouter
   (`moonshotai/kimi-k2-thinking`, `qwen/qwen3-coder`) and requires

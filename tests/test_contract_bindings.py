@@ -78,7 +78,7 @@ def test_schema_bundle_hash_falls_back_to_pinned_constant_without_schema_dir(
 ) -> None:
     # Simulate an installed wheel where the canonical schema dir is absent: the
     # helper must still return the frozen hash instead of raising (the bug that
-    # 500'd `/v1/fusion/trajectory:step` under `uvx fusionkit`).
+    # 500'd an internal fusion route in the installed sidecar wheel).
     monkeypatch.setattr("fusionkit_core.contracts._find_schema_dir", lambda: None)
     assert schema_bundle_hash() == SCHEMA_BUNDLE_HASH
     assert contract_metadata("trajectory.v1")["schema_bundle_hash"] == SCHEMA_BUNDLE_HASH

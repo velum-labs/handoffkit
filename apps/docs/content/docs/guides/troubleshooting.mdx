@@ -9,14 +9,16 @@ Start with:
 fusionkit doctor
 ```
 
-It checks `uv`/`uvx`, the agent binaries, provider keys, git, and your repo
-config, with a fix hint for anything missing.
+It checks `uv`/`uvx`, agent binaries, git, Fusion config, RouteKit connectivity,
+and referenced endpoint IDs, with a fix hint for anything missing. Run
+`routekit doctor` for provider credential checks.
 
 ## "preflight failed"
 
-A required binary or key is missing. The message lists each problem with an
-install hint, e.g. missing `uvx`, a missing agent (`codex`/`claude`/`cursor-agent`),
-or an unset provider key. Install the binary or export the key and retry.
+A required binary, config file, or endpoint is missing. The message lists each
+problem with an actionable hint, such as installing `uvx`, installing the
+selected agent (`codex`/`claude`/`cursor-agent`), running `fusionkit init`, or
+fixing an endpoint ID.
 
 ## "no --repo given and the current directory is not a git repository"
 
@@ -24,17 +26,17 @@ Run fusionkit from inside your project's git repo, or pass `--repo <dir>`.
 
 ## A panel model won't start
 
-If a provider rejects the request (bad key or an inaccessible model), fusionkit
-fails fast with a clear message naming the model and provider, instead of
-retrying forever or dumping a stack trace:
+If a RouteKit endpoint rejects a request because its credential or upstream
+model is invalid, inspect the endpoint directly:
 
-```
-panel model "gpt" (openai:gpt-5.5) could not start.
-  Check the model name and that OPENAI_API_KEY grants access.
-  ...
+```bash
+routekit endpoints health <endpoint-id>
+routekit doctor
 ```
 
-Transient startup failures are retried automatically with backoff.
+Then correct the endpoint's `model`, `baseUrl`, or `apiKeyEnv` in
+`.routekit/router.yaml`. FusionKit does not own provider retries or credential
+resolution.
 
 ## `--observe` says the dashboard isn't available
 

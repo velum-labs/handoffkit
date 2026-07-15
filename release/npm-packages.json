@@ -42,14 +42,6 @@
       "name": "@routekit/config-core"
     },
     {
-      "path": "packages/routekit-config",
-      "name": "@routekit/config"
-    },
-    {
-      "path": "packages/routekit-router",
-      "name": "@routekit/router"
-    },
-    {
       "path": "packages/telemetry-core",
       "name": "@routekit/telemetry-core"
     },
@@ -94,10 +86,6 @@
       "name": "@fusionkit/gateway"
     },
     {
-      "path": "packages/ensemble",
-      "name": "@fusionkit/ensemble"
-    },
-    {
       "path": "packages/harness-core",
       "name": "@routekit/harness-core"
     },
@@ -120,6 +108,22 @@
     {
       "path": "packages/tool-opencode",
       "name": "@routekit/tool-opencode"
+    },
+    {
+      "path": "packages/tool-registry",
+      "name": "@routekit/tool-registry"
+    },
+    {
+      "path": "packages/routekit-config",
+      "name": "@routekit/config"
+    },
+    {
+      "path": "packages/routekit-router",
+      "name": "@routekit/router"
+    },
+    {
+      "path": "packages/ensemble",
+      "name": "@fusionkit/ensemble"
     },
     {
       "path": "packages/routekit-cli",

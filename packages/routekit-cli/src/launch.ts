@@ -1,8 +1,4 @@
-import { claudeTool } from "@routekit/tool-claude";
-import { codexTool } from "@routekit/tool-codex";
-import { cursorTool } from "@routekit/tool-cursor";
-import { opencodeTool } from "@routekit/tool-opencode";
-import { createToolRegistry } from "@routekit/tools";
+import { toolRegistry as routekitToolRegistry } from "@routekit/tool-registry";
 import type {
   ToolIntegration,
   ToolLaunchContext,
@@ -14,12 +10,7 @@ import type { ModelEndpointConfig, RouterConfig } from "@routekit/gateway";
 
 import { startRouter } from "./serve.js";
 
-export const routekitToolRegistry = createToolRegistry([
-  codexTool,
-  claudeTool,
-  cursorTool,
-  opencodeTool
-]);
+export { routekitToolRegistry };
 
 function featureStatus(
   status: ModelEndpointConfig["capabilities"] extends infer Capabilities
