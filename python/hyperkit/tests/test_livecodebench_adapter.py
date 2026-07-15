@@ -9,6 +9,7 @@ from typing import Any
 
 import httpx
 import pytest
+
 from hyperkit.adapters.livecodebench import (
     LivecodebenchAdapter,
     _Client,

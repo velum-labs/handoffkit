@@ -215,7 +215,10 @@ def _legacy_fixture_json(value: str) -> Any:
     raw_pickle = decompressor.decompress(compressed, _FIXTURE_LIMIT + 1)
     if len(raw_pickle) > _FIXTURE_LIMIT or decompressor.unconsumed_tail:
         raise ValueError("decoded private fixture exceeds the size limit")
-    raw_json = _DataOnlyUnpickler(io.BytesIO(raw_pickle)).load()
+    try:
+        raw_json = _DataOnlyUnpickler(io.BytesIO(raw_pickle)).load()
+    except (EOFError, pickle.UnpicklingError) as exc:
+        raise ValueError(f"private fixture contains an invalid pickle: {exc}") from exc
     if isinstance(raw_json, bytes):
         raw_json = raw_json.decode("utf-8")
     if not isinstance(raw_json, str):
@@ -224,6 +227,8 @@ def _legacy_fixture_json(value: str) -> Any:
 
 
 def _validated_tests(value: Any, *, label: str) -> list[dict[str, str]]:
+    if value is None or value == "":
+        return []
     if isinstance(value, str):
         try:
             value = json.loads(value)
@@ -279,8 +284,6 @@ class _Sandbox:
                 _resource.setrlimit(_resource.RLIMIT_FSIZE, (_OUTPUT_LIMIT, _OUTPUT_LIMIT))
             with contextlib.suppress(Exception):
                 _resource.setrlimit(_resource.RLIMIT_AS, (_MEMORY_BYTES, _MEMORY_BYTES))
-            with contextlib.suppress(Exception):
-                _resource.setrlimit(_resource.RLIMIT_NPROC, (64, 64))
             with contextlib.suppress(Exception):
                 _resource.setrlimit(_resource.RLIMIT_NOFILE, (64, 64))
             with contextlib.suppress(Exception):
@@ -502,7 +505,7 @@ class _Client:
                 remaining = deadline - self.clock()
                 if remaining <= 0:
                     raise TimeoutError("chat completion exceeded its wall-clock deadline")
-                attempt_started = self.clock()
+                attempt_started = time.monotonic()
                 try:
                     with client.stream(
                         "POST",
@@ -541,7 +544,7 @@ class _Client:
                         {
                             "attempt": attempt + 1,
                             "status": "completed",
-                            "duration_s": self.clock() - attempt_started,
+                            "duration_s": time.monotonic() - attempt_started,
                             "response_id": data.get("id"),
                         }
                     )
@@ -582,7 +585,7 @@ class _Client:
                         {
                             "attempt": attempt + 1,
                             "status": "error",
-                            "duration_s": self.clock() - attempt_started,
+                            "duration_s": time.monotonic() - attempt_started,
                             "error_type": type(exc).__name__,
                             "error": str(exc)[:1000],
                         }
@@ -935,6 +938,7 @@ class LivecodebenchAdapter:
             sample["public_results"] = public["results"]
 
         tie_breaker: dict[str, Any] | None = None
+        public_exec_index = 0
         if selection == "first":
             selected = 0
         elif selection in (
