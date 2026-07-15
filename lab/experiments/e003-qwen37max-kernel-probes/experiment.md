@@ -1,12 +1,12 @@
 ---
 id: e003-qwen37max-kernel-probes
 owner: alen
-status: proposed
+status: analyzed
 benchmark: livecodebench
 claim: "multi-sample and pair kernels on the qwen3.7-max frontier"
 sweep_id: e003-qwen37max-kernel-probes
 budget_usd: 65
-spent_usd: 0
+spent_usd: 22
 created: 2026-07-14
 updated: 2026-07-14
 ---
@@ -39,7 +39,25 @@ fusion has no headroom on this slice and the next proposal re-scopes the
 benchmark instead.
 
 ## Results
+At rung 25, zero kernel wins over paired solo qwen3.7-max on any shared task:
+exec n3 14/20 vs 14/20 (discordants 0/0), judge-select 16/22 vs 16/22 (0/0),
+judge-synth 17/23 vs 17/23 (0/0), exec+repair 15/22 vs 16/22 (0/1),
+self-MoA 14/21 vs 15/21 (0/1); all McNemar p=1.0. Six exec shards never
+graded (sequential 3x1800 s sampling exceeds the 3600 s Batch wall clock) —
+these are the hardest instances and a documented limitation. Spend: $10.35
+metered + ~$12 serve-internal estimate = ~$22 of $65.
 
 ## Decision
+No promotion: every kernel has <2pp oracle headroom over its best member (the
+campaign prune rule) and zero discordant wins, so a rung-60 anchor McNemar
+significance is unreachable. Solo failures on this slice are capability-hard,
+not variance — extra samples, repair, r1 pairing, and judge/synth all
+reproduce solo's exact pass pattern. Fusion has no headroom here; re-scope
+the benchmark before any compound search.
 
 ## Follow-ups
+- up-for-grabs — holdout validation of the parity claim (solo qwen3.7-max vs
+  both anchors, once, from the $60 reserve) as the campaign final
+- up-for-grabs — harder/newer slice where the anchor gap is real, then re-probe
+- up-for-grabs — parallelize the exec-select sampling loop (Tier-3) so n>=3
+  fits the Batch wall clock
