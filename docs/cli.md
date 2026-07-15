@@ -16,7 +16,7 @@ fusionkit --help            # or: node packages/cli/dist/index.js --help
 The Python synthesizer (`fusionkit serve`) is fetched from PyPI via `uvx`; only
 `uv` and the coding-agent CLI you launch need to be installed locally. The pinned
 engine is **auto-provisioned** on first use; pre-warm it with `fusionkit setup`
-(or `fusionkit doctor --provision`) so the first real run is instant.
+so the first real run is instant.
 
 Task-focused walkthroughs: [inference endpoint](quickstart-inference.md),
 [coding harness](quickstart-harness.md),
@@ -61,21 +61,19 @@ are honored, and piped answers still drive prompts
 | Command | Purpose | Source |
 | --- | --- | --- |
 | `codex` \| `claude` \| `cursor` \| `serve` | Run the model ensemble behind a coding harness (or `serve` to print raw-endpoint setup). The headline product path. | `packages/cli/src/commands/fusion.ts` |
-| `fusion [tool]` | The generic launcher behind the per-tool shortcuts; omit the tool on a TTY to pick interactively. `fusion stop` reaps portless singleton services. | `packages/cli/src/commands/fusion.ts` |
 | `init` | Scaffold a committed `.fusionkit/` folder (panel, judge, tool, prompts, extras, named ensembles) for a repo; `--repo` targets another repo, `--fusionkit-dir` a local checkout for default prompts, `--force` overwrites an existing config. | `packages/cli/src/commands/fusion.ts` |
 | `setup` | Pre-provision (warm) the pinned `fusionkit` engine into the `uvx` cache; `--force` re-warms, `--fusionkit-dir` targets a local checkout. | `packages/cli/src/commands/setup.ts` |
-| `doctor`, `status` | Preflight the environment (prerequisites, per-platform capability, engine-cached state) and preview the effective fusion config + run plan. `doctor --provision` also warms the engine. | `packages/cli/src/commands/doctor.ts` |
-| `config` | Inspect **and edit** the one config source of truth: `config show` / `path` / `get` / `set` / `unset` / `edit` / `export-yaml`. | `packages/cli/src/commands/config.ts` |
+| `doctor` | Preflight the environment: prerequisites, per-platform capability, engine-cached state. Exits nonzero when not ready. | `packages/cli/src/commands/doctor.ts` |
+| `config` | Inspect **and edit** the one config source of truth: `config show` (effective config + run preview) / `path` / `get` / `set` / `unset` / `edit` / `export-yaml`. | `packages/cli/src/commands/config.ts` |
 | `prompts` | Manage the judge/synthesizer prompt overrides: `prompts list` / `prompts edit <id>` (opens `$EDITOR`, seeded from the engine default) / `prompts reset <id>`, with `--ensemble` for per-ensemble overrides. | `packages/cli/src/commands/prompts.ts` |
 | `sessions` | List, inspect, and remove durable gateway sessions: `sessions [list]` / `sessions show <id>` / `sessions rm <id>`. | `packages/cli/src/commands/sessions.ts` |
 | `models` | Manage the local MLX model cache: `models list` / `models download` / `models rm` (`models` alone also lists; `download --force` downloads even when the model looks too large for this host). | `packages/cli/src/commands/models.ts` |
-| `ensemble` | Manage named ensembles (`list` / `add` / `edit` / `remove` / `rename` / `use`) plus advanced maintainer harness tooling: `ensemble run` / `handoff` / `dashboard` / `e2e` / `gateway`. | `packages/cli/src/commands/ensemble.ts`, `ensemble-config.ts` |
+| `ensemble` | Manage named ensembles: `list` / `add` / `edit` / `remove` / `rename`. Set the default with `config set defaultEnsemble <name>`. | `packages/cli/src/commands/ensemble.ts`, `ensemble-config.ts` |
 | `install <tool>` / `uninstall <tool>` | Register FusionKit inside a tool's own config (currently `codex`: an extra model provider plus one launch profile per ensemble in `~/.codex/config.toml`). Flags: `--gateway-url`, `--port`, `--repo`, `--codex-home`. | `packages/cli/src/commands/install.ts` |
 | `proxy` | Long-lived Claude Code / Codex subscription pooling proxy: `proxy serve` / `proxy add <provider>` / `proxy status` / `proxy stop`. | `packages/cli/src/commands/proxy.ts` |
-| `stop` | Stop background fusion services (router, dashboard, ...) — the same reap as `fusion stop`. | `packages/cli/src/commands/stop.ts` |
+| `stop` | Stop all background fusion services (router, dashboard, subscription proxy, ...). | `packages/cli/src/commands/stop.ts` |
 | `telemetry` | Inspect and control anonymous, opt-in product telemetry: `telemetry status` / `on` / `off` / `inspect` (prints exactly what a session event would contain). Off by default; `DO_NOT_TRACK` beats everything. | `packages/cli/src/commands/telemetry.ts` |
 | `completion <shell>` | Print a static shell completion script for bash, zsh, or fish (advanced). | `packages/cli/src/commands/completion.ts` |
-| `runtime` | Advanced maintainer inspection of runtime-kernel workflows and composition primitives. | `packages/cli/src/commands/runtime.ts` |
 | `version` | Print the npm CLI and pinned Python synthesizer version matrix. | `packages/cli/src/commands/version.ts` |
 
 ## The ensemble launchers (`codex` / `claude` / `cursor` / `serve`)
@@ -179,7 +177,7 @@ fusionkit ensemble list                        # every ensemble + its fusion-<na
 fusionkit ensemble add fast                    # interactive panel builder (or --model/--judge flags)
 fusionkit ensemble edit fast --add-model flash=google:gemini-2.5-flash
 fusionkit ensemble edit fast --remove-model flash      # drop a member by id (repeatable)
-fusionkit ensemble use fast                    # make it the session default
+fusionkit config set defaultEnsemble fast      # make it the session default
 fusionkit ensemble rename fast quick           # prompt overrides move with it
 fusionkit ensemble remove quick --yes          # --yes skips the confirmation
 ```
@@ -188,12 +186,11 @@ The full model is documented in [Configuration](configuration.md).
 
 ## Stopping background services (`stop`)
 
-Fusion runs can leave persistent portless singletons (the shared router, the
-scope dashboard, ...) running across sessions. Top-level `fusionkit stop`
-performs the same reap as `fusionkit fusion stop`:
+Fusion runs can leave persistent services (the shared router, scope dashboard,
+subscription proxy, ...) running across sessions. Reap them with `fusionkit stop`:
 
 ```sh
-fusionkit stop                     # stop background fusion services (router, dashboard, ...)
+fusionkit stop                     # stop all background fusion services
 ```
 
 ## Codex integration (`install` / `uninstall`)

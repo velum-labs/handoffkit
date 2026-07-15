@@ -3,8 +3,8 @@
  * invoke the actual built entrypoint against isolated repo/HOME/CODEX_HOME
  * fixtures — no injected Commander program or mocked command handlers.
  *
- * Covered: version, completions, runtime registry, config path/show/get/set/
- * unset/export-yaml, prompts list/reset, codex install/uninstall, telemetry
+ * Covered: version, completions, config path/show/get/set/unset/export-yaml,
+ * prompts list/reset, codex install/uninstall, telemetry
  * status/on/inspect/off, setup provisioning via the local uv workspace, and
  * doctor's machine-readable preflight against the provider simulator.
  */
@@ -154,7 +154,7 @@ after(async () => {
   rmSync(root, { recursive: true, force: true });
 });
 
-test("version, completion, and runtime registry surfaces execute through the real CLI", { skip: SKIP }, () => {
+test("version and completion surfaces execute through the real CLI", { skip: SKIP }, () => {
   const version = JSON.parse(mustRun(["version", "--json"])) as {
     cli?: string;
   };
@@ -165,15 +165,6 @@ test("version, completion, and runtime registry surfaces execute through the rea
     assert.ok(completion.length > 100, `${shell} completion must be substantive`);
     assert.match(completion, /fusionkit/);
   }
-
-  const workflows = JSON.parse(mustRun(["runtime", "list", "--json"])) as {
-    workflows?: Array<{ id?: string }>;
-  };
-  assert.ok((workflows.workflows?.length ?? 0) > 0);
-  const workflowId = workflows.workflows?.[0]?.id;
-  assert.ok(workflowId);
-  const explanation = mustRun(["runtime", "explain", workflowId, "--json"]);
-  assert.match(explanation, new RegExp(workflowId));
 });
 
 test("config path/show/get/set/unset/export-yaml round-trip the stored source of truth", { skip: SKIP }, () => {

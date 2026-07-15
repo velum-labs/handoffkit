@@ -374,14 +374,6 @@ export function buildAcpRunner(config: GatewayRunnerConfig): AcpRunner {
   };
 }
 
-export function codexConfigSnippet(gatewayUrl: string): string {
-  const setup = toolRegistry.get("codex")?.setupSnippet?.({ gatewayUrl });
-  if (setup === undefined) {
-    throw new Error("codex tool integration does not expose a setup snippet");
-  }
-  return setup.split("\n").slice(1).join("\n");
-}
-
 /**
  * Style one tool's setup snippet: bold title line, gray config comments, cyan
  * URLs, everything else dim — so the copy-pasteable parts stand out from the
@@ -406,27 +398,10 @@ export function gatewaySetupSnippets(gatewayUrl: string, cursorKitNote: string):
       });
       return snippet === undefined ? [] : [snippet];
     });
-  const acpAdapterIds = toolRegistry
-    .list()
-    .map((tool) => tool.acpAdapterId)
-    .filter((id): id is string => id !== undefined);
   return [
     bold("point a coding agent at the gateway"),
     "",
-    ...toolSnippets.flatMap((snippet) => [styledSnippet(snippet), ""]),
-    styledSnippet(
-      [
-        "Generic ACP local agent:",
-        "  fusionkit ensemble gateway acp --fusion-backend <fusion-backend>"
-      ].join("\n")
-    ),
-    "",
-    styledSnippet(
-      [
-        "ACP registry adapters:",
-        `  fusionkit ensemble gateway acp-registry install ${acpAdapterIds.join(" ")}`
-      ].join("\n")
-    )
+    ...toolSnippets.flatMap((snippet) => [styledSnippet(snippet), ""])
   ].join("\n");
 }
 

@@ -37,7 +37,6 @@ export const codexTool: ToolIntegration = {
       "# ~/.codex/config.toml (or a temporary CODEX_HOME)",
       codexLaunchConfigToml(gatewayUrl, FUSION_PANEL_MODEL).trimEnd()
     ].join("\n"),
-  acpAdapterId: "codex-cli",
   modes: ["fusion", "local"],
   harnessKinds: ["codex"],
   panelHarnessKind: "codex",

@@ -751,8 +751,7 @@ const docsConsistencyTerms = [
   "frontdoor.finalize"
 ];
 const docsConsistencyFiles = [
-  "docs/fusion/kernel-migration.md",
-  "packages/cli/src/commands/runtime.ts"
+  "docs/fusion/kernel-migration.md"
 ];
 for (const term of docsConsistencyTerms) {
   const documented = docsConsistencyFiles.some((file) => readFileSync(file, "utf8").includes(term));

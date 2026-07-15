@@ -36,7 +36,6 @@ export const claudeTool: ToolIntegration = {
       `  ANTHROPIC_BASE_URL=${trimTrailingSlashes(gatewayUrl)}`,
       "  ANTHROPIC_AUTH_TOKEN=local"
     ].join("\n"),
-  acpAdapterId: "claude-agent",
   modes: ["fusion", "local"],
   harnessKinds: ["claude-code"],
   panelHarnessKind: "claude-code",

@@ -117,7 +117,6 @@ once for cost confirmation before its first run (skip with `--yes`).
 ## Verifying your setup
 
 ```bash
-fusionkit status                   # the effective panel, judge, and run plan
-fusionkit config show              # merged config + where each value came from
+fusionkit config show              # merged config, where each value came from, and the run plan
 fusionkit doctor                   # uv, git, agent CLIs, provider keys, platform capability
 ```

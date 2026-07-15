@@ -6,8 +6,8 @@
  * it (and its deps), and builds an isolated environment — which can be a
  * surprising multi-second/multi-MB stall right when the user expects their
  * coding agent to start. Warming that environment ahead of time (here, via
- * `fusionkit doctor --provision` / `fusionkit setup`, or on first run) moves
- * that cost to an explicit, progress-reported step.
+ * `fusionkit setup`, or on first run) moves that cost to an explicit,
+ * progress-reported step.
  */
 import { spawn } from "node:child_process";
 
@@ -118,9 +118,9 @@ export async function provisionFusionEngine(options: {
 }
 
 /**
- * Provision with a live task line and human-readable result lines. Shared by
- * `fusionkit setup` and `fusionkit doctor --provision`. Returns a process exit
- * code (0 ok, 1 on failure / missing runner).
+ * Provision with a live task line and human-readable result lines (the
+ * `fusionkit setup` warm path). Returns a process exit code (0 ok, 1 on
+ * failure / missing runner).
  */
 export async function provisionEngineWithProgress(
   options: {

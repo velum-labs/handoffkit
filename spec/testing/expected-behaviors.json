@@ -500,7 +500,7 @@
     {
       "id": "cli.management-surfaces",
       "category": "cli",
-      "expectation": "The real CLI covers config, prompts, install/uninstall, telemetry, setup, doctor, completions, versions, and runtime registry.",
+      "expectation": "The real CLI covers config, prompts, install/uninstall, telemetry, setup, doctor, completions, and versions.",
       "status": "required",
       "testFile": "packages/cli/src/test/cli-command-surfaces-e2e.test.ts",
       "anchor": "config path/show/get/set/unset/export-yaml"

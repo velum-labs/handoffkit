@@ -1,7 +1,7 @@
 /**
- * `fusionkit doctor` — a proactive environment checklist with fix hints, and
- * `fusionkit status` — the effective config + a dry-run preview. Both render
- * through the presenter and support `--json` for scripting/CI.
+ * `fusionkit doctor` — a proactive environment checklist with fix hints. It
+ * renders through the presenter and supports `--json` for scripting/CI. The
+ * effective config + run preview live in `fusionkit config show`.
  */
 import { existsSync, realpathSync } from "node:fs";
 import { execFileSync } from "node:child_process";
@@ -9,14 +9,13 @@ import { delimiter, join, resolve } from "node:path";
 
 import type { Command } from "commander";
 
-import { bold, cyan, dim, formatBytes, gray, green, red } from "@fusionkit/cli-ui";
+import { bold, cyan, dim, formatBytes, green, red } from "@fusionkit/cli-ui";
 import type { Presenter, StatusKind } from "@fusionkit/cli-ui";
 import { resolveWebSearchExecutor } from "@fusionkit/model-gateway";
 
 import {
   cliproxyBaseUrl,
   DEFAULT_CLOUD_PANEL,
-  DEFAULT_TRIO,
   defaultKeyEnv,
   gitToplevel,
   loadEnvFileInto
@@ -29,7 +28,7 @@ import { ownedMlxEnv } from "../fusion/mlx.js";
 import { probeOpenAiCompatibleModels } from "../fusion/openai-models.js";
 import { FUSIONKIT_PYPI_VERSION } from "../fusion/env.js";
 import { platformCapabilities } from "../fusion/platform.js";
-import { engineCached, provisionEngineWithProgress } from "../fusion/provision.js";
+import { engineCached } from "../fusion/provision.js";
 import { hasBinary, INSTALL_HINTS } from "../shared/preflight.js";
 import { probeBinaryVersion, readPackageVersion } from "../shared/package-version.js";
 import { contextFor } from "../shared/context.js";
@@ -282,7 +281,7 @@ async function reportCliproxy(
 }
 
 /** `fusionkit doctor` — a proactive environment checklist with fix hints. */
-async function runDoctor(opts: { provision?: boolean }, ctx: CommandContext): Promise<number> {
+async function runDoctor(ctx: CommandContext): Promise<number> {
   // Match runtime: a project .env makes provider keys available without export.
   loadEnvFileInto(join(process.cwd(), ".env"), process.env);
 
@@ -451,7 +450,7 @@ async function runDoctor(opts: { provision?: boolean }, ctx: CommandContext): Pr
       "pending",
       `fusionkit@${FUSIONKIT_PYPI_VERSION}`,
       "not provisioned yet — the first run pulls it from PyPI",
-      `run ${bold("fusionkit setup")} (or ${bold("fusionkit doctor --provision")}) to pre-warm it now`
+      `run ${bold("fusionkit setup")} to pre-warm it now`
     );
     report.push({
       section: "engine",
@@ -463,14 +462,8 @@ async function runDoctor(opts: { provision?: boolean }, ctx: CommandContext): Pr
 
   const localMlx = await reportLocalMlx(presenter, report);
 
-  // Optional: actually warm the engine now (doctor + setup in one shot).
-  if (opts.provision === true && runner) {
-    presenter.blank();
-    presenter.heading("provisioning");
-    await provisionEngineWithProgress({}, presenter);
-  }
-
-  // Config status, if any.
+  // Config status, if any. The effective config + run preview live in
+  // `fusionkit config show`; doctor only flags broken or missing files.
   if (repoRoot !== undefined) {
     presenter.blank();
     presenter.heading("repo config");
@@ -478,29 +471,19 @@ async function runDoctor(opts: { provision?: boolean }, ctx: CommandContext): Pr
     if (configError !== undefined) {
       presenter.status("fail", configError);
       report.push({ section: "config", label: "fusion.json", ok: false, detail: configError });
+    } else if (config === undefined) {
+      const trio = DEFAULT_CLOUD_PANEL.map((spec) => spec.id).join(", ");
+      presenter.status("pending", `no ${cyan(".fusionkit/")} yet — using built-in defaults (cloud trio: ${trio})`);
+      presenter.line(
+        `    ${dim(`run ${bold("fusionkit init")} to scaffold one, or ${bold("fusionkit config show")} to see the effective defaults`)}`
+      );
+      report.push({ section: "config", label: ".fusionkit/fusion.json", ok: false, detail: "not scaffolded" });
     } else {
-      if (config === undefined) {
-        const trio = DEFAULT_CLOUD_PANEL.map((spec) => spec.id).join(", ");
-        presenter.status("pending", `no ${cyan(".fusionkit/")} yet — using built-in defaults (cloud trio: ${trio})`);
-        presenter.line(
-          `    ${dim(`run ${bold("fusionkit init")} to scaffold one, or ${bold("fusionkit config show")} to see the effective defaults`)}`
-        );
-        report.push({ section: "config", label: ".fusionkit/fusion.json", ok: false, detail: "not scaffolded" });
-      } else {
-        const overrides = Object.keys(config.prompts ?? {});
-        const ensembleNames = Object.keys(config.ensembles ?? {});
-        const panelSummary =
-          ensembleNames.length > 1
-            ? `ensembles: ${ensembleNames.join(", ")}`
-            : `panel: ${(config.ensembles?.[ensembleNames[0] ?? ""]?.panel ?? []).map((s) => s.id).join(", ") || "(unset)"}`;
-        presenter.status("ok", cyan(fusionConfigPath(repoRoot)));
-        presenter.line(`    ${dim(`tool: ${config.tool ?? "(unset)"}  ${panelSummary}`)}`);
-        presenter.line(
-          `    ${dim(`prompt overrides: ${overrides.length > 0 ? overrides.join(", ") : "(none — built-in defaults)"}`)}`
-        );
-        presenter.line(`    ${dim(`edit it from the CLI with ${bold("fusionkit config set")} / ${bold("fusionkit config edit")}`)}`);
-        report.push({ section: "config", label: fusionConfigPath(repoRoot), ok: true, detail: panelSummary });
-      }
+      presenter.status("ok", cyan(fusionConfigPath(repoRoot)));
+      presenter.line(
+        `    ${dim(`effective config + run preview: ${bold("fusionkit config show")}`)}`
+      );
+      report.push({ section: "config", label: fusionConfigPath(repoRoot), ok: true });
     }
   }
 
@@ -565,128 +548,16 @@ async function runDoctor(opts: { provision?: boolean }, ctx: CommandContext): Pr
   return 0;
 }
 
-function panelLabel(spec: PanelModelSpec): string {
-  const provider = spec.provider ?? "mlx";
-  const key = spec.keyEnv ?? defaultKeyEnv(provider);
-  const keyNote = key !== undefined ? ` ${gray(`[${key}]`)}` : "";
-  return `${spec.id} = ${provider}:${spec.model}${keyNote}`;
-}
-
-/** `fusionkit status` — show the effective config and a dry-run preview. */
-function runStatus(ctx: CommandContext): number {
-  const { presenter } = ctx;
-  const repoRoot = gitToplevel(process.cwd());
-  if (repoRoot === undefined) {
-    if (ctx.json) {
-      ctx.emit({ error: { code: "no-repo", message: "not inside a git repository" } });
-      return 0;
-    }
-    presenter.blank();
-    presenter.header("status");
-    presenter.blank();
-    presenter.line(gray("not inside a git repository; run from your project."));
-    return 0;
-  }
-
-  let config: FusionConfig | undefined;
-  try {
-    config = loadFusionConfig(repoRoot, (message) => presenter.note(dim(message)));
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    if (ctx.json) {
-      ctx.emit({ error: { code: "config", message } });
-      return 1;
-    }
-    presenter.blank();
-    presenter.header("status");
-    presenter.blank();
-    presenter.line(`${red("config error:")} ${message}`);
-    return 1;
-  }
-
-  const local = config?.local === true;
-  const ensembleNames = Object.keys(config?.ensembles ?? {});
-  const defaultName =
-    config?.defaultEnsemble ?? (ensembleNames.includes("default") ? "default" : ensembleNames[0]);
-  const defaultEnsemble = defaultName !== undefined ? config?.ensembles?.[defaultName] : undefined;
-  const configPanel = defaultEnsemble?.panel;
-  const panel =
-    configPanel !== undefined && configPanel.length > 0
-      ? configPanel
-      : local
-        ? [...DEFAULT_TRIO]
-        : [...DEFAULT_CLOUD_PANEL];
-  const tool = config?.tool ?? "codex";
-  const judge = defaultEnsemble?.judgeModel ?? panel[0]?.model ?? "(first panel model)";
-  const spawnsCloud = panel.some((spec) => (spec.provider ?? "mlx") !== "mlx");
-
-  if (ctx.json) {
-    ctx.emit({
-      repo: repoRoot,
-      configPath: config !== undefined ? fusionConfigPath(repoRoot) : null,
-      tool,
-      judge,
-      observe: config?.observe === true,
-      panel,
-      ensembles: ensembleNames,
-      defaultEnsemble: defaultName ?? null,
-      spawnsCloud
-    });
-    return 0;
-  }
-
-  presenter.blank();
-  presenter.header("status");
-  presenter.blank();
-  const source =
-    config !== undefined ? cyan(fusionConfigPath(repoRoot)) : dim("(built-in defaults; run `fusionkit init`)");
-  const overrides = Object.keys(config?.prompts ?? {});
-  presenter.keyValue([
-    { label: "config", value: source },
-    { label: "repo", value: repoRoot },
-    { label: "tool", value: bold(tool) },
-    { label: "judge", value: judge },
-    { label: "observe", value: config?.observe === true ? "on" : "off" },
-    { label: "prompts", value: overrides.length > 0 ? overrides.join(", ") : dim("(built-in defaults)") }
-  ]);
-  presenter.blank();
-  presenter.heading("panel");
-  for (const spec of panel) presenter.line(`  ${gray("•")} ${panelLabel(spec)}`);
-  if (ensembleNames.length > 1) {
-    presenter.line(
-      dim(`ensembles: ${ensembleNames.join(", ")} (default: ${defaultName}) — see \`fusionkit config show\``)
-    );
-  }
-
-  presenter.blank();
-  presenter.line(
-    dim(`a run will: spawn ${panel.length} model server(s), a synthesizer, and the gateway, then launch ${tool}.`)
-  );
-  if (spawnsCloud) {
-    presenter.warn("cloud panel: each prompt fans out across the panel + judge (provider usage applies).");
-  }
-  return 0;
-}
-
 export function registerDoctor(program: Command): void {
   registerPaletteAction(
     { label: "Check my environment", hint: "fusionkit doctor", argv: ["doctor"] },
-    { label: "Show the effective config", hint: "fusionkit status", argv: ["status"] }
+    { label: "Show the effective config", hint: "fusionkit config show", argv: ["config", "show"] }
   );
   program
     .command("doctor")
     .description("check that prerequisites (uv, agents, keys, git) are ready")
-    .option("--provision", "also pre-provision (warm) the fusion engine into the uv cache")
     .option("--json", "emit machine-readable JSON")
-    .action(async (opts: { provision?: boolean; json?: boolean }, command: Command) => {
-      process.exitCode = await runDoctor({ provision: opts.provision === true }, contextFor(command));
-    });
-
-  program
-    .command("status")
-    .description("show the effective fusion config and a dry-run preview")
-    .option("--json", "emit machine-readable JSON")
-    .action((_opts: { json?: boolean }, command: Command) => {
-      process.exitCode = runStatus(contextFor(command));
+    .action(async (_opts: { json?: boolean }, command: Command) => {
+      process.exitCode = await runDoctor(contextFor(command));
     });
 }

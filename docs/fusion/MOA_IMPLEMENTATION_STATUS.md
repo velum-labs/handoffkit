@@ -76,8 +76,6 @@ This document tracks the implementation status of the architecture in `docs/fusi
 - `runEnsemble` public API wrapped through a kernel compatibility graph
 - CLI local/fusion gateways wrapped through `KernelBackend`
 - package subpath exports
-- `fusionkit runtime list`
-- `fusionkit runtime explain <workflow>`
 - package README and runtime docs
 - runnable `pnpm demo 15`
 

@@ -1,5 +1,5 @@
 /**
- * `fusionkit ensemble list|add|edit|remove|rename|use` — manage the named
+ * `fusionkit ensemble list|add|edit|remove|rename` — manage the named
  * ensembles in `.fusionkit/fusion.json` entirely from the CLI. Every defined
  * ensemble is registered as its own selectable gateway model
  * (`fusion-<name>`; the `default` ensemble keeps `fusion-panel`).
@@ -126,7 +126,7 @@ function runList(opts: EnsembleCommandOpts, ctx: CommandContext): number {
   }
   presenter.blank();
   presenter.line(
-    dim(`each ensemble is its own selectable model; switch the session default with ${bold("fusionkit ensemble use <name>")}`)
+    dim(`each ensemble is its own selectable model; switch the session default with ${bold("fusionkit config set defaultEnsemble <name>")}`)
   );
   return 0;
 }
@@ -187,7 +187,7 @@ async function runAdd(name: string, opts: EnsembleCommandOpts, ctx: CommandConte
   ctx.presenter.success(
     `added ensemble ${bold(name)} ${dim("→")} ${cyan(fusionModelId(name))} ${dim(`(${panel.length} member(s))`)}`
   );
-  ctx.presenter.line(dim(`make it the session default with ${bold(`fusionkit ensemble use ${name}`)}`));
+  ctx.presenter.line(dim(`make it the session default with ${bold(`fusionkit config set defaultEnsemble ${name}`)}`));
   return 0;
 }
 
@@ -379,25 +379,6 @@ function runRename(from: string, to: string, opts: EnsembleCommandOpts, ctx: Com
   return 0;
 }
 
-function runUse(name: string, opts: EnsembleCommandOpts, ctx: CommandContext): number {
-  const { root, inRepo } = repoRootFor(opts);
-  if (!inRepo) fail("not inside a git repository (and no --repo given) — nowhere to write .fusionkit/fusion.json");
-  const config = loadConfigOrFail(root, ctx.presenter);
-  const shape = persistedShape(config);
-  const ensembles = shapeEnsembles(shape);
-  if (ensembles[name] === undefined) {
-    fail(`unknown ensemble "${name}" (have: ${Object.keys(ensembles).join(", ") || "none"})`);
-  }
-  shape.defaultEnsemble = name;
-  validateAndWrite(root, shape);
-  if (ctx.json) {
-    ctx.emit({ defaultEnsemble: name, modelId: fusionModelId(name) });
-    return 0;
-  }
-  ctx.presenter.success(`sessions now default to ${bold(name)} ${dim(`(${fusionModelId(name)})`)}`);
-  return 0;
-}
-
 /** Resolve an omitted ensemble name with a fuzzy picker over the config. */
 async function ensembleNameOrPick(
   given: string | undefined,
@@ -489,14 +470,4 @@ export function registerEnsembleConfig(ensemble: Command): void {
       process.exitCode = runRename(from, to, opts, contextFor(command));
     });
 
-  ensemble
-    .command("use")
-    .argument("[name]", "ensemble sessions should default to; omit on a TTY to pick")
-    .description("set the session-default ensemble (defaultEnsemble)")
-    .option("--repo <dir>", "repo whose .fusionkit/ to write (default: cwd's git root)")
-    .option("--json", "emit machine-readable JSON")
-    .action(async (name: string | undefined, opts: EnsembleCommandOpts, command: Command) => {
-      const ctx = contextFor(command);
-      process.exitCode = runUse(await ensembleNameOrPick(name, opts, ctx, "use"), opts, ctx);
-    });
 }

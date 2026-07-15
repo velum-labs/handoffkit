@@ -4,8 +4,8 @@ import type { Command } from "commander";
 
 import { dim, uiStream } from "@fusionkit/cli-ui";
 
-import { DEFAULT_REASONING_MODEL, FUSION_TOOLS, gitToplevel, pickTool, runFusion } from "../fusion-quickstart.js";
-import type { FusionTool, RunFusionOptions } from "../fusion-quickstart.js";
+import { DEFAULT_REASONING_MODEL, FUSION_TOOLS, gitToplevel, runFusion } from "../fusion-quickstart.js";
+import type { RunFusionOptions } from "../fusion-quickstart.js";
 import { loadFusionConfig } from "../fusion-config.js";
 import type { FusionConfig } from "../fusion-config.js";
 import { runDirect } from "../local.js";
@@ -17,11 +17,9 @@ import { fail } from "../shared/errors.js";
 import { warnPassthroughTypos } from "../shared/flag-suggest.js";
 
 import { registerPaletteAction } from "./palette.js";
-import { runFusionStop } from "./stop.js";
 import {
   collect,
   parseBudget,
-  parseFusionTool,
   parseIdValue,
   parseK,
   parseOnRateLimit,
@@ -317,11 +315,8 @@ function configRepoRoot(options: RunFusionOptions): string | undefined {
   return options.repo ?? gitToplevel(process.cwd());
 }
 
-/**
- * Resolve options + the config-provided default tool. Flags always win over the
- * file; the file wins over built-in defaults.
- */
-function resolveContext(opts: FusionOpts): { options: RunFusionOptions; configTool?: FusionTool } {
+/** Resolve launcher options and merge the repository configuration. */
+function resolveContext(opts: FusionOpts): RunFusionOptions {
   const options = resolveOptions(opts);
   const repoRoot = configRepoRoot(options);
   let config: FusionConfig | undefined;
@@ -333,7 +328,7 @@ function resolveContext(opts: FusionOpts): { options: RunFusionOptions; configTo
     }
   }
   if (config !== undefined) mergeConfig(options, config);
-  return { options, ...(config?.tool !== undefined ? { configTool: config.tool } : {}) };
+  return options;
 }
 
 export function registerFusion(program: Command): void {
@@ -378,7 +373,7 @@ export function registerFusion(program: Command): void {
         if (!supportsFusion) {
           fail(`${tool} only supports direct mode; run \`fusionkit ${tool} --direct\``);
         }
-        const { options } = resolveContext(opts);
+        const options = resolveContext(opts);
         if (options.expose === true && tool !== "serve") {
           fail("--expose only applies to `fusionkit serve` (launched agents reach the gateway on loopback)");
         }
@@ -386,60 +381,6 @@ export function registerFusion(program: Command): void {
         process.exitCode = code;
       });
   }
-
-  // Generic `fusion [tool]` — keeps the original surface and interactive pick.
-  applyFusionOptions(
-    program
-      .command("fusion")
-      .description("one command: real model fusion backs a coding agent")
-      .argument("[tool]", `${FUSION_TOOLS.join(" | ")} | stop (omit on a TTY to pick interactively)`)
-      .argument("[args...]", "arguments forwarded to the tool")
-      .option("--tool <tool>", `coding agent to launch (${FUSION_TOOLS.join(" | ")})`)
-  )
-    .addHelpText(
-      "after",
-      "\nfusionkit's own flags must precede the tool name; everything after the tool is forwarded to it." +
-        "\nRun `fusionkit init` to scaffold a committed .fusionkit/ folder for this repo." +
-        "\nRun `fusionkit fusion stop` to reap portless singleton services (router, dashboard, ...)."
-    )
-    .action(async (positionalTool: string | undefined, args: string[], _opts: FusionOpts, command: Command) => {
-      // Merge program-level flags (--yes and friends may precede `fusion`).
-      const opts = command.optsWithGlobals<FusionOpts>();
-      // `fusion stop` reaps persistent portless singletons left running by prior
-      // runs (the router, dashboard, ...).
-      if (positionalTool === "stop") {
-        process.exitCode = await runFusionStop();
-        return;
-      }
-
-      const { options, configTool } = resolveContext(opts);
-      let tool: FusionTool | undefined = opts.tool ? parseFusionTool(opts.tool) : undefined;
-      let toolArgs = [...args];
-      if (positionalTool !== undefined) {
-        const positionalIsTool =
-          (FUSION_TOOLS as readonly string[]).includes(positionalTool) ||
-          (opts.direct === true && DIRECT_TOOLS.includes(positionalTool));
-        if (tool === undefined && positionalIsTool) {
-          tool = positionalTool as FusionTool;
-        } else {
-          toolArgs = [positionalTool, ...toolArgs];
-        }
-      }
-      const resolvedTool = tool ?? configTool ?? (process.stdin.isTTY ? await pickTool() : "codex");
-      warnPassthroughTypos(command, toolArgs, resolvedTool);
-      if (opts.direct === true) {
-        process.exitCode = await launchDirect(resolvedTool, toolArgs, opts, command);
-        return;
-      }
-      if (opts.publicUrl !== undefined) {
-        fail("--public-url requires --direct");
-      }
-      if (options.expose === true && resolvedTool !== "serve") {
-        fail("--expose only applies to `fusionkit serve` (launched agents reach the gateway on loopback)");
-      }
-      const code = await runFusion(resolvedTool, toolArgs, options);
-      process.exitCode = code;
-    });
 
   // Top-level `init` — scaffold a committed .fusionkit/ folder for this repo.
   program

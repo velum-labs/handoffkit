@@ -5,8 +5,8 @@
  * `fusionkit` Python engine into the local `uv` cache so the first real run
  * doesn't pay the cold-start cost, and prints the per-platform capability
  * summary (cloud everywhere; local MLX on Apple Silicon only). It is the
- * companion to `fusionkit doctor` (which checks prerequisites without changing
- * anything) and `fusionkit doctor --provision` (doctor + this warm step).
+ * companion to `fusionkit doctor`, which checks prerequisites without changing
+ * anything.
  */
 import type { Command } from "commander";
 

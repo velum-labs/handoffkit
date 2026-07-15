@@ -24,7 +24,6 @@ fusionkit init
 Inspect the effective configuration and a dry-run preview any time:
 
 ```bash
-fusionkit status
 fusionkit config show
 ```
 
@@ -118,7 +117,7 @@ fusionkit config unset budgetUsd
 fusionkit config edit
 fusionkit ensemble list
 fusionkit ensemble add fast --model kimi=openrouter:moonshotai/kimi-k2-thinking
-fusionkit ensemble use fast
+fusionkit config set defaultEnsemble fast
 ```
 
 ## Export router YAML

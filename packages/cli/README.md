@@ -65,7 +65,7 @@ defaults) plus editable system-prompt overrides in `.fusionkit/prompts/*.md`, so
 the whole team can just run `fusionkit codex`. Only env-var *names* for keys are
 stored, never secrets. Explicit CLI flags always override the folder. A legacy
 `fusionkit.json` is auto-migrated on first run. Inspect the effective config and
-a dry-run preview with `fusionkit status`.
+a dry-run preview with `fusionkit config show`.
 
 ## Local checkout development
 
@@ -95,14 +95,12 @@ working directory, and does not replace the normal `fusionkit` binary. Set
 
 - `fusionkit codex | claude | cursor` — launch that agent backed by the panel.
 - `fusionkit serve` — just run the gateway and print setup snippets for any tool.
-- `fusionkit fusion [tool]` — the generic launcher (interactive picker on a TTY).
-- `fusionkit stop` — reap portless singleton services (router, dashboard) left running by prior runs (`fusionkit fusion stop` does the same).
+- `fusionkit stop` — stop all background fusion services, including the subscription proxy.
 - `fusionkit proxy <serve|add|status|stop>` — long-lived Claude Code / Codex subscription pooling proxy.
 - `fusionkit init` — scaffold the committed `.fusionkit/` folder for this repo.
 - `fusionkit setup` — pre-provision the Python fusion engine so the first run is instant.
-- `fusionkit doctor` — check prerequisites with fix hints (`--provision` warms the engine too).
-- `fusionkit status` — show the effective config and what a run will do.
-- `fusionkit config show | path | export-yaml` — inspect the one config source of truth.
+- `fusionkit doctor` — check prerequisites with fix hints.
+- `fusionkit config show | path | export-yaml` — inspect the one config source of truth (`show` includes what a run will do).
 - `fusionkit sessions [show|rm]` — list, inspect, and remove durable gateway sessions (`--resume` / `--continue` rehydrate them).
 - `fusionkit models list | download | rm` — manage the local MLX model cache.
 - `fusionkit <tool> --direct` — back an agent with one local model, bypassing the panel, judge, and synthesis.
@@ -151,11 +149,10 @@ Each coding tool is its own workspace package implementing a single
      injects `spawnTool`, portless, teardown, etc. via the context; tool packages
      never import the CLI).
    - `modes` — `"fusion"`, `"local"`, or both.
-   - `createHarness` + `harnessKinds` — optional, only if the tool also runs as
-     an ensemble harness in the gateway/e2e matrix.
+   - `createHarness` + `harnessKinds` — optional, for internal harness testing.
 3. Register it in [`packages/cli/src/tools.ts`](src/tools.ts) by adding it to the
    `createToolRegistry([...])` list.
 
 That single registry entry wires the tool into the `fusionkit <tool>` launcher
-(including `--direct`), the interactive picker, preflight, and (when it has a
-harness) the ensemble gateway — no other switch statements to update.
+(including `--direct`), the interactive picker, and preflight — no other switch
+statements to update.

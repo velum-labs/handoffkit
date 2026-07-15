@@ -73,12 +73,18 @@ function runShow(opts: ConfigOpts, ctx: CommandContext): number {
   const { root, inRepo } = repoRootFor(opts);
   const config = loadConfigOrFail(root, ctx.presenter);
   const effective = resolveEffectiveConfig(config);
+  const spawnsCloud = effective.panel.value.some((spec) => (spec.provider ?? "mlx") !== "mlx");
 
   if (ctx.json) {
     ctx.emit({
       source: config !== undefined ? fusionConfigPath(root) : null,
       repo: root,
-      effective
+      effective,
+      runPlan: {
+        modelServers: effective.panel.value.length,
+        tool: effective.tool.value,
+        spawnsCloud
+      }
     });
     return 0;
   }
@@ -162,6 +168,17 @@ function runShow(opts: ConfigOpts, ctx: CommandContext): number {
       );
       for (const spec of ensemble.panel) presenter.line(`      ${glyph.bullet()} ${panelLabel(spec)}`);
     }
+  }
+
+  // The dry-run preview: what launching the default ensemble will actually do.
+  presenter.blank();
+  presenter.line(
+    dim(
+      `a run will: spawn ${effective.panel.value.length} model server(s), a synthesizer, and the gateway, then launch ${effective.tool.value}.`
+    )
+  );
+  if (spawnsCloud) {
+    presenter.warn("cloud panel: each prompt fans out across the panel + judge (provider usage applies).");
   }
 
   presenter.blank();
@@ -346,7 +363,7 @@ const ON_OFF_OPTIONS = [
   { value: "off", label: "off" }
 ] as const;
 
-async function promptConfigValue(address: ConfigPath): Promise<string> {
+async function promptConfigValue(address: ConfigPath, config: FusionConfig | undefined): Promise<string> {
   if (address.kind === "top") {
     switch (address.key) {
       case "local":
@@ -388,8 +405,15 @@ async function promptConfigValue(address: ConfigPath): Promise<string> {
         return text({ message: "gateway port", placeholder: "e.g. 8787" });
       case "budgetUsd":
         return text({ message: "budget (USD)", placeholder: "e.g. 5" });
-      case "defaultEnsemble":
-        return text({ message: "default ensemble name" });
+      case "defaultEnsemble": {
+        const names = Object.keys(config?.ensembles ?? {});
+        if (names.length === 0) return text({ message: "default ensemble name" });
+        return select<string>({
+          message: "session-default ensemble",
+          options: names.map((name) => ({ value: name, label: name })),
+          defaultIndex: 0
+        });
+      }
       default: {
         const exhaustive: never = address;
         throw new Error(`unknown top-level config key: ${String(exhaustive)}`);
@@ -509,7 +533,7 @@ export function registerConfig(program: Command): void {
 
   config
     .command("show")
-    .description("show the effective merged config and where each value came from")
+    .description("show the effective config, provenance, and run plan")
     .option("--repo <dir>", "repo whose .fusionkit/ to read (default: cwd's git root)")
     .option("--json", "emit machine-readable JSON (includes provenance)")
     .action((opts: ConfigOpts, command: Command) => {
@@ -548,13 +572,14 @@ export function registerConfig(program: Command): void {
     .action(async (path: string | undefined, value: string | undefined, opts: ConfigOpts, command: Command) => {
       const ctx = contextFor(command);
       const { root } = repoRootFor(opts);
-      const resolvedPath = await pathArgOrPick(path, loadConfigOrFail(root, ctx.presenter), "set");
+      const config = loadConfigOrFail(root, ctx.presenter);
+      const resolvedPath = await pathArgOrPick(path, config, "set");
       let resolvedValue = value;
       if (resolvedValue === undefined) {
         if (!canPickInteractively()) {
           fail(`missing value for ${resolvedPath} — pass it as the second argument`);
         }
-        resolvedValue = await promptConfigValue(parseConfigPath(resolvedPath));
+        resolvedValue = await promptConfigValue(parseConfigPath(resolvedPath), config);
       }
       process.exitCode = runSet(resolvedPath, resolvedValue, opts, ctx);
     });
