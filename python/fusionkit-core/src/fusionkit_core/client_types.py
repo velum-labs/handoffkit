@@ -8,6 +8,23 @@ from fusionkit_core.types import ChatMessage, ModelResponse, StreamChunk
 
 ToolDefinition = Mapping[str, Any]
 ToolChoice = str | Mapping[str, Any]
+_OPENROUTER_REQUEST_FIELDS = frozenset({"provider", "reasoning", "usage"})
+
+
+def reject_openrouter_request_fields(
+    extra: Mapping[str, Any] | None,
+    *,
+    provider: str,
+    model_id: str,
+) -> None:
+    """Reject OpenRouter-only controls before another SDK can drop them."""
+
+    unsupported = sorted(_OPENROUTER_REQUEST_FIELDS.intersection(extra or {}))
+    if unsupported:
+        raise ValueError(
+            f"{provider} endpoint {model_id!r} does not support OpenRouter "
+            f"request fields: {', '.join(unsupported)}"
+        )
 
 @runtime_checkable
 class ChatClient(Protocol):

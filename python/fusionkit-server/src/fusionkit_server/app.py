@@ -6,7 +6,7 @@ import os
 import time
 import traceback
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Mapping
 from contextlib import asynccontextmanager
 from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as distribution_version
@@ -36,7 +36,7 @@ from fusionkit_core.contracts import (
     contract_metadata,
 )
 from fusionkit_core.fusion import FusionEngine
-from fusionkit_core.judge import FuseResult, sum_usages
+from fusionkit_core.judge import FuseResult
 from fusionkit_core.kernel import FusionKernel
 from fusionkit_core.producers import PanelExhaustedError, trajectory_from_contract
 from fusionkit_core.registry import (
@@ -68,9 +68,10 @@ from fusionkit_core.types import (
     PanelMode,
     ProviderCost,
     StreamChunk,
+    Trajectory,
     Usage,
 )
-from pydantic import BaseModel, Field, ValidationError, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from fusionkit_server.cursor_endpoint import translate_cursor_request
 
@@ -89,6 +90,7 @@ class FusionOptions(BaseModel):
     mode: FusionMode | None = None
     panel_models: list[str] | None = Field(default=None, min_length=1)
     sample_count: int | None = Field(default=None, ge=1)
+    include_evidence: bool = False
     tool_execution: FusionToolExecutionOptions = Field(
         default_factory=FusionToolExecutionOptions
     )
@@ -103,6 +105,8 @@ class FusionOptions(BaseModel):
 
 
 class FusionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     model: str = FUSION_DEFAULT_ALIAS
     messages: list[ChatMessage] = Field(min_length=1)
     temperature: float | None = Field(default=None, ge=0, le=2)
@@ -111,6 +115,12 @@ class FusionRequest(BaseModel):
     # OpenAI's modern spelling of `max_tokens` (required by reasoning models);
     # the Node gateway adapters emit it. Folded into `max_tokens` below.
     max_completion_tokens: int | None = Field(default=None, ge=1)
+    # OpenRouter request extensions used by scientific runs. They are
+    # forwarded to every configured OpenRouter stage and rejected by clients
+    # that cannot honor them.
+    reasoning: dict[str, Any] | None = None
+    provider: dict[str, Any] | None = None
+    usage: dict[str, Any] | None = None
     stream: bool = False
     # Forwarded only on the per-model passthrough path (when `model` names a
     # configured endpoint); the fusion path ignores them.
@@ -120,6 +130,14 @@ class FusionRequest(BaseModel):
 
     @model_validator(mode="after")
     def _fold_max_completion_tokens(self) -> FusionRequest:
+        if (
+            self.max_tokens is not None
+            and self.max_completion_tokens is not None
+            and self.max_tokens != self.max_completion_tokens
+        ):
+            raise ValueError(
+                "max_tokens and max_completion_tokens must match when both are supplied"
+            )
         if self.max_tokens is None and self.max_completion_tokens is not None:
             self.max_tokens = self.max_completion_tokens
         return self
@@ -177,6 +195,10 @@ class FuseTrajectoriesRequest(BaseModel):
     # tool-call batch verbatim or answers in text. Absent = "trajectory"
     # (today's behavior), so older gateways keep working unchanged.
     panel_mode: PanelMode = "trajectory"
+    include_evidence: bool = False
+    reasoning: dict[str, Any] | None = None
+    provider: dict[str, Any] | None = None
+    usage: dict[str, Any] | None = None
     stream: bool = False
 
     @model_validator(mode="after")
@@ -354,9 +376,14 @@ def create_app(
                 tools=_normalize_tools(request.tools),
                 tool_choice=_normalize_tool_choice(request.tool_choice),
                 trace=trace,
+                request_extra=_request_extra(request),
             )
             return StreamingResponse(
-                _fused_completion_sse(request.model, stream),
+                _fused_completion_sse(
+                    request.model,
+                    stream,
+                    include_evidence=request.fusion.include_evidence,
+                ),
                 media_type="text/event-stream",
             )
         # Tool calling through the ensemble: when the caller passes `tools`, the
@@ -366,6 +393,12 @@ def create_app(
         if request.tools:
             return await _fusion_tool_step(kernel, config, request, trace=trace)
         if record_run:
+            if _request_extra(request) is not None:
+                return _openai_error_response(
+                    "unsupported_recorded_request_controls",
+                    "Recorded runs do not yet support provider-specific request controls.",
+                    status_code=400,
+                )
             resolved = await _resolve_native_chat(kernel, request, config)
             if isinstance(resolved, JSONResponse):
                 return resolved
@@ -476,6 +509,7 @@ def create_app(
         messages = request.messages
         tools = _normalize_tools(request.tools)
         tool_choice = _normalize_tool_choice(request.tool_choice)
+        request_extra = _request_extra(request)
         trace = context_from_headers(dict(http_request.headers))
         # Real streaming: the synthesizer turn streams tokens; the fused
         # trajectory metadata rides on the terminal SSE chunk.
@@ -491,9 +525,15 @@ def create_app(
                 prompts=request.prompts,
                 panel_mode=request.panel_mode,
                 trace=trace,
+                request_extra=request_extra,
             )
             return StreamingResponse(
-                _fused_completion_sse(request.model, stream),
+                _fused_completion_sse(
+                    request.model,
+                    stream,
+                    include_evidence=request.include_evidence,
+                    include_panel_accounting=False,
+                ),
                 media_type="text/event-stream",
             )
         try:
@@ -508,6 +548,7 @@ def create_app(
                 prompts=request.prompts,
                 panel_mode=request.panel_mode,
                 trace=trace,
+                request_extra=request_extra,
             )
         except ProviderCallError as exc:
             return _provider_error_response(exc)
@@ -521,8 +562,8 @@ def create_app(
         return _openai_step_response(
             request.model,
             result.response,
-            _fusion_extension(result),
-            usage=_fuse_step_usage(result),
+            _fusion_extension(result, include_evidence=request.include_evidence),
+            usage=result.turn_usage(),
             provider_cost=result.turn_provider_cost(),
         )
 
@@ -560,6 +601,7 @@ async def _passthrough_chat(
             sampling,
             tools=tools,
             tool_choice=tool_choice,
+            request_extra=_request_extra(request),
         )
         return StreamingResponse(
             _fused_completion_sse(request.model, stream),
@@ -572,6 +614,7 @@ async def _passthrough_chat(
             sampling,
             tools=tools,
             tool_choice=tool_choice,
+            request_extra=_request_extra(request),
         )
     except ProviderCallError as exc:
         return _provider_error_response(exc)
@@ -601,6 +644,7 @@ async def _lightweight_fusion_chat(
             panel_models=request.fusion.panel_models,
             sample_count=request.fusion.sample_count,
             trace=trace,
+            request_extra=_request_extra(request),
         )
     except ProviderCallError as exc:
         return _provider_error_response(exc)
@@ -619,9 +663,9 @@ async def _lightweight_fusion_chat(
     return _openai_step_response(
         request.model,
         result.response,
-        _fusion_extension(result),
+        _fusion_extension(result, include_evidence=request.fusion.include_evidence),
         usage=_fuse_step_usage(result),
-        provider_cost=result.turn_provider_cost(),
+        provider_cost=result.compound_provider_cost(),
         fusionkit=_lightweight_fusion_metadata(result),
     )
 
@@ -651,6 +695,7 @@ async def _fusion_tool_step(
             tools=_normalize_tools(request.tools),
             tool_choice=_normalize_tool_choice(request.tool_choice),
             trace=trace,
+            request_extra=_request_extra(request),
         )
     except ProviderCallError as exc:
         return _provider_error_response(exc)
@@ -671,9 +716,9 @@ async def _fusion_tool_step(
     return _openai_step_response(
         request.model,
         result.response,
-        _fusion_extension(result),
+        _fusion_extension(result, include_evidence=request.fusion.include_evidence),
         usage=_fuse_step_usage(result),
-        provider_cost=result.turn_provider_cost(),
+        provider_cost=result.compound_provider_cost(),
     )
 
 
@@ -689,6 +734,23 @@ def _request_sampling(config: FusionConfig, request: FusionRequest) -> SamplingC
             if value is not None
         }
     )
+
+
+def _request_extra(
+    request: FusionRequest | FuseTrajectoriesRequest,
+) -> dict[str, object] | None:
+    """Provider-specific controls that must survive every model-call stage."""
+
+    extra = {
+        key: value
+        for key, value in {
+            "provider": request.provider,
+            "reasoning": request.reasoning,
+            "usage": request.usage,
+        }.items()
+        if value is not None
+    }
+    return extra or None
 
 
 def _passthrough_sampling(config: FusionConfig, request: FusionRequest) -> SamplingConfig:
@@ -737,6 +799,9 @@ async def _resolve_native_chat(
 async def _fused_completion_sse(
     model: str,
     stream: AsyncIterator[StreamChunk | FuseResult],
+    *,
+    include_evidence: bool = False,
+    include_panel_accounting: bool = True,
 ) -> AsyncIterator[str]:
     """Emit OpenAI ``chat.completion.chunk`` SSE from a fused/passthrough stream.
 
@@ -806,7 +871,10 @@ async def _fused_completion_sse(
     )
     extra: dict[str, Any] = {}
     if final_result is not None:
-        fusion_extension = _fusion_extension(final_result)
+        fusion_extension = _fusion_extension(
+            final_result,
+            include_evidence=include_evidence,
+        )
         if fusion_extension is not None:
             extra["fusion"] = fusion_extension
     # Carry the fuse step's token usage (judge + synthesizer combined) on the
@@ -814,8 +882,17 @@ async def _fused_completion_sse(
     # which reads `usage` off the SSE tail) can account a fused stream's cost —
     # mirroring the non-streaming `_openai_step_response` body.
     if final_result is not None:
-        extra["usage"] = _usage_payload(_fuse_step_usage(final_result))
-        step_cost = final_result.turn_provider_cost()
+        response_usage = (
+            final_result.compound_usage()
+            if include_panel_accounting
+            else final_result.turn_usage()
+        )
+        extra["usage"] = _usage_payload(response_usage)
+        step_cost = (
+            final_result.compound_provider_cost()
+            if include_panel_accounting
+            else final_result.turn_provider_cost()
+        )
         if step_cost is not None:
             extra["provider_cost"] = step_cost.model_dump(mode="json", exclude_none=True)
     elif response is not None:
@@ -1094,11 +1171,7 @@ def _tool_calls_payload(response: ModelResponse) -> list[dict[str, Any]]:
 
 
 def _fuse_step_usage(result: FuseResult) -> Usage:
-    usages: list[Usage] = []
-    if result.panel_usage is not None:
-        usages.append(result.panel_usage)
-    usages.append(result.turn_usage())
-    return sum_usages(usages)
+    return result.compound_usage()
 
 
 def _usage_payload(usage: Usage) -> dict[str, Any]:
@@ -1109,7 +1182,58 @@ def _usage_payload(usage: Usage) -> dict[str, Any]:
     }
 
 
-def _fusion_extension(result: FuseResult) -> dict[str, Any] | None:
+def _trajectory_evidence_payload(trajectory: Trajectory) -> dict[str, Any]:
+    metadata_keys = (
+        "latency_s",
+        "usage",
+        "finish_reason",
+        "temperature",
+        "seed",
+        "generation_status",
+        "error_code",
+        "error_category",
+        "provider",
+        "status_code",
+    )
+    metadata = {
+        key: trajectory.metadata[key]
+        for key in metadata_keys
+        if key in trajectory.metadata
+    }
+    raw_cost = trajectory.metadata.get("provider_cost")
+    if isinstance(raw_cost, Mapping):
+        metadata["provider_cost"] = {
+            key: value
+            for key, value in raw_cost.items()
+            if key != "raw"
+        }
+    raw_response = trajectory.metadata.get("raw_response")
+    if isinstance(raw_response, Mapping):
+        response_identity = {
+            key: raw_response[key]
+            for key in ("id", "model", "provider")
+            if key in raw_response
+        }
+        if response_identity:
+            metadata["response"] = response_identity
+    return {
+        "trajectory_id": trajectory.id,
+        "model_id": trajectory.model_id,
+        "status": trajectory.status,
+        "items": [
+            item.model_dump(mode="json", exclude_none=True)
+            for item in trajectory.items
+        ],
+        "final_output": trajectory.content,
+        "metadata": metadata,
+    }
+
+
+def _fusion_extension(
+    result: FuseResult,
+    *,
+    include_evidence: bool = False,
+) -> dict[str, Any] | None:
     """The ``fusion`` extension carried on a fuse response.
 
     On the terminal step the fused output is a trajectory whose ``synthesis``
@@ -1118,14 +1242,14 @@ def _fusion_extension(result: FuseResult) -> dict[str, Any] | None:
     will execute) carries the judge's ``best_trajectory`` instead, so the
     gateway can attribute the adopted proposal between rounds (narration's
     "last round the judge picked X" opener)."""
+    extension: dict[str, Any] = {}
     trajectory = result.trajectory
     if not result.terminal or trajectory is None:
         best = result.analysis.best_trajectory if result.analysis is not None else None
         if best:
-            return {"analysis": {"best_trajectory": best}}
-        return None
-    return {
-        "trajectory": {
+            extension["analysis"] = {"best_trajectory": best}
+    else:
+        extension["trajectory"] = {
             "trajectory_id": trajectory.id,
             "model_id": trajectory.model_id,
             "status": trajectory.status,
@@ -1136,7 +1260,13 @@ def _fusion_extension(result: FuseResult) -> dict[str, Any] | None:
                 else None
             ),
         }
-    }
+    if include_evidence:
+        extension["evidence_schema"] = "fusionkit.input-trajectories.v1"
+        extension["input_trajectories"] = [
+            _trajectory_evidence_payload(candidate)
+            for candidate in result.input_trajectories
+        ]
+    return extension or None
 
 
 def _openai_step_response(

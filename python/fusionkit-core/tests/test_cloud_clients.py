@@ -133,6 +133,60 @@ def test_openrouter_kimi_reasoning_can_be_overridden() -> None:
     assert payload["extra_body"]["reasoning"] == {"effort": "high"}
 
 
+def test_openrouter_payload_forwards_scientific_request_controls() -> None:
+    client = OpenAICompatibleClient(_endpoint("openrouter"))
+    payload = client._payload(
+        [ChatMessage(role="user", content="hi")],
+        SamplingConfig(),
+        None,
+        None,
+        {
+            "provider": {"order": ["FirstParty"], "allow_fallbacks": False},
+            "reasoning": {"effort": "high"},
+            "usage": {"include": True},
+        },
+    )
+
+    assert payload["extra_body"] == {
+        "provider": {"order": ["FirstParty"], "allow_fallbacks": False},
+        "reasoning": {"effort": "high"},
+        "usage": {"include": True},
+    }
+
+
+def test_non_openrouter_clients_reject_openrouter_request_controls() -> None:
+    controls = {"provider": {"allow_fallbacks": False}}
+    messages = [ChatMessage(role="user", content="hi")]
+
+    openai = OpenAICompatibleClient(_endpoint("openai"))
+    with pytest.raises(ValueError, match="does not support OpenRouter"):
+        openai._payload(
+            messages,
+            SamplingConfig(),
+            None,
+            None,
+            {"extra_body": controls},
+        )
+
+    anthropic = AnthropicModelClient(_endpoint("anthropic"))
+    with pytest.raises(ValueError, match="does not support OpenRouter"):
+        anthropic._kwargs(messages, SamplingConfig(), None, None, controls)
+
+    google = GoogleModelClient(_endpoint("google"))
+    with pytest.raises(ValueError, match="does not support OpenRouter"):
+        google._request(messages, SamplingConfig(), None, None, controls)
+
+    codex = CodexResponsesClient(_endpoint("codex"))
+    with pytest.raises(ValueError, match="does not support OpenRouter"):
+        codex._request_kwargs(messages, None, None, controls)
+
+
+def test_provider_sdks_do_not_retry_beneath_fusionkit() -> None:
+    assert OpenAICompatibleClient(_endpoint("openrouter"))._client.max_retries == 0
+    assert AnthropicModelClient(_endpoint("anthropic"))._client.max_retries == 0
+    assert CodexResponsesClient(_endpoint("codex"))._client.max_retries == 0
+
+
 # --- message + tool translation --------------------------------------------
 
 

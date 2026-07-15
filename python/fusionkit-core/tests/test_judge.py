@@ -12,6 +12,7 @@ from fusionkit_core.judge import (
     JudgeSynthesizer,
     analysis_reasoning_markdown,
     parse_analysis,
+    provider_costs_from_trajectories,
 )
 from fusionkit_core.types import (
     ChatMessage,
@@ -41,6 +42,56 @@ def _trajectory(trajectory_id: str, model_id: str, final_output: str) -> Traject
             TrajectoryItem(index=2, type="message", text=final_output),
         ],
     )
+
+
+def test_fuse_result_separates_stage_and_compound_costs() -> None:
+    result = FuseResult(
+        response=ModelResponse(
+            model_id="synth",
+            content="answer",
+            usage=Usage(prompt_tokens=4, completion_tokens=5),
+            provider_cost=ProviderCost(
+                cost_usd=0.3,
+                tokens_prompt=4,
+                tokens_completion=5,
+            ),
+        ),
+        terminal=True,
+        analysis=FusionAnalysis(),
+        synthesizer_called=True,
+        judge_response=ModelResponse(
+            model_id="judge",
+            content="{}",
+            usage=Usage(prompt_tokens=2, completion_tokens=3),
+            provider_cost=ProviderCost(cost_usd=0.2),
+        ),
+        panel_usage=Usage(prompt_tokens=1, completion_tokens=2),
+        panel_provider_costs=[
+            ProviderCost(
+                cost_usd=1.0,
+                tokens_prompt=1,
+                tokens_completion=2,
+            )
+        ],
+    )
+
+    stage_cost = result.turn_provider_cost()
+    compound_cost = result.compound_provider_cost()
+    assert stage_cost is not None
+    assert compound_cost is not None
+    assert stage_cost.cost_usd == 0.5
+    assert compound_cost.cost_usd == 1.5
+    assert stage_cost.tokens_prompt == 4
+    assert stage_cost.lookup_status == "complete"
+    assert result.turn_usage().total_tokens == 14
+    assert result.compound_usage().total_tokens == 17
+
+
+def test_malformed_trajectory_provider_cost_does_not_destroy_fuse_evidence() -> None:
+    trajectory = _trajectory("candidate", "member", "answer")
+    trajectory.metadata["provider_cost"] = {"cost_usd": "not-a-number"}
+
+    assert provider_costs_from_trajectories([trajectory]) == []
 
 
 @pytest.mark.asyncio

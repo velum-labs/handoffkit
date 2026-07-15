@@ -8,7 +8,7 @@ from collections.abc import AsyncIterator, Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from fusionkit_core.clients import ChatClient, ProviderCallError
 from fusionkit_core.config import ContextPolicy, FusionConfig, PromptOverrides, SamplingConfig
@@ -53,6 +53,7 @@ from fusionkit_core.types import (
 )
 
 _TOOL_CALL_LOGGER = logging.getLogger("fusionkit.tool_calls")
+_COST_LOGGER = logging.getLogger("fusionkit.provider_cost")
 
 
 def warn_malformed_tool_calls(tool_calls: Sequence[ToolCall], *, source: str) -> None:
@@ -77,6 +78,64 @@ def warn_malformed_tool_calls(tool_calls: Sequence[ToolCall], *, source: str) ->
                 exc,
                 call.arguments[:120],
             )
+
+
+def _sum_provider_costs(costs: Sequence[ProviderCost]) -> ProviderCost | None:
+    if not costs:
+        return None
+    if len(costs) == 1:
+        # Preserve provider attribution (generation id, route, native token
+        # counts, lookup status) when there is nothing to aggregate.
+        return costs[0].model_copy(deep=True)
+    known_costs = [cost.cost_usd for cost in costs if cost.cost_usd is not None]
+    known_prompt_tokens = [
+        cost.tokens_prompt for cost in costs if cost.tokens_prompt is not None
+    ]
+    known_completion_tokens = [
+        cost.tokens_completion for cost in costs if cost.tokens_completion is not None
+    ]
+    return ProviderCost(
+        source=(
+            "provider"
+            if all(cost.source == "provider" for cost in costs)
+            else "estimate"
+        ),
+        cost_usd=sum(known_costs) if known_costs else None,
+        lookup_status=(
+            "complete"
+            if len(known_costs) == len(costs)
+            else "partial"
+        ),
+        tokens_prompt=sum(known_prompt_tokens) if known_prompt_tokens else None,
+        tokens_completion=(
+            sum(known_completion_tokens) if known_completion_tokens else None
+        ),
+        raw={
+            "components": [
+                cost.model_dump(mode="json", exclude_none=True) for cost in costs
+            ]
+        },
+    )
+
+
+def provider_costs_from_trajectories(
+    trajectories: Sequence[Trajectory],
+) -> list[ProviderCost]:
+    """Recover provider costs retained on generated trajectory metadata."""
+
+    costs: list[ProviderCost] = []
+    for trajectory in trajectories:
+        raw_cost = trajectory.metadata.get("provider_cost")
+        if not isinstance(raw_cost, Mapping):
+            continue
+        try:
+            costs.append(ProviderCost.model_validate(raw_cost))
+        except ValueError:
+            _COST_LOGGER.warning(
+                "ignoring malformed provider cost on trajectory %s",
+                trajectory.id,
+            )
+    return costs
 
 
 class FuseResult(BaseModel):
@@ -111,6 +170,11 @@ class FuseResult(BaseModel):
     panel_usage: Usage | None = None
     #: Number of candidate trajectories generated in the panel/self step.
     panel_trajectory_count: int = 0
+    #: Complete candidate evidence used by this step. The server's fusion
+    #: extension persists it so benchmark artifacts can explain selection.
+    input_trajectories: list[Trajectory] = Field(default_factory=list)
+    #: Provider costs attached to panel members, separate from judge/synth.
+    panel_provider_costs: list[ProviderCost] = Field(default_factory=list)
 
     def turn_usage(self) -> Usage:
         """Combined token usage of this fuse step (judge + synthesizer)."""
@@ -119,15 +183,32 @@ class FuseResult(BaseModel):
         )
         return sum_usages([response.usage for response in responses])
 
-    def turn_provider_cost(self) -> ProviderCost | None:
-        """Provider-reported cost for the step: the synthesizer's, else the judge's.
+    def compound_usage(self) -> Usage:
+        """Combined panel, judge, and synthesizer usage."""
 
-        A verbatim-select step has no synthesizer call, so the judge's cost is
-        the whole step's provider spend.
-        """
-        if self.response.provider_cost is not None:
-            return self.response.provider_cost
-        return self.judge_response.provider_cost if self.judge_response is not None else None
+        usages = [self.turn_usage()]
+        if self.panel_usage is not None:
+            usages.insert(0, self.panel_usage)
+        return sum_usages(usages)
+
+    def turn_provider_cost(self) -> ProviderCost | None:
+        """Combined judge and synthesizer cost for the fuse stage."""
+
+        costs: list[ProviderCost] = []
+        if self.judge_response is not None and self.judge_response.provider_cost is not None:
+            costs.append(self.judge_response.provider_cost)
+        if self.synthesizer_called and self.response.provider_cost is not None:
+            costs.append(self.response.provider_cost)
+        return _sum_provider_costs(costs)
+
+    def compound_provider_cost(self) -> ProviderCost | None:
+        """Combined panel, judge, and synthesizer provider cost."""
+
+        costs = [*self.panel_provider_costs]
+        turn_cost = self.turn_provider_cost()
+        if turn_cost is not None:
+            costs.append(turn_cost)
+        return _sum_provider_costs(costs)
 
 
 # Rough token cost of the fixed prompt scaffolding (section headers, labels)
@@ -291,6 +372,7 @@ class JudgeSynthesizer:
         analysis: FusionAnalysis | None = None,
         trace: TraceContext | None = None,
         after_judge: Callable[[ModelResponse | None], None] | None = None,
+        request_extra: Mapping[str, object] | None = None,
     ) -> FuseResult:
         """One fusion step: produce the next step, or the final answer.
 
@@ -334,6 +416,7 @@ class JudgeSynthesizer:
                 tools=tools,
                 analysis=analysis,
                 trace=step_ctx,
+                request_extra=request_extra,
             )
             resolved_analysis = prepared.analysis
             if after_judge is not None:
@@ -356,6 +439,7 @@ class JudgeSynthesizer:
                         sampling,
                         tools=tools,
                         tool_choice=tool_choice,
+                        extra=request_extra,
                     )
                     synthesizer_called = True
                 except ProviderCallError as exc:
@@ -370,6 +454,7 @@ class JudgeSynthesizer:
                             sampling,
                             tools=tools,
                             tool_choice=tool_choice,
+                            extra=request_extra,
                         )
                         synthesizer_called = True
                         prepared.diagnostics.synth_fallback = "reduced_evidence_retry"
@@ -415,6 +500,7 @@ class JudgeSynthesizer:
         tool_choice: str | Mapping[str, Any] | None = None,
         analysis: FusionAnalysis | None = None,
         trace: TraceContext | None = None,
+        request_extra: Mapping[str, object] | None = None,
     ) -> AsyncIterator[StreamChunk | FuseResult]:
         """Streaming counterpart of :meth:`fuse`: the synthesizer turn streams.
 
@@ -442,6 +528,7 @@ class JudgeSynthesizer:
                 tools=tools,
                 analysis=analysis,
                 trace=step_ctx,
+                request_extra=request_extra,
             )
         except Exception as exc:
             _end_fuse_span(fuse_span_handle, error=str(exc))
@@ -490,6 +577,7 @@ class JudgeSynthesizer:
                     sampling,
                     tools=tools,
                     tool_choice=tool_choice,
+                    extra=request_extra,
                 ):
                     accumulator.add(chunk)
                     yield chunk
@@ -568,6 +656,7 @@ class JudgeSynthesizer:
         tools: Sequence[Mapping[str, Any]] | None,
         analysis: FusionAnalysis | None,
         trace: TraceContext | None,
+        request_extra: Mapping[str, object] | None,
     ) -> _PreparedTurn:
         """Build the synthesizer conversation (judge analysis + system + history).
 
@@ -589,6 +678,7 @@ class JudgeSynthesizer:
                 judge_sampling=sampling.model_copy(update={"temperature": 0.0}),
                 trace=trace,
                 diagnostics=diagnostics,
+                request_extra=request_extra,
             )
         if resolved_analysis is None:
             resolved_analysis = FusionAnalysis()
@@ -743,6 +833,8 @@ class JudgeSynthesizer:
             synthesizer_called=synthesizer_called,
             panel_usage=panel_usage_from_trajectories(trajectories),
             panel_trajectory_count=len(trajectories),
+            input_trajectories=list(trajectories),
+            panel_provider_costs=provider_costs_from_trajectories(trajectories),
         )
 
     async def analyze(
@@ -754,6 +846,7 @@ class JudgeSynthesizer:
         judge_sampling: SamplingConfig,
         trace: TraceContext | None = None,
         diagnostics: _TurnDiagnostics | None = None,
+        request_extra: Mapping[str, object] | None = None,
     ) -> FusionAnalysis:
         """The judge's gap analysis, packed to its budget and degrade-not-fail.
 
@@ -776,6 +869,7 @@ class JudgeSynthesizer:
         )
         evidence_budget = budget.evidence_tokens(overhead)
         response_format = _judge_response_format(judge_client)
+        judge_extra = {**(request_extra or {}), **(response_format or {})}
 
         async def call(budget_tokens: int) -> ModelResponse:
             packed, report = pack_trajectories(
@@ -792,7 +886,7 @@ class JudgeSynthesizer:
                     ),
                 ],
                 judge_sampling,
-                extra=response_format,
+                extra=judge_extra or None,
             )
 
         try:
@@ -1387,6 +1481,7 @@ __all__ = [
     "accumulate_tool_call",
     "parse_analysis",
     "panel_usage_from_trajectories",
+    "provider_costs_from_trajectories",
     "sum_usages",
     "warn_malformed_tool_calls",
 ]

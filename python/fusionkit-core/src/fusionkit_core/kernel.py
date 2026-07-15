@@ -1,12 +1,18 @@
 from __future__ import annotations
 
-from collections.abc import AsyncIterator, Sequence
+from collections.abc import AsyncIterator, Mapping, Sequence
 
 from fusionkit_core.clients import ChatClient, ToolChoice, ToolDefinition
 from fusionkit_core.config import FusionConfig, FusionMode, PromptOverrides, SamplingConfig
 from fusionkit_core.contracts import FusionRunRequestV1
 from fusionkit_core.fusion import FusionEngine
-from fusionkit_core.judge import FuseResult, JudgeSynthesizer, judge_synthesizer_for
+from fusionkit_core.judge import (
+    FuseResult,
+    JudgeSynthesizer,
+    judge_synthesizer_for,
+    panel_usage_from_trajectories,
+    provider_costs_from_trajectories,
+)
 from fusionkit_core.run import CreateRunResult, FusionRunManager, NativeRunError
 from fusionkit_core.run_models import (
     RunEventPage,
@@ -54,6 +60,7 @@ class FusionKernel:
         sampling: SamplingConfig | None = None,
         panel_models: Sequence[str] | None = None,
         sample_count: int | None = None,
+        request_extra: Mapping[str, object] | None = None,
     ):
         return await self._engine.run(
             messages,
@@ -61,6 +68,7 @@ class FusionKernel:
             sampling=sampling,
             panel_models=panel_models,
             sample_count=sample_count,
+            request_extra=request_extra,
         )
 
     async def create_and_run(
@@ -96,6 +104,7 @@ class FusionKernel:
         tools: Sequence[ToolDefinition] | None = None,
         tool_choice: ToolChoice | None = None,
         trace: TraceContext | None = None,
+        request_extra: Mapping[str, object] | None = None,
     ) -> FuseResult:
         return await self._engine.run_step(
             messages,
@@ -106,6 +115,7 @@ class FusionKernel:
             tools=tools,
             tool_choice=tool_choice,
             trace=trace,
+            request_extra=request_extra,
         )
 
     def run_stream(
@@ -119,6 +129,7 @@ class FusionKernel:
         tools: Sequence[ToolDefinition] | None = None,
         tool_choice: ToolChoice | None = None,
         trace: TraceContext | None = None,
+        request_extra: Mapping[str, object] | None = None,
     ) -> AsyncIterator[StreamChunk | FuseResult]:
         return self._engine.run_stream(
             messages,
@@ -129,6 +140,7 @@ class FusionKernel:
             tools=tools,
             tool_choice=tool_choice,
             trace=trace,
+            request_extra=request_extra,
         )
 
     def stream_passthrough(
@@ -139,9 +151,15 @@ class FusionKernel:
         *,
         tools: Sequence[ToolDefinition] | None = None,
         tool_choice: ToolChoice | None = None,
+        request_extra: Mapping[str, object] | None = None,
     ) -> AsyncIterator[StreamChunk | FuseResult]:
         return self._engine.stream_passthrough(
-            model_id, messages, sampling, tools=tools, tool_choice=tool_choice
+            model_id,
+            messages,
+            sampling,
+            tools=tools,
+            tool_choice=tool_choice,
+            request_extra=request_extra,
         )
 
     async def passthrough_chat(
@@ -152,9 +170,14 @@ class FusionKernel:
         *,
         tools: Sequence[ToolDefinition] | None = None,
         tool_choice: ToolChoice | None = None,
+        request_extra: Mapping[str, object] | None = None,
     ) -> ModelResponse:
         return await self.client(model_id).chat(
-            messages, sampling, tools=tools, tool_choice=tool_choice
+            messages,
+            sampling,
+            tools=tools,
+            tool_choice=tool_choice,
+            extra=request_extra,
         )
 
     def _judge_synthesizer_for(
@@ -192,17 +215,21 @@ class FusionKernel:
         prompts: PromptOverrides | None = None,
         panel_mode: PanelMode = "trajectory",
         trace: TraceContext | None = None,
+        request_extra: Mapping[str, object] | None = None,
     ) -> FuseResult:
-        return await self._judge_synthesizer_for(prompts, panel_mode).fuse(
+        survivors = self._successful_trajectories(trajectories)
+        result = await self._judge_synthesizer_for(prompts, panel_mode).fuse(
             messages,
-            trajectories,
+            survivors,
             judge_client=self.client(judge_model),
             synthesizer_client=self.client(synthesizer_model),
             sampling=sampling,
             tools=tools,
             tool_choice=tool_choice,
             trace=trace,
+            request_extra=request_extra,
         )
+        return self._attach_input_trajectories(result, trajectories)
 
     def fuse_trajectories_stream(
         self,
@@ -217,14 +244,51 @@ class FusionKernel:
         prompts: PromptOverrides | None = None,
         panel_mode: PanelMode = "trajectory",
         trace: TraceContext | None = None,
+        request_extra: Mapping[str, object] | None = None,
     ) -> AsyncIterator[StreamChunk | FuseResult]:
-        return self._judge_synthesizer_for(prompts, panel_mode).fuse_stream(
+        survivors = self._successful_trajectories(trajectories)
+        stream = self._judge_synthesizer_for(prompts, panel_mode).fuse_stream(
             messages,
-            trajectories,
+            survivors,
             judge_client=self.client(judge_model),
             synthesizer_client=self.client(synthesizer_model),
             sampling=sampling,
             tools=tools,
             tool_choice=tool_choice,
             trace=trace,
+            request_extra=request_extra,
         )
+        return self._attach_input_trajectories_stream(stream, trajectories)
+
+    @staticmethod
+    def _successful_trajectories(
+        trajectories: Sequence[Trajectory],
+    ) -> list[Trajectory]:
+        survivors = [
+            trajectory for trajectory in trajectories if trajectory.status == "succeeded"
+        ]
+        if not survivors:
+            raise ValueError("at least one succeeded trajectory is required")
+        return survivors
+
+    @staticmethod
+    def _attach_input_trajectories(
+        result: FuseResult,
+        trajectories: Sequence[Trajectory],
+    ) -> FuseResult:
+        result.input_trajectories = list(trajectories)
+        result.panel_usage = panel_usage_from_trajectories(trajectories)
+        result.panel_trajectory_count = len(trajectories)
+        result.panel_provider_costs = provider_costs_from_trajectories(trajectories)
+        return result
+
+    @classmethod
+    async def _attach_input_trajectories_stream(
+        cls,
+        stream: AsyncIterator[StreamChunk | FuseResult],
+        trajectories: Sequence[Trajectory],
+    ) -> AsyncIterator[StreamChunk | FuseResult]:
+        async for item in stream:
+            if isinstance(item, FuseResult):
+                item = cls._attach_input_trajectories(item, trajectories)
+            yield item

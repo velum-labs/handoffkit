@@ -50,6 +50,9 @@ class OpenAICompatibleClient:
             api_key=resolve_api_key(endpoint),
             timeout=endpoint.timeout_s,
             default_headers=default_headers,
+            # FusionKit owns the retry ledger. SDK retries would multiply each
+            # logical attempt invisibly and can resample a stochastic treatment.
+            max_retries=0,
         )
         self._openrouter_http: httpx.AsyncClient | None = None
 
@@ -135,14 +138,28 @@ class OpenAICompatibleClient:
             payload["reasoning"] = reasoning_request
         if extra:
             payload.update(extra)
-        # `reasoning` is an OpenRouter extension, not an OpenAI parameter: the
-        # SDK's typed `create()` rejects unknown top-level kwargs, so it must
-        # ride in `extra_body` to reach the wire. An explicit
-        # `extra_body.reasoning` from the caller still wins.
-        reasoning = payload.pop("reasoning", None)
-        if reasoning is not None:
-            extra_body = dict(payload.get("extra_body") or {})
-            extra_body.setdefault("reasoning", reasoning)
+        # OpenRouter extensions are not typed OpenAI SDK parameters. Move them
+        # under `extra_body` so provider pinning, reasoning budgets, and exact
+        # usage requests reach the wire instead of being silently discarded.
+        extensions = {
+            key: payload.pop(key)
+            for key in ("provider", "reasoning", "usage")
+            if key in payload
+        }
+        extra_body = dict(payload.get("extra_body") or {})
+        nested_extensions = {
+            key for key in ("provider", "reasoning", "usage") if key in extra_body
+        }
+        unsupported_extensions = set(extensions) | nested_extensions
+        if unsupported_extensions and self.endpoint.provider != "openrouter":
+            unsupported = ", ".join(sorted(unsupported_extensions))
+            raise ValueError(
+                f"{self.endpoint.provider} endpoint {self.model_id!r} does not "
+                f"support OpenRouter request fields: {unsupported}"
+            )
+        if extensions:
+            for key, value in extensions.items():
+                extra_body.setdefault(key, value)
             payload["extra_body"] = extra_body
         return payload
 

@@ -4,6 +4,7 @@ import json
 from collections.abc import AsyncIterator, Mapping, Sequence
 from typing import Any
 
+import pytest
 from fastapi.testclient import TestClient
 from fusionkit_core.clients import FakeModelClient, ProviderCallError
 from fusionkit_core.config import (
@@ -16,6 +17,7 @@ from fusionkit_core.config import (
 from fusionkit_core.types import ChatMessage, ModelResponse, StreamChunk
 from fusionkit_server import create_app
 from fusionkit_server.app import FusionRequest
+from pydantic import ValidationError
 
 
 def test_chat_completions_single_mode(tmp_path) -> None:
@@ -654,15 +656,25 @@ def test_fusion_request_accepts_max_completion_tokens() -> None:
     )
     assert modern.max_tokens == 321
 
-    # An explicit legacy value wins over the modern spelling.
-    both = FusionRequest.model_validate(
+    # Conflicting aliases are ambiguous and must fail rather than silently
+    # running a different output budget than the caller intended.
+    with pytest.raises(ValidationError):
+        FusionRequest.model_validate(
+            {
+                "messages": [{"role": "user", "content": "hi"}],
+                "max_tokens": 100,
+                "max_completion_tokens": 321,
+            }
+        )
+
+    matching = FusionRequest.model_validate(
         {
             "messages": [{"role": "user", "content": "hi"}],
-            "max_tokens": 100,
+            "max_tokens": 321,
             "max_completion_tokens": 321,
         }
     )
-    assert both.max_tokens == 100
+    assert matching.max_tokens == 321
 
 
 def _config(default_mode: FusionMode = "single") -> FusionConfig:

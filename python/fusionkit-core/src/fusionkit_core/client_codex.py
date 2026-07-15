@@ -7,7 +7,11 @@ from typing import Any
 from openai import AsyncOpenAI
 
 from fusionkit_core.client_errors import _call_with_retries, classify_provider_error
-from fusionkit_core.client_types import ToolChoice, ToolDefinition
+from fusionkit_core.client_types import (
+    ToolChoice,
+    ToolDefinition,
+    reject_openrouter_request_fields,
+)
 from fusionkit_core.client_wire import _codex_input, _codex_tool_choice, _codex_tools, _codex_usage
 from fusionkit_core.config import ModelEndpoint, SamplingConfig
 from fusionkit_core.credentials import resolve_credential
@@ -51,6 +55,9 @@ class CodexResponsesClient:
             api_key="placeholder-oauth-token",
             default_headers=CODEX_DEFAULT_HEADERS,
             timeout=endpoint.timeout_s,
+            # FusionKit owns retries and their attempt ledger. SDK retries are
+            # otherwise invisible resamplings of one logical treatment.
+            max_retries=0,
         )
 
     def _request_kwargs(
@@ -60,6 +67,11 @@ class CodexResponsesClient:
         tool_choice: ToolChoice | None,
         extra: Mapping[str, Any] | None,
     ) -> dict[str, Any]:
+        reject_openrouter_request_fields(
+            extra,
+            provider=self.endpoint.provider,
+            model_id=self.model_id,
+        )
         instructions, input_items = _codex_input(messages)
         credential = resolve_credential(self.endpoint)
         # Capital "Authorization" matches the SDK's constructor auth header key so

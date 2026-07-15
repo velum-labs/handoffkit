@@ -9,7 +9,11 @@ from google import genai
 from google.genai import types as genai_types
 
 from fusionkit_core.client_errors import _call_with_retries
-from fusionkit_core.client_types import ToolChoice, ToolDefinition
+from fusionkit_core.client_types import (
+    ToolChoice,
+    ToolDefinition,
+    reject_openrouter_request_fields,
+)
 from fusionkit_core.client_wire import (
     _google_contents,
     _google_extract,
@@ -43,6 +47,11 @@ class GoogleModelClient:
         tool_choice: ToolChoice | None,
         extra: Mapping[str, Any] | None,
     ) -> tuple[list[genai_types.Content], genai_types.GenerateContentConfig]:
+        reject_openrouter_request_fields(
+            extra,
+            provider=self.endpoint.provider,
+            model_id=self.model_id,
+        )
         system_text, contents = _google_contents(messages)
         config_kwargs: dict[str, Any] = {
             "temperature": sampling.temperature,

@@ -9,6 +9,8 @@ from fusionkit_core.judge import (
     JudgeSynthesizer,
     accumulate_tool_call,
     judge_synthesizer_for,
+    panel_usage_from_trajectories,
+    provider_costs_from_trajectories,
     warn_malformed_tool_calls,
 )
 from fusionkit_core.producers import ChatTrajectoryProducer
@@ -51,6 +53,7 @@ class FusionEngine:
         sampling: SamplingConfig | None = None,
         panel_models: Sequence[str] | None = None,
         sample_count: int | None = None,
+        request_extra: Mapping[str, object] | None = None,
     ) -> FusionResult:
         selected_mode = mode or self.config.default_mode
         selected_sampling = merge_sampling(sampling, self.config.sampling)
@@ -62,6 +65,7 @@ class FusionEngine:
                 sampling=selected_sampling,
                 panel_models=panel_models,
                 sample_count=sample_count,
+                request_extra=request_extra,
             )
             result.route = decision.route
             result.metrics["router_reasons"] = list(decision.reasons)
@@ -71,6 +75,7 @@ class FusionEngine:
                 self.config.default_model,
                 messages,
                 selected_sampling,
+                extra=request_extra,
             )
             return FusionResult(
                 mode="single",
@@ -85,8 +90,14 @@ class FusionEngine:
             sampling=selected_sampling,
             panel_models=panel_models,
             sample_count=sample_count,
+            request_extra=request_extra,
         )
-        fused = await self._judge_synthesize(messages, trajectories, sampling=selected_sampling)
+        fused = await self._judge_synthesize(
+            messages,
+            trajectories,
+            sampling=selected_sampling,
+            request_extra=request_extra,
+        )
         answer = fused.response.content
         metrics: dict[str, object] = {**_trajectory_metrics(trajectories)}
         synthesis = fused.trajectory.synthesis if fused.trajectory is not None else None
@@ -108,6 +119,7 @@ class FusionEngine:
         panel_models: Sequence[str] | None,
         sample_count: int | None,
         tools: Sequence[ToolDefinition] | None = None,
+        request_extra: Mapping[str, object] | None = None,
     ) -> list[Trajectory]:
         if mode == "self":
             return await self.producer.generate_self_fusion(
@@ -117,12 +129,19 @@ class FusionEngine:
                 self.config.self_temperatures,
                 sample_count or self.config.sample_count,
                 tools=tools,
+                extra=request_extra,
             )
         if mode == "panel":
             models = list(panel_models or self.config.panel_models)
             if not models:
                 models = [endpoint.id for endpoint in self.config.endpoints]
-            return await self.producer.generate_panel(models, messages, sampling, tools=tools)
+            return await self.producer.generate_panel(
+                models,
+                messages,
+                sampling,
+                tools=tools,
+                extra=request_extra,
+            )
         raise ValueError(f"Unsupported fusion generation mode: {mode}")
 
     async def run_step(
@@ -136,6 +155,7 @@ class FusionEngine:
         tools: Sequence[ToolDefinition] | None = None,
         tool_choice: ToolChoice | None = None,
         trace: TraceContext | None = None,
+        request_extra: Mapping[str, object] | None = None,
     ) -> FuseResult:
         """One OpenAI-compatible fusion *step* that may emit tool calls.
 
@@ -152,7 +172,11 @@ class FusionEngine:
         selected_sampling = merge_sampling(sampling, self.config.sampling)
         if selected_mode == "single":
             response = await self._client(self.config.default_model).chat(
-                messages, selected_sampling, tools=tools, tool_choice=tool_choice
+                messages,
+                selected_sampling,
+                tools=tools,
+                tool_choice=tool_choice,
+                extra=request_extra,
             )
             return FuseResult(
                 response=response,
@@ -168,9 +192,10 @@ class FusionEngine:
             panel_models=panel_models,
             sample_count=sample_count,
             tools=tools,
+            request_extra=request_extra,
         )
         survivors = [t for t in trajectories if t.status == "succeeded"] or list(trajectories)
-        return await self._fuse_synthesizer(tools).fuse(
+        result = await self._fuse_synthesizer(tools).fuse(
             messages,
             survivors,
             judge_client=self._client(self.config.resolved_judge_model),
@@ -179,7 +204,9 @@ class FusionEngine:
             tools=tools,
             tool_choice=tool_choice,
             trace=trace,
+            request_extra=request_extra,
         )
+        return self._attach_panel_evidence(result, trajectories)
 
     def _fuse_synthesizer(self, tools: Sequence[ToolDefinition] | None) -> JudgeSynthesizer:
         """Step-mode judging when candidates carry actionable proposals.
@@ -201,6 +228,7 @@ class FusionEngine:
         tools: Sequence[ToolDefinition] | None = None,
         tool_choice: ToolChoice | None = None,
         trace: TraceContext | None = None,
+        request_extra: Mapping[str, object] | None = None,
     ) -> AsyncIterator[StreamChunk | FuseResult]:
         """Stream the fused answer: real token streaming on the synthesizer turn.
 
@@ -220,6 +248,7 @@ class FusionEngine:
                 selected_sampling,
                 tools,
                 tool_choice,
+                request_extra,
             ):
                 yield item
             return
@@ -230,6 +259,7 @@ class FusionEngine:
             panel_models=panel_models,
             sample_count=sample_count,
             tools=tools,
+            request_extra=request_extra,
         )
         survivors = [t for t in trajectories if t.status == "succeeded"] or list(trajectories)
         async for item in self._fuse_synthesizer(tools).fuse_stream(
@@ -241,7 +271,10 @@ class FusionEngine:
             tools=tools,
             tool_choice=tool_choice,
             trace=trace,
+            request_extra=request_extra,
         ):
+            if isinstance(item, FuseResult):
+                item = self._attach_panel_evidence(item, trajectories)
             yield item
 
     def stream_passthrough(
@@ -252,6 +285,7 @@ class FusionEngine:
         *,
         tools: Sequence[ToolDefinition] | None = None,
         tool_choice: ToolChoice | None = None,
+        request_extra: Mapping[str, object] | None = None,
     ) -> AsyncIterator[StreamChunk | FuseResult]:
         """Real token streaming for a single configured endpoint (no fusion).
 
@@ -259,7 +293,12 @@ class FusionEngine:
         passthrough and fused streams normalize tool-call fragments identically.
         """
         return self._stream_client(
-            self._client(model_id), messages, sampling, tools, tool_choice
+            self._client(model_id),
+            messages,
+            sampling,
+            tools,
+            tool_choice,
+            request_extra,
         )
 
     async def _stream_client(
@@ -269,6 +308,7 @@ class FusionEngine:
         sampling: SamplingConfig,
         tools: Sequence[ToolDefinition] | None,
         tool_choice: ToolChoice | None,
+        request_extra: Mapping[str, object] | None = None,
     ) -> AsyncIterator[StreamChunk | FuseResult]:
         content_parts: list[str] = []
         tool_accumulator: list[dict[str, str]] = []
@@ -277,7 +317,11 @@ class FusionEngine:
         usage = Usage()
         provider_cost = None
         async for chunk in client.stream_chat(
-            messages, sampling, tools=tools, tool_choice=tool_choice
+            messages,
+            sampling,
+            tools=tools,
+            tool_choice=tool_choice,
+            extra=request_extra,
         ):
             if chunk.delta:
                 content_parts.append(chunk.delta)
@@ -328,6 +372,7 @@ class FusionEngine:
         *,
         sampling: SamplingConfig | None = None,
         after_judge: Callable[[ModelResponse | None], None] | None = None,
+        request_extra: Mapping[str, object] | None = None,
     ) -> FuseResult:
         judge = self._client(self.config.resolved_judge_model)
         synthesizer = self._client(self.config.resolved_synthesizer_model)
@@ -335,7 +380,7 @@ class FusionEngine:
         resolved_sampling = merge_sampling(sampling, self.config.sampling)
         # Text fusion is a zero-tool-round fuse: no tools means the synthesizer is
         # terminal on turn 1 and the fused answer + synthesis come back at once.
-        return await self.judge_synthesizer.fuse(
+        result = await self.judge_synthesizer.fuse(
             messages,
             survivors,
             judge_client=judge,
@@ -343,7 +388,22 @@ class FusionEngine:
             sampling=resolved_sampling,
             tools=None,
             after_judge=after_judge,
+            request_extra=request_extra,
         )
+        return self._attach_panel_evidence(result, trajectories)
+
+    @staticmethod
+    def _attach_panel_evidence(
+        result: FuseResult,
+        trajectories: Sequence[Trajectory],
+    ) -> FuseResult:
+        """Attach every attempted panel member, including failed generations."""
+
+        result.input_trajectories = list(trajectories)
+        result.panel_usage = panel_usage_from_trajectories(trajectories)
+        result.panel_trajectory_count = len(trajectories)
+        result.panel_provider_costs = provider_costs_from_trajectories(trajectories)
+        return result
 
     def _client(self, model_id: str) -> ChatClient:
         try:

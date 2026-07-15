@@ -8,7 +8,11 @@ from typing import Any
 from anthropic import AsyncAnthropic
 
 from fusionkit_core.client_errors import _call_with_retries
-from fusionkit_core.client_types import ToolChoice, ToolDefinition
+from fusionkit_core.client_types import (
+    ToolChoice,
+    ToolDefinition,
+    reject_openrouter_request_fields,
+)
 from fusionkit_core.client_wire import _anthropic_messages, _anthropic_tool_choice, _anthropic_tools
 from fusionkit_core.config import ModelEndpoint, SamplingConfig
 from fusionkit_core.credentials import resolve_credential
@@ -46,12 +50,14 @@ class AnthropicModelClient:
                 auth_token="placeholder-oauth-token",
                 default_headers={"anthropic-beta": ANTHROPIC_OAUTH_BETA},
                 timeout=endpoint.timeout_s,
+                max_retries=0,
             )
         else:
             self._client = AsyncAnthropic(
                 base_url=endpoint.base_url,
                 api_key=resolve_api_key(endpoint),
                 timeout=endpoint.timeout_s,
+                max_retries=0,
             )
 
     def _system_param(self, system_text: str) -> str | list[dict[str, Any]] | None:
@@ -83,6 +89,11 @@ class AnthropicModelClient:
         tool_choice: ToolChoice | None,
         extra: Mapping[str, Any] | None,
     ) -> dict[str, Any]:
+        reject_openrouter_request_fields(
+            extra,
+            provider=self.endpoint.provider,
+            model_id=self.model_id,
+        )
         system_text, conversation = _anthropic_messages(messages)
         # Registry providerRequestShapes marks Anthropic sampling as omitted:
         # newer Anthropic models reject explicit temperature/top_p, while callers
