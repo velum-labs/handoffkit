@@ -1,6 +1,14 @@
 # Experiment Journal
 
 ## 2026-07-15 — alen (via agent)
+e004 analyzed at $43.93: truncation-fair floors are dsv4pro 62.5%, kimi26
+60.4%, r1 52.7% (25-35pp above their invalid e002 rates) — yet all remain
+significantly below solo qwen3.7-max 76.0%, and union headroom is +0.0 to
++1.4pp, far under the 5pp gate. Compound search on the >=2024-08 slice is
+dead by preregistered rule. Next: e005 holdout parity final (q37max vs both
+anchors, from the reserve). glm52/kimikt truncate 26-40% even at 64k.
+
+## 2026-07-15 — alen (via agent)
 Deep e2e audit found the dominant flaw: shared max_tokens=16384 truncated
 reasoning models to EMPTY code on most shards (r1 72%, kimi26 68%, glm52 61%,
 kimikt 59%, nemotron3s 52%, dsv4pro 40%, qwen3t 28% — finish_reason=length).
