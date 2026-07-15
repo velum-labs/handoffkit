@@ -12,6 +12,9 @@
       "path": "../harness-core"
     },
     {
+      "path": "../tools"
+    },
+    {
       "path": "../kernel"
     },
     {

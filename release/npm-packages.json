@@ -42,12 +42,24 @@
       "name": "@routekit/config-core"
     },
     {
+      "path": "packages/routekit-config",
+      "name": "@routekit/config"
+    },
+    {
+      "path": "packages/routekit-router",
+      "name": "@routekit/router"
+    },
+    {
       "path": "packages/telemetry-core",
       "name": "@routekit/telemetry-core"
     },
     {
       "path": "packages/registry",
       "name": "@fusionkit/registry"
+    },
+    {
+      "path": "packages/fusion-config",
+      "name": "@fusionkit/config"
     },
     {
       "path": "packages/protocol",

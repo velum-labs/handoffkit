@@ -1,8 +1,8 @@
 /**
  * Canonical harness-core drivers through the full stack with the real Claude
  * Agent SDK / Codex SDK and their real
- * binaries. Per-member dialect gateways translate each native protocol to the
- * consolidated Python router. Two turns prove native cursor handling; Claude's
+ * binaries. RouteKit's single gateway translates each native protocol before
+ * it reaches the credential-free Python sidecar. Two turns prove native cursor handling; Claude's
  * worktree-scoped stale cursor intentionally falls back to a fresh session
  * carrying the full gateway conversation instead of failing the follow-up.
  */
@@ -116,10 +116,10 @@ for (const driverCase of CASES) {
           memberCalls.every((entry) => entry.stream),
           "the real native driver must use its streaming protocol"
         );
-        // The Python engine only sees translated Chat Completions; native
-        // /messages or /responses calls terminate at the per-member gateway.
-        assert.match(stack.engine.log(), /POST \/v1\/chat\/completions/);
-        assert.doesNotMatch(stack.engine.log(), /POST \/v1\/messages/);
+        assert.ok(
+          memberCalls.every((entry) => entry.model === driverCase.model),
+          "the canonical driver must route by the opaque member endpoint"
+        );
       } finally {
         await stack.close();
         for (const [name] of Object.entries(driverCase.env)) {

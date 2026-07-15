@@ -276,8 +276,8 @@ silently disable disclosure or stale the dynamic model list.
 | 6 | this repository (FusionKit monorepo) `.../tool-codex/src/harness.ts` `run` / `codexArgs` | Prepend identity suffix (and, if not threaded earlier, the passed‑through instructions) to `descriptor.prompt`; `model.id`/`ordinal` already in scope (`harness.ts:524`). |
 | 7 | this repository (FusionKit monorepo) ensemble panel runner (`runFusionPanels`) | Accept the composed task / messages so #5 reaches the harness. |
 
-No changes to `fusion-gateway.ts` wire formats, `adapters/*`, or the step body
-schema are required for the synthesizer path.
+No changes to the RouteKit public gateway adapters or the step body schema are
+required for the synthesizer path.
 
 ## 7. Configuration / flags
 

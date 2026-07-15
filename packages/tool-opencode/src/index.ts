@@ -13,7 +13,8 @@ export const opencodeTool: ToolIntegration = {
   packageName: "@routekit/tool-opencode",
   installHint: "install OpenCode: https://opencode.ai/docs",
   authSummary: "OpenCode uses an OpenAI-compatible gateway provider.",
-  setupSnippet: ({ gatewayUrl }) => `OpenCode gateway: ${gatewayUrl}`,
+  setupSnippet: ({ gatewayUrl, model = "gateway-model" }) =>
+    `OpenCode gateway: ${gatewayUrl} (model: ${model})`,
   launch: launchOpencode,
   driver: {
     kind: driver.kind,

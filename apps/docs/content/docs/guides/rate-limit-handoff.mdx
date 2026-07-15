@@ -37,7 +37,11 @@ You can also set the default in `.fusionkit/fusion.json`:
 
 ```json
 {
-  "version": "fusionkit.fusion.v3",
+  "version": "fusionkit.fusion.v4",
+  "router": { "config": ".routekit/router.yaml" },
+  "ensembles": {
+    "default": { "members": ["fast", "deep"], "judge": "deep" }
+  },
   "onRateLimit": "fusion"
 }
 ```

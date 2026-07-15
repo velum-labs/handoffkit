@@ -1,0 +1,35 @@
+{
+  "name": "@routekit/config",
+  "private": false,
+  "version": "0.8.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/velum-labs/handoffkit.git",
+    "directory": "packages/routekit-config"
+  },
+  "description": "RouteKit router configuration discovery, loading, validation, and atomic writes.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": ["dist", "LICENSE"],
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org",
+    "access": "public",
+    "provenance": true
+  },
+  "dependencies": {
+    "@routekit/config-core": "workspace:*",
+    "@routekit/gateway": "workspace:*",
+    "@routekit/runtime": "workspace:*",
+    "yaml": "2.9.0"
+  },
+  "keywords": ["routekit", "router", "configuration"],
+  "scripts": {
+    "test": "node --test \"dist/test/*.test.js\""
+  }
+}

@@ -51,7 +51,7 @@ The index is intentionally source-shaped. It does not replace package guides, AP
 - `packages/cli/src/fusion-config.ts`: FUSION_CONFIG_DIRNAME (const), FUSION_CONFIG_BASENAME (const), FUSION_PROMPTS_DIRNAME (const), FUSION_CONFIG_FILENAME (const), FUSION_CONFIG_VERSION (const), PROMPT_IDS (const), PromptId (type), PROMPT_CONFIG_KEY (const), PromptOverrides (type), FusionConfig (type), FusionConfigError (class), fusionConfigDir (function), fusionConfigPath (function), legacyFusionConfigPath (function), fusionPromptsDir (function), fusionPromptPath (function), parseFusionConfig (function), readFusionPrompts (function), loadFusionConfig (function), writeFusionConfig (function), writeFusionPrompts (function)
 - `packages/cli/src/fusion-init.ts`: judgeOptions (function), defaultMemberId (function), runFusionInit (function)
 - `packages/cli/src/fusion-quickstart.ts`: FUSION_TOOLS (const), portlessEnabled (function), runFusion (function), pickTool (function)
-- `packages/cli/src/gateway.ts`: GatewayRunnerConfig (type), setGatewayChatter (function), buildFrontDoorRunner (function), buildAcpRunner (function), codexConfigSnippet (function), gatewaySetupSnippets (function), startFusionStepGateway (function), startConfiguredGateway (function), runGatewayAcp (function), GatewayAcceptanceInput (type), runGatewayAcceptance (function), installRegistryAdapters (function)
+- `packages/cli/src/gateway.ts`: GatewayEnsembleConfig (type), GatewayRunnerConfig (type), setGatewayChatter (function), GatewayTurnStatus (type), setGatewayStatusSink (function), gatewaySetupSnippets (function), startFusionStepGateway (function), installRegistryAdapters (function)
 - `packages/cli/src/local.ts`: DirectTool (type), RunDirectOptions (type), runDirect (function)
 - `packages/cli/src/render.ts`: renderReceipt (function), renderDisclosure (function), renderRunList (function), renderTrace (function)
 - `packages/cli/src/shared/errors.ts`: fail (function)
@@ -138,14 +138,12 @@ The index is intentionally source-shaped. It does not replace package guides, AP
 - `packages/model-gateway/src/backend.ts`: Backend (type), BackendRequestOptions (type), OpenAiBackendOptions (type), joinPath (function), OpenAiBackend (class)
 - `packages/model-gateway/src/config.ts`: DEFAULT_MLX_MODEL (const), BackendConfig (type), resolveBackendConfig (function), createBackend (function)
 - `packages/model-gateway/src/cost.ts`: ModelPricing (type), TokenUsage (type), TurnCost (type), SessionCost (type), DEFAULT_MODEL_PRICING (const), parseUsage (function), parseUsageFromSse (function), lookupPricing (function), estimateCost (function), meterTurn (function), emptySessionCost (function), addTurnCost (function), formatUsd (function), turnCostLine (function)
-- `packages/fusion-gateway/src/front-door-acceptance.ts`: FrontDoorStatus (type), FrontDoorOutcome (type), FrontDoorAcceptanceReport (type), FrontDoorOutcomeProducer (type), FrontDoorAcceptanceOptions (type), runFrontDoorAcceptance (function)
 - `packages/fusion-gateway/src/frontdoor/operators.ts`: FrontdoorArtifactTypes (const), FrontdoorOperatorKinds (const), FrontdoorFuseError (class), FrontdoorPanelError (class), BudgetValue (type), RouteValue (type), FailoverValue (type), CandidateSetValue (type), frontdoorBudgetGateOperator (function), frontdoorBudgetStopOperator (function), frontdoorResolveModelOperator (function), frontdoorVendorProxyOperator (function), frontdoorPanelOperator (function), frontdoorFuseOperator (function), frontdoorStreamingFuseOperator (function), frontdoorFinalizeOperator (function)
 - `packages/fusion-gateway/src/frontdoor/request.ts`: FUSION_FRONTDOOR_REQUEST_WORKFLOW (const), FrontdoorRequestScheduler (class), runFrontdoorRequest (function)
 - `packages/fusion-gateway/src/frontdoor/sse.ts`: EventsToSseOptions (type), eventsToSseResponse (function)
 - `packages/fusion-gateway/src/frontdoor/types.ts`: FrontdoorChatBody (type), FRONTDOOR_SIGNAL (const), FrontdoorRequestValue (type), FrontdoorRoute (type), VendorProxyOutcome (type), FrontdoorServices (type)
 - `packages/fusion-gateway/src/frontdoor/workflow.ts`: FUSION_FRONTDOOR_TURN_WORKFLOW (const), FrontdoorTurnOutcome (type), frontdoorRequestArtifact (function), runFusionFrontdoorTurn (function), streamFusionFrontdoorTurn (function)
 - `packages/fusion-gateway/src/fusion-backend.ts`: PassthroughModel (type), ChatMessageLike (type), PanelRunInput (type), PanelRunner (type), FuseStepRunInput (type), FuseStepRunner (type), OnRateLimitPolicy (type), FusionBackendOptions (type), SessionMetaInput (type), FusionBackendKernelSessionState (type), FusionBackendKernelStateStore (type), InMemoryFusionBackendKernelStateStore (class), FusionBackend (class)
-- `packages/fusion-gateway/src/fusion-gateway.ts`: FrontDoorDialect (type), FrontDoorRunnerInput (type), FrontDoorRunnerResult (type), FrontDoorRunner (type), FusionGatewayOptions (type), FusionGateway (type), FUSION_RUN_ID_HEADER (const), FUSION_STATUS_HEADER (const), FUSION_EVIDENCE_HEADER (const), FUSION_REPORT_HEADER (const), promptFromResponses (function), promptFromAnthropic (function), ChatRequest (type), promptFromChat (function), formatResponses (function), formatAnthropic (function), formatChat (function), startFusionGateway (function)
 - `packages/fusion-gateway/src/mlx-backend.ts`: MlxBackendOptions (type), MlxBackend (class)
 - `packages/model-gateway/src/provenance.ts`: GatewayDialect (type), MODEL_CALL_ID_HEADER (const), UNKNOWN_GIT_SHA (const), resolveProducerGitSha (function), readProducerVersion (function), ModelGatewayCallContext (type), ModelGatewayCallResult (type), ModelCallRecord (type), ProvenanceSink (type), buildModelCallRecord (function), modelCallId (function), responseBodyHash (function)
 - `packages/model-gateway/src/server.ts`: GatewayOptions (type), Gateway (type), startGateway (function)
@@ -433,7 +431,6 @@ The index is intentionally source-shaped. It does not replace package guides, AP
 - `export type {`
 - `export { ACP_PROTOCOL_VERSION, runAcpAgent } from "./acp-agent.js";`
 - `export type {`
-- `export { runFrontDoorAcceptance } from "./front-door-acceptance.js";`
 - `export type {`
 - `export {`
 - `export type {`

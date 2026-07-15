@@ -144,6 +144,38 @@ test("EndpointPool cools a throttled instance and retries another", async () => 
   assert.deepEqual(calls, ["https://healthy.example/v1"]);
 });
 
+test("EndpointPool does not poison an instance after caller cancellation", async () => {
+  let calls = 0;
+  const backend = new CatalogBackend({
+    config: {
+      cooldownMs: 60_000,
+      endpoints: [
+        {
+          endpointId: "opaque",
+          model: "native",
+          baseUrl: "https://cancel.example/v1"
+        }
+      ]
+    },
+    createBackend: (endpoint) =>
+      fakeBackend(endpoint.baseUrl, () => {
+        calls += 1;
+        if (calls === 1) {
+          throw new DOMException("cancelled", "AbortError");
+        }
+        return Response.json({ ok: true });
+      })
+  });
+
+  await assert.rejects(
+    backend.chat({ model: "opaque", messages: [] }),
+    (error: unknown) => error instanceof Error && error.name === "AbortError"
+  );
+  const recovered = await backend.chat({ model: "opaque", messages: [] });
+  assert.equal(recovered.status, 200);
+  assert.equal(calls, 2);
+});
+
 test("EndpointPool exposes explicit health and cooldown controls", async () => {
   const calls: string[] = [];
   const firstConfig = {

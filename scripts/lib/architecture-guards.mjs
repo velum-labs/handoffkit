@@ -17,6 +17,8 @@ export const CANONICAL_SHARED_PACKAGES = new Map([
   ["packages/cli-ui", "@routekit/cli-ui"],
   ["packages/cli-core", "@routekit/cli-core"],
   ["packages/config-core", "@routekit/config-core"],
+  ["packages/routekit-config", "@routekit/config"],
+  ["packages/routekit-router", "@routekit/router"],
   ["packages/telemetry-core", "@routekit/telemetry-core"],
   ["packages/harness-core", "@routekit/harness-core"],
   ["packages/tools", "@routekit/tools"],
@@ -83,6 +85,35 @@ export function routekitDependencyViolations(manifests) {
     }
   }
 
+  return violations;
+}
+
+export function fusionkitCompositionViolations(manifests) {
+  const byName = new Map(manifests.map((entry) => [entry.manifest.name, entry]));
+  const root = byName.get("@fusionkit/cli");
+  if (root === undefined) return ["@fusionkit/cli is missing from the workspace"];
+  const violations = [];
+  const queue = [...manifestDependencies(root.manifest)].map((name) => ({
+    name,
+    path: ["@fusionkit/cli", name]
+  }));
+  const visited = new Set();
+  while (queue.length > 0) {
+    const current = queue.shift();
+    if (current === undefined || visited.has(current.name)) continue;
+    visited.add(current.name);
+    if (current.name === "@routekit/cli") {
+      violations.push(
+        `FusionKit dependency closure includes the RouteKit CLI: ${current.path.join(" -> ")}`
+      );
+      continue;
+    }
+    const dependency = byName.get(current.name);
+    if (dependency === undefined) continue;
+    for (const child of manifestDependencies(dependency.manifest)) {
+      queue.push({ name: child, path: [...current.path, child] });
+    }
+  }
   return violations;
 }
 

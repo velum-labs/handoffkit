@@ -1,5 +1,4 @@
-import type { PanelTrust } from "@fusionkit/ensemble";
-import type { OnRateLimitPolicy } from "@fusionkit/gateway";
+import type { OnRateLimitPolicy, PanelTrust } from "@fusionkit/config";
 import { SESSION_ISOLATIONS } from "@fusionkit/protocol";
 import type { SessionIsolation } from "@fusionkit/protocol";
 import {
@@ -9,9 +8,6 @@ import {
   parsePositiveInteger,
   parsePositiveNumber
 } from "@routekit/cli-core";
-
-import type { PanelAuthMode, PanelModelSpec, PanelProvider } from "../fusion-quickstart.js";
-import { PANEL_AUTH_MODES, PANEL_PROVIDERS, panelProviderForAuthMode } from "../fusion/env.js";
 
 import { fail } from "@routekit/cli-core";
 
@@ -38,8 +34,6 @@ export function isolationFlag(value: string | undefined): SessionIsolation | und
   }
   return value as SessionIsolation;
 }
-
-export { PANEL_AUTH_MODES, PANEL_PROVIDERS };
 
 /**
  * WS5 rate-limit / credit handoff picker prompt, shared by every interactive
@@ -127,36 +121,4 @@ export function parsePanelTrust(value: string | undefined): PanelTrust | undefin
     fail(`--panel-trust must be one of ${PANEL_TRUST_LEVELS.join(" | ")}`);
   }
   return value as PanelTrust;
-}
-
-/**
- * Parse `id=provider:model` (or `id=model`, defaulting to the local mlx
- * provider). The prefix may also be a subscription auth mode: `id=claude-code:model`
- * reuses the Claude Code login (provider anthropic), `id=codex:model` reuses the
- * Codex login (provider codex). Subscription specs carry no `keyEnv`.
- */
-export function parsePanelModelSpec(spec: string, keyEnvs: Record<string, string>): PanelModelSpec {
-  const { id, value } = parseIdValue("--model", spec);
-  const colon = value.indexOf(":");
-  if (colon > 0) {
-    const maybe = value.slice(0, colon);
-    const model = value.slice(colon + 1);
-    if ((PANEL_AUTH_MODES as readonly string[]).includes(maybe)) {
-      const auth = maybe as PanelAuthMode;
-      // The auth-mode -> provider mapping comes from the subscription registry:
-      // claude-code maps to the anthropic provider; codex has its own provider
-      // on the FusionKit side (derived in routerConfigYaml from `auth`).
-      const provider = panelProviderForAuthMode(auth);
-      return provider !== undefined ? { id, model, provider, auth } : { id, model, auth };
-    }
-    if ((PANEL_PROVIDERS as readonly string[]).includes(maybe)) {
-      return {
-        id,
-        model,
-        provider: maybe as PanelProvider,
-        ...(keyEnvs[id] !== undefined ? { keyEnv: keyEnvs[id] } : {})
-      };
-    }
-  }
-  return { id, model: value, provider: "mlx", ...(keyEnvs[id] !== undefined ? { keyEnv: keyEnvs[id] } : {}) };
 }

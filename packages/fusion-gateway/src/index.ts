@@ -119,38 +119,6 @@ export type { MlxBackendOptions } from "./mlx-backend.js";
 export { createBackend, DEFAULT_MLX_MODEL, resolveBackendConfig } from "./config.js";
 export type { BackendConfig } from "./config.js";
 
-export {
-  FUSION_EVIDENCE_HEADER,
-  FUSION_REPORT_HEADER,
-  FUSION_RUN_ID_HEADER,
-  FUSION_STATUS_HEADER,
-  formatAnthropic,
-  formatChat,
-  formatResponses,
-  promptFromAnthropic,
-  promptFromChat,
-  promptFromResponses,
-  startFusionGateway
-} from "./fusion-gateway.js";
-export type {
-  ChatRequest,
-  FrontDoorDialect,
-  FrontDoorRunner,
-  FrontDoorRunnerInput,
-  FrontDoorRunnerResult,
-  FusionGateway,
-  FusionGatewayOptions
-} from "./fusion-gateway.js";
-
-export { runFrontDoorAcceptance } from "./front-door-acceptance.js";
-export type {
-  FrontDoorAcceptanceOptions,
-  FrontDoorAcceptanceReport,
-  FrontDoorOutcome,
-  FrontDoorOutcomeProducer,
-  FrontDoorStatus
-} from "./front-door-acceptance.js";
-
 export { createTrajectoryCapture, reconstructTrajectory } from "./trajectory-capture.js";
 export type {
   CapturedStep,

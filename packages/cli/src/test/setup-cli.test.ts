@@ -6,12 +6,9 @@ import { runCliForTest } from "@routekit/cli-core/testing";
 import { FUSIONKIT_PYPI_VERSION, fusionkitPyCommand, fusionkitWarmArgv } from "../fusion/env.js";
 import type { HostInfo } from "../fusion/local-catalog.js";
 import {
-  ensureLocalPanelSupported,
   localPanelUnsupportedMessage,
-  panelUsesLocalMlx,
   platformCapabilities
 } from "../fusion/platform.js";
-import type { PanelModelSpec } from "../fusion/env.js";
 
 const CLI = fileURLToPath(new URL("../index.js", import.meta.url));
 
@@ -30,9 +27,6 @@ function host(appleSilicon: boolean): HostInfo {
     appleSilicon
   };
 }
-
-const MLX_PANEL: PanelModelSpec[] = [{ id: "qwen", model: "mlx-community/Qwen3-1.7B-4bit", provider: "mlx" }];
-const CLOUD_PANEL: PanelModelSpec[] = [{ id: "gpt", model: "gpt-5.5", provider: "openai" }];
 
 // ---- engine run argv (the uvx/uv invocation used for real router launches) ----
 
@@ -77,33 +71,20 @@ test("fusionkitWarmArgv uses `uv run` against a local checkout (dev override)", 
 
 // ---- cross-platform gating ----
 
-test("panelUsesLocalMlx detects mlx members (provider defaults to mlx)", () => {
-  assert.equal(panelUsesLocalMlx(MLX_PANEL), true);
-  assert.equal(panelUsesLocalMlx([{ id: "q", model: "some-model" }]), true);
-  assert.equal(panelUsesLocalMlx(CLOUD_PANEL), false);
+test("local lifecycle guidance points unsupported hosts to RouteKit", () => {
+  assert.match(localPanelUnsupportedMessage(host(false)), /RouteKit/);
+  assert.match(localPanelUnsupportedMessage(host(false)), /Apple Silicon/);
 });
 
-test("ensureLocalPanelSupported throws for a local panel off Apple Silicon", () => {
-  assert.throws(() => ensureLocalPanelSupported(MLX_PANEL, host(false)), /Apple Silicon/);
-  // ... and points the user at the cross-platform cloud path.
-  assert.match(localPanelUnsupportedMessage(host(false)), /cloud panel/);
-});
-
-test("ensureLocalPanelSupported allows a local panel on Apple Silicon and cloud anywhere", () => {
-  assert.doesNotThrow(() => ensureLocalPanelSupported(MLX_PANEL, host(true)));
-  assert.doesNotThrow(() => ensureLocalPanelSupported(CLOUD_PANEL, host(false)));
-  assert.doesNotThrow(() => ensureLocalPanelSupported(CLOUD_PANEL, host(true)));
-});
-
-test("platformCapabilities reports cloud everywhere and local MLX only on Apple Silicon", () => {
+test("platformCapabilities reports RouteKit fusion everywhere and local lifecycle only on Apple Silicon", () => {
   const linux = platformCapabilities(host(false));
-  const cloud = linux.find((cap) => cap.label === "cloud ensembles");
-  const localMlx = linux.find((cap) => cap.label === "local MLX ensembles");
-  assert.equal(cloud?.ok, true);
+  const routed = linux.find((cap) => cap.label === "RouteKit-backed fusion");
+  const localMlx = linux.find((cap) => cap.label === "local MLX lifecycle");
+  assert.equal(routed?.ok, true);
   assert.equal(localMlx?.ok, false);
 
   const mac = platformCapabilities(host(true));
-  assert.equal(mac.find((cap) => cap.label === "local MLX ensembles")?.ok, true);
+  assert.equal(mac.find((cap) => cap.label === "local MLX lifecycle")?.ok, true);
 });
 
 // ---- CLI surface ----

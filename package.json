@@ -19,6 +19,7 @@
     "test": "PORTLESS=0 pnpm --recursive --if-present run test && pnpm run test:root",
     "test:root": "PORTLESS=0 node --test \"test/*.test.js\"",
     "test:routekit-pack": "node scripts/check-routekit-cli-pack.mjs",
+    "test:fusionkit-pack": "node scripts/check-fusionkit-cli-pack.mjs",
     "demo": "node scripts/demo.mjs",
     "dev:link-cli": "node scripts/link-fusionkit-dev.mjs",
     "dev:run-cli": "node scripts/fusionkit-dev.mjs",

@@ -87,7 +87,11 @@ export type ToolIntegration = {
    * (rendered by `gatewaySetupSnippets`). `note` carries tool-specific extra
    * context (e.g. the Cursorkit endpoint placeholder).
    */
-  setupSnippet?: (input: { gatewayUrl: string; note?: string }) => string;
+  setupSnippet?: (input: {
+    gatewayUrl: string;
+    model?: string;
+    note?: string;
+  }) => string;
   /** Boot the tool against the host context; resolves with its exit code. */
   launch(ctx: ToolLaunchContext): Promise<number>;
   driver: ToolDriverMetadata;

@@ -116,6 +116,10 @@ test("Codex Responses egress preserves subscription auth and tool output", async
     return Response.json({
       id: "resp_1",
       output: [
+        {
+          type: "reasoning",
+          summary: [{ type: "summary_text", text: "considering the fix" }]
+        },
         { type: "message", content: [{ type: "output_text", text: "done" }] },
         {
           type: "function_call",
@@ -142,9 +146,12 @@ test("Codex Responses egress preserves subscription auth and tool output", async
     assert.equal(request?.headers.get("authorization"), "Bearer oauth");
     assert.equal(request?.headers.get("chatgpt-account-id"), "account");
     const body = (await response.json()) as {
-      choices: Array<{ message: { content: string; tool_calls: unknown[] } }>;
+      choices: Array<{
+        message: { content: string; reasoning: string; tool_calls: unknown[] };
+      }>;
     };
     assert.equal(body.choices[0]?.message.content, "done");
+    assert.equal(body.choices[0]?.message.reasoning, "considering the fix");
     assert.equal(body.choices[0]?.message.tool_calls.length, 1);
   } finally {
     globalThis.fetch = original;
@@ -273,6 +280,10 @@ test("Codex streaming egress preserves Responses tool history and deltas", async
     request = new Request(input, init);
     return sse([
       {
+        event: "response.reasoning_summary_text.delta",
+        data: { delta: "considering the patch" }
+      },
+      {
         event: "response.output_item.added",
         data: {
           output_index: 0,
@@ -338,6 +349,7 @@ test("Codex streaming egress preserves Responses tool history and deltas", async
       parameters: { type: "object" }
     });
     const text = await response.text();
+    assert.match(text, /"reasoning":"considering the patch"/);
     assert.match(text, /"name":"apply"/);
     assert.match(text, /\\"patch\\":\\"x\\"/);
     assert.match(text, /"finish_reason":"tool_calls"/);

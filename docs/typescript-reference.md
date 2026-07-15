@@ -46,7 +46,7 @@ Relevant files:
 | --- | --- |
 | `packages/cli/src/index.ts` | Binary entry point, help behavior, top-level error mapping. |
 | `packages/cli/src/cli.ts` | Commander program construction and registration order. |
-| `packages/cli/src/commands/fusion.ts` | Product launchers for fused sessions and single-model `--direct` mode. |
+| `packages/cli/src/commands/fusion.ts` | Fusion-only launchers for configured endpoint-ID ensembles across Codex, Claude Code, Cursor, OpenCode, and serve. |
 | `packages/cli/src/local.ts` | Direct local-model gateway lifecycle. |
 | `packages/cli/src/commands/models.ts` | Local model cache commands. |
 | `packages/cli/src/commands/sessions.ts` | Session list, show, and removal commands. |

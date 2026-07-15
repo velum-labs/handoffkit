@@ -89,6 +89,9 @@ importers:
       '@fusionkit/adapter-ai-sdk':
         specifier: workspace:*
         version: link:../adapter-ai-sdk
+      '@fusionkit/config':
+        specifier: workspace:*
+        version: link:../fusion-config
       '@fusionkit/ensemble':
         specifier: workspace:*
         version: link:../ensemble
@@ -107,15 +110,15 @@ importers:
       '@fusionkit/workspace':
         specifier: workspace:*
         version: link:../workspace
-      '@routekit/accounts':
-        specifier: workspace:*
-        version: link:../accounts
       '@routekit/cli-core':
         specifier: workspace:*
         version: link:../cli-core
       '@routekit/cli-ui':
         specifier: workspace:*
         version: link:../cli-ui
+      '@routekit/config':
+        specifier: workspace:*
+        version: link:../routekit-config
       '@routekit/config-core':
         specifier: workspace:*
         version: link:../config-core
@@ -131,6 +134,9 @@ importers:
       '@routekit/registry':
         specifier: workspace:*
         version: link:../routekit-registry
+      '@routekit/router':
+        specifier: workspace:*
+        version: link:../routekit-router
       '@routekit/runtime':
         specifier: workspace:*
         version: link:../runtime-utils
@@ -158,15 +164,9 @@ importers:
       figlet:
         specifier: 1.11.0
         version: 1.11.0
-      openai:
-        specifier: 6.46.0
-        version: 6.46.0(ws@8.21.0)(zod@4.4.3)
       posthog-node:
         specifier: 5.39.4
         version: 5.39.4
-      untun:
-        specifier: 0.1.3
-        version: 0.1.3
       yaml:
         specifier: 2.9.0
         version: 2.9.0
@@ -274,6 +274,15 @@ importers:
         specifier: 6.0.200
         version: 6.0.200(zod@4.4.3)
 
+  packages/fusion-config:
+    dependencies:
+      '@routekit/config-core':
+        specifier: workspace:*
+        version: link:../config-core
+      '@routekit/runtime':
+        specifier: workspace:*
+        version: link:../runtime-utils
+
   packages/fusion-gateway:
     dependencies:
       '@fusionkit/adapter-ai-sdk':
@@ -358,15 +367,18 @@ importers:
       '@routekit/cli-ui':
         specifier: workspace:*
         version: link:../cli-ui
-      '@routekit/config-core':
+      '@routekit/config':
         specifier: workspace:*
-        version: link:../config-core
+        version: link:../routekit-config
       '@routekit/gateway':
         specifier: workspace:*
         version: link:../model-gateway
       '@routekit/registry':
         specifier: workspace:*
         version: link:../routekit-registry
+      '@routekit/router':
+        specifier: workspace:*
+        version: link:../routekit-router
       '@routekit/runtime':
         specifier: workspace:*
         version: link:../runtime-utils
@@ -395,7 +407,34 @@ importers:
         specifier: 2.9.0
         version: 2.9.0
 
+  packages/routekit-config:
+    dependencies:
+      '@routekit/config-core':
+        specifier: workspace:*
+        version: link:../config-core
+      '@routekit/gateway':
+        specifier: workspace:*
+        version: link:../model-gateway
+      '@routekit/runtime':
+        specifier: workspace:*
+        version: link:../runtime-utils
+      yaml:
+        specifier: 2.9.0
+        version: 2.9.0
+
   packages/routekit-registry: {}
+
+  packages/routekit-router:
+    dependencies:
+      '@routekit/accounts':
+        specifier: workspace:*
+        version: link:../accounts
+      '@routekit/gateway':
+        specifier: workspace:*
+        version: link:../model-gateway
+      '@routekit/runtime':
+        specifier: workspace:*
+        version: link:../runtime-utils
 
   packages/routekit-tracing:
     dependencies:
@@ -913,9 +952,6 @@ packages:
     resolution: {integrity: sha512-7NzBL0rN6fMUW+f7A6Io4h40qQlG+xGmtMxfbnH/K7TAtt8JQWVQK+6g0UXKMeVJoyV5EkkNsErQ8pVD3bLHbA==}
     engines: {node: ^12.17.0 || ^14.13 || >=16.0.0}
 
-  citty@0.1.6:
-    resolution: {integrity: sha512-tskPPKEs8D2KPafUypv2gxwJP8h/OaJmC82QQGGDQcHvXX43xF2VDACcJVmZ0EuSxkpO9Kc4MlrA3q0+FG58AQ==}
-
   cli-boxes@4.0.1:
     resolution: {integrity: sha512-5IOn+jcCEHEraYolBPs/sT4BxYCe2nHg374OPiItB1O96KZFseS2gthU4twyYzeDcFew4DaUM/xwc5BQf08JJw==}
     engines: {node: '>=18.20 <19 || >=20.10'}
@@ -935,10 +971,6 @@ packages:
   commander@14.0.3:
     resolution: {integrity: sha512-H+y0Jo/T1RZ9qPP4Eh1pkcQcLRglraJaSLoyOtHxu6AapkjWVCy2Sit1QQ4x3Dng8qDlSsZEet7g5Pq06MvTgw==}
     engines: {node: '>=20'}
-
-  consola@3.4.2:
-    resolution: {integrity: sha512-5IKcdX0nnYavi6G7TtOhwkYzyjfJlatbjMjuLSfE2kYT5pMDOilZ4OvMhi637CcDICTmz3wARPoyhqyX1Y+XvA==}
-    engines: {node: ^14.18.0 || >=16.10.0}
 
   convert-to-spaces@2.0.1:
     resolution: {integrity: sha512-rcQ1bsQO9799wq24uE5AM2tAILy4gXGIK/njFWcVQkGNZ96edlpY+A7bjwvzjYvLDyzmG1MmMLZhpcsb+klNMQ==}
@@ -1031,26 +1063,6 @@ packages:
     resolution: {integrity: sha512-kbpaSSGJTWdAY5KPVeMOKXSrPtr8C8C7wodJbcsd51jRnmD+GZu8Y0VoU6Dm5Z4vWr0Ig/1NKuWRKf7j5aaYSg==}
     engines: {node: '>=6'}
 
-  openai@6.46.0:
-    resolution: {integrity: sha512-DFg6jEPT2RO+oAyXtddeUJU8zkGy1OQ1AjGzNIJUMQG03TTqvCpy9tBpQ+2VVVnvrl3E56F8GEin2JYtWpITtA==}
-    peerDependencies:
-      '@aws-sdk/credential-provider-node': '>=3.972.0 <4'
-      '@smithy/hash-node': '>=4.3.0 <5'
-      '@smithy/signature-v4': '>=5.4.0 <6'
-      ws: ^8.18.0
-      zod: ^3.25 || ^4.0
-    peerDependenciesMeta:
-      '@aws-sdk/credential-provider-node':
-        optional: true
-      '@smithy/hash-node':
-        optional: true
-      '@smithy/signature-v4':
-        optional: true
-      ws:
-        optional: true
-      zod:
-        optional: true
-
   patch-console@2.0.0:
     resolution: {integrity: sha512-0YNdUceMdaQwoKce1gatDScmMo5pu/tfABfnzEqeG0gtTmd7mh/WcwgUjtAeOU7N8nFFlbQBnFK2gXW5fGvmMA==}
     engines: {node: ^12.20.0 || ^14.13.1 || >=16.0.0}
@@ -1058,9 +1070,6 @@ packages:
   path-key@3.1.1:
     resolution: {integrity: sha512-ojmeN0qd+y0jszEtoY48r0Peq5dwMEkIlCOu6Q5f41lfkswXuKtYrhgoTpLnyIcHm24Uhqx+5Tqm2InSwLhE6Q==}
     engines: {node: '>=8'}
-
-  pathe@1.1.2:
-    resolution: {integrity: sha512-whLdWMYL2TwI08hn8/ZqAbrVemu0LNaNNJZX73O6qaIdCTfXutsLhMkjdENX0qhsQ9uIimo4/aQOmXkoon2nDQ==}
 
   pkijs@3.4.0:
     resolution: {integrity: sha512-emEcLuomt2j03vxD54giVB4SxTjnsqkU692xZOZXHDVoYyypEm+b3jpiTcc+Cf+myooc+/Ly0z01jqeNHVgJGw==}
@@ -1180,10 +1189,6 @@ packages:
   undici@8.5.0:
     resolution: {integrity: sha512-xamtWoB1EshgjpmlXd7GGm2VfdDtw1+rD8uhry8pSNW3If6S8E0m2T2+orSKeZXEn/aPJMviCpDBA65WJt8zhg==}
     engines: {node: '>=22.19.0'}
-
-  untun@0.1.3:
-    resolution: {integrity: sha512-4luGP9LMYszMRZwsvyUd9MrxgEGZdZuZgpVQHEEX0lCYFESasVRvZd0EYpCkOIbJKHMuv0LskpXc/8Un+MJzEQ==}
-    hasBin: true
 
   which@2.0.2:
     resolution: {integrity: sha512-BLI3Tl1TW3Pvl70l3yq3Y64i+awpwXqsGBYWkkqMtnbXgrMD+yj7rhW0kuEDxzJaYXGjEW5ogapKNMEKNMjibA==}
@@ -1601,10 +1606,6 @@ snapshots:
 
   chalk@5.6.2: {}
 
-  citty@0.1.6:
-    dependencies:
-      consola: 3.4.2
-
   cli-boxes@4.0.1: {}
 
   cli-cursor@4.0.0:
@@ -1621,8 +1622,6 @@ snapshots:
       convert-to-spaces: 2.0.1
 
   commander@14.0.3: {}
-
-  consola@3.4.2: {}
 
   convert-to-spaces@2.0.1: {}
 
@@ -1710,16 +1709,9 @@ snapshots:
     dependencies:
       mimic-fn: 2.1.0
 
-  openai@6.46.0(ws@8.21.0)(zod@4.4.3):
-    optionalDependencies:
-      ws: 8.21.0
-      zod: 4.4.3
-
   patch-console@2.0.0: {}
 
   path-key@3.1.1: {}
-
-  pathe@1.1.2: {}
 
   pkijs@3.4.0:
     dependencies:
@@ -1817,12 +1809,6 @@ snapshots:
   undici-types@6.21.0: {}
 
   undici@8.5.0: {}
-
-  untun@0.1.3:
-    dependencies:
-      citty: 0.1.6
-      consola: 3.4.2
-      pathe: 1.1.2
 
   which@2.0.2:
     dependencies:

@@ -7,7 +7,6 @@
  */
 import { resolve } from "node:path";
 
-import { dim } from "@routekit/cli-ui";
 import { fail } from "@routekit/cli-core";
 import { editConfig } from "@routekit/config-core";
 import type { Presenter } from "@routekit/cli-ui";
@@ -35,8 +34,9 @@ export function repoRootFor(opts: { repo?: string }): { root: string; inRepo: bo
 
 /** Load the repo config, failing with a one-line `config error:` on parse problems. */
 export function loadConfigOrFail(root: string, presenter?: Presenter): FusionConfig | undefined {
+  void presenter;
   try {
-    return loadFusionConfig(root, (message) => presenter?.note(dim(message)));
+    return loadFusionConfig(root);
   } catch (error) {
     return fail(error instanceof FusionConfigError ? error.message : String(error));
   }

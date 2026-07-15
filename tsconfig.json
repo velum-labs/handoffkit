@@ -23,10 +23,19 @@
       "path": "packages/config-core"
     },
     {
+      "path": "packages/routekit-config"
+    },
+    {
+      "path": "packages/routekit-router"
+    },
+    {
       "path": "packages/telemetry-core"
     },
     {
       "path": "packages/registry"
+    },
+    {
+      "path": "packages/fusion-config"
     },
     {
       "path": "packages/kernel"

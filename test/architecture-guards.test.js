@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import {
+  CANONICAL_SHARED_PACKAGES,
   canonicalSharedPackageViolations,
+  fusionkitCompositionViolations,
   routekitDependencyViolations,
   routekitSourceViolations
 } from "../scripts/lib/architecture-guards.mjs";
@@ -47,21 +49,43 @@ test("RouteKit dependency guard rejects direct and transitive FusionKit dependen
 });
 
 test("canonical shared package guard pins every owner name to its path", () => {
-  const manifests = [
-    ["packages/runtime-utils", "@routekit/runtime"],
-    ["packages/routekit-tracing", "@routekit/tracing"],
-    ["packages/cli-ui", "@routekit/cli-ui"],
-    ["packages/cli-core", "@routekit/cli-core"],
-    ["packages/config-core", "@routekit/config-core"],
-    ["packages/telemetry-core", "@routekit/telemetry-core"]
-  ].map(([dir, name]) => ({
+  const manifests = [...CANONICAL_SHARED_PACKAGES].map(([dir, name]) => ({
     dir,
     manifestPath: `${dir}/package.json`,
     manifest: { name }
   }));
   assert.deepEqual(canonicalSharedPackageViolations(manifests), []);
-  manifests[0].manifest.name = "@fusionkit/runtime-utils";
+  const runtime = manifests.find((entry) => entry.dir === "packages/runtime-utils");
+  assert.ok(runtime);
+  runtime.manifest.name = "@fusionkit/runtime-utils";
   assert.match(canonicalSharedPackageViolations(manifests)[0], /must declare @routekit\/runtime/);
+});
+
+test("FusionKit composition guard rejects a transitive RouteKit CLI dependency", () => {
+  const clean = [
+    workspacePackage("@fusionkit/cli", {
+      "@routekit/router": "workspace:*",
+      "@routekit/config": "workspace:*"
+    }),
+    workspacePackage("@routekit/router", {
+      "@routekit/gateway": "workspace:*"
+    }),
+    workspacePackage("@routekit/config"),
+    workspacePackage("@routekit/gateway")
+  ];
+  assert.deepEqual(fusionkitCompositionViolations(clean), []);
+
+  const bad = [
+    ...clean,
+    workspacePackage("@routekit/bad-wrapper", {
+      "@routekit/cli": "workspace:*"
+    }),
+    workspacePackage("@routekit/cli")
+  ];
+  bad[0].manifest.dependencies["@routekit/bad-wrapper"] = "workspace:*";
+  assert.deepEqual(fusionkitCompositionViolations(bad), [
+    "FusionKit dependency closure includes the RouteKit CLI: @fusionkit/cli -> @routekit/bad-wrapper -> @routekit/cli"
+  ]);
 });
 
 test("RouteKit source guard targets production paths, declarations, and imports", () => {

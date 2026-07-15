@@ -51,7 +51,7 @@ async function runVersion(ctx: CommandContext): Promise<number> {
   presenter.line(dim("tool integrations"));
   presenter.keyValue(
     Object.entries(matrix.tools).map(([name, version]) => ({
-      label: `@fusionkit/tool-${name}`,
+      label: `@routekit/tool-${name}`,
       value: version ?? dim("unknown")
     }))
   );

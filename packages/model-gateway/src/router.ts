@@ -17,6 +17,10 @@ import {
   GoogleGenAiBackend
 } from "./provider-backends.js";
 
+function isAbortError(error: unknown): boolean {
+  return error instanceof Error && error.name === "AbortError";
+}
+
 export const modelEndpointSchema = z
   .object({
     endpointId: z.string().min(1),
@@ -204,6 +208,9 @@ export class EndpointPool implements Backend {
         excluded.add(lease.id);
         this.#instances.markFailure(lease.id, this.#cooldown(response));
       } catch (error) {
+        if (isAbortError(error)) {
+          throw error;
+        }
         excluded.add(lease.id);
         this.#instances.markFailure(lease.id, this.#cooldownMs);
         if (excluded.size >= this.#instances.list().length) throw error;

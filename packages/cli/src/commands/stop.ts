@@ -2,19 +2,16 @@ import type { Command } from "commander";
 
 import { dim, done, note, uiStream } from "@routekit/cli-ui";
 
-import { stopProxy } from "../fusion/subscription-proxy.js";
 import { reapFusionServices } from "../shared/portless.js";
 
 import { registerPaletteAction } from "./palette.js";
 
-/** Reap persistent fusion services, including the subscription proxy. */
+/** Reap only FusionKit-owned portless services. */
 export async function runFusionStop(): Promise<number> {
   const log = (line: string): void => {
     uiStream().write(`${dim(line)}\n`);
   };
-  const proxy = await stopProxy(log);
-  const stoppedServices = await reapFusionServices(log);
-  const stopped = stoppedServices + (proxy.stopped ? 1 : 0);
+  const stopped = await reapFusionServices(log);
   if (stopped === 0) note("no background fusion services were running");
   else done(`stopped ${stopped} background fusion service(s)`);
   return 0;
@@ -28,7 +25,7 @@ export function registerStop(program: Command): void {
   });
   program
     .command("stop")
-    .description("stop all background fusion services (router, dashboard, subscription proxy, ...)")
+    .description("stop only FusionKit-owned processes and portless routes")
     .action(async () => {
       process.exitCode = await runFusionStop();
     });

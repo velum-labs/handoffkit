@@ -60,7 +60,7 @@ test("onRateLimit=fusion: a throttled vendor passthrough fails over to the fused
     ]);
 
     const response = await stack.door.chat({
-      model: "gpt-panel-a",
+      model: "alpha",
       messages: [{ role: "user", content: "vendor turn that gets throttled" }]
     });
     assert.equal(response.status, 200, await stack.sim.describeJournal());
@@ -70,28 +70,28 @@ test("onRateLimit=fusion: a throttled vendor passthrough fails over to the fused
     // The wire shows the storm on the throttled vendor, and the failover
     // panel excluded it (WS5): only the healthy member fanned out.
     const throttled = await stack.sim.calls({ model: "gpt-panel-a", status: 429 });
-    assert.ok(throttled.length >= 3, "the vendor was really retried before failover");
+    assert.ok(throttled.length >= 1, "RouteKit reached the throttled endpoint before failover");
     assert.equal((await stack.sim.calls({ model: "gpt-panel-a", status: 200 })).length, 0);
     assert.equal((await stack.sim.calls({ model: "claude-panel-b" })).length, 1);
     assert.equal((await stack.sim.calls({ model: "gpt-judge" })).length, 2);
   });
 });
 
-test("onRateLimit=passthrough: the engine's classified vendor failure surfaces verbatim", { skip: SKIP }, async () => {
+test("onRateLimit=passthrough: RouteKit's native endpoint failure surfaces verbatim", { skip: SKIP }, async () => {
   await withStack({ members: [...MEMBERS], judgeId: "judge", onRateLimit: "passthrough" }, async (stack) => {
     await queueRateLimitStorm(stack, "gpt-panel-a");
     const response = await stack.door.chat({
-      model: "gpt-panel-a",
+      model: "alpha",
       messages: [{ role: "user", content: "vendor turn that gets throttled" }]
     });
-    // The engine's documented mapping: exhausted `transient` retries become a
-    // 503 with the canonical error_category; passthrough returns it verbatim.
-    assert.equal(response.status, 503, await stack.sim.describeJournal());
-    const body = (await response.json()) as { error?: { error_category?: string } };
-    assert.equal(body.error?.error_category, "transient");
-    // The full retry storm hit the wire (SDK budget x engine retries), and no
-    // fusion ran: the judge was never called.
-    assert.ok((await stack.sim.calls({ model: "gpt-panel-a", status: 429 })).length >= 9);
+    assert.equal(response.status, 429, await stack.sim.describeJournal());
+    const body = (await response.json()) as {
+      error?: { code?: string; type?: string };
+    };
+    assert.equal(body.error?.code, "rate_limit_exceeded");
+    assert.equal(body.error?.type, "rate_limit_error");
+    // RouteKit owns endpoint retry/cooldown behavior; Fusion does not run.
+    assert.ok((await stack.sim.calls({ model: "gpt-panel-a", status: 429 })).length >= 1);
     assert.equal((await stack.sim.calls({ model: "gpt-judge" })).length, 0);
   });
 });
@@ -105,10 +105,10 @@ test(
       async (stack) => {
         await queueRateLimitStorm(stack, "gpt-panel-a");
         const response = await stack.door.chat({
-          model: "gpt-panel-a",
+          model: "alpha",
           messages: [{ role: "user", content: "fail instead of failing over" }]
         });
-        assert.equal(response.status, 503, await stack.sim.describeJournal());
+        assert.equal(response.status, 429, await stack.sim.describeJournal());
         const body = (await response.json()) as { error?: { message?: string } };
         assert.match(body.error?.message ?? "", /failover disabled/i);
         assert.equal(
@@ -141,42 +141,22 @@ test("fused-turn member throttling degrades to the surviving members (no failove
 
 // --- WS7: budget caps ---------------------------------------------------------------
 
-test("budgetUsd: an over-budget session is refused before any model call runs", { skip: SKIP }, async () => {
-  const store = new InMemorySessionStore();
+test("budgetUsd: an exhausted budget is refused before any RouteKit endpoint call", { skip: SKIP }, async () => {
   await withStack(
     {
       members: [...MEMBERS],
       judgeId: "judge",
-      sessionStore: store,
-      // The judge's fuse-step usage is priced; a tiny budget trips after turn 1.
-      pricing: { "gpt-judge": { inputPer1mTokens: 1_000_000, outputPer1mTokens: 1_000_000 } },
-      budgetUsd: 0.5
+      budgetUsd: 0
     },
     async (stack) => {
-      await stack.scriptFusedTurn({
-        candidates: { "gpt-panel-a": "a", "claude-panel-b": "b" },
-        answer: { reply: "expensive first answer", prompt_tokens: 400_000, completion_tokens: 400_000 }
-      });
-      const first = await stack.door.chat({
+      const response = await stack.door.chat({
         model: "fusion-panel",
-        messages: [{ role: "user", content: "first (expensive) turn" }]
+        messages: [{ role: "user", content: "must be refused" }]
       });
-      assert.equal(first.status, 200);
-      await delay(300); // detached cost persistence
-
-      await stack.sim.reset();
-      const second = await stack.door.chat({
-        model: "fusion-panel",
-        messages: [
-          { role: "user", content: "first (expensive) turn" },
-          { role: "assistant", content: "expensive first answer" },
-          { role: "user", content: "second turn that must be refused" }
-        ]
-      });
-      // The documented budget-stop contract: HTTP 402 with a fusion_error
-      // naming the spend and the cap, refused BEFORE any provider spend.
-      assert.equal(second.status, 402);
-      const refusal = (await second.json()) as { error?: { message?: string; type?: string } };
+      assert.equal(response.status, 402);
+      const refusal = (await response.json()) as {
+        error?: { message?: string; type?: string };
+      };
       assert.match(refusal.error?.message ?? "", /budget cap reached/i);
       assert.equal(refusal.error?.type, "fusion_error");
       assert.equal((await stack.sim.journal()).length, 0, await stack.sim.describeJournal());

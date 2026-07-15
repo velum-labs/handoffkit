@@ -13,8 +13,8 @@ export const cursorTool: ToolIntegration = {
   packageName: "@routekit/tool-cursor",
   installHint: "install the Cursor CLI: https://cursor.com/cli",
   authSummary: "Cursor uses a logged-in cursor-agent CLI and a local bridge.",
-  setupSnippet: ({ gatewayUrl, note }) =>
-    `cursor-agent --endpoint ${note ?? gatewayUrl} --model gateway-model`,
+  setupSnippet: ({ gatewayUrl, model = "gateway-model", note }) =>
+    `cursor-agent --endpoint ${note === undefined || note.length === 0 ? gatewayUrl : note} --model ${model}`,
   launch: launchCursor,
   driver: {
     kind: driver.kind,

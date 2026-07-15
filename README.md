@@ -48,39 +48,38 @@ The thesis is economic as much as architectural: several cheaper or open-weight 
 
 | Feature | What it gives you | Docs |
 | --- | --- | --- |
-| Fused coding harnesses | `fusionkit codex`, `claude`, and `cursor` launch normal agents against a local fusion gateway. | [quickstart](https://fusionkit.velum-labs.com/docs/getting-started/quickstart) |
+| Fused coding harnesses | `fusionkit codex`, `claude`, `cursor`, and `opencode` launch normal agents against a local fusion gateway. | [quickstart](https://fusionkit.velum-labs.com/docs/getting-started/quickstart) |
 | Raw inference endpoint | `fusionkit serve` exposes OpenAI-compatible chat completions backed by the same panel + synthesis engine. | [endpoint](https://fusionkit.velum-labs.com/docs/getting-started/inference-endpoint) |
 | Streaming + tool calling | OpenAI Responses, Anthropic Messages, and OpenAI Chat dialects stay native at the harness edge. | [model fusion](https://fusionkit.velum-labs.com/docs/concepts/model-fusion) |
-| Named ensembles | `.fusionkit/fusion.json` can define multiple panels; each becomes its own `fusion-<name>` model id. | [configuration](https://fusionkit.velum-labs.com/docs/getting-started/configuration) |
+| Named ensembles | `.fusionkit/fusion.json` v4 composes opaque RouteKit endpoint IDs; each ensemble becomes its own `fusion-<name>` model id. | [configuration](https://fusionkit.velum-labs.com/docs/getting-started/configuration) |
 | Rate-limit handoff | Default `onRateLimit: fusion` re-runs a failed passthrough turn on the panel instead of returning a raw 429. | [handoff](https://fusionkit.velum-labs.com/docs/getting-started/rate-limit-handoff) |
 | Durable sessions | Full turns, metadata, and costs persist locally for `sessions`, `--resume`, and `--continue`. | [privacy](https://fusionkit.velum-labs.com/docs/privacy) |
 | Cost controls | Per-turn token/USD estimates, receipts, and `--budget <usd>` keep spend visible. | [costs](https://fusionkit.velum-labs.com/docs/cli/cost-and-models) |
-| Local MLX path | `--local` runs an Apple-Silicon MLX panel with no provider API spend. | [models](https://fusionkit.velum-labs.com/docs/cli/models-and-panels) |
+| RouteKit composition | Embedded or external RouteKit owns model routing and credentials; FusionKit owns ensembles and synthesis. | [configuration](https://fusionkit.velum-labs.com/docs/getting-started/configuration) |
 
 ## CLI surface
 
 | Command | Purpose |
 | --- | --- |
-| `codex` / `claude` / `cursor` / `serve` | Main journey: run a fused panel behind a coding harness, or run just the gateway. |
+| `codex` / `claude` / `cursor` / `opencode` / `serve` | Main journey: run configured fusion ensembles behind a coding harness, or run just the gateway. |
 | `setup` | Pre-provision the pinned PyPI `fusionkit` engine into the `uvx` cache. |
-| `doctor` | Preflight readiness; exits nonzero only when not ready (no `uv`/`uvx`, or no credentials and no downloaded local MLX model). |
-| `init` | Scaffold `.fusionkit/fusion.json` and editable prompt files for a repo. |
-| `config` | `show` (effective config + run preview), `path`, `get`, `set`, `unset`, `edit`, and `export-yaml`. |
+| `doctor` | Validate Fusion/RouteKit config, endpoint IDs, `uv`/`uvx`, git, and coding tools. |
+| `init` | Scaffold `.fusionkit/fusion.json` v4 and a safe `.routekit/router.yaml` when absent. |
+| `config` | `show`, `path`, `get`, `set`, `unset`, and `edit` Fusion-only settings. |
 | `prompts` | `list`, `edit`, and `reset` judge/synthesizer prompt overrides. |
 | `ensemble` | `list`, `add`, `edit`, `remove`, and `rename` named ensembles. |
-| `sessions`, `models` | Manage durable sessions and the local MLX model cache; launcher `--direct` mode handles single-local-model runs. |
-| `stop` | Stop all background fusion services (router, dashboard, subscription proxy, ...). |
-| `install <tool>` / `uninstall <tool>` | Register FusionKit inside a tool's own config (currently `codex`: extra provider + one profile per ensemble). |
-| `proxy` | `serve`, `add`, `status`, and `stop` for the Claude Code / Codex subscription pooling relay. |
+| `sessions`, `models` | Manage durable Fusion sessions and the Fusion-owned local MLX cache. |
+| `stop` | Stop only Fusion-owned processes and portless routes; external RouteKit daemons are untouched. |
 | `telemetry` | `status`, `on`, `off`, and `inspect` for opt-in, anonymous product telemetry. |
 | `completion <shell>`, `version` | Shell completions and version reporting. |
 
 ## Architecture
 
-Two processes cooperate:
+Three layers cooperate:
 
-1. **Node `@fusionkit/cli`** owns the user journey: config, preflight, harness launchers, the local gateway, sessions, cost controls, and local model management.
-2. **Python `fusionkit`** owns the router and fusion engine: `/v1/chat/completions`, panel calls, judge synthesis, native run records, and benchmark tooling.
+1. **RouteKit SDKs** own RouterConfig loading, model routing, provider credentials, accounts, and the embedded router lifecycle.
+2. **Node `@fusionkit/cli`** owns Fusion v4 config, ensembles, harness launchers, the Fusion gateway, sessions, and observability.
+3. **Python `fusionkit`** performs judge/synthesis calls through the RouteKit gateway. Its provider implementation is retained temporarily and is the next deletion phase.
 
 Panel members run in lightweight git worktrees so parallel candidates can inspect or edit the same repo without trampling each other. The gateway reshapes the fused result back into the dialect your harness already expects. Maintainer architecture details live in [`docs/fusion-harness-gateway.md`](docs/fusion-harness-gateway.md) and [`docs/fusion-judge-trajectory.md`](docs/fusion-judge-trajectory.md).
 

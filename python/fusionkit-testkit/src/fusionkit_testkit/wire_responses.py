@@ -42,6 +42,20 @@ def _usage_json(behavior: Behavior) -> dict[str, Any]:
 
 def _output_items(behavior: Behavior, response_id: str) -> list[dict[str, Any]]:
     items: list[dict[str, Any]] = []
+    if behavior.reasoning is not None:
+        items.append(
+            {
+                "id": f"{response_id}_rs0",
+                "type": "reasoning",
+                "status": "completed",
+                "summary": [
+                    {
+                        "type": "summary_text",
+                        "text": behavior.reasoning,
+                    }
+                ],
+            }
+        )
     if behavior.reply is not None:
         items.append(
             {

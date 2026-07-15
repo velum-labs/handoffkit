@@ -28,7 +28,7 @@
     {
       "id": "models.native-members-advertised",
       "category": "model-exposure",
-      "expectation": "Panel provider models remain available as native passthrough choices.",
+      "expectation": "Opaque RouteKit endpoint ids remain available as native passthrough choices.",
       "status": "required",
       "testFile": "packages/cli/src/test/stack-e2e.test.ts",
       "anchor": "must be advertised as a passthrough"
@@ -140,10 +140,10 @@
     {
       "id": "fusion.passthrough-bypasses-fusion",
       "category": "fusion",
-      "expectation": "Selecting a native provider model performs exactly one provider call and never invokes the judge.",
+      "expectation": "Selecting an opaque RouteKit endpoint performs exactly one endpoint call and never invokes the judge.",
       "status": "required",
       "testFile": "packages/cli/src/test/stack-e2e.test.ts",
-      "anchor": "vendor passthrough routes each member"
+      "anchor": "RouteKit endpoint passthrough routes each opaque id"
     },
     {
       "id": "fusion.extension-metadata",
@@ -308,7 +308,7 @@
     {
       "id": "harness.driver-cutover",
       "category": "harness",
-      "expectation": "Claude Agent SDK and Codex SDK drivers use per-member native dialect gateways on multiple turns.",
+      "expectation": "Canonical tool drivers use the single RouteKit gateway on multiple turns.",
       "status": "required",
       "testFile": "packages/cli/src/test/stack-drivers-e2e.test.ts",
       "anchor": "real driver runs two fused turns"
@@ -332,7 +332,7 @@
     {
       "id": "policy.failover-passthrough",
       "category": "policy",
-      "expectation": "Passthrough policy surfaces the engine's classified provider failure verbatim.",
+      "expectation": "Passthrough policy surfaces RouteKit's native endpoint failure verbatim.",
       "status": "required",
       "testFile": "packages/cli/src/test/stack-policies-e2e.test.ts",
       "anchor": "onRateLimit=passthrough"
@@ -348,10 +348,10 @@
     {
       "id": "policy.budget-before-spend",
       "category": "policy",
-      "expectation": "An over-budget session is refused with 402 before any provider call.",
+      "expectation": "An exhausted budget is refused with 402 before any RouteKit endpoint call.",
       "status": "required",
       "testFile": "packages/cli/src/test/stack-policies-e2e.test.ts",
-      "anchor": "over-budget session is refused before any model call"
+      "anchor": "exhausted budget is refused before any RouteKit endpoint call"
     },
     {
       "id": "security.gateway-auth",
@@ -380,10 +380,10 @@
     {
       "id": "session.cost-persisted",
       "category": "sessions",
-      "expectation": "Fused usage and priced cost are persisted in the durable session ledger.",
+      "expectation": "Fused usage is persisted without inferring provider pricing from opaque endpoint ids.",
       "status": "required",
       "testFile": "packages/cli/src/test/stack-depth-e2e.test.ts",
-      "anchor": "priced cost"
+      "anchor": "without resolving opaque endpoint ids to provider pricing"
     },
     {
       "id": "lifecycle.straggler-bounded",
@@ -500,17 +500,25 @@
     {
       "id": "cli.management-surfaces",
       "category": "cli",
-      "expectation": "The real CLI covers config, prompts, install/uninstall, telemetry, setup, doctor, completions, and versions.",
+      "expectation": "The FusionKit CLI exposes fusion launchers and management surfaces while excluding proxy, account, install/uninstall, and direct-mode commands.",
       "status": "required",
-      "testFile": "packages/cli/src/test/cli-command-surfaces-e2e.test.ts",
-      "anchor": "config path/show/get/set/unset/export-yaml"
+      "testFile": "packages/cli/src/test/composition.test.ts",
+      "anchor": "Fusion CLI contains only fusion product launch surfaces"
+    },
+    {
+      "id": "composition.routekit-endpoint-ids",
+      "category": "composition",
+      "expectation": "Opaque RouteKit endpoint IDs cross the real embedded-router, Python-sidecar, and Fusion-gateway stack, and closing Fusion leaves external RouteKit routers running.",
+      "status": "required",
+      "testFile": "packages/cli/src/test/stack-endpoint-ids-e2e.test.ts",
+      "anchor": "embedded RouteKit routes opaque endpoint ids"
     },
     {
       "id": "observability.trace-semantics",
       "category": "observability",
       "expectation": "Fusion candidate, panel, judge, and provider spans use the registered semantic conventions and preserve trace context.",
       "status": "required",
-      "testFile": "packages/model-gateway/src/test/fusion-backend-trace.test.ts",
+      "testFile": "packages/fusion-gateway/src/test/fusion-backend-trace.test.ts",
       "anchor": "trace"
     },
     {

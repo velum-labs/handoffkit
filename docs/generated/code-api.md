@@ -197,6 +197,41 @@ Example utilities entry point. It exposes demo manifest parsing, mock model help
 
 No exports found.
 
+### `packages/fusion-config/src/index.ts`
+
+No module JSDoc was found.
+
+- `export const FUSION_CONFIG_DIRNAME ...`
+- `export const FUSION_CONFIG_BASENAME ...`
+- `export const FUSION_PROMPTS_DIRNAME ...`
+- `export const FUSION_CONFIG_VERSION ...`
+- `export const DEFAULT_ENSEMBLE_NAME ...`
+- `export const FUSION_TOOLS ...`
+- `export type FusionTool ...`
+- `export const PROMPT_IDS ...`
+- `export type PromptId ...`
+- `export const PROMPT_CONFIG_KEY: Record<PromptId, string> ...`
+- `export type PromptOverrides ...`
+- `export type OnRateLimitPolicy ...`
+- `export type PanelTrust ...`
+- `export type EmbeddedRouterConfig ...`
+- `export type ExternalRouterConfig ...`
+- `export type FusionRouterConfig ...`
+- `export type EnsembleConfig ...`
+- `export type FusionConfig ...`
+- `export class FusionConfigError extends Error ...`
+- `export function fusionConfigDir(repoRoot: string): string ...`
+- `export function fusionConfigPath(repoRoot: string): string ...`
+- `export function fusionPromptsDir(repoRoot: string, ensemble?: string): string ...`
+- `export function fusionPromptPath(repoRoot: string, id: PromptId, ensemble?: string): string ...`
+- `export function validateEnsembleName(name: string, source: string): void ...`
+- `export function parseFusionConfig(raw: unknown, source: string): FusionConfig ...`
+- `export function readFusionPrompts(repoRoot: string, ensemble?: string): PromptOverrides ...`
+- `export function loadFusionConfig(repoRoot: string): FusionConfig | undefined ...`
+- `export function persistedFusionConfig(config: FusionConfig): Record<string, unknown> ...`
+- `export function writeFusionConfig(`
+- `export function writeFusionPrompts(`
+
 ### `packages/fusion-gateway/src/index.ts`
 
 No module JSDoc was found.
@@ -226,10 +261,6 @@ No module JSDoc was found.
 - `export type { MlxBackendOptions } from "./mlx-backend.js";`
 - `export { createBackend, DEFAULT_MLX_MODEL, resolveBackendConfig } from "./config.js";`
 - `export type { BackendConfig } from "./config.js";`
-- `export { FUSION_EVIDENCE_HEADER, FUSION_REPORT_HEADER, FUSION_RUN_ID_HEADER, FUSION_STATUS_HEADER, formatAnthropic, formatChat, formatResponses, promptFromAnthropic, promptFromChat, promptFromResponses, startFusionGateway } from "./fusion-gateway.js";`
-- `export type { ChatRequest, FrontDoorDialect, FrontDoorRunner, FrontDoorRunnerInput, FrontDoorRunnerResult, FusionGateway, FusionGatewayOptions } from "./fusion-gateway.js";`
-- `export { runFrontDoorAcceptance } from "./front-door-acceptance.js";`
-- `export type { FrontDoorAcceptanceOptions, FrontDoorAcceptanceReport, FrontDoorOutcome, FrontDoorOutcomeProducer, FrontDoorStatus } from "./front-door-acceptance.js";`
 - `export { createTrajectoryCapture, reconstructTrajectory } from "./trajectory-capture.js";`
 - `export type { CapturedStep, CapturedTrajectory, TrajectoryCapture } from "./trajectory-capture.js";`
 - `export { PANEL_DEPTH_HEADER, panelDepthFromRequest, parsePanelDepth } from "./request-context.js";`
@@ -386,6 +417,23 @@ Executable entrypoint for the independent RouteKit router CLI.
 
 No exports found.
 
+### `packages/routekit-config/src/index.ts`
+
+No module JSDoc was found.
+
+- `export type RouterConfigSource ...`
+- `export type LoadedRouterConfig ...`
+- `export type RouterConfigPaths ...`
+- `export function routekitHome(env: NodeJS.ProcessEnv ...`
+- `export function globalRouterConfigPath(home: string ...`
+- `export function projectRouterConfigPath(cwd: string ...`
+- `export function findProjectRouterConfig(cwd: string ...`
+- `export function routerConfigPaths(`
+- `export function loadRouterConfig(`
+- `export function writeRouterConfig(path: string, config: RouterConfig | unknown): string ...`
+- `export function updateRouterConfig(`
+- `export const DEFAULT_ROUTER_CONFIG: RouterConfig ...`
+
 ### `packages/routekit-registry/src/index.ts`
 
 Typed accessors over RouteKit's generated neutral registry data.
@@ -427,6 +475,13 @@ panel presets are deliberately excluded.
 - `export const PREFERRED_LOCAL_MODELS: readonly PreferredLocalModel[] ...`
 - `export const GATEWAY_DEFAULT_MLX_MODEL: string ...`
 - `export const LOCAL_PROBE_MODEL: string ...`
+
+### `packages/routekit-router/src/index.ts`
+
+No module JSDoc was found.
+
+- `export type StartRouterOptions ...`
+- `export type RunningRouter ...`
 
 ### `packages/routekit-tracing/src/index.ts`
 

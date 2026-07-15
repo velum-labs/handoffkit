@@ -55,25 +55,17 @@ You don't edit any agent config. `fusionkit` sets up each harness for you:
 | --- | --- |
 | Codex | an ephemeral `CODEX_HOME` with a `fusion-gateway` provider (`wire_api = responses`) |
 | Claude Code | `ANTHROPIC_BASE_URL` / `ANTHROPIC_AUTH_TOKEN` pointed at the gateway |
-| Cursor | the bundled cursorkit bridge driving `cursor-agent`; add `--ide` to wire the **Cursor IDE** through a local desktop proxy (no public tunnel) |
+| Cursor | the bundled cursorkit bridge driving `cursor-agent`; add `--ide` to wire the **Cursor IDE** through a local desktop proxy |
+| OpenCode | the generic RouteKit tool launcher and driver |
 
 ```bash
 fusionkit cursor --ide          # turnkey Cursor IDE (no manual tunnel)
 ```
 
-For a **persistent** Codex integration (instead of the ephemeral per-run
-wiring), `fusionkit install codex` registers the FusionKit gateway as an extra
-provider plus one profile per ensemble in `~/.codex/config.toml`; pair it with
-a running `fusionkit serve` and launch `codex --profile fusion-panel`. Remove
-it any time with `fusionkit uninstall codex`.
+## Picking a fused ensemble
 
-## Picking the fused vs. passthrough model
-
-The gateway advertises the **fused** model (`fusion-panel`) *and* each panel
-member as a direct **passthrough**. Use the agent's own `/model` picker to switch
-between "run the ensemble" and "use this one vendor directly" mid-session. When a
-passthrough vendor hits a rate limit, the turn is transparently handed off to the
-ensemble. See [rate-limit handoff](quickstart-handoff.md).
+The gateway advertises the default fused model (`fusion-panel`) and each named
+ensemble as `fusion-<name>`. Use RouteKit for direct single-model sessions.
 
 ## Useful flags
 
@@ -81,10 +73,8 @@ ensemble. See [rate-limit handoff](quickstart-handoff.md).
 forwarded to the agent.
 
 ```bash
-fusionkit codex --local                                   # Apple-Silicon MLX trio
 fusionkit claude --repo /path/to/repo                     # fuse over another repo
-fusionkit codex --model gpt=openai:gpt-5.5 --model opus=anthropic:claude-opus-4-8
-fusionkit codex --judge-model claude-sonnet-4-6           # who synthesizes
+fusionkit codex --ensemble review                         # configured endpoint-ID ensemble
 fusionkit codex --budget 5                                # stop at $5 of spend
 fusionkit codex --continue                                # resume the last session
 fusionkit codex --on-rate-limit fusion                    # handoff policy (default)

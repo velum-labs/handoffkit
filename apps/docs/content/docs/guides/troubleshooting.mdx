@@ -53,11 +53,8 @@ required. It only needs a logged-in `cursor-agent` CLI
 Cursor's BYOK ("Override OpenAI Base URL") requests are proxied through
 Cursor's backend, which deliberately blocks loopback and private addresses
 (`ssrf_blocked`). A `http://127.0.0.1:...` base URL can never work. Use
-`fusionkit serve --expose` to publish the gateway on a public HTTPS tunnel
-with a required bearer token; it prints the exact Cursor settings. You can
-also bring your own tunnel and pass `--public-url` or set
-`FUSIONKIT_PUBLIC_URL`. For Cursor without BYOK, `fusionkit cursor --ide`
-needs no tunnel at all. See [Cursor](/docs/tools/cursor).
+`fusionkit cursor --ide`, which needs no public tunnel, or arrange external
+network exposure outside FusionKit. See [Cursor](/docs/tools/cursor).
 
 ## Where are the logs?
 
@@ -65,8 +62,8 @@ Each run writes full per-process logs to a temp directory; fusionkit prints the
 path (`fusion: logs in ...`). Failures also surface the most relevant lines
 inline.
 
-## Keys are in `.env` but not picked up
+## Provider keys are not picked up
 
-fusionkit auto-loads `.env` from the current directory and the repo root, but
-**already-exported** variables always win. If you exported an empty value, that
-empty value is used. Unset it so the `.env` value applies.
+Export the variables named by `.routekit/router.yaml` before launch. RouteKit
+owns provider credential resolution; use `routekit doctor` to diagnose missing
+provider variables. FusionKit only resolves an external router's `authEnv`.

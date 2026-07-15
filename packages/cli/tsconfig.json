@@ -22,6 +22,12 @@
       "path": "../config-core"
     },
     {
+      "path": "../routekit-config"
+    },
+    {
+      "path": "../fusion-config"
+    },
+    {
       "path": "../telemetry-core"
     },
     {
@@ -34,10 +40,10 @@
       "path": "../model-gateway"
     },
     {
-      "path": "../fusion-gateway"
+      "path": "../routekit-router"
     },
     {
-      "path": "../accounts"
+      "path": "../fusion-gateway"
     },
     {
       "path": "../protocol"

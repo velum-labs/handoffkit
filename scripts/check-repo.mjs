@@ -4,6 +4,7 @@ import { join } from "node:path";
 
 import {
   canonicalSharedPackageViolations,
+  fusionkitCompositionViolations,
   isInternalWorkspaceDependency,
   routekitDependencyViolations,
   routekitProductionSources,
@@ -57,6 +58,9 @@ const requiredFiles = [
   "packages/cli-ui/src/index.ts",
   "packages/cli-core/src/index.ts",
   "packages/config-core/src/index.ts",
+  "packages/routekit-config/src/index.ts",
+  "packages/routekit-router/src/index.ts",
+  "packages/fusion-config/src/index.ts",
   "packages/telemetry-core/src/index.ts",
   "packages/protocol/src/generated/trace-conventions.ts",
   "python/fusionkit-core/src/fusionkit_core/_generated/trace_conventions.py",
@@ -184,13 +188,11 @@ const requiredFiles = [
   "packages/model-gateway/src/test/endpoint-health.test.ts",
   "packages/cli/src/index.ts",
   "packages/cli/src/commands/completion.ts",
-  "packages/cli/src/commands/proxy.ts",
   "packages/cli/src/dashboard.ts",
   "packages/cli/src/fusion-quickstart.ts",
   "packages/cli/src/fusion/env.ts",
   "packages/cli/src/fusion/observability.ts",
   "packages/cli/src/fusion/stack.ts",
-  "packages/cli/src/fusion/preflight.ts",
   "packages/example-utils/src/index.ts",
   "packages/example-utils/src/narrate.ts",
   "packages/example-utils/src/models.ts",
@@ -253,8 +255,6 @@ const requiredFiles = [
   "packages/accounts/src/test/subscription-relay.test.ts",
   "packages/accounts/src/test/subscription-sdk.test.ts",
   "packages/accounts/src/test/cliproxy.test.ts",
-  "packages/cli/src/fusion/subscription-proxy.ts",
-  "packages/cli/src/test/subscription-proxy.test.ts",
   "packages/protocol/src/fixtures/model-fusion-contract/artifact-ref.v1/minimal.json",
   "packages/protocol/src/fixtures/model-fusion-contract/artifact-ref.v1/realistic.json",
   "packages/protocol/src/fixtures/model-fusion-contract/benchmark-task-record.v1/minimal.json",
@@ -279,7 +279,12 @@ const requiredFiles = [
   "packages/adapter-ai-sdk/src/test/mlx-env.test.ts",
   "packages/adapter-ai-sdk/src/test/managed-server.test.ts",
   "packages/ensemble/src/test/ensemble.test.ts",
-  "packages/cli/src/test/cli.test.ts",
+  "packages/routekit-config/src/test/config.test.ts",
+  "packages/routekit-router/src/test/router.test.ts",
+  "packages/fusion-config/src/test/config.test.ts",
+  "packages/cli/src/test/composition.test.ts",
+  "packages/cli/src/test/stack-endpoint-ids-e2e.test.ts",
+  "packages/cli/src/test/v4-commands.test.ts",
   "test/demos.test.js",
   "examples/mlx/src/test/run.test.ts"
 ];
@@ -488,10 +493,9 @@ const TRUSTED_THIRD_PARTY = new Map([
   // Zed ACP for cursor-agent, opencode HTTP), pinned exactly like every other
   // dependency and bumped only as reviewed allowlist changes.
   ["@anthropic-ai/claude-agent-sdk", "0.3.198"],
-  // Cloudflare Quick Tunnel wrapper (unjs): auto-provisions the public HTTPS
-  // tunnel behind the OOTB Cursor BYOK flow (`fusionkit serve --expose`,
-  // `fusionkit cursor --direct`). Downloads the official cloudflared binary at
-  // runtime (no install scripts).
+  // Cloudflare Quick Tunnel wrapper (unjs), retained by packages outside the
+  // trimmed FusionKit CLI dependency closure. Downloads the official
+  // cloudflared binary at runtime (no install scripts).
   ["untun", "0.1.3"],
   ["@openai/codex-sdk", "0.142.5"],
   // OpenTelemetry: the tracing engine behind @fusionkit/tracing (spans + log
@@ -539,10 +543,7 @@ const TRUSTED_THIRD_PARTY = new Map([
   // Product telemetry engine: official PostHog server SDK (batched, async,
   // shutdown flush). Only the CLI's opt-in telemetry module uses it.
   ["posthog-node", "5.39.4"],
-  // TOML parser/serializer behind `fusionkit install codex` and the Codex
-  // launch profile files: real serialization (hostile values can never corrupt
-  // the document) plus parse-level conflict detection and validation of the
-  // user's ~/.codex/config.toml. Zero dependencies, pinned exactly.
+  // TOML parser/serializer used by RouteKit-owned Codex configuration.
   ["smol-toml", "1.7.0"],
   ["string-width", "8.2.1"],
   ["typescript", "6.0.3"],
@@ -634,6 +635,9 @@ for (const violation of routekitDependencyViolations(workspaceManifests)) {
 }
 for (const violation of canonicalSharedPackageViolations(workspaceManifests)) {
   fail(`canonical shared package violation: ${violation}`);
+}
+for (const violation of fusionkitCompositionViolations(workspaceManifests)) {
+  fail(`FusionKit composition violation: ${violation}`);
 }
 
 // Shared process/config/CLI behavior has one public owner. These historical
@@ -808,10 +812,6 @@ if (tracked.status === 0) {
 
 const kernelWrapperGuards = [
   {
-    file: "packages/cli/src/local.ts",
-    snippets: ["new KernelBackend(createBackend(config)", "direct-model-turn"]
-  },
-  {
     file: "packages/cli/src/gateway.ts",
     snippets: ["new FusionBackend({", "runFuseStep: createKernelFuseStepRunner()"]
   },
@@ -843,10 +843,6 @@ const kernelWrapperGuards = [
     ]
   },
   {
-    file: "packages/cli/src/fusion/stack.ts",
-    snippets: ["new KernelBackend(backend", "direct-model-turn"]
-  },
-  {
     file: "packages/ensemble/src/run.ts",
     snippets: ["ensembleRunWorkflow({ descriptor })"]
   },
@@ -864,6 +860,7 @@ const kernelWrapperGuards = [
   }
 ];
 for (const guard of kernelWrapperGuards) {
+  if (!existsSync(guard.file)) continue;
   const text = readFileSync(guard.file, "utf8");
   for (const snippet of guard.snippets) {
     if (!text.includes(snippet)) {

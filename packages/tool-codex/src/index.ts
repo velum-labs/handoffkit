@@ -13,10 +13,10 @@ export const codexTool: ToolIntegration = {
   packageName: "@routekit/tool-codex",
   installHint: "install the Codex CLI: https://github.com/openai/codex",
   authSummary: "Codex uses an ephemeral gateway-backed provider.",
-  setupSnippet: ({ gatewayUrl }) =>
+  setupSnippet: ({ gatewayUrl, model = "gateway-model" }) =>
     codexLaunchConfigToml({
       gatewayUrl,
-      defaultModel: "gateway-model"
+      defaultModel: model
     }),
   launch: launchCodex,
   driver: {

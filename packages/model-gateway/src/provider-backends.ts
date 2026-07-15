@@ -621,6 +621,15 @@ function responsesRequest(body: ChatBody, model: string): Record<string, unknown
 
 function responsesOutput(payload: Record<string, unknown>): Record<string, unknown> {
   const output = payload.output as Array<Record<string, unknown>> | undefined;
+  const reasoning = (output ?? [])
+    .filter((item) => item.type === "reasoning")
+    .flatMap((item) => {
+      const summary = item.summary as Array<Record<string, unknown>> | undefined;
+      return (summary ?? []).flatMap((part) =>
+        typeof part.text === "string" ? [part.text] : []
+      );
+    })
+    .join("");
   const text = (output ?? []).flatMap((item) => {
     const content = item.content as Array<Record<string, unknown>> | undefined;
     return (content ?? []).flatMap((part) =>
@@ -642,6 +651,7 @@ function responsesOutput(payload: Record<string, unknown>): Record<string, unkno
   return {
     role: "assistant",
     content: text,
+    ...(reasoning.length > 0 ? { reasoning } : {}),
     ...(toolCalls.length > 0 ? { tool_calls: toolCalls } : {})
   };
 }
@@ -676,6 +686,25 @@ export class CodexResponsesBackend extends HttpProviderBackend {
       let hasToolCalls = false;
       return mapSse(response, (event, data) => {
         const item = data as Record<string, unknown>;
+        if (
+          event === "response.reasoning_summary_text.delta" ||
+          event === "response.reasoning_text.delta"
+        ) {
+          return [
+            {
+              id: randomId(18, "chatcmpl_"),
+              object: "chat.completion.chunk",
+              model,
+              choices: [
+                {
+                  index: 0,
+                  delta: { reasoning: item.delta },
+                  finish_reason: null
+                }
+              ]
+            }
+          ];
+        }
         if (event === "response.output_text.delta") {
           return [
             {

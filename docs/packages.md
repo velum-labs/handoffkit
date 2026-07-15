@@ -24,7 +24,10 @@ HTTP contracts, read [Specs and APIs](specs-and-apis.md).
 | Package | Responsibility | Start with |
 | --- | --- | --- |
 | `@routekit/cli` | Independent `routekit` configuration, gateway serving, endpoint/account management, and coding-tool launchers. | `packages/routekit-cli/src/cli.ts`, `packages/routekit-cli/src/commands.ts` |
-| `@fusionkit/cli` | `fusionkit` command line workflows for init, local models, harness launchers, sessions, config, prompts, and fusion. | `packages/cli/src/cli.ts`, `packages/cli/src/commands` |
+| `@routekit/config` | Reusable RouterConfig discovery, layered loading, validation, and atomic writes. | `packages/routekit-config/src/index.ts` |
+| `@routekit/router` | Reusable embedded RouteKit router composition, including account relays and gateway ownership. | `packages/routekit-router/src/index.ts` |
+| `@fusionkit/config` | Fusion-only v4 config, opaque endpoint-ID ensembles, prompt loading, validation, and atomic writes. | `packages/fusion-config/src/index.ts` |
+| `@fusionkit/cli` | Fusion-only init, local-panel lifecycle, generic harness launchers, sessions, config, prompts, and observability. It composes RouteKit SDKs but never `@routekit/cli`. | `packages/cli/src/cli.ts`, `packages/cli/src/commands` |
 | `@routekit/cli-ui` | Brand-configurable Ink/plain presenters, prompts, wizards, and formatting. | `packages/cli-ui/src/index.ts` |
 | `@routekit/cli-core` | CLI context, errors, shared option parsing, completion, package versions, and test helpers. | `packages/cli-core/src/index.ts` |
 | `@fusionkit/handoff` | Continuation SDK: checkpoints, `continueIn`, parallel fan-out, review, pull, tools, model routing, and trace logs. | `legacy/packages/handoff/src/handoff.ts` |

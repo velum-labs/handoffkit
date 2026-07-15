@@ -14,10 +14,11 @@ export const claudeTool: ToolIntegration = {
   packageName: "@routekit/tool-claude",
   installHint: "install Claude Code: https://docs.anthropic.com/en/docs/claude-code/overview",
   authSummary: "Claude Code uses the gateway's Anthropic-compatible surface.",
-  setupSnippet: ({ gatewayUrl }) =>
+  setupSnippet: ({ gatewayUrl, model = "gateway-model" }) =>
     [
       `ANTHROPIC_BASE_URL=${gatewayUrl.replace(/\/+$/, "")}`,
-      "ANTHROPIC_AUTH_TOKEN=routekit"
+      "ANTHROPIC_AUTH_TOKEN=routekit",
+      `ANTHROPIC_MODEL=${model}`
     ].join("\n"),
   launch: launchClaude,
   driver: {

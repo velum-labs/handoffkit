@@ -93,20 +93,13 @@ launch the dashboard and export both signals into it (standard
 ```bash
 cd /path/to/this/repo && pnpm build
 
-# One command: real cloud panel (gpt-5.5 + sonnet + gemini), judge gpt-5.5, codex as the
-# front-door harness, and the scope dashboard observing it live on :4317.
-node packages/cli/dist/index.js fusion codex \
-  --observe \
-  --fusionkit-dir . \
-  --model gpt=openai:gpt-5.5 \
-  --model sonnet=anthropic:claude-sonnet-4-6 \
-  --model gemini=google:gemini-2.5-pro \
-  --judge-model gpt-5.5
+# Configure provider endpoints in .routekit/router.yaml and their opaque ids in
+# .fusionkit/fusion.json, then launch the configured compound.
+node packages/cli/dist/index.js codex --observe --fusionkit-dir .
 ```
 
-API keys (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`) are loaded
-from the FusionKit checkout's `.env`. Omit `--model` flags to use the default
-cloud trio, or pass `--local` on Apple Silicon to use the local MLX trio.
+Provider keys are resolved by RouteKit from the `apiKeyEnv` references in its
+router config; FusionKit receives endpoint IDs only.
 
 ### Automated end-to-end drivers
 
