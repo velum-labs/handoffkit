@@ -44,7 +44,7 @@ import {
   uninstallCodexIntegration
 } from "../index.js";
 import type { CodexExecRunner } from "../index.js";
-import { OpenAiBackend } from "@fusionkit/model-gateway";
+import { OpenAiBackend } from "@routekit/gateway";
 
 function tempOutputRoot(): { outputRoot: string; cleanup: () => void } {
   const outputRoot = mkdtempSync(join(tmpdir(), "ensemble-codex-out-"));

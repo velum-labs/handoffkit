@@ -51,7 +51,7 @@ packages/model-gateway/src/adapters/responses.ts:95-96
 the latest user message only; the system message is discarded:
 
 ```
-packages/model-gateway/src/fusion-backend.ts:1314-1332  (#task)
+packages/fusion-gateway/src/fusion-backend.ts:1314-1332  (#task)
   // Real CLIs put their large agent harness prompt in the system message ...
   // so take the latest user turn ... fall back to system text only if there is
   // no user content at all.
@@ -65,7 +65,7 @@ custom/developer instructions are lost.
 harness system message) is sent to the fuse step:
 
 ```
-packages/model-gateway/src/fusion-backend.ts:958-968  (buildStepBody)
+packages/fusion-gateway/src/fusion-backend.ts:958-968  (buildStepBody)
   messages,
   trajectories: candidates,
 ```

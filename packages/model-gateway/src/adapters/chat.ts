@@ -1,6 +1,6 @@
 /**
  * OpenAI Chat Completions surface. This is the gateway's "core" dialect: it is
- * what the owned mlx fork speaks, what opencode and the Cursor IDE plan panel
+ * what OpenAI-compatible providers speak, what opencode and the Cursor IDE
  * consume directly, and what the Anthropic and Responses adapters translate
  * down to. The handlers here are deliberately thin — the request is forwarded
  * to the backend and the upstream response (including SSE streams) is piped

@@ -1,0 +1,49 @@
+{
+  "name": "@fusionkit/gateway",
+  "private": false,
+  "version": "0.8.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/velum-labs/handoffkit.git",
+    "directory": "packages/fusion-gateway"
+  },
+  "description": "FusionKit panel orchestration, synthesis gateway, session persistence, and aggregate cost accounting.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org",
+    "access": "public",
+    "provenance": true
+  },
+  "dependencies": {
+    "@fusionkit/adapter-ai-sdk": "workspace:*",
+    "@fusionkit/kernel": "workspace:*",
+    "@fusionkit/protocol": "workspace:*",
+    "@fusionkit/registry": "workspace:*",
+    "@fusionkit/tracing": "workspace:*",
+    "@routekit/contracts": "workspace:*",
+    "@routekit/gateway": "workspace:*",
+    "@routekit/registry": "workspace:*",
+    "@routekit/runtime": "workspace:*",
+    "@routekit/tracing": "workspace:*"
+  },
+  "keywords": [
+    "fusionkit",
+    "model-fusion",
+    "ensemble",
+    "gateway"
+  ],
+  "scripts": {
+    "test": "node --test \"dist/test/*.test.js\""
+  }
+}

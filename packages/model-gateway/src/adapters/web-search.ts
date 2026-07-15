@@ -5,7 +5,7 @@
  * clients) declare it but never run it — on the real provider APIs the
  * backend searches mid-turn. Nothing behind this gateway can do that, so the
  * gateway becomes the server: the dialect adapters project the tool to the
- * fused model, and when it calls the tool the server-tool loop executes the
+ * upstream model, and when it calls the tool the server-tool loop executes the
  * search here by delegating to a real provider's native web search in a
  * one-shot, buffered side call.
  *
@@ -20,7 +20,7 @@ import { withDeadline } from "@routekit/runtime";
 export type WebSearchCitation = { url: string; title?: string };
 
 export type WebSearchOutcome = {
-  /** The answer/result text the fused model reads. */
+  /** The answer/result text the upstream model reads. */
   text: string;
   citations: WebSearchCitation[];
   /**
@@ -70,8 +70,8 @@ type OpenAiResponsesOutput = {
 };
 
 function openAiExecutor(apiKey: string, env: Record<string, string | undefined>): WebSearchExecutor {
-  const model = env.FUSIONKIT_WEB_SEARCH_OPENAI_MODEL ?? OPENAI_DEFAULT_MODEL;
-  const baseUrl = env.FUSIONKIT_WEB_SEARCH_OPENAI_URL ?? "https://api.openai.com/v1";
+  const model = env.ROUTEKIT_WEB_SEARCH_OPENAI_MODEL ?? OPENAI_DEFAULT_MODEL;
+  const baseUrl = env.ROUTEKIT_WEB_SEARCH_OPENAI_URL ?? "https://api.openai.com/v1";
   return {
     provider: "openai",
     model,
@@ -124,8 +124,8 @@ type AnthropicMessagesOutput = {
 };
 
 function anthropicExecutor(apiKey: string, env: Record<string, string | undefined>): WebSearchExecutor {
-  const model = env.FUSIONKIT_WEB_SEARCH_ANTHROPIC_MODEL ?? ANTHROPIC_DEFAULT_MODEL;
-  const baseUrl = env.FUSIONKIT_WEB_SEARCH_ANTHROPIC_URL ?? "https://api.anthropic.com/v1";
+  const model = env.ROUTEKIT_WEB_SEARCH_ANTHROPIC_MODEL ?? ANTHROPIC_DEFAULT_MODEL;
+  const baseUrl = env.ROUTEKIT_WEB_SEARCH_ANTHROPIC_URL ?? "https://api.anthropic.com/v1";
   return {
     provider: "anthropic",
     model,
@@ -180,14 +180,14 @@ function anthropicExecutor(apiKey: string, env: Record<string, string | undefine
 /**
  * The executor for a dialect: the matching provider when its key is present,
  * the other provider as fallback (working search beats provider purity), or
- * `undefined` when the feature is off (`FUSIONKIT_WEB_SEARCH=0` or no keys),
+ * `undefined` when the feature is off (`ROUTEKIT_WEB_SEARCH=0` or no keys),
  * in which case the adapters keep dropping the tool with a warning.
  */
 export function resolveWebSearchExecutor(
   dialect: WebSearchDialect,
   env: Record<string, string | undefined> = process.env
 ): WebSearchExecutor | undefined {
-  if (env.FUSIONKIT_WEB_SEARCH === "0") return undefined;
+  if (env.ROUTEKIT_WEB_SEARCH === "0") return undefined;
   const openAiKey = env.OPENAI_API_KEY;
   const anthropicKey = env.ANTHROPIC_API_KEY;
   const openAi = openAiKey !== undefined && openAiKey.length > 0 ? openAiExecutor(openAiKey, env) : undefined;

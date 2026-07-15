@@ -6,6 +6,39 @@ The generated reference intentionally covers package entry points and Python pub
 
 ## TypeScript package entry points
 
+### `packages/accounts/src/index.ts`
+
+`@routekit/accounts` — the subscription pooling SDK.
+
+A cohesive, typed surface for pooling Claude Code and Codex OAuth
+subscriptions behind one provider-native proxy: resolve an account set from
+the official CLI login / an enrolled directory / explicit paths, select and
+refresh members with quota-aware routing, and expose it over the gateway wire
+protocols. `startSubscriptionProxy` is the one-call programmatic entrypoint;
+`SubscriptionProxyClient` reads a running proxy's usage over a typed wire
+contract. Product CLIs can wrap this module without owning account logic.
+
+- `export { defaultSubscriptionAccountDirectory, defaultSubscriptionCredentialPath, enrollCurrentSubscription, loadSubscriptionCredential, persistSubscriptionCredential, sanitizeSubscriptionLabel, subscriptionCredentialLabel } from "./credentials.js";`
+- `export { resolveSubscriptionAccounts } from "./account-source.js";`
+- `export type { ResolvedSubscriptionAccounts, SubscriptionAccountSource } from "./account-source.js";`
+- `export { subscriptionProvider } from "./provider.js";`
+- `export type { AdminUsageCost, AdminUsageRange, SubscriptionProvider } from "./provider.js";`
+- `export { RateLimitTracker, SubscriptionAccountSet, SubscriptionAccountSetExhaustedError } from "./account-set.js";`
+- `export type { SubscriptionAccountSetOptions } from "./account-set.js";`
+- `export { CodexBackendRelay, codexRelayAuth } from "./codex-relay.js";`
+- `export type { CodexCatalogEntry, CodexRelayAuth, CodexRelayAuthSource, CodexRelayOptions, ProviderRelayLogger, CodexStockEntry } from "./codex-relay.js";`
+- `export { AnthropicBackendRelay, forwardRelayHeaders, RelayOnlyBackend } from "./relay.js";`
+- `export type { AnthropicRelayOptions, SubscriptionRelay, SubscriptionRelayDialect } from "./relay.js";`
+- `export { openSubscriptionRelays } from "./gateway.js";`
+- `export type { OpenSubscriptionRelaysOptions, OpenSubscriptionRelaysResult, SubscriptionAccountConfigs } from "./gateway.js";`
+- `export { NoSubscriptionAccountsError, startSubscriptionProxy } from "./proxy.js";`
+- `export type { StartSubscriptionProxyOptions, SubscriptionProxy } from "./proxy.js";`
+- `export { SubscriptionProxyClient, SubscriptionProxyClientError } from "./client.js";`
+- `export type { SubscriptionProxyClientOptions } from "./client.js";`
+- `export { snapshotsToUsage, SUBSCRIPTION_USAGE_PATH, subscriptionUsageResponseSchema } from "./wire.js";`
+- `export type { SubscriptionUsageResponse } from "./wire.js";`
+- `export type { AccountLimits, CreditSnapshot, RateLimitWindow, SubscriptionAccountSetSnapshot, SubscriptionCredential, SubscriptionFailure, SubscriptionMemberStatus, SubscriptionSelectionStrategy } from "./types.js";`
+
 ### `packages/adapter-ai-sdk/src/index.ts`
 
 @fusionkit/adapter-ai-sdk is the AI SDK side of FusionKit local-model flows.
@@ -83,7 +116,8 @@ No module JSDoc was found.
 - `export { canonicalize } from "./jcs.js";`
 - `export type { JsonValue } from "./jcs.js";`
 - `export { SHA256_PREFIX, artifactHash, hashCanonical, hashCanonicalSha256, requestHash, responseHash, schemaBundleHash, sha256Hex, sha256PrefixedHex } from "./hash.js";`
-- `export type { CapabilityStatus, ModelCallContract, ModelCallSideEffects, ModelCallStatus, ModelChatMessage, ModelChatRole, ModelEndpoint, ModelUsage, ProviderError, ProviderErrorKind } from "./model.js";`
+- `export type { CapabilityStatus, ModelCallContract, ModelCallSideEffects, ModelCallStatus, ModelChatMessage, ModelChatRole, ModelEndpoint, ModelUsage, ProviderError, ProviderErrorKind, ProviderFailure, ProviderFailureCategory } from "./model.js";`
+- `export { ProviderFailureError, classifyProviderFailure, isRetryableProviderFailure } from "./model.js";`
 - `export type { HarnessApprovalDecision, HarnessContentStream, HarnessEvent, HarnessEventRaw, HarnessEventType, HarnessItemType, HarnessRequestType, HarnessTokenUsage, HarnessTurnEndReason } from "./harness-event.js";`
 
 ### `packages/ensemble/src/index.ts`
@@ -160,6 +194,44 @@ Example utilities entry point. It exposes demo manifest parsing, mock model help
 
 No exports found.
 
+### `packages/fusion-gateway/src/index.ts`
+
+No module JSDoc was found.
+
+- `export { FusionBackend, InMemoryFusionBackendKernelStateStore, PendingSessionWrites } from "./fusion-backend.js";`
+- `export type { ChatMessageLike, FusedModelRoute, FuseStepRunInput, FuseStepRunner, FusionBackendKernelSessionState, FusionBackendKernelStateStore, FusionBackendOptions, OnRateLimitPolicy, PanelRunInput, PanelRunner, PassthroughModel, SessionMetaInput, WireTrajectory } from "./fusion-backend.js";`
+- `export { FrontdoorArtifactTypes, FrontdoorFuseError, FrontdoorOperatorKinds, FrontdoorPanelError, frontdoorBudgetGateOperator, frontdoorBudgetStopOperator, frontdoorFinalizeOperator, frontdoorFuseOperator, frontdoorPanelOperator, frontdoorResolveModelOperator, frontdoorStreamingFuseOperator, frontdoorVendorProxyOperator } from "./frontdoor/operators.js";`
+- `export type { BudgetValue, CandidateSetValue, FailoverValue, RouteValue } from "./frontdoor/operators.js";`
+- `export { FUSION_FRONTDOOR_TURN_WORKFLOW, frontdoorRequestArtifact, runFusionFrontdoorTurn, streamFusionFrontdoorTurn } from "./frontdoor/workflow.js";`
+- `export type { FrontdoorTurnOutcome } from "./frontdoor/workflow.js";`
+- `export { FUSION_FRONTDOOR_REQUEST_WORKFLOW, FrontdoorRequestScheduler, runFrontdoorRequest } from "./frontdoor/request.js";`
+- `export { eventsToSseResponse } from "./frontdoor/sse.js";`
+- `export type { EventsToSseOptions } from "./frontdoor/sse.js";`
+- `export { createTurnNarrator, mergeEventsWithNarration } from "./frontdoor/narration.js";`
+- `export type { NarrationWriter, ReasoningDeltaEvent, TurnNarration, TurnNarratorInput } from "./frontdoor/narration.js";`
+- `export { createChatNarrationWriter } from "./frontdoor/narration-writer.js";`
+- `export type { ChatFn, ChatNarrationWriterOptions } from "./frontdoor/narration-writer.js";`
+- `export { FRONTDOOR_SIGNAL } from "./frontdoor/types.js";`
+- `export type { FrontdoorChatBody, FrontdoorRequestValue, FrontdoorRoute, FrontdoorServices, VendorProxyOutcome } from "./frontdoor/types.js";`
+- `export { defaultSessionsDir, FileSystemSessionStore, InMemorySessionStore } from "./session-store.js";`
+- `export type { PersistedSession, SessionMeta, SessionStore, SessionSummary, SessionTurnRecord } from "./session-store.js";`
+- `export { addLedgerEntry, addTurnCost, emptySessionCost, estimateCost, formatUsd, lookupPricing, meterCall, meterTurn, parseUsage, parseUsageFromSse, turnCostLine } from "./cost.js";`
+- `export type { CostLedgerEntry, CostStage, LocalComputePricing, LocalComputeUsage, ModelPricing, ProviderCostMetadata, SessionCost, TokenUsage, TurnCost } from "./cost.js";`
+- `export { defaultFusionGatewayLogger } from "./logger.js";`
+- `export type { FusionGatewayLogger } from "./logger.js";`
+- `export { MlxBackend } from "./mlx-backend.js";`
+- `export type { MlxBackendOptions } from "./mlx-backend.js";`
+- `export { createBackend, DEFAULT_MLX_MODEL, resolveBackendConfig } from "./config.js";`
+- `export type { BackendConfig } from "./config.js";`
+- `export { FUSION_EVIDENCE_HEADER, FUSION_REPORT_HEADER, FUSION_RUN_ID_HEADER, FUSION_STATUS_HEADER, formatAnthropic, formatChat, formatResponses, promptFromAnthropic, promptFromChat, promptFromResponses, startFusionGateway } from "./fusion-gateway.js";`
+- `export type { ChatRequest, FrontDoorDialect, FrontDoorRunner, FrontDoorRunnerInput, FrontDoorRunnerResult, FusionGateway, FusionGatewayOptions } from "./fusion-gateway.js";`
+- `export { runFrontDoorAcceptance } from "./front-door-acceptance.js";`
+- `export type { FrontDoorAcceptanceOptions, FrontDoorAcceptanceReport, FrontDoorOutcome, FrontDoorOutcomeProducer, FrontDoorStatus } from "./front-door-acceptance.js";`
+- `export { createTrajectoryCapture, reconstructTrajectory } from "./trajectory-capture.js";`
+- `export type { CapturedStep, CapturedTrajectory, TrajectoryCapture } from "./trajectory-capture.js";`
+- `export { PANEL_DEPTH_HEADER, panelDepthFromRequest, parsePanelDepth } from "./request-context.js";`
+- `export { toFusionModelCallRecord } from "./provenance.js";`
+
 ### `packages/harness-core/src/index.ts`
 
 @fusionkit/harness-core is the single coding-agent harness contract:
@@ -198,68 +270,41 @@ No exports found.
 
 ### `packages/model-gateway/src/index.ts`
 
-@fusionkit/model-gateway is the Fusion Harness Gateway entry point.
-
-It fronts OpenAI-compatible Chat Completions backends, local MLX servers, and
-fused panel routes, then exposes the wire dialects each agent harness needs.
-A local or fused model can back opencode, Claude Code, Codex, Cursor, and raw
-HTTP callers without changing their workflow.
-
-Public exports include server startup, backend implementations, frontdoor
-workflows, session stores, cost metering, rate-limit failover, dialect
-adapters, ACP helpers, provenance records, and trajectory capture.
+Product-neutral RouteKit gateway and router.
 
 - `export { startGateway } from "./server.js";`
-- `export type { Gateway, GatewayOptions } from "./server.js";`
-- `export { joinPath, ModelRoutedBackend, OpenAiBackend, PANEL_DEPTH_HEADER, parsePanelDepth } from "./backend.js";`
+- `export type { Gateway, GatewayOptions, ProviderRelay, ProviderRelayDialect } from "./server.js";`
+- `export { joinPath, ModelRoutedBackend, OpenAiBackend } from "./backend.js";`
 - `export type { Backend, BackendRequestOptions, ModelRoutedBackendOptions, OpenAiBackendOptions } from "./backend.js";`
-- `export { FusionBackend } from "./fusion-backend.js";`
-- `export { InMemoryFusionBackendKernelStateStore, PendingSessionWrites } from "./fusion-backend.js";`
-- `export { FrontdoorArtifactTypes, FrontdoorFuseError, FrontdoorOperatorKinds, FrontdoorPanelError, frontdoorBudgetGateOperator, frontdoorBudgetStopOperator, frontdoorFinalizeOperator, frontdoorFuseOperator, frontdoorPanelOperator, frontdoorResolveModelOperator, frontdoorStreamingFuseOperator, frontdoorVendorProxyOperator } from "./frontdoor/operators.js";`
-- `export type { BudgetValue, CandidateSetValue, FailoverValue, RouteValue } from "./frontdoor/operators.js";`
-- `export { FUSION_FRONTDOOR_TURN_WORKFLOW, frontdoorRequestArtifact, runFusionFrontdoorTurn, streamFusionFrontdoorTurn } from "./frontdoor/workflow.js";`
-- `export type { FrontdoorTurnOutcome } from "./frontdoor/workflow.js";`
-- `export { FUSION_FRONTDOOR_REQUEST_WORKFLOW, FrontdoorRequestScheduler, runFrontdoorRequest } from "./frontdoor/request.js";`
-- `export { eventsToSseResponse } from "./frontdoor/sse.js";`
-- `export type { EventsToSseOptions } from "./frontdoor/sse.js";`
-- `export { createTurnNarrator, mergeEventsWithNarration } from "./frontdoor/narration.js";`
-- `export type { NarrationWriter, ReasoningDeltaEvent, TurnNarration, TurnNarratorInput } from "./frontdoor/narration.js";`
-- `export { createChatNarrationWriter } from "./frontdoor/narration-writer.js";`
-- `export type { ChatFn, ChatNarrationWriterOptions } from "./frontdoor/narration-writer.js";`
-- `export { FRONTDOOR_SIGNAL } from "./frontdoor/types.js";`
-- `export type { FrontdoorChatBody, FrontdoorRequestValue, FrontdoorRoute, FrontdoorServices, VendorProxyOutcome } from "./frontdoor/types.js";`
-- `export type { ChatMessageLike, FusedModelRoute, FuseStepRunInput, FuseStepRunner, FusionBackendKernelSessionState, FusionBackendKernelStateStore, FusionBackendOptions, OnRateLimitPolicy, PanelRunInput, PanelRunner, PassthroughModel, SessionMetaInput } from "./fusion-backend.js";`
-- `export type { WireTrajectory } from "@fusionkit/protocol";`
-- `export { defaultSessionsDir, FileSystemSessionStore, InMemorySessionStore } from "./session-store.js";`
-- `export type { PersistedSession, SessionMeta, SessionStore, SessionSummary, SessionTurnRecord } from "./session-store.js";`
-- `export { addTurnCost, DEFAULT_MODEL_PRICING, emptySessionCost, estimateCost, formatUsd, lookupPricing, meterTurn, parseUsage, parseUsageFromSse, turnCostLine } from "./cost.js";`
-- `export type { CostLedgerEntry, CostStage, LocalComputePricing, LocalComputeUsage, ModelPricing, ProviderCostMetadata, SessionCost, TokenUsage, TurnCost } from "./cost.js";`
-- `export { defaultFusionGatewayLogger } from "./logger.js";`
-- `export type { FusionGatewayLogger } from "./logger.js";`
-- `export { MlxBackend } from "./mlx-backend.js";`
-- `export type { MlxBackendOptions } from "./mlx-backend.js";`
-- `export { createBackend, DEFAULT_MLX_MODEL, resolveBackendConfig } from "./config.js";`
-- `export type { BackendConfig } from "./config.js";`
+- `export { AnthropicBackend, CodexResponsesBackend, GoogleGenAiBackend } from "./provider-backends.js";`
+- `export type { ProviderBackendOptions } from "./provider-backends.js";`
+- `export { CatalogBackend, EndpointPool, modelEndpointSchema, parseRouterConfig, providerBackend, routerConfigSchema } from "./router.js";`
+- `export type { CatalogBackendOptions, EndpointPoolOptions, ModelEndpointConfig, RouterConfig } from "./router.js";`
+- `export { CapacityPool } from "./capacity-pool.js";`
+- `export type { CapacityLease, CapacityPoolMember, CapacityPoolOptions, CapacityPoolStrategy } from "./capacity-pool.js";`
 - `export { effectiveModel, isStream, withDefaultModel } from "./adapters/chat.js";`
 - `export { isCursorChatBody, translateCursorRequest } from "./adapters/cursor.js";`
-- `export { anthropicModelsResponse, anthropicToChat, chatToAnthropicMessage, claudeModelAlias, countTokensEstimate, handleAnthropicMessages, handleCountTokens, mapStopReason, openAiSseToAnthropic } from "./adapters/anthropic.js";`
+- `export { anthropicModelsResponse, anthropicToChat, CLAUDE_ALIAS_PREFIX, chatToAnthropicMessage, claudeModelAlias, countTokensEstimate, handleAnthropicMessages, handleCountTokens, mapStopReason, openAiSseToAnthropic } from "./adapters/anthropic.js";`
 - `export type { AnthropicRequest } from "./adapters/anthropic.js";`
 - `export { chatToResponses, customToolNames, handleResponses, openAiSseToResponses, responsesToChat, responsesToolRegistry } from "./adapters/responses.js";`
 - `export type { ResponsesRequest, ResponsesToolKind, ResponsesToolRegistry } from "./adapters/responses.js";`
 - `export { MAX_WEB_SEARCHES_PER_TURN, resolveWebSearchExecutor } from "./adapters/web-search.js";`
 - `export type { WebSearchDialect, WebSearchExecutor, WebSearchOutcome } from "./adapters/web-search.js";`
-- `export { FUSION_EVIDENCE_HEADER, FUSION_REPORT_HEADER, FUSION_RUN_ID_HEADER, FUSION_STATUS_HEADER, formatAnthropic, formatChat, formatResponses, promptFromAnthropic, promptFromChat, promptFromResponses, startFusionGateway } from "./fusion-gateway.js";`
-- `export type { ChatRequest, FrontDoorDialect, FrontDoorRunner, FrontDoorRunnerInput, FrontDoorRunnerResult, FusionGateway, FusionGatewayOptions } from "./fusion-gateway.js";`
+- `export { DIALECT_DROPPED_ATTRIBUTE, droppedField, resetDroppedFieldWarnings, withDroppedFieldSpan } from "./adapters/dropped.js";`
+- `export type { DialectName, DroppedFieldSpan } from "./adapters/dropped.js";`
 - `export { ACP_PROTOCOL_VERSION, runAcpAgent } from "./acp-agent.js";`
 - `export type { AcpAgentOptions, AcpRunner, AcpRunnerInput, AcpRunnerResult } from "./acp-agent.js";`
-- `export { runFrontDoorAcceptance } from "./front-door-acceptance.js";`
-- `export type { FrontDoorAcceptanceOptions, FrontDoorAcceptanceReport, FrontDoorOutcome, FrontDoorOutcomeProducer, FrontDoorStatus } from "./front-door-acceptance.js";`
 - `export { ACP_REGISTRY_URL, fetchAcpRegistry, installAcpAdapters } from "./acp-registry.js";`
 - `export type { AcpRegistry, AcpRegistryAgent, AcpRegistryFetcher, InstallAcpAdaptersOptions, InstalledAcpAdapter } from "./acp-registry.js";`
+- `export { DEFAULT_MODEL_PRICING, estimateCost, formatUsd, lookupPricing, meterCall, parseUsage, parseUsageFromSse } from "./cost.js";`
+- `export type { CallCostRecord, ModelPricing, ProviderCostMetadata, TokenUsage } from "./cost.js";`
 - `export { buildModelCallRecord, MODEL_CALL_ID_HEADER, modelCallId, readProducerVersion, resolveProducerGitSha, responseBodyHash, UNKNOWN_GIT_SHA } from "./provenance.js";`
 - `export type { GatewayDialect, ModelCallRecord, ModelGatewayCallContext, ModelGatewayCallResult, ProvenanceSink } from "./provenance.js";`
-- `export { createTrajectoryCapture, reconstructTrajectory } from "./trajectory-capture.js";`
-- `export type { CapturedStep, CapturedTrajectory, TrajectoryCapture } from "./trajectory-capture.js";`
+- `export { authorizedRequest } from "./auth.js";`
+- `export { errorEvent, finishChunk, noticeChunk, reasoningChunk, sseResponse } from "./sse-wire.js";`
+- `export { ChatStreamAssembler } from "./sse/chat-assembler.js";`
+- `export type { AssembledToolCall } from "./sse/chat-assembler.js";`
+- `export { decodeBufferedSse, SseDecoder, SseParseError } from "./sse/parse.js";`
 
 ### `packages/protocol/src/index.ts`
 
@@ -418,7 +463,7 @@ No module JSDoc was found.
   The `git diff` of a working tree, or undefined when clean or not a repo.
 - `export function ensureRunOutputDir(`
   Create an output directory. When it lives under one of the caller-owned data-directory segments, drop a self-ignoring `.gitignore` so generated artifacts never pollute the user's working tree.
-- `export function writeFileAtomic(path: string, content: string): void ...`
+- `export function writeFileAtomic(`
   Atomically replace a UTF-8 file by writing a sibling temporary first.
 - `export type FileLock ...`
 - `export function tryAcquireFileLock(path: string): FileLock | undefined ...`

@@ -1,6 +1,7 @@
 import { bold, box, cyan, dim, glyph, green, isInteractive, uiStream } from "@routekit/cli-ui";
-import { createBackend, resolveBackendConfig, startGateway } from "@fusionkit/model-gateway";
-import type { BackendConfig } from "@fusionkit/model-gateway";
+import { createBackend, resolveBackendConfig } from "@fusionkit/gateway";
+import type { BackendConfig } from "@fusionkit/gateway";
+import { startGateway } from "@routekit/gateway";
 import { KernelBackend } from "@fusionkit/ensemble";
 import { LOCAL_MODEL_LABEL, readEnv } from "@fusionkit/tools";
 import type { ToolLaunchContext } from "@fusionkit/tools";

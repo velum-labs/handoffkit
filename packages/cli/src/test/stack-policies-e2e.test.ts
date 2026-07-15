@@ -10,7 +10,7 @@ import assert from "node:assert/strict";
 import { setTimeout as delay } from "node:timers/promises";
 import { test } from "node:test";
 
-import { InMemorySessionStore } from "@fusionkit/model-gateway";
+import { InMemorySessionStore } from "@fusionkit/gateway";
 import { judgeAnalysis, simErrors, stackToolingSkip } from "@fusionkit/testkit";
 
 import { startSimFusionStack } from "./sim-stack.js";

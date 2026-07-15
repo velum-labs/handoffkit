@@ -5,7 +5,7 @@ import {
   type SubscriptionAccountSetSnapshot,
   type SubscriptionMemberStatus,
   type SubscriptionSelectionStrategy
-} from "@fusionkit/model-gateway/subscriptions";
+} from "@routekit/accounts";
 import type { SubscriptionMode } from "@routekit/registry";
 import { registerCleanup } from "@routekit/runtime";
 import { cyan, dim, relativeTime, timeUntil } from "@routekit/cli-ui";

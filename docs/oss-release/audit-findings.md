@@ -84,8 +84,8 @@ fixtures; no `.env` files; no `ghp_`/`AKIA`/private-key matches). Remaining issu
 | 4.2 | Resolved: published package license payloads, including `@fusionkit/harness-core` and `@routekit/runtime`, now match their manifests. | `packages/harness-core/`, `packages/runtime-utils/` | Resolved |
 | 4.3 | No root `NOTICE`; `spec/model-fusion-contract/package.json` missing a `license` field; `python/uniroute*` are `UNLICENSED` inside an Apache-2.0 repo | multiple | P1 |
 | 4.4 | **Committed `.fusionkit/fusion.json` routes this repo's default panel through OpenRouter** (third-party aggregator) — anyone cloning and running `fusionkit codex` in-repo sends code to OpenRouter, undisclosed; also diverges from the documented default frontier trio | `.fusionkit/fusion.json` | P0 |
-| 4.5 | Sessions persist **full prompt/message arrays** (user code included) to `~/.fusionkit/sessions/<id>/turns.jsonl` — mentioned in passing, no privacy/data-handling doc | `packages/model-gateway/src/session-store.ts:12-18` | P1 |
-| 4.6 | Rate-limit failover (`onRateLimit: fusion`, the default) re-sends the current turn to *additional* providers beyond the one the user selected — privacy implication undocumented | `packages/model-gateway/src/fusion-backend.ts:966-975`, `packages/cli/src/fusion/effective-config.ts:38` | P1 |
+| 4.5 | Sessions persist **full prompt/message arrays** (user code included) to `~/.fusionkit/sessions/<id>/turns.jsonl` — mentioned in passing, no privacy/data-handling doc | `packages/fusion-gateway/src/session-store.ts:12-18` | P1 |
+| 4.6 | Rate-limit failover (`onRateLimit: fusion`, the default) re-sends the current turn to *additional* providers beyond the one the user selected — privacy implication undocumented | `packages/fusion-gateway/src/fusion-backend.ts:966-975`, `packages/cli/src/fusion/effective-config.ts:38` | P1 |
 | 4.7 | No product telemetry / phone-home (verified) — a strength; should be stated affirmatively in the privacy doc. `HF_HUB_DISABLE_TELEMETRY` is set for MLX downloads | `packages/adapter-ai-sdk/src/mlx-env.ts` | P2 |
 | 4.8 | `.github/CODEOWNERS` is an unfilled placeholder referencing `@velum-labs/<team>` | `.github/CODEOWNERS` | P1 |
 | 4.9 | Supply chain posture is strong (exact-pin allowlist in `check-repo.mjs`, `.npmrc` with `ignore-scripts`/`minimum-release-age`/provenance publishing, committed lockfiles) — keep; document in CONTRIBUTING | `.npmrc`, `scripts/check-repo.mjs:326-427` | — |
@@ -112,7 +112,7 @@ by `check-repo.mjs` in `cli`/`cli-ui`.
 
 | ID | Finding | Evidence | Sev |
 | --- | --- | --- | --- |
-| 6.1 | **God file:** `packages/model-gateway/src/fusion-backend.ts` — 2,041 lines mixing public types, session state, vendor proxy/failover, SSE assembly, cost metering, trace emission, and the `FusionBackend` class. Partially superseded by `frontdoor/`; also contains 11 raw `console.*` calls (gateway is outside the lint ban) | file | P1 |
+| 6.1 | **God file:** `packages/fusion-gateway/src/fusion-backend.ts` — 2,041 lines mixing public types, session state, vendor proxy/failover, SSE assembly, cost metering, trace emission, and the `FusionBackend` class. Partially superseded by `frontdoor/`; also contains 11 raw `console.*` calls (gateway is outside the lint ban) | file | P1 |
 | 6.2 | **God file:** `packages/kernel/src/runtime.ts` — 1,421 lines (type system + graph engine + scheduling + streaming) and **zero tests** for the whole `kernel` package | file | P1 |
 | 6.3 | **God file:** `packages/ensemble/src/unified.ts` — 949 lines (harness kind registry + panel orchestration + factories + judge hooks) | file | P1 |
 | 6.4 | **Dual harness implementations:** legacy `harness.ts` vs new `driver.ts` coexist in tool-codex (932 vs 445 lines), tool-claude, tool-cursor, gated by `FUSIONKIT_HARNESS_DRIVERS` env flag — two code paths to maintain and test | `packages/tool-*/src/` | P1 |

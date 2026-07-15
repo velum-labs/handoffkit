@@ -177,7 +177,7 @@ test("id-and-index-less argument fragments append to the last open call", () => 
   assert.deepEqual(turn.toolCalls, [{ id: "call_a", name: "run", arguments: '{"cmd":"ls"}' }]);
 });
 
-test("captures usage and fusion metadata from any chunk", () => {
+test("captures usage and extension metadata from any chunk", () => {
   const assembler = new ChatStreamAssembler();
   feedAssembler(
     assembler,
@@ -185,13 +185,13 @@ test("captures usage and fusion metadata from any chunk", () => {
     JSON.stringify({
       choices: [{ index: 0, delta: {}, finish_reason: "stop" }],
       usage: { prompt_tokens: 3, completion_tokens: 5 },
-      fusion: { run_id: "run_1" }
+      route: { request_id: "request_1" }
     }),
     "[DONE]"
   );
   const turn = assembler.result();
   assert.deepEqual(turn.usage, { prompt_tokens: 3, completion_tokens: 5 });
-  assert.deepEqual(turn.fusion, { run_id: "run_1" });
+  assert.deepEqual(turn.extensions.route, { request_id: "request_1" });
 });
 
 test("a stream that ends without finish_reason is truncated, not a clean stop", () => {

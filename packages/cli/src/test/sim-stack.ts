@@ -17,7 +17,8 @@ import { join } from "node:path";
 
 import { scriptFusedTurn, simRouterConfigYaml, startEngine, startProviderSim } from "@fusionkit/testkit";
 import type { EngineHandle, FusedTurnScript, ProviderSimHandle, SimEndpointSpec } from "@fusionkit/testkit";
-import type { Gateway, ModelPricing, OnRateLimitPolicy, SessionStore } from "@fusionkit/model-gateway";
+import type { OnRateLimitPolicy, SessionStore } from "@fusionkit/gateway";
+import type { Gateway, ModelPricing } from "@routekit/gateway";
 
 import { fusionModelId } from "@fusionkit/registry";
 import { harnessDriversEnabled } from "@fusionkit/tools";

@@ -5,12 +5,16 @@ import { join } from "node:path";
 import type { ModelCallRecordV1 } from "@fusionkit/protocol";
 import {
   createTrajectoryCapture,
+  PANEL_DEPTH_HEADER,
+  toFusionModelCallRecord
+} from "@fusionkit/gateway";
+import type { CapturedTrajectory } from "@fusionkit/gateway";
+import {
   ModelRoutedBackend,
   OpenAiBackend,
-  PANEL_DEPTH_HEADER,
   startGateway
-} from "@fusionkit/model-gateway";
-import type { Backend, CapturedTrajectory } from "@fusionkit/model-gateway";
+} from "@routekit/gateway";
+import type { Backend } from "@routekit/gateway";
 import { KernelBackend, panelMemberPreamble, traceCandidate } from "@fusionkit/ensemble";
 import type { FusedSubagentAccess, FusionTraceCarrier } from "@fusionkit/ensemble";
 import { artifactHash } from "@routekit/contracts";
@@ -623,7 +627,7 @@ async function runProvider(input: {
         ),
         provenance: {
           onModelCall(record) {
-            records.push(record);
+            records.push(toFusionModelCallRecord(record));
           },
           onModelCallRaw(context, result) {
             capture.sink.onModelCallRaw?.(context, result);
@@ -663,7 +667,7 @@ async function runProvider(input: {
         ),
         provenance: {
           onModelCall(record) {
-            records.push(record);
+            records.push(toFusionModelCallRecord(record));
           },
           onModelCallRaw(context, result) {
             capture.sink.onModelCallRaw?.(context, result);

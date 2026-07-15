@@ -9,10 +9,12 @@ The workspace uses ESM, TypeScript project references, pnpm, Node 22 (effectivel
 ```mermaid
 flowchart LR
   CLI["@fusionkit/cli"] --> Tools["@fusionkit/tools"]
-  CLI --> Gateway["@fusionkit/model-gateway"]
+  CLI --> FusionGateway["@fusionkit/gateway"]
+  FusionGateway --> Gateway["@routekit/gateway"]
+  CLI --> Accounts["@routekit/accounts"]
   CLI --> Ensemble["@fusionkit/ensemble"]
   CLI --> Workspace["@fusionkit/workspace"]
-  Gateway --> Protocol["@fusionkit/protocol"]
+  FusionGateway --> Protocol["@fusionkit/protocol"]
   Ensemble --> Protocol
   Ensemble --> Workspace
   Ensemble --> Kernel["@fusionkit/kernel"]
@@ -97,46 +99,43 @@ const result = await runEnsemble({
 console.log(result.summary.status);
 ```
 
-## `@fusionkit/model-gateway`
+## `@routekit/gateway`
 
-`@fusionkit/model-gateway` receives harness-native HTTP requests and maps them to either a vendor proxy path or the FusionKit panel path. It owns the local gateway server, backend abstraction, frontdoor workflow, session persistence, cost metering, dialect adapters, ACP adapter support, provenance capture, and trajectory reconstruction.
-
-The server entry point is `startGateway()`, which returns a `Gateway` with a URL and close behavior. `OpenAiBackend`, `MlxBackend`, `FusionBackend`, `createBackend()`, `resolveBackendConfig()`, and `DEFAULT_MLX_MODEL` make up the backend layer. `FusionBackend` is the key class when a request should run through model fusion instead of simple passthrough.
-
-The frontdoor workflow exports are `runFusionFrontdoorTurn()`, `streamFusionFrontdoorTurn()`, `runFrontdoorRequest()`, `FrontdoorRequestScheduler`, `frontdoorRequestArtifact()`, and workflow constants. Operator exports such as `frontdoorResolveModelOperator`, `frontdoorBudgetGateOperator`, `frontdoorVendorProxyOperator`, `frontdoorPanelOperator`, `frontdoorFuseOperator`, `frontdoorStreamingFuseOperator`, `frontdoorFinalizeOperator`, and `frontdoorBudgetStopOperator` define the internal graph.
-
-Session exports include `defaultSessionsDir()`, `FileSystemSessionStore`, `InMemorySessionStore`, and types for persisted sessions, summaries, turn records, and metadata. Cost exports include `emptySessionCost()`, `addTurnCost()`, `meterTurn()`, `estimateCost()`, `lookupPricing()`, `parseUsage()`, `parseUsageFromSse()`, `formatUsd()`, and `turnCostLine()`.
-
-Dialect adapters are public because they are tested independently and used by the gateway. Chat helpers include `effectiveModel()`, `withDefaultModel()`, and `isStream()`. Anthropic helpers include `handleAnthropicMessages()`, `anthropicToChat()`, `chatToAnthropicMessage()`, `openAiSseToAnthropic()`, `handleCountTokens()`, `countTokensEstimate()`, and `mapStopReason()`. Responses helpers include `handleResponses()`, `chatToResponses()`, `responsesToChat()`, and `openAiSseToResponses()`.
-
-Fusion gateway helpers include `startFusionGateway()`, `formatChat()`, `formatAnthropic()`, `formatResponses()`, `promptFromChat()`, `promptFromAnthropic()`, `promptFromResponses()`, and headers such as `FUSION_RUN_ID_HEADER`, `FUSION_STATUS_HEADER`, `FUSION_REPORT_HEADER`, and `FUSION_EVIDENCE_HEADER`.
-
-Provenance exports include `buildModelCallRecord()`, `modelCallId()`, `responseBodyHash()`, `readProducerVersion()`, `resolveProducerGitSha()`, `MODEL_CALL_ID_HEADER`, and `UNKNOWN_GIT_SHA`. Trajectory capture exports include `createTrajectoryCapture()` and `reconstructTrajectory()`.
-
-Example:
+`@routekit/gateway` is the neutral HTTP router. It owns `Backend`,
+`startGateway()`, Chat/Responses/Anthropic/Cursor dialect adapters, SSE, ACP,
+single-call cost/provenance records, `RouterConfig`, `CatalogBackend`,
+`EndpointPool`, `CapacityPool`, and OpenAI-compatible, Anthropic, Google GenAI,
+and Codex Responses egress. Endpoint IDs are opaque and endpoint instances are
+balanced without managing local server processes.
 
 ```ts
-import {
-  FileSystemSessionStore,
-  formatUsd,
-  startGateway
-} from "@fusionkit/model-gateway";
+import { CatalogBackend, startGateway } from "@routekit/gateway";
 
-const gateway = await startGateway({
-  host: "127.0.0.1",
-  port: 4319,
-  sessions: new FileSystemSessionStore("/tmp/fusionkit-sessions"),
-  backend: {
-    kind: "openai",
-    baseUrl: "http://127.0.0.1:8000/v1",
-    apiKey: "local"
+const backend = new CatalogBackend({
+  config: {
+    endpoints: [{
+      endpointId: "primary",
+      model: "provider-model",
+      baseUrl: "https://provider.example/v1",
+      dialect: "openai"
+    }]
   }
 });
-
-console.log(`gateway ready at ${gateway.url}`);
-console.log(formatUsd(0.013));
-await gateway.close();
+const gateway = await startGateway({ backend });
 ```
+
+## `@routekit/accounts`
+
+`@routekit/accounts` owns subscription credentials, account sources, quota
+tracking, account pools, provider relays, and proxy/client wire contracts. Its
+selection policies reuse RouteKit's generic `CapacityPool`.
+
+## `@fusionkit/gateway`
+
+`@fusionkit/gateway` builds on RouteKit with `FusionBackend`, frontdoor
+operators, panel/synthesis orchestration, session stores, aggregate cost and
+budget accounting, trajectory conversion, Fusion headers, and managed MLX
+lifecycle. Pricing and per-call metering are imported from RouteKit.
 
 ## `@fusionkit/protocol`
 

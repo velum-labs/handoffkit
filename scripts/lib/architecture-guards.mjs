@@ -10,6 +10,8 @@ const DEPENDENCY_SECTIONS = [
 ];
 
 export const CANONICAL_SHARED_PACKAGES = new Map([
+  ["packages/model-gateway", "@routekit/gateway"],
+  ["packages/accounts", "@routekit/accounts"],
   ["packages/runtime-utils", "@routekit/runtime"],
   ["packages/routekit-tracing", "@routekit/tracing"],
   ["packages/cli-ui", "@routekit/cli-ui"],

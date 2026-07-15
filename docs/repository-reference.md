@@ -123,31 +123,18 @@ await runWorkflow(workflow, {
 });
 ```
 
-### `@fusionkit/model-gateway`
+### `@routekit/gateway`, `@routekit/accounts`, and `@fusionkit/gateway`
 
-`@fusionkit/model-gateway` exposes native harness dialects over local or fused model backends. It is the bridge between coding agents and the fusion backend. The gateway supports OpenAI Chat Completions, Anthropic Messages, OpenAI Responses, fusion frontdoor workflows, cost metering, session persistence, MLX backend resolution, ACP adapter installation, and provenance capture.
+`@routekit/gateway` is the canonical neutral router and HTTP boundary. It owns
+wire dialects, SSE, ACP, provider egress, opaque endpoint catalogs, reusable
+capacity pooling, and normalized single-call cost/provenance.
 
-The primary server export is `startGateway()`, which returns a `Gateway`. Backend exports include `OpenAiBackend`, `MlxBackend`, `FusionBackend`, `createBackend`, `resolveBackendConfig`, and `DEFAULT_MLX_MODEL`. The gateway's fusion path is driven by `runFusionFrontdoorTurn`, `streamFusionFrontdoorTurn`, `runFrontdoorRequest`, `FrontdoorRequestScheduler`, and the frontdoor operator exports such as `frontdoorResolveModelOperator`, `frontdoorPanelOperator`, `frontdoorFuseOperator`, and `frontdoorVendorProxyOperator`.
+`@routekit/accounts` owns subscription credential sources, quota/health
+tracking, account pools, relays, and the proxy/client wire contract.
 
-Session and cost exports include `defaultSessionsDir`, `FileSystemSessionStore`, `InMemorySessionStore`, `emptySessionCost`, `addTurnCost`, `meterTurn`, `estimateCost`, `lookupPricing`, `parseUsage`, `parseUsageFromSse`, `formatUsd`, and `turnCostLine`. These are the relevant functions when debugging budgets or session totals.
-
-Dialect adapter exports include `handleAnthropicMessages`, `chatToAnthropicMessage`, `anthropicToChat`, `openAiSseToAnthropic`, `handleResponses`, `chatToResponses`, `responsesToChat`, `openAiSseToResponses`, `effectiveModel`, `withDefaultModel`, and `isStream`.
-
-Example:
-
-```ts
-import { FileSystemSessionStore, startGateway } from "@fusionkit/model-gateway";
-
-const gateway = await startGateway({
-  host: "127.0.0.1",
-  port: 4319,
-  backend: { kind: "openai", baseUrl: "http://127.0.0.1:8000/v1", apiKey: "local" },
-  sessions: new FileSystemSessionStore("~/.fusionkit/sessions")
-});
-
-console.log(gateway.url);
-await gateway.close();
-```
+`@fusionkit/gateway` depends on those neutral packages and owns only the Fusion
+frontdoor, panel/synthesis flow, sessions, aggregate budgets, trajectory
+conversion, and managed local-model lifecycle.
 
 ### `@fusionkit/protocol`
 

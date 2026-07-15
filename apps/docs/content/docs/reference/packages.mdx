@@ -10,7 +10,9 @@ FusionKit is a pnpm + TypeScript workspace plus a uv + Python workspace. The pac
 | Package | Responsibility |
 | --- | --- |
 | `@fusionkit/cli` | The `fusionkit` command line and primary product surface. |
-| `@fusionkit/model-gateway` | Dialect translation, streaming, sessions, cost metering, rate-limit handoff, passthrough models, and fused front-door routing. |
+| `@routekit/gateway` | Product-neutral HTTP gateway, wire dialects, provider egress, endpoint catalogs, pooling, and single-call provenance. |
+| `@routekit/accounts` | Subscription credentials, account pools, provider relays, and proxy clients. |
+| `@fusionkit/gateway` | Fusion front-door orchestration, sessions, aggregate cost accounting, trajectories, and managed local-model lifecycle. |
 | `@fusionkit/ensemble` | Panel orchestration, worktrees, runtime-kernel workflows, judge adapters, and advanced harness tooling. |
 | `@fusionkit/tools` | Tool integration contract and registry. |
 | `@fusionkit/tool-codex`, `tool-claude`, `tool-cursor`, `tool-opencode` | Per-tool launcher shims and ensemble harness adapters. |

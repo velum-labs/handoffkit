@@ -42,6 +42,24 @@ importers:
         specifier: workspace:*
         version: link:../../packages/example-utils
 
+  packages/accounts:
+    dependencies:
+      '@routekit/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@routekit/gateway':
+        specifier: workspace:*
+        version: link:../model-gateway
+      '@routekit/registry':
+        specifier: workspace:*
+        version: link:../routekit-registry
+      '@routekit/runtime':
+        specifier: workspace:*
+        version: link:../runtime-utils
+      zod:
+        specifier: 4.4.3
+        version: 4.4.3
+
   packages/adapter-ai-sdk:
     dependencies:
       '@ai-sdk/openai-compatible':
@@ -71,12 +89,12 @@ importers:
       '@fusionkit/ensemble':
         specifier: workspace:*
         version: link:../ensemble
+      '@fusionkit/gateway':
+        specifier: workspace:*
+        version: link:../fusion-gateway
       '@fusionkit/harness-core':
         specifier: workspace:*
         version: link:../harness-core
-      '@fusionkit/model-gateway':
-        specifier: workspace:*
-        version: link:../model-gateway
       '@fusionkit/protocol':
         specifier: workspace:*
         version: link:../protocol
@@ -104,6 +122,9 @@ importers:
       '@fusionkit/workspace':
         specifier: workspace:*
         version: link:../workspace
+      '@routekit/accounts':
+        specifier: workspace:*
+        version: link:../accounts
       '@routekit/cli-core':
         specifier: workspace:*
         version: link:../cli-core
@@ -116,6 +137,9 @@ importers:
       '@routekit/contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@routekit/gateway':
+        specifier: workspace:*
+        version: link:../model-gateway
       '@routekit/registry':
         specifier: workspace:*
         version: link:../routekit-registry
@@ -198,15 +222,15 @@ importers:
       '@fusionkit/adapter-ai-sdk':
         specifier: workspace:*
         version: link:../adapter-ai-sdk
+      '@fusionkit/gateway':
+        specifier: workspace:*
+        version: link:../fusion-gateway
       '@fusionkit/harness-core':
         specifier: workspace:*
         version: link:../harness-core
       '@fusionkit/kernel':
         specifier: workspace:*
         version: link:../kernel
-      '@fusionkit/model-gateway':
-        specifier: workspace:*
-        version: link:../model-gateway
       '@fusionkit/protocol':
         specifier: workspace:*
         version: link:../protocol
@@ -219,6 +243,9 @@ importers:
       '@routekit/contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@routekit/gateway':
+        specifier: workspace:*
+        version: link:../model-gateway
       '@routekit/runtime':
         specifier: workspace:*
         version: link:../runtime-utils
@@ -241,24 +268,7 @@ importers:
         specifier: 6.0.200
         version: 6.0.200(zod@4.4.3)
 
-  packages/harness-core:
-    dependencies:
-      '@fusionkit/protocol':
-        specifier: workspace:*
-        version: link:../protocol
-      '@routekit/contracts':
-        specifier: workspace:*
-        version: link:../contracts
-      '@routekit/runtime':
-        specifier: workspace:*
-        version: link:../runtime-utils
-      zod:
-        specifier: 4.4.3
-        version: 4.4.3
-
-  packages/kernel: {}
-
-  packages/model-gateway:
+  packages/fusion-gateway:
     dependencies:
       '@fusionkit/adapter-ai-sdk':
         specifier: workspace:*
@@ -278,12 +288,50 @@ importers:
       '@routekit/contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@routekit/gateway':
+        specifier: workspace:*
+        version: link:../model-gateway
       '@routekit/registry':
         specifier: workspace:*
         version: link:../routekit-registry
       '@routekit/runtime':
         specifier: workspace:*
         version: link:../runtime-utils
+      '@routekit/tracing':
+        specifier: workspace:*
+        version: link:../routekit-tracing
+
+  packages/harness-core:
+    dependencies:
+      '@fusionkit/protocol':
+        specifier: workspace:*
+        version: link:../protocol
+      '@routekit/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@routekit/runtime':
+        specifier: workspace:*
+        version: link:../runtime-utils
+      zod:
+        specifier: 4.4.3
+        version: 4.4.3
+
+  packages/kernel: {}
+
+  packages/model-gateway:
+    dependencies:
+      '@routekit/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@routekit/registry':
+        specifier: workspace:*
+        version: link:../routekit-registry
+      '@routekit/runtime':
+        specifier: workspace:*
+        version: link:../runtime-utils
+      '@routekit/tracing':
+        specifier: workspace:*
+        version: link:../routekit-tracing
       zod:
         specifier: 4.4.3
         version: 4.4.3
@@ -354,12 +402,12 @@ importers:
       '@fusionkit/ensemble':
         specifier: workspace:*
         version: link:../ensemble
+      '@fusionkit/gateway':
+        specifier: workspace:*
+        version: link:../fusion-gateway
       '@fusionkit/harness-core':
         specifier: workspace:*
         version: link:../harness-core
-      '@fusionkit/model-gateway':
-        specifier: workspace:*
-        version: link:../model-gateway
       '@fusionkit/protocol':
         specifier: workspace:*
         version: link:../protocol
@@ -369,6 +417,9 @@ importers:
       '@routekit/contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@routekit/gateway':
+        specifier: workspace:*
+        version: link:../model-gateway
       '@routekit/registry':
         specifier: workspace:*
         version: link:../routekit-registry
@@ -388,12 +439,12 @@ importers:
       '@fusionkit/ensemble':
         specifier: workspace:*
         version: link:../ensemble
+      '@fusionkit/gateway':
+        specifier: workspace:*
+        version: link:../fusion-gateway
       '@fusionkit/harness-core':
         specifier: workspace:*
         version: link:../harness-core
-      '@fusionkit/model-gateway':
-        specifier: workspace:*
-        version: link:../model-gateway
       '@fusionkit/protocol':
         specifier: workspace:*
         version: link:../protocol
@@ -409,6 +460,9 @@ importers:
       '@routekit/contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@routekit/gateway':
+        specifier: workspace:*
+        version: link:../model-gateway
       '@routekit/registry':
         specifier: workspace:*
         version: link:../routekit-registry

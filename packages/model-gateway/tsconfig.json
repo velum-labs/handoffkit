@@ -9,18 +9,6 @@
   ],
   "references": [
     {
-      "path": "../adapter-ai-sdk"
-    },
-    {
-      "path": "../kernel"
-    },
-    {
-      "path": "../protocol"
-    },
-    {
-      "path": "../registry"
-    },
-    {
       "path": "../contracts"
     },
     {
@@ -30,7 +18,7 @@
       "path": "../runtime-utils"
     },
     {
-      "path": "../tracing"
+      "path": "../routekit-tracing"
     }
   ]
 }

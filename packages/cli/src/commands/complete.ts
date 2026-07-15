@@ -14,7 +14,7 @@
  */
 import { Command } from "commander";
 
-import { defaultSessionsDir, FileSystemSessionStore } from "@fusionkit/model-gateway";
+import { defaultSessionsDir, FileSystemSessionStore } from "@fusionkit/gateway";
 
 import { loadFusionConfig, PROMPT_IDS } from "../fusion-config.js";
 import { cachedCatalog } from "../fusion/catalog.js";

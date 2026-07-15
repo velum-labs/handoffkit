@@ -1,5 +1,5 @@
 import type { PanelTrust } from "@fusionkit/ensemble";
-import type { OnRateLimitPolicy } from "@fusionkit/model-gateway";
+import type { OnRateLimitPolicy } from "@fusionkit/gateway";
 import { SESSION_ISOLATIONS } from "@fusionkit/protocol";
 import type { SessionIsolation } from "@fusionkit/protocol";
 import {

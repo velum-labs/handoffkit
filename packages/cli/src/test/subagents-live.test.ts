@@ -27,8 +27,9 @@ import { dirname, join } from "node:path";
 import { test } from "node:test";
 
 import { createKernelFuseStepRunner } from "@fusionkit/ensemble";
-import { FusionBackend, OpenAiBackend, startGateway } from "@fusionkit/model-gateway";
-import type { FusedModelRoute, PanelRunInput, WireTrajectory } from "@fusionkit/model-gateway";
+import { FusionBackend } from "@fusionkit/gateway";
+import type { FusedModelRoute, PanelRunInput, WireTrajectory } from "@fusionkit/gateway";
+import { OpenAiBackend, startGateway } from "@routekit/gateway";
 import {
   codexAgentRoles,
   codexAgentRoleToml,

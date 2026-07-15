@@ -26,19 +26,14 @@ import { ATTR, normalizeWireTrajectories } from "@fusionkit/protocol";
 import { emitFusionEvent, initFusionTracing, jsonAttr, newSessionCarrier, startFusionSpan } from "@fusionkit/tracing";
 import {
   FusionBackend,
-  installAcpAdapters,
-  runAcpAgent,
   runFrontDoorAcceptance,
-  startFusionGateway,
-  startGateway
-} from "@fusionkit/model-gateway";
+  startFusionGateway
+} from "@fusionkit/gateway";
 import type {
-  AcpRunner,
   ChatMessageLike,
   FrontDoorRunner,
   FrontDoorRunnerResult,
   FusionGateway,
-  Gateway,
   LocalComputePricing,
   ModelPricing,
   NarrationWriter,
@@ -48,12 +43,22 @@ import type {
   SessionMetaInput,
   SessionStore,
   WireTrajectory
-} from "@fusionkit/model-gateway";
-import { CodexBackendRelay, openSubscriptionRelays } from "@fusionkit/model-gateway/subscriptions";
+} from "@fusionkit/gateway";
+import {
+  installAcpAdapters,
+  runAcpAgent,
+  startGateway
+} from "@routekit/gateway";
+import type { AcpRunner, Gateway } from "@routekit/gateway";
+import {
+  CodexBackendRelay,
+  openSubscriptionRelays,
+  snapshotsToUsage
+} from "@routekit/accounts";
 import type {
   CodexRelayOptions,
   SubscriptionAccountSetOptions
-} from "@fusionkit/model-gateway/subscriptions";
+} from "@routekit/accounts";
 import type { SubscriptionMode } from "@routekit/registry";
 import { bold, cyan, gray, uiStream } from "@routekit/cli-ui";
 import { registerCleanup, trimTrailingSlashes } from "@routekit/runtime";
@@ -688,7 +693,15 @@ export async function startFusionStepGateway(input: {
     port: input.port,
     ...(input.authToken !== undefined ? { authToken: input.authToken } : {}),
     ...(codexRelay !== undefined ? { codexRelay } : {}),
-    ...(Object.keys(subscriptionRelays).length > 0 ? { subscriptionRelays } : {})
+    ...(Object.keys(subscriptionRelays).length > 0
+      ? {
+          providerRelays: subscriptionRelays,
+          usage: () =>
+            snapshotsToUsage(
+              Object.values(subscriptionRelays).map((relay) => relay?.snapshot?.())
+            )
+        }
+      : {})
   });
   selfGatewayUrl = gateway.url();
   return gateway;

@@ -30,10 +30,11 @@
     "@fusionkit/harness-core": "workspace:*",
     "zod": "4.4.3",
     "@fusionkit/ensemble": "workspace:*",
-    "@fusionkit/model-gateway": "workspace:*",
+    "@fusionkit/gateway": "workspace:*",
     "@fusionkit/protocol": "workspace:*",
     "@fusionkit/tools": "workspace:*",
     "@routekit/contracts": "workspace:*",
+    "@routekit/gateway": "workspace:*",
     "@routekit/runtime": "workspace:*",
     "@routekit/registry": "workspace:*"
   },

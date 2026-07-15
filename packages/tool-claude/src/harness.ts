@@ -1,12 +1,14 @@
 import { artifactHash } from "@routekit/contracts";
 import {
+  PANEL_DEPTH_HEADER
+} from "@fusionkit/gateway";
+import {
   claudeModelAlias,
   ModelRoutedBackend,
   OpenAiBackend,
-  PANEL_DEPTH_HEADER,
   startGateway
-} from "@fusionkit/model-gateway";
-import type { Backend } from "@fusionkit/model-gateway";
+} from "@routekit/gateway";
+import type { Backend } from "@routekit/gateway";
 import {
   buildChildEnv,
   captureWorktreeDiff,

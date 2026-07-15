@@ -17,7 +17,7 @@
  * All styling degrades to plain text when color is off (pipes, CI).
  */
 import { bold, cyan, dim, glyph, gray, green, red, uiStream, yellow } from "@routekit/cli-ui";
-import type { FusionGatewayLogger } from "@fusionkit/model-gateway";
+import type { FusionGatewayLogger } from "@fusionkit/gateway";
 
 let chatter = true;
 

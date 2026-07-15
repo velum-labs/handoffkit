@@ -12,8 +12,8 @@
  */
 import type { Command } from "commander";
 
-import { defaultSessionsDir, FileSystemSessionStore, formatUsd } from "@fusionkit/model-gateway";
-import type { SessionCost, SessionStore, SessionSummary } from "@fusionkit/model-gateway";
+import { defaultSessionsDir, FileSystemSessionStore, formatUsd } from "@fusionkit/gateway";
+import type { SessionCost, SessionStore, SessionSummary } from "@fusionkit/gateway";
 
 import { bold, cyan, dim, gray, green, relativeTime } from "@routekit/cli-ui";
 import { argOrPick, contextFor } from "@routekit/cli-core";

@@ -121,12 +121,13 @@
     "@fusionkit/adapter-ai-sdk": "workspace:*",
     "@fusionkit/harness-core": "workspace:*",
     "@fusionkit/kernel": "workspace:*",
-    "@fusionkit/model-gateway": "workspace:*",
+    "@fusionkit/gateway": "workspace:*",
     "@fusionkit/protocol": "workspace:*",
     "@routekit/runtime": "workspace:*",
     "@fusionkit/tracing": "workspace:*",
     "@fusionkit/workspace": "workspace:*",
     "@routekit/contracts": "workspace:*",
+    "@routekit/gateway": "workspace:*",
     "@velum-labs/cursorkit": "0.2.0"
   },
   "keywords": [

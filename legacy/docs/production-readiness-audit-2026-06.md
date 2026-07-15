@@ -93,7 +93,7 @@ Root package is literally named `warrant` ("the governed execution and provenanc
 - Runner is **outbound-only**: polls, claims, materializes workspace, runs the harness in a session backend, signs runner receipts.
 - Deps `jose`/`pino`/`zod`; `protocol`/`sdk`/`workspace` stay Node-builtins-only for auditability.
 
-**Fusion harness gateway** (`@fusionkit/model-gateway` + `ensemble` + `apps/scope`)
+**Fusion harness gateway** (`@fusionkit/gateway` + `ensemble` + `apps/scope`)
 - Lets unmodified Codex / Claude / Cursor use model fusion as backend. Each panel model runs through the **same harness** in its own git worktree.
 - `FusionBackend` = "the judge streams a trajectory the user's harness executes." No apply/verify/repair — iteration is the harness's job.
 - Dependency-injected `PanelRunner` so `model-gateway` does not depend on `ensemble`/`cli`.

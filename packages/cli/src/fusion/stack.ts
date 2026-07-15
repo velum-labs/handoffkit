@@ -13,18 +13,19 @@ import { stringify } from "yaml";
 import { KernelBackend } from "@fusionkit/ensemble";
 import type { EnsembleModel, PanelTrust, UnifiedHarnessKind } from "@fusionkit/ensemble";
 import { fusionModelId } from "@fusionkit/registry";
-import { createChatNarrationWriter, MlxBackend, OpenAiBackend, startGateway } from "@fusionkit/model-gateway";
+import { createChatNarrationWriter, MlxBackend } from "@fusionkit/gateway";
+import { OpenAiBackend, startGateway } from "@routekit/gateway";
 import { providerForAuthMode } from "@routekit/registry";
 import type {
-  Gateway,
   LocalComputePricing,
   ModelPricing,
   NarrationWriter,
   OnRateLimitPolicy,
   SessionMetaInput,
   SessionStore
-} from "@fusionkit/model-gateway";
-import type { CodexRelayOptions } from "@fusionkit/model-gateway/subscriptions";
+} from "@fusionkit/gateway";
+import type { Gateway } from "@routekit/gateway";
+import type { CodexRelayOptions } from "@routekit/accounts";
 import { harnessDriversEnabled } from "@fusionkit/tools";
 import { reservePort, spawnLogged, terminate, waitForHttp } from "@routekit/runtime";
 

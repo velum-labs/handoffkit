@@ -18,6 +18,9 @@
       "path": "../model-gateway"
     },
     {
+      "path": "../fusion-gateway"
+    },
+    {
       "path": "../protocol"
     },
     {

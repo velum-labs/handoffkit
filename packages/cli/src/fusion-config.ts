@@ -35,11 +35,11 @@ import {
   writeJsonAtomic
 } from "@routekit/config-core";
 import { writeFileAtomic } from "@routekit/runtime";
-import type { OnRateLimitPolicy } from "@fusionkit/model-gateway";
+import type { OnRateLimitPolicy } from "@fusionkit/gateway";
 import type {
   SubscriptionAccountSource,
   SubscriptionSelectionStrategy
-} from "@fusionkit/model-gateway/subscriptions";
+} from "@routekit/accounts";
 import { DEFAULT_ENSEMBLE_NAME } from "@fusionkit/registry";
 import type { SubscriptionMode } from "@routekit/registry";
 

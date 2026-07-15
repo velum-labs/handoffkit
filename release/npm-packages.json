@@ -71,7 +71,15 @@
     },
     {
       "path": "packages/model-gateway",
-      "name": "@fusionkit/model-gateway"
+      "name": "@routekit/gateway"
+    },
+    {
+      "path": "packages/accounts",
+      "name": "@routekit/accounts"
+    },
+    {
+      "path": "packages/fusion-gateway",
+      "name": "@fusionkit/gateway"
     },
     {
       "path": "packages/ensemble",

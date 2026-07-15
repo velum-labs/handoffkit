@@ -38,6 +38,12 @@
       "path": "packages/model-gateway"
     },
     {
+      "path": "packages/accounts"
+    },
+    {
+      "path": "packages/fusion-gateway"
+    },
+    {
       "path": "packages/protocol"
     },
     {

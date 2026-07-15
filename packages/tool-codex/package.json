@@ -28,11 +28,12 @@
   "dependencies": {
     "@fusionkit/ensemble": "workspace:*",
     "@fusionkit/harness-core": "workspace:*",
-    "@fusionkit/model-gateway": "workspace:*",
+    "@fusionkit/gateway": "workspace:*",
     "@fusionkit/protocol": "workspace:*",
     "@fusionkit/tools": "workspace:*",
     "@fusionkit/tracing": "workspace:*",
     "@routekit/contracts": "workspace:*",
+    "@routekit/gateway": "workspace:*",
     "@routekit/registry": "workspace:*",
     "@routekit/runtime": "workspace:*",
     "@openai/codex-sdk": "0.142.5",

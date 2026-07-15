@@ -28,7 +28,9 @@ These packages must not depend directly or transitively on the legacy packages:
 | --- | --- |
 | `@fusionkit/cli` | Product front door. |
 | `@fusionkit/ensemble` | Panel run engine: worktrees, harness execution, judge synthesis, fusion. |
-| `@fusionkit/model-gateway` | Harness gateway: dialect translation, streaming, sessions, cost, rate-limit handoff. |
+| `@routekit/gateway` | Neutral router, gateway dialects, endpoint pools, provider egress, and call provenance. |
+| `@routekit/accounts` | Neutral subscription credentials, capacity pools, relays, and proxy clients. |
+| `@fusionkit/gateway` | Fusion frontdoor, panel/synthesis orchestration, sessions, budgets, and local lifecycle. |
 | `@fusionkit/protocol` | Model-fusion data contracts and generated SDK bindings. |
 | `@fusionkit/workspace` | Git workspace capture, worktree materialization, divergence-safe pull. |
 | `@fusionkit/tools`, `tool-codex`, `tool-claude`, `tool-cursor`, `tool-opencode` | Per-harness adapters. |

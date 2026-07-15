@@ -29,7 +29,9 @@ HTTP contracts, read [Specs and APIs](specs-and-apis.md).
 | `@fusionkit/handoff` | Continuation SDK: checkpoints, `continueIn`, parallel fan-out, review, pull, tools, model routing, and trace logs. | `legacy/packages/handoff/src/handoff.ts` |
 | `@fusionkit/adapter-ai-sdk` | Product-local AI SDK utilities, worktree agents, local model adapters, and managed MLX helpers. | `packages/adapter-ai-sdk/src/index.ts` |
 | `@fusionkit/adapter-compute` | ComputeSDK-shaped sandbox surface backed by governed runner sessions. | `legacy/packages/adapter-compute/src/sandbox.ts` |
-| `@fusionkit/model-gateway` | Local-model gateway exposing harness wire dialects over OpenAI-compatible local models. | `packages/model-gateway/src/index.ts` |
+| `@routekit/gateway` | Neutral HTTP gateway, dialect adapters, runtime router/catalog, pooled endpoints, provider egress, and single-call provenance. | `packages/model-gateway/src/index.ts` |
+| `@routekit/accounts` | Subscription credentials, reusable account pooling, provider relays, and proxy clients. | `packages/accounts/src/index.ts` |
+| `@fusionkit/gateway` | Fusion frontdoor, panel/synthesis orchestration, sessions, aggregate budgets, trajectory conversion, and local lifecycle. | `packages/fusion-gateway/src/index.ts` |
 
 ## Session and harness packages
 

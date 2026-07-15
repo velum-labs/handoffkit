@@ -1,13 +1,13 @@
 # Subscription pooling architecture
 
 The subscription proxy is a cohesive SDK published under the
-`@fusionkit/model-gateway/subscriptions` subpath, not a pile of exports on the
+`@routekit/accounts` subpath, not a pile of exports on the
 gateway's core entrypoint. The core `startGateway` still owns the HTTP door,
 ingress authentication, request validation, streaming backpressure, and abort
 propagation; the subscriptions module supplies the relays, account sets,
 provider adapters, programmatic proxy, and typed client that plug into it.
 
-## SDK surface (`@fusionkit/model-gateway/subscriptions`)
+## SDK surface (`@routekit/accounts`)
 
 - `startSubscriptionProxy(options)`: the one-call programmatic entrypoint —
   opens the configured account sets into relays, fronts them with a relay-only

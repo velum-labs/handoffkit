@@ -186,10 +186,17 @@ export function ensureRunOutputDir(
 }
 
 /** Atomically replace a UTF-8 file by writing a sibling temporary first. */
-export function writeFileAtomic(path: string, content: string): void {
+export function writeFileAtomic(
+  path: string,
+  content: string,
+  options: { mode?: number } = {}
+): void {
   const temporary = `${path}.${process.pid}.${randomId(8)}.tmp`;
   try {
-    writeFileSync(temporary, content);
+    writeFileSync(temporary, content, {
+      encoding: "utf8",
+      ...(options.mode !== undefined ? { mode: options.mode } : {})
+    });
     renameSync(temporary, path);
   } finally {
     rmSync(temporary, { force: true });

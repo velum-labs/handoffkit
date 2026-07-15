@@ -3,8 +3,6 @@ import { createServer } from "node:http";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { test } from "node:test";
 
-import { assertModelCallRecordV1 } from "@fusionkit/protocol";
-
 import { OpenAiBackend } from "../backend.js";
 import { MODEL_CALL_ID_HEADER } from "../provenance.js";
 import type { ModelCallRecord } from "../provenance.js";
@@ -113,7 +111,6 @@ test("injects the default model and pipes the completion back", async () => {
     assert.equal(json.object, "chat.completion");
     assert.equal(mock.lastChatBody()?.model, "mlx-default");
     assert.equal(records.length, 1);
-    assertModelCallRecordV1(records[0]);
     assert.equal(records[0]?.call_id, callId);
     assert.equal(records[0]?.metadata?.dialect, "openai-chat");
     assert.equal(records[0]?.model, "mlx-default");
@@ -144,7 +141,6 @@ test("records failed upstream responses as failed model-call records", async () 
     });
     assert.equal(response.status, 500);
     assert.equal(records.length, 1);
-    assertModelCallRecordV1(records[0]);
     assert.equal(records[0]?.status, "failed");
     assert.equal(records[0]?.error?.kind, "provider_error");
   } finally {
@@ -175,7 +171,6 @@ test("records thrown backend failures as failed model-call records", async () =>
     assert.equal(response.status, 502);
     assert.equal(response.headers.get(MODEL_CALL_ID_HEADER), records[0]?.call_id);
     assert.equal(records.length, 1);
-    assertModelCallRecordV1(records[0]);
     assert.equal(records[0]?.status, "failed");
     assert.equal(records[0]?.error?.kind, "provider_error");
     assert.equal(records[0]?.metadata?.unknown_usage, true);

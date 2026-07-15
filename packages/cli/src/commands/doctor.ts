@@ -13,7 +13,7 @@ import { bold, cyan, dim, formatBytes, green, red } from "@routekit/cli-ui";
 import { contextFor, probeBinaryVersion, readPackageVersion } from "@routekit/cli-core";
 import type { CommandContext } from "@routekit/cli-core";
 import type { Presenter, StatusKind } from "@routekit/cli-ui";
-import { resolveWebSearchExecutor } from "@fusionkit/model-gateway";
+import { resolveWebSearchExecutor } from "@routekit/gateway";
 
 import {
   cliproxyBaseUrl,

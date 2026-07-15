@@ -4,6 +4,7 @@ import { test } from "node:test";
 import {
   canonicalize,
   hashCanonical,
+  parseRetryAfterSeconds,
   requestHash,
   responseHash
 } from "../index.js";
@@ -19,6 +20,18 @@ test("canonical hashing is stable across object insertion order", () => {
   assert.equal(canonicalize({ b: 2, a: 1 }), '{"a":1,"b":2}');
   assert.equal(hashCanonical({ b: 2, a: 1 }), hashCanonical({ a: 1, b: 2 }));
   assert.equal(requestHash({ b: 2, a: 1 }), responseHash({ a: 1, b: 2 }));
+});
+
+test("Retry-After parsing supports delay seconds and HTTP dates", () => {
+  assert.equal(parseRetryAfterSeconds("2"), 2);
+  assert.equal(
+    parseRetryAfterSeconds("Wed, 15 Jul 2026 14:30:05 GMT", () =>
+      Date.parse("Wed, 15 Jul 2026 14:30:00 GMT")
+    ),
+    5
+  );
+  assert.equal(parseRetryAfterSeconds("-1"), undefined);
+  assert.equal(parseRetryAfterSeconds("invalid"), undefined);
 });
 
 test("neutral model and harness contracts compose without product types", () => {

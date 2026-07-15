@@ -16,7 +16,7 @@
  * panel is hardware-shaped: the local MLX trio when `local` is effectively on,
  * the decorrelated three-vendor cloud trio otherwise.
  */
-import type { OnRateLimitPolicy } from "@fusionkit/model-gateway";
+import type { OnRateLimitPolicy } from "@fusionkit/gateway";
 import { DEFAULT_ENSEMBLE_NAME, fusionModelId } from "@fusionkit/registry";
 import { resolveLayer } from "@routekit/config-core";
 import type { ConfigSource, LayeredValue } from "@routekit/config-core";

@@ -123,7 +123,7 @@ curl http://127.0.0.1:8000/v1/chat/completions \
 
 ### Model gateway
 
-The model gateway is started by `startGateway()` from `@fusionkit/model-gateway`. It exposes the wire dialects expected by coding harnesses.
+The model gateway is started by `startGateway()` from `@fusionkit/gateway`. It exposes the wire dialects expected by coding harnesses.
 
 | Dialect | Route family | Used by |
 | --- | --- | --- |

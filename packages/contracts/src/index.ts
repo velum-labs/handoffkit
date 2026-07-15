@@ -23,7 +23,15 @@ export type {
   ModelEndpoint,
   ModelUsage,
   ProviderError,
-  ProviderErrorKind
+  ProviderErrorKind,
+  ProviderFailure,
+  ProviderFailureCategory
+} from "./model.js";
+export {
+  ProviderFailureError,
+  classifyProviderFailure,
+  isRetryableProviderFailure,
+  parseRetryAfterSeconds
 } from "./model.js";
 
 export type {

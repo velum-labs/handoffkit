@@ -9,7 +9,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 
 import type { PanelTrust } from "@fusionkit/ensemble";
-import type { OnRateLimitPolicy } from "@fusionkit/model-gateway";
+import type { OnRateLimitPolicy } from "@fusionkit/gateway";
 import { DEFAULT_CLOUD_PANEL_MEMBERS } from "@fusionkit/registry";
 import {
   DEFAULT_REASONING_MODEL as REGISTRY_DEFAULT_REASONING_MODEL,
