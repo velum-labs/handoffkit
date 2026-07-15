@@ -60,7 +60,11 @@ jobs:
         run: pnpm demo all
 
       - name: Audit dependencies
-        run: pnpm audit --audit-level high
+        # npm retired the classic audit endpoints (HTTP 410) that pnpm 10
+        # queries; pnpm 11 uses the bulk advisory endpoint. Audit reads the
+        # lockfile, so invoking pnpm 11 here is safe while the workspace
+        # itself stays pinned to pnpm 10.
+        run: npx --yes pnpm@11 audit --audit-level high
 
   scope:
     name: scope observability app (apps/scope)
