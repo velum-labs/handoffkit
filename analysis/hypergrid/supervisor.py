@@ -58,6 +58,7 @@ def load(workdir: Path) -> tuple[Any, list[Any], dict[str, dict[str, Any]]]:
 
 def analyze(workdir: Path) -> dict[str, Any]:
     lock, results, cells = load(workdir)
+    submitted_instances = lock.submitted_instances()
     by_cell: dict[str, dict[str, Any]] = defaultdict(dict)  # cell -> instance -> result
     for result in results:
         if result.instance_id in by_cell[result.cell_id]:
@@ -70,6 +71,11 @@ def analyze(workdir: Path) -> dict[str, Any]:
     for cell_id, meta in cells.items():
         cell = meta["cell"]
         shard_map = by_cell.get(cell_id, {})
+        expected = (
+            submitted_instances.get(cell_id, set())
+            if submitted_instances
+            else set(cell.instances)
+        )
         terminal = {
             inst: result
             for inst, result in shard_map.items()
@@ -98,7 +104,8 @@ def analyze(workdir: Path) -> dict[str, Any]:
                 "n": n,
                 "completed": len(completed),
                 "errors": errors,
-                "missing": max(0, len(cell.instances) - len(terminal)),
+                "submitted": len(expected),
+                "missing": len(expected - set(terminal)),
                 "resolved": resolved,
                 "rate": resolved / n if n else None,
                 "completed_rate": resolved / len(completed) if completed else None,

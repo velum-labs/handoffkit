@@ -139,12 +139,34 @@ class AwsBatchComputeBackend:
     ) -> str | None:
         cell = entries[0][0]
         cell_key = self.store._key(f"runs/{sweep_id}/cells/{cell.cell_id}.json")
+        existing_cell_payload = self._get_json_if_present(cell_key)
+        observed_instances = {instance_id for _, instance_id, _ in entries}
+        observed_instances.update(
+            result.instance_id
+            for result in self.store.get_all(sweep_id)
+            if result.cell_id == cell.cell_id
+        )
+        if existing_cell_payload is not None:
+            existing_cell = existing_cell_payload.get("cell")
+            if isinstance(existing_cell, dict):
+                previous_instances = existing_cell.get("instances")
+                if isinstance(previous_instances, list):
+                    observed_instances.update(str(value) for value in previous_instances)
+        observed_cell = cell.model_copy(
+            update={
+                "instances": [
+                    instance_id
+                    for instance_id in cell.instances
+                    if instance_id in observed_instances
+                ]
+            }
+        )
         self.store.client.put_object(
             Bucket=self.store.bucket,
             Key=cell_key,
             Body=json.dumps(
                 {
-                    "cell": cell.model_dump(mode="json"),
+                    "cell": observed_cell.model_dump(mode="json"),
                     "generation": self.generation,
                 },
                 sort_keys=True,

@@ -295,6 +295,9 @@ class _Client:
         *,
         temperature: float,
         max_tokens: int,
+        top_p: float | None = None,
+        reasoning: dict[str, Any] | None = None,
+        provider: dict[str, Any] | None = None,
         timeout_s: float = 900.0,
         attempts: int = 3,
     ) -> dict[str, Any]:
@@ -306,6 +309,12 @@ class _Client:
             # OpenRouter returns exact billed cost; other servers ignore this.
             "usage": {"include": True},
         }
+        if top_p is not None:
+            payload["top_p"] = top_p
+        if reasoning is not None:
+            payload["reasoning"] = reasoning
+        if provider is not None:
+            payload["provider"] = provider
         headers = {"Content-Type": "application/json"}
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
@@ -336,6 +345,12 @@ class _Client:
                         "text": message.get("content") or "",
                         "prompt_tokens": int(usage.get("prompt_tokens") or 0),
                         "completion_tokens": int(usage.get("completion_tokens") or 0),
+                        "reasoning_tokens": int(
+                            (usage.get("completion_tokens_details") or {}).get(
+                                "reasoning_tokens"
+                            )
+                            or 0
+                        ),
                         "cost_usd": float(usage.get("cost") or 0.0),
                         "finish_reason": choice.get("finish_reason"),
                         "response_id": data.get("id"),
@@ -423,6 +438,17 @@ class LivecodebenchAdapter:
         prompt_variants = [str(value) for value in params.get("prompt_variants", [])]
         selection = str(params.get("selection", "first"))
         max_tokens = int(params.get("max_tokens", 16384))
+        top_p = (
+            float(params["top_p"])
+            if params.get("top_p") is not None
+            else None
+        )
+        reasoning = params.get("reasoning")
+        if reasoning is not None and not isinstance(reasoning, dict):
+            raise ValueError("reasoning must be an object")
+        provider = params.get("provider")
+        if provider is not None and not isinstance(provider, dict):
+            raise ValueError("provider must be an object")
         # Wall clock must exceed the CPU rlimit or grading becomes a lottery on
         # slow hosts: a CPU-bound solution must always get its full CPU budget.
         timeout_s = float(params.get("test_timeout_s", 30.0))
@@ -452,6 +478,9 @@ class LivecodebenchAdapter:
                 prompt,
                 temperature=temperature,
                 max_tokens=max_tokens,
+                top_p=top_p,
+                reasoning=reasoning,
+                provider=provider,
                 timeout_s=request_timeout_s,
                 attempts=attempts,
             )
@@ -468,6 +497,7 @@ class LivecodebenchAdapter:
                 "finish_reason": completion["finish_reason"],
                 "prompt_tokens": completion["prompt_tokens"],
                 "completion_tokens": completion["completion_tokens"],
+                "reasoning_tokens": completion["reasoning_tokens"],
                 "cost_usd": completion["cost_usd"],
                 "response_id": completion.get("response_id"),
                 "response_model": completion.get("response_model"),
@@ -536,6 +566,9 @@ class LivecodebenchAdapter:
                 repair_prompt,
                 temperature=temps[0],
                 max_tokens=max_tokens,
+                top_p=top_p,
+                reasoning=reasoning,
+                provider=provider,
                 timeout_s=request_timeout_s,
                 attempts=attempts,
             )
@@ -555,6 +588,7 @@ class LivecodebenchAdapter:
                 "finish_reason": completion["finish_reason"],
                 "prompt_tokens": completion["prompt_tokens"],
                 "completion_tokens": completion["completion_tokens"],
+                "reasoning_tokens": completion["reasoning_tokens"],
                 "cost_usd": completion["cost_usd"],
                 "response_id": completion.get("response_id"),
                 "response_model": completion.get("response_model"),

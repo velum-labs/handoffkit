@@ -201,6 +201,12 @@ def test_aws_batch_groups_missing_shards_and_retries_idempotently() -> None:
     assert manifest["0"]["instance_id"] == "b"
     assert manifest["0"]["generation"] == 3
     assert manifest["0"]["shard_id"] == _result(first, "b").shard_id
+    first_cell_key = f"prefix/runs/run/cells/{first.cell_id}.json"
+    first_cell_payload = json.loads(s3.objects[("bucket", first_cell_key)])
+    assert first_cell_payload["cell"]["instances"] == ["a", "b"]
+    second_cell_key = f"prefix/runs/run/cells/{second.cell_id}.json"
+    second_cell_payload = json.loads(s3.objects[("bucket", second_cell_key)])
+    assert second_cell_payload["cell"]["instances"] == ["c", "d"]
 
     backend.submit(shards, "run")
 

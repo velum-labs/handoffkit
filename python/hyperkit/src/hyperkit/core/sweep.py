@@ -19,7 +19,13 @@ from hyperkit.core.aggregate import aggregate
 from hyperkit.core.contracts import Experiment, ExperimentContext
 from hyperkit.core.ids import hash_obj
 from hyperkit.core.lock import extend_lock, load_lock, new_lock, save_lock
-from hyperkit.core.models import Cell, RunResult, ShardResult
+from hyperkit.core.models import (
+    Cell,
+    RunResult,
+    ShardResult,
+    SubmittedShard,
+    SweepSubmission,
+)
 from hyperkit.core.store import ResultStore
 
 
@@ -191,7 +197,38 @@ class SweepEngine:
             pending = [
                 s for s in pending if s.cell.instances.index(s.instance_id) < rung
             ]
+        spent = sum(
+            result.cost_usd or 0.0
+            for result in self.store.get_all(lock.sweep_id)
+        )
+        if (
+            pending
+            and lock.spend_ceiling_usd is not None
+            and spent >= lock.spend_ceiling_usd
+        ):
+            raise RuntimeError(
+                f"sweep has spent ${spent:.2f}, reaching its "
+                f"${lock.spend_ceiling_usd:.2f} ceiling"
+            )
         backend.submit([(s.cell, s.instance_id) for s in pending], lock.sweep_id)
+        if pending:
+            submission = SweepSubmission(
+                backend=resolved_name,
+                rung=rung,
+                only=only,
+                shards=[
+                    SubmittedShard(
+                        cell_id=shard.cell.cell_id,
+                        instance_id=shard.instance_id,
+                        shard_id=shard.shard_id,
+                    )
+                    for shard in pending
+                ],
+            )
+            lock = lock.model_copy(
+                update={"submissions": [*lock.submissions, submission]}
+            )
+            save_lock(lock, self.lock_path)
         return len(pending)
 
     def _local_backend(self):
@@ -233,4 +270,10 @@ class SweepEngine:
     def collect(self) -> RunResult:
         lock = load_lock(self.lock_path)
         results = self.store.get_all(lock.sweep_id)
-        return aggregate(lock.sweep_id, lock.active_cells(), results)
+        submitted = lock.submitted_instances()
+        return aggregate(
+            lock.sweep_id,
+            lock.active_cells(),
+            results,
+            submitted_instances=submitted or None,
+        )

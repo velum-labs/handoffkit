@@ -165,6 +165,22 @@ class Generation(BaseModel):
     repo_sha: str | None = None
 
 
+class SubmittedShard(BaseModel):
+    cell_id: str
+    instance_id: str
+    shard_id: str
+
+
+class SweepSubmission(BaseModel):
+    """One successful apply call and its exact scientific denominator."""
+
+    backend: str
+    shards: list[SubmittedShard]
+    rung: int | None = None
+    only: str | None = None
+    created_at: str = Field(default_factory=_utcnow)
+
+
 class SweepLock(BaseModel):
     """The frozen, append-only record of a sweep.
 
@@ -178,6 +194,7 @@ class SweepLock(BaseModel):
     max_vcpus: int = 64
     spend_ceiling_usd: float | None = None
     generations: list[Generation] = Field(default_factory=list)
+    submissions: list[SweepSubmission] = Field(default_factory=list)
 
     def all_cells(self) -> list[Cell]:
         return [cell for gen in self.generations for cell in gen.cells]
@@ -192,6 +209,13 @@ class SweepLock(BaseModel):
 
     def next_generation_index(self) -> int:
         return len(self.generations)
+
+    def submitted_instances(self) -> dict[str, set[str]]:
+        expected: dict[str, set[str]] = {}
+        for submission in self.submissions:
+            for shard in submission.shards:
+                expected.setdefault(shard.cell_id, set()).add(shard.instance_id)
+        return expected
 
 
 class RunResult(BaseModel):

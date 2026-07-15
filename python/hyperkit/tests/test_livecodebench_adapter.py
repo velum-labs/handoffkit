@@ -139,6 +139,47 @@ def test_client_retries_malformed_provider_json(
     assert result["cost_usd"] == 0.001
 
 
+def test_client_forwards_reasoning_sampling_and_provider_policy() -> None:
+    payloads: list[dict[str, Any]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        payloads.append(json.loads(request.content))
+        return httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {
+                        "message": {"content": "ok"},
+                        "finish_reason": "stop",
+                    }
+                ]
+            },
+        )
+
+    _Client(
+        "https://provider.example/v1",
+        "key",
+        transport=httpx.MockTransport(handler),
+    ).complete(
+        "model",
+        "prompt",
+        temperature=0.55,
+        top_p=1.0,
+        max_tokens=65_536,
+        reasoning={"max_tokens": 48_000},
+        provider={
+            "order": ["provider-a"],
+            "allow_fallbacks": False,
+            "require_parameters": True,
+        },
+        attempts=1,
+    )
+
+    assert payloads[0]["top_p"] == 1.0
+    assert payloads[0]["reasoning"] == {"max_tokens": 48_000}
+    assert payloads[0]["provider"]["allow_fallbacks"] is False
+
+
 class _HeartbeatStream(httpx.SyncByteStream):
     def __iter__(self):
         yield b" \n"
@@ -212,6 +253,7 @@ def _patch_completions(
             "text": text,
             "prompt_tokens": 10,
             "completion_tokens": 20,
+            "reasoning_tokens": 0,
             "cost_usd": 0.001,
             "finish_reason": "stop",
         }

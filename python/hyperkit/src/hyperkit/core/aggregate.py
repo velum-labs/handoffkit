@@ -22,6 +22,8 @@ def aggregate(
     sweep_id: str,
     cells: Sequence[Cell],
     results: Sequence[ShardResult],
+    *,
+    submitted_instances: dict[str, set[str]] | None = None,
 ) -> RunResult:
     by_cell: dict[str, list[ShardResult]] = {}
     seen: set[tuple[str, str]] = set()
@@ -47,6 +49,11 @@ def aggregate(
     rows: list[dict[str, Any]] = []
     for cell in cells:
         shards = by_cell.get(cell.cell_id, [])
+        expected = (
+            submitted_instances.get(cell.cell_id, set())
+            if submitted_instances is not None
+            else set(cell.instances)
+        )
         completed = [
             shard
             for shard in shards
@@ -76,7 +83,8 @@ def aggregate(
             "n_completed": len(graded),
             "n_errors": errors,
             "n_present": len(shards),
-            "n_missing": max(0, len(cell.instances) - len(shards)),
+            "n_submitted": len(expected),
+            "n_missing": len(expected - {shard.instance_id for shard in shards}),
             "n_instances": len(cell.instances),
             "resolved": resolved,
             "rate": (resolved / n) if n else None,

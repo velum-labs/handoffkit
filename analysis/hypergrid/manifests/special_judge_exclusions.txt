@@ -1,25 +1,25 @@
-# Instances whose statements permit multiple valid outputs ("print any of
-# them" and variants). Exact-match stdout grading cannot score these fairly:
-# a correct program fails unless it happens to emit the canonical answer, and
-# on arc181_c this inverted the public-test signal that exec-select relies on
-# (samples passed all 25 private tests while failing both public tests).
-# Detected 2026-07-15 by phrase scan over question_content; see the e003
-# errata in lab/. Future manifests and the e005 holdout final must exclude
-# these; existing e002/e003 paired comparisons are unaffected because every
-# cell faced the same instances.
+# Instances requiring non-exact output semantics that Hyperkit does not yet
+# implement. Constructive tasks accept multiple valid answers; float/case
+# tasks require tolerant comparators. Exact matching can reject correct code
+# and can bias execution-guided selection by method, even when all cells see
+# the same instances (arc181_c demonstrably inverted e003's selector).
+# Audited task-by-task 2026-07-15. abc384_c, abc370_c, and abc398_f were false
+# positives in the earlier phrase scan and are intentionally restored.
 #
-# dev.txt (6 of 110)
+# dev.txt (9 of 110)
 abc366_g
 abc373_g
-abc384_c
+abc385_f
+abc392_d
 abc396_e
 arc181_c
 arc191_c
+arc192_b
+arc195_c
 #
-# holdout.txt (6 of 70)
-abc370_c
+# holdout.txt (5 of 70)
 abc397_d
-abc398_f
 arc183_d
 arc185_c
 arc190_a
+arc192_a

@@ -5,7 +5,9 @@ from pathlib import Path
 import hyperkit.adapters  # noqa: F401
 from hyperkit.core.contracts import ExperimentContext
 from hyperkit.core.experiments import CartesianExperiment, load_experiment
-from hyperkit.core.models import ShardResult
+from hyperkit.core.lock import load_lock
+from hyperkit.core.models import Cell, ShardResult
+from hyperkit.core.registry import register_backend
 from hyperkit.core.sweep import SweepEngine
 
 
@@ -59,6 +61,52 @@ axes:
     engine = SweepEngine(tmp_path / "run")
     engine.plan(CartesianExperiment.from_yaml(matrix))
     assert engine.status() == {"total": 2, "done": 0, "pending": 2}
+
+
+def test_apply_records_exact_submitted_denominator(tmp_path: Path) -> None:
+    class RecordingBackend:
+        name = "recording-submissions"
+
+        def __init__(self) -> None:
+            self.shards: list[tuple[Cell, str]] = []
+
+        def submit(self, shards, sweep_id: str) -> None:
+            assert sweep_id == "smoke"
+            self.shards.extend(shards)
+
+        def results(self, sweep_id: str) -> list[ShardResult]:
+            return []
+
+    matrix = tmp_path / "matrix.yaml"
+    manifest = tmp_path / "manifest.txt"
+    manifest.write_text("task-a\ntask-b\n")
+    matrix.write_text(
+        f"""
+id: smoke
+benchmarks: [swebench_verified]
+instances:
+  swebench_verified: {manifest}
+sut: fusionkit-serve
+axes:
+  topology: [driver]
+  k: [1]
+"""
+    )
+    backend = RecordingBackend()
+    register_backend(backend)
+    engine = SweepEngine(tmp_path / "run")
+    engine.plan(CartesianExperiment.from_yaml(matrix), sweep_id="smoke")
+
+    assert engine.apply(backend.name, rung=1) == 1
+
+    lock = load_lock(engine.lock_path)
+    assert len(lock.submissions) == 1
+    assert lock.submissions[0].rung == 1
+    assert len(lock.submissions[0].shards) == 1
+    assert len(backend.shards) == 1
+    (row,) = engine.collect().cells
+    assert row["n_submitted"] == 1
+    assert row["n_missing"] == 1
 
 
 def test_matrix_as_code_loads_and_materializes_once(tmp_path: Path) -> None:
