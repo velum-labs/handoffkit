@@ -7,6 +7,7 @@
  *   node ledger-stamp.mjs <page> --dep <path> [--dep <path>...]  # rewrite deps
  *   node ledger-stamp.mjs --add <page> [--dep <path>...]
  *   node ledger-stamp.mjs --remove <page>
+ *   node ledger-stamp.mjs --result <json> --plan <trusted-plan.json>
  *
  * For each page, records the git object hash of the page itself (from the
  * intended final tree, so it is safe — and intended — to stamp before
@@ -30,7 +31,7 @@
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, isAbsolute, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -63,6 +64,8 @@ let date = new Date().toISOString();
 let addPage = null;
 let removePage = null;
 let deps = null;
+let resultPath = null;
+let planPath = null;
 
 for (let i = 0; i < args.length; i++) {
   const arg = args[i];
@@ -70,6 +73,8 @@ for (let i = 0; i < args.length; i++) {
   else if (arg === "--date") date = args[++i] ?? fail("--date needs a value");
   else if (arg === "--add") addPage = args[++i] ?? fail("--add needs a page path");
   else if (arg === "--remove") removePage = args[++i] ?? fail("--remove needs a page path");
+  else if (arg === "--result") resultPath = args[++i] ?? fail("--result needs a JSON path");
+  else if (arg === "--plan") planPath = args[++i] ?? fail("--plan needs a trusted plan path");
   else if (arg === "--dep") {
     deps ??= [];
     deps.push(args[++i] ?? fail("--dep needs a path"));
@@ -80,9 +85,13 @@ for (let i = 0; i < args.length; i++) {
 
 if (Number.isNaN(Date.parse(date))) fail(`--date must be an ISO date/time, got ${date}`);
 date = new Date(date).toISOString();
-if (pages.length === 0 && addPage === null && removePage === null) {
-  fail("nothing to do: pass page paths, --add, or --remove");
+if (pages.length === 0 && addPage === null && removePage === null && resultPath === null) {
+  fail("nothing to do: pass page paths, --add, --remove, or --result");
 }
+if (resultPath !== null && (pages.length > 0 || addPage !== null || removePage !== null || deps !== null)) {
+  fail("--result cannot be combined with page stamping, --add, --remove, or --dep");
+}
+if ((resultPath === null) !== (planPath === null)) fail("--result and --plan must be used together");
 if (addPage !== null && removePage !== null) fail("--add and --remove are mutually exclusive");
 if (removePage !== null && (pages.length > 0 || deps !== null)) {
   fail("--remove cannot be combined with page stamping or --dep");
@@ -176,21 +185,97 @@ function stamp(page, dependsOn) {
   ledger.pages[page] = { dependsOn, verified, verifiedAt: date };
 }
 
+const touched = [];
+
+if (resultPath !== null) {
+  const readJson = (path) =>
+    JSON.parse(readFileSync(isAbsolute(path) ? path : join(repoRoot, path), "utf8"));
+  const result = readJson(resultPath);
+  const plan = readJson(planPath);
+  if (
+    result.version !== 1 ||
+    !Array.isArray(result.pages) ||
+    !Array.isArray(result.remove)
+  ) {
+    fail("result must have version: 1, pages: [], and remove: []");
+  }
+  const allowed = new Set([
+    ...(plan.changed ?? []).map(({ page }) => page),
+    ...(plan.rotation ?? []).map(({ page }) => page),
+    ...(plan.unledgered ?? []),
+    ...(plan.warnings ?? []).map(({ page }) => page).filter((page) => page !== null)
+  ]);
+  const resultPages = result.pages.map((item) => item?.page);
+  const requested = [...resultPages, ...result.remove];
+  if (
+    requested.some((page) => typeof page !== "string") ||
+    new Set(requested).size !== requested.length ||
+    requested.length > 10
+  ) {
+    fail("result page/remove paths must be unique strings with at most 10 total");
+  }
+  for (const page of requested) {
+    if (!allowed.has(page)) fail(`result contains ${page}, which is outside the trusted plan`);
+  }
+
+  const trackedChanges = git(["diff", "--name-only", "HEAD"]).stdout.split("\n").filter(Boolean);
+  const untrackedChanges = git(["ls-files", "--others", "--exclude-standard"]).stdout
+    .split("\n")
+    .filter(Boolean);
+  const changedPaths = [...new Set([...trackedChanges, ...untrackedChanges])];
+  const requestedSet = new Set(requested);
+  const isDocPage = (path) =>
+    (path.startsWith("docs/") && path.endsWith(".md")) ||
+    (path.startsWith("apps/docs/content/docs/") && path.endsWith(".mdx")) ||
+    ["README.md", "CONTRIBUTING.md", "SECURITY.md"].includes(path) ||
+    /^(?:packages|python|apps|infra|docker)\/[^/]+\/README\.md$/.test(path);
+  for (const path of changedPaths) {
+    if (isDocPage(path) && !requestedSet.has(path)) {
+      fail(`${path} was edited but is missing from the verification result`);
+    }
+  }
+
+  for (const page of result.remove) {
+    if (!ledger.pages[page]) fail(`${page} has no ledger entry to remove`);
+    delete ledger.pages[page];
+    touched.push(page);
+  }
+  for (const item of result.pages) {
+    const keys = Object.keys(item ?? {});
+    if (
+      !item ||
+      keys.some((key) => !["page", "dependsOn"].includes(key)) ||
+      (item.dependsOn !== undefined && !Array.isArray(item.dependsOn))
+    ) {
+      fail("each result page must contain page and optional dependsOn[] only");
+    }
+    const existing = ledger.pages[item.page];
+    if (!existing && item.dependsOn === undefined) {
+      fail(`${item.page} is new and requires dependsOn[] in the result`);
+    }
+    stamp(item.page, item.dependsOn ?? existing.dependsOn);
+    touched.push(item.page);
+  }
+}
+
 if (removePage !== null) {
   if (!ledger.pages[removePage]) fail(`${removePage} has no ledger entry to remove`);
   delete ledger.pages[removePage];
+  touched.push(removePage);
 }
 
 if (addPage !== null) {
   // No --dep means a self-only page.
   if (ledger.pages[addPage]) fail(`${addPage} already has a ledger entry; stamp it instead`);
   stamp(addPage, deps ?? []);
+  touched.push(addPage);
 }
 
 for (const page of pages) {
   const entry = ledger.pages[page];
   if (!entry) fail(`${page} has no ledger entry; use --add with --dep to create one`);
   stamp(page, addPage === null && deps !== null ? deps : entry.dependsOn);
+  touched.push(page);
 }
 
 ledger.pages = Object.fromEntries(
@@ -198,5 +283,4 @@ ledger.pages = Object.fromEntries(
 );
 
 writeFileSync(ledgerPath, `${JSON.stringify(ledger, null, 2)}\n`);
-const touched = [...pages, ...(addPage === null ? [] : [addPage]), ...(removePage === null ? [] : [removePage])];
 console.log(`updated ${touched.length} page(s) (${date})`);

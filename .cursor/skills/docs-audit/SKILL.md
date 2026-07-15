@@ -44,10 +44,10 @@ helper scripts; judging accuracy and writing prose is your job.
 
 ### 1. Scope the run
 
-If the caller supplied `.docs-heal-plan.json`, use that trusted plan verbatim.
-Otherwise run the planner and treat its output as your work queue. Cap
-automated runs to ten pages so timeout/context exhaustion cannot discard a
-whole backlog:
+If the caller supplied a root-owned `plan.json`, use that trusted plan
+verbatim. Otherwise run the planner and treat its output as your work queue.
+Cap automated runs to ten pages so timeout/context exhaustion cannot discard
+a whole backlog:
 
 ```sh
 node .cursor/skills/docs-audit/ledger-plan.mjs --limit 10
@@ -74,7 +74,7 @@ node .cursor/skills/docs-audit/ledger-plan.mjs --limit 10
   page under a broadly excluded archive prefix must be added manually.
 
 When invoked for a push, inspect the complete `before..head` range supplied by
-the workflow in `.docs-heal-trigger.diff`; do not substitute `git show HEAD`
+the workflow in its root-owned `trigger.diff`; do not substitute `git show HEAD`
 (a direct push can contain multiple commits). For interactive runs, use
 `git diff <before>..<head>`, falling back to `git show <head>` only when the
 before object is unavailable.
@@ -87,13 +87,15 @@ manufacture doc changes to justify the run. This gate happens before
 verification, so it creates no ledger stamps. Conversely, once you verify an
 in-scope page, stamp it even when it was already accurate; that ledger-only
 change records real work and prevents the same page being queued again.
+Never take this early exit when the trusted plan contains work: a healer merge
+may be carrying a deferred backlog even if its trigger diff is docs-only.
 
 ### 2. Verify
 
 For each in-scope page, check its claims against ground truth. Deterministic
 enumerations to run (each caught real drift in the 2026-07 audit):
 
-- **CLI surface:** in CI, read the trusted `.docs-heal-cli-help.txt` supplied
+- **CLI surface:** in CI, read the root-owned `cli-help.txt` supplied
   by the workflow (top-level and per-command help). Interactively, build
   (`pnpm build`) and capture `node packages/cli/dist/index.js --help` plus
   per-command `--help`. Compare against [docs/cli.md](../../../docs/cli.md)
@@ -135,6 +137,9 @@ Ownership map — where ground truth lives per doc area:
 
 ### 4. Validate
 
+In the healer workflow, shell access is intentionally denied; the secretless
+validation job owns these commands. Run them yourself in an interactive audit:
+
 ```sh
 pnpm check                    # includes generated-doc + changelog --check modes
 cd apps/docs && pnpm install --frozen-lockfile && pnpm build  # when .mdx changed
@@ -144,9 +149,29 @@ Do not run the mutating `docs:generate-*` commands after `pnpm check`; that
 would create unchecked output. If a generated page is stale, update its source,
 regenerate first, then run `pnpm check` last.
 
-### 5. Stamp
+### 5. Record verification and stamp
 
-Re-stamp every page you verified in this run — fixed or confirmed clean:
+In the healer workflow, do not edit `ledger.json` or run the helper. Write
+`docs-heal-result.json` instead:
+
+```json
+{
+  "version": 1,
+  "pages": [
+    { "page": "docs/example.md" },
+    { "page": "docs/new.md", "dependsOn": ["packages/example/src"] }
+  ],
+  "remove": []
+}
+```
+
+Include every page you verified or edited. Omit `dependsOn` for an existing
+page when unchanged; include it for new pages or dependency repairs. The
+trusted post-agent step rejects paths outside `plan.json`, applies the result,
+and hashes the intended final tree.
+
+For an interactive audit, re-stamp every page you verified — fixed or
+confirmed clean:
 
 ```sh
 node .cursor/skills/docs-audit/ledger-stamp.mjs <page...>
