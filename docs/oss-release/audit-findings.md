@@ -81,7 +81,7 @@ fixtures; no `.env` files; no `ghp_`/`AKIA`/private-key matches). Remaining issu
 | ID | Finding | Evidence | Sev |
 | --- | --- | --- | --- |
 | 4.1 | **`SECURITY.md` states the repo is "design-stage and private… no released versions"** — false (npm/PyPI 0.8.0 shipped) and dangerous as public policy | `SECURITY.md:5-24` | P0 |
-| 4.2 | Resolved: published package license payloads, including `@fusionkit/harness-core` and `@routekit/runtime`, now match their manifests. | `packages/harness-core/`, `packages/runtime-utils/` | Resolved |
+| 4.2 | Resolved: published package license payloads, including `@routekit/harness-core` and `@routekit/runtime`, now match their manifests. | `packages/harness-core/`, `packages/runtime-utils/` | Resolved |
 | 4.3 | No root `NOTICE`; `spec/model-fusion-contract/package.json` missing a `license` field; `python/uniroute*` are `UNLICENSED` inside an Apache-2.0 repo | multiple | P1 |
 | 4.4 | **Committed `.fusionkit/fusion.json` routes this repo's default panel through OpenRouter** (third-party aggregator) — anyone cloning and running `fusionkit codex` in-repo sends code to OpenRouter, undisclosed; also diverges from the documented default frontier trio | `.fusionkit/fusion.json` | P0 |
 | 4.5 | Sessions persist **full prompt/message arrays** (user code included) to `~/.fusionkit/sessions/<id>/turns.jsonl` — mentioned in passing, no privacy/data-handling doc | `packages/fusion-gateway/src/session-store.ts:12-18` | P1 |
@@ -115,7 +115,7 @@ by `check-repo.mjs` in `cli`/`cli-ui`.
 | 6.1 | **God file:** `packages/fusion-gateway/src/fusion-backend.ts` — 2,041 lines mixing public types, session state, vendor proxy/failover, SSE assembly, cost metering, trace emission, and the `FusionBackend` class. Partially superseded by `frontdoor/`; also contains 11 raw `console.*` calls (gateway is outside the lint ban) | file | P1 |
 | 6.2 | **God file:** `packages/kernel/src/runtime.ts` — 1,421 lines (type system + graph engine + scheduling + streaming) and **zero tests** for the whole `kernel` package | file | P1 |
 | 6.3 | **God file:** `packages/ensemble/src/unified.ts` — 949 lines (harness kind registry + panel orchestration + factories + judge hooks) | file | P1 |
-| 6.4 | **Dual harness implementations:** legacy `harness.ts` vs new `driver.ts` coexist in tool-codex (932 vs 445 lines), tool-claude, tool-cursor, gated by `FUSIONKIT_HARNESS_DRIVERS` env flag — two code paths to maintain and test | `packages/tool-*/src/` | P1 |
+| 6.4 | Resolved: each tool package now owns one launcher and one canonical driver; legacy harness and trajectory implementations were deleted. | `packages/tool-*/src/` | Resolved |
 | 6.5 | DRY: near-identical stream-json trajectory parsers in `tool-claude/src/stream-trajectory.ts` (222 ln) and `tool-cursor/src/stream-trajectory.ts` (184 ln) — same helpers (`truncate`, `asObject`, `asArray`, …) | files | P1 |
 | 6.6 | DRY: OpenAI chat wire types (`OpenAiToolCall`, `OpenAiDelta`, `OpenAiChoice`) duplicated in `model-gateway/src/adapters/responses.ts:61-80` and `adapters/anthropic.ts:67-80`; SSE chunk builders duplicated between `frontdoor/sse.ts` and inline in `fusion-backend.ts` (~638–662) | files | P2 |
 | 6.7 | DRY: fused sub-agent provisioning implemented 3× (`tool-codex/src/launch.ts` TOML, `tool-claude/src/launch.ts` JSON, `tool-cursor/src/subagents.ts` markdown) with no shared builder | files | P2 |

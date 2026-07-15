@@ -92,30 +92,12 @@ importers:
       '@fusionkit/gateway':
         specifier: workspace:*
         version: link:../fusion-gateway
-      '@fusionkit/harness-core':
-        specifier: workspace:*
-        version: link:../harness-core
       '@fusionkit/protocol':
         specifier: workspace:*
         version: link:../protocol
       '@fusionkit/registry':
         specifier: workspace:*
         version: link:../registry
-      '@fusionkit/tool-claude':
-        specifier: workspace:*
-        version: link:../tool-claude
-      '@fusionkit/tool-codex':
-        specifier: workspace:*
-        version: link:../tool-codex
-      '@fusionkit/tool-cursor':
-        specifier: workspace:*
-        version: link:../tool-cursor
-      '@fusionkit/tool-opencode':
-        specifier: workspace:*
-        version: link:../tool-opencode
-      '@fusionkit/tools':
-        specifier: workspace:*
-        version: link:../tools
       '@fusionkit/tracing':
         specifier: workspace:*
         version: link:../tracing
@@ -140,6 +122,9 @@ importers:
       '@routekit/gateway':
         specifier: workspace:*
         version: link:../model-gateway
+      '@routekit/harness-core':
+        specifier: workspace:*
+        version: link:../harness-core
       '@routekit/registry':
         specifier: workspace:*
         version: link:../routekit-registry
@@ -149,6 +134,21 @@ importers:
       '@routekit/telemetry-core':
         specifier: workspace:*
         version: link:../telemetry-core
+      '@routekit/tool-claude':
+        specifier: workspace:*
+        version: link:../tool-claude
+      '@routekit/tool-codex':
+        specifier: workspace:*
+        version: link:../tool-codex
+      '@routekit/tool-cursor':
+        specifier: workspace:*
+        version: link:../tool-cursor
+      '@routekit/tool-opencode':
+        specifier: workspace:*
+        version: link:../tool-opencode
+      '@routekit/tools':
+        specifier: workspace:*
+        version: link:../tools
       commander:
         specifier: 14.0.3
         version: 14.0.3
@@ -225,9 +225,6 @@ importers:
       '@fusionkit/gateway':
         specifier: workspace:*
         version: link:../fusion-gateway
-      '@fusionkit/harness-core':
-        specifier: workspace:*
-        version: link:../harness-core
       '@fusionkit/kernel':
         specifier: workspace:*
         version: link:../kernel
@@ -246,9 +243,15 @@ importers:
       '@routekit/gateway':
         specifier: workspace:*
         version: link:../model-gateway
+      '@routekit/harness-core':
+        specifier: workspace:*
+        version: link:../harness-core
       '@routekit/runtime':
         specifier: workspace:*
         version: link:../runtime-utils
+      '@routekit/tools':
+        specifier: workspace:*
+        version: link:../tools
       '@velum-labs/cursorkit':
         specifier: 0.2.0
         version: 0.2.0
@@ -303,9 +306,6 @@ importers:
 
   packages/harness-core:
     dependencies:
-      '@fusionkit/protocol':
-        specifier: workspace:*
-        version: link:../protocol
       '@routekit/contracts':
         specifier: workspace:*
         version: link:../contracts
@@ -399,76 +399,36 @@ importers:
       '@anthropic-ai/claude-agent-sdk':
         specifier: 0.3.198
         version: 0.3.198(zod@4.4.3)
-      '@fusionkit/ensemble':
-        specifier: workspace:*
-        version: link:../ensemble
-      '@fusionkit/gateway':
-        specifier: workspace:*
-        version: link:../fusion-gateway
-      '@fusionkit/harness-core':
+      '@routekit/harness-core':
         specifier: workspace:*
         version: link:../harness-core
-      '@fusionkit/protocol':
-        specifier: workspace:*
-        version: link:../protocol
-      '@fusionkit/tools':
-        specifier: workspace:*
-        version: link:../tools
-      '@routekit/contracts':
-        specifier: workspace:*
-        version: link:../contracts
-      '@routekit/gateway':
-        specifier: workspace:*
-        version: link:../model-gateway
-      '@routekit/registry':
-        specifier: workspace:*
-        version: link:../routekit-registry
       '@routekit/runtime':
         specifier: workspace:*
         version: link:../runtime-utils
+      '@routekit/tools':
+        specifier: workspace:*
+        version: link:../tools
       zod:
         specifier: 4.4.3
         version: 4.4.3
-    devDependencies:
-      '@fusionkit/workspace':
-        specifier: workspace:*
-        version: link:../workspace
 
   packages/tool-codex:
     dependencies:
-      '@fusionkit/ensemble':
-        specifier: workspace:*
-        version: link:../ensemble
-      '@fusionkit/gateway':
-        specifier: workspace:*
-        version: link:../fusion-gateway
-      '@fusionkit/harness-core':
-        specifier: workspace:*
-        version: link:../harness-core
-      '@fusionkit/protocol':
-        specifier: workspace:*
-        version: link:../protocol
-      '@fusionkit/tools':
-        specifier: workspace:*
-        version: link:../tools
-      '@fusionkit/tracing':
-        specifier: workspace:*
-        version: link:../tracing
       '@openai/codex-sdk':
         specifier: 0.142.5
         version: 0.142.5
-      '@routekit/contracts':
+      '@routekit/harness-core':
         specifier: workspace:*
-        version: link:../contracts
-      '@routekit/gateway':
-        specifier: workspace:*
-        version: link:../model-gateway
+        version: link:../harness-core
       '@routekit/registry':
         specifier: workspace:*
         version: link:../routekit-registry
       '@routekit/runtime':
         specifier: workspace:*
         version: link:../runtime-utils
+      '@routekit/tools':
+        specifier: workspace:*
+        version: link:../tools
       smol-toml:
         specifier: 1.7.0
         version: 1.7.0
@@ -478,24 +438,18 @@ importers:
 
   packages/tool-cursor:
     dependencies:
-      '@fusionkit/ensemble':
-        specifier: workspace:*
-        version: link:../ensemble
-      '@fusionkit/harness-core':
+      '@routekit/harness-core':
         specifier: workspace:*
         version: link:../harness-core
-      '@fusionkit/protocol':
-        specifier: workspace:*
-        version: link:../protocol
-      '@fusionkit/tools':
-        specifier: workspace:*
-        version: link:../tools
-      '@routekit/contracts':
-        specifier: workspace:*
-        version: link:../contracts
       '@routekit/runtime':
         specifier: workspace:*
         version: link:../runtime-utils
+      '@routekit/tools':
+        specifier: workspace:*
+        version: link:../tools
+      '@velum-labs/cursorkit':
+        specifier: 0.2.0
+        version: 0.2.0
       '@zed-industries/agent-client-protocol':
         specifier: 0.4.5
         version: 0.4.5
@@ -505,36 +459,27 @@ importers:
 
   packages/tool-opencode:
     dependencies:
-      '@fusionkit/harness-core':
-        specifier: workspace:*
-        version: link:../harness-core
-      '@fusionkit/tools':
-        specifier: workspace:*
-        version: link:../tools
       '@opencode-ai/sdk':
         specifier: 1.17.13
         version: 1.17.13
+      '@routekit/harness-core':
+        specifier: workspace:*
+        version: link:../harness-core
       '@routekit/runtime':
         specifier: workspace:*
         version: link:../runtime-utils
+      '@routekit/tools':
+        specifier: workspace:*
+        version: link:../tools
       zod:
         specifier: 4.4.3
         version: 4.4.3
 
   packages/tools:
     dependencies:
-      '@fusionkit/ensemble':
+      '@routekit/harness-core':
         specifier: workspace:*
-        version: link:../ensemble
-      '@fusionkit/protocol':
-        specifier: workspace:*
-        version: link:../protocol
-      '@fusionkit/registry':
-        specifier: workspace:*
-        version: link:../registry
-      '@routekit/contracts':
-        specifier: workspace:*
-        version: link:../contracts
+        version: link:../harness-core
 
   packages/tracing:
     dependencies:

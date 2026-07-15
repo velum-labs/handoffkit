@@ -9,31 +9,13 @@
   ],
   "references": [
     {
-      "path": "../ensemble"
-    },
-    {
       "path": "../harness-core"
-    },
-    {
-      "path": "../model-gateway"
-    },
-    {
-      "path": "../fusion-gateway"
-    },
-    {
-      "path": "../protocol"
-    },
-    {
-      "path": "../contracts"
     },
     {
       "path": "../routekit-registry"
     },
     {
       "path": "../tools"
-    },
-    {
-      "path": "../tracing"
     },
     {
       "path": "../runtime-utils"

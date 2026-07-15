@@ -183,45 +183,44 @@ await materializeWorkspace({
 });
 ```
 
-### `@fusionkit/tools`
+### `@routekit/tools`
 
-`@fusionkit/tools` defines the integration contract used by per-harness packages. It is small but central: a new coding tool becomes available to the CLI by implementing `ToolIntegration` and registering it in the tool registry.
+`@routekit/tools` defines product-neutral launcher, canonical-driver, and capability metadata. A host registers `ToolIntegration` values and supplies opaque model entries plus generic agent profiles through one `ToolLaunchSpec`.
 
-Important exports include process helpers from `proc`, the `ToolIntegration` type family, `createToolRegistry`, constants such as `FUSION_PANEL_MODEL`, `LOCAL_MODEL_LABEL`, and `CURSOR_BRIDGE_MODEL_NAME`, environment compatibility helpers such as `readEnv`, `envFlagEnabled`, and `legacyEnvName`, plus `buildSkippedCandidate` for harness candidate reporting.
+Important exports include `ToolIntegration`, `ToolLaunchSpec`, `ToolLaunchContext`, `AgentProfile`, `createToolRegistry`, and `createToolCapabilityMatrix`.
 
 Example:
 
 ```ts
-import { createToolRegistry } from "@fusionkit/tools";
-import { codexTool } from "@fusionkit/tool-codex";
+import { createToolRegistry } from "@routekit/tools";
+import { codexTool } from "@routekit/tool-codex";
 
-const registry = createToolRegistry();
-registry.register(codexTool);
-console.log(registry.list().map((tool) => tool.name));
+const registry = createToolRegistry([codexTool]);
+console.log(registry.list().map((tool) => tool.id));
 ```
 
 ### Tool integration packages
 
-`@fusionkit/tool-codex`, `@fusionkit/tool-claude`, `@fusionkit/tool-cursor`, and `@fusionkit/tool-opencode` adapt specific harnesses to FusionKit.
+`@routekit/tool-codex`, `@routekit/tool-claude`, `@routekit/tool-cursor`, and `@routekit/tool-opencode` each own one launcher/serializer and one canonical `HarnessDriver`.
 
-`@fusionkit/tool-codex` exports `codexTool`, launcher helpers, Codex harness creation, Codex response parsing, and harness input and result types. It is used when the CLI launches Codex behind the gateway or runs Codex as an ensemble candidate.
+`@routekit/tool-codex` owns Codex catalog/profile serialization, launch, and its SDK driver.
 
-`@fusionkit/tool-claude` exports `claudeTool`, `createClaudeCodeHarness`, `claudeEnv`, `launchClaude`, and Claude Code harness types. It is used for Claude Code launcher and ensemble behavior.
+`@routekit/tool-claude` owns Claude agent-profile serialization, launch, and its Agent SDK driver.
 
-`@fusionkit/tool-cursor` exports `cursorTool`, Cursor harness helpers, `startCursorBridge`, Cursor launch instructions, and bridge helpers for the Cursor IDE path. This package is important when debugging `fusionkit cursor --ide`.
+`@routekit/tool-cursor` owns Cursor CLI/IDE launch, bridge configuration, and its ACP driver.
 
-`@fusionkit/tool-opencode` exports `opencodeTool`, `launchOpencode`, `opencodeConfig`, and `opencodeModelArg`. It currently provides launcher configuration rather than a full ensemble harness.
+`@routekit/tool-opencode` owns OpenCode configuration, launch, and its SDK driver.
 
 Example:
 
 ```ts
-import { claudeTool } from "@fusionkit/tool-claude";
-import { codexTool } from "@fusionkit/tool-codex";
-import { cursorTool } from "@fusionkit/tool-cursor";
+import { claudeTool } from "@routekit/tool-claude";
+import { codexTool } from "@routekit/tool-codex";
+import { cursorTool } from "@routekit/tool-cursor";
 
 const tools = [codexTool, claudeTool, cursorTool];
 for (const tool of tools) {
-  console.log(`${tool.name}: ${tool.modes.join(", ")}`);
+  console.log(`${tool.displayName}: ${tool.driver.kind}`);
 }
 ```
 
@@ -268,7 +267,7 @@ if (issues.length > 0) {
 
 `@routekit/cli-ui` is the brand-configurable terminal presentation layer; `@routekit/cli-core` owns command context, errors, common option parsing, completion, package-version formatting, and reusable CLI test helpers. FusionKit composes both and keeps product options in `@fusionkit/cli`.
 
-`@fusionkit/harness-core` is the single coding-agent harness contract: driver, instance, and session interfaces, the canonical harness event union, a tagged error taxonomy with derived retryability, approval policies, status probes, and the `DriverRegistry`. The `tool-*` packages implement it; the panel fanout and launchers consume it.
+`@routekit/harness-core` is the product-neutral coding-agent harness contract: driver, instance, and session interfaces, canonical events, tagged errors, approval policies, status probes, and shared stream/process primitives. The `@routekit/tool-*` packages implement it; product orchestrators adapt those drivers.
 
 `@fusionkit/registry` provides typed accessors over the generated registry data in `spec/registry/*.json`: provider metadata, subscription auth metadata, the model and local catalogs, capability quirks, and default pricing. The Python workspace consumes the same data through generated bindings, so the two stacks cannot drift.
 

@@ -145,18 +145,20 @@ const requiredFiles = [
   "packages/ensemble/src/command.ts",
   "packages/tools/src/index.ts",
   "packages/tools/src/registry.ts",
-  "packages/tools/src/constants.ts",
-  "packages/tools/src/env-compat.ts",
-  "packages/tools/src/fused-subagents.ts",
   "packages/harness-core/src/stream-json.ts",
   "packages/tool-codex/src/index.ts",
-  "packages/tool-codex/src/harness.ts",
+  "packages/tool-codex/src/driver.ts",
+  "packages/tool-codex/src/launch.ts",
   "packages/tool-claude/src/index.ts",
-  "packages/tool-claude/src/harness.ts",
+  "packages/tool-claude/src/driver.ts",
+  "packages/tool-claude/src/launch.ts",
   "packages/tool-cursor/src/index.ts",
-  "packages/tool-cursor/src/harness.ts",
+  "packages/tool-cursor/src/driver.ts",
+  "packages/tool-cursor/src/launch.ts",
   "packages/tool-cursor/src/bridge.ts",
   "packages/tool-opencode/src/index.ts",
+  "packages/tool-opencode/src/driver.ts",
+  "packages/tool-opencode/src/launch.ts",
   "packages/cli/src/index.ts",
   "packages/cli/src/commands/completion.ts",
   "packages/cli/src/commands/proxy.ts",
@@ -216,9 +218,9 @@ const requiredFiles = [
   "packages/ensemble/src/test/tool-executor.test.ts",
   "packages/ensemble/src/test/external-executor.test.ts",
   "packages/ensemble/src/test/isolation.test.ts",
-  "packages/tool-codex/src/test/codex.test.ts",
-  "packages/tool-cursor/src/test/cursor.test.ts",
-  "packages/tool-claude/src/test/claude-code.test.ts",
+  "packages/tool-codex/src/test/driver.test.ts",
+  "packages/tool-cursor/src/test/driver.test.ts",
+  "packages/tool-claude/src/test/driver.test.ts",
   "packages/tool-opencode/src/test/opencode.test.ts",
   "packages/cli/src/test/dashboard.test.ts",
   "packages/accounts/src/test/subscription-pool.test.ts",
@@ -624,6 +626,27 @@ for (const wrapper of [
   if (existsSync(wrapper)) fail(`forbidden local shared-core wrapper: ${wrapper}`);
 }
 
+for (const legacyHarness of [
+  "packages/tool-codex/src/harness.ts",
+  "packages/tool-claude/src/harness.ts",
+  "packages/tool-cursor/src/harness.ts",
+  "packages/tool-opencode/src/harness.ts",
+  "packages/tool-claude/src/stream-trajectory.ts",
+  "packages/tool-cursor/src/stream-trajectory.ts"
+]) {
+  if (existsSync(legacyHarness)) fail(`forbidden parallel harness implementation: ${legacyHarness}`);
+}
+
+const retiredToolNames = new RegExp(
+  `@fusionkit/(?:tools|harness-core|tool-(?:codex|claude|cursor|opencode))|` +
+    `FUSIONKIT_${"HARNESS"}_${"DRIVERS"}`
+);
+for (const { manifestPath, manifest } of workspaceManifests) {
+  if (retiredToolNames.test(JSON.stringify(manifest))) {
+    fail(`${manifestPath} references a retired tool package or cutover flag`);
+  }
+}
+
 // RouteKit production source names and imports must remain product-neutral.
 // Tests and docs are intentionally excluded: they need to assert the boundary
 // and explain FusionKit without triggering vocabulary false positives.
@@ -796,12 +819,6 @@ const kernelWrapperGuards = [
   {
     file: "packages/cli/src/fusion/stack.ts",
     snippets: ["new KernelBackend(backend", "direct-model-turn"]
-  },
-  {
-    file: "packages/tool-codex/src/harness.ts",
-    // The member's chat core (its router endpoint + the fused sub-agent route)
-    // must stay wrapped in the kernel backend.
-    snippets: ["new KernelBackend(", "memberChatBackend(", "new OpenAiBackend({", "native-passthrough-turn"]
   },
   {
     file: "packages/ensemble/src/run.ts",

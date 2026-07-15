@@ -303,18 +303,6 @@ MUTATIONS = [
         ),
     ),
     Mutation(
-        id="M23",
-        what="driver cutover skips the per-member native dialect gateways",
-        file="packages/cli/src/test/sim-stack.ts",
-        old="    if (driverHarness && harnessDriversEnabled()) {",
-        new="    if (false) {",
-        build=True,
-        cmd=(
-            "PORTLESS=0 node --test --test-name-pattern claude-agent-sdk "
-            "packages/cli/dist/test/stack-drivers-e2e.test.js"
-        ),
-    ),
-    Mutation(
         id="M24",
         what="unbounded completed candidates are never restored from the durable turn cache",
         file="packages/model-gateway/src/fusion-session.ts",

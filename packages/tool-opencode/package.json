@@ -1,5 +1,5 @@
 {
-  "name": "@fusionkit/tool-opencode",
+  "name": "@routekit/tool-opencode",
   "private": false,
   "version": "0.8.0",
   "repository": {
@@ -7,7 +7,7 @@
     "url": "git+https://github.com/velum-labs/handoffkit.git",
     "directory": "packages/tool-opencode"
   },
-  "description": "opencode tool integration for fusionkit: local-model launcher config shim (no ensemble harness).",
+  "description": "Product-neutral OpenCode launcher, serializer, and canonical harness driver.",
   "license": "Apache-2.0",
   "type": "module",
   "exports": {
@@ -26,17 +26,14 @@
     "provenance": true
   },
   "dependencies": {
-    "@fusionkit/harness-core": "workspace:*",
-    "@fusionkit/tools": "workspace:*",
+    "@routekit/harness-core": "workspace:*",
+    "@routekit/tools": "workspace:*",
     "@routekit/runtime": "workspace:*",
     "@opencode-ai/sdk": "1.17.13",
     "zod": "4.4.3"
   },
   "keywords": [
-    "fusionkit",
-    "model-fusion",
     "llm",
-    "ensemble",
     "coding-agent",
     "opencode",
     "harness",

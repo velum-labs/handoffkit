@@ -1,5 +1,5 @@
 {
-  "name": "@fusionkit/tool-claude",
+  "name": "@routekit/tool-claude",
   "private": false,
   "version": "0.8.0",
   "repository": {
@@ -7,7 +7,7 @@
     "url": "git+https://github.com/velum-labs/handoffkit.git",
     "directory": "packages/tool-claude"
   },
-  "description": "Claude Code tool integration for fusionkit: launcher env shim plus the ensemble Claude Code harness adapter.",
+  "description": "Product-neutral Claude Code launcher, serializer, and canonical harness driver.",
   "license": "Apache-2.0",
   "type": "module",
   "exports": {
@@ -27,25 +27,13 @@
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "0.3.198",
-    "@fusionkit/harness-core": "workspace:*",
-    "zod": "4.4.3",
-    "@fusionkit/ensemble": "workspace:*",
-    "@fusionkit/gateway": "workspace:*",
-    "@fusionkit/protocol": "workspace:*",
-    "@fusionkit/tools": "workspace:*",
-    "@routekit/contracts": "workspace:*",
-    "@routekit/gateway": "workspace:*",
+    "@routekit/harness-core": "workspace:*",
     "@routekit/runtime": "workspace:*",
-    "@routekit/registry": "workspace:*"
-  },
-  "devDependencies": {
-    "@fusionkit/workspace": "workspace:*"
+    "@routekit/tools": "workspace:*",
+    "zod": "4.4.3"
   },
   "keywords": [
-    "fusionkit",
-    "model-fusion",
     "llm",
-    "ensemble",
     "coding-agent",
     "claude-code",
     "harness",

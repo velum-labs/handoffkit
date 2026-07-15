@@ -2,10 +2,8 @@ import type { ModelFusionErrorKind, ModelFusionHarnessKind } from "@fusionkit/pr
 import type { FusionTraceCarrier } from "@fusionkit/tracing";
 import {
   HarnessError,
-  PANEL_APPROVAL_POLICY,
-  toModelFusionErrorKind,
-  toModelFusionHarnessKind
-} from "@fusionkit/harness-core";
+  DEFAULT_AUTOMATION_APPROVAL_POLICY
+} from "@routekit/harness-core";
 import { artifactHash } from "@routekit/contracts";
 import type { JsonValue } from "@routekit/contracts";
 import type {
@@ -16,7 +14,8 @@ import type {
   HarnessErrorCode,
   HarnessEvent,
   ResumeCursor
-} from "@fusionkit/harness-core";
+} from "@routekit/harness-core";
+import type { HarnessKind } from "@routekit/harness-core";
 
 import { traceCandidate } from "./candidate-trace.js";
 import type {
@@ -66,8 +65,8 @@ export type DriverHarnessOptions<Config> = {
   configForModel: (route: DriverModelRoute) => Config;
   /** Per-model endpoints keyed by ensemble model id (panel routing). */
   modelEndpoints?: Record<string, string>;
-  /** The shared fusion backend URL for models without a dedicated endpoint. */
-  fusionBackendUrl: string;
+  /** The shared gateway URL for models without a dedicated endpoint. */
+  gatewayUrl: string;
   /** Env/status-cache context for probes and child allowlists. */
   context?: DriverContext;
   /** Panel default is autoApprove:all (headless, disposable worktrees). */
@@ -84,6 +83,46 @@ export type DriverHarnessOptions<Config> = {
   trace?: FusionTraceCarrier;
   turn?: number;
 };
+
+function toModelFusionHarnessKind(kind: HarnessKind): ModelFusionHarnessKind {
+  switch (kind) {
+    case "codex":
+      return "codex";
+    case "claude_code":
+      return "claude_code";
+    case "cursor":
+      return "cursor";
+    case "opencode":
+    case "generic":
+      return "generic";
+    default: {
+      const exhausted: never = kind;
+      throw new Error(`unsupported harness kind: ${String(exhausted)}`);
+    }
+  }
+}
+
+function toModelFusionErrorKind(error: HarnessError): ModelFusionErrorKind {
+  switch (error.code) {
+    case "not_installed":
+    case "not_authenticated":
+    case "version_unsupported":
+      return "capability_missing";
+    case "invalid_config":
+    case "protocol_parse":
+      return "validation_error";
+    case "timeout":
+      return "timeout";
+    case "aborted":
+    case "session_closed":
+    case "provider_error":
+      return error.category === "quota_exhausted" ? "rate_limited" : "provider_error";
+    default: {
+      const exhausted: never = error.code;
+      throw new Error(`unsupported harness error code: ${String(exhausted)}`);
+    }
+  }
+}
 
 type FoldedTurn = {
   status: HarnessCandidateOutput["status"];
@@ -212,12 +251,12 @@ export function createDriverHarness<Config>(
   options: DriverHarnessOptions<Config>
 ): HarnessAdapter {
   const harnessKind: ModelFusionHarnessKind = toModelFusionHarnessKind(options.driver.kind);
-  const approvalPolicy = options.approvalPolicy ?? PANEL_APPROVAL_POLICY;
+  const approvalPolicy = options.approvalPolicy ?? DEFAULT_AUTOMATION_APPROVAL_POLICY;
   const routeFor = (modelId: string, model: string): DriverModelRoute => {
     const endpointUrl = options.modelEndpoints?.[modelId];
     return endpointUrl !== undefined
       ? { modelId, model: modelId, endpointUrl }
-      : { modelId, model, endpointUrl: options.fusionBackendUrl };
+      : { modelId, model, endpointUrl: options.gatewayUrl };
   };
   return {
     id: options.driver.kind,

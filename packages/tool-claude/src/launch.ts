@@ -1,91 +1,55 @@
-import { deriveFusedSubagents, LOCAL_MODEL_LABEL } from "@fusionkit/tools";
 import { spawnTool } from "@routekit/runtime";
-import type { FusedEnsembleInfo, ToolLaunchContext } from "@fusionkit/tools";
+import type { AgentProfile, ToolLaunchContext } from "@routekit/tools";
 
-/**
- * Environment for Claude Code: point it at the gateway's Anthropic surface and
- * turn on gateway model discovery so the `/model` picker is populated from the
- * gateway's `/v1/models`. The gateway lists every panel model there (aliasing
- * non-Anthropic ids past Claude Code's `claude`/`anthropic` picker filter), so
- * the fused model and each native are all selectable; the gateway maps the
- * alias back when routing.
- */
 export function claudeEnv(gatewayUrl: string, authToken?: string): Record<string, string> {
   return {
     ANTHROPIC_BASE_URL: gatewayUrl,
-    // A token must be present or gateway discovery silently no-ops (it guards on
-    // having an auth token / api key before fetching `/v1/models`).
-    ANTHROPIC_AUTH_TOKEN: authToken ?? LOCAL_MODEL_LABEL,
+    ANTHROPIC_AUTH_TOKEN: authToken ?? "routekit",
     CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY: "1"
   };
 }
 
-/**
- * The id a gateway model is selectable under inside Claude Code. Claude only
- * accepts ids beginning with `claude`/`anthropic`, so fused ensemble ids are
- * aliased with a `claude-` prefix — the same rule as the gateway's
- * `claudeModelAlias`, which strips the prefix back when routing.
- */
-function claudeAliasedModelId(modelId: string): string {
+function claudeModelId(modelId: string): string {
   return modelId.startsWith("claude") || modelId.startsWith("anthropic")
     ? modelId
     : `claude-${modelId}`;
 }
 
-/**
- * The `--agents <json>` payload defining one session-scoped Claude sub-agent
- * per fusion ensemble (Task-tool delegation works out of the box; nothing is
- * written into the user's `.claude/`). Each agent pins its `model` to the
- * ensemble's `claude-`aliased gateway id.
- */
-export function claudeAgentsJson(
-  ensembles: readonly FusedEnsembleInfo[],
-  defaultModelId: string
-): string {
-  const agents: Record<string, { description: string; prompt: string; model: string }> = {};
-  for (const subagent of deriveFusedSubagents(ensembles, defaultModelId, "delegate-task")) {
-    agents[subagent.modelId] = {
-      description: subagent.description,
-      prompt: subagent.developerInstructions,
-      model: claudeAliasedModelId(subagent.modelId)
-    };
-  }
-  return JSON.stringify(agents);
+/** Serialize host-authored profiles once into Claude's session agent format. */
+export function claudeAgentsJson(profiles: readonly AgentProfile[]): string {
+  return JSON.stringify(
+    Object.fromEntries(
+      profiles.map((profile) => [
+        profile.id,
+        {
+          description: profile.description,
+          prompt: profile.instructions,
+          model: claudeModelId(profile.model)
+        }
+      ])
+    )
+  );
 }
 
-/** Whether the user already passed their own `--agents` (their definition wins). */
-function hasUserAgentsArg(toolArgs: readonly string[]): boolean {
-  return toolArgs.some((arg) => arg === "--agents" || arg.startsWith("--agents="));
+function hasAgentsArg(args: readonly string[]): boolean {
+  return args.some((arg) => arg === "--agents" || arg.startsWith("--agents="));
 }
 
-/**
- * The final claude argv: the user's args plus, when sub-agent auto-provisioning
- * is on and the user did not pass their own `--agents`, one session-scoped
- * agent per fusion ensemble (see {@link claudeAgentsJson}).
- */
-export function claudeLaunchArgs(
-  ctx: Pick<ToolLaunchContext, "toolArgs" | "modelLabel" | "fusedEnsembles" | "subagents">
-): string[] {
-  const args = [...ctx.toolArgs];
-  if (
-    ctx.subagents !== false &&
-    ctx.fusedEnsembles !== undefined &&
-    ctx.fusedEnsembles.length > 0 &&
-    !hasUserAgentsArg(args)
-  ) {
-    args.push("--agents", claudeAgentsJson(ctx.fusedEnsembles, ctx.modelLabel));
+export function claudeLaunchArgs(ctx: ToolLaunchContext): string[] {
+  const args = [...ctx.spec.args];
+  const profiles = ctx.spec.agentProfiles ?? [];
+  if (profiles.length > 0 && !hasAgentsArg(args)) {
+    args.push("--agents", claudeAgentsJson(profiles));
   }
   return args;
 }
 
-/** Boot the Claude Code CLI pointed at the gateway's Anthropic surface. */
 export async function launchClaude(ctx: ToolLaunchContext): Promise<number> {
   ctx.prepareForPassthrough();
-  if (ctx.mode === "fusion") {
-    ctx.log("fusion: launching claude...");
-  }
-  // OOTB sub-agents: define one session-scoped agent per fusion ensemble so
-  // Claude's Task tool can delegate to any ensemble. A user-supplied --agents
-  // always wins; --no-subagents / `subagents: false` skips ours entirely.
-  return await spawnTool("claude", claudeLaunchArgs(ctx), claudeEnv(ctx.gatewayUrl, ctx.authToken), ctx.repo);
+  return await spawnTool(
+    "claude",
+    claudeLaunchArgs(ctx),
+    claudeEnv(ctx.spec.gatewayUrl, ctx.spec.auth?.token),
+    ctx.spec.cwd
+  );
 }

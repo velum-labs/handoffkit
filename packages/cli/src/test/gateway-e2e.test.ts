@@ -18,8 +18,8 @@ import {
 import type { FusionGateway } from "@fusionkit/gateway";
 import { runAcpAgent } from "@routekit/gateway";
 import { resolveCursorkitCli } from "@fusionkit/ensemble";
-import { cursorBridgeEnv } from "@fusionkit/tool-cursor";
-import { CURSOR_BRIDGE_MODEL_NAME, FUSION_PANEL_MODEL } from "@fusionkit/tools";
+import { cursorBridgeEnv } from "@routekit/tool-cursor";
+import { CURSOR_BRIDGE_MODEL_NAME, FUSION_PANEL_MODEL } from "@fusionkit/registry";
 
 import { buildAcpRunner, startConfiguredGateway } from "../gateway.js";
 import type { GatewayRunnerConfig } from "../gateway.js";

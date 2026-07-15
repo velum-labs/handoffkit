@@ -1,21 +1,20 @@
 /**
- * @fusionkit/harness-core is the single coding-agent harness contract:
+ * @routekit/harness-core is the single coding-agent harness contract:
  * driver -> instance -> session interfaces, the canonical harness event
  * union (with raw provider envelopes), one tagged error taxonomy with
  * derived retryability, deferred-based approvals with explicit policies,
  * status probes with an identity-checked disk cache, and an explicit driver
  * registry. Drivers (tool-codex, tool-claude, tool-cursor, tool-opencode)
- * implement this contract; the panel fanout and launchers consume it.
+ * implement this contract; orchestrators and launchers consume it.
  */
-export { HARNESS_KINDS, isHarnessKind, toModelFusionHarnessKind } from "./kinds.js";
+export { HARNESS_KINDS, isHarnessKind } from "./kinds.js";
 export type { HarnessKind } from "./kinds.js";
 
 export {
   HARNESS_ERROR_CODES,
   HarnessError,
   asHarnessError,
-  isRetryable,
-  toModelFusionErrorKind
+  isRetryable
 } from "./errors.js";
 export type { HarnessErrorCategory, HarnessErrorCode } from "./errors.js";
 
@@ -31,7 +30,7 @@ export type {
 } from "./events.js";
 
 export {
-  PANEL_APPROVAL_POLICY,
+  DEFAULT_AUTOMATION_APPROVAL_POLICY,
   PendingRequests,
   createDeferred,
   decideApproval

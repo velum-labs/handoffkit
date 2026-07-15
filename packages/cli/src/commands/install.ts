@@ -16,10 +16,10 @@ import type { Command } from "commander";
 
 import { bold, cyan, dim, done, note, uiStream } from "@routekit/cli-ui";
 import { fail } from "@routekit/cli-core";
-import { DEFAULT_ENSEMBLE_NAME, fusionModelId } from "@fusionkit/tools";
+import { DEFAULT_ENSEMBLE_NAME, fusionModelId } from "@fusionkit/registry";
 import { trimTrailingSlashes } from "@routekit/runtime";
-import { installCodexIntegration, uninstallCodexIntegration } from "@fusionkit/tool-codex";
-import type { CodexInstallProfile } from "@fusionkit/tool-codex";
+import { installCodexIntegration, uninstallCodexIntegration } from "@routekit/tool-codex";
+import type { CodexInstallOwner, CodexInstallProfile } from "@routekit/tool-codex";
 
 import { loadFusionConfig } from "../fusion-config.js";
 import { gitToplevel } from "../fusion/env.js";
@@ -32,6 +32,15 @@ type InstallOpts = {
   port?: string;
   repo?: string;
   codexHome?: string;
+};
+
+const CODEX_INSTALL_OWNER: CodexInstallOwner = {
+  id: "fusionkit",
+  displayName: "FusionKit fusion",
+  providerId: "fusionkit",
+  installCommand: "fusionkit install codex",
+  uninstallCommand: "fusionkit uninstall codex",
+  startCommand: "fusionkit serve --port <the port in base_url>"
 };
 
 /** Resolve the gateway URL the installed provider points at. */
@@ -49,7 +58,10 @@ function resolveProfiles(opts: InstallOpts): CodexInstallProfile[] {
   const config = loadFusionConfig(repo);
   const names = Object.keys(config?.ensembles ?? {});
   const ensembleNames = names.length > 0 ? names : [DEFAULT_ENSEMBLE_NAME];
-  return ensembleNames.map((name) => ({ ensembleName: name, modelId: fusionModelId(name) }));
+  return ensembleNames.map((name) => ({
+    modelId: fusionModelId(name),
+    description: `fused "${name}" ensemble`
+  }));
 }
 
 function runInstallCodex(opts: InstallOpts): number {
@@ -58,6 +70,7 @@ function runInstallCodex(opts: InstallOpts): number {
   const result = installCodexIntegration({
     gatewayUrl,
     profiles,
+    owner: CODEX_INSTALL_OWNER,
     ...(opts.codexHome !== undefined ? { codexHome: opts.codexHome } : {})
   });
   const write = (line: string): void => void uiStream().write(`${line}\n`);
@@ -83,9 +96,10 @@ function runInstallCodex(opts: InstallOpts): number {
 }
 
 function runUninstallCodex(opts: Pick<InstallOpts, "codexHome">): number {
-  const result = uninstallCodexIntegration(
-    opts.codexHome !== undefined ? { codexHome: opts.codexHome } : {}
-  );
+  const result = uninstallCodexIntegration({
+    ownerId: CODEX_INSTALL_OWNER.id,
+    ...(opts.codexHome !== undefined ? { codexHome: opts.codexHome } : {})
+  });
   if (result.removed) done(`removed the FusionKit block from ${result.configPath}`);
   else note(`no FusionKit block found in ${result.configPath}; nothing to remove`);
   return 0;

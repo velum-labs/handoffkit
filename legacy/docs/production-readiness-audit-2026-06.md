@@ -302,7 +302,7 @@ Flagship repo, two product identities (`warrant` plane + `fusionkit` gateway). 2
 | **sdk** | 238 | **0 — none** |
 | **tools** | — | **0 — none** |
 
-> `@fusionkit/sdk` (offline receipt verification client) and `@fusionkit/tools` (subprocess infra) have **no own tests**.
+> `@fusionkit/sdk` (offline receipt verification client) and the former tool registry had **no own tests** at the time of this audit.
 
 **CI gaps (`.github/workflows/ci.yml`):** `check` job runs `pnpm check` → build → OOTB CLI smoke → `pnpm test` → `pnpm demo all` → **`pnpm bench` (§8.4 budgets)** → `pnpm audit`. Plus `python` and `docker` jobs.
 - **`apps/scope` tests never run in CI** — `pnpm test` globs `packages/*/dist/test`, `examples/*`, `test/*`; scope is an isolated workspace with its own lockfile, only **built** (in the release workflow), never `npm test`ed.

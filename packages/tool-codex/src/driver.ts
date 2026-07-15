@@ -16,7 +16,7 @@ import {
   readCachedStatus,
   runCliCapture,
   writeCachedStatus
-} from "@fusionkit/harness-core";
+} from "@routekit/harness-core";
 import type {
   DriverContext,
   HarnessDriver,
@@ -28,7 +28,7 @@ import type {
   SessionHandle,
   SessionTurnInput,
   StartSessionOptions
-} from "@fusionkit/harness-core";
+} from "@routekit/harness-core";
 
 const RESUME_CURSOR_VERSION = 1;
 const DEFAULT_COMMAND = "codex";
@@ -397,7 +397,7 @@ class CodexInstance implements HarnessInstance {
  * Probe the codex CLI: version via `codex --version`, and treat a present
  * `CODEX_HOME/auth.json` or a configured provider credential as authenticated.
  * Full account detail requires the app-server protocol; this is the cheap,
- * offline-friendly signal the launcher and panel pre-flight need.
+ * offline-friendly signal launchers and readiness checks need.
  */
 async function probeCodex(
   config: CodexDriverConfig,

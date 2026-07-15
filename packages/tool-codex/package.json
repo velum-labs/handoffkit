@@ -1,5 +1,5 @@
 {
-  "name": "@fusionkit/tool-codex",
+  "name": "@routekit/tool-codex",
   "private": false,
   "version": "0.8.0",
   "repository": {
@@ -7,7 +7,7 @@
     "url": "git+https://github.com/velum-labs/handoffkit.git",
     "directory": "packages/tool-codex"
   },
-  "description": "Codex CLI tool integration for fusionkit: launcher config shim plus the ensemble Codex harness adapter.",
+  "description": "Product-neutral Codex launcher, serializer, and canonical harness driver.",
   "license": "Apache-2.0",
   "type": "module",
   "exports": {
@@ -26,25 +26,16 @@
     "provenance": true
   },
   "dependencies": {
-    "@fusionkit/ensemble": "workspace:*",
-    "@fusionkit/harness-core": "workspace:*",
-    "@fusionkit/gateway": "workspace:*",
-    "@fusionkit/protocol": "workspace:*",
-    "@fusionkit/tools": "workspace:*",
-    "@fusionkit/tracing": "workspace:*",
-    "@routekit/contracts": "workspace:*",
-    "@routekit/gateway": "workspace:*",
+    "@routekit/harness-core": "workspace:*",
     "@routekit/registry": "workspace:*",
     "@routekit/runtime": "workspace:*",
+    "@routekit/tools": "workspace:*",
     "@openai/codex-sdk": "0.142.5",
     "smol-toml": "1.7.0",
     "zod": "4.4.3"
   },
   "keywords": [
-    "fusionkit",
-    "model-fusion",
     "llm",
-    "ensemble",
     "coding-agent",
     "codex",
     "harness",

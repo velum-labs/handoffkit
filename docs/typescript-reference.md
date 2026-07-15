@@ -8,7 +8,7 @@ The workspace uses ESM, TypeScript project references, pnpm, Node 22 (effectivel
 
 ```mermaid
 flowchart LR
-  CLI["@fusionkit/cli"] --> Tools["@fusionkit/tools"]
+  CLI["@fusionkit/cli"] --> Tools["@routekit/tools"]
   CLI --> FusionGateway["@fusionkit/gateway"]
   FusionGateway --> Gateway["@routekit/gateway"]
   CLI --> Accounts["@routekit/accounts"]
@@ -18,10 +18,16 @@ flowchart LR
   Ensemble --> Protocol
   Ensemble --> Workspace
   Ensemble --> Kernel["@fusionkit/kernel"]
-  Tools --> Codex["@fusionkit/tool-codex"]
-  Tools --> Claude["@fusionkit/tool-claude"]
-  Tools --> Cursor["@fusionkit/tool-cursor"]
-  Tools --> Opencode["@fusionkit/tool-opencode"]
+  CLI --> Codex["@routekit/tool-codex"]
+  CLI --> Claude["@routekit/tool-claude"]
+  CLI --> Cursor["@routekit/tool-cursor"]
+  CLI --> Opencode["@routekit/tool-opencode"]
+  Codex --> Tools
+  Claude --> Tools
+  Cursor --> Tools
+  Opencode --> Tools
+  Tools --> HarnessCore["@routekit/harness-core"]
+  Ensemble --> Tools
 ```
 
 The FusionKit product path starts in `@fusionkit/cli`. The CLI registers tool integrations, resolves configuration, starts the model gateway, starts or connects to the Python fusion engine, and launches the selected harness. The gateway owns wire dialect translation and session state. The ensemble package owns panel execution, worktrees, judge synthesis adapters, and runtime-kernel workflows. Protocol and workspace packages provide shared contracts and git-safe file movement.
@@ -192,43 +198,41 @@ const outputs = await collectOutputs({ root: "/tmp/fusionkit-session" });
 console.log(outputs.files.length);
 ```
 
-## `@fusionkit/tools`
+## `@routekit/tools`
 
-`@fusionkit/tools` defines the interface between the CLI and per-harness packages. A tool integration tells the CLI how to launch a tool, whether it supports fusion or local modes, and whether it can provide an ensemble harness adapter.
+`@routekit/tools` defines product-neutral launcher, canonical-driver, and capability metadata. Hosts provide opaque model catalogs and generic agent profiles through `ToolLaunchSpec`.
 
-The important exports are the `ToolIntegration` type family, process helper types, `createToolRegistry()`, `ToolRegistry`, constants such as `FUSION_PANEL_MODEL`, `LOCAL_MODEL_LABEL`, and `CURSOR_BRIDGE_MODEL_NAME`, environment compatibility helpers such as `readEnv()`, `envFlagEnabled()`, plus `buildSkippedCandidate()`.
+Important exports are `ToolIntegration`, `ToolLaunchSpec`, `ToolLaunchContext`, `AgentProfile`, `createToolRegistry()`, and `createToolCapabilityMatrix()`.
 
 Example:
 
 ```ts
-import { createToolRegistry } from "@fusionkit/tools";
-import { codexTool } from "@fusionkit/tool-codex";
-import { claudeTool } from "@fusionkit/tool-claude";
+import { createToolRegistry } from "@routekit/tools";
+import { codexTool } from "@routekit/tool-codex";
+import { claudeTool } from "@routekit/tool-claude";
 
-const registry = createToolRegistry();
-registry.register(codexTool);
-registry.register(claudeTool);
-console.log(registry.list().map((tool) => tool.name));
+const registry = createToolRegistry([codexTool, claudeTool]);
+console.log(registry.list().map((tool) => tool.id));
 ```
 
 ## Tool packages
 
-`@fusionkit/tool-codex` exports `codexTool`, launcher helpers, Codex harness creation, response parsing, and harness types. Use this package when debugging `fusionkit codex`, Codex Responses translation, or Codex panel members.
+`@routekit/tool-codex` owns one Codex serializer/launcher and one SDK driver.
 
-`@fusionkit/tool-claude` exports `claudeTool`, Claude Code harness creation, `claudeEnv()`, `launchClaude()`, and Claude Code harness environment types. Use this package when debugging `fusionkit claude` or Claude Code candidate execution.
+`@routekit/tool-claude` owns one Claude profile serializer/launcher and one Agent SDK driver.
 
-`@fusionkit/tool-cursor` exports `cursorTool`, Cursor harness helpers, `startCursorBridge()`, `cursorInstructions()`, `cursorIdeInstructions()`, and `launchCursor()`. Use this package when debugging Cursor terminal launch, Cursor IDE launch, or the local desktop bridge.
+`@routekit/tool-cursor` owns one Cursor CLI/IDE launch path and one ACP driver.
 
-`@fusionkit/tool-opencode` exports `opencodeTool`, `launchOpencode()`, `opencodeConfig()`, and `opencodeModelArg()`. It provides launcher support and local-model configuration but does not currently own a full ensemble harness path.
+`@routekit/tool-opencode` owns one OpenCode serializer/launcher and one SDK driver.
 
 Example:
 
 ```ts
-import { cursorTool } from "@fusionkit/tool-cursor";
-import { opencodeTool } from "@fusionkit/tool-opencode";
+import { cursorTool } from "@routekit/tool-cursor";
+import { opencodeTool } from "@routekit/tool-opencode";
 
-console.log(cursorTool.name);
-console.log(opencodeTool.modes);
+console.log(cursorTool.driver.kind);
+console.log(opencodeTool.capabilities.streaming);
 ```
 
 ## `@fusionkit/adapter-ai-sdk`
@@ -275,11 +279,11 @@ if (issues.length > 0) {
 
 Important exports include `createPresenter()`, `InkPresenter`, `PlainPresenter`, prompt helpers (`select()`, `multiselect()`, `confirm()`, `text()`, `fuzzySelect()`), `runWizard()`, `fuzzyFilter()`/`fuzzyMatch()`, and the theme, runtime, and format helpers re-exported from the entry point.
 
-## `@fusionkit/harness-core`
+## `@routekit/harness-core`
 
-`@fusionkit/harness-core` is the single coding-agent harness contract: driver, instance, and session interfaces, the canonical harness event union (with raw provider envelopes), a tagged error taxonomy with derived retryability, deferred-based approvals with explicit policies, status probes with an identity-checked disk cache, and an explicit driver registry. The tool packages implement this contract; the panel fanout and launchers consume it.
+`@routekit/harness-core` is the product-neutral coding-agent harness contract: driver, instance, and session interfaces, canonical events, tagged errors, approvals, status probes, and shared stream/process primitives.
 
-Important exports include `HARNESS_KINDS`, `isHarnessKind()`, `HarnessError`, `asHarnessError()`, `isRetryable()`, `PANEL_APPROVAL_POLICY`, `PendingRequests`, `createDeferred()`, `decideApproval()`, `readCachedStatus()`/`writeCachedStatus()`, `DriverRegistry`, and the `HarnessDriver`/`HarnessInstance`/`SessionHandle` type family.
+Important exports include `HARNESS_KINDS`, `isHarnessKind()`, `HarnessError`, `asHarnessError()`, `isRetryable()`, `DEFAULT_AUTOMATION_APPROVAL_POLICY`, `PendingRequests`, stream-JSON helpers, and the `HarnessDriver`/`HarnessInstance`/`SessionHandle` type family.
 
 ## `@fusionkit/registry`
 

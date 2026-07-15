@@ -5,8 +5,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 
-import { createMockDriver } from "@fusionkit/harness-core/testing";
-import type { ResumeCursor } from "@fusionkit/harness-core";
+import { createMockDriver } from "@routekit/harness-core/testing";
+import type { ResumeCursor } from "@routekit/harness-core";
 
 import { createDriverHarness } from "../driver-adapter.js";
 import { ensemble } from "../run.js";
@@ -79,7 +79,7 @@ test("driver bridge runs a panel candidate with a reconstructed trajectory", asy
   const driver = createMockDriver();
   const harness = createDriverHarness({
     driver,
-    fusionBackendUrl: "http://127.0.0.1:9999",
+    gatewayUrl: "http://127.0.0.1:9999",
     configForModel: () => driver.configSchema.parse({ replies: ["fused answer"] })
   });
   try {
@@ -100,7 +100,7 @@ test("driver bridge reconstructs trajectory steps from canonical events", async 
   const driver = createMockDriver();
   const harness = createDriverHarness({
     driver,
-    fusionBackendUrl: "http://127.0.0.1:9999",
+    gatewayUrl: "http://127.0.0.1:9999",
     configForModel: () =>
       driver.configSchema.parse({ replies: ["the fused answer"], approvalDetail: "npm test" })
   });
@@ -143,7 +143,7 @@ test("driver bridge resumes each member's native session across turns", async ()
   const makeHarness = () =>
     createDriverHarness({
       driver,
-      fusionBackendUrl: "http://127.0.0.1:9999",
+      gatewayUrl: "http://127.0.0.1:9999",
       // The mock driver replies replies[min(turnCount, len-1)]: a resumed
       // session advances turnCount, so turn two only says "turn two" if the
       // native session was resumed rather than started fresh.

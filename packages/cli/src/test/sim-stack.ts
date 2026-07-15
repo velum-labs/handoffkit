@@ -21,7 +21,6 @@ import type { OnRateLimitPolicy, SessionStore } from "@fusionkit/gateway";
 import type { Gateway, ModelPricing } from "@routekit/gateway";
 
 import { fusionModelId } from "@fusionkit/registry";
-import { harnessDriversEnabled } from "@fusionkit/tools";
 
 import { startFusionStepGateway } from "../gateway.js";
 import type { GatewayEnsembleConfig } from "../gateway.js";
@@ -236,8 +235,9 @@ export async function startSimFusionStack(options: {
       options.harness === "codex" ||
       options.harness === "claude-code" ||
       options.harness === "cursor-acp" ||
-      options.harness === "cursor-desktop";
-    if (driverHarness && harnessDriversEnabled()) {
+      options.harness === "cursor-desktop" ||
+      options.harness === "opencode";
+    if (driverHarness) {
       const driverEndpoints = await startDriverEndpointGateways({
         models: panel.map((member) => ({ id: member.id, model: member.model })),
         modelEndpoints: endpoints

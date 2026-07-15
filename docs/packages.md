@@ -42,9 +42,9 @@ HTTP contracts, read [Specs and APIs](specs-and-apis.md).
 | `@fusionkit/session-harness` | AI SDK harness bindings for vendor coding agents in governed sessions. | `legacy/packages/session-harness/src/index.ts` |
 | `@fusionkit/ensemble` | FusionKit runtime kernel, typed operator graphs, schedulers, workflow recipes, harness-agnostic model-fusion runner, artifacts, worktrees, dashboards, judge synthesis, and protocol records. | `packages/ensemble/src/index.ts`, `packages/ensemble/src/kernel.ts`, `packages/ensemble/src/workflows.ts` |
 | `@fusionkit/kernel` | Dependency-free runtime kernel substrate: artifacts, operators, graphs, validation, wire artifacts, and replay records. | `packages/kernel/src/index.ts` |
-| `@fusionkit/harness-core` | Coding-agent harness contract: drivers, events, error taxonomy, approvals, status probes, and the driver registry. | `packages/harness-core/src/index.ts` |
-| `@fusionkit/tools` | Tool integration contract and registry consumed by the CLI and per-harness packages. | `packages/tools/src/index.ts` |
-| `@fusionkit/tool-codex`, `tool-claude`, `tool-cursor`, `tool-opencode` | Per-harness adapters implementing the tool and harness contracts. | `packages/tool-<name>/src/index.ts` |
+| `@routekit/harness-core` | Product-neutral coding-agent driver, event, error, approval, and status contracts. | `packages/harness-core/src/index.ts` |
+| `@routekit/tools` | Neutral launcher, canonical-driver, and capability registry. | `packages/tools/src/index.ts` |
+| `@routekit/tool-codex`, `tool-claude`, `tool-cursor`, `tool-opencode` | One launcher/serializer and one canonical driver per coding tool. | `packages/tool-<name>/src/index.ts` |
 
 ## Support packages
 

@@ -21,7 +21,7 @@ import type {
   UnifiedHarnessE2EResult,
   UnifiedHarnessKind
 } from "@fusionkit/ensemble";
-import type { ResumeCursor } from "@fusionkit/harness-core";
+import type { ResumeCursor } from "@routekit/harness-core";
 import { ATTR, normalizeWireTrajectories } from "@fusionkit/protocol";
 import { emitFusionEvent, initFusionTracing, jsonAttr, newSessionCarrier, startFusionSpan } from "@fusionkit/tracing";
 import {
@@ -62,8 +62,8 @@ import type {
 import type { SubscriptionMode } from "@routekit/registry";
 import { bold, cyan, gray, uiStream } from "@routekit/cli-ui";
 import { registerCleanup, trimTrailingSlashes } from "@routekit/runtime";
-import { FUSION_PANEL_MODEL, harnessDriversEnabled } from "@fusionkit/tools";
-import { buildCursorAcpProducer } from "@fusionkit/tool-cursor";
+import { FUSION_PANEL_MODEL } from "@fusionkit/registry";
+import { buildCursorAcpProducer } from "@routekit/tool-cursor";
 import { PROMPT_CONFIG_KEY } from "./fusion-config.js";
 import type { PromptOverrides } from "./fusion-config.js";
 import {
@@ -462,11 +462,8 @@ export async function startFusionStepGateway(input: {
   };
 
   // Native multi-turn: one resume-cursor map per conversation (keyed by
-  // session), each holding a cursor per panel model. When the harness-driver
-  // cutover flag is on, a follow-up turn resumes each member's native session
-  // from these instead of re-prompting a fresh process. Legacy harnesses
-  // ignore the map, so it is a no-op with the flag off.
-  const driversEnabled = harnessDriversEnabled();
+  // session), each holding a cursor per panel model. A follow-up turn resumes
+  // each member's native session instead of re-prompting a fresh process.
   const resumeCursorsBySession = new Map<string, Map<string, ResumeCursor>>();
   const resumeCursorsFor = (sessionKey: string): Map<string, ResumeCursor> => {
     let map = resumeCursorsBySession.get(sessionKey);
@@ -568,7 +565,7 @@ export async function startFusionStepGateway(input: {
           return fusedSubagents !== undefined ? { fusedSubagents } : {};
         })(),
         ...(harnessSystem !== undefined ? { harnessSystem } : {}),
-        ...(driversEnabled ? { resumeCursors: resumeCursorsFor(sessionKey) } : {})
+        resumeCursors: resumeCursorsFor(sessionKey)
       });
       const trajectories = normalizeWireTrajectories(wire);
       logTurnCandidates({
@@ -752,8 +749,12 @@ export async function runGatewayAcceptance(input: GatewayAcceptanceInput): Promi
       gatewayUrl: gateway.url(),
       sentinel: input.sentinel,
       repo: input.config.repo,
+      enabled: process.env.FUSIONKIT_GATEWAY_LIVE_CURSOR === "1",
       ...(input.config.models[0]?.id !== undefined
         ? { modelName: input.config.models[0].id }
+        : {}),
+      ...(input.config.models[0]?.model !== undefined
+        ? { providerModel: input.config.models[0].model }
         : {}),
       ...(input.config.timeoutMs !== undefined ? { timeoutMs: input.config.timeoutMs } : {})
     });

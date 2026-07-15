@@ -1,6 +1,6 @@
 /**
- * Harness-core driver cutover (`FUSIONKIT_HARNESS_DRIVERS=1`) through the
- * full stack with the REAL Claude Agent SDK / Codex SDK and their real
+ * Canonical harness-core drivers through the full stack with the real Claude
+ * Agent SDK / Codex SDK and their real
  * binaries. Per-member dialect gateways translate each native protocol to the
  * consolidated Python router. Two turns prove native cursor handling; Claude's
  * worktree-scoped stale cursor intentionally falls back to a fresh session
@@ -56,9 +56,7 @@ for (const driverCase of CASES) {
     `[${driverCase.id}] real driver runs two fused turns through native per-member dialect gateways`,
     { skip: binarySkip },
     async () => {
-      const previousDrivers = process.env.FUSIONKIT_HARNESS_DRIVERS;
       const previous: Record<string, string | undefined> = {};
-      process.env.FUSIONKIT_HARNESS_DRIVERS = "1";
       for (const [name, value] of Object.entries(driverCase.env)) {
         previous[name] = process.env[name];
         process.env[name] = value;
@@ -124,8 +122,6 @@ for (const driverCase of CASES) {
         assert.doesNotMatch(stack.engine.log(), /POST \/v1\/messages/);
       } finally {
         await stack.close();
-        if (previousDrivers === undefined) delete process.env.FUSIONKIT_HARNESS_DRIVERS;
-        else process.env.FUSIONKIT_HARNESS_DRIVERS = previousDrivers;
         for (const [name] of Object.entries(driverCase.env)) {
           if (previous[name] === undefined) delete process.env[name];
           else process.env[name] = previous[name];

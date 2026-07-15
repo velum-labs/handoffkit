@@ -1,17 +1,17 @@
-# @fusionkit/tools
+# @routekit/tools
 
-FusionKit tool integration contracts and registry.
+Product-neutral tool launcher, canonical driver, and capability registry contracts.
 
 ## Architecture
 
-This package defines the launcher and harness adapter shape that per-tool packages register for Codex, Claude Code, Cursor, and opencode.
+This package defines the launcher and driver metadata registered for Codex, Claude Code, Cursor, and OpenCode.
 
 ## Usage
 
-Install `@fusionkit/cli` for the normal workflow; use this package when adding a new harness integration.
+Use this package when adding a coding-tool integration to a RouteKit host.
 
 ```ts
-import * as fusionkitPackage from "@fusionkit/tools";
+import { createToolRegistry } from "@routekit/tools";
 ```
 
 ## Docs

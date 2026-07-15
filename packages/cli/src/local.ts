@@ -1,10 +1,10 @@
 import { bold, box, cyan, dim, glyph, green, isInteractive, uiStream } from "@routekit/cli-ui";
 import { createBackend, resolveBackendConfig } from "@fusionkit/gateway";
 import type { BackendConfig } from "@fusionkit/gateway";
+import { LOCAL_MODEL_LABEL } from "@fusionkit/registry";
 import { startGateway } from "@routekit/gateway";
 import { KernelBackend } from "@fusionkit/ensemble";
-import { LOCAL_MODEL_LABEL, readEnv } from "@fusionkit/tools";
-import type { ToolLaunchContext } from "@fusionkit/tools";
+import type { ToolLaunchContext } from "@routekit/tools";
 
 import { generateSessionToken, startPublicTunnel } from "./shared/tunnel.js";
 import type { PublicTunnel, StartPublicTunnelOptions } from "./shared/tunnel.js";
@@ -30,10 +30,10 @@ function backendModel(config: BackendConfig): string {
 
 // ---- pure shim builders (re-exported from the per-tool packages) ----
 
-export { claudeEnv } from "@fusionkit/tool-claude";
-export { codexLaunchConfigToml as codexConfigToml } from "@fusionkit/tool-codex";
-export { opencodeConfig, opencodeModelArg } from "@fusionkit/tool-opencode";
-export { cursorInstructions } from "@fusionkit/tool-cursor";
+export { claudeEnv } from "@routekit/tool-claude";
+export { codexLaunchConfigToml as codexConfigToml } from "@routekit/tool-codex";
+export { opencodeConfig, opencodeModelArg } from "@routekit/tool-opencode";
+export { cursorInstructions } from "@routekit/tool-cursor";
 
 // ---- dispatcher ----
 
@@ -78,7 +78,7 @@ export async function runDirect(
   const log = options.log ?? ((line: string) => uiStream().write(`${line}\n`));
   const config = options.config ?? resolveBackendConfig();
   const model = backendModel(config);
-  let publicUrl = options.publicUrl ?? readEnv(process.env, "FUSIONKIT_PUBLIC_URL");
+  let publicUrl = options.publicUrl ?? process.env.FUSIONKIT_PUBLIC_URL;
   // Cursor's BYOK plan-panel flow needs a public HTTPS URL (Cursor's backend
   // proxies BYOK traffic and blocks loopback). When the user did not bring
   // their own tunnel, provision a Quick Tunnel — and since that URL is public,
@@ -144,17 +144,19 @@ export async function runDirect(
       return exitCode;
     }
     const integration = toolRegistry.get(tool);
-    if (integration === undefined || !integration.modes.includes("local")) {
+    if (integration === undefined) {
       throw new Error(`unknown local tool: ${String(tool)}`);
     }
     const ctx: ToolLaunchContext = {
-      mode: "local",
-      gatewayUrl: gateway.url,
-      modelLabel: model,
-      toolArgs,
-      ...(options.ide === true ? { ide: true } : {}),
-      ...(authToken !== undefined ? { authToken } : {}),
-      ...(publicUrl !== undefined ? { publicUrl } : {}),
+      spec: {
+        gatewayUrl: gateway.url,
+        defaultModel: model,
+        models: [{ id: model }],
+        args: toolArgs,
+        ...(options.ide === true ? { ide: true } : {}),
+        ...(authToken !== undefined ? { auth: { token: authToken } } : {}),
+        ...(publicUrl !== undefined ? { publicUrl } : {})
+      },
       log,
       prepareForPassthrough: () => undefined,
       registerPort: (_name, port) => `http://127.0.0.1:${port}`,

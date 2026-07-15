@@ -119,7 +119,8 @@
   },
   "dependencies": {
     "@fusionkit/adapter-ai-sdk": "workspace:*",
-    "@fusionkit/harness-core": "workspace:*",
+    "@routekit/harness-core": "workspace:*",
+    "@routekit/tools": "workspace:*",
     "@fusionkit/kernel": "workspace:*",
     "@fusionkit/gateway": "workspace:*",
     "@fusionkit/protocol": "workspace:*",

@@ -142,7 +142,7 @@ Each coding tool is its own workspace package implementing a single
 `ToolIntegration` (the adapter), so supporting a new tool is additive:
 
 1. Create `packages/tool-<name>/` (copy `packages/tool-codex` as a template). It
-   depends on `@fusionkit/tools` for the `ToolIntegration` / `ToolLaunchContext`
+   depends on `@routekit/tools` for the neutral `ToolIntegration` / `ToolLaunchContext`
    contract, and on `@fusionkit/ensemble` if it also ships a harness adapter.
 2. Export a `const <name>Tool: ToolIntegration` with:
    - `launch(ctx)` — boot the tool's binary against `ctx.gatewayUrl` (the host

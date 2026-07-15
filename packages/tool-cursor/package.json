@@ -1,5 +1,5 @@
 {
-  "name": "@fusionkit/tool-cursor",
+  "name": "@routekit/tool-cursor",
   "private": false,
   "version": "0.8.0",
   "repository": {
@@ -7,7 +7,7 @@
     "url": "git+https://github.com/velum-labs/handoffkit.git",
     "directory": "packages/tool-cursor"
   },
-  "description": "Cursor tool integration for fusionkit: Cursorkit bridge launcher plus the ensemble Cursor harness adapter.",
+  "description": "Product-neutral Cursor launcher, bridge serializer, and canonical ACP driver.",
   "license": "Apache-2.0",
   "type": "module",
   "exports": {
@@ -26,20 +26,15 @@
     "provenance": true
   },
   "dependencies": {
-    "@fusionkit/ensemble": "workspace:*",
-    "@fusionkit/harness-core": "workspace:*",
-    "@fusionkit/protocol": "workspace:*",
-    "@fusionkit/tools": "workspace:*",
-    "@routekit/contracts": "workspace:*",
+    "@routekit/harness-core": "workspace:*",
     "@routekit/runtime": "workspace:*",
+    "@routekit/tools": "workspace:*",
+    "@velum-labs/cursorkit": "0.2.0",
     "@zed-industries/agent-client-protocol": "0.4.5",
     "zod": "4.4.3"
   },
   "keywords": [
-    "fusionkit",
-    "model-fusion",
     "llm",
-    "ensemble",
     "coding-agent",
     "cursor",
     "harness",

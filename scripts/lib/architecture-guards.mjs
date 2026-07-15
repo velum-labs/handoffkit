@@ -17,7 +17,13 @@ export const CANONICAL_SHARED_PACKAGES = new Map([
   ["packages/cli-ui", "@routekit/cli-ui"],
   ["packages/cli-core", "@routekit/cli-core"],
   ["packages/config-core", "@routekit/config-core"],
-  ["packages/telemetry-core", "@routekit/telemetry-core"]
+  ["packages/telemetry-core", "@routekit/telemetry-core"],
+  ["packages/harness-core", "@routekit/harness-core"],
+  ["packages/tools", "@routekit/tools"],
+  ["packages/tool-codex", "@routekit/tool-codex"],
+  ["packages/tool-claude", "@routekit/tool-claude"],
+  ["packages/tool-cursor", "@routekit/tool-cursor"],
+  ["packages/tool-opencode", "@routekit/tool-opencode"]
 ]);
 
 export function canonicalSharedPackageViolations(manifests) {
@@ -93,6 +99,14 @@ export function routekitSourceViolations(file, source) {
   const importPattern =
     /(?:\bfrom\s*|\bimport\s*\(\s*|\brequire\s*\(\s*)["']@fusionkit\//;
   if (importPattern.test(source)) violations.push("imports @fusionkit/*");
+
+  const neutralToolPackage =
+    /\/packages\/(?:harness-core|tools|tool-(?:codex|claude|cursor|opencode))\//.test(
+      `/${normalized}`
+    );
+  if (neutralToolPackage && /\b(?:fusionkit|fusion|fused)\b/i.test(source)) {
+    violations.push("product-specific vocabulary in production source");
+  }
 
   const declarationPattern =
     /^\s*(?:export\s+)?(?:declare\s+)?(?:async\s+)?(?:class|enum|function|interface|namespace|type|const|let|var)\s+([$A-Z_a-z][$\w]*)/gm;

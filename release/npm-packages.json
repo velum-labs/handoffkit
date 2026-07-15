@@ -87,27 +87,27 @@
     },
     {
       "path": "packages/harness-core",
-      "name": "@fusionkit/harness-core"
+      "name": "@routekit/harness-core"
     },
     {
       "path": "packages/tools",
-      "name": "@fusionkit/tools"
+      "name": "@routekit/tools"
     },
     {
       "path": "packages/tool-codex",
-      "name": "@fusionkit/tool-codex"
+      "name": "@routekit/tool-codex"
     },
     {
       "path": "packages/tool-claude",
-      "name": "@fusionkit/tool-claude"
+      "name": "@routekit/tool-claude"
     },
     {
       "path": "packages/tool-cursor",
-      "name": "@fusionkit/tool-cursor"
+      "name": "@routekit/tool-cursor"
     },
     {
       "path": "packages/tool-opencode",
-      "name": "@fusionkit/tool-opencode"
+      "name": "@routekit/tool-opencode"
     },
     {
       "path": "packages/cli",

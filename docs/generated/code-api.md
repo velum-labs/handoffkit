@@ -133,12 +133,12 @@ FusionKit ensemble runtime entry point. It exposes harness execution, panel work
 - `export { createMockJudgeSynthesizer } from "./judge.js";`
 - `export type { JudgeCandidateEvidence, JudgeInput, JudgePatch, JudgeSynthesizer, JudgeSynthesisOutput, MockJudgeSynthesizerOptions, SynthesisFailureSummary } from "./judge.js";`
 - `export { ensemble, runEnsemble } from "./run.js";`
-- `export { buildPanelPrompt, createFusionKitJudgeSynthesizer, harnessSupportsFiniteK, panelCandidateContract, runFusionPanelWorkflow, runFusionPanels, runUnifiedHarnessE2E, setToolHarnessProvider } from "./unified.js";`
+- `export { buildPanelPrompt, createFusionKitJudgeSynthesizer, harnessSupportsFiniteK, panelCandidateContract, runFusionPanelWorkflow, runFusionPanels, runUnifiedHarnessE2E, setToolDriverRegistry } from "./unified.js";`
 - `export { runPanelRound } from "./panel-round.js";`
 - `export type { PanelRoundOptions } from "./panel-round.js";`
 - `export { runProposalPanels } from "./panel-propose.js";`
 - `export type { ProposalPanelOptions } from "./panel-propose.js";`
-- `export type { CursorHarnessRunnerInput, CursorHarnessRunnerResult, FusedSubagentAccess, FusedSubagentEnsemble, FusionPanelOptions, PanelTrust, ToolHarnessProvider, ToolHarnessResolveOptions, UnifiedHarnessE2EOptions, UnifiedHarnessE2EResult, UnifiedHarnessKind, UnifiedHarnessMatrixResult } from "./unified.js";`
+- `export type { CursorHarnessRunnerInput, CursorHarnessRunnerResult, FusedSubagentAccess, FusedSubagentEnsemble, FusionPanelOptions, PanelTrust, ToolDriverRegistry, ToolHarnessResolveOptions, UnifiedHarnessE2EOptions, UnifiedHarnessE2EResult, UnifiedHarnessKind, UnifiedHarnessMatrixResult } from "./unified.js";`
 - `export type { FusionTraceCarrier } from "@fusionkit/tracing";`
 - `export { runJudgeSynthesis } from "./synthesis.js";`
 - `export type { RunSynthesisInput, SynthesisResult } from "./synthesis.js";`
@@ -234,20 +234,20 @@ No module JSDoc was found.
 
 ### `packages/harness-core/src/index.ts`
 
-@fusionkit/harness-core is the single coding-agent harness contract:
+@routekit/harness-core is the single coding-agent harness contract:
 driver -> instance -> session interfaces, the canonical harness event
 union (with raw provider envelopes), one tagged error taxonomy with
 derived retryability, deferred-based approvals with explicit policies,
 status probes with an identity-checked disk cache, and an explicit driver
 registry. Drivers (tool-codex, tool-claude, tool-cursor, tool-opencode)
-implement this contract; the panel fanout and launchers consume it.
+implement this contract; orchestrators and launchers consume it.
 
-- `export { HARNESS_KINDS, isHarnessKind, toModelFusionHarnessKind } from "./kinds.js";`
+- `export { HARNESS_KINDS, isHarnessKind } from "./kinds.js";`
 - `export type { HarnessKind } from "./kinds.js";`
-- `export { HARNESS_ERROR_CODES, HarnessError, asHarnessError, isRetryable, toModelFusionErrorKind } from "./errors.js";`
+- `export { HARNESS_ERROR_CODES, HarnessError, asHarnessError, isRetryable } from "./errors.js";`
 - `export type { HarnessErrorCategory, HarnessErrorCode } from "./errors.js";`
 - `export type { HarnessContentStream, HarnessEvent, HarnessEventRaw, HarnessEventType, HarnessItemType, HarnessRequestType, HarnessTokenUsage, HarnessTurnEndReason } from "./events.js";`
-- `export { PANEL_APPROVAL_POLICY, PendingRequests, createDeferred, decideApproval } from "./approvals.js";`
+- `export { DEFAULT_AUTOMATION_APPROVAL_POLICY, PendingRequests, createDeferred, decideApproval } from "./approvals.js";`
 - `export type { ApprovalDecision, ApprovalPolicy, Deferred, PendingRequest } from "./approvals.js";`
 - `export { DEFAULT_STATUS_CACHE_DIR, readCachedStatus, statusSkipReason, writeCachedStatus } from "./status.js";`
 - `export type { HarnessAuthStatus, HarnessModelDescriptor, HarnessStatus } from "./status.js";`
@@ -546,39 +546,35 @@ Composable layers for realistic end-to-end tests (see docs/testing.md):
 
 ### `packages/tool-claude/src/index.ts`
 
-Claude Code tool integration entry point. It exposes launcher environment helpers and the Claude Code ensemble harness adapter.
+No module JSDoc was found.
 
 - `export const claudeTool: ToolIntegration ...`
-- `export { claudeCodeHarness, claudeCodeHarnessCredentialSkipReason, createClaudeCodeHarness } from "./harness.js";`
-- `export type { ClaudeCodeHarnessEnv, ClaudeCodeHarnessOptions } from "./harness.js";`
-- `export { claudeAgentsJson, claudeEnv, claudeLaunchArgs, launchClaude } from "./launch.js";`
 - `export { claudeDriverConfigSchema, createClaudeDriver } from "./driver.js";`
-- `export type { ClaudeDriverConfig } from "./driver.js";`
+- `export type { ClaudeDriverConfig, ClaudeDriverOptions, ClaudeQueryFn } from "./driver.js";`
+- `export { claudeAgentsJson, claudeEnv, claudeLaunchArgs, launchClaude } from "./launch.js";`
 
 ### `packages/tool-codex/src/index.ts`
 
-Codex tool integration entry point. It exposes the Codex launcher and ensemble harness adapter used by the FusionKit CLI.
+No module JSDoc was found.
 
 - `export const codexTool: ToolIntegration ...`
-- `export { codexConfigToml, codexEndReason, codexHarness, codexHarnessCredentialSkipReason, codexMemberCatalogJson, createCodexHarness, defaultCodexRunner, memberChatBackend } from "./harness.js";`
-- `export type { CodexAmbientProvider, CodexApprovalPolicy, CodexConfigTomlInput, CodexExecInput, CodexExecResult, CodexExecRunner, CodexHarnessEnv, CodexHarnessOptions, CodexOpenAiCompatibleProvider, CodexProvider, CodexResponsesProvider, CodexSandboxMode } from "./harness.js";`
-- `export { codexAgentRoles, codexAgentRoleToml, codexAuthPath, codexCatalogEntries, codexLaunchConfigToml, codexListedStockSlugs, codexModelCatalogJson, codexProfileFiles, codexProfileFileToml, codexRoleDescription, hasCodexLogin, isCodexConfigFailure, launchCodex, readCodexCatalogTemplate, readCodexModelsCache } from "./launch.js";`
-- `export type { CodexAgentRole, CodexModelPreset } from "./launch.js";`
-- `export { CODEX_INSTALL_BEGIN, CODEX_INSTALL_END, CODEX_INSTALL_PROVIDER, codexIntegrationBlock, installCodexIntegration, uninstallCodexIntegration } from "./install.js";`
-- `export type { CodexInstallInput, CodexInstallProfile, CodexInstallResult } from "./install.js";`
 - `export { codexDriverConfigSchema, createCodexDriver } from "./driver.js";`
 - `export type { CodexDriverConfig } from "./driver.js";`
+- `export { codexAgentRoles, codexAgentRoleToml, codexAuthPath, codexCatalogEntries, codexLaunchConfigToml, codexListedStockSlugs, codexModelCatalogJson, codexProfileFiles, codexProfileFileToml, hasCodexLogin, isCodexConfigFailure, launchCodex, readCodexCatalogTemplate, readCodexModelsCache } from "./launch.js";`
+- `export type { CodexAgentRole, CodexModelPreset } from "./launch.js";`
+- `export { codexIntegrationBlock, installCodexIntegration, uninstallCodexIntegration } from "./install.js";`
+- `export type { CodexInstallInput, CodexInstallOwner, CodexInstallProfile, CodexInstallResult } from "./install.js";`
 
 ### `packages/tool-cursor/src/index.ts`
 
-Cursor tool integration entry point. It exposes Cursor launcher helpers, the Cursorkit bridge, and the Cursor ensemble harness adapter.
+No module JSDoc was found.
 
 - `export const cursorTool: ToolIntegration ...`
-- `export { createCursorHarness, cursorHarness, cursorHarnessUnavailableReason, defaultCursorRunner } from "./harness.js";`
-- `export type { CursorExecInput, CursorExecResult, CursorExecRunner, CursorHarnessOptions, CursorRunMode } from "./harness.js";`
 - `export { buildCursorAcpProducer } from "./acp.js";`
 - `export { startCursorBridge } from "./bridge.js";`
 - `export { CURSOR_AGENT_TOOL_MAX_ITERATIONS, CURSOR_AGENT_TOOL_POLICY, cursorBridgeEnv, cursorBridgeModelEnv, cursorIdeEnv, cursorIdeModelsJson } from "./bridge-config.js";`
+- `export { resolveCursorkitCli } from "./cursorkit-path.js";`
+- `export type { CursorkitCli } from "./cursorkit-path.js";`
 - `export { cursorIdeInstructions, cursorInstructions, launchCursor } from "./launch.js";`
 - `export { CURSOR_AGENTS_DIRNAME, cursorSubagentMarkdown, scaffoldCursorSubagents } from "./subagents.js";`
 - `export { createCursorDriver, cursorDriverConfigSchema } from "./driver.js";`
@@ -586,26 +582,20 @@ Cursor tool integration entry point. It exposes Cursor launcher helpers, the Cur
 
 ### `packages/tool-opencode/src/index.ts`
 
-opencode tool integration entry point. It exposes launcher configuration helpers for local-model and gateway-backed opencode sessions.
+No module JSDoc was found.
 
 - `export const opencodeTool: ToolIntegration ...`
-- `export { launchOpencode, opencodeConfig, opencodeModelArg } from "./launch.js";`
+- `export { launchOpencode, opencodeConfig, opencodeModelArg, opencodeProviderConfig } from "./launch.js";`
 - `export { createOpencodeDriver, opencodeDriverConfigSchema } from "./driver.js";`
 - `export type { OpencodeBackend, OpencodeBackendFactory, OpencodeDriverConfig, OpencodeDriverOptions, OpencodeTurnPart, OpencodeTurnResult } from "./driver.js";`
 
 ### `packages/tools/src/index.ts`
 
-Tool integration entry point. Runtime primitives are imported directly from
-`@routekit/runtime`; this package owns only tool-domain contracts and helpers.
+No module JSDoc was found.
 
-- `export type { FusedEnsembleInfo, ToolDashboardLiveSmoke, ToolDashboardMetadata, ToolDashboardSmoke, ToolHarnessMetadata, ToolIntegration, ToolLaunchContext, ToolLaunchMode } from "./types.js";`
-- `export { createToolRegistry } from "./registry.js";`
-- `export type { ToolRegistry } from "./registry.js";`
-- `export { CURSOR_BRIDGE_MODEL_NAME, DEFAULT_ENSEMBLE_NAME, FUSION_PANEL_MODEL, fusionModelId, LOCAL_MODEL_LABEL } from "./constants.js";`
-- `export { envFlagEnabled, HARNESS_DRIVERS_FLAG, harnessDriversEnabled, readEnv } from "./env-compat.js";`
-- `export { buildSkippedCandidate } from "./candidate.js";`
-- `export { deriveFusedSubagents, fusedSubagentDescription, fusedSubagentDeveloperInstructions, fusedSubagentMembers } from "./fused-subagents.js";`
-- `export type { FusedSubagentDefinition, FusedSubagentDescriptionStyle } from "./fused-subagents.js";`
+- `export type { AgentProfile, ToolCapabilityGrade, ToolCapabilityMetadata, ToolDriverMetadata, ToolDriverRoute, ToolIntegration, ToolLaunchContext, ToolLaunchSpec, ToolModel, ToolModelFeature } from "./types.js";`
+- `export { createToolCapabilityMatrix, createToolRegistry } from "./registry.js";`
+- `export type { ToolCapabilityCell, ToolRegistry } from "./registry.js";`
 
 ### `packages/tracing/src/index.ts`
 

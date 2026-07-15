@@ -11,7 +11,7 @@ import type {
 
 import {
   HarnessError,
-  PANEL_APPROVAL_POLICY,
+  DEFAULT_AUTOMATION_APPROVAL_POLICY,
   PendingRequests,
   asHarnessError,
   buildChildEnv,
@@ -19,7 +19,7 @@ import {
   readCachedStatus,
   runCliCapture,
   writeCachedStatus
-} from "@fusionkit/harness-core";
+} from "@routekit/harness-core";
 import type {
   ApprovalDecision,
   ApprovalPolicy,
@@ -33,7 +33,7 @@ import type {
   SessionHandle,
   SessionTurnInput,
   StartSessionOptions
-} from "@fusionkit/harness-core";
+} from "@routekit/harness-core";
 
 const RESUME_CURSOR_VERSION = 1;
 const DEFAULT_COMMAND = "claude";
@@ -80,8 +80,8 @@ function resolveEnv(context: DriverContext | undefined): Record<string, string |
 /**
  * The canonical approval request type for a claude tool name. Note `Task`
  * (Claude's sub-agent tool) deliberately lands in the generic `tool_approval`
- * bucket: under the panel default policy (`autoApprove: "all"`) it is
- * auto-accepted, so panel members can parallelize with same-model sub-agents,
+ * bucket: under the automation default policy (`autoApprove: "all"`) it is
+ * auto-accepted, so unattended runs can parallelize with same-model sub-agents,
  * while stricter policies (`edits`/`none`) still surface it like any tool.
  */
 function requestTypeForTool(toolName: string): HarnessRequestType {
@@ -125,7 +125,8 @@ class ClaudeSession implements SessionHandle {
     this.#context = input.context;
     this.#cwd = input.options.cwd;
     this.#model = input.options.model ?? input.config.model;
-    this.#approvalPolicy = input.options.approvalPolicy ?? PANEL_APPROVAL_POLICY;
+    this.#approvalPolicy =
+      input.options.approvalPolicy ?? DEFAULT_AUTOMATION_APPROVAL_POLICY;
     this.#sessionId = resumeSessionId(input.options.resume) ?? "claude:pending";
     this.#queryFn = input.queryFn;
   }

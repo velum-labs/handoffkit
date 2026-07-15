@@ -10,14 +10,15 @@ import {
   HarnessError,
   PendingRequests,
   asHarnessError,
+  createStreamJsonStepEmitter,
   createTrackedTmpDir,
   decideApproval,
+  parseStreamJsonTrajectory,
   readCachedStatus,
   releaseTrackedTmpDir,
   statusSkipReason,
+  streamJsonResultContentText,
   sweepTrackedTmpDirs,
-  toModelFusionErrorKind,
-  toModelFusionHarnessKind,
   writeCachedStatus
 } from "../index.js";
 import type { HarnessEvent, HarnessStatus } from "../index.js";
@@ -33,6 +34,34 @@ driverContractSuite({
   },
   startOptions: () => ({ cwd: process.cwd() }),
   supportsResume: true
+});
+test("shared stream JSON primitives normalize incremental and buffered events", () => {
+  type Step = { text?: string; kind: "message" | "result" };
+  const stepsForEvent = (event: Record<string, unknown>): Step[] =>
+    event.type === "message" && typeof event.text === "string"
+      ? [{ kind: "message", text: event.text }]
+      : [];
+  const resultStep = (result: string): Step => ({ kind: "result", text: result });
+  const emitted: Array<Step & { index: number }> = [];
+  const emit = createStreamJsonStepEmitter({ stepsForEvent, resultStep, onStep: (step) => emitted.push(step) });
+  emit('{"type":"message","text":"hello"}');
+  emit('{"type":"result","result":"done"}');
+  assert.deepEqual(emitted, [
+    { index: 0, kind: "message", text: "hello" },
+    { index: 1, kind: "result", text: "done" }
+  ]);
+
+  const parsed = parseStreamJsonTrajectory({
+    stdout:
+      '{"type":"message","text":"hello"}\n' +
+      '{"type":"result","result":"done","is_error":false}\n',
+    stepsForEvent,
+    resultStep
+  });
+  assert.equal(parsed.finalOutput, "done");
+  assert.equal(parsed.sawResult, true);
+  assert.equal(parsed.isError, false);
+  assert.equal(streamJsonResultContentText([{ type: "text", text: "a" }, { type: "text", text: "b" }]), "ab");
 });
 
 test("registry decodes config exactly once and classifies failures", async () => {
@@ -52,22 +81,19 @@ test("registry decodes config exactly once and classifies failures", async () =>
   assert.throws(() => registry.register(createMockDriver()), /already registered/);
 });
 
-test("error taxonomy derives retryability, category, and wire kind", () => {
+test("error taxonomy derives retryability and category", () => {
   const timeout = new HarnessError("timeout", "deadline exceeded");
   assert.equal(timeout.retryable, true);
   assert.equal(timeout.category, "transient");
-  assert.equal(toModelFusionErrorKind(timeout), "timeout");
 
   const auth = new HarnessError("not_authenticated", "run codex login");
   assert.equal(auth.retryable, false);
   assert.equal(auth.category, "auth_permanent");
-  assert.equal(toModelFusionErrorKind(auth), "capability_missing");
 
   const quota = new HarnessError("provider_error", "out of credits", {
     category: "quota_exhausted"
   });
   assert.equal(quota.retryable, true);
-  assert.equal(toModelFusionErrorKind(quota), "rate_limited");
 
   const enoent = asHarnessError(
     Object.assign(new Error("spawn codex ENOENT"), { code: "ENOENT" })
@@ -190,12 +216,4 @@ test("tracked temp dirs are swept after a simulated crash", () => {
   } finally {
     rmSync(manifestDir, { recursive: true, force: true });
   }
-});
-
-test("kind mapping is exhaustive and opencode degrades to generic on the wire", () => {
-  assert.equal(toModelFusionHarnessKind("codex"), "codex");
-  assert.equal(toModelFusionHarnessKind("claude_code"), "claude_code");
-  assert.equal(toModelFusionHarnessKind("cursor"), "cursor");
-  assert.equal(toModelFusionHarnessKind("opencode"), "generic");
-  assert.equal(toModelFusionHarnessKind("generic"), "generic");
 });

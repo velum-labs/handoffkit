@@ -99,8 +99,8 @@ test("help prints usage and lists the top-level commands", () => {
     "codex",
     "claude",
     "cursor",
-    "serve",
     "opencode",
+    "serve",
     "init",
     "setup",
     "doctor",
@@ -343,10 +343,11 @@ test("direct mode rejects fusion-only options instead of ignoring them", () => {
   assert.match(result.stderr, /--model\/--models cannot be combined with --direct/);
 });
 
-test("direct-only tools require the direct flag", () => {
-  const result = fusionkit(["opencode"]);
-  assert.equal(result.status, 1);
-  assert.match(result.stderr, /opencode only supports direct mode/);
+test("OpenCode is a first-class routed launcher", () => {
+  const result = fusionkit(["opencode", "--help"]);
+  assert.equal(result.status, 0);
+  assert.match(result.stdout, /real model fusion backs opencode/);
+  assert.doesNotMatch(result.stdout, /only supports direct mode/);
 });
 
 test("public URL is scoped to direct mode", () => {

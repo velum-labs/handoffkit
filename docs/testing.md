@@ -238,7 +238,7 @@ suites.
 | Managed harness k | real AI SDK agents + git worktrees: k=2 executed/proposed boundaries, unbounded completion, path traversal rejection | provider | `packages/cli/src/test/stack-harness-k-e2e.test.ts` |
 | Chaos/lifecycle | k=1 straggler abandonment, hard panel timeout, caller cancellation + post-failure recovery | provider | `packages/cli/src/test/stack-chaos-e2e.test.ts` |
 | Durable resume | unbounded candidate cache persisted in FileSystemSessionStore and restored after gateway restart with zero re-fanout | provider | `packages/cli/src/test/stack-resume-e2e.test.ts` |
-| Driver cutover | `FUSIONKIT_HARNESS_DRIVERS=1`: real Claude Agent SDK + Codex SDK, native dialect gateways, stale-cursor fallback | provider | `packages/cli/src/test/stack-drivers-e2e.test.ts` |
+| Canonical tool drivers | Real Claude Agent SDK + Codex SDK, native dialect gateways, stale-cursor fallback | provider | `packages/cli/src/test/stack-drivers-e2e.test.ts` |
 | Auth boundary | every door rejects missing/wrong bearer credentials before any provider call | provider | `packages/cli/src/test/stack-auth-e2e.test.ts` |
 | Hostile-input fuzz | malformed bodies per door (structural rejection matrix) + 40 seeded random bodies; invariants: native 400 envelope, zero fanout, no leaked internals, bounded latency, gateway survives | provider | `packages/cli/src/test/stack-fuzz-e2e.test.ts`, `python/fusionkit-testkit/tests/test_engine_fuzz.py`, unit: `wire-validation.test.ts` |
 | Chunk-boundary fuzz | provider streams re-split at 1/3/7-byte boundaries (mid-frame, mid-UTF-8-rune) must reassemble byte-exactly, per provider family + fused | provider | `python/fusionkit-testkit/tests/test_stream_chunk_fuzz.py` |

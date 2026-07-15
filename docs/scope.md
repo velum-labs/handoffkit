@@ -33,9 +33,10 @@ These packages must not depend directly or transitively on the legacy packages:
 | `@fusionkit/gateway` | Fusion frontdoor, panel/synthesis orchestration, sessions, budgets, and local lifecycle. |
 | `@fusionkit/protocol` | Model-fusion data contracts and generated SDK bindings. |
 | `@fusionkit/workspace` | Git workspace capture, worktree materialization, divergence-safe pull. |
-| `@fusionkit/tools`, `tool-codex`, `tool-claude`, `tool-cursor`, `tool-opencode` | Per-harness adapters. |
+| `@routekit/tools`, `tool-codex`, `tool-claude`, `tool-cursor`, `tool-opencode` | Product-neutral launcher, driver, and capability integrations. |
 | `@fusionkit/adapter-ai-sdk` | Managed MLX local-model helpers and product-local AI SDK utilities. |
-| `@fusionkit/harness-core`, `registry`, `kernel` | Fusion-specific harness, registry, and execution primitives. |
+| `@routekit/harness-core` | Product-neutral harness driver contracts and shared event/process primitives. |
+| `@fusionkit/registry`, `@fusionkit/kernel` | Fusion-specific registry and execution primitives. |
 | `@fusionkit/tracing` | OpenTelemetry-backed fusion span/event helpers and trace carriers. |
 | `@routekit/runtime`, `cli-ui`, `cli-core`, `config-core`, `telemetry-core`, `tracing` | Brand-neutral shared runtime, CLI, configuration, telemetry, and tracing foundations. |
 
@@ -71,8 +72,8 @@ packages. Legacy-only surfaces moved out of product packages:
   from `@fusionkit/cli`.
 - The CLI receipt/trace renderer moved to private `@fusionkit/example-utils` for
   legacy examples only.
-- `@fusionkit/tool-claude` keeps only the local Claude Code harness path used by
-  FusionKit panels; the sandbox/session-harness path is gone.
+- `@routekit/tool-claude` owns one product-neutral Claude Code launcher and
+  canonical driver; FusionKit adapts it in the ensemble package.
 - Governed AI SDK helpers (`remoteTools`, `swarmTools`, `handoffModel`,
   `routedModel`) moved from `@fusionkit/adapter-ai-sdk` to legacy
   `@fusionkit/handoff`.

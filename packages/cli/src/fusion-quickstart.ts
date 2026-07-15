@@ -24,16 +24,18 @@ import {
   DEFAULT_ENSEMBLE_NAME,
   FUSION_PANEL_MODEL,
   fusionModelId
-} from "@fusionkit/tools";
+} from "@fusionkit/registry";
 import { formatDurationMs, registerCleanup } from "@routekit/runtime";
-import type { ToolLaunchContext } from "@fusionkit/tools";
+import type { HarnessKind } from "@routekit/harness-core";
+import type { AgentProfile, ToolLaunchContext } from "@routekit/tools";
 import { harnessSupportsFiniteK } from "@fusionkit/ensemble";
+import type { UnifiedHarnessKind } from "@fusionkit/ensemble";
 import { isLookaheadK } from "@fusionkit/protocol";
 import { defaultSessionsDir, FileSystemSessionStore, formatUsd } from "@fusionkit/gateway";
 import type { SessionMetaInput, SessionSummary } from "@fusionkit/gateway";
 import type { CodexRelayOptions } from "@routekit/accounts";
-import { codexCatalogEntries, readCodexModelsCache } from "@fusionkit/tool-codex";
-import { cursorInstructions } from "@fusionkit/tool-cursor";
+import { codexCatalogEntries, readCodexModelsCache } from "@routekit/tool-codex";
+import { cursorInstructions } from "@routekit/tool-cursor";
 
 import {
   bold,
@@ -89,7 +91,7 @@ export * from "./fusion/preflight.js";
 
 /** Launchable fusion tools (registry-derived) plus the `serve` pseudo-tool. */
 export const FUSION_TOOLS: readonly FusionTool[] = [
-  ...toolRegistry.launchableFusion().map((tool) => tool.id),
+  ...toolRegistry.list().map((tool) => tool.id),
   "serve"
 ];
 
@@ -132,6 +134,9 @@ export function panelMemberSummary(
 /** Auth summary for the launched coding tool, not the panel members behind it. */
 export function toolAuthSummary(tool: FusionTool): string | undefined {
   if (tool === "serve") return undefined;
+  if (tool === "codex") {
+    return "codex auth: ephemeral CODEX_HOME -> FusionKit local provider (Responses; requires_openai_auth=false)";
+  }
   return toolRegistry.get(tool)?.authSummary ?? `${tool} auth: FusionKit gateway provider`;
 }
 
@@ -255,19 +260,58 @@ export function styledPreambleLines(lines: readonly string[]): string[] {
  * stock-model pick is relayed verbatim to the Codex backend under the
  * client's own auth. Inert for every other client.
  */
+function unifiedHarnessKind(kind: HarnessKind): UnifiedHarnessKind {
+  switch (kind) {
+    case "codex":
+      return "codex";
+    case "claude_code":
+      return "claude-code";
+    case "cursor":
+      return "cursor-acp";
+    case "opencode":
+      return "opencode";
+    case "generic":
+      return "agent";
+    default: {
+      const exhausted: never = kind;
+      throw new Error(`unsupported tool driver kind: ${String(exhausted)}`);
+    }
+  }
+}
+
+export function fusionAgentProfiles(ensembles: readonly EnsembleRunSpec[]): AgentProfile[] {
+  return ensembles.map((ensemble) => {
+    const model = fusionModelId(ensemble.name);
+    const members = ensemble.models.map((member) => member.id).join(", ");
+    return {
+      id: model,
+      model,
+      description: `Delegate a task to the "${ensemble.name}" compound (${members}).`,
+      instructions: `Answer the delegated task directly using the "${ensemble.name}" compound.`
+    };
+  });
+}
+
 export function codexRelayConfig(
   modelLabel: string,
   ensembles: readonly EnsembleRunSpec[],
   unionModels: readonly PanelModelSpec[]
 ): CodexRelayOptions {
-  const fusedIds = ensembles.map((ensemble) => fusionModelId(ensemble.name));
   const nativeModels = [...new Set(unionModels.map((spec) => spec.model))];
+  const models = [
+    ...ensembles.map((ensemble) => {
+      const id = fusionModelId(ensemble.name);
+      return { id, label: `${id} (fusion)` };
+    }),
+    ...nativeModels.map((id) => ({ id }))
+  ];
   // Test/self-hosted hook, mirroring the Python engine's
   // FUSIONKIT_CODEX_RESPONSES_BASE_URL override.
   const backendUrl = process.env.FUSIONKIT_CODEX_BACKEND_URL;
   return {
     ...(backendUrl !== undefined && backendUrl.length > 0 ? { backendUrl } : {}),
-    catalog: (template, stock) => codexCatalogEntries(modelLabel, nativeModels, template, fusedIds, stock),
+    catalog: (template, stock) =>
+      codexCatalogEntries({ defaultModel: modelLabel, models }, template, stock),
     fallbackStock: () => readCodexModelsCache()
   };
 }
@@ -696,7 +740,8 @@ export async function runFusion(
     initFusionTracing({ serviceName: "fusionkit" });
     disposers.push(() => shutdownFusionTracing());
 
-    const panelHarness = toolRegistry.panelHarnessKindFor(tool);
+    const panelHarness =
+      integration !== undefined ? unifiedHarnessKind(integration.driver.kind) : undefined;
     // B17: finite k>1 (stop at the k-th step boundary) needs a member loop
     // fusionkit owns. k=1 never reaches a harness, and k=∞ (unset) is every
     // harness's native behavior.
@@ -933,7 +978,7 @@ export async function runFusion(
         uiStream().write(`\n${box("fusion gateway", gatewayRows)}\n\n`);
         uiStream().write(`${gatewaySetupSnippets(stack.fusionUrl, "http://127.0.0.1:<cursorkit-port>")}\n`);
         if (tunnelUrl !== undefined) {
-          uiStream().write(`\n${cursorInstructions(tunnelUrl, modelLabel, fusedIds, authToken)}\n`);
+          uiStream().write(`\n${cursorInstructions(tunnelUrl, modelLabel, authToken)}\n`);
         }
         uiStream().write("\n");
 
@@ -982,7 +1027,7 @@ export async function runFusion(
         log(gatewaySetupSnippets(stack.fusionUrl, "http://127.0.0.1:<cursorkit-port>"));
         if (tunnelUrl !== undefined) {
           log("");
-          log(cursorInstructions(tunnelUrl, modelLabel, fusedIds, authToken));
+          log(cursorInstructions(tunnelUrl, modelLabel, authToken));
           log("");
           log(`Public gateway (bearer token required): ${tunnelUrl}/v1`);
         }
@@ -994,30 +1039,27 @@ export async function runFusion(
       });
       return 0;
     }
-    if (integration === undefined || !integration.modes.includes("fusion")) {
+    if (integration === undefined) {
       throw new Error(`unknown fusion tool: ${String(tool)}`);
     }
     const ctx: ToolLaunchContext = {
-      mode: "fusion",
-      gatewayUrl: stack.fusionUrl,
-      modelLabel,
-      fusedModels: ensembles.map((ensemble) => fusionModelId(ensemble.name)),
-      // The detail sub-agent auto-provisioning needs: each launcher defines one
-      // native sub-agent per ensemble from this list (session default first).
-      fusedEnsembles: ensembles.map((ensemble) => ({
-        name: ensemble.name,
-        modelId: fusionModelId(ensemble.name),
-        memberIds: ensemble.models.map((spec) => spec.id),
-        ...(ensemble.judgeModel !== undefined ? { judgeModel: ensemble.judgeModel } : {})
-      })),
-      ...(options.subagents !== undefined ? { subagents: options.subagents } : {}),
-      nativeModels: [...new Set(unionModels.map((spec) => spec.model))],
-      toolArgs,
-      repo,
-      ...(options.ide === true ? { ide: true } : {}),
-      ...(authToken !== undefined ? { authToken } : {}),
-      ...(portless.caCertPath !== undefined ? { caCertPath: portless.caCertPath } : {}),
-      logsDir,
+      spec: {
+        gatewayUrl: stack.fusionUrl,
+        defaultModel: modelLabel,
+        models: [
+          ...ensembles.map((ensemble) => ({ id: fusionModelId(ensemble.name) })),
+          ...[...new Set(unionModels.map((model) => model.model))].map((id) => ({ id }))
+        ],
+        ...(options.subagents === false ? {} : { agentProfiles: fusionAgentProfiles(ensembles) }),
+        args: toolArgs,
+        cwd: repo,
+        ...(options.ide === true ? { ide: true } : {}),
+        ...(authToken !== undefined ? { auth: { token: authToken } } : {}),
+        ...(portless.caCertPath !== undefined
+          ? { tls: { caCertPath: portless.caCertPath } }
+          : {}),
+        logsDir
+      },
       log,
       prepareForPassthrough,
       registerPort: (name, port) => portless.register(name, port),
@@ -1043,7 +1085,7 @@ export async function runFusion(
 /** Selectable fusion tools used by the init wizard. */
 export function toolSelectOptions(): Array<{ value: FusionTool; label: string; hint: string }> {
   return [
-    ...toolRegistry.launchableFusion().map((tool) => ({
+    ...toolRegistry.list().map((tool) => ({
       value: tool.id,
       label: tool.id,
       hint: tool.pickerHint

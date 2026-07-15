@@ -1,20 +1,18 @@
 import type { ChildProcess } from "node:child_process";
 
-import { resolveCursorkitCli } from "@fusionkit/ensemble";
 import { reservePort, spawnLogged, terminate, waitForOutput } from "@routekit/runtime";
 
 import { cursorBridgeEnv } from "./bridge-config.js";
+import { resolveCursorkitCli } from "./cursorkit-path.js";
 
 /**
- * Start the Cursorkit bridge with its local-model backend pointed at the fusion
- * gateway, and resolve once it is listening. Returns the child and its port.
+ * Start the Cursorkit bridge with its local-model backend pointed at the
+ * configured gateway. Resolves once it is listening.
  */
 export async function startCursorBridge(input: {
-  fusionUrl: string;
+  gatewayUrl: string;
   modelLabel: string;
-  /** Every fused ensemble model id (session default first). */
-  fusedModels?: readonly string[];
-  nativeModels?: readonly string[];
+  models?: readonly string[];
   logFile?: string;
   caCertPath?: string;
   log: (line: string) => void;
@@ -25,11 +23,10 @@ export async function startCursorBridge(input: {
   const port = reservation.port;
   const env = cursorBridgeEnv({
     port,
-    gatewayUrl: input.fusionUrl,
+    gatewayUrl: input.gatewayUrl,
     modelName: input.modelLabel,
     providerModel: input.modelLabel,
-    ...(input.fusedModels !== undefined ? { fusedModels: input.fusedModels } : {}),
-    ...(input.nativeModels !== undefined ? { nativeModels: input.nativeModels } : {}),
+    ...(input.models !== undefined ? { models: input.models } : {}),
     ...(input.caCertPath !== undefined ? { caCertPath: input.caCertPath } : {})
   });
   const { serveCli } = resolveCursorkitCli();
@@ -44,6 +41,6 @@ export async function startCursorBridge(input: {
     terminate(proc.child);
     throw error instanceof Error ? error : new Error(String(error));
   }
-  input.log(`fusion: Cursorkit bridge listening on http://127.0.0.1:${port}`);
+  input.log(`Cursorkit bridge listening on http://127.0.0.1:${port}`);
   return { child: proc.child, port };
 }

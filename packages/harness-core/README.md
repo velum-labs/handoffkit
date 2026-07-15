@@ -1,6 +1,6 @@
-# @fusionkit/harness-core
+# @routekit/harness-core
 
-Core harness driver contracts for FusionKit.
+Product-neutral coding-agent harness driver contracts.
 
 ## Architecture
 
@@ -11,7 +11,7 @@ This package defines the shared driver, instance, session, event, error, approva
 Use it when implementing or testing a new coding-agent harness adapter.
 
 ```ts
-import * as fusionkitPackage from "@fusionkit/harness-core";
+import type { HarnessDriver } from "@routekit/harness-core";
 ```
 
 ## Docs

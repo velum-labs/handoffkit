@@ -64,7 +64,7 @@ type FusionOpts = {
 };
 
 const DIRECT_TOOLS: readonly string[] = [
-  ...toolRegistry.launchableLocal().map((tool) => tool.id),
+  ...toolRegistry.list().map((tool) => tool.id),
   "serve"
 ];
 
@@ -335,7 +335,7 @@ function resolveContext(opts: FusionOpts): RunFusionOptions {
 
 export function registerFusion(program: Command): void {
   registerPaletteAction(
-    ...toolRegistry.launchableFusion().map((tool) => ({
+    ...toolRegistry.list().map((tool) => ({
       label: `Run ${tool.id} with fusion`,
       hint: `fusionkit ${tool.id}`,
       argv: [tool.id]

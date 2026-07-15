@@ -2,55 +2,48 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { LOCAL_MODEL_LABEL } from "@fusionkit/tools";
+import type { ServerOptions } from "@opencode-ai/sdk/server";
 import { spawnTool } from "@routekit/runtime";
-import type { FusedEnsembleInfo, ToolLaunchContext } from "@fusionkit/tools";
+import type { ToolLaunchContext, ToolLaunchSpec } from "@routekit/tools";
 
-/**
- * opencode config registering the gateway as an OpenAI-compatible provider.
- * The fused model is listed first (the default) followed by every other fused
- * ensemble model and each native panel model, so opencode's picker offers them
- * all — the gateway routes a native pick to its real provider and a fused pick
- * to that ensemble's panel + judge.
- *
- * With `ensembles`, one `subagent`-mode agent per fusion ensemble is defined so
- * opencode's Task tool (and `@fusion-<name>` mentions) can delegate to any
- * ensemble out of the box. The agent map lives in the ephemeral config — the
- * user's own opencode config is untouched.
- */
-export function opencodeConfig(
-  gatewayUrl: string,
-  model: string,
-  nativeModels: readonly string[] = [],
-  fusedModels: readonly string[] = [],
-  ensembles: readonly FusedEnsembleInfo[] = []
-): Record<string, unknown> {
-  const models: Record<string, { name: string }> = { [model]: { name: model } };
-  for (const id of [...fusedModels, ...nativeModels]) {
-    if (id !== model) models[id] = { name: id };
-  }
-  const agent: Record<string, unknown> = {};
-  for (const ensemble of ensembles) {
-    const members = ensemble.memberIds.join(", ");
-    const flavor = ensemble.modelId === model ? "default " : "";
-    agent[ensemble.modelId] = {
-      mode: "subagent",
-      model: opencodeModelArg(ensemble.modelId),
-      description:
-        `Delegate a task to the ${flavor}"${ensemble.name}" fusion ensemble ` +
-        `(${members} fused by a judge). Use when the user asks for the ${ensemble.name} ensemble.`,
-      prompt:
-        `You run on the fused "${ensemble.name}" ensemble; every reply is already a ` +
-        "panel-and-judge fusion. Answer the delegated task directly and completely."
-    };
-  }
+const PROVIDER_ID = "routekit";
+type OpencodeServerConfig = NonNullable<ServerOptions["config"]>;
+
+export function opencodeModelArg(model: string): string {
+  return `${PROVIDER_ID}/${model}`;
+}
+
+/** Serialize one neutral routed provider for launchers and driver instances. */
+export function opencodeProviderConfig(
+  spec: Pick<ToolLaunchSpec, "gatewayUrl" | "models" | "agentProfiles" | "auth">
+): OpencodeServerConfig {
+  const models = Object.fromEntries(
+    spec.models.flatMap((model) => [
+      [model.id, { name: model.label ?? model.id }],
+      ...(model.aliases ?? []).map((alias) => [alias, { name: alias }])
+    ])
+  );
+  const agent = Object.fromEntries(
+    (spec.agentProfiles ?? []).map((profile) => [
+      profile.id,
+      {
+        mode: "subagent" as const,
+        model: opencodeModelArg(profile.model),
+        description: profile.description,
+        prompt: profile.instructions
+      }
+    ])
+  );
   return {
     $schema: "https://opencode.ai/config.json",
     provider: {
-      [LOCAL_MODEL_LABEL]: {
+      [PROVIDER_ID]: {
         npm: "@ai-sdk/openai-compatible",
-        name: "FusionKit local",
-        options: { baseURL: `${gatewayUrl}/v1` },
+        name: "RouteKit gateway",
+        options: {
+          baseURL: `${spec.gatewayUrl.replace(/\/+$/, "")}/v1`,
+          ...(spec.auth?.token !== undefined ? { apiKey: spec.auth.token } : {})
+        },
         models
       }
     },
@@ -58,34 +51,19 @@ export function opencodeConfig(
   };
 }
 
-/** The opencode `--model provider/model` argument for the gateway provider. */
-export function opencodeModelArg(model: string): string {
-  return `${LOCAL_MODEL_LABEL}/${model}`;
+/** Serialize the neutral model catalog and profiles into OpenCode JSON. */
+export function opencodeConfig(spec: ToolLaunchSpec): OpencodeServerConfig {
+  return opencodeProviderConfig(spec);
 }
 
-/** Boot opencode against the gateway via an ephemeral OPENCODE_CONFIG. */
 export async function launchOpencode(ctx: ToolLaunchContext): Promise<number> {
-  const dir = mkdtempSync(join(tmpdir(), "fusionkit-opencode-"));
+  const dir = mkdtempSync(join(tmpdir(), "routekit-opencode-"));
   ctx.registerDisposer(() => rmSync(dir, { recursive: true, force: true }));
   const configPath = join(dir, "opencode.json");
-  const ensembles = ctx.subagents !== false ? (ctx.fusedEnsembles ?? []) : [];
-  writeFileSync(
-    configPath,
-    JSON.stringify(
-      opencodeConfig(
-        ctx.gatewayUrl,
-        ctx.modelLabel,
-        ctx.nativeModels ?? [],
-        ctx.fusedModels ?? [],
-        ensembles
-      ),
-      null,
-      2
-    )
-  );
-  const args = ctx.toolArgs.includes("--model")
-    ? ctx.toolArgs
-    : ["--model", opencodeModelArg(ctx.modelLabel), ...ctx.toolArgs];
+  writeFileSync(configPath, JSON.stringify(opencodeConfig(ctx.spec), null, 2));
+  const args = ctx.spec.args.includes("--model")
+    ? [...ctx.spec.args]
+    : ["--model", opencodeModelArg(ctx.spec.defaultModel), ...ctx.spec.args];
   ctx.prepareForPassthrough();
-  return await spawnTool("opencode", args, { OPENCODE_CONFIG: configPath }, ctx.repo);
+  return await spawnTool("opencode", args, { OPENCODE_CONFIG: configPath }, ctx.spec.cwd);
 }

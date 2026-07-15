@@ -17,14 +17,14 @@ export type HarnessRequestType = RouteHarnessRequestType;
 
 /**
  * What the session auto-approves without surfacing a request. `all` is the
- * headless panel default (the historical `--force --trust` /
+ * headless automation default (the historical `--force --trust` /
  * `bypassPermissions` behavior, now an explicit policy instead of a baked-in
  * flag); `edits` approves workspace writes but surfaces command execution;
  * `none` surfaces everything.
  */
 export type ApprovalPolicy = { autoApprove: "all" | "edits" | "none" };
 
-export const PANEL_APPROVAL_POLICY: ApprovalPolicy = { autoApprove: "all" };
+export const DEFAULT_AUTOMATION_APPROVAL_POLICY: ApprovalPolicy = { autoApprove: "all" };
 
 /** The policy's verdict for a request type, or undefined to surface it. */
 export function decideApproval(

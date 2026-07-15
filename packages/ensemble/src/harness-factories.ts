@@ -15,7 +15,7 @@ import { createMockHarness } from "./mock.js";
 import { runEnsemble } from "./run.js";
 import type { EnsembleDescriptor, EnsembleRunResult, HarnessAdapter } from "./harness.js";
 import { createFusionKitJudgeSynthesizer } from "./panel-orchestration.js";
-import { requireToolHarnessProvider, resolveToolAdapter } from "./harness-kind-registry.js";
+import { resolveToolAdapter } from "./harness-kind-registry.js";
 import { chatCompletionsUrl, normalizeFusionBackendUrl } from "./unified-url.js";
 import type { CursorHarnessRunnerInput, CursorHarnessRunnerResult, UnifiedHarnessE2EOptions, UnifiedHarnessE2EResult, UnifiedHarnessKind, UnifiedHarnessMatrixResult } from "./unified-types.js";
 export type { CursorHarnessRunnerInput, CursorHarnessRunnerResult, UnifiedHarnessE2EOptions, UnifiedHarnessE2EResult, UnifiedHarnessMatrixResult } from "./unified-types.js";
@@ -32,7 +32,8 @@ export function sideEffectsForHarness(kind: UnifiedHarnessKind): EnsembleDescrip
     case "claude-code":
     case "cursor-acp":
     case "cursor-desktop":
-      return requireToolHarnessProvider(kind).sideEffects(kind);
+    case "opencode":
+      return "writes_workspace";
     default: {
       const exhausted: never = kind;
       throw new Error(`unsupported unified harness: ${String(exhausted)}`);
@@ -97,6 +98,7 @@ function harnessAdapter(kind: UnifiedHarnessKind, options: UnifiedHarnessE2EOpti
     case "claude-code":
     case "cursor-acp":
     case "cursor-desktop":
+    case "opencode":
       return resolveToolAdapter(kind, options);
     default: {
       const exhausted: never = kind;
@@ -119,7 +121,8 @@ export function responseShapeFor(kind: UnifiedHarnessKind): string {
     case "claude-code":
     case "cursor-acp":
     case "cursor-desktop":
-      return requireToolHarnessProvider(kind).responseShape(kind);
+    case "opencode":
+      return "Return a concise coding-agent result with changes and verification evidence.";
     default: {
       const exhausted: never = kind;
       throw new Error(`unsupported unified harness: ${String(exhausted)}`);

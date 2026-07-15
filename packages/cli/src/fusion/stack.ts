@@ -26,7 +26,6 @@ import type {
 } from "@fusionkit/gateway";
 import type { Gateway } from "@routekit/gateway";
 import type { CodexRelayOptions } from "@routekit/accounts";
-import { harnessDriversEnabled } from "@fusionkit/tools";
 import { reservePort, spawnLogged, terminate, waitForHttp } from "@routekit/runtime";
 
 import { startFusionStepGateway } from "../gateway.js";
@@ -920,8 +919,9 @@ export async function startFusionStack(options: StartFusionStackOptions): Promis
     options.harness === "codex" ||
     options.harness === "claude-code" ||
     options.harness === "cursor-acp" ||
-    options.harness === "cursor-desktop";
-  if (driverHarness && harnessDriversEnabled()) {
+    options.harness === "cursor-desktop" ||
+    options.harness === "opencode";
+  if (driverHarness) {
     try {
       const driverEndpoints = await startDriverEndpointGateways({
         models,

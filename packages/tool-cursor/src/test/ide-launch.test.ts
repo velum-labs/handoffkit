@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { test } from "node:test";
 
-import type { ToolLaunchContext } from "@fusionkit/tools";
+import type { ToolLaunchContext } from "@routekit/tools";
 
 import { launchCursor } from "../launch.js";
 
@@ -44,23 +44,24 @@ test("launchCursor --ide drives the desktop launcher with the gateway-wired mode
   const outFile = join(workdir, "ck-invocation.json");
   writeCkStub(stub, outFile);
 
-  const previousOverride = process.env.FUSIONKIT_CURSORKIT_SERVE_CLI;
+  const previousOverride = process.env.ROUTEKIT_CURSORKIT_SERVE_CLI;
   // A leftover BRIDGE_* var that must be scrubbed before spawning the launcher.
   const previousLeak = process.env.BRIDGE_PORT;
-  process.env.FUSIONKIT_CURSORKIT_SERVE_CLI = stub;
+  process.env.ROUTEKIT_CURSORKIT_SERVE_CLI = stub;
   process.env.BRIDGE_PORT = "59999";
   const disposers: Array<() => void | Promise<void>> = [];
   const logs: string[] = [];
   const ctx: ToolLaunchContext = {
-    mode: "fusion",
-    ide: true,
-    gatewayUrl: "http://127.0.0.1:9999",
-    modelLabel: "fusion-panel",
-    nativeModels: ["gpt", "sonnet", "fusion-panel"],
-    toolArgs: [],
-    repo,
-    caCertPath: "/tmp/portless-ca.pem",
-    logsDir,
+    spec: {
+      gatewayUrl: "http://127.0.0.1:9999",
+      defaultModel: "primary",
+      models: [{ id: "primary", aliases: ["primary-alias"] }, { id: "gpt" }, { id: "sonnet" }],
+      args: [],
+      cwd: repo,
+      tls: { caCertPath: "/tmp/portless-ca.pem" },
+      logsDir,
+      ide: true
+    },
     log: (line) => logs.push(line),
     prepareForPassthrough: () => undefined,
     registerPort: (_name, port) => `http://127.0.0.1:${port}`,
@@ -102,7 +103,7 @@ test("launchCursor --ide drives the desktop launcher with the gateway-wired mode
       const models = JSON.parse(invocation.models ?? "[]") as Array<{ id: string; baseUrl: string }>;
       assert.deepEqual(
         models.map((entry) => entry.id),
-        ["fusion-panel", "gpt", "sonnet"]
+        ["primary", "primary-alias", "gpt", "sonnet"]
       );
       assert.ok(models.every((entry) => entry.baseUrl === "http://127.0.0.1:9999/v1"));
     } finally {
@@ -116,9 +117,9 @@ test("launchCursor --ide drives the desktop launcher with the gateway-wired mode
     }
   } finally {
     if (previousOverride === undefined) {
-      delete process.env.FUSIONKIT_CURSORKIT_SERVE_CLI;
+      delete process.env.ROUTEKIT_CURSORKIT_SERVE_CLI;
     } else {
-      process.env.FUSIONKIT_CURSORKIT_SERVE_CLI = previousOverride;
+      process.env.ROUTEKIT_CURSORKIT_SERVE_CLI = previousOverride;
     }
     if (previousLeak === undefined) {
       delete process.env.BRIDGE_PORT;

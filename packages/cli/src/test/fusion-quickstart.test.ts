@@ -10,6 +10,7 @@ import { after, test } from "node:test";
 import {
   codexRelayConfig,
   defaultKeyEnv,
+  fusionAgentProfiles,
   fusionPreambleLines,
   loadEnvFileInto,
   panelMemberSummary,
@@ -19,6 +20,28 @@ import {
 import type { PortlessSession } from "../shared/portless.js";
 
 const SENTINEL = "FUSION_OK";
+
+test("FusionKit authors neutral agent profiles for tool launchers", () => {
+  assert.deepEqual(
+    fusionAgentProfiles([
+      {
+        name: "review",
+        models: [
+          { id: "alpha", model: "opaque-a", provider: "openai" },
+          { id: "beta", model: "opaque-b", provider: "anthropic" }
+        ]
+      }
+    ]),
+    [
+      {
+        id: "fusion-review",
+        model: "fusion-review",
+        description: 'Delegate a task to the "review" compound (alpha, beta).',
+        instructions: 'Answer the delegated task directly using the "review" compound.'
+      }
+    ]
+  );
+});
 
 /**
  * Create a real git repo with a genuinely failing test, so each panel model has

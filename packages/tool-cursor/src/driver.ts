@@ -19,7 +19,7 @@ import type {
 import {
   AsyncChannel,
   HarnessError,
-  PANEL_APPROVAL_POLICY,
+  DEFAULT_AUTOMATION_APPROVAL_POLICY,
   PendingRequests,
   asHarnessError,
   buildChildEnv,
@@ -28,7 +28,7 @@ import {
   runCliCapture,
   terminate,
   writeCachedStatus
-} from "@fusionkit/harness-core";
+} from "@routekit/harness-core";
 import type {
   ApprovalDecision,
   ApprovalPolicy,
@@ -43,7 +43,7 @@ import type {
   SessionHandle,
   SessionTurnInput,
   StartSessionOptions
-} from "@fusionkit/harness-core";
+} from "@routekit/harness-core";
 
 const RESUME_CURSOR_VERSION = 1;
 const DEFAULT_COMMAND = "cursor-agent";
@@ -443,7 +443,7 @@ class CursorInstance implements HarnessInstance {
         child,
         connection,
         sessionId,
-        approvalPolicy: options.approvalPolicy ?? PANEL_APPROVAL_POLICY
+        approvalPolicy: options.approvalPolicy ?? DEFAULT_AUTOMATION_APPROVAL_POLICY
       });
       this.#sessions.add(session);
       return session;

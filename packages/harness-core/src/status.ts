@@ -15,7 +15,7 @@ export type HarnessModelDescriptor = {
 
 /**
  * The probed state of one harness CLI: installed / version / auth / models.
- * Consumed by `doctor`, the panel pre-flight (skip with an actionable reason
+ * Consumed by diagnostics and readiness checks (skip with an actionable reason
  * before any spend), and the front-door launchers.
  */
 export type HarnessStatus = {
@@ -31,7 +31,7 @@ export type HarnessStatus = {
   probeError?: string;
 };
 
-export const DEFAULT_STATUS_CACHE_DIR = join(homedir(), ".fusionkit", "harness-status");
+export const DEFAULT_STATUS_CACHE_DIR = join(homedir(), ".routekit", "harness-status");
 
 /**
  * Read a cached status snapshot. The payload's own `kind` must match the
