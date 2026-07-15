@@ -26,6 +26,7 @@ from __future__ import annotations
 import argparse
 import base64
 import contextlib
+import hashlib
 import json
 import os
 import subprocess
@@ -33,6 +34,7 @@ import time
 from pathlib import Path
 
 import boto3
+from botocore.exceptions import ClientError
 
 NAME = "hypergrid-batch"
 REPO_NAME = "hypergrid-runner"
@@ -103,16 +105,28 @@ def _ensure_bucket(s3, bucket: str, region: str) -> None:
 
 
 def _upload_store(s3, bucket: str) -> int:
-    existing: set[str] = set()
-    paginator = s3.get_paginator("list_objects_v2")
-    for page in paginator.paginate(Bucket=bucket, Prefix="lcb-store/"):
-        existing.update(obj["Key"] for obj in page.get("Contents", []))
     uploaded = 0
     for path in sorted(LCB_LOCAL_STORE.glob("*.json")):
         key = f"lcb-store/{path.name}"
-        if key in existing:
+        digest = hashlib.sha256(path.read_bytes()).hexdigest()
+        try:
+            remote = s3.head_object(Bucket=bucket, Key=key)
+        except ClientError as exc:
+            if exc.response.get("Error", {}).get("Code") not in {
+                "404",
+                "NoSuchKey",
+                "NotFound",
+            }:
+                raise
+            remote = {}
+        if remote.get("Metadata", {}).get("sha256") == digest:
             continue
-        s3.upload_file(str(path), bucket, key)
+        s3.upload_file(
+            str(path),
+            bucket,
+            key,
+            ExtraArgs={"Metadata": {"sha256": digest}},
+        )
         uploaded += 1
     return uploaded
 
