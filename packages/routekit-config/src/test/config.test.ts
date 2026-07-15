@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -26,6 +26,8 @@ test("router config discovery and IO are reusable outside the CLI", () => {
       ],
       defaultEndpointId: "opaque"
     });
+    const persisted = readFileSync(path, "utf8");
+    assert.doesNotMatch(persisted, /cooldownMs|strategy|accounts/);
     const loaded = loadRouterConfig({ cwd: directory, home: directory, env: {} });
     assert.equal(loaded.path, path);
     assert.equal(loaded.config.endpoints[0]?.endpointId, "opaque");

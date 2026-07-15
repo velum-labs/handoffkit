@@ -168,9 +168,11 @@ export function loadRouterConfig(
 
 export function writeRouterConfig(path: string, config: RouterConfig | unknown): string {
   assertNoInlineCredentials(config, path);
-  const validated = parseRouterConfig(config);
+  parseRouterConfig(config);
   mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
-  writeFileAtomic(path, stringifyYaml(validated), { mode: 0o600 });
+  // Persist only fields the caller supplied. Materializing schema defaults in
+  // a project overlay would accidentally override explicit global settings.
+  writeFileAtomic(path, stringifyYaml(config), { mode: 0o600 });
   chmodSync(path, 0o600);
   return path;
 }
@@ -183,7 +185,7 @@ export function updateRouterConfig(
   const draft = structuredClone(current);
   mutate(draft);
   const validated = parseRouterConfig(draft);
-  writeRouterConfig(path, validated);
+  writeRouterConfig(path, draft);
   return validated;
 }
 
