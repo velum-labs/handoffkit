@@ -26,9 +26,12 @@ import { fileURLToPath } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const ledgerPath = join(here, "ledger.json");
+const repoRoot = join(here, "..", "..", "..");
 
 function git(args) {
-  const result = spawnSync("git", args, { encoding: "utf8" });
+  // cwd is pinned to the repo root: `ls-files` pathspecs are cwd-relative,
+  // so running from a subdirectory would silently produce wrong results.
+  const result = spawnSync("git", args, { encoding: "utf8", cwd: repoRoot });
   return {
     ok: result.status === 0,
     stdout: (result.stdout ?? "").trim(),
@@ -114,6 +117,12 @@ if (surfaces.length > 0) {
       if (excludes.some((prefix) => file === prefix || file.startsWith(prefix))) continue;
       unledgered.push(file);
     }
+  } else {
+    warnings.push({
+      type: "scan-failed",
+      page: null,
+      detail: `unledgered scan failed (${listing.stderr}); treat the empty unledgered list as unknown`
+    });
   }
 }
 

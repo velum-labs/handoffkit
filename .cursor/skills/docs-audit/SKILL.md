@@ -51,11 +51,14 @@ node .cursor/skills/docs-audit/ledger-plan.mjs
 - `rotation` — the oldest-verified pages. Re-verify these fully (every claim,
   every link), regardless of hashes: their dependency lists may be incomplete
   or their claims may never have been true.
-- `warnings` — fix `dead-dep` entries (update `dependsOn` for renames) and
-  `missing-page` entries (remove the ledger entry, or restore the page and
-  clean up references to it repo-wide).
+- `warnings` — fix `dead-dep` entries (re-verify the page, then re-point its
+  deps: `ledger-stamp.mjs <page> --deps <new,paths>`) and `missing-page`
+  entries (either restore the page, or clean up references to it repo-wide
+  and drop the entry: `ledger-stamp.mjs --remove <page>`).
 - `unledgered` — new doc pages; verify them, then add entries with
-  `ledger-stamp.mjs --add <page> --deps <paths>`.
+  `ledger-stamp.mjs --add <page> --deps <paths>`. Note the scan skips the
+  excluded archive prefixes (see `ledger.json` config), so a new *living*
+  page under one of them (e.g. `docs/fusion/`) must be added manually.
 
 When invoked for a specific merge (the workflow passes a commit SHA), also
 read that diff directly: `git show <sha> --stat` then the relevant hunks.
@@ -76,8 +79,9 @@ enumerations to run (each caught real drift in the 2026-07 audit):
   [apps/docs/content/docs/reference/commands.mdx](../../../apps/docs/content/docs/reference/commands.mdx).
   Registration ground truth: `packages/cli/src/cli.ts` (`buildProgram()`).
 - **Config fields:** fields parsed in `packages/cli/src/fusion-config.ts` and
-  defaults in `effective-config.ts` versus `docs/configuration.md` and the
-  site's `reference/configuration.mdx` — both directions.
+  defaults in `packages/cli/src/fusion/effective-config.ts` versus
+  `docs/configuration.md` and the site's `reference/configuration.mdx` —
+  both directions.
 - **Docs inventory:** `git ls-files 'docs/**/*.md'` versus the inventory
   tables in `docs/documentation-taxonomy.md` — both directions.
 - **Cited paths:** every repo path a page cites must exist (`git ls-files`);
@@ -124,9 +128,10 @@ Re-stamp every page you verified in this run — fixed or confirmed clean:
 node .cursor/skills/docs-audit/ledger-stamp.mjs <page...>
 ```
 
-Stamp after your doc edits are final so `verifiedCommit` = the commit that
-contains them (in the workflow, stamping happens before the single commit is
-created; that is correct because the stamp lands in the same commit).
+Stamp after your doc edits are final: the ledger records content hashes, and
+the stamp reads the page from the working tree, so stamping before the commit
+is created is correct — the recorded hash matches the committed blob because
+git hashes are content-addressed.
 
 ### 6. Report
 

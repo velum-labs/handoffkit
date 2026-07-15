@@ -1,5 +1,5 @@
 {
-  "$comment": "Docs freshness ledger. Each page records the source paths it documents (dependsOn) and the commit its content was last verified against. Maintained via ledger-stamp.mjs; consumed by ledger-plan.mjs. See SKILL.md.",
+  "$comment": "Docs freshness ledger. Each page records the source paths it documents (dependsOn) and git object hashes of the page + deps captured when the page was last verified (verified). Content-addressed, so stamps survive squash merges. Maintained only via ledger-stamp.mjs; consumed by ledger-plan.mjs. See SKILL.md.",
   "config": {
     "rotationK": 5,
     "surfaces": [
@@ -802,9 +802,30 @@
       "verifiedAt": "2026-07-15"
     },
     "docs/source-symbol-index.md": {
-      "dependsOn": [],
+      "dependsOn": [
+        "packages/cli/src/cli.ts",
+        "packages/ensemble/src/index.ts",
+        "packages/model-gateway/src/index.ts",
+        "packages/kernel/src/index.ts",
+        "packages/protocol/src/index.ts",
+        "packages/adapter-ai-sdk/src/index.ts",
+        "packages/testkit/src/index.ts",
+        "packages/tracing/src/index.ts",
+        "packages/registry/src/index.ts",
+        "pyproject.toml"
+      ],
       "verified": {
-        "docs/source-symbol-index.md": "61e17189ce1d857de277524eac443169894ea936"
+        "docs/source-symbol-index.md": "61e17189ce1d857de277524eac443169894ea936",
+        "packages/cli/src/cli.ts": "d23960e1cd88b66ba7840ef7362189bafe4936b3",
+        "packages/ensemble/src/index.ts": "9cd01158ad18942f429e8d7ec7f22d8881a47e86",
+        "packages/model-gateway/src/index.ts": "b6c21b22b49d3c8237fea631cbd2441541a65ae9",
+        "packages/kernel/src/index.ts": "a74b360fdcd0956cad13fddeed7fb693f7cc4980",
+        "packages/protocol/src/index.ts": "7f1c9d2369d0adf01b20585045d9570f74d7c9ec",
+        "packages/adapter-ai-sdk/src/index.ts": "06b8154c80e46b9a7250dc0243d47c7d02bc9168",
+        "packages/testkit/src/index.ts": "9741b63f39fe23dd4d7ff6eb4797ce63ee2a1b64",
+        "packages/tracing/src/index.ts": "98eb395bf99eeda35053454efd8511767d21d714",
+        "packages/registry/src/index.ts": "74ebb70b1fadfde5084fcbe13e1112f178d8f26c",
+        "pyproject.toml": "ae9a7b9f54ab997fbdc64f57d1f1a9dc4ffedc53"
       },
       "verifiedAt": "2026-07-15"
     },
@@ -823,7 +844,7 @@
     "docs/style-guide.md": {
       "dependsOn": [],
       "verified": {
-        "docs/style-guide.md": "3a081dba09d8c8d1fb32826b0e8927ffa58cdf1a"
+        "docs/style-guide.md": "c76d1025347c7b4511696caa58fd0c8c1a73bb58"
       },
       "verifiedAt": "2026-07-15"
     },

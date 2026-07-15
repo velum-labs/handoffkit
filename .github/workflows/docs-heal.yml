@@ -23,9 +23,9 @@
 # deterministic steps below own commit, push, and PR creation.
 #
 # Loop guard: healer commits land via PRs titled "docs-heal: ..." on
-# docs/heal-* branches; the push trigger skips merge commits whose message
-# starts with that prefix, and paths-ignore keeps ledger-only merges from
-# re-triggering.
+# docs/heal-* branches. The job-level `if` skips pushes whose head commit is a
+# squash of such a PR (message starts with "docs-heal:") or a merge commit of
+# one (message contains "docs/heal-").
 
 name: docs-heal
 
@@ -33,20 +33,24 @@ on:
   push:
     branches: [main]
     paths:
-      # Doc-sensitive sources (trigger scoping only; the skill decides
-      # docs-worthiness and exits early when a change needs no doc update).
-      - "packages/cli/src/**"
-      - "packages/model-gateway/src/**"
-      - "packages/ensemble/src/**"
-      - "packages/kernel/src/**"
-      - "packages/tool-*/src/**"
-      - "packages/tools/src/**"
-      - "python/fusionkit-*/src/**"
-      - "python/hyperkit/src/**"
+      # Doc-sensitive sources and the doc trees themselves (trigger scoping
+      # only; the skill decides docs-worthiness and exits early when a change
+      # needs no doc update). Mirrors the dependsOn roots in the ledger.
+      - "packages/*/src/**"
+      - "python/*/src/**"
       - "spec/**"
       - "release/*.json"
       - "examples/manifest.json"
       - "scripts/**"
+      - "configs/**"
+      - "infra/**"
+      - "docker/**"
+      - ".github/workflows/**"
+      - "docs/**"
+      - "apps/docs/content/docs/**"
+      - "README.md"
+      - "CONTRIBUTING.md"
+      - "SECURITY.md"
   schedule:
     # Weekly full sweep (Monday 06:00 UTC): rotation picks plus anything the
     # push trigger's path filter missed.
@@ -73,10 +77,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     # Canonical repo only (never forks), and skip pushes produced by a
-    # docs-heal PR merging.
+    # docs-heal PR merging — squash merges start with the PR title
+    # ("docs-heal:"), merge commits name the head branch ("docs/heal-").
     if: >-
       github.repository == 'velum-labs/handoffkit' &&
-      (github.event_name != 'push' || !startsWith(github.event.head_commit.message, 'docs-heal:'))
+      (github.event_name != 'push' ||
+        (!startsWith(github.event.head_commit.message, 'docs-heal:') &&
+         !contains(github.event.head_commit.message, 'docs/heal-')))
     steps:
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -131,6 +138,10 @@ jobs:
           TRIGGER_SHA: ${{ github.sha }}
           PUSH_BEFORE: ${{ github.event.before }}
           REPORT_PATH: ${{ runner.temp }}/docs-heal-report.md
+          # Belt and braces against interactive hangs: git never prompts, and
+          # anything that shells out to an editor gets a no-op.
+          GIT_TERMINAL_PROMPT: "0"
+          GIT_EDITOR: "true"
         run: |
           if [ -z "$CURSOR_API_KEY" ]; then
             echo "CURSOR_API_KEY secret is not configured" >&2
@@ -156,31 +167,61 @@ jobs:
           cursor-agent -p "$(cat /tmp/docs-heal-prompt.txt)" \
             --model "$CURSOR_MODEL" \
             --force \
+            --trust \
             --output-format text
 
       - name: Validate
+        env:
+          TRIGGER_SHA: ${{ github.sha }}
         run: |
+          # If the agent committed despite instructions, recover the work into
+          # the working tree (mixed reset) instead of silently losing it.
+          git reset -q "$TRIGGER_SHA"
           if [ -z "$(git status --porcelain)" ]; then
             echo "no doc changes produced; skipping validation"
             exit 0
           fi
           pnpm check
+          if ! git diff --quiet HEAD -- apps/docs/content; then
+            echo "MDX changed; building the docs site"
+            (cd apps/docs && pnpm install --frozen-lockfile && pnpm build)
+          fi
 
       - name: Publish draft PR
         env:
           GH_TOKEN: ${{ secrets.DOCS_HEAL_PR_TOKEN || github.token }}
+          HAS_PR_TOKEN: ${{ secrets.DOCS_HEAL_PR_TOKEN != '' }}
           REPORT_PATH: ${{ runner.temp }}/docs-heal-report.md
           RUN_ID: ${{ github.run_id }}
+          TRIGGER_SHA: ${{ github.sha }}
         run: |
+          # Mixed reset: recover any agent-made commits into the working tree
+          # with a clean index, so the scoped add below is the only gate that
+          # decides what ships.
+          git reset -q "$TRIGGER_SHA"
           if [ -z "$(git status --porcelain)" ]; then
             echo "nothing to publish"
             exit 0
+          fi
+          if [ "$HAS_PR_TOKEN" != "true" ]; then
+            echo "::warning::DOCS_HEAL_PR_TOKEN is not set; falling back to GITHUB_TOKEN, so the draft PR will not trigger CI checks"
+          fi
+          # Stage doc surfaces + the ledger only; anything else the agent
+          # touched is a bug we refuse to ship.
+          git add -A -- docs 'apps/docs/content/docs' '.cursor/skills/docs-audit/ledger.json' \
+            README.md CONTRIBUTING.md SECURITY.md \
+            ':(glob)packages/*/README.md' ':(glob)python/*/README.md' \
+            ':(glob)apps/*/README.md' ':(glob)infra/*/README.md' ':(glob)docker/*/README.md'
+          LEFTOVER="$(git status --porcelain | grep -v '^[AMDRC] ' || true)"
+          if [ -n "$LEFTOVER" ]; then
+            echo "agent modified files outside the documentation surfaces:" >&2
+            echo "$LEFTOVER" >&2
+            exit 1
           fi
           BRANCH="docs/heal-${RUN_ID}"
           git config user.name "docs-heal"
           git config user.email "docs-heal@users.noreply.github.com"
           git checkout -B "$BRANCH"
-          git add -A
           git commit -m "docs-heal: automated documentation repair (run ${RUN_ID})"
           git push "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "HEAD:${BRANCH}"
           if [ ! -f "$REPORT_PATH" ]; then

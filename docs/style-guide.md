@@ -1,12 +1,15 @@
 # Documentation style guide
 
 This page is the format specification for every documentation surface in the
-repository. It codifies the patterns the docs already follow so that humans,
-interactive agents, and the automated docs healer (see
+repository. It codifies the patterns the living docs predominantly follow so
+that humans, interactive agents, and the automated docs healer (see
 [`.cursor/skills/docs-audit/SKILL.md`](../.cursor/skills/docs-audit/SKILL.md))
 produce consistent output. It absorbs the former conventions bullets in
 [`docs/README.md`](README.md) and extends the review checklist in
 [Documentation taxonomy](documentation-taxonomy.md).
+
+Scope: these rules bind new writing and edits to living pages. Design-archive
+and legacy pages are exempt — do not retrofit them.
 
 ## Common core (all surfaces)
 
