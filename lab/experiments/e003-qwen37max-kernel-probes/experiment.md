@@ -1,7 +1,7 @@
 ---
 id: e003-qwen37max-kernel-probes
 owner: alen
-status: locked
+status: running
 benchmark: livecodebench
 claim: "multi-sample and pair kernels on the qwen3.7-max frontier"
 sweep_id: e003-qwen37max-kernel-probes
