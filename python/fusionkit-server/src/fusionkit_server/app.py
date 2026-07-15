@@ -741,7 +741,7 @@ def _request_extra(
 ) -> dict[str, object] | None:
     """Provider-specific controls that must survive every model-call stage."""
 
-    extra = {
+    extra: dict[str, object] = {
         key: value
         for key, value in {
             "provider": request.provider,
