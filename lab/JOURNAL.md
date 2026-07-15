@@ -1,6 +1,16 @@
 # Experiment Journal
 
 ## 2026-07-15 — alen (via agent)
+Grading audit after e003's suspicious zero-headroom result: the 8 s wall clock
+undercut the 12 s CPU rlimit (environment-sensitive TLE of correct code), and
+12 manifest instances are exact-match-unfair special-judge problems. A
+zero-spend 30 s re-grade flipped only 10/478 unresolved shards, symmetrically:
+e002 parity and e003 no-headroom conclusions both survive. Adapter v2 (30 s
+wall, parallel sample draws, version bump) ships with
+manifests/special_judge_exclusions.txt — use both for all future sweeps;
+v1/v2 shard results must not be mixed in paired tests.
+
+## 2026-07-15 — alen (via agent)
 e003 analyzed at ~$22: every kernel (exec-select, repair, self-MoA,
 judge-select, judge-synth on q37+r1) reproduced solo qwen3.7-max's exact pass
 pattern — zero discordant wins at rung 25, all p=1.0. Fusion has no headroom

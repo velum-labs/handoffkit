@@ -12,7 +12,8 @@ Harness-side kernels are cell coordinates via ``Cell.params``:
   passing the most PUBLIC tests, grade on PRIVATE -- leakage-free) |
   ``public-exec-repair`` (public-exec + one failure-directed repair round when
   the winner still fails a public test).
-- ``max_tokens`` (default 16384), ``test_timeout_s`` (default 8.0),
+- ``max_tokens`` (default 16384), ``test_timeout_s`` (default 30.0 wall;
+  the 12 s CPU rlimit is the binding, environment-independent limit),
   ``model`` (override the target's served model id, e.g. a fusionkit
   passthrough endpoint id).
 
@@ -41,6 +42,7 @@ import tempfile
 import time
 import zlib
 from collections.abc import Callable, Sequence
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
@@ -307,7 +309,9 @@ class LivecodebenchGrader:
 
 class LivecodebenchAdapter:
     name = "livecodebench"
-    version = "1"
+    # v2: fair grading wall clock (30 s >= the 12 s CPU rlimit) and parallel
+    # sample draws. Grading semantics changed, so shard identity must too.
+    version = "2"
 
     def manifest(self, ref: str) -> TextManifest:
         return TextManifest(ref)
@@ -342,7 +346,9 @@ class LivecodebenchAdapter:
         temps = [float(t) for t in params.get("temps", [0.2])] or [0.2]
         selection = str(params.get("selection", "first"))
         max_tokens = int(params.get("max_tokens", 16384))
-        timeout_s = float(params.get("test_timeout_s", 8.0))
+        # Wall clock must exceed the CPU rlimit or grading becomes a lottery on
+        # slow hosts: a CPU-bound solution must always get its full CPU budget.
+        timeout_s = float(params.get("test_timeout_s", 30.0))
         model = str(params.get("model", target.model))
         # Multi-stage SUTs (panel -> judge -> synth) legitimately take much
         # longer per request than a single model; retrying a timed-out fused
@@ -353,8 +359,7 @@ class LivecodebenchAdapter:
         client = _Client(target.base_url, _resolve_api_key(target.base_url, params))
         sandbox = _Sandbox()
 
-        samples: list[dict[str, Any]] = []
-        for index in range(n_samples):
+        def draw_sample(index: int) -> dict[str, Any]:
             temperature = temps[index % len(temps)]
             completion = client.complete(
                 model,
@@ -368,21 +373,28 @@ class LivecodebenchAdapter:
             public = run_tests(
                 sandbox, code, public_tests, timeout_s=timeout_s, stop_on_failure=False
             )
-            samples.append(
-                {
-                    "index": index,
-                    "temperature": temperature,
-                    "code": code,
-                    "finish_reason": completion["finish_reason"],
-                    "prompt_tokens": completion["prompt_tokens"],
-                    "completion_tokens": completion["completion_tokens"],
-                    "cost_usd": completion["cost_usd"],
-                    "public_passed": public["passed"],
-                    "public_total": public["total"],
-                    "public_all": public["all_passed"],
-                    "public_failure": public["failure"],
-                }
-            )
+            return {
+                "index": index,
+                "temperature": temperature,
+                "code": code,
+                "finish_reason": completion["finish_reason"],
+                "prompt_tokens": completion["prompt_tokens"],
+                "completion_tokens": completion["completion_tokens"],
+                "cost_usd": completion["cost_usd"],
+                "public_passed": public["passed"],
+                "public_total": public["total"],
+                "public_all": public["all_passed"],
+                "public_failure": public["failure"],
+            }
+
+        # Samples are independent: draw them concurrently so an n-sample cell's
+        # wall clock tracks the slowest single completion, not their sum
+        # (sequential 3x1800 s draws overran the 3600 s Batch limit in e003).
+        if n_samples == 1:
+            samples = [draw_sample(0)]
+        else:
+            with ThreadPoolExecutor(max_workers=n_samples) as pool:
+                samples = list(pool.map(draw_sample, range(n_samples)))
 
         if selection == "first":
             selected = 0
