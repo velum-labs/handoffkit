@@ -1,12 +1,12 @@
 ---
 id: e004-truncation-fair-rescreen
 owner: alen
-status: running
+status: analyzed
 benchmark: livecodebench
 claim: "truncation-fair open floor and complementarity for the seven capped models"
 sweep_id: e004-truncation-fair-rescreen
 budget_usd: 45
-spent_usd: 0
+spent_usd: 43.93
 created: 2026-07-15
 updated: 2026-07-15
 ---
@@ -42,7 +42,24 @@ corrected floor still saturates within 2pp with no headroom, the compound
 search on this slice is dead — propose the holdout parity final instead.
 
 ## Results
+Corrected floor (special-judge excluded, v2 grading): dsv4pro 62.5%
+[52.9%, 71.2%], kimi26 60.4%, r1 52.7% (74 graded; 32 wall-clock timeouts),
+kimikt 40.2%, glm52 39.8%, nemotron3s 25.7%. Truncation had understated
+dsv4pro by ~25pp, kimi26 by ~35pp, r1 by ~33pp — but every model remains
+significantly below solo qwen3.7-max 76.0% (all McNemar p<=0.003). Union
+headroom over q37max: +0.0 to +1.4pp, far under the preregistered 5pp bar.
+q37max-vs-GPT-5.5 parity on the cleaned slice: 0/1 discordants, p=1.0
+(n=53). glm52/kimikt still truncate 26-40% even at 64k. Spend $43.93 of $45
+(qwen3t trimmed at the ceiling).
 
 ## Decision
+The corrected complementarity gate fails everywhere: no model or pair offers
+>=5pp union headroom over solo qwen3.7-max, so compound search on this slice
+is dead per the preregistered rule. The campaign's remaining claim is the
+parity result; take it to the locked holdout as the final (from the reserve).
 
 ## Follow-ups
+- claimed: alen — e005 holdout final: solo q37max vs both anchors, once, from
+  the $60 reserve, exclusions applied
+- up-for-grabs — qwen3t 64k re-screen (trimmed here) if anyone needs its floor
+- up-for-grabs — reasoning-aware truncation handling for glm52/kimikt (>64k)
