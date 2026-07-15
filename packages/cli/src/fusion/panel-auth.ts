@@ -6,7 +6,7 @@
  * authenticates - a Claude Code / Codex subscription, an API key, or a local
  * model - and any of these can be mixed in one panel.
  */
-import { catalogDefaultModel, defaultKeyEnv } from "@fusionkit/registry";
+import { catalogDefaultModel, defaultKeyEnv } from "@routekit/registry";
 
 import { detectHost } from "./local-catalog.js";
 import type { HostInfo } from "./local-catalog.js";

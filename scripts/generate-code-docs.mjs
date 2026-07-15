@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { dirname, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
@@ -53,12 +53,11 @@ function summarizeExport(statement) {
 }
 
 function tsEntryDocs() {
-  const glob = spawnSync("git", ["ls-files", "packages/*/src/index.ts"], {
-    cwd: root,
-    encoding: "utf8"
-  });
-  if (glob.status !== 0) throw new Error(glob.stderr || "failed to list TypeScript entry points");
-  const files = glob.stdout.trim().split("\n").filter(Boolean).sort();
+  const files = readdirSync(`${root}/packages`, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => `packages/${entry.name}/src/index.ts`)
+    .filter((file) => existsSync(`${root}/${file}`))
+    .sort();
   const sections = [];
   for (const file of files) {
     const source = read(`${root}/${file}`);

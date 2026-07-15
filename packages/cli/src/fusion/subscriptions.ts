@@ -9,7 +9,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { homedir, platform, userInfo } from "node:os";
 import { join } from "node:path";
 
-import { SUBSCRIPTIONS } from "@fusionkit/registry";
+import { SUBSCRIPTIONS } from "@routekit/registry";
 import { superviseSpawn } from "@fusionkit/runtime-utils";
 
 import type { PanelAuthMode } from "./env.js";

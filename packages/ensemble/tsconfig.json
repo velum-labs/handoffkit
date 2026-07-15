@@ -21,6 +21,9 @@
       "path": "../protocol"
     },
     {
+      "path": "../contracts"
+    },
+    {
       "path": "../runtime-utils"
     },
     {

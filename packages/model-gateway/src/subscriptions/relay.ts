@@ -1,6 +1,6 @@
 import type { IncomingHttpHeaders } from "node:http";
 
-import { providerDefaultBaseUrl, subscriptionInfo } from "@fusionkit/registry";
+import { providerDefaultBaseUrl, subscriptionInfo } from "@routekit/registry";
 import { trimTrailingSlashes } from "@fusionkit/runtime-utils";
 
 import type { AnthropicRequest } from "../adapters/anthropic.js";

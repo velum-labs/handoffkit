@@ -12,8 +12,9 @@ import { stringify } from "yaml";
 
 import { KernelBackend } from "@fusionkit/ensemble";
 import type { EnsembleModel, PanelTrust, UnifiedHarnessKind } from "@fusionkit/ensemble";
-import { fusionModelId, providerForAuthMode } from "@fusionkit/registry";
+import { fusionModelId } from "@fusionkit/registry";
 import { createChatNarrationWriter, MlxBackend, OpenAiBackend, startGateway } from "@fusionkit/model-gateway";
+import { providerForAuthMode } from "@routekit/registry";
 import type {
   Gateway,
   LocalComputePricing,

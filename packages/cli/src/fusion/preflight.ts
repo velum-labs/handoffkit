@@ -3,7 +3,7 @@
  * the tool, panel, and options. The actual prerequisite check lives in
  * `../shared/preflight.ts`; this computes what to check.
  */
-import { providerKeyProbe } from "@fusionkit/registry";
+import { providerKeyProbe } from "@routekit/registry";
 
 import { toolRegistry } from "../tools.js";
 

@@ -26,9 +26,9 @@ importers:
       '@fusionkit/adapter-ai-sdk':
         specifier: workspace:*
         version: link:../../packages/adapter-ai-sdk
-      '@fusionkit/registry':
+      '@routekit/registry':
         specifier: workspace:*
-        version: link:../../packages/registry
+        version: link:../../packages/routekit-registry
       ai:
         specifier: 6.0.200
         version: 6.0.200(zod@4.4.3)
@@ -110,6 +110,12 @@ importers:
       '@fusionkit/workspace':
         specifier: workspace:*
         version: link:../workspace
+      '@routekit/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@routekit/registry':
+        specifier: workspace:*
+        version: link:../routekit-registry
       commander:
         specifier: 14.0.3
         version: 14.0.3
@@ -165,6 +171,8 @@ importers:
         specifier: 4.0.0
         version: 4.0.0(@types/react@19.2.17)
 
+  packages/contracts: {}
+
   packages/ensemble:
     dependencies:
       '@fusionkit/adapter-ai-sdk':
@@ -191,6 +199,9 @@ importers:
       '@fusionkit/workspace':
         specifier: workspace:*
         version: link:../workspace
+      '@routekit/contracts':
+        specifier: workspace:*
+        version: link:../contracts
       '@velum-labs/cursorkit':
         specifier: 0.2.0
         version: 0.2.0
@@ -203,12 +214,9 @@ importers:
       '@ai-sdk/provider':
         specifier: 4.0.2
         version: 4.0.2
-      '@fusionkit/protocol':
+      '@routekit/registry':
         specifier: workspace:*
-        version: link:../protocol
-      '@fusionkit/registry':
-        specifier: workspace:*
-        version: link:../registry
+        version: link:../routekit-registry
       ai:
         specifier: 6.0.200
         version: 6.0.200(zod@4.4.3)
@@ -221,6 +229,9 @@ importers:
       '@fusionkit/runtime-utils':
         specifier: workspace:*
         version: link:../runtime-utils
+      '@routekit/contracts':
+        specifier: workspace:*
+        version: link:../contracts
       zod:
         specifier: 4.4.3
         version: 4.4.3
@@ -247,13 +258,25 @@ importers:
       '@fusionkit/tracing':
         specifier: workspace:*
         version: link:../tracing
+      '@routekit/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@routekit/registry':
+        specifier: workspace:*
+        version: link:../routekit-registry
       zod:
         specifier: 4.4.3
         version: 4.4.3
 
-  packages/protocol: {}
+  packages/protocol:
+    dependencies:
+      '@routekit/contracts':
+        specifier: workspace:*
+        version: link:../contracts
 
   packages/registry: {}
+
+  packages/routekit-registry: {}
 
   packages/runtime-utils: {}
 
@@ -280,12 +303,15 @@ importers:
       '@fusionkit/protocol':
         specifier: workspace:*
         version: link:../protocol
-      '@fusionkit/registry':
-        specifier: workspace:*
-        version: link:../registry
       '@fusionkit/tools':
         specifier: workspace:*
         version: link:../tools
+      '@routekit/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@routekit/registry':
+        specifier: workspace:*
+        version: link:../routekit-registry
       zod:
         specifier: 4.4.3
         version: 4.4.3
@@ -308,9 +334,6 @@ importers:
       '@fusionkit/protocol':
         specifier: workspace:*
         version: link:../protocol
-      '@fusionkit/registry':
-        specifier: workspace:*
-        version: link:../registry
       '@fusionkit/tools':
         specifier: workspace:*
         version: link:../tools
@@ -320,6 +343,12 @@ importers:
       '@openai/codex-sdk':
         specifier: 0.142.5
         version: 0.142.5
+      '@routekit/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@routekit/registry':
+        specifier: workspace:*
+        version: link:../routekit-registry
       smol-toml:
         specifier: 1.7.0
         version: 1.7.0
@@ -338,12 +367,12 @@ importers:
       '@fusionkit/protocol':
         specifier: workspace:*
         version: link:../protocol
-      '@fusionkit/registry':
-        specifier: workspace:*
-        version: link:../registry
       '@fusionkit/tools':
         specifier: workspace:*
         version: link:../tools
+      '@routekit/contracts':
+        specifier: workspace:*
+        version: link:../contracts
       '@zed-industries/agent-client-protocol':
         specifier: 0.4.5
         version: 0.4.5
@@ -380,6 +409,9 @@ importers:
       '@fusionkit/runtime-utils':
         specifier: workspace:*
         version: link:../runtime-utils
+      '@routekit/contracts':
+        specifier: workspace:*
+        version: link:../contracts
 
   packages/tracing:
     dependencies:
@@ -416,6 +448,9 @@ importers:
       '@fusionkit/protocol':
         specifier: workspace:*
         version: link:../protocol
+      '@routekit/contracts':
+        specifier: workspace:*
+        version: link:../contracts
       minimatch:
         specifier: 10.2.5
         version: 10.2.5

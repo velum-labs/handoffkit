@@ -7,7 +7,7 @@
  * stdin the builder falls back to the default cloud panel.
  */
 import type { LocalModelInfo } from "@fusionkit/adapter-ai-sdk";
-import { defaultKeyEnv as registryDefaultKeyEnv, providerDiscovery } from "@fusionkit/registry";
+import { defaultKeyEnv as registryDefaultKeyEnv, providerDiscovery } from "@routekit/registry";
 
 import {
   autocompleteText,

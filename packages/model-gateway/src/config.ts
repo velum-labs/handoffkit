@@ -1,4 +1,4 @@
-import { GATEWAY_DEFAULT_MLX_MODEL } from "@fusionkit/registry";
+import { GATEWAY_DEFAULT_MLX_MODEL } from "@routekit/registry";
 
 import { OpenAiBackend } from "./backend.js";
 import type { Backend } from "./backend.js";

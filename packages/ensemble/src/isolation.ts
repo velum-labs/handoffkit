@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 
-import { hashCanonicalSha256 } from "@fusionkit/protocol";
+import { hashCanonicalSha256 } from "@routekit/contracts";
 import {
   CANDIDATE_ISOLATION_DEFAULTS,
   definedEnv,

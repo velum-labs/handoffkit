@@ -16,7 +16,7 @@ import {
   subscriptionInfo,
   type SubscriptionInfo,
   type SubscriptionMode
-} from "@fusionkit/registry";
+} from "@routekit/registry";
 
 import type { SubscriptionCredential } from "./types.js";
 

@@ -35,7 +35,7 @@ import type {
   SubscriptionSelectionStrategy
 } from "@fusionkit/model-gateway/subscriptions";
 import { DEFAULT_ENSEMBLE_NAME } from "@fusionkit/registry";
-import type { SubscriptionMode } from "@fusionkit/registry";
+import type { SubscriptionMode } from "@routekit/registry";
 
 import type { PanelTrust } from "@fusionkit/ensemble";
 

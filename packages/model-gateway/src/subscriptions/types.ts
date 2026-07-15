@@ -1,4 +1,4 @@
-import type { SubscriptionMode } from "@fusionkit/registry";
+import type { SubscriptionMode } from "@routekit/registry";
 
 import type { FailoverCategory } from "../fusion-types.js";
 

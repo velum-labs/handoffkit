@@ -1,5 +1,5 @@
 import { contractHash, verifyContractSignature } from "./contract.js";
-import { hashCanonical } from "./hash.js";
+import { hashCanonical } from "@routekit/contracts";
 import { keyIdFromPublicPem, signData, verifyData } from "./keys.js";
 import { verifyChain } from "./chain.js";
 import type {

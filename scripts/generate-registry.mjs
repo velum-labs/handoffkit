@@ -3,12 +3,14 @@
  *
  * The JSON files under spec/registry/ are the single source of truth for
  * provider metadata (base URLs, key env vars, probes, discovery), subscription
- * auth metadata (Claude Code / Codex), the fusion model identity, the
- * cloud/local model catalogs, model-family capability quirks, and default
- * pricing. This script embeds that data into:
+ * auth metadata (Claude Code / Codex), cloud/local model catalogs,
+ * model-family capability quirks, default pricing, and FusionKit-only model
+ * identities/panel presets. This script keeps the ownership boundary explicit:
  *
- *   - packages/registry/src/generated/data.ts   (the @fusionkit/registry package)
+ *   - packages/routekit-registry/src/generated/data.ts (@routekit/registry)
+ *   - packages/registry/src/generated/data.ts          (@fusionkit/registry)
  *   - python/fusionkit-core/src/fusionkit_core/_generated/registry_data.py
+ *   - python/fusionkit-core/src/fusionkit_core/_generated/fusion_registry_data.py
  *
  * Run `node scripts/generate-registry.mjs` after editing any spec/registry
  * file; `--check` verifies the generated files are current (used by pnpm check).
@@ -16,24 +18,36 @@
 import { mkdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
 import { dirname } from "node:path";
 
-const SPEC_FILES = [
+const NEUTRAL_SPEC_FILES = [
   ["providers", "spec/registry/providers.json"],
   ["subscriptions", "spec/registry/subscriptions.json"],
-  ["fusion", "spec/registry/fusion.json"],
   ["modelCatalog", "spec/registry/model-catalog.json"],
   ["modelCapabilities", "spec/registry/model-capabilities.json"],
   ["pricing", "spec/registry/pricing.json"],
   ["localCatalog", "spec/registry/local-catalog.json"]
 ];
+const FUSION_SPEC_FILES = [["fusion", "spec/registry/fusion.json"]];
 
-const TS_TARGET = "packages/registry/src/generated/data.ts";
-const PY_TARGET = "python/fusionkit-core/src/fusionkit_core/_generated/registry_data.py";
+const TARGETS = [
+  {
+    files: NEUTRAL_SPEC_FILES,
+    exportName: "REGISTRY",
+    ts: "packages/routekit-registry/src/generated/data.ts",
+    py: "python/fusionkit-core/src/fusionkit_core/_generated/registry_data.py"
+  },
+  {
+    files: FUSION_SPEC_FILES,
+    exportName: "FUSION_REGISTRY",
+    ts: "packages/registry/src/generated/data.ts",
+    py: "python/fusionkit-core/src/fusionkit_core/_generated/fusion_registry_data.py"
+  }
+];
 
 const checkMode = process.argv.includes("--check");
 
-function loadRegistry() {
+function loadRegistry(specFiles) {
   const registry = {};
-  for (const [key, path] of SPEC_FILES) {
+  for (const [key, path] of specFiles) {
     const parsed = JSON.parse(readFileSync(path, "utf8"));
     const section = parsed[key];
     if (section === undefined) {
@@ -48,9 +62,9 @@ const HEADER_NOTE =
   "GENERATED FILE - DO NOT EDIT. Source of truth: spec/registry/*.json. " +
   "Regenerate with `node scripts/generate-registry.mjs`.";
 
-function renderTs(registry) {
+function renderTs(registry, exportName) {
   const body = JSON.stringify(registry, null, 2);
-  return `// ${HEADER_NOTE}\n\nexport const REGISTRY = ${body};\n`;
+  return `// ${HEADER_NOTE}\n\nexport const ${exportName} = ${body};\n`;
 }
 
 /** Serialize a JSON value as a Python literal (True/False/None instead of JSON). */
@@ -74,7 +88,7 @@ function toPython(value, indent) {
   return `{\n${items.join(",\n")},\n${pad}}`;
 }
 
-function renderPy(registry) {
+function renderPy(registry, exportName) {
   return [
     `# ${HEADER_NOTE}`,
     "# ruff: noqa: E501",
@@ -82,7 +96,7 @@ function renderPy(registry) {
     "",
     "from typing import Any, Final",
     "",
-    `REGISTRY: Final[dict[str, Any]] = ${toPython(registry, 0)}`,
+    `${exportName}: Final[dict[str, Any]] = ${toPython(registry, 0)}`,
     ""
   ].join("\n");
 }
@@ -108,9 +122,11 @@ function apply(path, content) {
   console.log(`wrote ${path}`);
 }
 
-const registry = loadRegistry();
-apply(TS_TARGET, renderTs(registry));
-apply(PY_TARGET, renderPy(registry));
+for (const target of TARGETS) {
+  const registry = loadRegistry(target.files);
+  apply(target.ts, renderTs(registry, target.exportName));
+  apply(target.py, renderPy(registry, target.exportName));
+}
 
 if (checkMode && process.exitCode === undefined) {
   console.log("registry check passed");

@@ -1,7 +1,7 @@
 import { mkdirSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
 
-import type { SubscriptionMode } from "@fusionkit/registry";
+import type { SubscriptionMode } from "@routekit/registry";
 
 import {
   defaultSubscriptionAccountDirectory,

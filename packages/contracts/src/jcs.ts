@@ -1,14 +1,8 @@
 /**
- * RFC 8785 (JSON Canonicalization Scheme) subset sufficient for FusionKit
- * protocol objects: members sorted by UTF-16 code units, ES number
- * serialization (delegated to JSON.stringify, which implements the
- * ECMA-262 algorithm JCS mandates), and no insignificant whitespace.
- *
- * Kept dependency-free on purpose: the offline verifier's canonicalizer is
- * the most trust-critical code in the repo, so it is auditable in full here
- * rather than delegated to a third-party canonicalization library.
+ * RFC 8785 (JSON Canonicalization Scheme) subset for protocol objects: members
+ * sorted by UTF-16 code units, ES number serialization, and no insignificant
+ * whitespace.
  */
-
 export type JsonValue =
   | null
   | boolean
@@ -26,9 +20,6 @@ export function canonicalize(value: unknown): string {
       if (!Number.isFinite(value)) {
         throw new Error("non-finite numbers are not representable in JCS");
       }
-      // RFC 8785 specifies ECMAScript Number::toString for number output,
-      // which is exactly what JSON.stringify produces for a finite number;
-      // delegating here is correct, not a shortcut.
       return JSON.stringify(value);
     }
     case "string":

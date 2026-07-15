@@ -1,13 +1,15 @@
 import { writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { isFiniteK } from "@fusionkit/protocol";
-import type { JsonValue, ModelFusionStatus } from "@fusionkit/protocol";
+import type { ModelFusionStatus } from "@fusionkit/protocol";
 import { ensureRunOutputDir, runCliCapture } from "@fusionkit/runtime-utils";
 import { envOf } from "@fusionkit/tracing";
-import { deriveSourceRepo } from "./source-repo.js";
 import { gitText } from "@fusionkit/workspace";
+import type { JsonValue } from "@routekit/contracts";
+
 import { createAgentHarness } from "./agent.js";
 import { createCommandHarness } from "./command.js";
+import { deriveSourceRepo } from "./source-repo.js";
 import { resolveCursorkitCli } from "./cursorkit-path.js";
 import { createMockHarness } from "./mock.js";
 import { runEnsemble } from "./run.js";

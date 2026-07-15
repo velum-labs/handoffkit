@@ -7,12 +7,12 @@ import {
   toolSideEffectClassFromModelFusion
 } from "@fusionkit/protocol";
 import type {
-  JsonValue,
   ToolCallPlanV1,
   ToolExecutionRecordV1,
   ToolExecutionResult,
   ToolPolicyDecision
 } from "@fusionkit/protocol";
+import type { JsonValue } from "@routekit/contracts";
 
 import type { ToolExecutor } from "./tool-executor.js";
 

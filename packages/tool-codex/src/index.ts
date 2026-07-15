@@ -1,7 +1,7 @@
 /**
  * Codex tool integration entry point. It exposes the Codex launcher and ensemble harness adapter used by the FusionKit CLI.
  */
-import { smokeModelForTool } from "@fusionkit/registry";
+import { smokeModelForTool } from "@routekit/registry";
 import {
   FUSION_PANEL_MODEL,
   harnessDriversEnabled,

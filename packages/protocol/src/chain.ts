@@ -1,4 +1,4 @@
-import { hashCanonical } from "./hash.js";
+import { hashCanonical } from "@routekit/contracts";
 import type { ChainedEvent, RunEvent } from "./types.js";
 
 function eventHash(input: {

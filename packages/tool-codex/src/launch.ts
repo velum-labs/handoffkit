@@ -5,7 +5,7 @@ import { join } from "node:path";
 
 import { stringify as tomlStringify } from "smol-toml";
 
-import { SUBSCRIPTIONS } from "@fusionkit/registry";
+import { SUBSCRIPTIONS } from "@routekit/registry";
 import {
   deriveFusedSubagents,
   fusedSubagentDescription,

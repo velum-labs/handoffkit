@@ -5,22 +5,22 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import {
-  artifactHash,
   assertModelCallRecordV1,
-  MODEL_FUSION_SCHEMA_BUNDLE_HASH,
-  requestHash,
-  responseHash
+  MODEL_FUSION_SCHEMA_BUNDLE_HASH
 } from "@fusionkit/protocol";
-
-import { decodeBufferedSse } from "./sse/parse.js";
 import type {
   ModelCallRecordV1,
-  ModelFusionChatMessage,
-  ModelFusionError,
-  ModelFusionStatus,
-  JsonValue,
-  ModelFusionUsage
+  ModelFusionStatus
 } from "@fusionkit/protocol";
+import { artifactHash, requestHash, responseHash } from "@routekit/contracts";
+import type {
+  JsonValue,
+  ModelChatMessage,
+  ModelUsage,
+  ProviderError
+} from "@routekit/contracts";
+
+import { decodeBufferedSse } from "./sse/parse.js";
 
 /** The wire dialect a request arrived on. */
 export type GatewayDialect = "openai-chat" | "anthropic-messages" | "openai-responses";
@@ -131,12 +131,12 @@ function stringValue(value: unknown): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
 }
 
-function requestMessages(body: unknown): ModelFusionChatMessage[] {
+function requestMessages(body: unknown): ModelChatMessage[] {
   const obj = asObject(body);
   const messages = obj?.messages;
   if (Array.isArray(messages)) {
     const projected = messages
-      .map((message): ModelFusionChatMessage | undefined => {
+      .map((message): ModelChatMessage | undefined => {
         const item = asObject(message);
         if (item === undefined) return undefined;
         const role = item?.role;
@@ -153,7 +153,7 @@ function requestMessages(body: unknown): ModelFusionChatMessage[] {
           content: requestHash(item.content ?? "")
         };
       })
-      .filter((message): message is ModelFusionChatMessage => message !== undefined);
+      .filter((message): message is ModelChatMessage => message !== undefined);
     if (projected.length > 0) return projected;
   }
   return [{ role: "user", content: requestHash(body) }];
@@ -172,7 +172,7 @@ function responseText(buffer: Buffer | undefined): string {
   return buffer?.toString("utf8") ?? "";
 }
 
-function usageFromObject(value: unknown): ModelFusionUsage | undefined {
+function usageFromObject(value: unknown): ModelUsage | undefined {
   const obj = asObject(value);
   const usage = asObject(obj?.usage);
   if (usage === undefined) return undefined;
@@ -204,8 +204,8 @@ function usageFromObject(value: unknown): ModelFusionUsage | undefined {
   };
 }
 
-function usageFromSse(text: string): ModelFusionUsage | undefined {
-  let usage: ModelFusionUsage | undefined;
+function usageFromSse(text: string): ModelUsage | undefined {
+  let usage: ModelUsage | undefined;
   // Best-effort provenance capture over a buffered response body: a non-JSON or
   // truncated payload is skipped (parseJson returns undefined) rather than
   // failing the record — provenance is an observation, never authoritative.
@@ -250,9 +250,9 @@ function exactProviderCostUsd(providerCost: JsonValue | undefined): number | und
 }
 
 function usageWithProviderCost(
-  usage: ModelFusionUsage | undefined,
+  usage: ModelUsage | undefined,
   providerCost: JsonValue | undefined
-): ModelFusionUsage | undefined {
+): ModelUsage | undefined {
   const record = asObject(providerCost);
   if (record === undefined) return usage;
   const prompt =
@@ -279,7 +279,7 @@ function usageWithProviderCost(
   };
 }
 
-function usageFromResponse(body: Buffer | undefined): ModelFusionUsage | undefined {
+function usageFromResponse(body: Buffer | undefined): ModelUsage | undefined {
   const parsed = parseJson(body);
   return usageFromObject(parsed) ?? usageFromSse(responseText(body));
 }
@@ -292,7 +292,7 @@ function providerRequestId(body: Buffer | undefined): string | undefined {
   return stringValue(asObject(parseJson(body))?.id);
 }
 
-function errorKind(statusCode: number, error: unknown): ModelFusionError["kind"] {
+function errorKind(statusCode: number, error: unknown): ProviderError["kind"] {
   if (statusCode === 408) return "timeout";
   if (statusCode === 429) return "rate_limited";
   if (error !== undefined) return "provider_error";
@@ -324,7 +324,7 @@ export function buildModelCallRecord(
     ...(providerCost !== undefined ? { provider_cost: providerCost } : {}),
     ...(exactCostUsd !== undefined ? { cost_estimate: exactCostUsd } : {})
   };
-  const error: ModelFusionError | undefined =
+  const error: ProviderError | undefined =
     status === "failed"
       ? {
           kind: errorKind(result.statusCode, result.error),

@@ -2,8 +2,7 @@ import { existsSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "nod
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { artifactHash } from "@fusionkit/protocol";
-import type { JsonValue, ModelCallRecordV1 } from "@fusionkit/protocol";
+import type { ModelCallRecordV1 } from "@fusionkit/protocol";
 import {
   createTrajectoryCapture,
   ModelRoutedBackend,
@@ -14,7 +13,9 @@ import {
 import type { Backend, CapturedTrajectory } from "@fusionkit/model-gateway";
 import { KernelBackend, panelMemberPreamble, traceCandidate } from "@fusionkit/ensemble";
 import type { FusedSubagentAccess, FusionTraceCarrier } from "@fusionkit/ensemble";
-import { PROVIDERS, SUBSCRIPTIONS } from "@fusionkit/registry";
+import { artifactHash } from "@routekit/contracts";
+import type { JsonValue } from "@routekit/contracts";
+import { PROVIDERS, SUBSCRIPTIONS } from "@routekit/registry";
 import {
   buildChildEnv,
   buildSkippedCandidate,

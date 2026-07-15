@@ -1,5 +1,6 @@
 import { runWorktreeAgent } from "@fusionkit/adapter-ai-sdk";
-import { artifactHash, ATTR } from "@fusionkit/protocol";
+import { ATTR } from "@fusionkit/protocol";
+import { artifactHash } from "@routekit/contracts";
 import { RUNTIME_TIMEOUT_MS } from "@fusionkit/runtime-utils";
 import { emitFusionEvent } from "@fusionkit/tracing";
 import type { FusionTraceCarrier } from "@fusionkit/tracing";

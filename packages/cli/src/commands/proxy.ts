@@ -6,7 +6,7 @@ import {
   type SubscriptionMemberStatus,
   type SubscriptionSelectionStrategy
 } from "@fusionkit/model-gateway/subscriptions";
-import type { SubscriptionMode } from "@fusionkit/registry";
+import type { SubscriptionMode } from "@routekit/registry";
 import { registerCleanup } from "@fusionkit/runtime-utils";
 import { cyan, dim, relativeTime, timeUntil } from "@fusionkit/cli-ui";
 import type { Presenter } from "@fusionkit/cli-ui";

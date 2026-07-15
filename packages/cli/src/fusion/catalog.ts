@@ -26,7 +26,7 @@ import {
   defaultKeyEnv as registryDefaultKeyEnv,
   providerDefaultBaseUrl,
   providerDiscovery
-} from "@fusionkit/registry";
+} from "@routekit/registry";
 
 import { cliproxyBaseUrl, defaultKeyEnv } from "./env.js";
 import type { PanelProvider } from "./env.js";

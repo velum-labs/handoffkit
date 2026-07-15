@@ -2,7 +2,7 @@ import {
   providerDefaultBaseUrl,
   subscriptionInfo,
   type SubscriptionMode
-} from "@fusionkit/registry";
+} from "@routekit/registry";
 
 import {
   loadSubscriptionCredential,

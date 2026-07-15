@@ -8,12 +8,11 @@ import {
 import type {
   ArtifactRef,
   HarnessRunResultV1,
-  JsonValue,
-  ModelFusionCapabilityStatus,
   ModelFusionHarnessKind,
   ModelFusionSideEffects
 } from "@fusionkit/protocol";
 import { gitText } from "@fusionkit/workspace";
+import type { CapabilityStatus, JsonValue } from "@routekit/contracts";
 
 import {
   COMMAND_DASHBOARD_CAPABILITIES,
@@ -528,7 +527,7 @@ function liveSmokeRuns(options: {
 function capabilityCell(
   capabilities: HarnessCapabilities,
   capability: string
-): ModelFusionCapabilityStatus {
+): CapabilityStatus {
   return capabilities[capability] ?? "unknown";
 }
 

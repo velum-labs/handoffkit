@@ -62,7 +62,7 @@
       "key": "handoffkit",
       "repo": "handoffkit",
       "ecosystem": "pnpm-monorepo",
-      "description": "The publishable @fusionkit/* npm packages, versioned in lockstep with the root and release/npm-packages.json protocol.version.",
+      "description": "The publishable @routekit/* foundation and @fusionkit/* product npm packages, versioned in lockstep with the root and release/npm-packages.json protocol.version.",
       "branch": "main",
       "tagPattern": "handoffkit-v{version}",
       "releaseTrigger": "github-release",

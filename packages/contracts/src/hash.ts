@@ -12,7 +12,6 @@ export function sha256PrefixedHex(data: string | Buffer): string {
   return `${SHA256_PREFIX}${sha256Hex(data)}`;
 }
 
-/** Content hash of a protocol object: sha256 over its canonical JSON. */
 export function hashCanonical(value: unknown): string {
   return sha256Hex(canonicalize(value));
 }

@@ -1,22 +1,23 @@
-"""Typed accessors over the generated registry data (spec/registry/*.json).
+"""Typed accessors over the generated RouteKit and FusionKit registry data.
 
 The single source of truth for provider metadata (base URLs, key env vars),
 subscription auth metadata (Claude Code / Codex logins), the fusion model
 identity, model catalogs, model-family capability quirks, and default pricing.
-The Node packages consume the same data through ``@fusionkit/registry`` — both
-bindings are generated from the same JSON by ``scripts/generate-registry.mjs``,
-so the two stacks cannot drift.
+The Node packages consume the same data through ``@routekit/registry`` and
+``@fusionkit/registry``. All bindings are generated from the same JSON by
+``scripts/generate-registry.mjs``, so the two stacks cannot drift.
 """
 
 from __future__ import annotations
 
 from typing import Any, cast
 
+from fusionkit_core._generated.fusion_registry_data import FUSION_REGISTRY
 from fusionkit_core._generated.registry_data import REGISTRY
 
 _PROVIDERS = cast(dict[str, dict[str, Any]], REGISTRY["providers"])
 _SUBSCRIPTIONS = cast(dict[str, dict[str, Any]], REGISTRY["subscriptions"])
-_FUSION = cast(dict[str, Any], REGISTRY["fusion"])
+_FUSION = cast(dict[str, Any], FUSION_REGISTRY["fusion"])
 _MODEL_CATALOG = cast(dict[str, Any], REGISTRY["modelCatalog"])
 _CAPABILITIES = cast(dict[str, Any], REGISTRY["modelCapabilities"])
 _PRICING = cast(dict[str, Any], REGISTRY["pricing"])
@@ -115,14 +116,14 @@ DEFAULT_API_MODELS: dict[str, str] = {
 
 DEFAULT_CLOUD_PANEL_MEMBERS: tuple[dict[str, str], ...] = tuple(
     dict(cast(dict[str, str], member))
-    for member in cast(list[dict[str, str]], _MODEL_CATALOG["defaultCloudPanel"])
+    for member in cast(list[dict[str, str]], _FUSION["defaultCloudPanel"])
 )
 
 BENCHMARK_PANEL_PRESETS: dict[str, dict[str, Any]] = {
     panel_id: dict(cast(dict[str, Any], preset))
     for panel_id, preset in cast(
         dict[str, dict[str, Any]],
-        _MODEL_CATALOG["benchmarkPanels"],
+        _FUSION["benchmarkPanels"],
     ).items()
 }
 

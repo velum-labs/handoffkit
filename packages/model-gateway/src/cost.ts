@@ -19,7 +19,7 @@
  * estimates. Provider-reported spend (for example OpenRouter generation
  * metadata) wins; configured/static pricing is treated as an estimate fallback.
  */
-import { DEFAULT_MODEL_PRICING as REGISTRY_MODEL_PRICING, PRICING_ALIASES } from "@fusionkit/registry";
+import { DEFAULT_MODEL_PRICING as REGISTRY_MODEL_PRICING, PRICING_ALIASES } from "@routekit/registry";
 import { randomId } from "@fusionkit/runtime-utils";
 
 import { decodeBufferedSse } from "./sse/parse.js";

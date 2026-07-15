@@ -1,6 +1,6 @@
 import type { ZodType } from "zod";
 
-import type { JsonValue } from "@fusionkit/protocol";
+import type { JsonValue } from "@routekit/contracts";
 
 import type { ApprovalDecision, ApprovalPolicy } from "./approvals.js";
 import type { HarnessEvent } from "./events.js";

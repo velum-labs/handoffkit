@@ -1,5 +1,4 @@
-import { artifactHash } from "@fusionkit/protocol";
-import type { JsonValue, ModelFusionErrorKind, ModelFusionHarnessKind } from "@fusionkit/protocol";
+import type { ModelFusionErrorKind, ModelFusionHarnessKind } from "@fusionkit/protocol";
 import type { FusionTraceCarrier } from "@fusionkit/tracing";
 import {
   HarnessError,
@@ -7,6 +6,8 @@ import {
   toModelFusionErrorKind,
   toModelFusionHarnessKind
 } from "@fusionkit/harness-core";
+import { artifactHash } from "@routekit/contracts";
+import type { JsonValue } from "@routekit/contracts";
 import type {
   AnyHarnessDriver,
   ApprovalPolicy,

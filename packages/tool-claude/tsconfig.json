@@ -21,7 +21,10 @@
       "path": "../protocol"
     },
     {
-      "path": "../registry"
+      "path": "../contracts"
+    },
+    {
+      "path": "../routekit-registry"
     },
     {
       "path": "../tools"

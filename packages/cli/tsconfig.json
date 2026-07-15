@@ -34,6 +34,12 @@
       "path": "../registry"
     },
     {
+      "path": "../contracts"
+    },
+    {
+      "path": "../routekit-registry"
+    },
+    {
       "path": "../testkit"
     },
     {

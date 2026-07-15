@@ -1,4 +1,5 @@
-import type { JsonValue, ModelFusionStatus } from "@fusionkit/protocol";
+import type { ModelFusionStatus } from "@fusionkit/protocol";
+import type { JsonValue } from "@routekit/contracts";
 import type { ResumeCursor } from "@fusionkit/harness-core";
 import type { FusionTraceCarrier } from "@fusionkit/tracing";
 import type { EnsembleDescriptor, EnsembleModel, EnsembleRunResult, HarnessAdapter } from "./harness.js";

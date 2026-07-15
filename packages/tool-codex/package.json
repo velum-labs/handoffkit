@@ -30,9 +30,10 @@
     "@fusionkit/harness-core": "workspace:*",
     "@fusionkit/model-gateway": "workspace:*",
     "@fusionkit/protocol": "workspace:*",
-    "@fusionkit/registry": "workspace:*",
     "@fusionkit/tools": "workspace:*",
     "@fusionkit/tracing": "workspace:*",
+    "@routekit/contracts": "workspace:*",
+    "@routekit/registry": "workspace:*",
     "@openai/codex-sdk": "0.142.5",
     "smol-toml": "1.7.0",
     "zod": "4.4.3"

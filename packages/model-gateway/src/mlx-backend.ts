@@ -1,6 +1,6 @@
 import { mlxServer } from "@fusionkit/adapter-ai-sdk";
 import type { ManagedServerEvent } from "@fusionkit/adapter-ai-sdk";
-import { chatTemplateKwargsForModel } from "@fusionkit/registry";
+import { chatTemplateKwargsForModel } from "@routekit/registry";
 
 import { OpenAiBackend } from "./backend.js";
 import type { Backend } from "./backend.js";

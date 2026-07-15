@@ -32,8 +32,9 @@
     "@fusionkit/ensemble": "workspace:*",
     "@fusionkit/model-gateway": "workspace:*",
     "@fusionkit/protocol": "workspace:*",
-    "@fusionkit/registry": "workspace:*",
-    "@fusionkit/tools": "workspace:*"
+    "@fusionkit/tools": "workspace:*",
+    "@routekit/contracts": "workspace:*",
+    "@routekit/registry": "workspace:*"
   },
   "devDependencies": {
     "@fusionkit/workspace": "workspace:*"

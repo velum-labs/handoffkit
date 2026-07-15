@@ -9,6 +9,7 @@
     { "path": "../ensemble" },
     { "path": "../protocol" },
     { "path": "../registry" },
+    { "path": "../contracts" },
     { "path": "../runtime-utils" }
   ]
 }

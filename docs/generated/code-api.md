@@ -47,6 +47,16 @@ Entry point for the FusionKit command line package. The executable itself lives 
 
 No exports found.
 
+### `packages/contracts/src/index.ts`
+
+No module JSDoc was found.
+
+- `export { canonicalize } from "./jcs.js";`
+- `export type { JsonValue } from "./jcs.js";`
+- `export { SHA256_PREFIX, artifactHash, hashCanonical, hashCanonicalSha256, requestHash, responseHash, schemaBundleHash, sha256Hex, sha256PrefixedHex } from "./hash.js";`
+- `export type { CapabilityStatus, ModelCallContract, ModelCallSideEffects, ModelCallStatus, ModelChatMessage, ModelChatRole, ModelEndpoint, ModelUsage, ProviderError, ProviderErrorKind } from "./model.js";`
+- `export type { HarnessApprovalDecision, HarnessContentStream, HarnessEvent, HarnessEventRaw, HarnessEventType, HarnessItemType, HarnessRequestType, HarnessTokenUsage, HarnessTurnEndReason } from "./harness-event.js";`
+
 ### `packages/ensemble/src/index.ts`
 
 FusionKit ensemble runtime entry point. It exposes harness execution, panel workflows, judge synthesis, runtime-kernel workflows, operators, schedulers, worktrees, isolation helpers, and tool execution.
@@ -226,10 +236,11 @@ adapters, ACP helpers, provenance records, and trajectory capture.
 
 @fusionkit/protocol is the open, versioned data contract layer.
 
-It exports signed run contracts, receipts, hash-chained event logs, workspace
-manifests, policy snapshots, checkpoints, handoff envelopes, model-fusion
-schemas, generated OpenAPI clients, hashing, signing, verification, trace
-events, validators, and normalization helpers.
+It exports FusionKit wire/panel/model-fusion schemas and generated clients.
+The signed-run governance contracts below are unrelated legacy Warrant
+surface retained here for compatibility during this phase; they are
+intentionally guarded as FusionKit protocol, not RouteKit contracts.
+Generic hashing/JCS and model-call primitives come from @routekit/contracts.
 
 Everything here is stable protocol surface. Packages should consume these
 interfaces instead of recreating local string lists or proof logic.
@@ -240,13 +251,13 @@ interfaces instead of recreating local string lists or proof logic.
 - `export type { ExecutionEnv, ExecutionLogPolicy, ExecutionSpec } from "./execution.js";`
 - `export { evaluateToolPolicy, modelFusionSideEffects, toolArgumentsHash, toolCallKey, toolSideEffectClassFromModelFusion } from "./tool-executor.js";`
 - `export type { ToolDefinition, ToolExecutionRequest, ToolExecutionResult, ToolExecutorBudget, ToolExecutorContract, ToolExecutorLimits, ToolExecutorMode, ToolPolicyDecision, ToolSideEffectClass } from "./tool-executor.js";`
-- `export { canonicalize } from "./jcs.js";`
-- `export type { JsonValue } from "./jcs.js";`
+- `export { canonicalize } from "@routekit/contracts";`
+- `export type { JsonValue } from "@routekit/contracts";`
 - `export { assertWireTrajectory, isWireTrajectory, normalizeWireTrajectories } from "./fusion-wire.js";`
 - `export type { WireTrajectory } from "./fusion-wire.js";`
 - `export { isFiniteK, isLookaheadK, isProposalK, panelModeForK } from "./panel-k.js";`
 - `export type { PanelMode } from "./panel-k.js";`
-- `export { artifactHash, hashCanonical, hashCanonicalSha256, requestHash, responseHash, schemaBundleHash, SHA256_PREFIX, sha256Hex, sha256PrefixedHex } from "./hash.js";`
+- `export { artifactHash, hashCanonical, hashCanonicalSha256, requestHash, responseHash, schemaBundleHash, SHA256_PREFIX, sha256Hex, sha256PrefixedHex } from "@routekit/contracts";`
 - `export { MODEL_FUSION_SCHEMA_BUNDLE_HASH, assertArtifactRefV1, assertBenchmarkTaskRecordV1, assertEnsembleReceiptV1, assertHarnessCandidateRecordV1, assertHarnessRunRequestV1, assertHarnessRunResultV1, assertJudgeSynthesisRecordV1, assertModelCallRecordV1, assertModelFusionRecord, assertToolCallPlanV1, assertToolExecutionRecordV1 } from "./model-fusion.js";`
 - `export { executeHarnessTask, MODEL_FUSION_HARNESS_EXECUTOR_PATH, MODEL_FUSION_OPENAPI_SOURCE_HASH } from "./generated/model-fusion-openapi.js";`
 - `export type { ExecuteHarnessTaskClientOptions, ModelFusionOpenApiArtifactRef, ModelFusionOpenApiErrorResponse, ModelFusionOpenApiHarnessExecutionRequest, ModelFusionOpenApiHarnessExecutionResult, ModelFusionOpenApiPersistedJsonRecord } from "./generated/model-fusion-openapi.js";`
@@ -268,33 +279,45 @@ interfaces instead of recreating local string lists or proof logic.
 
 ### `packages/registry/src/index.ts`
 
-Typed accessors over the generated registry data (spec/registry/*.json).
+Fusion-only identities and panel presets generated from
+spec/registry/fusion.json.
 
-This package is the Node-side single source of truth for provider metadata
-(base URLs, API key env vars, key probes, discovery), subscription auth
-metadata (Claude Code / Codex logins), the fusion model identity, the
-cloud/local model catalogs, model-family capability quirks, and default
-pricing. The Python workspace consumes the same data through
-`fusionkit_core._generated.registry_data` — both are generated from the same
-JSON by `scripts/generate-registry.mjs`, so the two stacks cannot drift.
+Product-neutral provider, subscription, catalog, capability, pricing, and
+local model metadata lives in @routekit/registry.
 
-Zero runtime dependencies (node builtins only) so any package can depend on
-it without cycles.
+- `export const FUSION_PANEL_MODEL: string ...`
+- `export const DEFAULT_ENSEMBLE_NAME ...`
+- `export const FUSION_MODEL_ID_PREFIX ...`
+- `export function fusionModelId(ensemble: string): string ...`
+- `export const CURSOR_BRIDGE_MODEL_NAME: string ...`
+- `export const LOCAL_MODEL_LABEL: string ...`
+- `export const FUSION_MODEL_ALIASES: readonly string[] ...`
+- `export const FUSION_DEFAULT_ALIAS: string ...`
+- `export const FUSION_PANEL_ALIAS: string ...`
+- `export const FUSION_GATEWAY_DEFAULT_BASE_URL: string ...`
+- `export const FUSION_GATEWAY_API_KEY_ENV: string ...`
+- `export type CatalogPanelMember ...`
+- `export type BenchmarkPanelPreset ...`
+- `export const DEFAULT_CLOUD_PANEL_MEMBERS: readonly CatalogPanelMember[] ...`
+- `export const BENCHMARK_PANEL_PRESETS: Readonly<Record<string, BenchmarkPanelPreset>> ...`
+
+### `packages/routekit-registry/src/index.ts`
+
+Typed accessors over RouteKit's generated neutral registry data.
+
+Provider/auth metadata, model catalogs, capabilities, pricing, and local
+model data are generated from spec/registry. Product-specific identities and
+panel presets are deliberately excluded.
 
 - `export type ProviderAuthStyle ...`
 - `export type ProviderKeyProbe ...`
 - `export type ProviderDiscovery ...`
 - `export type ProviderInfo ...`
 - `export const PROVIDERS: Readonly<Record<string, ProviderInfo>> ...`
-  All registered providers, keyed by canonical provider id.
 - `export function providerDefaultBaseUrl(provider: string): string | undefined ...`
-  Default base URL for a provider, or undefined for local providers (mlx).
 - `export function defaultKeyEnv(provider: string): string | undefined ...`
-  Default env var holding the API key for a provider, or undefined.
 - `export function providerKeyProbe(provider: string): ProviderKeyProbe | undefined ...`
-  Cheap key-validation probe metadata for a provider, or undefined.
 - `export function providerDiscovery(provider: string): ProviderDiscovery | undefined ...`
-  Live model-discovery capability for a provider, or undefined.
 - `export type SubscriptionMode ...`
 - `export type SubscriptionOAuthInfo ...`
 - `export type SubscriptionRateLimitInfo ...`
@@ -302,65 +325,23 @@ it without cycles.
 - `export type SubscriptionInfo ...`
 - `export const SUBSCRIPTIONS: Readonly<Record<SubscriptionMode, SubscriptionInfo>> ...`
 - `export function subscriptionInfo(mode: SubscriptionMode): SubscriptionInfo ...`
-  Subscription metadata for an auth mode.
 - `export function providerForAuthMode(mode: SubscriptionMode): string ...`
-  The provider a subscription auth mode speaks (claude-code -> anthropic, codex -> codex).
-- `export const FUSION_PANEL_MODEL: string ...`
-  The model label the fused panel is fronted under (gateway + tool pickers).
-- `export const DEFAULT_ENSEMBLE_NAME ...`
-  The name of the implicit/default ensemble (advertised as {@link FUSION_PANEL_MODEL}).
-- `export const FUSION_MODEL_ID_PREFIX ...`
-  The id prefix every non-default ensemble's fused model is advertised under.
-- `export function fusionModelId(ensemble: string): string ...`
-  The advertised model id for a named ensemble: `fusion-<name>`, except the default ensemble which keeps the canonical {@link FUSION_PANEL_MODEL} id (`fusion-panel`) for full back-compat with single-ensemble configs.
-- `export const CURSOR_BRIDGE_MODEL_NAME: string ...`
-  The model name the Cursor bridge exposes to cursor-agent.
-- `export const LOCAL_MODEL_LABEL: string ...`
-  Provider/model label a tool advertises for the gateway-backed local model.
-- `export const FUSION_MODEL_ALIASES: readonly string[] ...`
-  Reserved fusion aliases the Python server's chat front door understands.
-- `export const FUSION_DEFAULT_ALIAS: string ...`
-  The Python server's default (heuristic) fusion alias.
-- `export const FUSION_PANEL_ALIAS: string ...`
-  The panel-mode fusion alias external benchmark runners target.
-- `export const FUSION_GATEWAY_DEFAULT_BASE_URL: string ...`
-  Default local FusionKit gateway base URL used by benchmark runners.
-- `export const FUSION_GATEWAY_API_KEY_ENV: string ...`
-  Env var external runners can read for a FusionKit gateway API key placeholder.
-- `export type CatalogPanelMember ...`
-- `export type BenchmarkPanelPreset ...`
-- `export const DEFAULT_CLOUD_PANEL_MEMBERS: readonly CatalogPanelMember[] ...`
-  The default cloud panel trio (OpenAI + Anthropic + Google).
-- `export const BENCHMARK_PANEL_PRESETS: Readonly<Record<string, BenchmarkPanelPreset>> ...`
-  Named benchmark/live-smoke panel presets shared by CLI scripts and Python evals.
 - `export const DEFAULT_REASONING_MODEL: string ...`
-  The default narration-writer model for a bare `--reasoning-model` flag.
 - `export function catalogDefaultModel(choice: string): string | undefined ...`
-  The default model for an auth choice, or undefined for unknown choices.
 - `export function curatedModels(choice: string): readonly string[] ...`
-  Curated fallback model list for an auth choice (may be empty).
 - `export function smokeModelForTool(tool: string): string | undefined ...`
-  Default smoke-test model for a tool id, or undefined.
 - `export function samplingOverridesForModel(model: string): Readonly<Record<string, number>> ...`
-  Per-model sampling overrides (first matching family wins), e.g. qwen-family models want temperature 0.55 / top_p 1.0. Empty when no family matches.
 - `export function chatTemplateKwargsForModel(`
-  Chat-template kwargs the local MLX gateway should default for a model family (e.g. Qwen `enable_thinking`), or undefined when no family matches.
 - `export type RegistryModelPricing ...`
 - `export const PRICING_ALIASES: Readonly<Record<string, string>> ...`
-  Explicit dated/variant model id → canonical priced id. Lookup is exact → alias → unknown; prefix matching is never used.
 - `export const DEFAULT_MODEL_PRICING: Readonly<Record<string, RegistryModelPricing>> ...`
-  Default per-model list prices (USD / 1M tokens), manual overrides merged over the generated table. Consumers resolve via exact id, then {@link PRICING_ALIASES}.
 - `export type LocalModelRole ...`
 - `export type LocalCatalogModel ...`
 - `export const LOCAL_CATALOG_ENTRIES: readonly LocalCatalogModel[] ...`
-  The curated local MLX catalog, ordered small -> large.
 - `export type PreferredLocalModel ...`
 - `export const PREFERRED_LOCAL_MODELS: readonly PreferredLocalModel[] ...`
-  Repos `defaultTrioFor` prefers first, in order, with their panel member ids.
 - `export const GATEWAY_DEFAULT_MLX_MODEL: string ...`
-  The standalone model-gateway MLX fallback model.
 - `export const LOCAL_PROBE_MODEL: string ...`
-  Throwaway model id used to construct model-agnostic MLX envs.
 
 ### `packages/runtime-utils/src/index.ts`
 

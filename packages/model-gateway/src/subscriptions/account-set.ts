@@ -7,7 +7,7 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 
-import type { SubscriptionMode } from "@fusionkit/registry";
+import type { SubscriptionMode } from "@routekit/registry";
 
 import { isFailoverWorthy } from "../fusion-failover.js";
 import { resolveSubscriptionAccounts } from "./account-source.js";

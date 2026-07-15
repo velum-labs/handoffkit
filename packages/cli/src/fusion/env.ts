@@ -2,16 +2,16 @@
  * Shared types, panel defaults, and env helpers for the `fusionkit <tool>`
  * launcher. Kept dependency-light (node builtins + the zero-dep registry) so
  * every other fusion module and the orchestrator can import from here without
- * cycles. Panel/provider defaults come from @fusionkit/registry — the generated
- * single source of truth shared with the Python workspace.
+ * cycles. Panel defaults come from @fusionkit/registry; neutral provider and
+ * model metadata comes from @routekit/registry.
  */
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 
 import type { PanelTrust } from "@fusionkit/ensemble";
 import type { OnRateLimitPolicy } from "@fusionkit/model-gateway";
+import { DEFAULT_CLOUD_PANEL_MEMBERS } from "@fusionkit/registry";
 import {
-  DEFAULT_CLOUD_PANEL_MEMBERS,
   DEFAULT_REASONING_MODEL as REGISTRY_DEFAULT_REASONING_MODEL,
   PREFERRED_LOCAL_MODELS,
   PROVIDERS,
@@ -19,7 +19,7 @@ import {
   providerDefaultBaseUrl as registryProviderDefaultBaseUrl,
   providerForAuthMode,
   type SubscriptionMode
-} from "@fusionkit/registry";
+} from "@routekit/registry";
 
 import type { PromptOverrides, SubscriptionAccountConfig } from "../fusion-config.js";
 

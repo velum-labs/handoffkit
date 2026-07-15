@@ -1,0 +1,38 @@
+{
+  "name": "@routekit/contracts",
+  "private": false,
+  "version": "0.8.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/velum-labs/handoffkit.git",
+    "directory": "packages/contracts"
+  },
+  "description": "Product-neutral model endpoint, call, capability, usage, provider-error, harness-event, JCS, and hashing contracts.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org",
+    "access": "public",
+    "provenance": true
+  },
+  "keywords": [
+    "routekit",
+    "llm",
+    "contracts",
+    "protocol",
+    "jcs"
+  ],
+  "scripts": {
+    "test": "node --test \"dist/test/*.test.js\""
+  }
+}

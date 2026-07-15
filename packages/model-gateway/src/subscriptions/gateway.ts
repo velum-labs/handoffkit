@@ -1,4 +1,4 @@
-import type { SubscriptionMode } from "@fusionkit/registry";
+import type { SubscriptionMode } from "@routekit/registry";
 
 import { CodexBackendRelay } from "./codex-relay.js";
 import type { CodexCatalogEntry, CodexRelayOptions } from "./codex-relay.js";

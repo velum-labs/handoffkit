@@ -7,15 +7,13 @@
  */
 import { randomUUID } from "node:crypto";
 
-export type ApprovalDecision = "accept" | "acceptForSession" | "decline" | "cancel";
+import type {
+  HarnessApprovalDecision,
+  HarnessRequestType as RouteHarnessRequestType
+} from "@routekit/contracts";
 
-/** Canonical approval/user-input request categories across all providers. */
-export type HarnessRequestType =
-  | "exec_command_approval"
-  | "file_change_approval"
-  | "file_read_approval"
-  | "tool_approval"
-  | "tool_user_input";
+export type ApprovalDecision = HarnessApprovalDecision;
+export type HarnessRequestType = RouteHarnessRequestType;
 
 /**
  * What the session auto-approves without surfacing a request. `all` is the

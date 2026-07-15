@@ -1,5 +1,5 @@
-import { artifactHash } from "@fusionkit/protocol";
-import type { JsonValue } from "@fusionkit/protocol";
+import { artifactHash } from "@routekit/contracts";
+import type { JsonValue } from "@routekit/contracts";
 
 import { resolveCursorkitCli } from "@fusionkit/ensemble";
 import type {

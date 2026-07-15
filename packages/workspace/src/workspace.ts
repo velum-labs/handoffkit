@@ -9,8 +9,8 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
-import { sha256Hex } from "@fusionkit/protocol";
 import type { ManifestFile, WorkspaceManifest } from "@fusionkit/protocol";
+import { sha256Hex } from "@routekit/contracts";
 import { minimatch } from "minimatch";
 
 import { gitBinary, gitText } from "./git.js";

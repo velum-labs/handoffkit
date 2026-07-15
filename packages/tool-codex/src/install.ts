@@ -20,7 +20,7 @@ import { dirname, join } from "node:path";
 
 import { parse as tomlParse, stringify as tomlStringify } from "smol-toml";
 
-import { SUBSCRIPTIONS } from "@fusionkit/registry";
+import { SUBSCRIPTIONS } from "@routekit/registry";
 import { trimTrailingSlashes } from "@fusionkit/tools";
 
 import { codexProfileFileToml } from "./launch.js";

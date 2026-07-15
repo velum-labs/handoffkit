@@ -54,7 +54,7 @@ import type {
   CodexRelayOptions,
   SubscriptionAccountSetOptions
 } from "@fusionkit/model-gateway/subscriptions";
-import type { SubscriptionMode } from "@fusionkit/registry";
+import type { SubscriptionMode } from "@routekit/registry";
 import { bold, cyan, gray, uiStream } from "@fusionkit/cli-ui";
 import { registerCleanup } from "@fusionkit/runtime-utils";
 import { FUSION_PANEL_MODEL, harnessDriversEnabled, trimTrailingSlashes } from "@fusionkit/tools";

@@ -9,7 +9,7 @@
     { "path": "../ensemble" },
     { "path": "../harness-core" },
     { "path": "../protocol" },
-    { "path": "../registry" },
+    { "path": "../contracts" },
     { "path": "../tools" }
   ]
 }
