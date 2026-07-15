@@ -1,7 +1,7 @@
 ---
 id: e004-truncation-fair-rescreen
 owner: alen
-status: proposed
+status: locked
 benchmark: livecodebench
 claim: "truncation-fair open floor and complementarity for the seven capped models"
 sweep_id: e004-truncation-fair-rescreen
