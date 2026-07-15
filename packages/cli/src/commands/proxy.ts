@@ -7,9 +7,10 @@ import {
   type SubscriptionSelectionStrategy
 } from "@fusionkit/model-gateway/subscriptions";
 import type { SubscriptionMode } from "@routekit/registry";
-import { registerCleanup } from "@fusionkit/runtime-utils";
-import { cyan, dim, relativeTime, timeUntil } from "@fusionkit/cli-ui";
-import type { Presenter } from "@fusionkit/cli-ui";
+import { registerCleanup } from "@routekit/runtime";
+import { cyan, dim, relativeTime, timeUntil } from "@routekit/cli-ui";
+import { contextFor } from "@routekit/cli-core";
+import type { Presenter } from "@routekit/cli-ui";
 import type { Command } from "commander";
 
 import {
@@ -27,7 +28,6 @@ import {
   registerRunningProxy,
   stopProxy
 } from "../fusion/subscription-proxy.js";
-import { contextFor } from "../shared/context.js";
 
 /** Portless is on unless the flag disables it or `PORTLESS=0` is set. */
 function portlessEnabled(flag: boolean | undefined): boolean {

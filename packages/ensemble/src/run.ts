@@ -4,7 +4,7 @@ import {
   assertHarnessRunResultV1,
   MODEL_FUSION_SCHEMA_BUNDLE_HASH
 } from "@fusionkit/protocol";
-import { CANDIDATE_ISOLATION_DEFAULTS, registerCleanup } from "@fusionkit/runtime-utils";
+import { CANDIDATE_ISOLATION_DEFAULTS, registerCleanup } from "@routekit/runtime";
 import type {
   HarnessCandidateRecordV1,
   HarnessRunRequestV1,

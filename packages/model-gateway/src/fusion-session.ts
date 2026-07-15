@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 
 import { isFiniteK } from "@fusionkit/protocol";
 import type { WireTrajectory } from "@fusionkit/protocol";
-import { randomId } from "@fusionkit/runtime-utils";
+import { randomId } from "@routekit/runtime";
 import { newSpanId, sessionCarrier } from "@fusionkit/tracing";
 
 import type { SessionCost } from "./cost.js";

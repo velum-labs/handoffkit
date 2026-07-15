@@ -3,7 +3,7 @@ import type { IncomingHttpHeaders } from "node:http";
 import { z } from "zod";
 
 import { providerDefaultBaseUrl } from "@routekit/registry";
-import { trimTrailingSlashes } from "@fusionkit/runtime-utils";
+import { trimTrailingSlashes } from "@routekit/runtime";
 
 import type { FusionGatewayLogger } from "../logger.js";
 import { defaultFusionGatewayLogger } from "../logger.js";

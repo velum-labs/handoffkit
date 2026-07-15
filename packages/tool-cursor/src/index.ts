@@ -1,7 +1,8 @@
 /**
  * Cursor tool integration entry point. It exposes Cursor launcher helpers, the Cursorkit bridge, and the Cursor ensemble harness adapter.
  */
-import { FUSION_PANEL_MODEL, harnessDriversEnabled, trimTrailingSlashes } from "@fusionkit/tools";
+import { FUSION_PANEL_MODEL, harnessDriversEnabled } from "@fusionkit/tools";
+import { trimTrailingSlashes } from "@routekit/runtime";
 import type { ToolIntegration } from "@fusionkit/tools";
 import { createDriverHarness } from "@fusionkit/ensemble";
 import type { HarnessAdapter, ToolHarnessResolveOptions } from "@fusionkit/ensemble";

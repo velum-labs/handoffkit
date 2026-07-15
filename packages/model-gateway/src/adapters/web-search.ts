@@ -15,7 +15,7 @@
  * off and the adapters keep their honest-drop behavior.
  */
 
-import { withDeadline } from "@fusionkit/runtime-utils";
+import { withDeadline } from "@routekit/runtime";
 
 export type WebSearchCitation = { url: string; title?: string };
 

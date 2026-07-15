@@ -10,7 +10,7 @@ import { homedir, platform, userInfo } from "node:os";
 import { join } from "node:path";
 
 import { SUBSCRIPTIONS } from "@routekit/registry";
-import { superviseSpawn } from "@fusionkit/runtime-utils";
+import { superviseSpawn } from "@routekit/runtime";
 
 import type { PanelAuthMode } from "./env.js";
 

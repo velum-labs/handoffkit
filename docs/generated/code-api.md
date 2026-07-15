@@ -21,13 +21,28 @@ routing live in the legacy `@fusionkit/handoff` package.
 - `export { managedModelServer, mlxServer } from "./managed-server.js";`
 - `export type { ManagedModelServerOptions, ManagedServerEvent, MlxServerOptions } from "./managed-server.js";`
 
+### `packages/cli-core/src/index.ts`
+
+No module JSDoc was found.
+
+- `export { attachGlobalFlags, contextFor, emitJson, isJsonMode, resetContextForTest } from "./context.js";`
+- `export type { CommandContext, GlobalFlags } from "./context.js";`
+- `export { CliError, cliErrorPayload, fail, renderCliError } from "./errors.js";`
+- `export type { CliErrorInput } from "./errors.js";`
+- `export { findFlagTypos, knownLongFlags, levenshtein, warnPassthroughTypos } from "./flags.js";`
+- `export { argOrPick, canPickInteractively } from "./pickers.js";`
+- `export { collect, parseIdValue, parsePort, parsePositiveInteger, parsePositiveNumber } from "./options.js";`
+- `export { COMPLETION_SHELLS, completionScript, isCompletionShell, registerCompletion } from "./completion.js";`
+- `export type { CompletionShell } from "./completion.js";`
+- `export { formatPackageVersion, probeBinaryVersion, readPackageVersion } from "./version.js";`
+
 ### `packages/cli-ui/src/index.ts`
 
-@fusionkit/cli-ui — the fusionkit terminal UX layer.
+@routekit/cli-ui — a brand-configurable terminal UX layer.
 
 One presenter contract, two implementations: rich Ink (React) rendering on
 interactive TTYs, ordered plain-text lines everywhere else (CI, pipes,
-`FUSIONKIT_NO_TUI=1`). All UI goes to stderr; stdout stays reserved for
+`ROUTEKIT_NO_TUI=1`). All UI goes to stderr; stdout stays reserved for
 machine payloads and the launched tool's output.
 
 - `export { PlainPresenter, renderErrorPanelLines, renderKeyValueLines, renderTableLines } from "./plain.js";`
@@ -46,6 +61,20 @@ machine payloads and the launched tool's output.
 Entry point for the FusionKit command line package. The executable itself lives in src/index.ts, while cli.ts builds the Commander command tree.
 
 No exports found.
+
+### `packages/config-core/src/index.ts`
+
+No module JSDoc was found.
+
+- `export type ConfigSource ...`
+- `export type LayeredValue<T> ...`
+- `export function resolveLayer<T>(`
+- `export function isRecord(value: unknown): value is Record<string, unknown> ...`
+- `export function readJson(path: string): unknown ...`
+- `export function readValidatedJson<T>(`
+- `export function writeJsonAtomic(`
+- `export function loadMigratingConfig<T>(input: ...`
+- `export function editConfig<T, U ...`
 
 ### `packages/contracts/src/index.ts`
 
@@ -343,6 +372,25 @@ panel presets are deliberately excluded.
 - `export const GATEWAY_DEFAULT_MLX_MODEL: string ...`
 - `export const LOCAL_PROBE_MODEL: string ...`
 
+### `packages/routekit-tracing/src/index.ts`
+
+No module JSDoc was found.
+
+- `export { baggageOf, carrierFromEnv, carrierFromHeaders, carrierOf, contextOf, envOf, headersOf, newSessionCarrier, newSpanId, newTraceId, sessionCarrier, traceIdOf, withBaggage } from "./carrier.js";`
+- `export type { TraceCarrier } from "./carrier.js";`
+- `export { addEventListener, addSpanListener, hasEventListeners, hasSpanListeners, listenerLogRecordProcessor, listenerSpanProcessor, removeEventListener, removeSpanListener } from "./listener.js";`
+- `export type { EventListener, SpanListener } from "./listener.js";`
+- `export { attrBool, attrJson, attrNum, attrStr, eventNameOf, eventSpanId, eventTimeMs, eventTraceId, spanEndMs, spanId, spanTraceId } from "./readable.js";`
+- `export type { AttributeSource, ReadableEvent, ReadableSpan } from "./readable.js";`
+- `export { isLoopbackOtlpEndpoint, PolicyLogExporter, PolicySpanExporter, toExportableEvent, toExportableSpan } from "./exportable.js";`
+- `export type { AttributePolicy } from "./exportable.js";`
+- `export { flushTracing, initTracing, isEventExportConfigured, isTraceExportConfigured, isTracingActive, resetTracingForTest, shutdownTracing, tracingServiceName } from "./provider.js";`
+- `export type { InitTracingOptions } from "./provider.js";`
+- `export { InMemorySpanExporter, SimpleSpanProcessor } from "@opentelemetry/sdk-trace-base";`
+- `export type { SpanProcessor } from "@opentelemetry/sdk-trace-base";`
+- `export { InMemoryLogRecordExporter, SimpleLogRecordProcessor } from "@opentelemetry/sdk-logs";`
+- `export type { LogRecordProcessor } from "@opentelemetry/sdk-logs";`
+
 ### `packages/runtime-utils/src/index.ts`
 
 No module JSDoc was found.
@@ -350,7 +398,11 @@ No module JSDoc was found.
 - `export { registerCleanup, runCleanups } from "./cleanup.js";`
 - `export { superviseSpawn, terminateGroup } from "./process.js";`
 - `export type { ExitInfo, Spawned, SuperviseSpawnOptions } from "./process.js";`
-- `export const RUNTIME_TIMEOUT_MS ...`
+- `export { createActivePortlessSession, createPortlessSession, detectPortlessProxy, reapPortlessProject, reapPortlessService } from "./portless.js";`
+- `export type { DetectedProxy, DiscoverOrSpawnInput, DiscoverOrSpawnResult, PortlessModule, PortlessOptions, PortlessSession, RouteMapping, RouteStoreLike, SpawnedService } from "./portless.js";`
+- `export const DEFAULT_RUNTIME_TIMEOUTS ...`
+- `export function defineTimeouts<const T extends Record<string, number>>(timeouts: T): Readonly<T> ...`
+  Build a named timeout map in the product package that owns those names.
 - `export const MANAGED_SERVER_DEFAULTS ...`
 - `export const CANDIDATE_ISOLATION_DEFAULTS ...`
 - `export function sleep(ms: number): Promise<void> ...`
@@ -364,8 +416,13 @@ No module JSDoc was found.
   True when `command` resolves to an executable: an existing path when it contains a separator, else a match on any `PATH` entry (with Windows `PATHEXT` extensions appended). One implementation shared by every harness and launcher instead of three subtly-different copies.
 - `export function captureWorktreeDiff(cwd: string): string | undefined ...`
   The `git diff` of a working tree, or undefined when clean or not a repo.
-- `export function ensureRunOutputDir(dir: string): string ...`
-  Create a run-output directory. When it lives under a `.fusionkit/` segment (the default output roots inside user repos), drop a self-ignoring `.gitignore` so run artifacts never pollute the user's `git status` — while committed config like `.fusionkit/fusion.json` stays trackable.
+- `export function ensureRunOutputDir(`
+  Create an output directory. When it lives under one of the caller-owned data-directory segments, drop a self-ignoring `.gitignore` so generated artifacts never pollute the user's working tree.
+- `export function writeFileAtomic(path: string, content: string): void ...`
+  Atomically replace a UTF-8 file by writing a sibling temporary first.
+- `export type FileLock ...`
+- `export function tryAcquireFileLock(path: string): FileLock | undefined ...`
+  Acquire an exclusive lock file. Creation is atomic; callers own retry policy and must release the returned handle.
 - `export function definedEnv(env: EnvInput): Record<string, string> ...`
 - `export function trimTrailingSlashes(value: string): string ...`
   Strip trailing "/" characters in linear time (a `/\/+$/` regex backtracks polynomially on adversarial input, which code scanning rightly flags).
@@ -391,6 +448,18 @@ No module JSDoc was found.
   SIGTERM -> SIGKILL a child's whole process group. Thin wrapper over {@link terminateGroup} (the shared supervisor primitive) kept for the many existing `terminate(child)` call sites.
 - `export function escapeMarkdownCell(value: string): string ...`
 - `export function markdownTable(headers: readonly string[], rows: readonly (readonly string[])[]): string[] ...`
+
+### `packages/telemetry-core/src/index.ts`
+
+No module JSDoc was found.
+
+- `export type ConsentFile ...`
+- `export type ConsentDecision ...`
+- `export type ConsentOptions ...`
+- `export function createConsentManager(options: ConsentOptions) ...`
+- `export function durationBucket(ms: number): string ...`
+- `export function allowlistedProperties(`
+- `export function anonymousEventProperties(`
 
 ### `packages/testkit/src/index.ts`
 
@@ -481,18 +550,14 @@ opencode tool integration entry point. It exposes launcher configuration helpers
 
 ### `packages/tools/src/index.ts`
 
-Tool integration entry point. It exposes the launcher and harness integration contract, registry helpers, process helpers, constants, environment compatibility helpers, and skipped-candidate utilities.
+Tool integration entry point. Runtime primitives are imported directly from
+`@routekit/runtime`; this package owns only tool-domain contracts and helpers.
 
-- `export { captureWorktreeDiff, commandOnPath, distillLog, formatDurationMs, freePort, registerCleanup, reservePort, runCleanups, runCliCapture, sleep, spawnLogged, spawnTool, superviseSpawn, terminate, terminateGroup, waitForHttp, waitForOutput, withDeadline, withTimeout } from "./proc.js";`
-- `export type { CliCaptureOptions, CliCaptureResult, ExitInfo, LoggedChild, LoggedSpawnOptions, ReservedPort, Spawned, SuperviseSpawnOptions } from "./proc.js";`
-- `export { CANDIDATE_ISOLATION_DEFAULTS, escapeMarkdownCell, markdownTable, RUNTIME_TIMEOUT_MS, trimTrailingSlashes } from "@fusionkit/runtime-utils";`
 - `export type { FusedEnsembleInfo, ToolDashboardLiveSmoke, ToolDashboardMetadata, ToolDashboardSmoke, ToolHarnessMetadata, ToolIntegration, ToolLaunchContext, ToolLaunchMode } from "./types.js";`
 - `export { createToolRegistry } from "./registry.js";`
 - `export type { ToolRegistry } from "./registry.js";`
 - `export { CURSOR_BRIDGE_MODEL_NAME, DEFAULT_ENSEMBLE_NAME, FUSION_PANEL_MODEL, fusionModelId, LOCAL_MODEL_LABEL } from "./constants.js";`
 - `export { envFlagEnabled, HARNESS_DRIVERS_FLAG, harnessDriversEnabled, readEnv } from "./env-compat.js";`
-- `export { buildChildEnv, DEFAULT_BRIDGE_SCRUB_PREFIXES, definedEnv, normalizeApiBaseUrl, scrubBridgeEnv } from "./env.js";`
-- `export type { BuildChildEnvInput } from "./env.js";`
 - `export { buildSkippedCandidate } from "./candidate.js";`
 - `export { deriveFusedSubagents, fusedSubagentDescription, fusedSubagentDeveloperInstructions, fusedSubagentMembers } from "./fused-subagents.js";`
 - `export type { FusedSubagentDefinition, FusedSubagentDescriptionStyle } from "./fused-subagents.js";`
@@ -519,10 +584,8 @@ subscribe to.
 - `export type { AllowlistLogExporterOptions, AllowlistSpanExporterOptions } from "./exportable.js";`
 - `export { attrBool, attrJson, attrNum, attrStr, eventNameOf, eventSpanId, eventTimeMs, eventTraceId, spanEndMs, spanId, spanTraceId } from "./readable.js";`
 - `export type { AttributeSource, ReadableFusionEvent, ReadableSpan } from "./readable.js";`
-- `export { InMemorySpanExporter, SimpleSpanProcessor } from "@opentelemetry/sdk-trace-base";`
-- `export type { SpanProcessor } from "@opentelemetry/sdk-trace-base";`
-- `export { InMemoryLogRecordExporter, SimpleLogRecordProcessor } from "@opentelemetry/sdk-logs";`
-- `export type { LogRecordProcessor } from "@opentelemetry/sdk-logs";`
+- `export { InMemoryLogRecordExporter, InMemorySpanExporter, SimpleLogRecordProcessor, SimpleSpanProcessor } from "@routekit/tracing";`
+- `export type { LogRecordProcessor, SpanProcessor } from "@routekit/tracing";`
 - `export { ATTR, EXPORTABLE_ATTRIBUTES, FUSION_CONVENTIONS_VERSION, FUSION_EVENT_NAMES, FUSION_SCOPES, FUSION_SPAN_NAMES } from "@fusionkit/protocol";`
 - `export type { FusionAttributeKey, FusionEventName, FusionSpanName } from "@fusionkit/protocol";`
 

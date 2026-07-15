@@ -1,22 +1,6 @@
-/**
- * Per-invocation command context: the presenter every command renders through,
- * the machine-output (`--json`) emitter, and the resolved global flags.
- *
- * Global flags (they must precede the subcommand name, like every fusionkit
- * flag):
- *
- *   --json      emit a machine-readable JSON result on stdout (implies
- *               non-interactive; all human UI is suppressed)
- *   --no-input  never prompt; prompts resolve to their defaults (CI posture)
- *   --yes       accept confirmations (cost consent, overwrites) without asking
- *   --quiet     suppress informational output; warnings and errors still print
- *
- * The presenter renders to stderr; `emit` writes to stdout — so `--json`
- * output stays pipe-clean even when warnings appear.
- */
 import type { Command } from "commander";
 
-import { createPresenter, forceNonInteractive, PlainPresenter } from "@fusionkit/cli-ui";
+import { createPresenter, forceNonInteractive, PlainPresenter } from "@routekit/cli-ui";
 import type {
   ChecklistController,
   KeyValueRow,
@@ -26,7 +10,7 @@ import type {
   StepInput,
   TableOptions,
   TaskController
-} from "@fusionkit/cli-ui";
+} from "@routekit/cli-ui";
 
 export type GlobalFlags = {
   json: boolean;
@@ -37,27 +21,23 @@ export type GlobalFlags = {
 
 export type CommandContext = GlobalFlags & {
   presenter: Presenter;
-  /** Write the command's machine-readable result to stdout (used with --json). */
   emit(payload: unknown): void;
 };
 
-/** Set when any command runs in --json mode, so the top-level error handler
- * can emit a structured error instead of styled text. */
 let jsonMode = false;
 
 export function isJsonMode(): boolean {
   return jsonMode;
 }
 
-/** Emit a machine-readable result on stdout. */
-export function emitJson(payload: unknown): void {
-  process.stdout.write(JSON.stringify(payload, null, 2) + "\n");
+export function resetContextForTest(): void {
+  jsonMode = false;
 }
 
-/**
- * A presenter that drops informational output but keeps warnings and errors
- * (the `--quiet` posture, and the UI channel under `--json`).
- */
+export function emitJson(payload: unknown): void {
+  process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
+}
+
 class QuietPresenter extends PlainPresenter {
   override banner(): void {}
   override header(): void {}
@@ -74,13 +54,11 @@ class QuietPresenter extends PlainPresenter {
   override box(_title: string, _lines: readonly string[]): void {}
   override checklist(steps: readonly StepInput[]): ChecklistController {
     const labels = new Map(steps.map((step) => [step.id, step.label]));
-    const failed = (id: string, detail?: string): void => {
-      this.error(`${labels.get(id) ?? id}${detail !== undefined ? ` ${detail}` : ""}`);
-    };
     return {
       setActive: () => {},
       setDone: () => {},
-      setFailed: failed,
+      setFailed: (id, detail) =>
+        this.error(`${labels.get(id) ?? id}${detail !== undefined ? ` ${detail}` : ""}`),
       setSkipped: () => {},
       setDetail: () => {},
       stop: () => {}
@@ -108,11 +86,6 @@ class QuietPresenter extends PlainPresenter {
 
 type RawGlobalOpts = { json?: boolean; yes?: boolean; quiet?: boolean; input?: boolean };
 
-/**
- * Build the context for one command invocation. `command` is the commander
- * instance passed as the last action argument; global flags are merged from
- * the program level via `optsWithGlobals`.
- */
 export function contextFor(command: Command): CommandContext {
   const opts = command.optsWithGlobals<RawGlobalOpts>();
   const json = opts.json === true;
@@ -120,19 +93,16 @@ export function contextFor(command: Command): CommandContext {
   const noInput = opts.input === false;
   if (json) jsonMode = true;
   if (json || noInput) forceNonInteractive();
-
-  const presenter = json || quiet ? new QuietPresenter() : createPresenter();
   return {
     json,
     yes: opts.yes === true,
     quiet,
     noInput,
-    presenter,
+    presenter: json || quiet ? new QuietPresenter() : createPresenter(),
     emit: emitJson
   };
 }
 
-/** Attach the global flags to the program (they precede the subcommand name). */
 export function attachGlobalFlags(program: Command): Command {
   return program
     .option("--json", "emit a machine-readable JSON result on stdout (implies non-interactive)")

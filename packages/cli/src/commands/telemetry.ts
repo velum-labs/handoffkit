@@ -14,10 +14,10 @@
  */
 import type { Command } from "commander";
 
-import { bold, dim, green, yellow } from "@fusionkit/cli-ui";
+import { bold, dim, green, yellow } from "@routekit/cli-ui";
+import { contextFor } from "@routekit/cli-core";
+import type { CommandContext } from "@routekit/cli-core";
 
-import { contextFor } from "../shared/context.js";
-import type { CommandContext } from "../shared/context.js";
 import {
   disableTelemetry,
   enableTelemetry,

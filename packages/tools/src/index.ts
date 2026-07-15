@@ -1,44 +1,7 @@
 /**
- * Tool integration entry point. It exposes the launcher and harness integration contract, registry helpers, process helpers, constants, environment compatibility helpers, and skipped-candidate utilities.
+ * Tool integration entry point. Runtime primitives are imported directly from
+ * `@routekit/runtime`; this package owns only tool-domain contracts and helpers.
  */
-export {
-  captureWorktreeDiff,
-  commandOnPath,
-  distillLog,
-  formatDurationMs,
-  freePort,
-  registerCleanup,
-  reservePort,
-  runCleanups,
-  runCliCapture,
-  sleep,
-  spawnLogged,
-  spawnTool,
-  superviseSpawn,
-  terminate,
-  terminateGroup,
-  waitForHttp,
-  waitForOutput,
-  withDeadline,
-  withTimeout
-} from "./proc.js";
-export type {
-  CliCaptureOptions,
-  CliCaptureResult,
-  ExitInfo,
-  LoggedChild,
-  LoggedSpawnOptions,
-  ReservedPort,
-  Spawned,
-  SuperviseSpawnOptions
-} from "./proc.js";
-export {
-  CANDIDATE_ISOLATION_DEFAULTS,
-  escapeMarkdownCell,
-  markdownTable,
-  RUNTIME_TIMEOUT_MS,
-  trimTrailingSlashes
-} from "@fusionkit/runtime-utils";
 export type {
   FusedEnsembleInfo,
   ToolDashboardLiveSmoke,
@@ -64,14 +27,6 @@ export {
   harnessDriversEnabled,
   readEnv
 } from "./env-compat.js";
-export {
-  buildChildEnv,
-  DEFAULT_BRIDGE_SCRUB_PREFIXES,
-  definedEnv,
-  normalizeApiBaseUrl,
-  scrubBridgeEnv
-} from "./env.js";
-export type { BuildChildEnvInput } from "./env.js";
 export { buildSkippedCandidate } from "./candidate.js";
 export {
   deriveFusedSubagents,

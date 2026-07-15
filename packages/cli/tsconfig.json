@@ -16,6 +16,15 @@
       "path": "../cli-ui"
     },
     {
+      "path": "../cli-core"
+    },
+    {
+      "path": "../config-core"
+    },
+    {
+      "path": "../telemetry-core"
+    },
+    {
       "path": "../ensemble"
     },
     {

@@ -24,7 +24,7 @@
  * simply re-issue the search next turn.
  */
 
-import { randomId } from "@fusionkit/runtime-utils";
+import { randomId } from "@routekit/runtime";
 
 import { SseDecoder } from "../sse/parse.js";
 import { ChatStreamAssembler } from "../sse/chat-assembler.js";

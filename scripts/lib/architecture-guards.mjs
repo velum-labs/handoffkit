@@ -9,6 +9,28 @@ const DEPENDENCY_SECTIONS = [
   "peerDependencies"
 ];
 
+export const CANONICAL_SHARED_PACKAGES = new Map([
+  ["packages/runtime-utils", "@routekit/runtime"],
+  ["packages/routekit-tracing", "@routekit/tracing"],
+  ["packages/cli-ui", "@routekit/cli-ui"],
+  ["packages/cli-core", "@routekit/cli-core"],
+  ["packages/config-core", "@routekit/config-core"],
+  ["packages/telemetry-core", "@routekit/telemetry-core"]
+]);
+
+export function canonicalSharedPackageViolations(manifests) {
+  const violations = [];
+  for (const [dir, expectedName] of CANONICAL_SHARED_PACKAGES) {
+    const entry = manifests.find((candidate) => candidate.dir === dir);
+    if (entry === undefined) {
+      violations.push(`${dir} is missing from the workspace`);
+    } else if (entry.manifest.name !== expectedName) {
+      violations.push(`${dir} must declare ${expectedName}, got ${entry.manifest.name}`);
+    }
+  }
+  return violations;
+}
+
 export function isInternalWorkspaceDependency(name) {
   return INTERNAL_SCOPES.some((scope) => name.startsWith(scope));
 }

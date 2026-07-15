@@ -2,7 +2,8 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { LOCAL_MODEL_LABEL, spawnTool } from "@fusionkit/tools";
+import { LOCAL_MODEL_LABEL } from "@fusionkit/tools";
+import { spawnTool } from "@routekit/runtime";
 import type { FusedEnsembleInfo, ToolLaunchContext } from "@fusionkit/tools";
 
 /**

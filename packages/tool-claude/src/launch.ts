@@ -1,4 +1,5 @@
-import { deriveFusedSubagents, LOCAL_MODEL_LABEL, spawnTool } from "@fusionkit/tools";
+import { deriveFusedSubagents, LOCAL_MODEL_LABEL } from "@fusionkit/tools";
+import { spawnTool } from "@routekit/runtime";
 import type { FusedEnsembleInfo, ToolLaunchContext } from "@fusionkit/tools";
 
 /**

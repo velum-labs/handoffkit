@@ -2,48 +2,33 @@ import type { PanelTrust } from "@fusionkit/ensemble";
 import type { OnRateLimitPolicy } from "@fusionkit/model-gateway";
 import { SESSION_ISOLATIONS } from "@fusionkit/protocol";
 import type { SessionIsolation } from "@fusionkit/protocol";
+import {
+  collect,
+  parseIdValue,
+  parsePort,
+  parsePositiveInteger,
+  parsePositiveNumber
+} from "@routekit/cli-core";
 
 import type { PanelAuthMode, PanelModelSpec, PanelProvider } from "../fusion-quickstart.js";
 import { PANEL_AUTH_MODES, PANEL_PROVIDERS, panelProviderForAuthMode } from "../fusion/env.js";
 
-import { fail } from "./errors.js";
+import { fail } from "@routekit/cli-core";
 
-/** Commander reducer for repeatable string options (`--flag a --flag b`). */
-export function collect(value: string, previous?: string[]): string[] {
-  return [...(previous ?? []), value];
-}
-
-/** Parse `ID=VALUE`, failing with a flag-specific message on malformed input. */
-export function parseIdValue(flag: string, spec: string): { id: string; value: string } {
-  const separator = spec.indexOf("=");
-  if (separator <= 0 || separator === spec.length - 1) {
-    fail(`${flag} must be ID=VALUE, got "${spec}"`);
-  }
-  return { id: spec.slice(0, separator), value: spec.slice(separator + 1) };
-}
-
-export function parsePort(raw: string | undefined, fallback: number): number {
-  const port = Number(raw ?? String(fallback));
-  if (!Number.isInteger(port) || port < 0) fail("--port must be a non-negative integer");
-  return port;
-}
+export { collect, parseIdValue, parsePort };
 
 /** Parse `--budget <usd>` (WS7): a positive dollar cap. Returns undefined when unset. */
 export function parseBudget(value: string | undefined): number | undefined {
-  if (value === undefined) return undefined;
-  const budget = Number(value);
-  if (!Number.isFinite(budget) || budget <= 0) fail("--budget must be a positive number of USD");
-  return budget;
+  return parsePositiveNumber("--budget", value, "a positive number of USD");
 }
 
 /** Parse `--k <n>`: a positive integer (step boundaries per panel member). */
 export function parseK(value: string | undefined): number | undefined {
-  if (value === undefined) return undefined;
-  const k = Number(value);
-  if (!Number.isInteger(k) || k < 1) {
-    fail("--k must be a positive integer (step boundaries per panel member before aggregation)");
-  }
-  return k;
+  return parsePositiveInteger(
+    "--k",
+    value,
+    "a positive integer (step boundaries per panel member before aggregation)"
+  );
 }
 
 export function isolationFlag(value: string | undefined): SessionIsolation | undefined {

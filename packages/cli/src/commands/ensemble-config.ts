@@ -15,7 +15,9 @@ import type { Command } from "commander";
 
 import { fusionModelId } from "@fusionkit/registry";
 
-import { bold, canPromptInteractively, confirm, cyan, dim, gray, select } from "@fusionkit/cli-ui";
+import { bold, canPromptInteractively, confirm, cyan, dim, gray, select } from "@routekit/cli-ui";
+import { argOrPick, contextFor, fail } from "@routekit/cli-core";
+import type { CommandContext } from "@routekit/cli-core";
 
 import {
   DEFAULT_ENSEMBLE_NAME,
@@ -36,11 +38,7 @@ import { defaultKeyEnv } from "../fusion/env.js";
 import type { PanelModelSpec } from "../fusion/env.js";
 import { detectHost } from "../fusion/local-catalog.js";
 import { buildPanel, judgeOptions } from "../fusion/panel-builder.js";
-import { contextFor } from "../shared/context.js";
-import type { CommandContext } from "../shared/context.js";
-import { fail } from "../shared/errors.js";
 import { collect, parseIdValue, parsePanelModelSpec } from "../shared/options.js";
-import { argOrPick } from "../shared/pickers.js";
 
 type EnsembleCommandOpts = {
   repo?: string;

@@ -5,11 +5,9 @@ import { resolveCursorkitCli } from "@fusionkit/ensemble";
 import {
   CURSOR_BRIDGE_MODEL_NAME,
   FUSION_PANEL_MODEL,
-  commandOnPath,
-  readEnv,
-  reservePort,
-  terminate
+  readEnv
 } from "@fusionkit/tools";
+import { commandOnPath, reservePort, terminate } from "@routekit/runtime";
 
 import { cursorBridgeEnv } from "./bridge-config.js";
 

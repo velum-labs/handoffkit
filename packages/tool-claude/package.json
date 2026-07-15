@@ -34,6 +34,7 @@
     "@fusionkit/protocol": "workspace:*",
     "@fusionkit/tools": "workspace:*",
     "@routekit/contracts": "workspace:*",
+    "@routekit/runtime": "workspace:*",
     "@routekit/registry": "workspace:*"
   },
   "devDependencies": {

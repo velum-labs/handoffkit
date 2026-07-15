@@ -21,8 +21,8 @@ import {
   select,
   text,
   uiStream
-} from "@fusionkit/cli-ui";
-import type { Back } from "@fusionkit/cli-ui";
+} from "@routekit/cli-ui";
+import type { Back } from "@routekit/cli-ui";
 
 import { DEFAULT_CLOUD_PANEL, defaultKeyEnv } from "./env.js";
 import type { PanelModelSpec } from "./env.js";

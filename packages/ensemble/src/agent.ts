@@ -1,7 +1,7 @@
 import { runWorktreeAgent } from "@fusionkit/adapter-ai-sdk";
 import { ATTR } from "@fusionkit/protocol";
 import { artifactHash } from "@routekit/contracts";
-import { RUNTIME_TIMEOUT_MS } from "@fusionkit/runtime-utils";
+import { defineTimeouts } from "@routekit/runtime";
 import { emitFusionEvent } from "@fusionkit/tracing";
 import type { FusionTraceCarrier } from "@fusionkit/tracing";
 
@@ -22,7 +22,7 @@ import {
  */
 
 /** Wall-clock budget for a single panel model's agent run (model + tools). */
-const DEFAULT_MODEL_TIMEOUT_MS = RUNTIME_TIMEOUT_MS.panelModel;
+const DEFAULT_MODEL_TIMEOUT_MS = defineTimeouts({ panelModel: 10 * 60 * 1000 }).panelModel;
 
 export type AgentHarnessOptions = {
   id?: string;

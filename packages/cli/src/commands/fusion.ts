@@ -2,7 +2,12 @@ import { resolve } from "node:path";
 
 import type { Command } from "commander";
 
-import { dim, uiStream } from "@fusionkit/cli-ui";
+import { dim, uiStream } from "@routekit/cli-ui";
+import {
+  contextFor,
+  fail,
+  warnPassthroughTypos as warnCorePassthroughTypos
+} from "@routekit/cli-core";
 
 import { DEFAULT_REASONING_MODEL, FUSION_TOOLS, gitToplevel, runFusion } from "../fusion-quickstart.js";
 import type { RunFusionOptions } from "../fusion-quickstart.js";
@@ -12,9 +17,6 @@ import { runDirect } from "../local.js";
 import { configDefaultEnsembleName } from "../fusion/effective-config.js";
 import { runFusionInit } from "../fusion-init.js";
 import { toolRegistry } from "../tools.js";
-import { contextFor } from "../shared/context.js";
-import { fail } from "../shared/errors.js";
-import { warnPassthroughTypos } from "../shared/flag-suggest.js";
 
 import { registerPaletteAction } from "./palette.js";
 import {
@@ -362,7 +364,10 @@ export function registerFusion(program: Command): void {
       )
       .action(async (args: string[], _opts: FusionOpts, command: Command) => {
         const opts = command.optsWithGlobals<FusionOpts>();
-        warnPassthroughTypos(command, args, tool);
+        warnCorePassthroughTypos(command, args, {
+          productName: "fusionkit",
+          forwardedTo: tool
+        });
         if (opts.direct === true) {
           process.exitCode = await launchDirect(tool, args, opts, command);
           return;

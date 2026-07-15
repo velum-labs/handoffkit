@@ -7,16 +7,16 @@ import {
   startGateway
 } from "@fusionkit/model-gateway";
 import type { Backend } from "@fusionkit/model-gateway";
-
-import { claudeAgentsJson, claudeEnv } from "./launch.js";
 import {
   buildChildEnv,
   captureWorktreeDiff,
   commandOnPath,
   normalizeApiBaseUrl,
   runCliCapture
-} from "@fusionkit/tools";
-import type { CliCaptureResult } from "@fusionkit/tools";
+} from "@routekit/runtime";
+import type { CliCaptureResult } from "@routekit/runtime";
+
+import { claudeAgentsJson, claudeEnv } from "./launch.js";
 
 import { KernelBackend, traceCandidate } from "@fusionkit/ensemble";
 import type { FusionTraceCarrier } from "@fusionkit/ensemble";

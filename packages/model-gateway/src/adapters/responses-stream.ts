@@ -1,4 +1,4 @@
-import { randomId } from "@fusionkit/runtime-utils";
+import { randomId } from "@routekit/runtime";
 import { SseDecoder, SseParseError } from "../sse/parse.js";
 import type { OpenAiChoice } from "./openai-chat-wire.js";
 import { serverToolMarkerOf } from "./server-tool-loop.js";

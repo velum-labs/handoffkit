@@ -17,7 +17,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { carrierFromHeaders, newSessionCarrier } from "@fusionkit/tracing";
 import type { FusionTraceCarrier } from "@fusionkit/tracing";
 import { FUSION_PANEL_MODEL } from "@fusionkit/registry";
-import { estimateTokens, randomId } from "@fusionkit/runtime-utils";
+import { estimateTokens, randomId } from "@routekit/runtime";
 
 import { chatToAnthropicMessage, openAiSseToAnthropic } from "./adapters/anthropic.js";
 import type { AnthropicRequest } from "./adapters/anthropic.js";

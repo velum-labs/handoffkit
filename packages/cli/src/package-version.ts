@@ -1,47 +1,21 @@
+import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
-import { spawnSync } from "node:child_process";
 import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
 
-import { FUSIONKIT_PYPI_VERSION, fusionkitWarmArgv } from "../fusion/env.js";
-import { hasBinary } from "./preflight.js";
-import { toolRegistry } from "../tools.js";
+import { probeBinaryVersion, readPackageVersion } from "@routekit/cli-core";
+
+import { FUSIONKIT_PYPI_VERSION, fusionkitWarmArgv } from "./fusion/env.js";
+import { hasBinary } from "./shared/preflight.js";
+import { toolRegistry } from "./tools.js";
 
 const require = createRequire(import.meta.url);
 
-/** Read `version` from the nearest ancestor package.json relative to a module URL. */
-export function readPackageVersion(fromModuleUrl: string, relativePkgPath = "../package.json"): string {
-  try {
-    const pkg = JSON.parse(
-      readFileSync(fileURLToPath(new URL(relativePkgPath, fromModuleUrl)), "utf8")
-    ) as { version?: string };
-    return pkg.version ?? "0.0.0";
-  } catch {
-    return "0.0.0";
-  }
-}
-
-/** Best-effort first line from `binary --version` (2s timeout). */
-export function probeBinaryVersion(binary: string): string | null {
-  if (!hasBinary(binary)) return null;
-  const result = spawnSync(binary, ["--version"], {
-    encoding: "utf8",
-    timeout: 2_000,
-    stdio: ["ignore", "pipe", "pipe"]
-  });
-  if (result.status !== 0) return "unknown";
-  const line = `${result.stdout ?? ""}${result.stderr ?? ""}`.trim().split("\n")[0]?.trim();
-  return line && line.length > 0 ? line : "unknown";
-}
-
-/** Resolve the installed @fusionkit/tool-* package version for a registry tool id. */
 export function readToolPackageVersion(toolId: string): string | null {
   const packageName = toolRegistry.get(toolId)?.packageName;
   if (packageName === undefined) return null;
   try {
-    const entry = require.resolve(packageName);
-    let dir = dirname(entry);
+    let dir = dirname(require.resolve(packageName));
     for (let depth = 0; depth < 8; depth += 1) {
       try {
         const pkg = JSON.parse(readFileSync(join(dir, "package.json"), "utf8")) as {
@@ -56,10 +30,10 @@ export function readToolPackageVersion(toolId: string): string | null {
       if (parent === dir) break;
       dir = parent;
     }
-    return null;
   } catch {
-    return null;
+    // Package is not installed.
   }
+  return null;
 }
 
 async function probeCachedSynthesizerVersion(): Promise<string | null> {
@@ -84,27 +58,21 @@ export type VersionMatrix = {
   tools: Record<string, string | null>;
 };
 
-/** Collect the full fusionkit version matrix for `fusionkit version`. */
 export async function collectVersionMatrix(): Promise<VersionMatrix> {
   const runners: Record<string, string | null> = {};
-  for (const binary of ["uv", "uvx"] as const) {
-    runners[binary] = probeBinaryVersion(binary);
+  for (const binary of ["uv", "uvx"]) {
+    runners[binary] = probeBinaryVersion(binary, { available: hasBinary });
   }
-
-  // Every registry tool with a launchable binary, probed by its own binary name.
   const agents: Record<string, string | null> = {};
-  for (const tool of toolRegistry.list()) {
-    if (tool.binary === undefined) continue;
-    agents[tool.id] = probeBinaryVersion(tool.binary);
-  }
-
   const tools: Record<string, string | null> = {};
   for (const tool of toolRegistry.list()) {
+    if (tool.binary !== undefined) {
+      agents[tool.id] = probeBinaryVersion(tool.binary, { available: hasBinary });
+    }
     tools[tool.id] = readToolPackageVersion(tool.id);
   }
-
   return {
-    cli: readPackageVersion(import.meta.url, "../../package.json"),
+    cli: readPackageVersion(import.meta.url, "../package.json"),
     synthesizerPinned: FUSIONKIT_PYPI_VERSION,
     synthesizerCached: await probeCachedSynthesizerVersion(),
     runners,

@@ -22,6 +22,30 @@
       "name": "@routekit/registry"
     },
     {
+      "path": "packages/runtime-utils",
+      "name": "@routekit/runtime"
+    },
+    {
+      "path": "packages/routekit-tracing",
+      "name": "@routekit/tracing"
+    },
+    {
+      "path": "packages/cli-ui",
+      "name": "@routekit/cli-ui"
+    },
+    {
+      "path": "packages/cli-core",
+      "name": "@routekit/cli-core"
+    },
+    {
+      "path": "packages/config-core",
+      "name": "@routekit/config-core"
+    },
+    {
+      "path": "packages/telemetry-core",
+      "name": "@routekit/telemetry-core"
+    },
+    {
       "path": "packages/registry",
       "name": "@fusionkit/registry"
     },
@@ -54,10 +78,6 @@
       "name": "@fusionkit/ensemble"
     },
     {
-      "path": "packages/runtime-utils",
-      "name": "@fusionkit/runtime-utils"
-    },
-    {
       "path": "packages/harness-core",
       "name": "@fusionkit/harness-core"
     },
@@ -80,10 +100,6 @@
     {
       "path": "packages/tool-opencode",
       "name": "@fusionkit/tool-opencode"
-    },
-    {
-      "path": "packages/cli-ui",
-      "name": "@fusionkit/cli-ui"
     },
     {
       "path": "packages/cli",

@@ -2,7 +2,7 @@ import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 
 import { resolveCursorkitCli } from "@fusionkit/ensemble";
-import { spawnLogged, spawnTool, terminate, waitForOutput } from "@fusionkit/tools";
+import { spawnLogged, spawnTool, terminate, waitForOutput } from "@routekit/runtime";
 import type { ToolLaunchContext } from "@fusionkit/tools";
 
 import { cursorIdeEnv } from "./bridge-config.js";

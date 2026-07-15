@@ -2,7 +2,8 @@
  * Claude Code tool integration entry point. It exposes launcher environment helpers and the Claude Code ensemble harness adapter.
  */
 import { smokeModelForTool } from "@routekit/registry";
-import { harnessDriversEnabled, trimTrailingSlashes } from "@fusionkit/tools";
+import { harnessDriversEnabled } from "@fusionkit/tools";
+import { trimTrailingSlashes } from "@routekit/runtime";
 import type { ToolIntegration } from "@fusionkit/tools";
 import { createDriverHarness } from "@fusionkit/ensemble";
 import type { HarnessAdapter, ToolHarnessResolveOptions } from "@fusionkit/ensemble";

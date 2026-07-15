@@ -7,7 +7,7 @@ import {
   definedEnv,
   randomId,
   superviseSpawn
-} from "@fusionkit/runtime-utils";
+} from "@routekit/runtime";
 
 import type {
   CandidateActualIsolationKind,

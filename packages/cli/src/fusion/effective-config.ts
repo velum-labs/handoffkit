@@ -18,6 +18,8 @@
  */
 import type { OnRateLimitPolicy } from "@fusionkit/model-gateway";
 import { DEFAULT_ENSEMBLE_NAME, fusionModelId } from "@fusionkit/registry";
+import { resolveLayer } from "@routekit/config-core";
+import type { ConfigSource, LayeredValue } from "@routekit/config-core";
 
 import { FusionConfigError } from "../fusion-config.js";
 import type { EnsembleConfig, FusionConfig, PromptOverrides } from "../fusion-config.js";
@@ -26,10 +28,10 @@ import { DEFAULT_CLOUD_PANEL, DEFAULT_TRIO } from "./env.js";
 import type { FusionTool, PanelModelSpec } from "./env.js";
 
 /** Where an effective value came from, in precedence order (flag wins). */
-export type ConfigSource = "flag" | "config" | "default";
+export type { ConfigSource };
 
 /** A resolved value plus the layer that supplied it. */
-export type Provenance<T> = { value: T; source: ConfigSource };
+export type Provenance<T> = LayeredValue<T>;
 
 /** Built-in defaults, shared with the run path so `config show` never lies. */
 export const DEFAULT_TOOL: FusionTool = "codex";
@@ -92,12 +94,6 @@ export type EffectiveFusionConfig = {
 };
 
 /** flag > config > default, tagging the winning layer. */
-function pick<T>(flag: T | undefined, file: T | undefined, fallback: T): Provenance<T> {
-  if (flag !== undefined) return { value: flag, source: "flag" };
-  if (file !== undefined) return { value: file, source: "config" };
-  return { value: fallback, source: "default" };
-}
-
 /** The config's default ensemble name: `defaultEnsemble`, else `default`, else first. */
 export function configDefaultEnsembleName(config: FusionConfig | undefined): string | undefined {
   if (config?.ensembles === undefined) return undefined;
@@ -138,8 +134,8 @@ export function resolveEffectiveConfig(
   config: FusionConfig | undefined,
   overrides: EffectiveOverrides = {}
 ): EffectiveFusionConfig {
-  const tool = pick(overrides.tool, config?.tool, DEFAULT_TOOL);
-  const local = pick(overrides.local, config?.local, DEFAULT_LOCAL);
+  const tool = resolveLayer(overrides.tool, config?.tool, DEFAULT_TOOL);
+  const local = resolveLayer(overrides.local, config?.local, DEFAULT_LOCAL);
 
   const defaultPanel: readonly PanelModelSpec[] = local.value ? DEFAULT_TRIO : DEFAULT_CLOUD_PANEL;
 
@@ -149,7 +145,7 @@ export function resolveEffectiveConfig(
   const hasConfigured = configured !== undefined && Object.keys(configured).length > 0;
   // Only an explicit `defaultEnsemble` is config-sourced; a derived first name
   // (`default`, else the first key) is a default-layer fallback.
-  const defaultEnsemble = pick(
+  const defaultEnsemble = resolveLayer(
     overrides.ensemble,
     config?.defaultEnsemble,
     configDefaultEnsembleName(config) ?? DEFAULT_ENSEMBLE_NAME
@@ -215,11 +211,11 @@ export function resolveEffectiveConfig(
     source: hasConfigured ? "config" : "default"
   };
 
-  const observe = pick(overrides.observe, config?.observe, DEFAULT_OBSERVE);
-  const onRateLimit = pick(overrides.onRateLimit, config?.onRateLimit, DEFAULT_ON_RATE_LIMIT);
-  const portless = pick(overrides.portless, config?.portless, DEFAULT_PORTLESS);
-  const reasoning = pick(overrides.reasoning, config?.reasoning, DEFAULT_REASONING);
-  const reasoningModel = pick<string | undefined>(
+  const observe = resolveLayer(overrides.observe, config?.observe, DEFAULT_OBSERVE);
+  const onRateLimit = resolveLayer(overrides.onRateLimit, config?.onRateLimit, DEFAULT_ON_RATE_LIMIT);
+  const portless = resolveLayer(overrides.portless, config?.portless, DEFAULT_PORTLESS);
+  const reasoning = resolveLayer(overrides.reasoning, config?.reasoning, DEFAULT_REASONING);
+  const reasoningModel = resolveLayer<string | undefined>(
     overrides.reasoningModel,
     config?.reasoningModel,
     undefined

@@ -26,9 +26,15 @@
  * back-compat fallback). Legacy v1/v2 configs (a flat `panel` + `judgeModel`)
  * are upgraded in memory into `ensembles.default`.
  */
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
+import {
+  isRecord,
+  loadMigratingConfig,
+  writeJsonAtomic
+} from "@routekit/config-core";
+import { writeFileAtomic } from "@routekit/runtime";
 import type { OnRateLimitPolicy } from "@fusionkit/model-gateway";
 import type {
   SubscriptionAccountSource,
@@ -196,10 +202,6 @@ export function fusionPromptsDir(repoRoot: string, ensemble?: string): string {
 /** The prompt override file for a single prompt id (optionally per-ensemble). */
 export function fusionPromptPath(repoRoot: string, id: PromptId, ensemble?: string): string {
   return join(fusionPromptsDir(repoRoot, ensemble), `${id}.md`);
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function optionalNonNegativeNumber(value: unknown, path: string): number | undefined {
@@ -615,18 +617,6 @@ export function parseFusionConfig(raw: unknown, source: string): FusionConfig {
   return config;
 }
 
-function readAndParse(path: string): FusionConfig {
-  let raw: unknown;
-  try {
-    raw = JSON.parse(readFileSync(path, "utf8"));
-  } catch (error) {
-    throw new FusionConfigError(
-      `${path}: invalid JSON (${error instanceof Error ? error.message : String(error)})`
-    );
-  }
-  return parseFusionConfig(raw, path);
-}
-
 /**
  * Read the committed prompt overrides for one ensemble. The flat
  * `.fusionkit/prompts/*.md` files are the default ensemble's prompts; a named
@@ -682,23 +672,31 @@ export function loadFusionConfig(
   repoRoot: string,
   onNotice?: (message: string) => void
 ): FusionConfig | undefined {
-  const newPath = fusionConfigPath(repoRoot);
-  if (existsSync(newPath)) {
-    return withPrompts(repoRoot, readAndParse(newPath));
-  }
+  const currentPath = fusionConfigPath(repoRoot);
+  const config = loadMigratingConfig({
+    currentPath,
+    legacyPaths: [legacyFusionConfigPath(repoRoot)],
+    parse: parseFusionConfig,
+    serialize: persistedFusionConfig,
+    writeError: (message) => new FusionConfigError(message),
+    onMigration: (legacyPath, migratedPath) =>
+      onNotice?.(`migrated ${legacyPath} into ${migratedPath}`)
+  });
+  return config === undefined ? undefined : withPrompts(repoRoot, config);
+}
 
-  const legacyPath = legacyFusionConfigPath(repoRoot);
-  if (!existsSync(legacyPath)) return undefined;
-
-  const config = readAndParse(legacyPath);
-  try {
-    writeFusionConfig(repoRoot, config);
-    onNotice?.(`migrated ${legacyPath} into ${newPath}`);
-  } catch {
-    // Could not write the migrated copy (e.g. read-only FS); use the legacy
-    // file in place for this run rather than failing.
+function persistedFusionConfig(config: FusionConfig): Record<string, unknown> {
+  const { prompts: _prompts, ensembles, ...persisted } = config;
+  const output: Record<string, unknown> = { ...persisted };
+  if (ensembles !== undefined) {
+    output.ensembles = Object.fromEntries(
+      Object.entries(ensembles).map(([name, ensemble]) => {
+        const { prompts: _ensemblePrompts, ...rest } = ensemble;
+        return [name, rest];
+      })
+    );
   }
-  return withPrompts(repoRoot, config);
+  return output;
 }
 
 /**
@@ -715,19 +713,11 @@ export function writeFusionConfig(
   if (existsSync(path) && options.force !== true) {
     throw new FusionConfigError(`${path} already exists (pass --force to overwrite)`);
   }
-  mkdirSync(fusionConfigDir(repoRoot), { recursive: true });
-  const { prompts: _prompts, ensembles, ...persisted } = config;
-  const output: Record<string, unknown> = { ...persisted };
-  if (ensembles !== undefined) {
-    output.ensembles = Object.fromEntries(
-      Object.entries(ensembles).map(([name, ensemble]) => {
-        const { prompts: _ensemblePrompts, ...rest } = ensemble;
-        return [name, rest];
-      })
-    );
+  try {
+    return writeJsonAtomic(path, persistedFusionConfig(config), options);
+  } catch (error) {
+    throw new FusionConfigError(error instanceof Error ? error.message : String(error));
   }
-  writeFileSync(path, JSON.stringify(output, null, 2) + "\n");
-  return path;
 }
 
 /**
@@ -747,7 +737,7 @@ export function writeFusionPrompts(
     if (text === undefined) continue;
     const path = fusionPromptPath(repoRoot, id, options.ensemble);
     if (existsSync(path) && options.force !== true) continue;
-    writeFileSync(path, text.endsWith("\n") ? text : `${text}\n`);
+    writeFileAtomic(path, text.endsWith("\n") ? text : `${text}\n`);
     written.push(path);
   }
   return written;

@@ -14,14 +14,15 @@
  */
 import type { Command } from "commander";
 
-import { bold, cyan, dim, done, note, uiStream } from "@fusionkit/cli-ui";
-import { DEFAULT_ENSEMBLE_NAME, fusionModelId, trimTrailingSlashes } from "@fusionkit/tools";
+import { bold, cyan, dim, done, note, uiStream } from "@routekit/cli-ui";
+import { fail } from "@routekit/cli-core";
+import { DEFAULT_ENSEMBLE_NAME, fusionModelId } from "@fusionkit/tools";
+import { trimTrailingSlashes } from "@routekit/runtime";
 import { installCodexIntegration, uninstallCodexIntegration } from "@fusionkit/tool-codex";
 import type { CodexInstallProfile } from "@fusionkit/tool-codex";
 
 import { loadFusionConfig } from "../fusion-config.js";
 import { gitToplevel } from "../fusion/env.js";
-import { fail } from "../shared/errors.js";
 import { parsePort } from "../shared/options.js";
 
 import { registerPaletteAction } from "./palette.js";

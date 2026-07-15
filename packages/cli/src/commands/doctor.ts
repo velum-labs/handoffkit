@@ -9,8 +9,10 @@ import { delimiter, join, resolve } from "node:path";
 
 import type { Command } from "commander";
 
-import { bold, cyan, dim, formatBytes, green, red } from "@fusionkit/cli-ui";
-import type { Presenter, StatusKind } from "@fusionkit/cli-ui";
+import { bold, cyan, dim, formatBytes, green, red } from "@routekit/cli-ui";
+import { contextFor, probeBinaryVersion, readPackageVersion } from "@routekit/cli-core";
+import type { CommandContext } from "@routekit/cli-core";
+import type { Presenter, StatusKind } from "@routekit/cli-ui";
 import { resolveWebSearchExecutor } from "@fusionkit/model-gateway";
 
 import {
@@ -30,9 +32,6 @@ import { FUSIONKIT_PYPI_VERSION } from "../fusion/env.js";
 import { platformCapabilities } from "../fusion/platform.js";
 import { engineCached } from "../fusion/provision.js";
 import { hasBinary, INSTALL_HINTS } from "../shared/preflight.js";
-import { probeBinaryVersion, readPackageVersion } from "../shared/package-version.js";
-import { contextFor } from "../shared/context.js";
-import type { CommandContext } from "../shared/context.js";
 import { toolRegistry } from "../tools.js";
 
 import { registerPaletteAction } from "./palette.js";

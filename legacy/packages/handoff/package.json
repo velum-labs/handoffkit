@@ -28,7 +28,7 @@
   "dependencies": {
     "@ai-sdk/provider": "4.0.2",
     "@fusionkit/protocol": "workspace:*",
-    "@fusionkit/runtime-utils": "workspace:*",
+    "@routekit/runtime": "workspace:*",
     "@fusionkit/sdk": "workspace:*",
     "@fusionkit/workspace": "workspace:*",
     "ai": "6.0.200",

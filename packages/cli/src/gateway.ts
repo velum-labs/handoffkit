@@ -55,9 +55,9 @@ import type {
   SubscriptionAccountSetOptions
 } from "@fusionkit/model-gateway/subscriptions";
 import type { SubscriptionMode } from "@routekit/registry";
-import { bold, cyan, gray, uiStream } from "@fusionkit/cli-ui";
-import { registerCleanup } from "@fusionkit/runtime-utils";
-import { FUSION_PANEL_MODEL, harnessDriversEnabled, trimTrailingSlashes } from "@fusionkit/tools";
+import { bold, cyan, gray, uiStream } from "@routekit/cli-ui";
+import { registerCleanup, trimTrailingSlashes } from "@routekit/runtime";
+import { FUSION_PANEL_MODEL, harnessDriversEnabled } from "@fusionkit/tools";
 import { buildCursorAcpProducer } from "@fusionkit/tool-cursor";
 import { PROMPT_CONFIG_KEY } from "./fusion-config.js";
 import type { PromptOverrides } from "./fusion-config.js";

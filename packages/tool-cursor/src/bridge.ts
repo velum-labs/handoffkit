@@ -1,7 +1,7 @@
 import type { ChildProcess } from "node:child_process";
 
 import { resolveCursorkitCli } from "@fusionkit/ensemble";
-import { reservePort, spawnLogged, terminate, waitForOutput } from "@fusionkit/tools";
+import { reservePort, spawnLogged, terminate, waitForOutput } from "@routekit/runtime";
 
 import { cursorBridgeEnv } from "./bridge-config.js";
 

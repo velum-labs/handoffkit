@@ -11,13 +11,8 @@ import type {
 
 import { traceCandidate } from "@fusionkit/ensemble";
 import type { FusionTraceCarrier } from "@fusionkit/ensemble";
-
-import { createCursorStreamStepEmitter, parseCursorStreamJson } from "./stream-trajectory.js";
 import {
-  CURSOR_BRIDGE_MODEL_NAME,
-  FUSION_PANEL_MODEL,
   buildChildEnv,
-  buildSkippedCandidate,
   captureWorktreeDiff,
   commandOnPath,
   definedEnv,
@@ -26,8 +21,15 @@ import {
   spawnLogged,
   terminate,
   waitForOutput
+} from "@routekit/runtime";
+import type { CliCaptureResult } from "@routekit/runtime";
+
+import { createCursorStreamStepEmitter, parseCursorStreamJson } from "./stream-trajectory.js";
+import {
+  CURSOR_BRIDGE_MODEL_NAME,
+  FUSION_PANEL_MODEL,
+  buildSkippedCandidate,
 } from "@fusionkit/tools";
-import type { CliCaptureResult } from "@fusionkit/tools";
 
 import {
   CURSOR_AGENT_TOOL_MAX_ITERATIONS,

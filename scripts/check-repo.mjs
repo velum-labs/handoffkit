@@ -3,6 +3,7 @@ import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 
 import {
+  canonicalSharedPackageViolations,
   isInternalWorkspaceDependency,
   routekitDependencyViolations,
   routekitProductionSources,
@@ -51,6 +52,12 @@ const requiredFiles = [
   "spec/fusion-trace/registry.json",
   "scripts/generate-trace-conventions.mjs",
   "packages/tracing/src/index.ts",
+  "packages/routekit-tracing/src/index.ts",
+  "packages/runtime-utils/src/index.ts",
+  "packages/cli-ui/src/index.ts",
+  "packages/cli-core/src/index.ts",
+  "packages/config-core/src/index.ts",
+  "packages/telemetry-core/src/index.ts",
   "packages/protocol/src/generated/trace-conventions.ts",
   "python/fusionkit-core/src/fusionkit_core/_generated/trace_conventions.py",
   "apps/scope/lib/generated/trace-conventions.ts",
@@ -133,7 +140,6 @@ const requiredFiles = [
   "packages/ensemble/src/mock.ts",
   "packages/ensemble/src/command.ts",
   "packages/tools/src/index.ts",
-  "packages/tools/src/proc.ts",
   "packages/tools/src/registry.ts",
   "packages/tools/src/constants.ts",
   "packages/tools/src/env-compat.ts",
@@ -484,7 +490,7 @@ const TRUSTED_THIRD_PARTY = new Map([
   ["ai", "6.0.200"],
   ["commander", "14.0.3"],
   ["figlet", "1.11.0"],
-  // The CLI's Ink-based presentation layer (@fusionkit/cli-ui): React for
+  // The CLI's Ink-based presentation layer (@routekit/cli-ui): React for
   // terminals plus its testing harness, pinned exactly like everything else.
   ["ink", "7.1.0"],
   ["ink-testing-library", "4.0.0"],
@@ -595,6 +601,24 @@ for (const violation of routekitDependencyViolations(workspaceManifests)) {
       violation.dependencyPath.join(" -> ")
   );
 }
+for (const violation of canonicalSharedPackageViolations(workspaceManifests)) {
+  fail(`canonical shared package violation: ${violation}`);
+}
+
+// Shared process/config/CLI behavior has one public owner. These historical
+// local facades make duplicate implementations easy to reintroduce.
+for (const wrapper of [
+  "packages/tools/src/proc.ts",
+  "packages/tools/src/env.ts",
+  "packages/cli/src/shared/proc.ts",
+  "packages/cli/src/shared/context.ts",
+  "packages/cli/src/shared/errors.ts",
+  "packages/cli/src/shared/flag-suggest.ts",
+  "packages/cli/src/shared/pickers.ts",
+  "packages/cli/src/shared/package-version.ts"
+]) {
+  if (existsSync(wrapper)) fail(`forbidden local shared-core wrapper: ${wrapper}`);
+}
 
 // RouteKit production source names and imports must remain product-neutral.
 // Tests and docs are intentionally excluded: they need to assert the boundary
@@ -643,13 +667,19 @@ if (sourceListing.status === 0) {
   }
 }
 
-// The CLI renders exclusively through the @fusionkit/cli-ui presenter (UI on
+// The CLI renders exclusively through the @routekit/cli-ui presenter (UI on
 // stderr, machine payloads on stdout). Raw console.* calls bypass that
 // contract — non-interactive degradation, --json purity, NO_COLOR — so they
 // are disallowed in the CLI and UI sources (tests excluded).
 const noConsoleListing = spawnSync(
   "git",
-  ["ls-files", "packages/cli/src/**/*.ts", "packages/cli-ui/src/**/*.ts", "packages/cli-ui/src/**/*.tsx"],
+  [
+    "ls-files",
+    "packages/cli/src/**/*.ts",
+    "packages/cli-core/src/**/*.ts",
+    "packages/cli-ui/src/**/*.ts",
+    "packages/cli-ui/src/**/*.tsx"
+  ],
   { encoding: "utf8" }
 );
 if (noConsoleListing.status === 0) {
@@ -660,7 +690,7 @@ if (noConsoleListing.status === 0) {
     const lines = readFileSync(file, "utf8").split("\n");
     for (let i = 0; i < lines.length; i++) {
       if (consolePattern.test(lines[i])) {
-        fail(`raw console output in ${file}:${i + 1} — render through the @fusionkit/cli-ui presenter instead`);
+        fail(`raw console output in ${file}:${i + 1} — render through the @routekit/cli-ui presenter instead`);
       }
     }
   }
@@ -669,9 +699,9 @@ if (noConsoleListing.status === 0) {
 // Spawned children must never inherit the full parent environment: a panel
 // model or harness child that can run shell commands would see every
 // credential the parent holds (and persist them into trajectories/artifacts).
-// All spawn/exec env objects must be built through the runtime-utils
+// All spawn/exec env objects must be built through @routekit/runtime's
 // buildChildEnv allowlist; spreading process.env into an env literal is only
-// permitted inside runtime-utils itself (which implements the policy).
+// permitted inside the canonical runtime itself (which implements the policy).
 const envSpreadListing = spawnSync(
   "git",
   ["ls-files", "packages/*/src/**/*.ts"],
@@ -691,7 +721,7 @@ if (envSpreadListing.status === 0) {
     for (let i = 0; i < lines.length; i++) {
       if (envSpreadPattern.test(lines[i]) && !waiverPattern.test(lines[i - 1] ?? "")) {
         fail(
-          `full parent env spread in ${file}:${i + 1} — build the child env with buildChildEnv (runtime-utils), ` +
+            `full parent env spread in ${file}:${i + 1} — build the child env with buildChildEnv (@routekit/runtime), ` +
             `or add an "env-spread-allowed: <reason>" comment for a trusted infra child`
         );
       }

@@ -24,7 +24,8 @@ HTTP contracts, read [Specs and APIs](specs-and-apis.md).
 | Package | Responsibility | Start with |
 | --- | --- | --- |
 | `@fusionkit/cli` | `fusionkit` command line workflows for init, local models, harness launchers, sessions, config, prompts, and fusion. | `packages/cli/src/cli.ts`, `packages/cli/src/commands` |
-| `@fusionkit/cli-ui` | Terminal presentation layer: Ink and plain presenters, prompts, wizards, and formatting. | `packages/cli-ui/src/index.ts` |
+| `@routekit/cli-ui` | Brand-configurable Ink/plain presenters, prompts, wizards, and formatting. | `packages/cli-ui/src/index.ts` |
+| `@routekit/cli-core` | CLI context, errors, shared option parsing, completion, package versions, and test helpers. | `packages/cli-core/src/index.ts` |
 | `@fusionkit/handoff` | Continuation SDK: checkpoints, `continueIn`, parallel fan-out, review, pull, tools, model routing, and trace logs. | `legacy/packages/handoff/src/handoff.ts` |
 | `@fusionkit/adapter-ai-sdk` | Product-local AI SDK utilities, worktree agents, local model adapters, and managed MLX helpers. | `packages/adapter-ai-sdk/src/index.ts` |
 | `@fusionkit/adapter-compute` | ComputeSDK-shaped sandbox surface backed by governed runner sessions. | `legacy/packages/adapter-compute/src/sandbox.ts` |
@@ -48,8 +49,11 @@ HTTP contracts, read [Specs and APIs](specs-and-apis.md).
 | Package | Responsibility | Start with |
 | --- | --- | --- |
 | `@fusionkit/registry` | Typed accessors over the generated `spec/registry/*.json` data: providers, catalogs, capabilities, and pricing. | `packages/registry/src/index.ts` |
-| `@fusionkit/runtime-utils` | Shared runtime primitives: supervised spawn, cleanup, timeouts, ids, and token estimates. | `packages/runtime-utils/src/index.ts` |
-| `@fusionkit/tracing` | OpenTelemetry-backed fusion span/event helpers, trace carriers, and in-process listeners. | `packages/tracing/src/index.ts` |
+| `@routekit/runtime` | Shared process supervision, child environments, cleanup, atomic files, locks, ports, and portless registration. | `packages/runtime-utils/src/index.ts` |
+| `@routekit/config-core` | Layered config resolution, validated JSON IO, migration, and edit primitives. | `packages/config-core/src/index.ts` |
+| `@routekit/telemetry-core` | Parameterized consent, redaction, anonymous events, and bounded shutdown. | `packages/telemetry-core/src/index.ts` |
+| `@routekit/tracing` | Generic OpenTelemetry providers, propagation, listeners, and export redaction. | `packages/routekit-tracing/src/index.ts` |
+| `@fusionkit/tracing` | Fusion semantic-convention facade over `@routekit/tracing`. | `packages/tracing/src/index.ts` |
 | `@fusionkit/testkit` | Cross-stack E2E tooling (never published): provider simulator handle, real engine process, sim-backed router configs, and SSE observation. Legacy plane/runner fixtures live in `legacy/packages/testkit`. | `packages/testkit/src/index.ts`, `docs/testing.md` |
 | `@fusionkit/example-utils` | Shared demo manifest parsing, narration, and live-model helpers. | `packages/example-utils/src/index.ts` |
 

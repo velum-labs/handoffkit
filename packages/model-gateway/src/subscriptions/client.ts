@@ -1,4 +1,4 @@
-import { trimTrailingSlashes } from "@fusionkit/runtime-utils";
+import { trimTrailingSlashes } from "@routekit/runtime";
 
 import { subscriptionUsageResponseSchema, SUBSCRIPTION_USAGE_PATH } from "./wire.js";
 import type { SubscriptionUsageResponse } from "./wire.js";

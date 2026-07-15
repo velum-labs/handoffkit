@@ -22,11 +22,10 @@ import { join } from "node:path";
 
 import {
   DEFAULT_ENSEMBLE_NAME,
-  formatDurationMs,
   FUSION_PANEL_MODEL,
-  fusionModelId,
-  registerCleanup
+  fusionModelId
 } from "@fusionkit/tools";
+import { formatDurationMs, registerCleanup } from "@routekit/runtime";
 import type { ToolLaunchContext } from "@fusionkit/tools";
 import { harnessSupportsFiniteK } from "@fusionkit/ensemble";
 import { isLookaheadK } from "@fusionkit/protocol";
@@ -51,7 +50,7 @@ import {
   isInteractive,
   uiStream,
   yellow
-} from "@fusionkit/cli-ui";
+} from "@routekit/cli-ui";
 
 import { resolveSessionId } from "./commands/sessions.js";
 import { gatewaySetupSnippets, setGatewayChatter, setGatewayStatusSink } from "./gateway.js";

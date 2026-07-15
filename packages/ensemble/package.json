@@ -123,7 +123,7 @@
     "@fusionkit/kernel": "workspace:*",
     "@fusionkit/model-gateway": "workspace:*",
     "@fusionkit/protocol": "workspace:*",
-    "@fusionkit/runtime-utils": "workspace:*",
+    "@routekit/runtime": "workspace:*",
     "@fusionkit/tracing": "workspace:*",
     "@fusionkit/workspace": "workspace:*",
     "@routekit/contracts": "workspace:*",

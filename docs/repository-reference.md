@@ -279,15 +279,17 @@ if (issues.length > 0) {
 
 ### Product support packages
 
-`@fusionkit/cli-ui` is the terminal presentation layer for the CLI: one presenter contract with an Ink (React) implementation for interactive TTYs and a plain-text implementation for CI and pipes, plus prompt, wizard, fuzzy-match, and formatting helpers.
+`@routekit/cli-ui` is the brand-configurable terminal presentation layer; `@routekit/cli-core` owns command context, errors, common option parsing, completion, package-version formatting, and reusable CLI test helpers. FusionKit composes both and keeps product options in `@fusionkit/cli`.
 
 `@fusionkit/harness-core` is the single coding-agent harness contract: driver, instance, and session interfaces, the canonical harness event union, a tagged error taxonomy with derived retryability, approval policies, status probes, and the `DriverRegistry`. The `tool-*` packages implement it; the panel fanout and launchers consume it.
 
 `@fusionkit/registry` provides typed accessors over the generated registry data in `spec/registry/*.json`: provider metadata, subscription auth metadata, the model and local catalogs, capability quirks, and default pricing. The Python workspace consumes the same data through generated bindings, so the two stacks cannot drift.
 
-`@fusionkit/runtime-utils` holds shared runtime primitives: supervised process spawning, cleanup registration, timeout defaults, random ids, and token estimation.
+`@routekit/runtime` is the canonical owner for process supervision, child environments, cleanup, atomic files and locks, ports, and product-parameterized portless service registration.
 
-`@fusionkit/tracing` is the OpenTelemetry-backed tracing layer: `initFusionTracing()`, typed span and event helpers over the fusion semantic conventions, the serializable trace carrier, and in-process span/event listeners.
+`@routekit/config-core` and `@routekit/telemetry-core` provide the layered config IO/migration and parameterized consent/redaction/event plumbing used by the FusionKit CLI.
+
+`@routekit/tracing` owns the generic OpenTelemetry provider, propagation, listener, and export-redaction runtime. `@fusionkit/tracing` is a one-way conventions facade that supplies Fusion attributes, scopes, baggage, and names.
 
 ### Legacy and platform TypeScript packages
 

@@ -1,4 +1,5 @@
 import { Command } from "commander";
+import { attachGlobalFlags, readPackageVersion } from "@routekit/cli-core";
 
 import "./tools.js";
 import { FUSIONKIT_PYPI_VERSION } from "./fusion-quickstart.js";
@@ -17,8 +18,6 @@ import { registerSetup } from "./commands/setup.js";
 import { registerStop } from "./commands/stop.js";
 import { registerTelemetry } from "./commands/telemetry.js";
 import { registerVersion } from "./commands/version.js";
-import { attachGlobalFlags } from "./shared/context.js";
-import { readPackageVersion } from "./shared/package-version.js";
 
 /**
  * Build the `fusionkit` command tree. `enablePositionalOptions` keeps the

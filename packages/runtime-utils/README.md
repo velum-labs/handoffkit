@@ -1,6 +1,6 @@
-# @fusionkit/runtime-utils
+# @routekit/runtime
 
-Small runtime utilities shared by FusionKit packages.
+Brand-neutral runtime utilities shared by RouteKit and product packages.
 
 ## Architecture
 
@@ -8,10 +8,10 @@ This package contains leaf helpers for process control, timeouts, formatting, ma
 
 ## Usage
 
-Most users never install it directly; it is a dependency of higher-level FusionKit packages.
+Most users install it through a higher-level package.
 
 ```ts
-import * as fusionkitPackage from "@fusionkit/runtime-utils";
+import { superviseSpawn, writeFileAtomic } from "@routekit/runtime";
 ```
 
 ## Docs

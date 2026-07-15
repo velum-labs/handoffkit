@@ -14,7 +14,7 @@
  */
 
 import type { Backend } from "../backend.js";
-import { randomId } from "@fusionkit/runtime-utils";
+import { randomId } from "@routekit/runtime";
 import type { OpenAiChoice } from "./openai-chat-wire.js";
 import { droppedField } from "./dropped.js";
 import { unwrapUpstreamError } from "./upstream-error.js";

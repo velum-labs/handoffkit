@@ -1,5 +1,5 @@
 {
-  "name": "@fusionkit/runtime-utils",
+  "name": "@routekit/runtime",
   "private": false,
   "version": "0.8.0",
   "repository": {
@@ -7,7 +7,7 @@
     "url": "git+https://github.com/velum-labs/handoffkit.git",
     "directory": "packages/runtime-utils"
   },
-  "description": "Leaf runtime helpers for FusionKit process control, timeouts, formatting, markdown reports, and isolation defaults.",
+  "description": "Brand-neutral runtime helpers for process control, cleanup, child environments, filesystems, ports, and service routing.",
   "license": "Apache-2.0",
   "type": "module",
   "exports": {
@@ -26,15 +26,14 @@
     "provenance": true
   },
   "keywords": [
-    "fusionkit",
-    "model-fusion",
-    "llm",
-    "ensemble",
-    "coding-agent",
+    "routekit",
     "runtime",
     "process-control",
     "utilities"
   ],
+  "optionalDependencies": {
+    "portless": "0.15.1"
+  },
   "scripts": {
     "test": "node --test \"dist/test/*.test.js\""
   }

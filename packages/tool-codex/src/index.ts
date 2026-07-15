@@ -4,9 +4,9 @@
 import { smokeModelForTool } from "@routekit/registry";
 import {
   FUSION_PANEL_MODEL,
-  harnessDriversEnabled,
-  trimTrailingSlashes
+  harnessDriversEnabled
 } from "@fusionkit/tools";
+import { trimTrailingSlashes } from "@routekit/runtime";
 import type { ToolIntegration } from "@fusionkit/tools";
 import { createDriverHarness } from "@fusionkit/ensemble";
 import type { HarnessAdapter, ToolHarnessResolveOptions } from "@fusionkit/ensemble";

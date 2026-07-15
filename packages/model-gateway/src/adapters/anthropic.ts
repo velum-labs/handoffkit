@@ -10,7 +10,7 @@
 
 import type { Backend } from "../backend.js";
 import { defaultFusionGatewayLogger } from "../logger.js";
-import { estimateTokens, randomId } from "@fusionkit/runtime-utils";
+import { estimateTokens, randomId } from "@routekit/runtime";
 import { SseDecoder, SseParseError } from "../sse/parse.js";
 import type { OpenAiChoice } from "./openai-chat-wire.js";
 import { droppedField } from "./dropped.js";

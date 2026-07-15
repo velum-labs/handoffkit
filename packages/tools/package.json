@@ -29,7 +29,6 @@
     "@fusionkit/ensemble": "workspace:*",
     "@fusionkit/protocol": "workspace:*",
     "@fusionkit/registry": "workspace:*",
-    "@fusionkit/runtime-utils": "workspace:*",
     "@routekit/contracts": "workspace:*"
   },
   "keywords": [

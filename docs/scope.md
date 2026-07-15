@@ -27,15 +27,15 @@ These packages must not depend directly or transitively on the legacy packages:
 | Package | Role |
 | --- | --- |
 | `@fusionkit/cli` | Product front door. |
-| `@fusionkit/cli-ui` | Terminal presentation layer. |
 | `@fusionkit/ensemble` | Panel run engine: worktrees, harness execution, judge synthesis, fusion. |
 | `@fusionkit/model-gateway` | Harness gateway: dialect translation, streaming, sessions, cost, rate-limit handoff. |
 | `@fusionkit/protocol` | Model-fusion data contracts and generated SDK bindings. |
 | `@fusionkit/workspace` | Git workspace capture, worktree materialization, divergence-safe pull. |
 | `@fusionkit/tools`, `tool-codex`, `tool-claude`, `tool-cursor`, `tool-opencode` | Per-harness adapters. |
 | `@fusionkit/adapter-ai-sdk` | Managed MLX local-model helpers and product-local AI SDK utilities. |
-| `@fusionkit/harness-core`, `runtime-utils`, `registry`, `kernel` | Shared product runtime, registry, and execution primitives. |
+| `@fusionkit/harness-core`, `registry`, `kernel` | Fusion-specific harness, registry, and execution primitives. |
 | `@fusionkit/tracing` | OpenTelemetry-backed fusion span/event helpers and trace carriers. |
+| `@routekit/runtime`, `cli-ui`, `cli-core`, `config-core`, `telemetry-core`, `tracing` | Brand-neutral shared runtime, CLI, configuration, telemetry, and tracing foundations. |
 
 ## Legacy quarantine
 

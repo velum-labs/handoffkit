@@ -1,7 +1,16 @@
 import { randomUUID } from "node:crypto";
 import { spawn, spawnSync } from "node:child_process";
 import type { ChildProcess, SpawnOptions } from "node:child_process";
-import { createWriteStream, existsSync, mkdirSync, writeFileSync } from "node:fs";
+import {
+  closeSync,
+  createWriteStream,
+  existsSync,
+  mkdirSync,
+  openSync,
+  renameSync,
+  rmSync,
+  writeFileSync
+} from "node:fs";
 import type { WriteStream } from "node:fs";
 import { createServer } from "node:net";
 import type { Server } from "node:net";
@@ -12,15 +21,37 @@ import { terminateGroup } from "./process.js";
 export { registerCleanup, runCleanups } from "./cleanup.js";
 export { superviseSpawn, terminateGroup } from "./process.js";
 export type { ExitInfo, Spawned, SuperviseSpawnOptions } from "./process.js";
+export {
+  createActivePortlessSession,
+  createPortlessSession,
+  detectPortlessProxy,
+  reapPortlessProject,
+  reapPortlessService
+} from "./portless.js";
+export type {
+  DetectedProxy,
+  DiscoverOrSpawnInput,
+  DiscoverOrSpawnResult,
+  PortlessModule,
+  PortlessOptions,
+  PortlessSession,
+  RouteMapping,
+  RouteStoreLike,
+  SpawnedService
+} from "./portless.js";
 
 type EnvInput = Record<string, string | undefined>;
 
-export const RUNTIME_TIMEOUT_MS = {
+export const DEFAULT_RUNTIME_TIMEOUTS = {
   remoteTool: 5 * 60 * 1000,
   sandboxCommand: 5 * 60 * 1000,
-  session: 10 * 60 * 1000,
-  panelModel: 10 * 60 * 1000
+  session: 10 * 60 * 1000
 } as const;
+
+/** Build a named timeout map in the product package that owns those names. */
+export function defineTimeouts<const T extends Record<string, number>>(timeouts: T): Readonly<T> {
+  return Object.freeze({ ...timeouts });
+}
 
 export const MANAGED_SERVER_DEFAULTS = {
   startupTimeoutMs: 120_000,
@@ -133,19 +164,61 @@ export function captureWorktreeDiff(cwd: string): string | undefined {
 }
 
 /**
- * Create a run-output directory. When it lives under a `.fusionkit/` segment
- * (the default output roots inside user repos), drop a self-ignoring
- * `.gitignore` so run artifacts never pollute the user's `git status` —
- * while committed config like `.fusionkit/fusion.json` stays trackable.
+ * Create an output directory. When it lives under one of the caller-owned
+ * data-directory segments, drop a self-ignoring `.gitignore` so generated
+ * artifacts never pollute the user's working tree.
  */
-export function ensureRunOutputDir(dir: string): string {
+export function ensureRunOutputDir(
+  dir: string,
+  options: { dataDirectoryNames?: readonly string[] } = {}
+): string {
   mkdirSync(dir, { recursive: true });
   const normalized = dir.split(sep).join("/");
-  if (/(^|\/)\.fusionkit\//.test(`${normalized}/`)) {
+  const inManagedDirectory = (options.dataDirectoryNames ?? []).some((name) => {
+    const segment = name.split(sep).join("/").replace(/^\/+|\/+$/g, "");
+    return segment.length > 0 && (`/${normalized}/`).includes(`/${segment}/`);
+  });
+  if (inManagedDirectory) {
     const ignorePath = join(dir, ".gitignore");
     if (!existsSync(ignorePath)) writeFileSync(ignorePath, "*\n");
   }
   return dir;
+}
+
+/** Atomically replace a UTF-8 file by writing a sibling temporary first. */
+export function writeFileAtomic(path: string, content: string): void {
+  const temporary = `${path}.${process.pid}.${randomId(8)}.tmp`;
+  try {
+    writeFileSync(temporary, content);
+    renameSync(temporary, path);
+  } finally {
+    rmSync(temporary, { force: true });
+  }
+}
+
+export type FileLock = { release(): void };
+
+/**
+ * Acquire an exclusive lock file. Creation is atomic; callers own retry policy
+ * and must release the returned handle.
+ */
+export function tryAcquireFileLock(path: string): FileLock | undefined {
+  let descriptor: number;
+  try {
+    descriptor = openSync(path, "wx");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "EEXIST") return undefined;
+    throw error;
+  }
+  let released = false;
+  return {
+    release(): void {
+      if (released) return;
+      released = true;
+      closeSync(descriptor);
+      rmSync(path, { force: true });
+    }
+  };
 }
 
 export function definedEnv(env: EnvInput): Record<string, string> {

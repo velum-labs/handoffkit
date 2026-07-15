@@ -30,13 +30,13 @@ import {
   text,
   uiStream,
   yellow
-} from "@fusionkit/cli-ui";
-import type { Presenter, WizardStep } from "@fusionkit/cli-ui";
+} from "@routekit/cli-ui";
+import type { Presenter, WizardStep } from "@routekit/cli-ui";
 
 import { MlxCapabilityError } from "@fusionkit/adapter-ai-sdk";
 import { fusionModelId } from "@fusionkit/registry";
 
-import { formatBytes, glyph } from "@fusionkit/cli-ui";
+import { formatBytes, glyph } from "@routekit/cli-ui";
 
 import { toolSelectOptions } from "./fusion-quickstart.js";
 import type { FusionTool, PanelModelSpec } from "./fusion-quickstart.js";

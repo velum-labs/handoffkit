@@ -14,7 +14,7 @@
 import { createClaudeCode } from "@ai-sdk/harness-claude-code";
 import { createVercelSandbox } from "@ai-sdk/sandbox-vercel";
 import type { RunContract } from "@fusionkit/protocol";
-import { CANDIDATE_ISOLATION_DEFAULTS } from "@fusionkit/runtime-utils";
+import { CANDIDATE_ISOLATION_DEFAULTS } from "@routekit/runtime";
 import type { SessionBackend } from "@fusionkit/runner";
 import {
   toVercelNetwork,

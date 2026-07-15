@@ -18,7 +18,9 @@ import { dirname } from "node:path";
 
 import type { Command } from "commander";
 
-import { bold, canPromptInteractively, cyan, dim, gray } from "@fusionkit/cli-ui";
+import { bold, canPromptInteractively, cyan, dim, gray } from "@routekit/cli-ui";
+import { argOrPick, contextFor, fail } from "@routekit/cli-core";
+import type { CommandContext } from "@routekit/cli-core";
 
 import {
   DEFAULT_ENSEMBLE_NAME,
@@ -29,10 +31,6 @@ import {
 import type { PromptId } from "../fusion-config.js";
 import { loadConfigOrFail, repoRootFor } from "../fusion/config-store.js";
 import { fetchDefaultPrompts } from "../fusion/prompts.js";
-import { contextFor } from "../shared/context.js";
-import type { CommandContext } from "../shared/context.js";
-import { fail } from "../shared/errors.js";
-import { argOrPick } from "../shared/pickers.js";
 
 type PromptOpts = { repo?: string; ensemble?: string; json?: boolean; fusionkitDir?: string };
 

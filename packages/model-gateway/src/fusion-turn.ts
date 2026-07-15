@@ -3,7 +3,7 @@ import type { WireTrajectory } from "@fusionkit/protocol";
 import { headersOf, isFusionTracingActive, jsonAttr, startFusionSpan } from "@fusionkit/tracing";
 import type { FusionSpan } from "@fusionkit/tracing";
 import { FUSION_PANEL_MODEL } from "@fusionkit/registry";
-import { withDeadline } from "@fusionkit/runtime-utils";
+import { withDeadline } from "@routekit/runtime";
 
 import { parseUsage } from "./cost.js";
 import { createTurnNarrator, proposalsAgree, renderProposal, terminalProposal } from "./frontdoor/narration.js";

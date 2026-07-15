@@ -1,4 +1,4 @@
-import { normalizeApiBaseUrl, scrubBridgeEnv } from "@fusionkit/tools";
+import { normalizeApiBaseUrl, scrubBridgeEnv } from "@routekit/runtime";
 
 const DEFAULT_CONTEXT_TOKEN_LIMIT = 128000;
 const DEFAULT_LOCAL_API_KEY = "local";

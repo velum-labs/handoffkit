@@ -19,10 +19,9 @@ import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { spawnLogged, terminate, waitForHttp } from "../shared/proc.js";
-import type { LoggedChild } from "../shared/proc.js";
+import { spawnLogged, superviseSpawn, terminate, waitForHttp } from "@routekit/runtime";
+import type { LoggedChild } from "@routekit/runtime";
 import type { PortlessSession } from "../shared/portless.js";
-import { superviseSpawn } from "@fusionkit/runtime-utils";
 
 import type { StackReporter } from "./env.js";
 

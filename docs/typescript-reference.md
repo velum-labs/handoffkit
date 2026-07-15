@@ -270,9 +270,9 @@ if (issues.length > 0) {
 }
 ```
 
-## `@fusionkit/cli-ui`
+## `@routekit/cli-ui` and `@routekit/cli-core`
 
-`@fusionkit/cli-ui` is the fusionkit terminal UX layer: one presenter contract with two implementations — rich Ink (React) rendering on interactive TTYs and ordered plain-text lines everywhere else. All UI goes to stderr; stdout stays reserved for machine payloads and the launched tool's output.
+`@routekit/cli-ui` is a brand-configurable terminal UX layer with rich Ink and ordered plain-text presenters. `@routekit/cli-core` composes it with brand-neutral command context, structured errors, common parsing, completion, version formatting, and test helpers.
 
 Important exports include `createPresenter()`, `InkPresenter`, `PlainPresenter`, prompt helpers (`select()`, `multiselect()`, `confirm()`, `text()`, `fuzzySelect()`), `runWizard()`, `fuzzyFilter()`/`fuzzyMatch()`, and the theme, runtime, and format helpers re-exported from the entry point.
 
@@ -288,13 +288,13 @@ Important exports include `HARNESS_KINDS`, `isHarnessKind()`, `HarnessError`, `a
 
 Important exports include `REGISTRY`, `PROVIDERS`, and the provider, catalog, capability, and pricing accessor types and helpers in `packages/registry/src/index.ts`.
 
-## `@fusionkit/runtime-utils`
+## RouteKit shared cores
 
-`@fusionkit/runtime-utils` holds shared runtime primitives used across product packages: `superviseSpawn()`/`terminateGroup()` for observable process management, `registerCleanup()`/`runCleanups()`, timeout defaults (`RUNTIME_TIMEOUT_MS`, `MANAGED_SERVER_DEFAULTS`, `CANDIDATE_ISOLATION_DEFAULTS`), `sleep()`, `randomId()`, and `estimateTokens()`.
+`@routekit/runtime` owns process supervision, child environments, cleanup, atomic files and locks, ports, timeouts, and parameterized portless service registration. `@routekit/config-core` owns layered resolution and validated/migrating JSON IO. `@routekit/telemetry-core` owns parameterized consent, redaction, anonymous event properties, and bounded shutdown.
 
 ## `@fusionkit/tracing`
 
-`@fusionkit/tracing` is the OpenTelemetry-based tracing layer for the fusion stack. The OTel SDK is the engine (ids, W3C propagation, batching, OTLP export); this package owns the thin domain layer over the fusion semantic conventions in `spec/fusion-trace/registry.json`.
+`@routekit/tracing` owns the generic OpenTelemetry engine integration: providers, W3C propagation, in-process listeners, and policy-based export redaction. `@fusionkit/tracing` is the thin conventions facade over the fusion semantic conventions in `spec/fusion-trace/registry.json`.
 
 Important exports include `initFusionTracing()`, `flushFusionTracing()`, `shutdownFusionTracing()`, `startFusionSpan()`, `emitFusionEvent()`, `newSessionCarrier()`, carrier helpers (`carrierFromHeaders()`, `carrierFromEnv()`, `headersOf()`, `envOf()`), and the in-process span/event listener registration (`addSpanListener()`, `addFusionEventListener()`).
 

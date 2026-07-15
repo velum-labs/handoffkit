@@ -1,37 +1,18 @@
-/**
- * Shared CLI failure helpers.
- *
- * `fail(message)` keeps the one-line `error: ...` contract (tests assert the
- * wording) for terse validation failures. Richer failures throw or pass a
- * {@link CliError}: one error shape rendered three ways — a red framed panel
- * on human UI, prefixed plain lines under --quiet, and a structured
- * `{ error: { code, message, hint?, try?, docs?, details? } }` payload in
- * --json mode. Every field is optional except the message, and the `try`
- * field is always a copy-pasteable next command.
- */
-import { createPresenter, uiStream } from "@fusionkit/cli-ui";
+import { createPresenter, uiStream } from "@routekit/cli-ui";
 
 import { emitJson, isJsonMode } from "./context.js";
 
 export type CliErrorInput = {
   message: string;
-  /** Stable machine-readable code for --json consumers (default: "error"). */
   code?: string;
-  /** Supporting evidence, e.g. a distilled log tail. */
   details?: readonly string[];
-  /** A human explanation of what likely went wrong / what to check. */
   hint?: string;
-  /** A copy-pasteable next command. */
   tryCommand?: string;
-  /** A docs URL for the failure area. */
   docs?: string;
-  /** Process exit code (default 1). */
   exitCode?: number;
-  /** Render as a one-line `error: <message>` instead of the framed panel. */
   plain?: boolean;
 };
 
-/** A CLI failure carrying presentation fields for the error panel. */
 export class CliError extends Error {
   readonly code: string;
   readonly details?: readonly string[];
@@ -54,7 +35,6 @@ export class CliError extends Error {
   }
 }
 
-/** The --json payload for a CliError (also used by the top-level handler). */
 export function cliErrorPayload(error: CliError): { error: Record<string, unknown> } {
   return {
     error: {
@@ -68,7 +48,6 @@ export function cliErrorPayload(error: CliError): { error: Record<string, unknow
   };
 }
 
-/** Render a CliError to the human UI channel and return its exit code. */
 export function renderCliError(error: CliError): number {
   if (isJsonMode()) {
     emitJson(cliErrorPayload(error));
@@ -90,6 +69,5 @@ export function renderCliError(error: CliError): number {
 }
 
 export function fail(message: string | CliErrorInput): never {
-  if (typeof message === "string") throw new CliError({ message, plain: true });
-  throw new CliError(message);
+  throw new CliError(typeof message === "string" ? { message, plain: true } : message);
 }

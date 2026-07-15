@@ -19,9 +19,11 @@ import { existsSync, writeFileSync } from "node:fs";
 
 import type { Command } from "commander";
 
-import { bold, cyan, dim, glyph, gray, green, yellow } from "@fusionkit/cli-ui";
+import { bold, cyan, dim, glyph, gray, green, yellow } from "@routekit/cli-ui";
 
-import { autocompleteText, select, text } from "@fusionkit/cli-ui";
+import { autocompleteText, select, text } from "@routekit/cli-ui";
+import { argOrPick, canPickInteractively, contextFor, fail } from "@routekit/cli-core";
+import type { CommandContext } from "@routekit/cli-core";
 
 import { FusionConfigError, fusionConfigPath, parseFusionConfig } from "../fusion-config.js";
 import type { FusionConfig } from "../fusion-config.js";
@@ -32,11 +34,7 @@ import { loadConfigOrFail, persistedShape, repoRootFor, validateAndWrite } from 
 import { resolveEffectiveConfig } from "../fusion/effective-config.js";
 import type { ConfigSource } from "../fusion/effective-config.js";
 import { exportRouterYaml } from "../fusion/stack.js";
-import { contextFor } from "../shared/context.js";
-import type { CommandContext } from "../shared/context.js";
-import { fail } from "../shared/errors.js";
 import { ON_RATE_LIMIT_OPTIONS, PANEL_TRUST_MESSAGE, PANEL_TRUST_OPTIONS } from "../shared/options.js";
-import { argOrPick, canPickInteractively } from "../shared/pickers.js";
 
 import { runConfigEdit } from "./config-edit.js";
 import { registerPaletteAction } from "./palette.js";

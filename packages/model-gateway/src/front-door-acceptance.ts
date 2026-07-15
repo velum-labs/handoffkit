@@ -13,7 +13,7 @@
 
 import { PassThrough } from "node:stream";
 
-import { trimTrailingSlashes } from "@fusionkit/runtime-utils";
+import { trimTrailingSlashes } from "@routekit/runtime";
 
 import { runAcpAgent } from "./acp-agent.js";
 import type { AcpRunner } from "./acp-agent.js";

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import {
+  canonicalSharedPackageViolations,
   routekitDependencyViolations,
   routekitSourceViolations
 } from "../scripts/lib/architecture-guards.mjs";
@@ -43,6 +44,24 @@ test("RouteKit dependency guard rejects direct and transitive FusionKit dependen
       ["@routekit/bad-transitive", "@routekit/bad-direct", "@fusionkit/protocol"]
     ]
   );
+});
+
+test("canonical shared package guard pins every owner name to its path", () => {
+  const manifests = [
+    ["packages/runtime-utils", "@routekit/runtime"],
+    ["packages/routekit-tracing", "@routekit/tracing"],
+    ["packages/cli-ui", "@routekit/cli-ui"],
+    ["packages/cli-core", "@routekit/cli-core"],
+    ["packages/config-core", "@routekit/config-core"],
+    ["packages/telemetry-core", "@routekit/telemetry-core"]
+  ].map(([dir, name]) => ({
+    dir,
+    manifestPath: `${dir}/package.json`,
+    manifest: { name }
+  }));
+  assert.deepEqual(canonicalSharedPackageViolations(manifests), []);
+  manifests[0].manifest.name = "@fusionkit/runtime-utils";
+  assert.match(canonicalSharedPackageViolations(manifests)[0], /must declare @routekit\/runtime/);
 });
 
 test("RouteKit source guard targets production paths, declarations, and imports", () => {

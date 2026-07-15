@@ -7,8 +7,10 @@
  */
 import { resolve } from "node:path";
 
-import { dim } from "@fusionkit/cli-ui";
-import type { Presenter } from "@fusionkit/cli-ui";
+import { dim } from "@routekit/cli-ui";
+import { fail } from "@routekit/cli-core";
+import { editConfig } from "@routekit/config-core";
+import type { Presenter } from "@routekit/cli-ui";
 
 import {
   FUSION_CONFIG_VERSION,
@@ -20,7 +22,6 @@ import {
 } from "../fusion-config.js";
 import type { EnsembleConfig, FusionConfig } from "../fusion-config.js";
 import { gitToplevel } from "./env.js";
-import { fail } from "../shared/errors.js";
 
 export type ConfigShape = Record<string, unknown>;
 
@@ -68,7 +69,12 @@ export function shapeEnsembles(shape: ConfigShape): Record<string, EnsembleConfi
 export function validateAndWrite(root: string, shape: ConfigShape): FusionConfig {
   let validated: FusionConfig;
   try {
-    validated = parseFusionConfig(shape, fusionConfigPath(root));
+    validated = editConfig(
+      shape,
+      () => {},
+      (value) => structuredClone(value),
+      (draft) => parseFusionConfig(draft, fusionConfigPath(root))
+    );
   } catch (error) {
     return fail(error instanceof FusionConfigError ? error.message : String(error));
   }

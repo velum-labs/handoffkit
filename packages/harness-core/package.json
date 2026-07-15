@@ -26,7 +26,7 @@
   ],
   "dependencies": {
     "@fusionkit/protocol": "workspace:*",
-    "@fusionkit/runtime-utils": "workspace:*",
+    "@routekit/runtime": "workspace:*",
     "@routekit/contracts": "workspace:*",
     "zod": "4.4.3"
   },

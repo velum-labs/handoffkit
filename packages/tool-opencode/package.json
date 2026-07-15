@@ -28,6 +28,7 @@
   "dependencies": {
     "@fusionkit/harness-core": "workspace:*",
     "@fusionkit/tools": "workspace:*",
+    "@routekit/runtime": "workspace:*",
     "@opencode-ai/sdk": "1.17.13",
     "zod": "4.4.3"
   },

@@ -14,11 +14,11 @@ export {
   waitForOutput,
   withDeadline,
   withTimeout
-} from "@fusionkit/runtime-utils";
+} from "@routekit/runtime";
 export type {
   BuildChildEnvInput,
   CliCaptureOptions,
   CliCaptureResult,
   LoggedChild,
   LoggedSpawnOptions
-} from "@fusionkit/runtime-utils";
+} from "@routekit/runtime";

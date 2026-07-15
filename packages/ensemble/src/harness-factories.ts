@@ -2,7 +2,7 @@ import { writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { isFiniteK } from "@fusionkit/protocol";
 import type { ModelFusionStatus } from "@fusionkit/protocol";
-import { ensureRunOutputDir, runCliCapture } from "@fusionkit/runtime-utils";
+import { ensureRunOutputDir, runCliCapture } from "@routekit/runtime";
 import { envOf } from "@fusionkit/tracing";
 import { gitText } from "@fusionkit/workspace";
 import type { JsonValue } from "@routekit/contracts";
@@ -191,7 +191,7 @@ async function defaultCursorRunner(input: CursorHarnessRunnerInput): Promise<Cur
     "--timeout-ms",
     String(input.timeoutMs ?? 60_000)
   ];
-  ensureRunOutputDir(input.outDir);
+  ensureRunOutputDir(input.outDir, { dataDirectoryNames: [".fusionkit"] });
   const result = await runCliCapture(process.execPath, args, {
     cwd: input.outDir,
     // The probe CLI enforces its own per-step timeout; this outer deadline is
@@ -247,7 +247,7 @@ export async function runUnifiedHarnessE2E(
   options: UnifiedHarnessE2EOptions
 ): Promise<UnifiedHarnessE2EResult> {
   const outputRoot = resolve(options.outputRoot);
-  ensureRunOutputDir(outputRoot);
+  ensureRunOutputDir(outputRoot, { dataDirectoryNames: [".fusionkit"] });
   const results: UnifiedHarnessMatrixResult[] = [];
   for (const kind of options.harnesses) {
     if (

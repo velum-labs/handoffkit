@@ -34,7 +34,7 @@
     "@fusionkit/protocol": "workspace:*",
     "@routekit/registry": "workspace:*",
     "@fusionkit/runner": "workspace:*",
-    "@fusionkit/runtime-utils": "workspace:*",
+    "@routekit/runtime": "workspace:*",
     "@fusionkit/session-hermetic": "workspace:*",
     "@fusionkit/session-vercel-sandbox": "workspace:*",
     "ws": "8.21.0"

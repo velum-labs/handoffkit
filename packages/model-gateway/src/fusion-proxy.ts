@@ -2,7 +2,7 @@ import { isFiniteK } from "@fusionkit/protocol";
 import type { WireTrajectory } from "@fusionkit/protocol";
 import { newSpanId, newTraceId } from "@fusionkit/tracing";
 import { FUSION_PANEL_MODEL } from "@fusionkit/registry";
-import { withTimeout } from "@fusionkit/runtime-utils";
+import { withTimeout } from "@routekit/runtime";
 
 import { CLAUDE_ALIAS_PREFIX } from "./adapters/anthropic.js";
 import type { Backend, BackendRequestOptions } from "./backend.js";

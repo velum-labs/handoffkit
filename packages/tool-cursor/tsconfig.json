@@ -10,6 +10,7 @@
     { "path": "../harness-core" },
     { "path": "../protocol" },
     { "path": "../contracts" },
-    { "path": "../tools" }
+    { "path": "../tools" },
+    { "path": "../runtime-utils" }
   ]
 }

@@ -34,7 +34,7 @@
     "@fusionkit/kernel": "workspace:*",
     "@fusionkit/protocol": "workspace:*",
     "@fusionkit/registry": "workspace:*",
-    "@fusionkit/runtime-utils": "workspace:*",
+    "@routekit/runtime": "workspace:*",
     "@fusionkit/tracing": "workspace:*",
     "@routekit/contracts": "workspace:*",
     "@routekit/registry": "workspace:*",

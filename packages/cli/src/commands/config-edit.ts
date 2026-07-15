@@ -5,7 +5,9 @@
  * nothing touches disk until the user saves. Non-interactive runs are pointed
  * at the scriptable `fusionkit config set` instead.
  */
-import { bold, canPromptInteractively, confirm, cyan, dim, gray, note, select, text } from "@fusionkit/cli-ui";
+import { bold, canPromptInteractively, confirm, cyan, dim, gray, note, select, text } from "@routekit/cli-ui";
+import { fail } from "@routekit/cli-core";
+import type { CommandContext } from "@routekit/cli-core";
 
 import { fusionConfigPath, parseFusionConfig } from "../fusion-config.js";
 import { FUSION_TOOLS } from "../fusion-quickstart.js";
@@ -31,8 +33,6 @@ import {
   PANEL_TRUST_MESSAGE,
   PANEL_TRUST_OPTIONS
 } from "../shared/options.js";
-import { fail } from "../shared/errors.js";
-import type { CommandContext } from "../shared/context.js";
 
 type Shape = Record<string, unknown>;
 

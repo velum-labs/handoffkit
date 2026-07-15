@@ -26,13 +26,13 @@ import type {
 } from "@fusionkit/model-gateway";
 import type { CodexRelayOptions } from "@fusionkit/model-gateway/subscriptions";
 import { harnessDriversEnabled } from "@fusionkit/tools";
+import { reservePort, spawnLogged, terminate, waitForHttp } from "@routekit/runtime";
 
 import { startFusionStepGateway } from "../gateway.js";
 import type { GatewayEnsembleConfig, GatewayRunnerConfig } from "../gateway.js";
-import { CliError } from "../shared/errors.js";
+import { CliError } from "@routekit/cli-core";
 import { createPortlessSession } from "../shared/portless.js";
 import type { PortlessSession } from "../shared/portless.js";
-import { reservePort, spawnLogged, terminate, waitForHttp } from "../shared/proc.js";
 
 import { PROMPT_CONFIG_KEY, PROMPT_IDS } from "../fusion-config.js";
 import type { PromptOverrides } from "../fusion-config.js";

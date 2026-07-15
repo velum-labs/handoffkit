@@ -53,12 +53,12 @@ importers:
       '@fusionkit/protocol':
         specifier: workspace:*
         version: link:../protocol
-      '@fusionkit/runtime-utils':
-        specifier: workspace:*
-        version: link:../runtime-utils
       '@fusionkit/tracing':
         specifier: workspace:*
         version: link:../tracing
+      '@routekit/runtime':
+        specifier: workspace:*
+        version: link:../runtime-utils
       ai:
         specifier: 6.0.200
         version: 6.0.200(zod@4.4.3)
@@ -68,9 +68,6 @@ importers:
       '@fusionkit/adapter-ai-sdk':
         specifier: workspace:*
         version: link:../adapter-ai-sdk
-      '@fusionkit/cli-ui':
-        specifier: workspace:*
-        version: link:../cli-ui
       '@fusionkit/ensemble':
         specifier: workspace:*
         version: link:../ensemble
@@ -86,9 +83,6 @@ importers:
       '@fusionkit/registry':
         specifier: workspace:*
         version: link:../registry
-      '@fusionkit/runtime-utils':
-        specifier: workspace:*
-        version: link:../runtime-utils
       '@fusionkit/tool-claude':
         specifier: workspace:*
         version: link:../tool-claude
@@ -110,12 +104,27 @@ importers:
       '@fusionkit/workspace':
         specifier: workspace:*
         version: link:../workspace
+      '@routekit/cli-core':
+        specifier: workspace:*
+        version: link:../cli-core
+      '@routekit/cli-ui':
+        specifier: workspace:*
+        version: link:../cli-ui
+      '@routekit/config-core':
+        specifier: workspace:*
+        version: link:../config-core
       '@routekit/contracts':
         specifier: workspace:*
         version: link:../contracts
       '@routekit/registry':
         specifier: workspace:*
         version: link:../routekit-registry
+      '@routekit/runtime':
+        specifier: workspace:*
+        version: link:../runtime-utils
+      '@routekit/telemetry-core':
+        specifier: workspace:*
+        version: link:../telemetry-core
       commander:
         specifier: 14.0.3
         version: 14.0.3
@@ -141,10 +150,15 @@ importers:
       '@types/figlet':
         specifier: 1.7.0
         version: 1.7.0
-    optionalDependencies:
-      portless:
-        specifier: 0.15.1
-        version: 0.15.1
+
+  packages/cli-core:
+    dependencies:
+      '@routekit/cli-ui':
+        specifier: workspace:*
+        version: link:../cli-ui
+      commander:
+        specifier: 14.0.3
+        version: 14.0.3
 
   packages/cli-ui:
     dependencies:
@@ -171,6 +185,12 @@ importers:
         specifier: 4.0.0
         version: 4.0.0(@types/react@19.2.17)
 
+  packages/config-core:
+    dependencies:
+      '@routekit/runtime':
+        specifier: workspace:*
+        version: link:../runtime-utils
+
   packages/contracts: {}
 
   packages/ensemble:
@@ -190,9 +210,6 @@ importers:
       '@fusionkit/protocol':
         specifier: workspace:*
         version: link:../protocol
-      '@fusionkit/runtime-utils':
-        specifier: workspace:*
-        version: link:../runtime-utils
       '@fusionkit/tracing':
         specifier: workspace:*
         version: link:../tracing
@@ -202,6 +219,9 @@ importers:
       '@routekit/contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@routekit/runtime':
+        specifier: workspace:*
+        version: link:../runtime-utils
       '@velum-labs/cursorkit':
         specifier: 0.2.0
         version: 0.2.0
@@ -226,12 +246,12 @@ importers:
       '@fusionkit/protocol':
         specifier: workspace:*
         version: link:../protocol
-      '@fusionkit/runtime-utils':
-        specifier: workspace:*
-        version: link:../runtime-utils
       '@routekit/contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@routekit/runtime':
+        specifier: workspace:*
+        version: link:../runtime-utils
       zod:
         specifier: 4.4.3
         version: 4.4.3
@@ -252,9 +272,6 @@ importers:
       '@fusionkit/registry':
         specifier: workspace:*
         version: link:../registry
-      '@fusionkit/runtime-utils':
-        specifier: workspace:*
-        version: link:../runtime-utils
       '@fusionkit/tracing':
         specifier: workspace:*
         version: link:../tracing
@@ -264,6 +281,9 @@ importers:
       '@routekit/registry':
         specifier: workspace:*
         version: link:../routekit-registry
+      '@routekit/runtime':
+        specifier: workspace:*
+        version: link:../runtime-utils
       zod:
         specifier: 4.4.3
         version: 4.4.3
@@ -278,10 +298,50 @@ importers:
 
   packages/routekit-registry: {}
 
-  packages/runtime-utils: {}
+  packages/routekit-tracing:
+    dependencies:
+      '@opentelemetry/api':
+        specifier: 1.9.1
+        version: 1.9.1
+      '@opentelemetry/api-logs':
+        specifier: 0.220.0
+        version: 0.220.0
+      '@opentelemetry/exporter-logs-otlp-http':
+        specifier: 0.220.0
+        version: 0.220.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/exporter-trace-otlp-http':
+        specifier: 0.220.0
+        version: 0.220.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/resources':
+        specifier: 2.9.0
+        version: 2.9.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/sdk-logs':
+        specifier: 0.220.0
+        version: 0.220.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/sdk-trace-base':
+        specifier: 2.9.0
+        version: 2.9.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/sdk-trace-node':
+        specifier: 2.9.0
+        version: 2.9.0(@opentelemetry/api@1.9.1)
+
+  packages/runtime-utils:
+    optionalDependencies:
+      portless:
+        specifier: 0.15.1
+        version: 0.15.1
+
+  packages/telemetry-core:
+    dependencies:
+      '@routekit/runtime':
+        specifier: workspace:*
+        version: link:../runtime-utils
 
   packages/testkit:
     dependencies:
+      '@routekit/runtime':
+        specifier: workspace:*
+        version: link:../runtime-utils
       yaml:
         specifier: 2.9.0
         version: 2.9.0
@@ -312,6 +372,9 @@ importers:
       '@routekit/registry':
         specifier: workspace:*
         version: link:../routekit-registry
+      '@routekit/runtime':
+        specifier: workspace:*
+        version: link:../runtime-utils
       zod:
         specifier: 4.4.3
         version: 4.4.3
@@ -349,6 +412,9 @@ importers:
       '@routekit/registry':
         specifier: workspace:*
         version: link:../routekit-registry
+      '@routekit/runtime':
+        specifier: workspace:*
+        version: link:../runtime-utils
       smol-toml:
         specifier: 1.7.0
         version: 1.7.0
@@ -373,6 +439,9 @@ importers:
       '@routekit/contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@routekit/runtime':
+        specifier: workspace:*
+        version: link:../runtime-utils
       '@zed-industries/agent-client-protocol':
         specifier: 0.4.5
         version: 0.4.5
@@ -391,6 +460,9 @@ importers:
       '@opencode-ai/sdk':
         specifier: 1.17.13
         version: 1.17.13
+      '@routekit/runtime':
+        specifier: workspace:*
+        version: link:../runtime-utils
       zod:
         specifier: 4.4.3
         version: 4.4.3
@@ -406,9 +478,6 @@ importers:
       '@fusionkit/registry':
         specifier: workspace:*
         version: link:../registry
-      '@fusionkit/runtime-utils':
-        specifier: workspace:*
-        version: link:../runtime-utils
       '@routekit/contracts':
         specifier: workspace:*
         version: link:../contracts
@@ -424,24 +493,15 @@ importers:
       '@opentelemetry/api-logs':
         specifier: 0.220.0
         version: 0.220.0
-      '@opentelemetry/exporter-logs-otlp-http':
-        specifier: 0.220.0
-        version: 0.220.0(@opentelemetry/api@1.9.1)
-      '@opentelemetry/exporter-trace-otlp-http':
-        specifier: 0.220.0
-        version: 0.220.0(@opentelemetry/api@1.9.1)
-      '@opentelemetry/resources':
-        specifier: 2.9.0
-        version: 2.9.0(@opentelemetry/api@1.9.1)
       '@opentelemetry/sdk-logs':
         specifier: 0.220.0
         version: 0.220.0(@opentelemetry/api@1.9.1)
       '@opentelemetry/sdk-trace-base':
         specifier: 2.9.0
         version: 2.9.0(@opentelemetry/api@1.9.1)
-      '@opentelemetry/sdk-trace-node':
-        specifier: 2.9.0
-        version: 2.9.0(@opentelemetry/api@1.9.1)
+      '@routekit/tracing':
+        specifier: workspace:*
+        version: link:../routekit-tracing
 
   packages/workspace:
     dependencies:

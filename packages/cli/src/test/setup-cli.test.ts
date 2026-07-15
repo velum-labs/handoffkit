@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 
+import { runCliForTest } from "@routekit/cli-core/testing";
 import { FUSIONKIT_PYPI_VERSION, fusionkitPyCommand, fusionkitWarmArgv } from "../fusion/env.js";
 import type { HostInfo } from "../fusion/local-catalog.js";
 import {
@@ -16,11 +16,10 @@ import type { PanelModelSpec } from "../fusion/env.js";
 const CLI = fileURLToPath(new URL("../index.js", import.meta.url));
 
 function runCli(args: string[]): { status: number; stdout: string; stderr: string } {
-  const result = spawnSync(process.execPath, [CLI, ...args], {
-    encoding: "utf8",
+  const result = runCliForTest(CLI, args, {
     env: { ...process.env, NO_COLOR: "1", FUSIONKIT_NO_TUI: "1" }
   });
-  return { status: result.status ?? 1, stdout: result.stdout ?? "", stderr: result.stderr ?? "" };
+  return { ...result, status: result.status ?? 1 };
 }
 
 function host(appleSilicon: boolean): HostInfo {

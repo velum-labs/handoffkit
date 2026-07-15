@@ -1,6 +1,6 @@
 import type { Command } from "commander";
 
-import { dim, done, note, uiStream } from "@fusionkit/cli-ui";
+import { dim, done, note, uiStream } from "@routekit/cli-ui";
 
 import { stopProxy } from "../fusion/subscription-proxy.js";
 import { reapFusionServices } from "../shared/portless.js";

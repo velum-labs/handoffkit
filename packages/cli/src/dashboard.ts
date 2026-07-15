@@ -28,8 +28,8 @@ import type {
   HarnessAdapter,
   HarnessCapabilities
 } from "@fusionkit/ensemble";
-import { ensureRunOutputDir } from "@fusionkit/runtime-utils";
-import { envFlagEnabled, markdownTable, readEnv } from "@fusionkit/tools";
+import { ensureRunOutputDir, markdownTable } from "@routekit/runtime";
+import { envFlagEnabled, readEnv } from "@fusionkit/tools";
 import type { ToolDashboardMetadata } from "@fusionkit/tools";
 
 import { toolRegistry } from "./tools.js";
@@ -730,7 +730,7 @@ export async function runHarnessSmokeDashboard(
   const commandFailure = options.commandFailure ?? DEFAULT_COMMAND_FAILURE;
   const env = options.env ?? process.env;
   const tools = dashboardTools(options);
-  ensureRunOutputDir(outputRoot);
+  ensureRunOutputDir(outputRoot, { dataDirectoryNames: [".fusionkit"] });
 
   const matrix = createHarnessCapabilityMatrix({
     ...options,

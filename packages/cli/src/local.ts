@@ -1,4 +1,4 @@
-import { bold, box, cyan, dim, glyph, green, isInteractive, uiStream } from "@fusionkit/cli-ui";
+import { bold, box, cyan, dim, glyph, green, isInteractive, uiStream } from "@routekit/cli-ui";
 import { createBackend, resolveBackendConfig, startGateway } from "@fusionkit/model-gateway";
 import type { BackendConfig } from "@fusionkit/model-gateway";
 import { KernelBackend } from "@fusionkit/ensemble";
