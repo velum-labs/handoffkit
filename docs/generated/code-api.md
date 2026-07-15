@@ -537,6 +537,7 @@ No module JSDoc was found.
 - `export function definedEnv(env: EnvInput): Record<string, string> ...`
 - `export function trimTrailingSlashes(value: string): string ...`
   Strip trailing "/" characters in linear time (a `/\/+$/` regex backtracks polynomially on adversarial input, which code scanning rightly flags).
+- `export function trimSurroundingSlashes(value: string): string ...`
 - `export function normalizeApiBaseUrl(baseUrl: string): string ...`
 - `export type BuildChildEnvInput ...`
 - `export function buildChildEnv(input: BuildChildEnvInput ...`
