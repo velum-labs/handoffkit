@@ -1,10 +1,8 @@
-"""The RouteKit gateway simulator HTTP server.
+"""The canonical multi-dialect provider simulator HTTP server.
 
-A stdlib-only threaded HTTP server that speaks RouteKit's neutral OpenAI Chat
-Completions surface, plus a control plane (behavior queueing / journal / reset)
-under ``/__sim/*``. Stdlib on purpose: no web framework in the test trust
-surface, and byte-level control of the wire (chunked SSE pacing, deliberately
-truncated streams) that a framework would abstract away.
+A stdlib-only threaded HTTP server that speaks OpenAI Chat Completions,
+Anthropic Messages, Google GenAI, and OpenAI Responses, plus one shared control
+plane (behavior queueing / journal / reset) under ``/__sim/*``.
 
 Usage (in-process)::
 
@@ -22,18 +20,24 @@ from __future__ import annotations
 
 import contextlib
 import json
+import re
 import threading
 import time
 from collections import defaultdict, deque
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any, cast
-from urllib.parse import urlsplit
+from urllib.parse import unquote, urlsplit
 
-from fusionkit_testkit import wire_openai
+from fusionkit_testkit import wire_anthropic, wire_google, wire_openai, wire_responses
 from fusionkit_testkit.behaviors import Behavior, SimError
 
 _JSON_TYPE = "application/json"
 _SSE_TYPE = "text/event-stream"
+_GOOGLE_ROUTE = re.compile(
+    r"^/(?:v1beta|v1)/models/(?P<model>[^:]+):"
+    r"(?P<method>generateContent|streamGenerateContent)$"
+)
+
 
 class _SimulatorState:
     """Thread-safe behavior queues + request journal."""
@@ -85,7 +89,7 @@ class _SimulatorState:
             self._seq = 0
 
 
-def _last_user_text(messages: list[Any]) -> str:
+def _last_user_text_openai(messages: list[Any]) -> str:
     for message in reversed(messages):
         if isinstance(message, dict) and message.get("role") == "user":
             content = message.get("content")
@@ -96,6 +100,23 @@ def _last_user_text(messages: list[Any]) -> str:
                     part.get("text", "")
                     for part in content
                     if isinstance(part, dict) and isinstance(part.get("text"), str)
+                )
+    return ""
+
+
+def _last_user_text_anthropic(messages: list[Any]) -> str:
+    for message in reversed(messages):
+        if isinstance(message, dict) and message.get("role") == "user":
+            content = message.get("content")
+            if isinstance(content, str):
+                return content
+            if isinstance(content, list):
+                return "".join(
+                    part.get("text", "")
+                    for part in content
+                    if isinstance(part, dict)
+                    and part.get("type") == "text"
+                    and isinstance(part.get("text"), str)
                 )
     return ""
 
@@ -181,7 +202,21 @@ class _Handler(BaseHTTPRequestHandler):
             self._send_json({"status": "reset"})
             return
         if path in ("/v1/chat/completions", "/chat/completions"):
-            self._routekit_chat(body)
+            self._openai_chat(body)
+            return
+        if path in ("/v1/messages", "/messages"):
+            self._anthropic_messages(body)
+            return
+        if path in ("/v1/responses", "/responses"):
+            self._openai_responses(body)
+            return
+        google = _GOOGLE_ROUTE.match(path)
+        if google is not None:
+            self._google_generate(
+                body,
+                model=unquote(google.group("model")),
+                stream=google.group("method") == "streamGenerateContent",
+            )
             return
         self._send_json({"error": {"message": f"no route {self.path}"}}, status=404)
 
@@ -211,8 +246,10 @@ class _Handler(BaseHTTPRequestHandler):
         behavior: Behavior,
         body: dict[str, Any],
     ) -> None:
-        kind = "error" if behavior.error is not None else (
-            "tool_calls" if behavior.tool_calls else "reply"
+        kind = (
+            "error"
+            if behavior.error is not None
+            else ("tool_calls" if behavior.tool_calls else "reply")
         )
         self._state.record(
             {
@@ -252,13 +289,17 @@ class _Handler(BaseHTTPRequestHandler):
                     message=(
                         f"simulator: a tool_calls behavior was queued for {model!r} but the "
                         "request declared no tools — the caller's tool definitions were "
-                            "dropped before reaching the RouteKit wire"
+                        "dropped before reaching the RouteKit wire"
                     ),
                 )
             )
         self._record(
-            dialect=dialect, model=model, stream=stream,
-            source=source, behavior=behavior, body=body,
+            dialect=dialect,
+            model=model,
+            stream=stream,
+            source=source,
+            behavior=behavior,
+            body=body,
         )
         if behavior.delay_s > 0:
             time.sleep(behavior.delay_s)
@@ -266,7 +307,12 @@ class _Handler(BaseHTTPRequestHandler):
 
     def _send_error(self, behavior: Behavior, error_json: dict[str, Any]) -> None:
         assert behavior.error is not None
-        self._send_json(error_json, status=behavior.error.status)
+        headers = (
+            {"retry-after": str(behavior.error.retry_after)}
+            if behavior.error.retry_after is not None
+            else None
+        )
+        self._send_json(error_json, status=behavior.error.status, headers=headers)
 
     def _stream_sse(
         self, blocks: list[bytes], behavior: Behavior, *, done: bytes | None = None
@@ -312,15 +358,18 @@ class _Handler(BaseHTTPRequestHandler):
                 time.sleep(behavior.chunk_delay_s)
         self._end_chunks()
 
-    # -- RouteKit's OpenAI-compatible Chat Completions ----------------------
+    # -- OpenAI Chat Completions -------------------------------------------
 
-    def _routekit_chat(self, body: dict[str, Any]) -> None:
+    def _openai_chat(self, body: dict[str, Any]) -> None:
         model = str(body.get("model", "unknown"))
         stream = body.get("stream") is True
         messages = body.get("messages") if isinstance(body.get("messages"), list) else []
         behavior = self._resolve(
-            dialect="routekit-chat", model=model, stream=stream,
-            last_user=_last_user_text(messages or []), body=body,
+            dialect="openai-chat",
+            model=model,
+            stream=stream,
+            last_user=_last_user_text_openai(messages or []),
+            body=body,
         )
         response_id = self._state.next_response_id("chatcmpl-sim")
         if behavior.error is not None:
@@ -338,6 +387,79 @@ class _Handler(BaseHTTPRequestHandler):
             for frame in wire_openai.stream_frames(model, behavior, response_id, include_usage)
         ]
         self._stream_sse(blocks, behavior, done=b"data: [DONE]\n\n")
+
+    # -- Anthropic Messages ------------------------------------------------
+
+    def _anthropic_messages(self, body: dict[str, Any]) -> None:
+        model = str(body.get("model", "unknown"))
+        stream = body.get("stream") is True
+        messages = body.get("messages") if isinstance(body.get("messages"), list) else []
+        behavior = self._resolve(
+            dialect="anthropic-messages",
+            model=model,
+            stream=stream,
+            last_user=_last_user_text_anthropic(messages or []),
+            body=body,
+        )
+        message_id = self._state.next_response_id("msg_sim")
+        if behavior.error is not None:
+            self._send_error(behavior, wire_anthropic.error_body(behavior))
+            return
+        if not stream:
+            self._send_json(wire_anthropic.message_body(model, behavior, message_id))
+            return
+        blocks = [
+            f"event: {name}\ndata: {payload}\n\n".encode()
+            for name, payload in wire_anthropic.stream_events(model, behavior, message_id)
+        ]
+        self._stream_sse(blocks, behavior)
+
+    # -- OpenAI Responses --------------------------------------------------
+
+    def _openai_responses(self, body: dict[str, Any]) -> None:
+        model = str(body.get("model", "unknown"))
+        stream = body.get("stream") is True
+        behavior = self._resolve(
+            dialect="openai-responses",
+            model=model,
+            stream=stream,
+            last_user=wire_responses.last_user_text(body),
+            body=body,
+        )
+        response_id = self._state.next_response_id("resp_sim")
+        if behavior.error is not None:
+            self._send_error(behavior, wire_responses.error_body(behavior))
+            return
+        if not stream:
+            self._send_json(
+                wire_responses.response_snapshot(model, behavior, response_id, status="completed")
+            )
+            return
+        blocks = [
+            f"event: {name}\ndata: {payload}\n\n".encode()
+            for name, payload in wire_responses.stream_events(model, behavior, response_id)
+        ]
+        self._stream_sse(blocks, behavior)
+
+    # -- Google GenAI ------------------------------------------------------
+
+    def _google_generate(self, body: dict[str, Any], *, model: str, stream: bool) -> None:
+        behavior = self._resolve(
+            dialect="google-generate",
+            model=model,
+            stream=stream,
+            last_user=wire_google.last_user_text(body),
+            body=body,
+        )
+        if behavior.error is not None:
+            self._send_error(behavior, wire_google.error_body(behavior))
+            return
+        if not stream:
+            self._send_json(wire_google.generate_content_body(behavior))
+            return
+        blocks = [f"data: {frame}\n\n".encode() for frame in wire_google.stream_frames(behavior)]
+        self._stream_sse(blocks, behavior)
+
 
 class _SimulatorServer(ThreadingHTTPServer):
     daemon_threads = True

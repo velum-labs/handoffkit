@@ -2,10 +2,10 @@
 
 Three composable layers (see ``docs/testing.md``):
 
-- :class:`RouteKitSimulator` — a real HTTP server with a neutral OpenAI Chat
-  Completions surface, scripted per opaque endpoint id via
-  :class:`Behavior` queues (in-process or over ``/__sim/*``) and observed via
-  its request journal.
+- :class:`RouteKitSimulator` — a real HTTP server with native OpenAI Chat,
+  Anthropic Messages, Google GenAI, and OpenAI Responses surfaces, all
+  scripted through shared :class:`Behavior` queues (in-process or over
+  ``/__sim/*``) and observed through one request journal.
 - :mod:`fusionkit_testkit.endpoints` — builders that point ``FusionConfig`` at
   the simulator.
 - :class:`EngineProcess` — the real ``fusionkit-sidecar serve`` CLI as a child

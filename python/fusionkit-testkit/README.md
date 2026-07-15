@@ -1,18 +1,26 @@
 # fusionkit-testkit
 
-A scriptable HTTP simulator for tests that need a controllable RouteKit
-upstream. It is never published to PyPI. Python sidecar tests use only its
-neutral OpenAI-compatible surface and opaque endpoint ids.
+A scriptable HTTP provider simulator for tests that need a controllable
+RouteKit upstream. It is never published to PyPI.
 
 ## What it is
 
-`RouteKitSimulator` is a real HTTP server (stdlib-only, no framework). Its
-neutral OpenAI-compatible surface supports:
+`RouteKitSimulator` is a real HTTP server (stdlib-only, no framework). One
+shared behavior queue and journal drive four native provider surfaces:
 
 - **Chat Completions** — `POST /v1/chat/completions` (JSON and SSE
   streaming with realistic chunking: role frame, token deltas, indexed
   tool-call fragments, finish frame, `stream_options.include_usage` usage
   frame).
+- **Anthropic Messages** — `POST /v1/messages`.
+- **Google GenAI** — `POST /v1beta/models/{model}:generateContent` and
+  `:streamGenerateContent`.
+- **OpenAI Responses** — `POST /v1/responses`.
+
+Each dialect renders text, reasoning, tool calls, errors, streaming, and usage
+in its native wire shape. The journal labels are `openai-chat`,
+`anthropic-messages`, `google-generate`, and `openai-responses`.
+
 Point `FusionConfig.routekit_url` at `simulator.url`; the sidecar sends opaque
 endpoint ids in the request model field.
 
@@ -31,7 +39,7 @@ an HTTP error, injected latency, or a deliberately broken stream.
 
 Every request is recorded: API dialect, model, full body, stream flag, and how
 it was answered (queued behavior vs default, status, kind). Tests assert on the
-journal — *what actually hit RouteKit's wire* — instead of trusting mocks.
+journal — *what actually hit the provider wire* — instead of trusting mocks.
 
 ## Standalone process
 

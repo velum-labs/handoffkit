@@ -1,4 +1,4 @@
-"""Scriptable RouteKit gateway behaviors.
+"""Scriptable provider behaviors shared by every simulator dialect.
 
 A :class:`Behavior` describes how the simulator answers one model call. Tests
 queue behaviors per model name (FIFO); a call with no queued behavior gets a
@@ -38,12 +38,13 @@ class SimToolCall:
 
 @dataclass
 class SimError:
-    """An error response from the simulated RouteKit gateway."""
+    """A provider-shaped error response rendered in the selected dialect."""
 
     status: int = 500
     code: str = "internal_error"
     error_type: str = "api_error"
-    message: str = "simulated RouteKit error"
+    message: str = "simulated provider error"
+    retry_after: float | None = None
 
     def to_json(self) -> dict[str, Any]:
         return {
@@ -51,15 +52,18 @@ class SimError:
             "code": self.code,
             "error_type": self.error_type,
             "message": self.message,
+            "retry_after": self.retry_after,
         }
 
     @staticmethod
     def from_json(data: dict[str, Any]) -> SimError:
+        retry_after = data.get("retry_after")
         return SimError(
             status=int(data.get("status", 500)),
             code=str(data.get("code", "internal_error")),
             error_type=str(data.get("error_type", "api_error")),
-            message=str(data.get("message", "simulated RouteKit error")),
+            message=str(data.get("message", "simulated provider error")),
+            retry_after=float(retry_after) if retry_after is not None else None,
         )
 
 
@@ -93,6 +97,7 @@ class Behavior:
     #: wire chunks of exactly this many bytes (the last may be shorter),
     #: splitting frames and multi-byte UTF-8 runes at arbitrary boundaries.
     chunk_bytes: int | None = None
+
     def finish_reason(self) -> str:
         return "tool_calls" if self.tool_calls else "stop"
 

@@ -535,9 +535,12 @@ Use it with the narrative references when you need to find the module that owns 
 - `python/fusionkit-testkit/src/fusionkit_testkit/engine.py`: free_port (function, public), _engine_argv (function, internal), EngineProcessError (class, public), EngineProcess (class, public)
 - `python/fusionkit-testkit/src/fusionkit_testkit/pytest_plugin.py`: SimStackFactory (class, public), routekit_sim (function, public), sim_stack (function, public)
 - `python/fusionkit-testkit/src/fusionkit_testkit/scenarios.py`: as_behavior (function, public), judge_analysis (function, public), script_fused_turn (function, public)
-- `python/fusionkit-testkit/src/fusionkit_testkit/server.py`: _SimulatorState (class, internal), _last_user_text (function, internal), _Handler (class, internal), _SimulatorServer (class, internal), RouteKitSimulator (class, public)
+- `python/fusionkit-testkit/src/fusionkit_testkit/server.py`: _SimulatorState (class, internal), _last_user_text_openai (function, internal), _last_user_text_anthropic (function, internal), _Handler (class, internal), _SimulatorServer (class, internal), RouteKitSimulator (class, public)
 - `python/fusionkit-testkit/src/fusionkit_testkit/sse.py`: parse_sse (function, public), sse_text (function, public), sse_reasoning (function, public), sse_done (function, public)
+- `python/fusionkit-testkit/src/fusionkit_testkit/wire_anthropic.py`: error_body (function, public), _content_blocks (function, internal), _stop_reason (function, internal), message_body (function, public), _tokenize (function, internal), _argument_fragments (function, internal), stream_events (function, public)
+- `python/fusionkit-testkit/src/fusionkit_testkit/wire_google.py`: error_body (function, public), _usage_metadata (function, internal), _function_call (function, internal), _parts (function, internal), generate_content_body (function, public), _tokenize (function, internal), stream_frames (function, public), last_user_text (function, public)
 - `python/fusionkit-testkit/src/fusionkit_testkit/wire_openai.py`: _usage_json (function, internal), error_body (function, public), completion_body (function, public), _tokenize (function, internal), _argument_fragments (function, internal), stream_frames (function, public)
+- `python/fusionkit-testkit/src/fusionkit_testkit/wire_responses.py`: error_body (function, public), _usage_json (function, internal), _output_items (function, internal), response_snapshot (function, public), _tokenize (function, internal), _argument_fragments (function, internal), stream_events (function, public), last_user_text (function, public)
 
 ### `python/hyperkit`
 
