@@ -14,7 +14,6 @@ from fusionkit_core.types import (
 )
 from fusionkit_server import create_app
 
-
 REQUEST_CONTROLS = {
     "provider": {
         "order": ["FirstParty"],
