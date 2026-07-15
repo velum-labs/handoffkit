@@ -171,6 +171,14 @@ const requiredFiles = [
   "docs/generated/code-api.md",
   "spec/testing/expected-behaviors.json",
   "docs/generated/expected-behaviors.md",
+  // self-healing docs: the style contract, the audit skill, its freshness
+  // ledger + helpers, and the workflow that runs the healer
+  "docs/style-guide.md",
+  ".cursor/skills/docs-audit/SKILL.md",
+  ".cursor/skills/docs-audit/ledger.json",
+  ".cursor/skills/docs-audit/ledger-plan.mjs",
+  ".cursor/skills/docs-audit/ledger-stamp.mjs",
+  ".github/workflows/docs-heal.yml",
   "references/trackcn.json",
   "references/THIRD_PARTY.md",
   "references/opencode/LICENSE",

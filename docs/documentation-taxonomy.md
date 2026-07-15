@@ -24,6 +24,7 @@ A page belongs in the public site when it helps a user install, run, configure, 
 | --- | --- | --- |
 | `README.md` | Orientation | Maintainer landing page and routing table for `docs/`. |
 | `documentation-taxonomy.md` | Orientation | Placement rules and inventory. |
+| `style-guide.md` | Orientation | Format specification for all doc surfaces; output contract for the docs healer (`.cursor/skills/docs-audit/`). |
 | `repository-coverage-map.md` | Orientation | Repo areas mapped to docs. |
 | `repository-reference.md` | Reference | Whole-repository map across packages, apps, specs, scripts, examples, and verification. |
 | `source-symbol-index.md` | Reference | Source-grounded TypeScript export and Python symbol inventory. |

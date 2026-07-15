@@ -1,0 +1,193 @@
+# Self-healing documentation: a headless Cursor agent follows
+# .cursor/skills/docs-audit/SKILL.md, repairs doc drift, and a deterministic
+# tail commits the result and opens a draft PR. Detection scope comes from the
+# freshness ledger (.cursor/skills/docs-audit/ledger.json); this workflow adds
+# only triggers, guards, and publishing. Design notes live in
+# docs/README.md ("Keeping docs honest").
+#
+# One-time setup (repository settings -> Secrets and variables -> Actions):
+#   CURSOR_API_KEY        Cursor API key (dashboard -> API Keys). Billed to the
+#                         owning account; the model is pinned below.
+#   DOCS_HEAL_PR_TOKEN    Fine-grained PAT or GitHub App token with contents:
+#                         write + pull-requests: write on this repo. Required
+#                         because PRs created with the default GITHUB_TOKEN do
+#                         not trigger CI, and repair PRs must pass the same
+#                         checks as everyone else. Without it the workflow
+#                         falls back to GITHUB_TOKEN and the draft PR will
+#                         show no check runs.
+#
+# Restricted autonomy: the agent edits files only. It gets no GitHub token,
+# checkout credentials are not persisted, and the gh CLI is deny-listed, so it
+# cannot push, comment, or open PRs; git stays available because the docs-audit
+# skill's enumeration and ledger helpers are read-only git consumers. The
+# deterministic steps below own commit, push, and PR creation.
+#
+# Loop guard: healer commits land via PRs titled "docs-heal: ..." on
+# docs/heal-* branches; the push trigger skips merge commits whose message
+# starts with that prefix, and paths-ignore keeps ledger-only merges from
+# re-triggering.
+
+name: docs-heal
+
+on:
+  push:
+    branches: [main]
+    paths:
+      # Doc-sensitive sources (trigger scoping only; the skill decides
+      # docs-worthiness and exits early when a change needs no doc update).
+      - "packages/cli/src/**"
+      - "packages/model-gateway/src/**"
+      - "packages/ensemble/src/**"
+      - "packages/kernel/src/**"
+      - "packages/tool-*/src/**"
+      - "packages/tools/src/**"
+      - "python/fusionkit-*/src/**"
+      - "python/hyperkit/src/**"
+      - "spec/**"
+      - "release/*.json"
+      - "examples/manifest.json"
+      - "scripts/**"
+  schedule:
+    # Weekly full sweep (Monday 06:00 UTC): rotation picks plus anything the
+    # push trigger's path filter missed.
+    - cron: "0 6 * * 1"
+  workflow_dispatch: {}
+
+concurrency:
+  group: docs-heal
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+env:
+  # Pinned agent CLI build (see https://cursor.com/install); bump deliberately.
+  CURSOR_CLI_VERSION: 2026.07.09-a3815c0
+  # Model slug must exist on the account owning CURSOR_API_KEY.
+  CURSOR_MODEL: composer-2.5
+
+jobs:
+  heal:
+    name: audit and heal docs
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    # Canonical repo only (never forks), and skip pushes produced by a
+    # docs-heal PR merging.
+    if: >-
+      github.repository == 'velum-labs/handoffkit' &&
+      (github.event_name != 'push' || !startsWith(github.event.head_commit.message, 'docs-heal:'))
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          # Full history: ledger diff anchors reference older object hashes.
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup Node
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 22
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Pin pnpm
+        run: corepack prepare pnpm@10.33.4 --activate
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        # The skill diffs the built CLI's --help output against the docs.
+        run: pnpm build
+
+      - name: Install pinned cursor-agent
+        run: |
+          curl -fsSL "https://downloads.cursor.com/lab/${CURSOR_CLI_VERSION}/linux/x64/agent-cli-package.tar.gz" -o /tmp/agent.tar.gz
+          mkdir -p "$HOME/.cursor-agent"
+          tar -xzf /tmp/agent.tar.gz -C "$HOME/.cursor-agent" --strip-components=1
+          echo "$HOME/.cursor-agent" >> "$GITHUB_PATH"
+          "$HOME/.cursor-agent/cursor-agent" --version
+
+      - name: Restrict agent permissions
+        # gh is denied outright; push/PR are impossible anyway (no token, no
+        # persisted credentials). Everything else the skill needs stays open.
+        run: |
+          mkdir -p "$HOME/.cursor"
+          cat > "$HOME/.cursor/cli-config.json" <<'JSON'
+          {
+            "permissions": {
+              "deny": ["Shell(gh)", "Read(**/.env*)", "Write(**/.env*)"]
+            }
+          }
+          JSON
+
+      - name: Run docs-audit agent
+        env:
+          CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
+          EVENT_NAME: ${{ github.event_name }}
+          TRIGGER_SHA: ${{ github.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          REPORT_PATH: ${{ runner.temp }}/docs-heal-report.md
+        run: |
+          if [ -z "$CURSOR_API_KEY" ]; then
+            echo "CURSOR_API_KEY secret is not configured" >&2
+            exit 1
+          fi
+          cat > /tmp/docs-heal-prompt.txt <<EOF
+          Read .cursor/skills/docs-audit/SKILL.md and follow it exactly.
+
+          Trigger: ${EVENT_NAME} at commit ${TRIGGER_SHA} (for push events the
+          previous head was ${PUSH_BEFORE}; start from that merge's diff).
+          A weekly 'schedule' or 'workflow_dispatch' trigger means a full
+          sweep: work everything ledger-plan reports.
+
+          Constraints for this environment:
+          - Edit documentation files and the ledger only. Do not run
+            'git commit', 'git push', or any 'gh' command; publishing is
+            handled by the workflow after you finish.
+          - Write the report (all required sections from the skill) to:
+            ${REPORT_PATH}
+          - If the docs-worthiness gate says nothing needs doc changes, write
+            the report saying so and change no files.
+          EOF
+          cursor-agent -p "$(cat /tmp/docs-heal-prompt.txt)" \
+            --model "$CURSOR_MODEL" \
+            --force \
+            --output-format text
+
+      - name: Validate
+        run: |
+          if [ -z "$(git status --porcelain)" ]; then
+            echo "no doc changes produced; skipping validation"
+            exit 0
+          fi
+          pnpm check
+
+      - name: Publish draft PR
+        env:
+          GH_TOKEN: ${{ secrets.DOCS_HEAL_PR_TOKEN || github.token }}
+          REPORT_PATH: ${{ runner.temp }}/docs-heal-report.md
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          if [ -z "$(git status --porcelain)" ]; then
+            echo "nothing to publish"
+            exit 0
+          fi
+          BRANCH="docs/heal-${RUN_ID}"
+          git config user.name "docs-heal"
+          git config user.email "docs-heal@users.noreply.github.com"
+          git checkout -B "$BRANCH"
+          git add -A
+          git commit -m "docs-heal: automated documentation repair (run ${RUN_ID})"
+          git push "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "HEAD:${BRANCH}"
+          if [ ! -f "$REPORT_PATH" ]; then
+            printf 'Automated docs repair. The agent did not produce a report; inspect the run log.\n' > "$REPORT_PATH"
+          fi
+          gh pr create \
+            --draft \
+            --head "$BRANCH" \
+            --title "docs-heal: automated documentation repair" \
+            --body-file "$REPORT_PATH"

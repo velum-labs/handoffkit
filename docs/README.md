@@ -13,6 +13,7 @@ Read [Documentation taxonomy](documentation-taxonomy.md) before adding, moving, 
 | Page | Category | Use it for |
 | --- | --- | --- |
 | [Documentation taxonomy](documentation-taxonomy.md) | Orientation | Category definitions, placement rules, and entry justification. |
+| [Style guide](style-guide.md) | Orientation | Format specification for every doc surface; the output contract for humans and the docs healer. |
 | [Product scope](scope.md) | Orientation | Product packages versus retained legacy governance and VM packages. |
 | [Repository coverage map](repository-coverage-map.md) | Orientation | Major repo areas mapped to their owning docs. |
 | [Repository reference](repository-reference.md) | Reference | Comprehensive package, API, app, example, protocol, and operations map. |
@@ -77,6 +78,33 @@ Governance / VM-isolation documentation has moved to [`legacy/docs/`](../legacy/
 
 ## Documentation conventions
 
+Format rules for every surface live in the [Style guide](style-guide.md). The
+short version:
+
 - Prefer linking to package entry points instead of duplicating API signatures.
 - Keep public package entry points annotated with module JSDoc or Python docstrings, then run `pnpm docs:generate-code` to refresh [Generated code API reference](generated/code-api.md).
 - Treat root `README.md` and `apps/docs` as user-facing; put deeper operational and maintainer detail here.
+
+## Keeping docs honest
+
+Documentation stays in sync with the code through three mechanisms:
+
+- **Generated pages** are enforced by `pnpm check`: [Generated code API
+  reference](generated/code-api.md), [expected
+  behaviors](generated/expected-behaviors.md), the site changelog page, and
+  the registry/pricing/trace bindings. Update the source and regenerate;
+  never edit these by hand.
+- **The docs healer** (`.github/workflows/docs-heal.yml`) runs a headless
+  agent following the [docs-audit skill](../.cursor/skills/docs-audit/SKILL.md)
+  after merges that touch doc-sensitive sources and on a weekly sweep. It
+  repairs drift with surgical deltas and opens a draft PR carrying its
+  verification evidence. Detection is scoped by the freshness ledger
+  (`.cursor/skills/docs-audit/ledger.json`), which records what each page
+  documents and the source state it was last verified against; ledger state
+  is maintained only through the skill's helper scripts.
+- **On-demand audits:** trigger the workflow manually (`workflow_dispatch`),
+  or ask an agent to follow the docs-audit skill.
+
+Prose docs are not a merge gate: feature PRs are never blocked on doc drift,
+and docs converge post-merge via healer PRs. Review those PRs promptly — the
+system degrades silently if they rot.
