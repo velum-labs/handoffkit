@@ -1,4 +1,5 @@
 import type { ToolIntegration } from "@routekit/tools";
+import { trimTrailingSlashes } from "@routekit/runtime";
 
 import { claudeDriverConfigSchema, createClaudeDriver } from "./driver.js";
 import { claudeEnv, launchClaude } from "./launch.js";
@@ -16,7 +17,7 @@ export const claudeTool: ToolIntegration = {
   authSummary: "Claude Code uses the gateway's Anthropic-compatible surface.",
   setupSnippet: ({ gatewayUrl, model = "gateway-model" }) =>
     [
-      `ANTHROPIC_BASE_URL=${gatewayUrl.replace(/\/+$/, "")}`,
+      `ANTHROPIC_BASE_URL=${trimTrailingSlashes(gatewayUrl)}`,
       "ANTHROPIC_AUTH_TOKEN=routekit",
       `ANTHROPIC_MODEL=${model}`
     ].join("\n"),

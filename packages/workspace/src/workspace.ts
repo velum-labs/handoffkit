@@ -132,7 +132,7 @@ export async function materializeWorkspace(
   writeFileSync(bundlePath, await fetchBlob(manifest.bundleHash));
 
   const repoDir = join(sessionDir, "repo");
-  git(sessionDir, ["clone", "--quiet", bundlePath, repoDir]);
+  git(sessionDir, ["clone", "--quiet", "--", bundlePath, repoDir]);
   git(repoDir, ["checkout", "--quiet", manifest.baseRef]);
 
   if (manifest.dirtyDiffHash) {

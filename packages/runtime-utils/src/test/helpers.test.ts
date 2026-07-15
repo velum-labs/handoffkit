@@ -4,7 +4,13 @@ import { test } from "node:test";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { estimateTokens, randomId, spawnTool } from "../index.js";
+import {
+  estimateTokens,
+  randomId,
+  spawnTool,
+  trimSurroundingSlashes,
+  trimTrailingSlashes
+} from "../index.js";
 
 test("randomId returns hex ids with optional prefix and default length", () => {
   const bare = randomId();
@@ -27,6 +33,12 @@ test("estimateTokens uses ceil(chars/4) with a minimum of 1", () => {
   assert.equal(estimateTokens("abcd"), 1);
   assert.equal(estimateTokens("abcde"), 2);
   assert.equal(estimateTokens("user", '{"tool":"payload"}'), 6);
+});
+
+test("slash trimming is linear and preserves interior separators", () => {
+  assert.equal(trimTrailingSlashes("https://route.test////"), "https://route.test");
+  assert.equal(trimSurroundingSlashes("////route/path////"), "route/path");
+  assert.equal(trimSurroundingSlashes("////"), "");
 });
 
 test("spawnTool forwards explicit tool env without leaking unrelated secrets", async () => {

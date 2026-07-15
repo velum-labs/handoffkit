@@ -491,8 +491,9 @@ function writeGatewayError(
     });
     return { statusCode: 429, payload };
   }
+  process.stderr.write(`routekit gateway upstream error: ${errorMessage(error)}\n`);
   const payload = writeErrorSafely(res, 502, {
-    error: { message: errorMessage(error), type: "upstream_error" }
+    error: { message: "upstream request failed", type: "upstream_error" }
   });
   return { statusCode: 502, payload };
 }

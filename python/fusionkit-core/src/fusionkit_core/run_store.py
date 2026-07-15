@@ -266,7 +266,10 @@ class FileSystemRunStore:
         seq_path.write_text(str(value), encoding="utf-8")
 
     def _run_dir(self, run_id: str) -> Path:
-        return self.root / run_id
+        # Run ids arrive through HTTP path parameters. Persist under a
+        # fixed-width digest so no caller-controlled path component reaches the
+        # filesystem, while the original id remains in every stored record.
+        return self.root / "_runs" / hash_text(run_id)
 
     def _event_path(self, run_id: str) -> Path:
         return self._run_dir(run_id) / "events.jsonl"

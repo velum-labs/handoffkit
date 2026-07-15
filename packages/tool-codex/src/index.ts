@@ -1,4 +1,5 @@
 import type { ToolIntegration } from "@routekit/tools";
+import { trimTrailingSlashes } from "@routekit/runtime";
 
 import { codexDriverConfigSchema, createCodexDriver } from "./driver.js";
 import { codexLaunchConfigToml, launchCodex } from "./launch.js";
@@ -28,7 +29,7 @@ export const codexTool: ToolIntegration = {
         sandboxMode: "danger-full-access",
         approvalPolicy: "never",
         provider: {
-          baseUrl: `${route.gatewayUrl.replace(/\/+$/, "")}/v1`,
+          baseUrl: `${trimTrailingSlashes(route.gatewayUrl)}/v1`,
           ...(route.authToken !== undefined ? { apiKey: route.authToken } : {})
         }
       })

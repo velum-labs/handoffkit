@@ -13,6 +13,7 @@ import { join } from "node:path";
 
 import { stringify as tomlStringify } from "smol-toml";
 
+import { trimTrailingSlashes } from "@routekit/runtime";
 import type { AgentProfile, ToolLaunchContext, ToolLaunchSpec } from "@routekit/tools";
 
 const PROVIDER_ID = "routekit";
@@ -181,7 +182,7 @@ export function codexLaunchConfigToml(
     "",
     `[model_providers.${PROVIDER_ID}]`,
     `name = "RouteKit gateway"`,
-    `base_url = ${JSON.stringify(`${spec.gatewayUrl.replace(/\/+$/, "")}/v1`)}`,
+    `base_url = ${JSON.stringify(`${trimTrailingSlashes(spec.gatewayUrl)}/v1`)}`,
     `wire_api = "responses"`,
     `requires_openai_auth = false`,
     ""

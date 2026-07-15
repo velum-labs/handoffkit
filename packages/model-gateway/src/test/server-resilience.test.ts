@@ -90,7 +90,7 @@ test("an error before headers are sent still yields a 502 JSON body", async () =
     assert.equal(response.status, 502);
     const body = (await response.json()) as { error?: { message?: string; type?: string } };
     assert.equal(body.error?.type, "upstream_error");
-    assert.match(body.error?.message ?? "", /exploded/);
+    assert.equal(body.error?.message, "upstream request failed");
   } finally {
     await gateway.close();
   }

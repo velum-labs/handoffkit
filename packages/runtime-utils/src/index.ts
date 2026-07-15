@@ -175,7 +175,7 @@ export function ensureRunOutputDir(
   mkdirSync(dir, { recursive: true });
   const normalized = dir.split(sep).join("/");
   const inManagedDirectory = (options.dataDirectoryNames ?? []).some((name) => {
-    const segment = name.split(sep).join("/").replace(/^\/+|\/+$/g, "");
+    const segment = trimSurroundingSlashes(name.split(sep).join("/"));
     return segment.length > 0 && (`/${normalized}/`).includes(`/${segment}/`);
   });
   if (inManagedDirectory) {
@@ -244,6 +244,14 @@ export function trimTrailingSlashes(value: string): string {
   let end = value.length;
   while (end > 0 && value.charCodeAt(end - 1) === 0x2f) end -= 1;
   return value.slice(0, end);
+}
+
+export function trimSurroundingSlashes(value: string): string {
+  let start = 0;
+  let end = value.length;
+  while (start < end && value.charCodeAt(start) === 0x2f) start += 1;
+  while (end > start && value.charCodeAt(end - 1) === 0x2f) end -= 1;
+  return value.slice(start, end);
 }
 
 export function normalizeApiBaseUrl(baseUrl: string): string {

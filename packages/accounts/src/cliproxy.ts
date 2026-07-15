@@ -12,7 +12,7 @@ import { arch as osArch, homedir, platform as osPlatform } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 
-import { writeFileAtomic } from "@routekit/runtime";
+import { trimTrailingSlashes, writeFileAtomic } from "@routekit/runtime";
 import { parse as parseYaml } from "yaml";
 
 const execFileAsync = promisify(execFile);
@@ -42,7 +42,7 @@ export function cliproxyBaseUrl(
 ): string {
   const override = env[CLIPROXY_BASE_URL_ENV];
   return override !== undefined && override.length > 0
-    ? override.replace(/\/+$/, "")
+    ? trimTrailingSlashes(override)
     : "http://127.0.0.1:8317";
 }
 

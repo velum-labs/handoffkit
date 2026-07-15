@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import type { ServerOptions } from "@opencode-ai/sdk/server";
-import { spawnTool } from "@routekit/runtime";
+import { spawnTool, trimTrailingSlashes } from "@routekit/runtime";
 import type { ToolLaunchContext, ToolLaunchSpec } from "@routekit/tools";
 
 const PROVIDER_ID = "routekit";
@@ -41,7 +41,7 @@ export function opencodeProviderConfig(
         npm: "@ai-sdk/openai-compatible",
         name: "RouteKit gateway",
         options: {
-          baseURL: `${spec.gatewayUrl.replace(/\/+$/, "")}/v1`,
+          baseURL: `${trimTrailingSlashes(spec.gatewayUrl)}/v1`,
           ...(spec.auth?.token !== undefined ? { apiKey: spec.auth.token } : {})
         },
         models
