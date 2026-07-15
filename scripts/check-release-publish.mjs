@@ -203,11 +203,7 @@ const pypiRegistryPackages = (pypiUnit?.registries ?? [])
 if (JSON.stringify(pypiRegistryPackages) !== JSON.stringify(expectedPythonPackages)) {
   fail("fusionkit-pypi registries must list every released Python package in dependency order");
 }
-const expectedPythonPreflight = [
-  "uv",
-  "build",
-  ...expectedPythonPackages.flatMap((packageName) => ["--package", packageName])
-];
+const expectedPythonPreflight = ["node", "scripts/build-fusionkit-python-packages.mjs"];
 if (JSON.stringify(pypiUnit?.preflight) !== JSON.stringify(expectedPythonPreflight)) {
   fail("fusionkit-pypi preflight must build every release package in dependency order");
 }
@@ -266,11 +262,7 @@ if (!fusionEnv.includes(`FUSIONKIT_PYPI_VERSION = "${root.version}"`)) {
 
 const pypiWorkflow = readFileSync(PYPI_WORKFLOW, "utf8");
 for (const required of [
-  "--package fusionkit-core",
-  "--package fusionkit-server",
-  "--package fusionkit",
-  "--package fusionkit-mlx",
-  "--package fusionkit-evals",
+  "scripts/build-fusionkit-python-packages.mjs",
   ".release-venv/bin/fusionkit-sidecar",
   ".release-venv/bin/fusionkit-bench",
   ".release-venv/bin/fusionkit"

@@ -58,20 +58,7 @@
         "python/fusionkit-evals/pyproject.toml#project.version",
         "packages/cli/src/fusion/env.ts#FUSIONKIT_PYPI_VERSION"
       ],
-      "preflight": [
-        "uv",
-        "build",
-        "--package",
-        "fusionkit-core",
-        "--package",
-        "fusionkit-server",
-        "--package",
-        "fusionkit",
-        "--package",
-        "fusionkit-mlx",
-        "--package",
-        "fusionkit-evals"
-      ],
+      "preflight": ["node", "scripts/build-fusionkit-python-packages.mjs"],
       "dependsOn": ["fusionkit-protocol"]
     },
     {

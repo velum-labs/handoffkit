@@ -211,6 +211,7 @@ const requiredFiles = [
   "packages/example-utils/src/models.ts",
   "scripts/demo.mjs",
   "scripts/check-release-publish.mjs",
+  "scripts/build-fusionkit-python-packages.mjs",
   "scripts/check-routekit-cli-pack.mjs",
   "scripts/check-model-fusion-protocol.mjs",
   "scripts/check-generated-model-fusion-sdk.mjs",

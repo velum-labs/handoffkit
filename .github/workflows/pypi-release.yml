@@ -20,17 +20,6 @@ concurrency:
   group: pypi-release-${{ github.ref }}
   cancel-in-progress: false
 
-env:
-  # Build in dependency order: the three-package sidecar runtime, then the
-  # separately installed MLX and evaluation packages. Other workspace packages
-  # are not part of this release unit.
-  FUSIONKIT_PACKAGES: >-
-    --package fusionkit-core
-    --package fusionkit-server
-    --package fusionkit
-    --package fusionkit-mlx
-    --package fusionkit-evals
-
 jobs:
   release:
     name: build, validate, and publish to PyPI
@@ -70,9 +59,7 @@ jobs:
         run: uv run pytest
 
       - name: Build fusionkit distributions
-        run: |
-          rm -rf dist
-          uv build ${FUSIONKIT_PACKAGES}
+        run: node scripts/build-fusionkit-python-packages.mjs
 
       - name: Validate distribution metadata
         run: uv run --with twine python -m twine check dist/*
