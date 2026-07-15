@@ -122,6 +122,7 @@ const preflightOutput = `${preflight.stdout}${preflight.stderr}`;
 if (
   !preflightOutput.includes("preflight failed") &&
   !preflightOutput.includes("local MLX models need Apple Silicon") &&
+  !preflightOutput.includes("missing credential environment variable") &&
   !preflightOutput.includes("synthesis sidecar failed to start")
 ) {
   fail(`expected a preflight failure, got:\n${preflightOutput}`);
