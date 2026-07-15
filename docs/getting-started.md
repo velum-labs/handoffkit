@@ -6,8 +6,8 @@ checkout. If you only want to use the product, start with the root
 task quickstarts for [coding harnesses](quickstart-harness.md) and the
 [inference endpoint](quickstart-inference.md).
 
-FusionKit's shipped product is the Node `@fusionkit/cli` front door plus the
-Python `fusionkit serve` fusion engine. The legacy Warrant governance plane,
+FusionKit's shipped product is the Node `@fusionkit/cli` front door plus its
+internal Python `fusionkit-sidecar` synthesis process. The legacy Warrant governance plane,
 Docker compose stack, runner, receipt, and VM-isolation packages are retained in
 the repository but are out of product scope; see [Product scope](scope.md).
 
@@ -71,15 +71,17 @@ uv run pytest tests -q
 uv run pytest python -q
 ```
 
-To exercise the raw fusion endpoint directly during development, use a config
-whose endpoints are available on your machine:
+To exercise the internal synthesis sidecar during development, use a config
+that names the RouteKit URL and opaque endpoint IDs:
 
 ```sh
-uv run --package fusionkit fusionkit serve -c <config.yaml> --host 127.0.0.1 --port 8080
+uv run --package fusionkit fusionkit-sidecar serve \
+  -c <config.yaml> --host 127.0.0.1 --port 8080
 ```
 
-Then POST to `/v1/chat/completions` with model `fusionkit/panel`, or use a
-specific endpoint id for passthrough.
+Use `/health` for readiness and `/v1/fusion/trajectories:fuse` for an internal
+fusion step. Public chat, messages, responses, model listing, and passthrough
+remain on the Node gateway started by `fusionkit serve`.
 
 ## Product quick checks
 

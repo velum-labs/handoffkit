@@ -2,9 +2,9 @@
 
 How this repository tests the product, what tooling exists for it, and how to
 write new tests against that tooling. The goal of the tooling is a specific
-fidelity contract: **tests drive the real product stack over the real provider
-wire protocols, with the provider itself being the only simulated component —
-and that component is scriptable and observable.**
+fidelity contract: **tests drive the real product stack across the Node↔Python
+boundary, with a scriptable and observable RouteKit gateway as the simulated
+upstream.**
 
 ## The problem this tooling solves
 
@@ -12,63 +12,43 @@ FusionKit is a chain of real processes and wire protocols:
 
 ```
 coding tool ──(OpenAI/Anthropic/Responses dialects)──▶ Node fusion gateway
-    Node gateway ──(panel fanout + trajectories:fuse)──▶ Python `fusionkit serve`
-        Python engine ──(OpenAI/Anthropic SDK clients)──▶ model providers
+    Node gateway ──(panel fanout + trajectories:fuse)──▶ Python `fusionkit-sidecar`
+        Python sidecar ──(neutral Chat Completions)──▶ Node RouteKit gateway
+            RouteKit gateway ──(provider adapters/accounts)──▶ model providers
 ```
 
 Historically each layer was tested against ad-hoc inline mocks of the layer
 below it: Node tests hand-rolled tiny HTTP servers pretending to be
-`fusionkit serve`, and Python tests injected `FakeModelClient` *behind* the
-provider-client boundary. That leaves the most failure-prone code — SDK wire
-parsing, SSE chunk reassembly, retry/backoff, error classification, the
-Node↔Python config seam, process startup — untested, and every suite invents
-its own unobservable mock. Abstracting the mocks further would recreate the
-same problem; the fix is to move the simulation **outside** the product, to
-the provider wire, and make it a first-class, instrumentable tool.
+the sidecar, and Python tests injected `FakeModelClient` behind the model-call
+boundary. The shared simulator now exercises neutral wire parsing, SSE chunk
+reassembly, the Node↔Python endpoint-ID seam, and process startup without
+recreating provider accounts or routing in Python.
 
 ## The tooling
 
-### 1. Provider simulator — `python/fusionkit-testkit`
+### 1. RouteKit simulator — `python/fusionkit-testkit`
 
-`ProviderSimulator` is a real HTTP server (stdlib-only, no framework) that
-speaks **every provider dialect FusionKit ships a client for** — one per
-`build_client` family:
+`RouteKitSimulator` is a real HTTP server (stdlib-only, no framework) that
+speaks the one neutral surface Python FusionKit consumes:
 
-- **OpenAI Chat Completions** (`POST /v1/chat/completions` — the `openai` /
-  `openrouter` / `openai-compatible` / `mlx-lm` / `custom` providers): JSON and
-  SSE streaming with realistic chunking — role frame, token-level content
+- **OpenAI-compatible Chat Completions** (`POST /v1/chat/completions`): JSON
+  and SSE streaming with realistic chunking — role frame, token-level content
   deltas, index-keyed tool-call argument fragments, finish frame, and the
-  `stream_options.include_usage` usage frame, exactly like the real API.
-- **Anthropic Messages** (`POST /v1/messages` — the `anthropic` provider):
-  JSON content blocks (`text` / `thinking` / `tool_use`) and the full
-  named-event SSE sequence (`message_start` … `input_json_delta` …
-  `message_delta` … `message_stop`).
-- **OpenAI Responses** (`POST /responses` — the `codex` subscription
-  provider): the stream-only typed-event sequence the `openai` SDK validates
-  (`response.created` … reasoning-summary / output-text /
-  function-call-argument deltas … `response.completed` with a full terminal
-  `Response` snapshot), plus fake subscription-token auth via
-  `CODEX_TEST_TOKEN_ENV` so no real ChatGPT login is touched.
-- **Google GenAI** (`POST /v1beta/models/{model}:generateContent` and
-  `:streamGenerateContent` — the `google` provider): typed candidate parts
-  (`text` / `thought` / `functionCall`), camelCase `usageMetadata`, and the
-  Google RPC error envelope.
+  `stream_options.include_usage` usage frame.
 
 **Control plane** (scriptable): behaviors are queued per model name, FIFO;
 an unqueued call gets a deterministic echo default. A `Behavior` can carry a
-reply, tool calls, out-of-band reasoning, a provider-shaped error (429 with
-`retry-after`, 401 invalid key, quota exhaustion, context overflow, 529
-overloaded, 500 — using the real wire spellings `classify_provider_error`
-keys on), injected latency, stream pacing, or a deliberately broken stream
+reply, tool calls, out-of-band reasoning, an HTTP error, injected latency,
+stream pacing, or a deliberately broken stream
 (truncated connection / garbage frame). Scripting works in-process
 (`sim.queue(...)`) and over HTTP (`POST /__sim/behaviors`, `POST /__sim/reset`)
 so any language can drive it.
 
 **Observation plane** (instrumentable): every request is journaled — dialect,
-model, full request body, auth headers, stream flag, which behavior answered
+opaque endpoint ID, full request body, stream flag, which behavior answered
 it (queued vs default), and the response status/kind. Tests assert on the
 journal (`sim.journal()` / `GET /__sim/journal`): *what actually crossed the
-provider wire*, not whether a mock function was called.
+RouteKit wire*, not whether a mock function was called.
 
 **Standalone**: `uv run --package fusionkit-testkit fusionkit-sim --port 0`
 prints a `listening` JSON line and serves until terminated (how the Node side
@@ -77,11 +57,9 @@ spawnable anywhere and gives byte-level wire control.
 
 ### 2. Config builders — `fusionkit_testkit.endpoints`
 
-`sim_endpoint(...)` / `panel_config(...)` return the *production*
-`ModelEndpoint` / `FusionConfig` objects pointed at the simulator, so a test
-composes its topology explicitly and the real `build_clients` factory
-constructs real SDK clients against it. Every provider kind is supported
-(`codex` endpoints get their fake subscription token seeded automatically).
+`sim_endpoint(...)` / `panel_config(...)` return opaque IDs and the production
+`FusionConfig` pointed at the simulator, so the real `build_clients` factory
+constructs RouteKit clients against it.
 
 ### 2b. Scenario scripting + pytest fixtures (the DX layer)
 
@@ -94,13 +72,13 @@ constructs real SDK clients against it. Every provider kind is supported
   filters the journal; `sim.describe_journal()` renders one line per wire call
   for assertion failure messages.
 - **Pytest fixtures, zero wiring**: the testkit registers a `pytest11` entry
-  point, so any test in the uv workspace can just take `provider_sim` (a fresh
+  point, so any test in the uv workspace can just take `routekit_sim` (a fresh
   simulator per test) or `sim_stack` (a factory that boots the real engine
   process over it) as a fixture argument.
 
 ### 3. Real engine process — `fusionkit_testkit.engine.EngineProcess`
 
-Runs the actual `fusionkit serve` CLI as a child process (the same entrypoint
+Runs the actual `fusionkit-sidecar serve` CLI as a child process (the entrypoint
 the Node CLI spawns in production) against a given config: real config-file
 loading, uvicorn startup, tracing setup, and HTTP surface. Startup failures
 raise with the engine's own captured output attached; `engine.log` exposes it
@@ -119,11 +97,8 @@ different package that reuses the name.)
   `describeJournal` / `reset`), with the child's log for diagnostics.
 - `scriptFusedTurn(sim, {...})` / `judgeAnalysis(...)` — one-call fused-turn
   scripting (mirrors the Python scenario helpers).
-- `simRouterConfigYaml(...)` — real `fusionkit serve` router YAML (the same
-  document shape `routerConfigYaml` emits in production) with all endpoints
-  simulator-backed; supports every provider kind including `google` and
-  `codex` (subscription auth wired to the fake test token).
-- `startEngine(...)` — the real Python engine as a child process via
+- `simRouterConfigYaml(...)` — RouteKit router YAML for Node gateway tests.
+- `startEngine(...)` — the real Python sidecar as a child process via
   `uv run --package fusionkit`, readiness-probed, log-captured.
 - `parseSse` / `sseText` / `sseReasoning` / `sseDone` — structured SSE
   observation (mirrors `fusionkit_testkit.sse`), replacing per-file inline
@@ -159,7 +134,8 @@ real Cursor login and stays behind the env-gated live tests.
 ### 5. Full-stack harness — `packages/cli/src/test/sim-stack.ts`
 
 `startSimFusionStack(...)` is the composition root for whole-product tests:
-provider simulator → real Python engine → **real Node fusion gateway**
+TypeScript provider simulator → real Node RouteKit gateway → real Python
+sidecar → **real Node fusion gateway**
 (`startFusionStepGateway`, the production front door). Defaults to `k=1`
 proposal panels so the entire chain runs without external coding-agent
 binaries. The returned stack carries:
@@ -171,9 +147,7 @@ binaries. The returned stack carries:
 - `scriptFusedTurn({candidates, answer})` — reset + script a fused turn
   against this stack's judge in one call.
 
-## The matrix: axes declared once, suites generated
-
-Coverage is a **product of declared axes**, not hand-written per-tool tests:
+## Executable behavior inventory
 
 The complete claimed behavior inventory lives in
 `spec/testing/expected-behaviors.json`; its reviewable generated form is
@@ -181,57 +155,35 @@ The complete claimed behavior inventory lives in
 file and source anchor; environment-gated rows must name the reason and exact
 live command. Node/Python meta-tests compare its door/tool/provider axes to
 the executable registries, and `pnpm check` fails if the generated list or
-anchors drift.
+anchors drift. Provider/account matrices are TypeScript RouteKit tests; Python
+has one RouteKit-client matrix over buffered/streamed text, usage, reasoning,
+tool calls, malformed responses, and opaque endpoint IDs.
 
-- **Provider axis** — `fusionkit_testkit.matrix.PROVIDER_PROFILES`: one
-  `ProviderProfile` per client family (OpenAI, OpenRouter, Anthropic, Google,
-  Codex) with
-  its wire dialect, auth journal field, and *declared* capability quirks
-  (SDK-internal retries, sampling forwarding, finish-reason vocabulary, quota
-  classification). Suites `pytest.mark.parametrize` over `provider_params()`
-  and branch only on declared capabilities — never on provider-name
-  string-compares. Adding a provider = one profile entry + one `wire_*`
-  module; every matrix suite picks it up automatically.
 - **Door axis** — `@fusionkit/testkit`'s `DOOR_PROFILES`: one `DoorProfile`
   per gateway front door (OpenAI chat, Anthropic Messages, Codex Responses,
   Cursor BYOK hybrid) declaring how to build requests (plain / streaming /
   tool-loop turns) and how to extract text / tool calls from its native JSON
   and SSE shapes. Node suites loop over the profiles and generate tests.
-- **Behavior axis** — the scripted `Behavior`/`SimError` vocabulary (replies,
-  reasoning, tool calls, the error taxonomy, latency, broken streams).
+- **Behavior axis** — scripted replies, reasoning, tool calls, latency, and
+  broken streams.
 
-Matrix suites (generated tests = product of axes):
+Generated Node suites cover the door × behavior product:
 
-- `test_matrix_wire_clients.py` — provider × {roundtrip, streaming
-  reassembly, tool calls ×2 modes, error taxonomy ×3, transient recovery,
-  truncated stream} plus OpenRouter generation-cost accounting = 47 tests
-  over the real SDK clients.
-- `test_matrix_engine_passthrough.py` — provider × {JSON, SSE, multi-turn
-  tool loop with per-dialect tool-result wire markers, auth error} = 20 tests
-  through the real engine.
 - `stack-e2e.test.ts` — door × {fused JSON, fused SSE with native close
   markers, multi-turn fused tool loop with native tool dialects} = 12
   generated tests through the whole stack (plus targeted cross-door
-  invariants: per-provider passthrough, discovery, count_tokens, embeddings,
-  degradation).
-
-Dialect quirks with no cross-axis analogue (Anthropic 529, the tools
-guardrail, control-plane infra) stay as targeted tests in
-`test_simulator.py`; fused-path and depth behaviors stay in their dedicated
-suites.
+  invariants: passthrough, discovery, count_tokens, embeddings, degradation).
+Python `test_simulator.py` keeps the RouteKit tools guardrail and control-plane
+checks targeted.
 
 ## The test pyramid, by layer
 
 | Layer | What runs for real | What is simulated | Where |
 |---|---|---|---|
 | Unit / component | one module | everything around it | `packages/*/src/test`, `python/*/tests` (existing suites, incl. `FakeModelClient`-based server tests) |
-| Wire-client matrix | real SDK clients + retry/classification, provider × behavior product | provider (simulator) | `test_matrix_wire_clients.py` (+ dialect quirks in `test_simulator.py`) |
-| Engine passthrough matrix | provider × {JSON, SSE, tool loop, errors} through the real engine | provider | `test_matrix_engine_passthrough.py` |
-| Engine e2e (fused) | `create_app` + real clients + kernel | provider | `test_engine_e2e.py` |
-| Engine surface matrix | every engine HTTP door + fusion mode, four-provider panel | provider | `test_engine_surfaces.py` |
-| Engine depth | multi-turn fused tool loops, wire-shape matrix, storms/quota, overflow ladder, prompt overrides, exact usage, concurrency | provider | `test_engine_depth.py` |
-| Adversarial | broken/garbage streams, multi-slot parallel tool calls, latency | provider | `test_adversarial.py` |
-| Process e2e | real `fusionkit serve` child process | provider | `test_engine_process.py` |
+| Sidecar API | internal route scope, health, trajectory fusion, native runs, and tool resume | none | `python/fusionkit-server/tests/` |
+| Neutral RouteKit client | opaque endpoint ids, buffered/stream parsing, reasoning, usage, and tools | none | `python/fusionkit-core/tests/test_routekit_client.py` |
+| Sidecar process e2e | real `fusionkit-sidecar serve` child process over a simulated RouteKit upstream | none | `python/fusionkit-testkit/tests/test_engine_process.py` |
 | Cross-stack door matrix | door × {fused JSON, fused SSE, tool loop} through the whole stack | provider | `packages/testkit/src/test/`, `packages/cli/src/test/stack-e2e.test.ts` |
 | Cross-stack depth | multi-ensemble routing + prompts, session/cost accounting, narration | provider | `packages/cli/src/test/stack-depth-e2e.test.ts` |
 | Gateway policies | WS5 failover (`fusion`/`passthrough`/`fail`), WS7 budget-stop (402 before spend), WS4 finite-k round semantics + persistence | provider | `packages/cli/src/test/stack-policies-e2e.test.ts` |
@@ -240,26 +192,22 @@ suites.
 | Durable resume | unbounded candidate cache persisted in FileSystemSessionStore and restored after gateway restart with zero re-fanout | provider | `packages/cli/src/test/stack-resume-e2e.test.ts` |
 | Canonical tool drivers | Real Claude Agent SDK + Codex SDK, native dialect gateways, stale-cursor fallback | provider | `packages/cli/src/test/stack-drivers-e2e.test.ts` |
 | Auth boundary | every door rejects missing/wrong bearer credentials before any provider call | provider | `packages/cli/src/test/stack-auth-e2e.test.ts` |
-| Hostile-input fuzz | malformed bodies per door (structural rejection matrix) + 40 seeded random bodies; invariants: native 400 envelope, zero fanout, no leaked internals, bounded latency, gateway survives | provider | `packages/cli/src/test/stack-fuzz-e2e.test.ts`, `python/fusionkit-testkit/tests/test_engine_fuzz.py`, unit: `wire-validation.test.ts` |
-| Chunk-boundary fuzz | provider streams re-split at 1/3/7-byte boundaries (mid-frame, mid-UTF-8-rune) must reassemble byte-exactly, per provider family + fused | provider | `python/fusionkit-testkit/tests/test_stream_chunk_fuzz.py` |
+| Hostile-input fuzz | malformed bodies per public gateway door plus seeded random bodies; native 400 envelope, zero fanout, no leaked internals, bounded latency | provider | `packages/cli/src/test/stack-fuzz-e2e.test.ts`, unit: `wire-validation.test.ts` |
+| Chunk-boundary fuzz | gateway streams re-split mid-frame and mid-UTF-8-rune must reassemble byte-exactly | provider | `packages/model-gateway/src/test/sse-codec.test.ts` |
 | Concurrency | 24 parallel passthrough streams + 8 parallel fused streams with per-request content identity (cross-talk detection), abort isolation | provider | `packages/cli/src/test/stack-concurrency-e2e.test.ts` |
-| Engine runs & processes | native runs API (create/inspect/events/idempotency) over the real wire, `serve-endpoint` child process, router identity handshake | provider | `python/fusionkit-testkit/tests/test_engine_runs_and_processes.py` |
+| Sidecar runs | native create/inspect/events/idempotency and tool resume over internal APIs | none | `python/fusionkit-server/tests/test_fusion_runs_api.py`, `test_tool_resume.py` |
 | **Real product CLI** | the ACTUAL `fusionkit serve` entrypoint booting its production stack: fusion.json loading, preflight probes, `uv run` router spawn, gateway + setup snippets | provider only | `packages/cli/src/test/stack-npm-cli-e2e.test.ts` |
 | Real command CLI | actual built entrypoint: version/completions/runtime, config CRUD/export, prompts, install/uninstall, telemetry, setup, doctor | provider only for doctor probes | `packages/cli/src/test/cli-command-surfaces-e2e.test.ts` |
 | **Real-CLI e2e** | the ACTUAL `claude` / `codex` / `opencode` binaries: production wire/toolsets and real local tool execution | provider only | `packages/cli/src/test/stack-cli-e2e.test.ts` |
 | Live (env-gated) | everything incl. real provider accounts | nothing | `FUSIONKIT_GATEWAY_LIVE_*` tests, billed benchmarks |
 
-The provider axis also covers **OpenRouter** including its post-response cost
-accounting: the simulator serves `GET /v1/generation`, and the wire tests
-assert `provider_cost` propagation (JSON + streaming terminal chunks).
+Provider-wire and cost-accounting coverage lives in the TypeScript RouteKit
+gateway suites. Python receives only neutral responses and usage.
 
 **Surface coverage** at the two e2e layers:
 
-- Engine doors: `/v1/chat/completions` (fused aliases `panel` / `single` /
-  `self` / `heuristic` + per-endpoint passthrough, JSON and SSE, tool loops),
-  `/v1/cursor/chat/completions` (hybrid + plain), `/v1/fusion/trajectories:fuse`
-  (JSON and SSE), `/v1/fusion/runs` + `/inspect` + `/events` (via
-  `x-fusionkit-record`), `/v1/models`, `/v1/cursor/models`, `/health`.
+- Sidecar doors: `/health`, `/v1/fusion/trajectories:fuse` (JSON and SSE), and
+  `/v1/fusion/runs` plus inspect/events/tool-results.
 - Gateway doors: `/v1/chat/completions` (JSON + SSE), `/v1/messages` (+
   streaming, + `count_tokens`), `/v1/responses` (JSON + SSE), 
   `/v1/cursor/chat/completions`, `/v1/models` (OpenAI + Anthropic shapes),
@@ -448,7 +396,8 @@ differential/stateful probes) found twenty-one more, spanning both stacks:
   load MLX models.
 - Real billed provider-account behavior (provider-side schema drift, actual
   rate limits, quality) remains in the explicitly env-gated live/public
-  benchmarks. Deterministic CI covers the provider wire and product behavior.
+  benchmarks. Deterministic TypeScript CI covers provider wires; Python CI
+  covers the neutral RouteKit wire and fusion behavior.
 - Generic ACP and unified command-harness worktree flows are covered by
   `packages/cli/src/test/gateway-e2e.test.ts`; native Claude/Codex SDK driver
   cutover is covered by `stack-drivers-e2e.test.ts`. OpenCode has no panel

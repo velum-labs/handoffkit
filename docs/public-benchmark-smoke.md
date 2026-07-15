@@ -17,7 +17,7 @@ not public benchmark runs.
 The "harness unavailable" statuses describe these smoke fixtures only. For real
 public LiveCodeBench runs, a full execution adapter exists at
 `python/fusionkit-evals/src/fusionkit_evals/adapters/livecodebench_adapter.py`
-and is driven by `fusionkit bench public --runner-command ...`.
+and is driven by `fusionkit-bench public --runner-command ...`.
 
 ## Rules
 
@@ -35,7 +35,7 @@ and is driven by `fusionkit bench public --runner-command ...`.
 The existing manifest path is enough:
 
 ```bash
-uv run fusionkit fusion-bench \
+uv run --package fusionkit-evals fusionkit-bench fusion \
   --config path/to/config.yaml \
   --manifest python/fusionkit-evals/src/fusionkit_evals/data/fixtures/public-smoke \
   --output .fusionkit/public-smoke/rows.jsonl \

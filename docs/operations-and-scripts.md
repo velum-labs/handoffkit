@@ -178,7 +178,12 @@ This script backs the `pnpm mono` helper: internal dependency graph inspection (
 
 ### Benchmark and infra tooling
 
-Benchmark execution lives in `python/fusionkit-evals` behind the Python CLI's `bench` group: `fusionkit bench public`, `fusionkit bench tune-prompts`, and `fusionkit bench fusion` (with hidden legacy aliases such as `fusion-bench`); [Benchmarking runbook](benchmarking-runbook.md) is the workflow doc. Hyperkit infra deploy scripts live at `infra/hypergrid-batch/deploy.py` and `infra/hypergrid-obs/deploy.py`; see [Hyperkit](hyperkit.md).
+Benchmark execution lives in `python/fusionkit-evals` behind the maintainer-only
+`fusionkit-bench` entrypoint: `fusionkit-bench public`,
+`fusionkit-bench tune-prompts`, and `fusionkit-bench fusion`;
+[Benchmarking runbook](benchmarking-runbook.md) is the workflow doc. Hyperkit
+infra deploy scripts live at `infra/hypergrid-batch/deploy.py` and
+`infra/hypergrid-obs/deploy.py`; see [Hyperkit](hyperkit.md).
 
 ## Release files
 
@@ -211,7 +216,7 @@ Workflows live under `.github/workflows/`. `ci.yml` defines five jobs:
 | --- | --- |
 | `check` | `pnpm check`, `pnpm build`, the OOTB CLI shape smoke, `pnpm test`, `pnpm demo all`, and a dependency audit. |
 | `scope` | Build and tests for the `apps/scope` observability app from its own workspace. |
-| `stack-e2e` | The cross-stack suites: Node gateway + real Python engine + provider simulator, plus the real `claude`/`codex`/`opencode` binaries. |
+| `stack-e2e` | The cross-stack suites: Node gateway + real Python sidecar + simulated RouteKit/provider upstreams, plus the real `claude`/`codex`/`opencode` binaries. |
 | `python` | uv lockfile check, sync, Ruff, Pyright, uniroute and FusionKit pytest suites, contract fixture validation, and PyPI metadata smoke. |
 | `observability` | Hyperkit Grafana dashboard validation: boots seeded Prometheus and Grafana and executes every panel query via `scripts/validate_hyperkit_dashboards.py`. |
 

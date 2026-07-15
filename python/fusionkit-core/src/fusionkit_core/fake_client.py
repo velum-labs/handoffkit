@@ -4,8 +4,8 @@ import time
 from collections.abc import AsyncIterator, Mapping, Sequence
 from typing import Any
 
-from fusionkit_core.client_types import ToolChoice, ToolDefinition
 from fusionkit_core.config import SamplingConfig
+from fusionkit_core.model_client import ToolChoice, ToolDefinition
 from fusionkit_core.types import ChatMessage, ModelResponse, StreamChunk, Usage
 
 
@@ -20,8 +20,6 @@ class FakeModelClient:
         self.model_id = model_id
         self.max_context = max_context
         self._responses = list(responses or [])
-        # Optional out-of-band reasoning attached to every reply, so tests can
-        # exercise the reasoning capture path without a real provider.
         self._reasoning = reasoning
         self._calls = 0
 
@@ -49,8 +47,8 @@ class FakeModelClient:
     ) -> ModelResponse:
         del tools, tool_choice, extra
         started = time.perf_counter()
-        sampling = sampling or SamplingConfig()
-        content = self._next_content(messages, sampling)
+        resolved_sampling = sampling or SamplingConfig()
+        content = self._next_content(messages, resolved_sampling)
         return ModelResponse(
             model_id=self.model_id,
             content=content,
@@ -81,3 +79,5 @@ class FakeModelClient:
     async def aclose(self) -> None:
         return None
 
+
+__all__ = ["FakeModelClient"]

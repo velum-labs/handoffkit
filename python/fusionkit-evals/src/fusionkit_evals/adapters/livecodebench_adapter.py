@@ -11,7 +11,7 @@ Contract: reads an ExternalBenchmarkRequest JSON on stdin, writes a normalized r
 envelope JSON on stdout (everything else goes to stderr). Requires:
   - `datasets<4` installed (the dataset uses a loading script),
   - `FUSIONKIT_BENCH_CONFIG` pointing at a FusionConfig YAML (the panel),
-  - provider API keys in the environment.
+  - a reachable RouteKit gateway.
 
 Untrusted solution code runs in a pluggable sandbox (env ``BENCH_SANDBOX``,
 default ``local``) with a scrubbed environment (no API keys), resource limits, and
@@ -42,7 +42,6 @@ from typing import Any
 from fusionkit_core.clients import build_clients
 from fusionkit_core.config import load_config
 from fusionkit_core.fusion import FusionEngine
-from fusionkit_core.providers import estimate_cost
 from fusionkit_core.registry import FUSION_PANEL_ALIAS
 from fusionkit_core.types import ChatMessage
 
@@ -85,7 +84,7 @@ def panel_signature(engine: FusionEngine, max_tests: int) -> str:
 
     config = engine.config
     payload = {
-        "endpoints": sorted((e.id, e.model, e.provider) for e in config.endpoints),
+        "endpoint_ids": sorted(config.endpoint_ids),
         "judge": config.resolved_judge_model,
         "synthesizer": config.resolved_synthesizer_model,
         "panel_models": sorted(config.panel_models),
@@ -169,17 +168,12 @@ async def evaluate_problem(
     scored = await asyncio.to_thread(
         _score_result, sandbox, result, tests, test_timeout, checker_mode
     )
-    cost = 0.0
-    for cand in result.trajectories:
-        est = _candidate_cost(engine, cand.model_id, cand.metadata.get("usage"))
-        if est is not None:
-            cost += est
     row = {
         "task_id": question_id,
         "outcome": "scored",
         "passed": scored["fused_pass"],
         "score": 1.0 if scored["fused_pass"] else 0.0,
-        "cost_usd": round(cost, 6),
+        "cost_usd": None,
         "latency_s": round(latency, 2),
         "candidate_scores": scored["candidate_scores"],
     }
@@ -313,11 +307,11 @@ async def main() -> None:
         "resolved_tasks": len(scored),
         "total_tasks": len(rows),
         "passed_tasks": sum(1 for r in scored if r["passed"]),
-        "cost_total_usd": round(sum(r.get("cost_usd") or 0.0 for r in rows), 6),
+        "cost_total_usd": None,
         "tasks": rows,
         "provenance": build_provenance(
             prompt_template=PROMPT_SUFFIX,
-            model_versions={e.id: e.model for e in config.endpoints},
+            model_versions={endpoint_id: endpoint_id for endpoint_id in config.endpoint_ids},
             dataset_revision=os.environ.get("LCB_VERSION", "release_v6"),
             extra={
                 "checker_mode": checker_mode,
@@ -325,8 +319,7 @@ async def main() -> None:
                 "scoring_version": SCORING_VERSION,
                 "contamination_window_min_date": os.environ.get("LCB_MIN_DATE", "2025-01-01"),
                 "manifest": os.environ.get("LCB_MANIFEST"),
-                # judge+synth token cost is not surfaced in-process today; see docs.
-                "cost_scope": "solver_candidates_only",
+                "cost_scope": "owned_by_routekit",
             },
         ),
         "metadata": {
@@ -342,14 +335,6 @@ def _resolve_checker_mode(value: str) -> CheckerMode:
     if value in ("exact", "token", "float", "case_insensitive"):
         return value
     return "exact"
-
-
-def _candidate_cost(engine: FusionEngine, model_id: str, usage: object) -> float | None:
-    try:
-        endpoint = engine.config.endpoint_for(model_id)
-    except KeyError:
-        return None
-    return estimate_cost(endpoint, usage if isinstance(usage, dict) else None)
 
 
 if __name__ == "__main__":

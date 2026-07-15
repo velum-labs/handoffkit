@@ -26,7 +26,7 @@
       "key": "fusionkit-pypi",
       "repo": "handoffkit",
       "ecosystem": "uv-monorepo",
-      "description": "The 5 fusionkit PyPI packages (fusionkit, fusionkit-core, fusionkit-evals, fusionkit-mlx, fusionkit-server) published in lockstep.",
+      "description": "FusionKit's slim Python sidecar runtime (fusionkit, fusionkit-core, fusionkit-server) plus separately installed maintainer packages (fusionkit-evals, fusionkit-mlx), published in lockstep.",
       "branch": "main",
       "tagPattern": "fusionkit-v{version}",
       "releaseTrigger": "github-release",

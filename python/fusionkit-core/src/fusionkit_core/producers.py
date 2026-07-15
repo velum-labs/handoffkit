@@ -19,12 +19,10 @@ the control flow, the harness/sandbox owns execution.
 from __future__ import annotations
 
 import asyncio
-import logging
 from collections.abc import Mapping, Sequence
 from typing import Any, Protocol
 
-from fusionkit_core.client_codex import CodexResponsesClient
-from fusionkit_core.clients import ChatClient, ProviderCallError, ToolDefinition
+from fusionkit_core.clients import ChatClient, ToolDefinition
 from fusionkit_core.config import SamplingConfig
 from fusionkit_core.contracts import (
     ContractUsage,
@@ -33,24 +31,6 @@ from fusionkit_core.contracts import (
     contract_metadata,
 )
 from fusionkit_core.types import ChatMessage, ModelResponse, Trajectory, TrajectorySynthesis
-
-_warned_codex_self_mode_sampling = False
-
-
-def _maybe_warn_codex_self_mode_sampling(client: ChatClient, sample_count: int) -> None:
-    """Warn once when self-mode diversity cannot affect a Codex endpoint."""
-    global _warned_codex_self_mode_sampling
-    if sample_count <= 1 or _warned_codex_self_mode_sampling:
-        return
-    if not isinstance(client, CodexResponsesClient):
-        return
-    _warned_codex_self_mode_sampling = True
-    logging.warning(
-        "fusionkit: Codex self-mode fans out over distinct temperatures, but "
-        "CodexResponsesClient ignores SamplingConfig — every parallel attempt "
-        "sends identical requests."
-    )
-
 
 # Cap on a single persisted reasoning item, mirroring the TS trajectory-capture
 # MAX_TEXT so evidence stays bounded regardless of how verbose a model thinks.
@@ -86,10 +66,6 @@ def trajectory_from_response(
         "usage": response.usage.model_dump(),
         "finish_reason": response.finish_reason,
     }
-    if response.provider_cost is not None:
-        metadata["provider_cost"] = response.provider_cost.model_dump(
-            mode="json", exclude_none=True
-        )
     if sampling is not None:
         metadata["temperature"] = sampling.temperature
         metadata["seed"] = sampling.seed
@@ -135,14 +111,6 @@ def failed_trajectory(
         "error_code": exc.__class__.__name__,
         "error_message": str(exc),
     }
-    # Surface the egress taxonomy category on the failed trajectory so the run
-    # metadata records *why* a model dropped out (transient vs quota vs auth) -
-    # the substrate the WS5 failover layer reads without re-parsing.
-    if isinstance(exc, ProviderCallError):
-        metadata["error_category"] = exc.category
-        metadata["provider"] = exc.provider
-        if exc.status_code is not None:
-            metadata["status_code"] = exc.status_code
     if sampling is not None:
         metadata["temperature"] = sampling.temperature
         metadata["seed"] = sampling.seed
@@ -267,9 +235,6 @@ class ChatTrajectoryProducer:
         sample_count: int,
         tools: Sequence[ToolDefinition] | None = None,
     ) -> list[Trajectory]:
-        # Self-mode fans out one request per temperature; Codex endpoints ignore
-        # SamplingConfig, so diversity is ineffective there (see client_codex).
-        _maybe_warn_codex_self_mode_sampling(self._client(model_id), sample_count)
         selected_temperatures = list(temperatures)[:sample_count]
         if len(selected_temperatures) < sample_count:
             missing_count = sample_count - len(selected_temperatures)

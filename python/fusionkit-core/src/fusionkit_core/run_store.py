@@ -145,7 +145,7 @@ class FileSystemRunStore:
         final_output_artifact = None
         judge_synthesis_record = None
         pending_tool_actions: dict[str, ToolPausePlaceholder] = {}
-        provider_metadata = []
+        model_call_metadata = []
         call_usages: list[dict[str, Any]] = []
 
         for event in events:
@@ -172,7 +172,7 @@ class FileSystemRunStore:
                 model_call_payload = event.payload.get("model_call_record")
                 if isinstance(model_call_payload, dict):
                     if isinstance(model_call_payload.get("metadata"), dict):
-                        provider_metadata.append(model_call_payload["metadata"])
+                        model_call_metadata.append(model_call_payload["metadata"])
                     if isinstance(model_call_payload.get("usage"), dict):
                         call_usages.append(model_call_payload["usage"])
             elif event.event_type == "artifact_recorded":
@@ -216,7 +216,7 @@ class FileSystemRunStore:
             judge_synthesis_record=judge_synthesis_record,
             requires_action=_latest_pending_action(pending_tool_actions),
             terminal_error=summary.terminal_error,
-            provider_metadata=provider_metadata,
+            model_call_metadata=model_call_metadata,
             usage=_sum_call_usages(call_usages),
         )
 

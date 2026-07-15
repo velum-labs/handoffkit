@@ -1,7 +1,7 @@
 [project]
 name = "fusionkit-server"
 version = "0.8.0"
-description = "OpenAI-compatible HTTP server for fusionkit."
+description = "Internal HTTP sidecar for FusionKit synthesis."
 readme = "README.md"
 requires-python = ">=3.11"
 license = "Apache-2.0"
@@ -12,7 +12,7 @@ keywords = [
   "model-fusion",
   "llm",
   "ensemble",
-  "openai-compatible",
+  "sidecar",
   "fastapi",
 ]
 classifiers = [

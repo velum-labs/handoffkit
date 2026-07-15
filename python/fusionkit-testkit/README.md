@@ -1,34 +1,26 @@
 # fusionkit-testkit
 
-A realistic, scriptable **LLM provider simulator** for testing FusionKit end to
-end without provider keys or billing. Never published to PyPI; it exists so the
-test suites (Python and Node) can drive the *real* product stack — real
-provider SDK clients, real wire parsing, real retry/error classification, the
-real `fusionkit serve` process — against a provider that the test fully
-controls and can observe.
+A scriptable HTTP simulator for tests that need a controllable RouteKit
+upstream. It is never published to PyPI. Python sidecar tests use only its
+neutral OpenAI-compatible surface and opaque endpoint ids.
 
 ## What it is
 
-`ProviderSimulator` is a real HTTP server (stdlib-only, no framework) that
-speaks the two provider wire dialects FusionKit's Python clients use:
+`RouteKitSimulator` is a real HTTP server (stdlib-only, no framework). Its
+neutral OpenAI-compatible surface supports:
 
-- **OpenAI Chat Completions** — `POST /v1/chat/completions` (JSON and SSE
+- **Chat Completions** — `POST /v1/chat/completions` (JSON and SSE
   streaming with realistic chunking: role frame, token deltas, indexed
   tool-call fragments, finish frame, `stream_options.include_usage` usage
-  frame), `GET /v1/models`.
-- **Anthropic Messages** — `POST /v1/messages` (JSON and SSE:
-  `message_start` → `content_block_*` → `message_delta` → `message_stop`,
-  including `input_json_delta` tool-argument fragments).
-
-Point a `ModelEndpoint.base_url` (or the openai / anthropic SDK `base_url`) at
-`simulator.url` and the real client code runs unmodified.
+  frame).
+Point `FusionConfig.routekit_url` at `simulator.url`; the sidecar sends opaque
+endpoint ids in the request model field.
 
 ## Scripting (the control plane)
 
 Behaviors are queued per model name and consumed FIFO; an unqueued call gets a
 deterministic echo default. A behavior can be a reply, tool calls, reasoning,
-a provider-shaped error (429 / 401 / quota / context overflow / 529 / 500,
-with `retry-after`), injected latency, or a deliberately broken stream.
+an HTTP error, injected latency, or a deliberately broken stream.
 
 - **In-process (Python):** `sim.queue("model", Behavior(reply="..."))`.
 - **Over HTTP (any language):** `POST /__sim/behaviors`,
@@ -37,10 +29,9 @@ with `retry-after`), injected latency, or a deliberately broken stream.
 
 ## Observability (the journal)
 
-Every request is recorded: API dialect, model, full body, auth header
-presence, stream flag, and how it was answered (queued behavior vs default,
-status, kind). Tests assert on the journal — *what actually hit the provider
-wire* — instead of trusting that mocks were called.
+Every request is recorded: API dialect, model, full body, stream flag, and how
+it was answered (queued behavior vs default, status, kind). Tests assert on the
+journal — *what actually hit RouteKit's wire* — instead of trusting mocks.
 
 ## Standalone process
 

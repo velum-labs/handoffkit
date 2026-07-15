@@ -4,7 +4,7 @@ import json
 from collections.abc import Sequence
 
 from fusionkit_core.clients import FakeModelClient
-from fusionkit_core.config import FusionConfig, ModelEndpoint, SamplingConfig
+from fusionkit_core.config import FusionConfig, SamplingConfig
 from fusionkit_core.fusion import FusionEngine
 from fusionkit_core.types import ChatMessage
 from fusionkit_evals.bench_verify import verify_solution
@@ -59,10 +59,8 @@ def test_verify_solution_pass_and_fail() -> None:
 
 def _panel_engine() -> FusionEngine:
     config = FusionConfig(
-        endpoints=[
-            ModelEndpoint(id="pass", model="m", base_url="http://x"),
-            ModelEndpoint(id="fail", model="m", base_url="http://x"),
-        ],
+        routekit_url="http://routekit.test",
+        endpoint_ids=["pass", "fail"],
         default_model="pass",
         panel_models=["pass", "fail"],
         default_mode="panel",

@@ -33,7 +33,7 @@ This map ties every major repository area to the documentation that owns it. Use
 | `python/fusionkit-cli` | `docs/python-reference.md`, `docs/generated/code-api.md`, public Inference endpoint | Python CLI commands, auth commands, prompt dumping, benchmarks, tuning, and hill climbing. |
 | `python/fusionkit-evals` | `docs/python-reference.md`, `docs/generated/code-api.md`, benchmark docs | Fusion bench, public bench, prompt tuning, hill climbing, scoring, reports, adapters, and execution selection. |
 | `python/fusionkit-mlx` | `docs/python-reference.md`, `docs/generated/code-api.md`, public Models and panels | Optional MLX launch helpers and local model serving integration. |
-| `python/fusionkit-testkit` | `docs/testing.md`, `docs/python-reference.md` | Scriptable provider simulator (`fusionkit-sim`), config builders, engine process harness, pytest fixtures, and the provider test matrix. |
+| `python/fusionkit-testkit` | `docs/testing.md`, `docs/python-reference.md` | Scriptable RouteKit simulator (`fusionkit-sim`), opaque-ID config builders, sidecar process harness, and pytest fixtures. |
 | `python/hyperkit` | `docs/hyperkit.md`, `docs/python-reference.md` | SUT-agnostic experiment platform: `hyperkit` CLI, benchmark adapters, AWS Batch and local backends, and observability. |
 | `python/uniroute` and `python/uniroute-mlx` | `docs/python-reference.md`, `docs/generated/code-api.md` | Routing research packages, local model bridge, router cards, evaluation helpers, and tests. |
 | `apps/docs` | `docs/apps-and-examples.md`, `apps/docs/README.md`, public Documentation taxonomy | Public docs site structure, MDX content, OpenAPI generation, Fumadocs setup, Mermaid, build, and deployment. |

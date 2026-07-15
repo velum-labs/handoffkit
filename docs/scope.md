@@ -57,7 +57,8 @@ The legacy stack now lives under `legacy/`:
 - `legacy/packages/testkit`: the old in-process plane/runner fixture package,
   still used by the legacy demos (including `legacy/examples/bench`). The root
   `packages/testkit` is a different, repurposed package: private cross-stack
-  E2E tooling (provider simulator + real engine) for the product test suites.
+  E2E tooling (simulated upstreams + real Python sidecar) for the product test
+  suites.
 
 The legacy packages remain publishable from this monorepo for now. Their npm
 package names, scopes, repository identity, binaries, and release manifest

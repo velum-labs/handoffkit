@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi.testclient import TestClient
 from fusionkit_core.artifacts import LocalArtifactStore
 from fusionkit_core.clients import FakeModelClient
-from fusionkit_core.config import FusionConfig, ModelEndpoint
+from fusionkit_core.config import FusionConfig
 from fusionkit_core.contracts import (
     FusionRunRequestV1,
     ToolCallPlanV1,
@@ -275,6 +275,13 @@ def test_tool_results_api_resumes_candidate_scoped_tool_call(tmp_path) -> None:
     assert response.status_code == 200
     assert response.json()["state"] == "generating"
     assert response.json()["requires_action"] is None
+    events_response = client.get(f"/v1/fusion/runs/{created.run_id}/events")
+    assert events_response.status_code == 200
+    event_types = [event["event_type"] for event in events_response.json()["events"]]
+    assert event_types[-2:] == ["tool_execution_recorded", "run_resumed"]
+    inspect_response = client.get(f"/v1/fusion/runs/{created.run_id}/inspect")
+    assert inspect_response.status_code == 200
+    assert inspect_response.json()["requires_action"] is None
 
 
 def test_tool_results_api_rejects_wrong_tool_call(tmp_path) -> None:
@@ -307,9 +314,8 @@ def test_tool_results_api_rejects_wrong_tool_call(tmp_path) -> None:
 
 def _manager(tmp_path) -> tuple[FusionRunManager, FileSystemRunStore]:
     config = FusionConfig(
-        endpoints=[
-            ModelEndpoint(id="fast", model="fake-fast", base_url="http://localhost:8101"),
-        ],
+        routekit_url="http://routekit.test",
+        endpoint_ids=["fast"],
         default_model="fast",
         default_mode="single",
     )
@@ -320,9 +326,8 @@ def _manager(tmp_path) -> tuple[FusionRunManager, FileSystemRunStore]:
 
 def _client(manager: FusionRunManager) -> TestClient:
     config = FusionConfig(
-        endpoints=[
-            ModelEndpoint(id="fast", model="fake-fast", base_url="http://localhost:8101"),
-        ],
+        routekit_url="http://routekit.test",
+        endpoint_ids=["fast"],
         default_model="fast",
         default_mode="single",
     )

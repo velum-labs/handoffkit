@@ -17,7 +17,6 @@ from fusionkit_core.contracts import (
     HarnessRunRequestV1,
     HarnessRunResultV1,
     ModelCallRecordV1,
-    ModelEndpointV1,
     SchemaName,
     ToolCallPlanV1,
     ToolExecutionRecordV1,
@@ -34,7 +33,6 @@ FIXTURE_ROOT = REPO_ROOT / "spec" / "model-fusion-contract" / "fixture"
 SCHEMA_ROOT = REPO_ROOT / "spec" / "model-fusion-contract" / "schema"
 
 FUSIONKIT_CONTRACT_SCHEMAS: dict[SchemaName, type] = {
-    "model_endpoint.v1": ModelEndpointV1,
     "model-call-record.v1": ModelCallRecordV1,
     "fusion-run-request.v1": FusionRunRequestV1,
     "fusion-record.v1": FusionRecordV1,
@@ -196,8 +194,6 @@ def test_downstream_readiness_fields_are_typed() -> None:
     benchmark_task = BenchmarkTaskRecordV1.model_validate(
         _load_fixture("benchmark-task-record.v1", "realistic.json")
     )
-    endpoint = ModelEndpointV1.model_validate(_load_fixture("model_endpoint.v1", "realistic.json"))
-
     assert model_call.call_id == "call_panel_fast_001"
     assert model_call.usage is not None
     assert fusion_record.run_id == "fusion_run_panel_001"
@@ -207,7 +203,6 @@ def test_downstream_readiness_fields_are_typed() -> None:
     assert harness_candidate.model_call_id == "call_panel_fast_001"
     assert receipt.run_id == "harness_result_cursor_001"
     assert benchmark_task.scorer.kind == "record_join"
-    assert endpoint.capabilities["tool_calls"] == "unsupported"
 
 
 def _load_fixture(schema_name: SchemaName, fixture_name: str) -> dict[str, Any]:

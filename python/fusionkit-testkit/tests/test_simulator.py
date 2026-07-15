@@ -1,88 +1,61 @@
-"""Simulator infrastructure self-tests.
-
-Per-provider wire behavior (roundtrips, streaming reassembly, tool calls, the
-error taxonomy) lives in the parametrized matrix (``test_matrix_wire_clients``)
-— these tests cover what is genuinely simulator-specific: the control plane,
-the journal, default behaviors, and dialect quirks with no cross-provider
-analogue.
-"""
+"""Neutral RouteKit simulator infrastructure self-tests."""
 
 from __future__ import annotations
 
+from typing import Literal
+
 import httpx
-from fusionkit_core.clients import build_client
+import pytest
+from fusionkit_core.routekit_client import RouteKitClient
 from fusionkit_core.types import ChatMessage
-from fusionkit_testkit import Behavior, ProviderSimulator, SimError, SimToolCall, sim_endpoint
+from fusionkit_testkit import Behavior, RouteKitSimulator, SimToolCall
 
 
 async def test_default_behavior_echoes_when_nothing_is_queued(
-    provider_sim: ProviderSimulator,
+    routekit_sim: RouteKitSimulator,
 ) -> None:
-    client = build_client(sim_endpoint(provider_sim, id="dflt", model="gpt-dflt"))
+    client = RouteKitClient(routekit_sim.url, "dflt")
     try:
         response = await client.chat([ChatMessage(role="user", content="ping")])
     finally:
         await client.aclose()
     assert "ping" in response.content
-    assert provider_sim.journal()[0]["source"] == "default"
-
-
-async def test_anthropic_overloaded_529_is_transient(provider_sim: ProviderSimulator) -> None:
-    # Anthropic's `overloaded_error` rides HTTP 529 — no other provider has an
-    # analogue, so it stays a dialect-specific case outside the matrix.
-    provider_sim.queue(
-        "claude-529",
-        Behavior(error=SimError.overloaded()),
-        Behavior(reply="back up"),
-    )
-    client = build_client(
-        sim_endpoint(provider_sim, id="a529", model="claude-529", provider="anthropic")
-    )
-    try:
-        response = await client.chat([ChatMessage(role="user", content="hi")])
-    finally:
-        await client.aclose()
-    assert response.content == "back up"
-    assert [entry["status"] for entry in provider_sim.calls(model="claude-529")] == [529, 200]
+    assert routekit_sim.journal()[0]["source"] == "default"
 
 
 async def test_tool_calls_behavior_without_declared_tools_fails_loudly(
-    provider_sim: ProviderSimulator,
+    routekit_sim: RouteKitSimulator,
 ) -> None:
     # The realism guardrail: a real model can never call an undeclared tool,
     # so a scripted tool_calls behavior answering a tools-less request must
     # fail the call instead of passing silently (this is what catches an
     # engine that drops the caller's tools).
-    provider_sim.queue(
+    routekit_sim.queue(
         "gpt-guard",
         Behavior(tool_calls=[SimToolCall(id="c", name="tool", arguments="{}")]),
     )
-    client = build_client(sim_endpoint(provider_sim, id="guard", model="gpt-guard"))
+    client = RouteKitClient(routekit_sim.url, "gpt-guard")
     try:
-        try:
+        with pytest.raises(httpx.HTTPStatusError):
             await client.chat([ChatMessage(role="user", content="no tools declared")])
-            raised = False
-        except Exception:  # noqa: BLE001 - any classified provider error is acceptable
-            raised = True
     finally:
         await client.aclose()
-    assert raised
-    (entry,) = provider_sim.calls(model="gpt-guard")
+    (entry,) = routekit_sim.calls(model="gpt-guard")
     assert entry["status"] == 400
     assert entry["error_code"] == "sim_tools_not_declared"
 
 
 async def test_http_control_plane_scripts_and_observes(
-    provider_sim: ProviderSimulator,
+    routekit_sim: RouteKitSimulator,
 ) -> None:
-    async with httpx.AsyncClient(base_url=provider_sim.url, timeout=5.0) as http:
+    async with httpx.AsyncClient(base_url=routekit_sim.url, timeout=5.0) as http:
         queued = await http.post(
             "/__sim/behaviors",
             json={"model": "gpt-http", "behaviors": [{"reply": "scripted over http"}]},
         )
         assert queued.status_code == 200
 
-        client = build_client(sim_endpoint(provider_sim, id="http", model="gpt-http"))
+        client = RouteKitClient(routekit_sim.url, "gpt-http")
         try:
             response = await client.chat([ChatMessage(role="user", content="hi")])
         finally:
@@ -96,3 +69,69 @@ async def test_http_control_plane_scripts_and_observes(
         reset = await http.post("/__sim/reset", json={})
         assert reset.status_code == 200
         assert (await http.get("/__sim/journal")).json()["entries"] == []
+
+
+@pytest.mark.parametrize("chunk_bytes", [1, 2, 5, 17])
+async def test_routekit_stream_survives_pathological_wire_chunking(
+    routekit_sim: RouteKitSimulator,
+    chunk_bytes: int,
+) -> None:
+    routekit_sim.queue(
+        "chunked",
+        Behavior(
+            reply="héllo 🌍",
+            reasoning="careful thought",
+            tool_calls=[
+                SimToolCall("call-a", "read_file", '{"path":"README.md"}'),
+                SimToolCall("call-b", "search", '{"query":"fusion"}'),
+            ],
+            prompt_tokens=13,
+            completion_tokens=8,
+            chunk_bytes=chunk_bytes,
+        ),
+    )
+    client = RouteKitClient(routekit_sim.url, "chunked")
+    try:
+        chunks = [
+            chunk
+            async for chunk in client.stream_chat(
+                [ChatMessage(role="user", content="stream")],
+                tools=[
+                    {"name": "read_file"},
+                    {"name": "search"},
+                ],
+            )
+        ]
+    finally:
+        await client.aclose()
+
+    assert "".join(chunk.delta for chunk in chunks) == "héllo 🌍"
+    assert "".join(chunk.model_reasoning_delta or "" for chunk in chunks) == "careful thought"
+    tool_fragments = [
+        chunk.tool_call_delta for chunk in chunks if chunk.tool_call_delta is not None
+    ]
+    assert {fragment.index for fragment in tool_fragments} == {0, 1}
+    assert chunks[-1].usage is not None
+    assert chunks[-1].usage.total_tokens == 21
+
+
+@pytest.mark.parametrize("broken_stream", ["truncate", "garbage"])
+async def test_broken_routekit_streams_fail_visibly(
+    routekit_sim: RouteKitSimulator,
+    broken_stream: Literal["truncate", "garbage"],
+) -> None:
+    routekit_sim.queue(
+        "broken",
+        Behavior(reply="partial answer", broken_stream=broken_stream),
+    )
+    client = RouteKitClient(routekit_sim.url, "broken")
+    try:
+        with pytest.raises((ValueError, httpx.RemoteProtocolError)):
+            _ = [
+                chunk
+                async for chunk in client.stream_chat(
+                    [ChatMessage(role="user", content="stream")]
+                )
+            ]
+    finally:
+        await client.aclose()

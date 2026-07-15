@@ -102,16 +102,16 @@
       "category": "request-fidelity",
       "expectation": "Sampling, system prompts, auth, tools, and token limits are transformed according to each provider wire.",
       "status": "required",
-      "testFile": "python/fusionkit-testkit/tests/test_engine_depth.py",
-      "anchor": "test_wire_request_shape_matrix"
+      "testFile": "packages/model-gateway/src/test/provider-backends.test.ts",
+      "anchor": "Anthropic egress preserves tools and normalizes the response"
     },
     {
       "id": "request.cursor-hybrid-translation",
       "category": "request-fidelity",
       "expectation": "Cursor Responses-hybrid input is translated into a valid chat conversation without dropping tool history.",
       "status": "required",
-      "testFile": "python/fusionkit-testkit/tests/test_engine_surfaces.py",
-      "anchor": "test_cursor_door_translates_the_responses_hybrid_body"
+      "testFile": "packages/model-gateway/src/test/cursor.test.ts",
+      "anchor": "Cursor hybrid requests translate to chat messages and tools"
     },
     {
       "id": "fusion.all-members-called",
@@ -126,8 +126,8 @@
       "category": "fusion",
       "expectation": "Candidates are judged before synthesis, using the configured judge and synthesizer endpoints.",
       "status": "required",
-      "testFile": "python/fusionkit-testkit/tests/test_engine_e2e.py",
-      "anchor": "ordered_models.index"
+      "testFile": "packages/cli/src/test/stack-endpoint-ids-e2e.test.ts",
+      "anchor": "embedded RouteKit routes opaque endpoint ids"
     },
     {
       "id": "fusion.named-ensemble-isolation",
@@ -150,48 +150,48 @@
       "category": "fusion",
       "expectation": "Terminal fused responses carry synthesis decision, input trajectory ids, contribution diagnostics, and usage.",
       "status": "required",
-      "testFile": "python/fusionkit-testkit/tests/test_engine_e2e.py",
-      "anchor": "test_trajectories_fuse_step_over_the_real_wire"
+      "testFile": "python/fusionkit-server/tests/test_trajectory_step.py",
+      "anchor": "test_internal_trajectory_fuse_returns_synthesis_extension"
     },
     {
       "id": "fusion.mode-panel",
       "category": "fusion",
       "expectation": "fusionkit/panel performs panel fanout, judge, and synthesis.",
       "status": "required",
-      "testFile": "python/fusionkit-testkit/tests/test_engine_surfaces.py",
-      "anchor": "test_panel_fans_out_across_all_four_provider_dialects"
+      "testFile": "python/fusionkit-core/tests/test_core.py",
+      "anchor": "test_fusion_engine_final_output_is_synthesized_not_top_trajectory"
     },
     {
       "id": "fusion.mode-single",
       "category": "fusion",
       "expectation": "fusionkit/single calls only the default model.",
       "status": "required",
-      "testFile": "python/fusionkit-testkit/tests/test_engine_surfaces.py",
-      "anchor": "test_single_mode_calls_only_the_default_model"
+      "testFile": "python/fusionkit-core/tests/test_fusion_run.py",
+      "anchor": "test_tracked_fusion_run_records_failure"
     },
     {
       "id": "fusion.mode-self",
       "category": "fusion",
       "expectation": "fusionkit/self generates the configured number of samples and fuses them.",
       "status": "required",
-      "testFile": "python/fusionkit-testkit/tests/test_engine_surfaces.py",
-      "anchor": "test_self_mode_samples_the_default_model_then_fuses"
+      "testFile": "python/fusionkit-core/tests/test_core.py",
+      "anchor": "test_panel_runner_generates_self_fusion_candidates"
     },
     {
       "id": "fusion.mode-heuristic",
       "category": "fusion",
       "expectation": "fusionkit/heuristic deterministically routes simple and hard requests to the documented modes.",
       "status": "required",
-      "testFile": "python/fusionkit-testkit/tests/test_engine_surfaces.py",
-      "anchor": "test_heuristic_mode_routes_hard_keywords_to_panel"
+      "testFile": "python/fusionkit-core/tests/test_core_units.py",
+      "anchor": "test_router_routes_hard_keywords_to_panel"
     },
     {
       "id": "reasoning.provider-captured",
       "category": "reasoning",
-      "expectation": "Every provider client's out-of-band reasoning is parsed separately from answer text.",
+      "expectation": "RouteKit out-of-band reasoning is parsed separately from answer text.",
       "status": "required",
-      "testFile": "python/fusionkit-testkit/tests/test_matrix_wire_clients.py",
-      "anchor": "assert response.reasoning == \"matrix thinking\""
+      "testFile": "python/fusionkit-core/tests/test_routekit_client.py",
+      "anchor": "test_routekit_client_parses_streamed_text_reasoning_usage_and_tools"
     },
     {
       "id": "reasoning.candidates-reach-judge",
@@ -238,24 +238,24 @@
       "category": "streaming",
       "expectation": "The fused stream's terminal frame carries exact panel plus judge plus synthesizer usage.",
       "status": "required",
-      "testFile": "python/fusionkit-testkit/tests/test_engine_depth.py",
-      "anchor": "test_fused_stream_terminal_usage_is_the_exact_judge_plus_synth_sum"
+      "testFile": "python/fusionkit-server/tests/test_streaming.py",
+      "anchor": "test_internal_fuse_streams_openai_neutral_wire"
     },
     {
       "id": "stream.parallel-tools",
       "category": "streaming",
       "expectation": "Parallel tool calls packed into multi-slot chunks survive reassembly.",
       "status": "required",
-      "testFile": "python/fusionkit-testkit/tests/test_adversarial.py",
-      "anchor": "test_parallel_tool_calls_survive_multi_slot_stream_chunks"
+      "testFile": "python/fusionkit-server/tests/test_tool_call_reassembly.py",
+      "anchor": "test_interleaved_parallel_calls_fold_by_index_not_arrival_order"
     },
     {
       "id": "stream.failure-terminates",
       "category": "streaming",
       "expectation": "Truncated or garbage provider streams emit a safe error event and terminate rather than hanging.",
       "status": "required",
-      "testFile": "python/fusionkit-testkit/tests/test_adversarial.py",
-      "anchor": "test_truncated_provider_stream_surfaces_error_event_and_terminates"
+      "testFile": "packages/model-gateway/src/test/provider-backends.test.ts",
+      "anchor": "provider streaming surfaces malformed and truncated SSE"
     },
     {
       "id": "tools.all-door-roundtrip",
@@ -428,18 +428,18 @@
     {
       "id": "robustness.engine-malformed-rejected",
       "category": "robustness",
-      "expectation": "The Python engine's own door rejects malformed bodies as 4xx without provider fanout and never leaks tracebacks.",
+      "expectation": "The internal Python sidecar rejects invalid endpoint ids as a stable 4xx without leaking tracebacks.",
       "status": "required",
-      "testFile": "python/fusionkit-testkit/tests/test_engine_fuzz.py",
-      "anchor": "test_malformed_bodies_reject_without_fanout"
+      "testFile": "python/fusionkit-server/tests/test_server.py",
+      "anchor": "test_fuse_rejects_unknown_routekit_endpoint"
     },
     {
       "id": "robustness.chunk-boundary-reassembly",
       "category": "robustness",
-      "expectation": "Provider streams split at arbitrary byte boundaries (including mid-UTF-8-rune) reassemble byte-exactly for every provider family.",
+      "expectation": "OpenAI-compatible streams split at arbitrary byte boundaries, including mid-UTF-8-rune, reassemble byte-exactly.",
       "status": "required",
-      "testFile": "python/fusionkit-testkit/tests/test_stream_chunk_fuzz.py",
-      "anchor": "test_streamed_text_reassembles_byte_exactly_at_any_chunk_boundary"
+      "testFile": "packages/model-gateway/src/test/sse-codec.test.ts",
+      "anchor": "handles events split at arbitrary byte boundaries"
     },
     {
       "id": "concurrency.no-cross-talk",
@@ -478,24 +478,16 @@
       "category": "runs",
       "expectation": "Native runs create, complete, inspect, page events, and idempotently replay without extra provider calls.",
       "status": "required",
-      "testFile": "python/fusionkit-testkit/tests/test_engine_runs_and_processes.py",
-      "anchor": "test_native_run_idempotency_key_replays_the_same_run"
+      "testFile": "python/fusionkit-server/tests/test_fusion_runs_api.py",
+      "anchor": "test_native_fusion_run_idempotency_replay"
     },
     {
       "id": "process.product-cli-boot",
       "category": "process",
-      "expectation": "The real FusionKit CLI loads config, preflights providers, spawns the Python engine, starts the gateway, and serves fusion.",
+      "expectation": "The real FusionKit CLI loads config, starts RouteKit and the internal Python sidecar, then serves fusion.",
       "status": "required",
       "testFile": "packages/cli/src/test/stack-npm-cli-e2e.test.ts",
       "anchor": "boots its production stack"
-    },
-    {
-      "id": "process.serve-endpoint",
-      "category": "process",
-      "expectation": "The real serve-endpoint child process advertises and fronts its single configured model.",
-      "status": "required",
-      "testFile": "python/fusionkit-testkit/tests/test_engine_runs_and_processes.py",
-      "anchor": "test_serve_endpoint_process_fronts_one_model"
     },
     {
       "id": "cli.management-surfaces",
@@ -532,10 +524,10 @@
     {
       "id": "providers.real-accounts",
       "category": "platform",
-      "expectation": "Real provider accounts accept the shipped request shapes and billed fusion completes.",
+      "expectation": "RouteKit accounts accept the shipped request shapes and billed fusion completes.",
       "status": "environment-gated",
-      "gateReason": "Requires explicit provider credentials and incurs spend.",
-      "liveCommand": "uv run --package fusionkit fusionkit bench public-bench --help"
+      "gateReason": "Requires RouteKit account credentials and incurs spend.",
+      "liveCommand": "uv run --package fusionkit-evals fusionkit-bench public-bench --help"
     }
   ]
 }

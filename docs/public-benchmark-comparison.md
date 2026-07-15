@@ -58,15 +58,14 @@ gpt-5.5 + claude-opus-4.8 + gemini-3-pro). See
 ## Subset first
 
 The recommended first run is a small subset (10-20 tasks) to validate the
-pipeline before any full pass. Use `--subset`. The preferred command form is the
-nested `fusionkit bench public` (the top-level `public-bench` remains a hidden
-legacy alias); env setup mirrors the
+pipeline before any full pass. Use `--subset`. The command lives in the
+maintainer-only `fusionkit-bench` entrypoint; env setup mirrors the
 [benchmarking runbook](benchmarking-runbook.md): source `.env`, and run
 LiveCodeBench commands under `uv run --with 'datasets<4'`.
 
 ```bash
-uv run --package fusionkit fusionkit serve -c configs/benchmark-panel.example.yaml &
-uv run fusionkit bench public \
+fusionkit serve &
+uv run --package fusionkit-evals fusionkit-bench public \
   --suite aider-polyglot \
   --panel decorrelated-peers \
   --subset 15 \

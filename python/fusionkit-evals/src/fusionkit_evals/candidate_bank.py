@@ -81,7 +81,7 @@ def bank_signature(
 
     config = engine.config
     payload = {
-        "endpoints": sorted((e.id, e.model, e.provider) for e in config.endpoints),
+        "endpoint_ids": sorted(config.endpoint_ids),
         "panel_models": sorted(config.panel_models),
         "solver_sampling": config.sampling.model_dump(mode="json"),
         "prompt_suffix": prompt_suffix,
@@ -93,7 +93,7 @@ def bank_signature(
 def panel_model_ids(engine: FusionEngine) -> list[str]:
     if engine.config.panel_models:
         return list(engine.config.panel_models)
-    return [endpoint.id for endpoint in engine.config.endpoints]
+    return list(engine.config.endpoint_ids)
 
 
 async def build_candidate_bank(

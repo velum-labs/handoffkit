@@ -85,20 +85,14 @@ test("Python sidecar receives RouteKit endpoint ids without provider credentials
     routekitUrl: "http://127.0.0.1:8787/v1",
     judge: "deep"
   });
-  const document = parse(
-    yaml
-  ) as { endpoints: Array<Record<string, unknown>> };
+  const document = parse(yaml) as {
+    routekit_url: string;
+    endpoint_ids: string[];
+  };
   assert.deepEqual(credentialFieldNames(document), []);
   assert.doesNotMatch(yaml, new RegExp(secret));
-  assert.deepEqual(
-    document.endpoints.map((endpoint) => endpoint.model),
-    ["fast", "deep"]
-  );
-  for (const endpoint of document.endpoints) {
-    assert.equal(endpoint.base_url, "http://127.0.0.1:8787");
-    assert.equal(endpoint.api_key, undefined);
-    assert.equal(endpoint.api_key_env, undefined);
-  }
+  assert.equal(document.routekit_url, "http://127.0.0.1:8787/v1");
+  assert.deepEqual(document.endpoint_ids, ["fast", "deep"]);
 });
 
 test("Python sidecar environment excludes router and provider credentials", () => {

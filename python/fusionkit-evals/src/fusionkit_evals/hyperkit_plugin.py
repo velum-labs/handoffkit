@@ -1,12 +1,8 @@
-"""hyperkit SystemUnderTest plugin for ``fusionkit serve``.
-
-This module is the dependency-direction seam: FusionKit imports hyperkit's
-opaque ``TopologySpec`` and translates it into a serve config; hyperkit core
-never imports FusionKit. Registered via the ``hyperkit.suts`` entry-point.
-"""
+"""HyperKit SUT plugin for the Node-owned FusionKit gateway."""
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import signal
@@ -27,7 +23,9 @@ def _free_port() -> int:
         return int(sock.getsockname()[1])
 
 
-class FusionKitServeSUT:
+class FusionKitGatewaySUT:
+    """Launch the Node gateway, which in turn owns the Python sidecar."""
+
     kind = "fusionkit-serve"
 
     def __init__(self) -> None:
@@ -35,25 +33,16 @@ class FusionKitServeSUT:
         self._log: BinaryIO | None = None
 
     def start(self, spec: TopologySpec, workdir: Path) -> SUTTarget:
-        workdir.mkdir(parents=True, exist_ok=True)
-        config = self._materialize_config(spec, workdir)
+        project_dir = self._materialize_project(spec, workdir)
         port = _free_port()
         binary = shutil.which("fusionkit")
         if binary is None:
-            raise RuntimeError("fusionkit executable is not on PATH")
-        log = (workdir / "fusionkit-serve.log").open("wb")
+            raise RuntimeError("Node fusionkit executable is not on PATH")
+        log = (workdir / "fusionkit-gateway.log").open("wb")
         self._log = log
         self._process = subprocess.Popen(
-            [
-                binary,
-                "serve",
-                "-c",
-                str(config),
-                "--host",
-                "127.0.0.1",
-                "--port",
-                str(port),
-            ],
+            [binary, "serve", "--no-portless", "--port", str(port)],
+            cwd=project_dir,
             stdout=log,
             stderr=subprocess.STDOUT,
             env=os.environ.copy(),
@@ -94,29 +83,45 @@ class FusionKitServeSUT:
         if log is not None:
             log.close()
 
-    def _materialize_config(self, spec: TopologySpec, workdir: Path) -> Path:
-        params = spec.params
-        existing = params.get("config")
+    def _materialize_project(self, spec: TopologySpec, workdir: Path) -> Path:
+        workdir.mkdir(parents=True, exist_ok=True)
+        existing = spec.params.get("project_dir")
         if existing:
             path = Path(str(existing)).resolve()
-            if not path.exists():
-                raise FileNotFoundError(f"fusionkit config not found: {path}")
+            if not path.is_dir():
+                raise FileNotFoundError(f"FusionKit project directory not found: {path}")
             return path
 
-        # Registered topology recipes ultimately materialize the same serve
-        # schema. Until the TS-kernel TopologySpec bridge lands, accept a fully
-        # resolved config payload here -- opaque to hyperkit, validated by
-        # FusionKit's loader when serve starts.
-        payload = params.get("serve_config")
-        if not isinstance(payload, dict):
+        fusion_config = spec.params.get("fusion_config")
+        routekit_config = spec.params.get("routekit_config")
+        if not isinstance(fusion_config, dict) or not isinstance(routekit_config, dict):
+            if "serve_config" in spec.params:
+                raise ValueError(
+                    "serve_config is the removed Python provider schema; use "
+                    "fusion_config plus routekit_config so the Node gateway owns routing"
+                )
             raise ValueError(
-                "fusionkit-serve TopologySpec requires params.config or params.serve_config"
+                "fusionkit-serve requires params.project_dir or both "
+                "params.fusion_config and params.routekit_config"
             )
-        path = workdir / "fusionkit-config.yaml"
-        path.write_text(yaml.safe_dump(payload, sort_keys=False))
-        return path
+
+        fusion_dir = workdir / ".fusionkit"
+        routekit_dir = workdir / ".routekit"
+        fusion_dir.mkdir(exist_ok=True)
+        routekit_dir.mkdir(exist_ok=True)
+        (fusion_dir / "fusion.json").write_text(
+            json.dumps(fusion_config, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        (routekit_dir / "router.yaml").write_text(
+            yaml.safe_dump(routekit_config, sort_keys=False),
+            encoding="utf-8",
+        )
+        return workdir
 
 
-def factory() -> FusionKitServeSUT:
-    return FusionKitServeSUT()
+def factory() -> FusionKitGatewaySUT:
+    return FusionKitGatewaySUT()
 
+
+__all__ = ["FusionKitGatewaySUT", "factory"]

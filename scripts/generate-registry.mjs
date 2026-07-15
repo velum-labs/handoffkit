@@ -9,7 +9,6 @@
  *
  *   - packages/routekit-registry/src/generated/data.ts (@routekit/registry)
  *   - packages/registry/src/generated/data.ts          (@fusionkit/registry)
- *   - python/fusionkit-core/src/fusionkit_core/_generated/registry_data.py
  *   - python/fusionkit-core/src/fusionkit_core/_generated/fusion_registry_data.py
  *
  * Run `node scripts/generate-registry.mjs` after editing any spec/registry
@@ -32,14 +31,20 @@ const TARGETS = [
   {
     files: NEUTRAL_SPEC_FILES,
     exportName: "REGISTRY",
-    ts: "packages/routekit-registry/src/generated/data.ts",
-    py: "python/fusionkit-core/src/fusionkit_core/_generated/registry_data.py"
+    ts: "packages/routekit-registry/src/generated/data.ts"
   },
   {
     files: FUSION_SPEC_FILES,
     exportName: "FUSION_REGISTRY",
     ts: "packages/registry/src/generated/data.ts",
-    py: "python/fusionkit-core/src/fusionkit_core/_generated/fusion_registry_data.py"
+    py: "python/fusionkit-core/src/fusionkit_core/_generated/fusion_registry_data.py",
+    pyTransform: runtimeFusionRegistry
+  },
+  {
+    files: FUSION_SPEC_FILES,
+    exportName: "BENCHMARK_REGISTRY",
+    py: "python/fusionkit-evals/src/fusionkit_evals/_generated/benchmark_registry_data.py",
+    pyTransform: benchmarkFusionRegistry
   }
 ];
 
@@ -56,6 +61,36 @@ function loadRegistry(specFiles) {
     registry[key] = section;
   }
   return registry;
+}
+
+function runtimeFusionRegistry(registry) {
+  const fusion = registry.fusion;
+  return {
+    fusion: {
+      aliases: fusion.aliases,
+      defaultAlias: fusion.defaultAlias,
+      panelAlias: fusion.panelAlias,
+      modeBySuffix: fusion.modeBySuffix,
+      defaultMode: fusion.defaultMode
+    }
+  };
+}
+
+function benchmarkFusionRegistry(registry) {
+  const panels = Object.fromEntries(
+    Object.entries(registry.fusion.benchmarkPanels).map(([panelId, panel]) => [
+      panelId,
+      {
+        ...panel,
+        members: panel.members.map(({ id, model }) => ({ id, model }))
+      }
+    ])
+  );
+  return {
+    benchmarkPanels: panels,
+    gatewayDefaultBaseUrl: registry.fusion.gatewayDefaultBaseUrl,
+    gatewayApiKeyEnv: registry.fusion.gatewayApiKeyEnv
+  };
 }
 
 const HEADER_NOTE =
@@ -124,8 +159,14 @@ function apply(path, content) {
 
 for (const target of TARGETS) {
   const registry = loadRegistry(target.files);
-  apply(target.ts, renderTs(registry, target.exportName));
-  apply(target.py, renderPy(registry, target.exportName));
+  if (target.ts !== undefined) {
+    apply(target.ts, renderTs(registry, target.exportName));
+  }
+  if (target.py !== undefined) {
+    const pythonRegistry =
+      target.pyTransform === undefined ? registry : target.pyTransform(registry);
+    apply(target.py, renderPy(pythonRegistry, target.exportName));
+  }
 }
 
 if (checkMode && process.exitCode === undefined) {

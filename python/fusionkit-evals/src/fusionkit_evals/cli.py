@@ -6,19 +6,93 @@ import json
 import os
 import shlex
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, cast
+from typing import Annotated, cast
 
 import typer
+from fusionkit_core.clients import build_clients
 from fusionkit_core.config import FusionMode, load_config
-from fusionkit_core.registry import BENCHMARK_PANEL_PRESETS, FUSION_GATEWAY_DEFAULT_BASE_URL
+from fusionkit_core.fusion import FusionEngine
 
-from fusionkit_cli.commands.shared import legacy_kernel
-
-if TYPE_CHECKING:
-    from fusionkit_evals.fusion_bench import FusionBenchReport
-    from fusionkit_evals.fusion_hillclimb import ClimbDiagnosis, ClimbResult, TargetCheck
-    from fusionkit_evals.prompt_tuning import PromptEval, TuningResult
-    from fusionkit_evals.public_bench import PublicBenchmarkSuite
+from fusionkit_evals.bench_history import BenchRunRecord, append_run, drift_vs_previous
+from fusionkit_evals.benchmark import BenchmarkRunner, load_jsonl_samples, write_jsonl_results
+from fusionkit_evals.benchmark_panel import get_benchmark_panel
+from fusionkit_evals.candidate_bank import (
+    CandidateBank,
+    PreparedTask,
+    bank_signature,
+    build_candidate_bank,
+    load_bank,
+    save_bank,
+)
+from fusionkit_evals.cli_shared import benchmark_kernel
+from fusionkit_evals.fusion_bench import (
+    CommandHandoffKitExecutor,
+    FusionBenchReport,
+    FusionBenchRunner,
+    build_fusion_bench_report,
+    load_benchmark_tasks,
+    load_fusion_bench_jsonl,
+    write_fusion_bench_jsonl,
+)
+from fusionkit_evals.fusion_hillclimb import (
+    ClimbDiagnosis,
+    ClimbResult,
+    TargetCheck,
+    best_single_baseline,
+    check_target,
+    diagnose_bank,
+    run_climb,
+)
+from fusionkit_evals.fusion_reports import (
+    write_fusion_bench_html_report,
+    write_fusion_bench_markdown_report,
+    write_fusion_bench_report_jsonl,
+)
+from fusionkit_evals.livecodebench_data import (
+    LCB_PROMPT_SUFFIX,
+    load_manifest,
+    load_problems,
+    prepare_tasks,
+)
+from fusionkit_evals.pareto import load_points, write_pareto_report
+from fusionkit_evals.polyglot import (
+    build_polyglot_bank,
+    load_polyglot_exercises,
+    polyglot_verifier,
+)
+from fusionkit_evals.prompt_tuning import (
+    LLMProposer,
+    PromptEval,
+    TunableRole,
+    TunerRuntime,
+    TuningResult,
+    evaluate_variant,
+    optimize,
+    select_decision_tasks,
+    split_dev_val,
+)
+from fusionkit_evals.public_bench import (
+    PUBLIC_BENCHMARK_INFO,
+    PUBLIC_BENCHMARK_SUITES,
+    CommandExternalBenchmarkExecutor,
+    ExternalBenchmarkRequest,
+    PublicBenchmarkSuite,
+    baselines_for,
+    run_public_benchmark,
+    write_external_runs_jsonl,
+)
+from fusionkit_evals.public_bench_report import (
+    build_benchmark_comparison,
+    write_benchmark_comparison_markdown,
+)
+from fusionkit_evals.registry import BENCHMARK_PANEL_PRESETS, FUSION_GATEWAY_DEFAULT_BASE_URL
+from fusionkit_evals.sandbox import SandboxConfig, build_sandbox
+from fusionkit_evals.tiny import (
+    load_tiny_tasks,
+    run_tiny_benchmark,
+    write_tiny_benchmark_report,
+    write_tiny_jsonl,
+)
 
 DEFAULT_PUBLIC_BENCH_PANEL = next(iter(BENCHMARK_PANEL_PRESETS))
 bench_app = typer.Typer(help="Benchmark, tune, and report on FusionKit fusion quality.")
@@ -30,15 +104,11 @@ def run_eval(
     mode: FusionMode = "single",
     config_id: str = "local",
 ) -> None:
-    from fusionkit_core.clients import build_clients
-    from fusionkit_core.fusion import FusionEngine
-    from fusionkit_evals.benchmark import BenchmarkRunner, load_jsonl_samples, write_jsonl_results
-
     fusion_config = load_config(config)
     clients = build_clients(fusion_config)
     engine = cast(
         FusionEngine,
-        legacy_kernel(fusion_config, clients, Path(".fusionkit/python-kernel-runs/eval")),
+        benchmark_kernel(fusion_config, clients, Path(".fusionkit/python-kernel-runs/eval")),
     )
     runner = BenchmarkRunner(engine)
     results = asyncio.run(runner.run_samples(load_jsonl_samples(samples), config_id, mode))
@@ -50,8 +120,6 @@ def pareto(
     points: Annotated[Path, typer.Option("--points", "-p")],
     output: Annotated[Path, typer.Option("--output", "-o")],
 ) -> None:
-    from fusionkit_evals.pareto import load_points, write_pareto_report
-
     write_pareto_report(output, load_points(points))
     typer.echo(json.dumps({"output": str(output)}))
 
@@ -63,20 +131,11 @@ def tiny_bench(
     mode: FusionMode = "panel",
     config_id: str = "local",
 ) -> None:
-    from fusionkit_core.clients import build_clients
-    from fusionkit_core.fusion import FusionEngine
-    from fusionkit_evals.tiny import (
-        load_tiny_tasks,
-        run_tiny_benchmark,
-        write_tiny_benchmark_report,
-        write_tiny_jsonl,
-    )
-
     fusion_config = load_config(config)
     clients = build_clients(fusion_config)
     engine = cast(
         FusionEngine,
-        legacy_kernel(
+        benchmark_kernel(
             fusion_config, clients, Path(".fusionkit/python-kernel-runs/tiny-bench")
         ),
     )
@@ -86,7 +145,9 @@ def tiny_bench(
             config_id=config_id,
             mode=mode,
             tasks=load_tiny_tasks(),
-            model_versions={endpoint.id: endpoint.model for endpoint in fusion_config.endpoints},
+            model_versions={
+                endpoint_id: endpoint_id for endpoint_id in fusion_config.endpoint_ids
+            },
         )
     )
     write_tiny_jsonl(output, results)
@@ -125,25 +186,17 @@ def fusion_bench(
     mode: FusionMode = "panel",
     config_id: str = "local",
 ) -> None:
-    from fusionkit_core.clients import build_clients
-    from fusionkit_core.fusion import FusionEngine
-    from fusionkit_evals.fusion_bench import (
-        CommandHandoffKitExecutor,
-        FusionBenchRunner,
-        build_fusion_bench_report,
-        load_benchmark_tasks,
-        write_fusion_bench_jsonl,
-    )
-
     fusion_config = load_config(config)
     clients = build_clients(fusion_config)
-    engine = cast(FusionEngine, legacy_kernel(fusion_config, clients, run_root / "kernel"))
+    engine = cast(FusionEngine, benchmark_kernel(fusion_config, clients, run_root / "kernel"))
     runner = FusionBenchRunner(
         engine,
         run_root=run_root,
         config_id=config_id,
         mode=mode,
-        model_versions={endpoint.id: endpoint.model for endpoint in fusion_config.endpoints},
+        model_versions={
+            endpoint_id: endpoint_id for endpoint_id in fusion_config.endpoint_ids
+        },
         handoff_executor=(
             CommandHandoffKitExecutor(
                 shlex.split(handoff_command),
@@ -174,8 +227,6 @@ def fusion_bench_report(
     report_markdown: Annotated[Path | None, typer.Option("--markdown", "-m")] = None,
     report_html: Annotated[Path | None, typer.Option("--html")] = None,
 ) -> None:
-    from fusionkit_evals.fusion_bench import build_fusion_bench_report, load_fusion_bench_jsonl
-
     rows = load_fusion_bench_jsonl(input_path)
     report = build_fusion_bench_report(rows)
     response: dict[str, int | str] = {
@@ -231,20 +282,6 @@ def public_bench(
     ] = None,
 ) -> None:
     """Run a public coding benchmark against the gateway and compare to leaderboards."""
-    from fusionkit_evals.bench_history import BenchRunRecord, append_run, drift_vs_previous
-    from fusionkit_evals.benchmark_panel import get_benchmark_panel
-    from fusionkit_evals.public_bench import (
-        PUBLIC_BENCHMARK_INFO,
-        CommandExternalBenchmarkExecutor,
-        ExternalBenchmarkRequest,
-        run_public_benchmark,
-        write_external_runs_jsonl,
-    )
-    from fusionkit_evals.public_bench_report import (
-        build_benchmark_comparison,
-        write_benchmark_comparison_markdown,
-    )
-
     resolved_suite = _resolve_public_suite(suite)
     info = PUBLIC_BENCHMARK_INFO[resolved_suite]
     benchmark_panel = get_benchmark_panel(panel)
@@ -322,8 +359,6 @@ def public_bench_baselines(
     ] = None,
 ) -> None:
     """Print the published leaderboard baselines used for comparison."""
-    from fusionkit_evals.public_bench import PUBLIC_BENCHMARK_SUITES, baselines_for
-
     suites = (PUBLIC_BENCHMARK_SUITES if suite is None else (_resolve_public_suite(suite),))
     payload = {
         target: [baseline.model_dump(mode="json") for baseline in baselines_for(target)]
@@ -363,38 +398,12 @@ def tune_prompts(
     ledger: Annotated[Path | None, typer.Option("--ledger")] = None,
 ) -> None:
     """Automated LLM-driven tuning of judge/synth prompts over a frozen bank."""
-    from fusionkit_core.clients import build_clients
-    from fusionkit_core.fusion import FusionEngine
-    from fusionkit_evals.bench_history import BenchRunRecord, append_run
-    from fusionkit_evals.candidate_bank import (
-        PreparedTask,
-        bank_signature,
-        build_candidate_bank,
-        load_bank,
-        save_bank,
-    )
-    from fusionkit_evals.livecodebench_data import (
-        LCB_PROMPT_SUFFIX,
-        load_manifest,
-        load_problems,
-        prepare_tasks,
-    )
-    from fusionkit_evals.prompt_tuning import (
-        LLMProposer,
-        TunableRole,
-        TunerRuntime,
-        optimize,
-        select_decision_tasks,
-        split_dev_val,
-    )
-    from fusionkit_evals.sandbox import SandboxConfig, build_sandbox
-
     if role not in _ROLE_PROMPT_FILE:
         raise typer.BadParameter(f"role must be one of {sorted(_ROLE_PROMPT_FILE)}")
     resolved_role = cast(TunableRole, role)
     fusion_config = load_config(config)
     clients = build_clients(fusion_config)
-    engine = cast(FusionEngine, legacy_kernel(fusion_config, clients, cache_dir / "kernel-runs"))
+    engine = cast(FusionEngine, benchmark_kernel(fusion_config, clients, cache_dir / "kernel-runs"))
     sandbox = build_sandbox(SandboxConfig(backend=os.environ.get("BENCH_SANDBOX", "local")))
 
     if bank.exists():
@@ -545,45 +554,12 @@ def fusion_hillclimb(
     (evaluated once). Tier-1 of the self-healing loop; Tier-2/3 are driven by the
     `fusion-hillclimb` skill, which calls this to re-measure after each change.
     """
-    from fusionkit_core.clients import build_clients
-    from fusionkit_core.fusion import FusionEngine
-    from fusionkit_evals.bench_history import BenchRunRecord, append_run
-    from fusionkit_evals.candidate_bank import (
-        CandidateBank,
-        PreparedTask,
-        bank_signature,
-        build_candidate_bank,
-        load_bank,
-        save_bank,
-    )
-    from fusionkit_evals.fusion_hillclimb import (
-        best_single_baseline,
-        check_target,
-        diagnose_bank,
-        run_climb,
-    )
-    from fusionkit_evals.livecodebench_data import (
-        LCB_PROMPT_SUFFIX,
-        load_manifest,
-        load_problems,
-        prepare_tasks,
-    )
-    from fusionkit_evals.prompt_tuning import (
-        LLMProposer,
-        TunableRole,
-        TunerRuntime,
-        evaluate_variant,
-        select_decision_tasks,
-        split_dev_val,
-    )
-    from fusionkit_evals.sandbox import SandboxConfig, build_sandbox
-
     if role not in _ROLE_PROMPT_FILE:
         raise typer.BadParameter(f"role must be one of {sorted(_ROLE_PROMPT_FILE)}")
     resolved_role = cast(TunableRole, role)
     fusion_config = load_config(config)
     clients = build_clients(fusion_config)
-    engine = cast(FusionEngine, legacy_kernel(fusion_config, clients, cache_dir / "kernel-runs"))
+    engine = cast(FusionEngine, benchmark_kernel(fusion_config, clients, cache_dir / "kernel-runs"))
     sandbox = build_sandbox(SandboxConfig(backend=os.environ.get("BENCH_SANDBOX", "local")))
 
     if bank.exists():
@@ -762,31 +738,6 @@ def fusion_hillclimb_polyglot(
     per-language test suites), then climbs the prompt for ``role`` with a
     polyglot-aware replay verifier, McNemar-gated, reporting the locked-test result.
     """
-    from fusionkit_core.clients import build_clients
-    from fusionkit_core.fusion import FusionEngine
-    from fusionkit_evals.bench_history import BenchRunRecord, append_run
-    from fusionkit_evals.candidate_bank import CandidateBank, load_bank, save_bank
-    from fusionkit_evals.fusion_hillclimb import (
-        best_single_baseline,
-        check_target,
-        diagnose_bank,
-        run_climb,
-    )
-    from fusionkit_evals.polyglot import (
-        build_polyglot_bank,
-        load_polyglot_exercises,
-        polyglot_verifier,
-    )
-    from fusionkit_evals.prompt_tuning import (
-        LLMProposer,
-        TunableRole,
-        TunerRuntime,
-        evaluate_variant,
-        select_decision_tasks,
-        split_dev_val,
-    )
-    from fusionkit_evals.sandbox import SandboxConfig, build_sandbox
-
     if role not in _ROLE_PROMPT_FILE:
         raise typer.BadParameter(f"role must be one of {sorted(_ROLE_PROMPT_FILE)}")
     resolved_role = cast(TunableRole, role)
@@ -794,7 +745,7 @@ def fusion_hillclimb_polyglot(
     root = polyglot_root or (Path.home() / ".cache" / "fusionkit-bench" / "polyglot")
     fusion_config = load_config(config)
     clients = build_clients(fusion_config)
-    engine = cast(FusionEngine, legacy_kernel(fusion_config, clients, cache_dir / "kernel-runs"))
+    engine = cast(FusionEngine, benchmark_kernel(fusion_config, clients, cache_dir / "kernel-runs"))
     sandbox = build_sandbox(SandboxConfig(backend=os.environ.get("BENCH_SANDBOX", "local")))
 
     # task_id -> exercise (needed by the replay verifier), rebuilt whether or not
@@ -806,7 +757,7 @@ def fusion_hillclimb_polyglot(
         candidate_bank = load_bank(bank)
     else:
         exercises = load_polyglot_exercises(root, languages=language_list, subset=subset)
-        endpoints_sig = sorted((e.id, e.model, e.provider) for e in fusion_config.endpoints)
+        endpoints_sig = sorted(fusion_config.endpoint_ids)
         signature = hashlib.sha256(
             json.dumps(
                 {
@@ -1008,8 +959,6 @@ def _format_tuning_report(result: TuningResult) -> str:
 
 
 def _resolve_public_suite(suite: str) -> PublicBenchmarkSuite:
-    from fusionkit_evals.public_bench import PUBLIC_BENCHMARK_SUITES, PublicBenchmarkSuite
-
     if suite not in PUBLIC_BENCHMARK_SUITES:
         known = ", ".join(PUBLIC_BENCHMARK_SUITES)
         raise typer.BadParameter(f"unknown suite {suite!r}; choose one of: {known}")
@@ -1023,12 +972,6 @@ def _write_fusion_bench_reports(
     report_markdown: Path | None,
     report_html: Path | None,
 ) -> dict[str, str]:
-    from fusionkit_evals.fusion_reports import (
-        write_fusion_bench_html_report,
-        write_fusion_bench_markdown_report,
-        write_fusion_bench_report_jsonl,
-    )
-
     outputs = {}
     if report_jsonl is not None:
         write_fusion_bench_report_jsonl(report_jsonl, report)
@@ -1042,21 +985,27 @@ def _write_fusion_bench_reports(
     return outputs
 
 
+_COMMANDS = [
+    ("eval", "eval", run_eval),
+    ("pareto", "pareto", pareto),
+    ("tiny", "tiny-bench", tiny_bench),
+    ("fusion", "fusion-bench", fusion_bench),
+    ("fusion-report", "fusion-bench-report", fusion_bench_report),
+    ("public", "public-bench", public_bench),
+    ("public-baselines", "public-bench-baselines", public_bench_baselines),
+    ("tune-prompts", "tune-prompts", tune_prompts),
+    ("hillclimb", "fusion-hillclimb", fusion_hillclimb),
+    ("hillclimb-polyglot", "fusion-hillclimb-polyglot", fusion_hillclimb_polyglot),
+]
+
+for bench_name, _legacy_name, command in _COMMANDS:
+    bench_app.command(bench_name)(command)
+
+
 def register(app: typer.Typer) -> None:
+    """Compatibility hook for non-shipping maintainer applications."""
+
     app.add_typer(bench_app, name="bench")
-    commands = [
-        ("eval", "eval", run_eval),
-        ("pareto", "pareto", pareto),
-        ("tiny", "tiny-bench", tiny_bench),
-        ("fusion", "fusion-bench", fusion_bench),
-        ("fusion-report", "fusion-bench-report", fusion_bench_report),
-        ("public", "public-bench", public_bench),
-        ("public-baselines", "public-bench-baselines", public_bench_baselines),
-        ("tune-prompts", "tune-prompts", tune_prompts),
-        ("hillclimb", "fusion-hillclimb", fusion_hillclimb),
-        ("hillclimb-polyglot", "fusion-hillclimb-polyglot", fusion_hillclimb_polyglot),
-    ]
-    for bench_name, legacy_name, command in commands:
-        bench_app.command(bench_name)(command)
+    for _bench_name, legacy_name, command in _COMMANDS:
         app.command(legacy_name, hidden=True)(command)
 

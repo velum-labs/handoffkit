@@ -70,8 +70,12 @@ const requiredFiles = [
   "packages/registry/src/index.ts",
   "packages/registry/src/generated/data.ts",
   "python/fusionkit-core/src/fusionkit_core/registry.py",
-  "python/fusionkit-core/src/fusionkit_core/_generated/registry_data.py",
   "python/fusionkit-core/src/fusionkit_core/_generated/fusion_registry_data.py",
+  "python/fusionkit-evals/src/fusionkit_evals/_generated/benchmark_registry_data.py",
+  "python/fusionkit-evals/src/fusionkit_evals/cli.py",
+  "python/fusionkit-evals/src/fusionkit_evals/cli_shared.py",
+  "python/fusionkit-evals/src/fusionkit_evals/hyperkit_plugin.py",
+  "python/fusionkit-cli/src/fusionkit_cli/main.py",
   // package entry points
   "packages/contracts/src/index.ts",
   "packages/contracts/src/jcs.ts",
@@ -304,6 +308,14 @@ for (const entry of [...manifest.demos, ...manifest.infra]) {
 
 for (const file of requiredFiles) {
   if (!existsSync(file)) fail(`missing ${file}`);
+}
+
+for (const file of [
+  "python/fusionkit-cli/src/fusionkit_cli/commands/__init__.py",
+  "python/fusionkit-cli/src/fusionkit_cli/commands/bench.py",
+  "python/fusionkit-cli/src/fusionkit_cli/commands/shared.py"
+]) {
+  if (existsSync(file)) fail(`forbidden sidecar maintainer command module: ${file}`);
 }
 
 const traceConventionsCheck = spawnSync(

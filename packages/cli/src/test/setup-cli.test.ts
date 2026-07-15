@@ -33,14 +33,18 @@ function host(appleSilicon: boolean): HostInfo {
 test("fusionkitPyCommand defaults to the pinned uvx engine", () => {
   const runner = fusionkitPyCommand();
   assert.equal(runner.command, "uvx");
-  assert.deepEqual(runner.prefix, [`fusionkit@${FUSIONKIT_PYPI_VERSION}`]);
+  assert.deepEqual(runner.prefix, [
+    "--from",
+    `fusionkit@${FUSIONKIT_PYPI_VERSION}`,
+    "fusionkit-sidecar"
+  ]);
   assert.equal(runner.cwd, undefined);
 });
 
 test("fusionkitPyCommand uses the fusionkit workspace package for local checkouts", () => {
   const runner = fusionkitPyCommand("/tmp/fusionkit-checkout");
   assert.equal(runner.command, "uv");
-  assert.deepEqual(runner.prefix, ["run", "--package", "fusionkit", "fusionkit"]);
+  assert.deepEqual(runner.prefix, ["run", "--package", "fusionkit", "fusionkit-sidecar"]);
   assert.equal(runner.cwd, "/tmp/fusionkit-checkout");
 });
 
@@ -49,24 +53,48 @@ test("fusionkitPyCommand uses the fusionkit workspace package for local checkout
 test("fusionkitWarmArgv defaults to the pinned uvx engine help", () => {
   const argv = fusionkitWarmArgv();
   assert.equal(argv.command, "uvx");
-  assert.deepEqual(argv.args, [`fusionkit@${FUSIONKIT_PYPI_VERSION}`, "--help"]);
+  assert.deepEqual(argv.args, [
+    "--from",
+    `fusionkit@${FUSIONKIT_PYPI_VERSION}`,
+    "fusionkit-sidecar",
+    "--help"
+  ]);
   assert.equal(argv.cwd, undefined);
 });
 
 test("fusionkitWarmArgv offline probe inserts --offline before the package spec", () => {
   const argv = fusionkitWarmArgv(undefined, { offline: true });
   assert.equal(argv.command, "uvx");
-  assert.deepEqual(argv.args, ["--offline", `fusionkit@${FUSIONKIT_PYPI_VERSION}`, "--help"]);
+  assert.deepEqual(argv.args, [
+    "--offline",
+    "--from",
+    `fusionkit@${FUSIONKIT_PYPI_VERSION}`,
+    "fusionkit-sidecar",
+    "--help"
+  ]);
 });
 
 test("fusionkitWarmArgv uses `uv run` against a local checkout (dev override)", () => {
   const argv = fusionkitWarmArgv("/tmp/fusionkit-checkout");
   assert.equal(argv.command, "uv");
-  assert.deepEqual(argv.args, ["run", "--package", "fusionkit", "fusionkit", "--help"]);
+  assert.deepEqual(argv.args, [
+    "run",
+    "--package",
+    "fusionkit",
+    "fusionkit-sidecar",
+    "--help"
+  ]);
   assert.equal(argv.cwd, "/tmp/fusionkit-checkout");
 
   const offline = fusionkitWarmArgv("/tmp/fusionkit-checkout", { offline: true });
-  assert.deepEqual(offline.args, ["run", "--offline", "--package", "fusionkit", "fusionkit", "--help"]);
+  assert.deepEqual(offline.args, [
+    "run",
+    "--offline",
+    "--package",
+    "fusionkit",
+    "fusionkit-sidecar",
+    "--help"
+  ]);
 });
 
 // ---- cross-platform gating ----

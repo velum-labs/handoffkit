@@ -54,7 +54,8 @@ HTTP contracts, read [Specs and APIs](specs-and-apis.md).
 
 | Package | Responsibility | Start with |
 | --- | --- | --- |
-| `@fusionkit/registry` | Typed accessors over the generated `spec/registry/*.json` data: providers, catalogs, capabilities, and pricing. | `packages/registry/src/index.ts` |
+| `@fusionkit/registry` | Fusion-only aliases and panel presets generated from `spec/registry/fusion.json`. | `packages/registry/src/index.ts` |
+| `@routekit/registry` | Provider catalogs, capabilities, discovery, and pricing used by the TypeScript routing stack. | `packages/routekit-registry/src/index.ts` |
 | `@routekit/runtime` | Shared process supervision, child environments, cleanup, atomic files, locks, ports, and portless registration. | `packages/runtime-utils/src/index.ts` |
 | `@routekit/config-core` | Layered config resolution, validated JSON IO, migration, and edit primitives. | `packages/config-core/src/index.ts` |
 | `@routekit/telemetry-core` | Parameterized consent, redaction, anonymous events, and bounded shutdown. | `packages/telemetry-core/src/index.ts` |
@@ -67,12 +68,12 @@ HTTP contracts, read [Specs and APIs](specs-and-apis.md).
 
 | Package | Responsibility | Start with |
 | --- | --- | --- |
-| `fusionkit-core` | Core fusion engine: config, provider clients, judge, run manager, contracts, tracing, and artifacts. | `python/fusionkit-core` |
-| `fusionkit-server` | FastAPI app and OpenAI-compatible HTTP routes for the fusion engine. | `python/fusionkit-server` |
-| `fusionkit` | The PyPI CLI (`fusionkit serve`, init, auth, prompts, benchmarks, tuning, hill climbing). | `python/fusionkit-cli` |
-| `fusionkit-evals` | Benchmarks, public reports, prompt tuning, Pareto analysis, hill climbing, scoring, and sandbox execution. | `python/fusionkit-evals` |
+| `fusionkit-core` | Fusion engine, neutral RouteKit client, sidecar config, judge, run manager, contracts, tracing, and artifacts. | `python/fusionkit-core` |
+| `fusionkit-server` | Internal FastAPI sidecar for trajectory fusion, native runs, tool resume, and health. | `python/fusionkit-server` |
+| `fusionkit` | Internal PyPI runtime exposing only the `fusionkit-sidecar` script. | `python/fusionkit-cli` |
+| `fusionkit-evals` | Maintainer-only `fusionkit-bench` app, benchmarks, public reports, prompt tuning, Pareto analysis, hill climbing, scoring, and HyperKit plugin. Independent of the sidecar distribution. | `python/fusionkit-evals` |
 | `fusionkit-mlx` | Optional MLX launcher utilities for Apple Silicon local serving. | `python/fusionkit-mlx` |
-| `fusionkit-testkit` | Scriptable provider simulator (`fusionkit-sim`), config builders, engine process harness, and pytest fixtures. | `python/fusionkit-testkit`, `docs/testing.md` |
+| `fusionkit-testkit` | Scriptable RouteKit-upstream simulator (`fusionkit-sim`), sidecar config builders, process harness, and pytest fixtures. | `python/fusionkit-testkit`, `docs/testing.md` |
 | `hyperkit` | SUT-agnostic experiment platform: `hyperkit` CLI, benchmark adapters, and AWS Batch/local backends. | `python/hyperkit`, `docs/hyperkit.md` |
 | `uniroute` | NumPy implementation of dynamic-pool UniRoute model routing. | `python/uniroute/README.md` |
 | `uniroute-mlx` | OpenAI-compatible and MLX-serving bridge for evaluating and serving routed local models. | `python/uniroute-mlx/README.md` |

@@ -708,138 +708,34 @@ uses it to checkpoint the workspace before continuation.
 
 ### `python/fusionkit-core/src/fusionkit_core/__init__.py`
 
-Public API for the FusionKit Python engine.
-
-The package re-exports the configuration models, provider clients, fusion engine,
-judge synthesizer, run manager, contract models, artifact helpers, trace helpers,
-and trajectory producers used by the Python server, CLI, benchmarks, and tests.
-Keep this module documented because generated API docs read this docstring and
-the `__all__` list as the supported Python surface.
-
-Re-exports are resolved lazily (PEP 562): importing any single submodule (for
-example ``fusionkit_core.config``) must not pay for the provider SDK stack that
-``fusionkit_core.clients`` drags in. This keeps CLI startup (``fusionkit
---version``, ``fusionkit prompts dump``) fast while ``from fusionkit_core
-import X`` keeps working unchanged for every name in ``__all__``.
+Public API for FusionKit's provider-neutral synthesis engine.
 
 Public exports:
 
-- `ATTR`
-- `AgentTrajectoryProducer`
-- `AnthropicModelClient`
-- `ArtifactRefV1`
-- `BenchmarkTaskRecordV1`
+- `ChatClient`
 - `ChatMessage`
-- `ChatTrajectoryProducer`
-- `CodexResponsesClient`
-- `ContextBudget`
 - `ContextPolicy`
-- `ContractMetadata`
-- `ContractRecord`
-- `CostMetadata`
-- `CreateRunResult`
-- `EndpointAuth`
-- `EndpointCapabilities`
-- `EnsembleReceiptV1`
-- `ExternalTrajectoryProducer`
 - `FakeModelClient`
-- `FileSystemRunStore`
 - `FuseResult`
 - `FusionConfig`
 - `FusionEngine`
 - `FusionKernel`
 - `FusionMode`
-- `FusionRecordV1`
-- `FusionRunEvent`
-- `FusionRunManager`
-- `FusionRunRequestV1`
-- `FusionRunState`
-- `GoogleModelClient`
-- `HarnessCandidateRecordV1`
-- `HarnessRunResultV1`
-- `HeuristicRouter`
-- `IdempotencyRecord`
+- `FusionModeRouter`
 - `JudgeSynthesizer`
-- `LocalArtifactStore`
-- `LocalModelClient`
-- `ModelCallRecordV1`
-- `ModelEndpoint`
-- `ModelEndpointV1`
 - `ModelResponse`
-- `NativeRunError`
-- `OpenAICompatibleClient`
-- `PackReport`
 - `PanelMode`
-- `ProviderCallError`
-- `ProviderErrorCategory`
-- `ProviderKind`
+- `PromptOverrides`
+- `RouteKitClient`
 - `RunBudget`
-- `RunEventPage`
-- `RunInspection`
-- `RunStateSummary`
 - `SamplingConfig`
 - `StreamChunk`
-- `SubscriptionAuthError`
-- `SubscriptionAuthMode`
-- `SubscriptionStatus`
-- `SubscriptionToken`
 - `ToolCall`
-- `ToolCallPlanV1`
-- `ToolExecutionMode`
-- `ToolExecutionPolicy`
-- `ToolExecutionRecordV1`
-- `ToolExecutor`
-- `ToolPausePlaceholder`
-- `ToolResultSubmission`
-- `TraceContext`
 - `Trajectory`
-- `TrajectoryInspection`
-- `TrajectoryPack`
-- `TrajectoryProducer`
-- `TrajectoryV1`
 - `Usage`
-- `build_client`
 - `build_clients`
-- `canonical_json`
-- `classify_provider_error`
-- `context_from_headers`
-- `contract_metadata`
-- `contract_model_for_schema`
-- `emit_event`
-- `endpoint_to_contract`
-- `estimate_cost`
-- `estimate_messages_tokens`
-- `estimate_tokens`
-- `fusion_span`
-- `hash_bytes`
-- `hash_json`
-- `hash_text`
-- `json_attr`
 - `judge_synthesizer_for`
-- `load_claude_code_credentials`
-- `load_codex_credentials`
-- `make_id`
-- `normalize_usage`
-- `pack_trajectories`
-- `producer`
-- `producer_git_sha`
-- `producer_version`
-- `provider_metadata`
-- `resolve_api_key`
-- `resolve_credential`
-- `schema_bundle_hash`
-- `setup_fusion_tracing`
-- `shutdown_fusion_tracing`
-- `status_for_run_state`
-- `subscription_status`
-- `trajectory_from_contract`
-- `trajectory_from_response`
-- `trajectory_to_contract`
-
-Documented local symbols:
-
-- `__getattr__` (function): Resolve a re-exported name (or submodule) on first access.
-- `__dir__` (function)
+- `load_config`
 
 ### `python/fusionkit-server/src/fusionkit_server/__init__.py`
 

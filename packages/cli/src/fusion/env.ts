@@ -67,11 +67,14 @@ export function fusionkitPyCommand(fusionkitDir?: string): {
   if (fusionkitDir !== undefined) {
     return {
       command: "uv",
-      prefix: ["run", "--package", "fusionkit", "fusionkit"],
+      prefix: ["run", "--package", "fusionkit", "fusionkit-sidecar"],
       cwd: fusionkitDir
     };
   }
-  return { command: "uvx", prefix: [`fusionkit@${FUSIONKIT_PYPI_VERSION}`] };
+  return {
+    command: "uvx",
+    prefix: ["--from", `fusionkit@${FUSIONKIT_PYPI_VERSION}`, "fusionkit-sidecar"]
+  };
 }
 
 export function fusionkitWarmArgv(
@@ -87,7 +90,7 @@ export function fusionkitWarmArgv(
         ...offline,
         "--package",
         "fusionkit",
-        "fusionkit",
+        "fusionkit-sidecar",
         "--help"
       ],
       cwd: fusionkitDir
@@ -95,7 +98,13 @@ export function fusionkitWarmArgv(
   }
   return {
     command: "uvx",
-    args: [...offline, `fusionkit@${FUSIONKIT_PYPI_VERSION}`, "--help"]
+    args: [
+      ...offline,
+      "--from",
+      `fusionkit@${FUSIONKIT_PYPI_VERSION}`,
+      "fusionkit-sidecar",
+      "--help"
+    ]
   };
 }
 

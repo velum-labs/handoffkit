@@ -10,14 +10,14 @@ from pathlib import Path
 from urllib.parse import unquote, urlparse
 
 import pytest
-from fusionkit_cli.main import app
 from fusionkit_core.artifacts import LocalArtifactStore
 from fusionkit_core.clients import FakeModelClient
-from fusionkit_core.config import CostMetadata, FusionConfig, ModelEndpoint
+from fusionkit_core.config import FusionConfig
 from fusionkit_core.contracts import BenchmarkTaskRecordV1, FusionRunRequestV1, contract_metadata
 from fusionkit_core.fusion import FusionEngine
 from fusionkit_core.run import FusionRunManager
 from fusionkit_core.run_store import FileSystemRunStore
+from fusionkit_evals.cli import bench_app
 from fusionkit_evals.fusion_bench import (
     FUSION_BENCH_DISCLAIMER,
     CommandHandoffKitExecutor,
@@ -109,7 +109,7 @@ async def test_fusion_bench_runs_native_task_and_joins_records(tmp_path) -> None
 
     assert len(rows) == 1
     row = rows[0]
-    assert row.failure.failure_kind == "none"
+    assert row.failure.failure_kind == "none", row.failure
     assert row.run_id
     assert row.trace_id
     assert row.fusion_record is not None
@@ -118,8 +118,15 @@ async def test_fusion_bench_runs_native_task_and_joins_records(tmp_path) -> None
     assert score_fusion_bench_row(row).best_single_success is not None
     assert row.judge_synthesis_record is None
     assert row.artifact_records
-    assert row.provider_metadata
-    assert row.cost_estimate is not None
+    assert row.model_call_metadata == [
+        {
+            "endpoint_id": "fast",
+            "finish_reason": None,
+            "role": "panel",
+            "unknown_usage": False,
+        }
+    ]
+    assert row.cost_estimate is None
     assert row.schema_bundle_hash.startswith("sha256:")
     assert row.repo_sha
     assert row.model_versions == {"fast": "fake-fast"}
@@ -244,7 +251,7 @@ async def test_fusion_bench_invokes_real_handoffkit_handoff_command(tmp_path) ->
     rows = await runner.run_tasks([task])
 
     row = rows[0]
-    assert row.failure.failure_kind == "none"
+    assert row.failure.failure_kind == "none", row.failure
     assert row.status == "succeeded"
     assert row.harness_run_result is not None
     assert row.harness_run_result["schema"] == "harness-run-result.v1"
@@ -692,9 +699,9 @@ def test_fusion_bench_report_cli_writes_markdown_and_jsonl(tmp_path) -> None:
     runner = CliRunner()
 
     result = runner.invoke(
-        app,
+        bench_app,
         [
-            "fusion-bench-report",
+            "fusion-report",
             "--input",
             str(input_path),
             "--jsonl",
@@ -730,9 +737,16 @@ def _handoffkit_cli_or_skip() -> Path:
     )
     for cli in candidates:
         if cli.exists():
-            return cli
+            probe = subprocess.run(
+                ["node", str(cli), "ensemble", "--help"],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            if "handoff" in f"{probe.stdout}\n{probe.stderr}":
+                return cli
     pytest.skip(
-        "HandoffKit CLI build not found; run `pnpm build` in the sibling handoffkit repo"
+        "HandoffKit CLI with `ensemble handoff` not found; provide HANDOFFKIT_CLI"
     )
 
 
@@ -975,14 +989,8 @@ json.dump({"records": records}, sys.stdout)
 
 def _engine() -> FusionEngine:
     config = FusionConfig(
-        endpoints=[
-            ModelEndpoint(
-                id="fast",
-                model="fake-fast",
-                base_url="http://localhost:8101",
-                pricing=CostMetadata(input_per_1m_tokens=1.0, output_per_1m_tokens=1.0),
-            ),
-        ],
+        routekit_url="http://routekit.test",
+        endpoint_ids=["fast"],
         default_model="fast",
         default_mode="single",
     )
@@ -1079,7 +1087,7 @@ def _report_row(
             }
             for index, tool_status in enumerate(tool_statuses or [])
         ],
-        provider_metadata=[{"cost_estimate": 0.2}],
+        model_call_metadata=[{"cost_estimate": 0.2}],
         model_ids=list(candidate_outputs),
         cost_estimate=0.2 if output is not None else None,
         latency_s=1.0 if output is not None else None,

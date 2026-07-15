@@ -137,15 +137,11 @@ export function sidecarConfigYaml(input: {
   synthesizer?: string;
   prompts?: Record<string, string>;
 }): string {
-  const baseUrl = input.routekitUrl.replace(/\/v1\/?$/, "").replace(/\/+$/, "");
+  const routekitUrl = input.routekitUrl.replace(/\/+$/, "");
   return (
     stringify({
-      endpoints: input.endpointIds.map((id) => ({
-        id,
-        model: id,
-        provider: "openai-compatible",
-        base_url: baseUrl
-      })),
+      routekit_url: routekitUrl,
+      endpoint_ids: input.endpointIds,
       default_model: input.judge,
       judge_model: input.judge,
       synthesizer_model: input.synthesizer ?? input.judge,
@@ -210,7 +206,7 @@ async function startSynthesisSidecar(input: {
   );
   const url = `http://127.0.0.1:${port}`;
   try {
-    await waitForHttp(`${url}/v1/models`, processHandle, {
+    await waitForHttp(`${url}/health`, processHandle, {
       timeoutMs: 60_000,
       label: "FusionKit synthesis sidecar",
       requireOk: true

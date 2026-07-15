@@ -98,7 +98,7 @@ class FusionBenchAttemptRow(BaseModel):
     artifact_records: list[dict[str, Any]] = Field(default_factory=list)
     tool_records: list[dict[str, Any]] = Field(default_factory=list)
     receipt_records: list[dict[str, Any]] = Field(default_factory=list)
-    provider_metadata: list[dict[str, Any]] = Field(default_factory=list)
+    model_call_metadata: list[dict[str, Any]] = Field(default_factory=list)
     model_ids: list[str] = Field(default_factory=list)
     cost_estimate: float | None = None
     latency_s: float | None = None
@@ -478,9 +478,9 @@ def join_run_records(
         judge_synthesis_record=judge_synthesis_record,
         artifact_records=artifact_records,
         tool_records=tool_records,
-        provider_metadata=inspection.provider_metadata,
+        model_call_metadata=inspection.model_call_metadata,
         model_ids=[trajectory.model_id for trajectory in inspection.trajectories],
-        cost_estimate=_cost_from_provider_metadata(inspection.provider_metadata),
+        cost_estimate=_cost_from_model_call_metadata(inspection.model_call_metadata),
         latency_s=_latency_from_model_calls(model_call_records),
     )
 
@@ -539,11 +539,9 @@ def join_handoffkit_records(
         artifact_records=artifact_records,
         tool_records=tool_records,
         receipt_records=receipt_records,
-        provider_metadata=_provider_metadata_from_model_calls(model_call_records),
+        model_call_metadata=_model_call_metadata(model_call_records),
         model_ids=_model_ids_from_handoff_records(model_call_records, harness_candidates),
-        cost_estimate=_cost_from_provider_metadata(
-            _provider_metadata_from_model_calls(model_call_records)
-        ),
+        cost_estimate=_cost_from_model_call_metadata(_model_call_metadata(model_call_records)),
         latency_s=_latency_from_model_calls(model_call_records),
     )
 
@@ -848,10 +846,10 @@ def _judge_parse_failed(judge_synthesis_record: Mapping[str, Any] | None) -> boo
     return isinstance(metrics, Mapping) and metrics.get("judge_structured_parse_status") == "failed"
 
 
-def _cost_from_provider_metadata(provider_metadata: list[dict[str, Any]]) -> float | None:
+def _cost_from_model_call_metadata(metadata_records: list[dict[str, Any]]) -> float | None:
     costs = [
         float(cost)
-        for metadata in provider_metadata
+        for metadata in metadata_records
         if isinstance(cost := metadata.get("cost_estimate"), int | float)
     ]
     if not costs:
@@ -870,15 +868,15 @@ def _latency_from_model_calls(model_call_records: list[dict[str, Any]]) -> float
     return sum(latencies)
 
 
-def _provider_metadata_from_model_calls(
+def _model_call_metadata(
     model_call_records: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
-    provider_metadata = []
+    metadata_records = []
     for record in model_call_records:
         metadata = record.get("metadata")
         if isinstance(metadata, dict):
-            provider_metadata.append(metadata)
-    return provider_metadata
+            metadata_records.append(metadata)
+    return metadata_records
 
 
 def _model_ids_from_handoff_records(

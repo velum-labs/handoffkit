@@ -76,6 +76,7 @@ test(
         }
       ],
       router: { kind: "embedded", config: routerConfig },
+      fusionkitDir: process.cwd(),
       log: () => {}
     });
     const routekitUrl = stack.endpoints.fast;
@@ -154,6 +155,7 @@ test(
         url: router.url,
         authToken: "external-router-secret"
       },
+      fusionkitDir: process.cwd(),
       log: () => {}
     });
     const bridgeUrl = stack.endpoints.opaque;

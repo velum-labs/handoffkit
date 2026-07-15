@@ -21,8 +21,8 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  # Only the 5 fusionkit packages are published; the workspace also contains the
-  # unpublished uniroute/uniroute-mlx members, so build/publish must be scoped.
+  # Publish the three-package sidecar runtime and the separately installed eval
+  # and MLX maintainer packages. The workspace's other packages are not included.
   FUSIONKIT_PACKAGES: >-
     --package fusionkit
     --package fusionkit-core

@@ -5,7 +5,7 @@ from pathlib import Path
 
 from fusionkit_core.artifacts import LocalArtifactStore, hash_bytes, hash_text
 from fusionkit_core.metrics import JsonlRunLogger, RunRecord
-from fusionkit_core.router import HeuristicRouter
+from fusionkit_core.router import FusionModeRouter
 from fusionkit_core.trace import (
     context_from_headers,
     context_of_span,
@@ -15,7 +15,11 @@ from fusionkit_core.trace import (
     start_fusion_span,
 )
 from fusionkit_core.types import ChatMessage
-from opentelemetry.sdk._logs.export import InMemoryLogRecordExporter
+from opentelemetry.sdk._logs.export import (
+    InMemoryLogRecordExporter,
+    SimpleLogRecordProcessor,
+)
+from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
 
@@ -24,25 +28,25 @@ def _user(content: str) -> list[ChatMessage]:
 
 
 def test_router_routes_hard_keywords_to_panel() -> None:
-    decision = HeuristicRouter().route(_user("please benchmark these options"))
+    decision = FusionModeRouter().route(_user("please benchmark these options"))
     assert decision.route == "panel"
     assert "hard keyword" in decision.reasons
 
 
 def test_router_routes_long_prompts_to_panel() -> None:
-    decision = HeuristicRouter().route(_user(" ".join(["word"] * 121)))
+    decision = FusionModeRouter().route(_user(" ".join(["word"] * 121)))
     assert decision.route == "panel"
     assert "long prompt" in decision.reasons
 
 
 def test_router_routes_medium_keywords_to_self() -> None:
-    decision = HeuristicRouter().route(_user("help me debug this"))
+    decision = FusionModeRouter().route(_user("help me debug this"))
     assert decision.route == "self"
     assert "medium keyword" in decision.reasons
 
 
 def test_router_routes_short_simple_prompts_to_single() -> None:
-    decision = HeuristicRouter().route(_user("hello there"))
+    decision = FusionModeRouter().route(_user("hello there"))
     assert decision.route == "single"
 
 
@@ -89,9 +93,6 @@ _LOG_EXPORTER = InMemoryLogRecordExporter()
 
 
 def _setup_tracing() -> InMemorySpanExporter:
-    from opentelemetry.sdk._logs.export import SimpleLogRecordProcessor
-    from opentelemetry.sdk.trace.export import SimpleSpanProcessor
-
     setup_fusion_tracing(
         "core-units-test",
         extra_processors=[SimpleSpanProcessor(_EXPORTER)],
