@@ -12,20 +12,19 @@
 #                         write + pull-requests: write on this repo. Required
 #                         because PRs created with the default GITHUB_TOKEN do
 #                         not trigger CI, and repair PRs must pass the same
-#                         checks as everyone else. Without it the workflow
-#                         falls back to GITHUB_TOKEN and the draft PR will
-#                         show no check runs.
+#                         checks as everyone else. Publication fails closed
+#                         when this secret is missing.
 #
-# Restricted autonomy: the agent edits files only. It gets no GitHub token,
-# checkout credentials are not persisted, and the gh CLI is deny-listed, so it
-# cannot push, comment, or open PRs; git stays available because the docs-audit
-# skill's enumeration and ledger helpers are read-only git consumers. The
-# deterministic steps below own commit, push, and PR creation.
+# Trust boundary: generation, validation, and publication are separate jobs.
+# The agent job has contents:read, no GitHub token, no persisted credentials,
+# explicit denials, and an OS sandbox with network disabled. It exports only a
+# scoped binary patch + evidence report. Validation applies that patch on a
+# fresh runner with no secrets. Publication applies the already-validated patch
+# on a third fresh runner; only that job receives DOCS_HEAL_PR_TOKEN.
 #
-# Loop guard: healer commits land via PRs titled "docs-heal: ..." on
-# docs/heal-* branches. The job-level `if` skips pushes whose head commit is a
-# squash of such a PR (message starts with "docs-heal:") or a merge commit of
-# one (message contains "docs/heal-").
+# Convergence guard: healer merges trigger the next bounded backlog batch via
+# the ledger path. Push runs disable rotation, so once no changed/unledgered
+# pages remain, the follow-up produces no patch and the chain stops.
 
 name: docs-heal
 
@@ -36,10 +35,12 @@ on:
       # Doc-sensitive sources and the doc trees themselves (trigger scoping
       # only; the skill decides docs-worthiness and exits early when a change
       # needs no doc update). Mirrors the dependsOn roots in the ledger.
-      - "packages/*/src/**"
-      - "python/*/src/**"
+      - "packages/**"
+      - "python/**"
+      - "apps/scope/**"
+      - "apps/docs/package.json"
       - "spec/**"
-      - "release/*.json"
+      - "release/**"
       - "examples/manifest.json"
       - "scripts/**"
       - "configs/**"
@@ -51,6 +52,18 @@ on:
       - "README.md"
       - "CONTRIBUTING.md"
       - "SECURITY.md"
+      - "legacy/README.md"
+      - "package.json"
+      - "pnpm-workspace.yaml"
+      - "packages/*/package.json"
+      - "packages/*/README.md"
+      - "pyproject.toml"
+      - "python/*/pyproject.toml"
+      - "python/*/README.md"
+      - "apps/*/README.md"
+      - "infra/*/README.md"
+      - "docker/*/README.md"
+      - ".cursor/skills/docs-audit/ledger.json"
   schedule:
     # Weekly full sweep (Monday 06:00 UTC): rotation picks plus anything the
     # push trigger's path filter missed.
@@ -61,9 +74,7 @@ concurrency:
   group: docs-heal
   cancel-in-progress: false
 
-permissions:
-  contents: write
-  pull-requests: write
+permissions: {}
 
 env:
   # Pinned agent CLI build (see https://cursor.com/install); bump deliberately.
@@ -72,22 +83,27 @@ env:
   CURSOR_MODEL: composer-2.5
 
 jobs:
-  heal:
+  generate:
     name: audit and heal docs
     runs-on: ubuntu-latest
     timeout-minutes: 45
-    # Canonical repo only (never forks), and skip pushes produced by a
-    # docs-heal PR merging — squash merges start with the PR title
-    # ("docs-heal:"), merge commits name the head branch ("docs/heal-").
+    permissions:
+      contents: read
+    outputs:
+      has_changes: ${{ steps.capture.outputs.has_changes }}
+      base_sha: ${{ steps.capture.outputs.base_sha }}
+    # Canonical repo and main only; workflow_dispatch on another ref cannot
+    # expose secrets or audit branch-controlled code.
     if: >-
       github.repository == 'velum-labs/handoffkit' &&
+      github.ref == 'refs/heads/main' &&
       (github.event_name != 'push' ||
-        (!startsWith(github.event.head_commit.message, 'docs-heal:') &&
-         !contains(github.event.head_commit.message, 'docs/heal-')))
+        (github.event.deleted == false && github.event.head_commit != null))
     steps:
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
+          ref: ${{ github.sha }}
           # Full history: ledger diff anchors reference older object hashes.
           fetch-depth: 0
           persist-credentials: false
@@ -113,37 +129,123 @@ jobs:
       - name: Install pinned cursor-agent
         run: |
           curl -fsSL "https://downloads.cursor.com/lab/${CURSOR_CLI_VERSION}/linux/x64/agent-cli-package.tar.gz" -o /tmp/agent.tar.gz
+          echo "c7c1f32249cedb99cc20cd4eed1f9308dc2299a78c283bbc6efd6d658cd4977e  /tmp/agent.tar.gz" | sha256sum --check
           mkdir -p "$HOME/.cursor-agent"
           tar -xzf /tmp/agent.tar.gz -C "$HOME/.cursor-agent" --strip-components=1
           echo "$HOME/.cursor-agent" >> "$GITHUB_PATH"
           "$HOME/.cursor-agent/cursor-agent" --version
 
       - name: Restrict agent permissions
-        # gh is denied outright; push/PR are impossible anyway (no token, no
-        # persisted credentials). Everything else the skill needs stays open.
+        # Explicit denials remain in force under --force. Shell commands run
+        # in Cursor's workspace sandbox with network disabled; generation is
+        # still treated as untrusted and exported only as a scoped patch.
         run: |
           mkdir -p "$HOME/.cursor"
           cat > "$HOME/.cursor/cli-config.json" <<'JSON'
           {
             "permissions": {
-              "deny": ["Shell(gh)", "Read(**/.env*)", "Write(**/.env*)"]
+              "allow": [
+                "Read(**)",
+                "Write(docs/**)",
+                "Write(apps/docs/content/docs/**)",
+                "Write(README.md)",
+                "Write(CONTRIBUTING.md)",
+                "Write(SECURITY.md)",
+                "Write(packages/*/README.md)",
+                "Write(python/*/README.md)",
+                "Write(apps/*/README.md)",
+                "Write(infra/*/README.md)",
+                "Write(docker/*/README.md)",
+                "Write(.cursor/skills/docs-audit/ledger.json)",
+                "Write(docs-heal-report.md)",
+                "Shell(node:.cursor/skills/docs-audit/ledger-plan.mjs*)",
+                "Shell(node:.cursor/skills/docs-audit/ledger-stamp.mjs*)",
+                "Shell(git:diff*)",
+                "Shell(git:show*)",
+                "Shell(git:ls-files*)",
+                "Shell(git:rev-parse*)",
+                "Shell(git:status*)"
+              ],
+              "deny": [
+                "Read(**/.env*)",
+                "Read(/proc/**)",
+                "Write(**/.env*)",
+                "WebFetch(*)",
+                "Mcp(*:*)",
+                "Shell(gh)",
+                "Shell(curl)",
+                "Shell(wget)",
+                "Shell(git:commit*)",
+                "Shell(git:push*)",
+                "Shell(git:config*)",
+                "Shell(git:remote*)"
+              ]
             }
           }
           JSON
 
-      - name: Run docs-audit agent
+      - name: Prepare audit inputs
         env:
-          CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
           EVENT_NAME: ${{ github.event_name }}
           TRIGGER_SHA: ${{ github.sha }}
           PUSH_BEFORE: ${{ github.event.before }}
-          REPORT_PATH: ${{ runner.temp }}/docs-heal-report.md
+        run: |
+          # Capture the live CLI surface in a trusted step. The agent reads
+          # this file; it cannot execute the product CLI itself.
+          node packages/cli/dist/index.js --help > .docs-heal-cli-help.txt
+          node <<'NODE'
+          const { appendFileSync, readFileSync } = require("node:fs");
+          const { spawnSync } = require("node:child_process");
+          const help = readFileSync(".docs-heal-cli-help.txt", "utf8");
+          const commands = [];
+          let inCommands = false;
+          for (const line of help.split("\n")) {
+            if (line === "Commands:") { inCommands = true; continue; }
+            if (!inCommands) continue;
+            if (line === "") break;
+            // Commander wraps descriptions with deep indentation; command
+            // declarations alone start with exactly two spaces.
+            if (!/^  \S/.test(line)) continue;
+            const command = line.trim().split(/\s+/)[0];
+            if (/^[a-z][a-z0-9-]*$/.test(command)) commands.push(command);
+          }
+          for (const command of commands) {
+            const result = spawnSync(
+              process.execPath,
+              ["packages/cli/dist/index.js", command, "--help"],
+              { encoding: "utf8" }
+            );
+            appendFileSync(
+              ".docs-heal-cli-help.txt",
+              `\n\n===== fusionkit ${command} --help =====\n${result.stdout}${result.stderr}`
+            );
+          }
+          NODE
+          if [ "$EVENT_NAME" = "push" ]; then
+            node .cursor/skills/docs-audit/ledger-plan.mjs --limit 10 --rotation 0 > .docs-heal-plan.json
+            if git cat-file -e "${PUSH_BEFORE}^{commit}" 2>/dev/null &&
+               git merge-base --is-ancestor "$PUSH_BEFORE" "$TRIGGER_SHA"; then
+              git diff "$PUSH_BEFORE..$TRIGGER_SHA" > .docs-heal-trigger.diff
+            else
+              git show --format=fuller "$TRIGGER_SHA" > .docs-heal-trigger.diff
+            fi
+          else
+            node .cursor/skills/docs-audit/ledger-plan.mjs --limit 10 > .docs-heal-plan.json
+            : > .docs-heal-trigger.diff
+          fi
+
+      - name: Run docs-audit agent
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          TRIGGER_SHA: ${{ github.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          REPORT_PATH: ${{ github.workspace }}/docs-heal-report.md
           # Belt and braces against interactive hangs: git never prompts, and
           # anything that shells out to an editor gets a no-op.
           GIT_TERMINAL_PROMPT: "0"
           GIT_EDITOR: "true"
         run: |
-          if [ -z "$CURSOR_API_KEY" ]; then
+          if [ -z "${{ secrets.CURSOR_API_KEY }}" ]; then
             echo "CURSOR_API_KEY secret is not configured" >&2
             exit 1
           fi
@@ -151,9 +253,14 @@ jobs:
           Read .cursor/skills/docs-audit/SKILL.md and follow it exactly.
 
           Trigger: ${EVENT_NAME} at commit ${TRIGGER_SHA} (for push events the
-          previous head was ${PUSH_BEFORE}; start from that merge's diff).
+          previous head was ${PUSH_BEFORE}). The trusted workflow has written:
+          - .docs-heal-plan.json (the ledger work queue, capped at 10 pages)
+          - .docs-heal-trigger.diff (the complete before..head push range)
+          - .docs-heal-cli-help.txt (trusted top-level + per-command help)
+          Read both files; do not replace the push-range diff with git show.
           A weekly 'schedule' or 'workflow_dispatch' trigger means a full
-          sweep: work everything ledger-plan reports.
+          sweep of the selected batch. Process at most those 10 pages; the
+          deferred count remains queued for later runs.
 
           Constraints for this environment:
           - Edit documentation files and the ledger only. Do not run
@@ -161,74 +268,174 @@ jobs:
             handled by the workflow after you finish.
           - Write the report (all required sections from the skill) to:
             ${REPORT_PATH}
-          - If the docs-worthiness gate says nothing needs doc changes, write
-            the report saying so and change no files.
+          - If the docs-worthiness gate exits before verification, write the
+            report saying so and change no files. If you verify pages and they
+            are already accurate, re-stamp them: ledger-only changes are valid.
           EOF
           cursor-agent -p "$(cat /tmp/docs-heal-prompt.txt)" \
+            --api-key "${{ secrets.CURSOR_API_KEY }}" \
             --model "$CURSOR_MODEL" \
             --force \
+            --sandbox enabled \
             --trust \
             --output-format text
 
-      - name: Validate
+      - name: Capture scoped patch
+        id: capture
         env:
           TRIGGER_SHA: ${{ github.sha }}
         run: |
-          # If the agent committed despite instructions, recover the work into
-          # the working tree (mixed reset) instead of silently losing it.
+          # Recover accidental local commits. Remove trusted, generated audit
+          # inputs before checking the agent's file scope.
           git reset -q "$TRIGGER_SHA"
-          if [ -z "$(git status --porcelain)" ]; then
-            echo "no doc changes produced; skipping validation"
-            exit 0
-          fi
-          pnpm check
-          if ! git diff --quiet HEAD -- apps/docs/content; then
-            echo "MDX changed; building the docs site"
-            (cd apps/docs && pnpm install --frozen-lockfile && pnpm build)
-          fi
-
-      - name: Publish draft PR
-        env:
-          GH_TOKEN: ${{ secrets.DOCS_HEAL_PR_TOKEN || github.token }}
-          HAS_PR_TOKEN: ${{ secrets.DOCS_HEAL_PR_TOKEN != '' }}
-          REPORT_PATH: ${{ runner.temp }}/docs-heal-report.md
-          RUN_ID: ${{ github.run_id }}
-          TRIGGER_SHA: ${{ github.sha }}
-        run: |
-          # Mixed reset: recover any agent-made commits into the working tree
-          # with a clean index, so the scoped add below is the only gate that
-          # decides what ships.
-          git reset -q "$TRIGGER_SHA"
-          if [ -z "$(git status --porcelain)" ]; then
-            echo "nothing to publish"
-            exit 0
-          fi
-          if [ "$HAS_PR_TOKEN" != "true" ]; then
-            echo "::warning::DOCS_HEAL_PR_TOKEN is not set; falling back to GITHUB_TOKEN, so the draft PR will not trigger CI checks"
-          fi
-          # Stage doc surfaces + the ledger only; anything else the agent
-          # touched is a bug we refuse to ship.
+          rm -f .docs-heal-plan.json .docs-heal-trigger.diff .docs-heal-cli-help.txt
+          # Reject any tracked/untracked path outside the doc surfaces before
+          # executing any agent-modified content.
+          python3 - <<'PY'
+          import fnmatch, subprocess, sys
+          allowed = [
+              "docs/**", "apps/docs/content/docs/**",
+              "README.md", "CONTRIBUTING.md", "SECURITY.md",
+              "packages/*/README.md", "python/*/README.md",
+              "apps/*/README.md", "infra/*/README.md", "docker/*/README.md",
+              ".cursor/skills/docs-audit/ledger.json",
+              "docs-heal-report.md",
+          ]
+          changed = set()
+          for cmd in (
+              ["git", "diff", "--name-only", "-z", "HEAD"],
+              ["git", "ls-files", "--others", "--exclude-standard", "-z"],
+          ):
+              raw = subprocess.check_output(cmd)
+              changed.update(p.decode() for p in raw.split(b"\\0") if p)
+          bad = sorted(p for p in changed if not any(fnmatch.fnmatch(p, pat) for pat in allowed))
+          if bad:
+              print("agent modified files outside documentation surfaces:", file=sys.stderr)
+              print("\\n".join(bad), file=sys.stderr)
+              sys.exit(1)
+          PY
           git add -A -- docs 'apps/docs/content/docs' '.cursor/skills/docs-audit/ledger.json' \
             README.md CONTRIBUTING.md SECURITY.md \
             ':(glob)packages/*/README.md' ':(glob)python/*/README.md' \
             ':(glob)apps/*/README.md' ':(glob)infra/*/README.md' ':(glob)docker/*/README.md'
-          LEFTOVER="$(git status --porcelain | grep -v '^[AMDRC] ' || true)"
-          if [ -n "$LEFTOVER" ]; then
-            echo "agent modified files outside the documentation surfaces:" >&2
-            echo "$LEFTOVER" >&2
+          if git diff --cached --quiet; then
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
+            echo "base_sha=$TRIGGER_SHA" >> "$GITHUB_OUTPUT"
+            : > /tmp/docs-heal.patch
+            exit 0
+          fi
+          git diff --cached --binary > /tmp/docs-heal.patch
+          echo "has_changes=true" >> "$GITHUB_OUTPUT"
+          echo "base_sha=$TRIGGER_SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Ensure evidence report
+        if: always()
+        run: |
+          if [ ! -f docs-heal-report.md ]; then
+            printf 'The agent did not produce an evidence report; inspect the run log.\\n' > docs-heal-report.md
+          fi
+          cat docs-heal-report.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload patch
+        if: steps.capture.outputs.has_changes == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: docs-heal-patch-${{ github.run_id }}-${{ github.run_attempt }}
+          path: /tmp/docs-heal.patch
+          retention-days: 7
+          if-no-files-found: error
+
+      - name: Upload evidence report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: docs-heal-report-${{ github.run_id }}-${{ github.run_attempt }}
+          path: docs-heal-report.md
+          retention-days: 30
+          if-no-files-found: error
+
+  validate:
+    name: validate docs-heal patch
+    needs: generate
+    if: needs.generate.result == 'success' && needs.generate.outputs.has_changes == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout pristine base
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ needs.generate.outputs.base_sha }}
+          persist-credentials: false
+      - name: Download patch
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: docs-heal-patch-${{ github.run_id }}-${{ github.run_attempt }}
+          path: /tmp
+      - name: Setup Node
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 22
+      - name: Install trusted dependencies
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.33.4 --activate
+          pnpm install --frozen-lockfile
+      - name: Apply and validate
+        run: |
+          git apply --index /tmp/docs-heal.patch
+          node .cursor/skills/docs-audit/ledger-plan.mjs \
+            --check-staged --limit 0 --rotation 0 > /dev/null
+          pnpm check
+          if git diff --cached --name-only | grep -q '^apps/docs/content/docs/'; then
+            (cd apps/docs && pnpm install --frozen-lockfile && pnpm build)
+          fi
+
+  publish:
+    name: publish docs-heal draft PR
+    needs: [generate, validate]
+    if: needs.validate.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Checkout pristine base
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ needs.generate.outputs.base_sha }}
+          persist-credentials: false
+      - name: Download patch
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: docs-heal-patch-${{ github.run_id }}-${{ github.run_attempt }}
+          path: /tmp
+      - name: Download evidence report
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: docs-heal-report-${{ github.run_id }}-${{ github.run_attempt }}
+          path: /tmp
+      - name: Commit and open draft PR
+        env:
+          GH_TOKEN: ${{ secrets.DOCS_HEAL_PR_TOKEN }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "DOCS_HEAL_PR_TOKEN secret is not configured" >&2
             exit 1
           fi
-          BRANCH="docs/heal-${RUN_ID}"
+          git apply --index /tmp/docs-heal.patch
+          BRANCH="docs/heal-${RUN_ID}-${RUN_ATTEMPT}"
           git config user.name "docs-heal"
           git config user.email "docs-heal@users.noreply.github.com"
           git checkout -B "$BRANCH"
-          git commit -m "docs-heal: automated documentation repair (run ${RUN_ID})"
+          git commit --no-verify -m "docs-heal: automated documentation repair (run ${RUN_ID}.${RUN_ATTEMPT})"
           git push "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "HEAD:${BRANCH}"
-          if [ ! -f "$REPORT_PATH" ]; then
-            printf 'Automated docs repair. The agent did not produce a report; inspect the run log.\n' > "$REPORT_PATH"
-          fi
           gh pr create \
             --draft \
             --head "$BRANCH" \
             --title "docs-heal: automated documentation repair" \
-            --body-file "$REPORT_PATH"
+            --body-file /tmp/docs-heal-report.md

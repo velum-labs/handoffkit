@@ -254,6 +254,18 @@ for (const file of requiredFiles) {
   if (!existsSync(file)) fail(`missing ${file}`);
 }
 
+const docsLedgerCheck = spawnSync(
+  process.execPath,
+  [".cursor/skills/docs-audit/ledger-plan.mjs", "--limit", "0", "--rotation", "0"],
+  { encoding: "utf8" }
+);
+if (docsLedgerCheck.stderr.trim()) {
+  console.error(docsLedgerCheck.stderr.trim());
+}
+if (docsLedgerCheck.status !== 0) {
+  fail("documentation freshness ledger is invalid");
+}
+
 const traceConventionsCheck = spawnSync(
   process.execPath,
   ["scripts/generate-trace-conventions.mjs", "--check"],

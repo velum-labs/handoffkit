@@ -6,12 +6,14 @@
  * recorded git object hashes of the page and its dependsOn paths against the
  * same paths at HEAD. Git trees are Merkle trees, so one hash comparison per
  * path answers "did anything under this path change" exactly. Hashes are
- * stored raw (not as a commit reference) so stamps survive squash merges and
- * shallow clones; `git diff <oldHash> <newHash>` still yields the exact
- * reconciliation diff for both trees and single files.
+ * stored raw (not as a commit reference) so stamps survive squash merges when
+ * the same content remains reachable. When an old object is unavailable
+ * (for example after history rewriting or in a shallow clone), the plan
+ * requires a full re-verification instead of emitting a broken diff anchor.
  *
- * Output (stdout) is a JSON work queue: changed pages with their diff-anchor
- * commands, rotation picks (the K pages with the oldest verifiedAt), warnings
+ * Output (stdout) is a JSON work queue: changed pages with structured
+ * diff-anchor arguments, rotation picks (the K pages with the oldest
+ * verifiedAt), warnings
  * (dead deps, missing pages), unledgered doc files, and the skipped-unchanged
  * count. This output is evidence: paste it verbatim into the audit report.
  *
@@ -27,6 +29,12 @@ import { fileURLToPath } from "node:url";
 const here = dirname(fileURLToPath(import.meta.url));
 const ledgerPath = join(here, "ledger.json");
 const repoRoot = join(here, "..", "..", "..");
+const objectIdPattern = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
+
+function fail(message) {
+  console.error(`ledger-plan: ${message}`);
+  process.exit(1);
+}
 
 function git(args) {
   // cwd is pinned to the repo root: `ls-files` pathspecs are cwd-relative,
@@ -46,7 +54,62 @@ function headHash(path) {
 }
 
 const ledger = JSON.parse(readFileSync(ledgerPath, "utf8"));
-const rotationK = ledger.config?.rotationK ?? 5;
+if (ledger.version !== 1 || typeof ledger.pages !== "object" || ledger.pages === null) {
+  fail("ledger.json must have version: 1 and a pages object");
+}
+
+function validRepoPath(path) {
+  return (
+    typeof path === "string" &&
+    path.length > 0 &&
+    !path.startsWith("/") &&
+    !path.includes("\0") &&
+    !path.split("/").includes("..")
+  );
+}
+
+function validateEntry(page, entry) {
+  if (!validRepoPath(page)) fail(`invalid page path ${JSON.stringify(page)}`);
+  if (!entry || !Array.isArray(entry.dependsOn) || !entry.verified) {
+    fail(`${page}: entry must have dependsOn[] and verified{}`);
+  }
+  const deps = entry.dependsOn;
+  if (new Set(deps).size !== deps.length) fail(`${page}: duplicate dependsOn path`);
+  for (const dep of deps) {
+    if (!validRepoPath(dep)) fail(`${page}: invalid dependsOn path ${JSON.stringify(dep)}`);
+    if (dep === page || page.startsWith(`${dep}/`)) {
+      fail(`${page}: dependsOn ${dep} contains the page itself; use narrower source paths`);
+    }
+  }
+  const expected = new Set([page, ...deps]);
+  const actual = Object.keys(entry.verified);
+  if (actual.length !== expected.size || actual.some((path) => !expected.has(path))) {
+    fail(`${page}: verified keys must equal the page plus dependsOn paths`);
+  }
+  for (const [path, hash] of Object.entries(entry.verified)) {
+    if (!objectIdPattern.test(hash)) fail(`${page}: invalid object id for ${path}`);
+  }
+  if (Number.isNaN(Date.parse(entry.verifiedAt))) fail(`${page}: invalid verifiedAt`);
+}
+
+for (const [page, entry] of Object.entries(ledger.pages)) validateEntry(page, entry);
+
+let pageLimit = Number.POSITIVE_INFINITY;
+let rotationK = ledger.config?.rotationK ?? 5;
+let checkStaged = false;
+const args = process.argv.slice(2);
+for (let i = 0; i < args.length; i++) {
+  if (args[i] === "--limit") pageLimit = Number(args[++i]);
+  else if (args[i] === "--rotation") rotationK = Number(args[++i]);
+  else if (args[i] === "--check-staged") checkStaged = true;
+  else fail(`unknown option ${args[i]}`);
+}
+if (!Number.isInteger(pageLimit) && pageLimit !== Number.POSITIVE_INFINITY) {
+  fail("--limit must be a non-negative integer");
+}
+if (pageLimit < 0 || !Number.isInteger(rotationK) || rotationK < 0) {
+  fail("--limit/--rotation must be non-negative integers");
+}
 
 const headResult = git(["rev-parse", "HEAD"]);
 if (!headResult.ok) {
@@ -54,6 +117,25 @@ if (!headResult.ok) {
   process.exit(1);
 }
 const head = headResult.stdout;
+
+if (checkStaged) {
+  const previousLedger = git(["show", "HEAD:.cursor/skills/docs-audit/ledger.json"]);
+  const stagedTree = git(["write-tree"]);
+  if (!previousLedger.ok || !stagedTree.ok) fail("cannot inspect staged ledger state");
+  const previousPages = JSON.parse(previousLedger.stdout).pages ?? {};
+  for (const [page, entry] of Object.entries(ledger.pages)) {
+    if (JSON.stringify(entry) === JSON.stringify(previousPages[page])) continue;
+    for (const [path, expected] of Object.entries(entry.verified)) {
+      const actual = git(["rev-parse", `${stagedTree.stdout}:${path}`]);
+      if (!actual.ok || actual.stdout !== expected) {
+        fail(
+          `${page}: staged stamp for ${path} is ${expected}, ` +
+          `but the intended final tree is ${actual.ok ? actual.stdout : "missing"}`
+        );
+      }
+    }
+  }
+}
 
 const changed = [];
 const unchanged = [];
@@ -82,11 +164,20 @@ for (const [page, entry] of Object.entries(ledger.pages)) {
         page,
         detail: `${dep} no longer exists at HEAD (renamed or deleted); fix the page's dependsOn`
       });
-      changedDeps.push({ path: dep, diffCommand: null });
+      changedDeps.push({ path: dep, diffArgs: null, reason: "dependency is missing at HEAD" });
     } else if (before === null) {
-      changedDeps.push({ path: dep, diffCommand: null, reason: "never verified" });
+      changedDeps.push({ path: dep, diffArgs: null, reason: "never verified" });
     } else if (before !== after) {
-      changedDeps.push({ path: dep, diffCommand: `git diff ${before} ${after}` });
+      const oldObject = git(["cat-file", "-e", `${before}^{object}`]);
+      changedDeps.push(
+        oldObject.ok
+          ? { path: dep, diffArgs: ["diff", before, after], reason: null }
+          : {
+              path: dep,
+              diffArgs: null,
+              reason: "old object is unavailable; fully re-verify this dependency"
+            }
+      );
     }
   }
 
@@ -101,7 +192,9 @@ for (const [page, entry] of Object.entries(ledger.pages)) {
 // full re-verification anyway. This bounds worst-case staleness for pages
 // whose dependsOn lists are incomplete or whose claims were never true.
 unchanged.sort((a, b) => a.verifiedAt.localeCompare(b.verifiedAt) || a.page.localeCompare(b.page));
-const rotation = unchanged.slice(0, rotationK).map(({ page, verifiedAt }) => ({ page, verifiedAt }));
+const rotationCandidates = unchanged
+  .slice(0, rotationK)
+  .map(({ page, verifiedAt }) => ({ page, verifiedAt }));
 
 // Unledgered scan: doc files on the configured surfaces with no ledger entry.
 // This is file-tree bookkeeping (paths only, never content).
@@ -130,11 +223,45 @@ const plan = {
   generatedAt: new Date().toISOString(),
   head,
   rotationK,
-  changed,
-  rotation,
-  unledgered,
-  warnings,
-  unchangedCount: unchanged.length - rotation.length
+  ...buildBoundedQueue()
 };
 
 console.log(JSON.stringify(plan, null, 2));
+
+function buildBoundedQueue() {
+  const selected = new Set();
+  const hasCapacity = () => pageLimit === Number.POSITIVE_INFINITY || selected.size < pageLimit;
+  const select = (page) => {
+    if (selected.has(page)) return true;
+    if (!hasCapacity()) return false;
+    selected.add(page);
+    return true;
+  };
+
+  // Broken ledger entries are highest priority, followed by source changes,
+  // newly discovered docs, then healthy-page rotation. One page consumes one
+  // unit even if it appears in both warnings and changed.
+  const warningPages = [...new Set(warnings.map(({ page }) => page).filter((page) => page !== null))];
+  for (const page of warningPages) select(page);
+  for (const { page } of changed) select(page);
+  for (const page of unledgered) select(page);
+  for (const { page } of rotationCandidates) select(page);
+
+  const selectedChanged = changed.filter(({ page }) => selected.has(page));
+  const selectedUnledgered = unledgered.filter((page) => selected.has(page));
+  const selectedRotation = rotationCandidates.filter(({ page }) => selected.has(page));
+  const selectedWarnings = warnings.filter(({ page }) => page === null || selected.has(page));
+
+  return {
+    changed: selectedChanged,
+    deferredChangedCount: changed.length - selectedChanged.length,
+    rotation: selectedRotation,
+    deferredRotationCount: rotationCandidates.length - selectedRotation.length,
+    unledgered: selectedUnledgered,
+    deferredUnledgeredCount: unledgered.length - selectedUnledgered.length,
+    warnings: selectedWarnings,
+    deferredWarningCount:
+      warningPages.length - warningPages.filter((page) => selected.has(page)).length,
+    unchangedCount: unchanged.length - selectedRotation.length
+  };
+}

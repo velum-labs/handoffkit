@@ -26,10 +26,12 @@ and legacy pages are exempt — do not retrofit them.
   and model ids.
 - Every link must resolve: relative links to real files, absolute site links
   to real pages.
-- Factual claims about behavior name their source: cite the defining file
-  (and symbol where useful), e.g. "registered in `packages/cli/src/cli.ts`
-  (`buildProgram()`)". A claim that cannot be anchored to code is either
-  removed or labeled as historical.
+- Factual claims about behavior are anchored to a defining source during
+  review. Maintainer prose and audit reports cite the file (and symbol where
+  useful), e.g. "registered in `packages/cli/src/cli.ts` (`buildProgram()`)."
+  Public user prose keeps that evidence in the audit report rather than
+  exposing repo-internal paths. A claim that cannot be anchored is removed or
+  labeled as historical.
 - No emojis. No marketing language. Present tense, active voice.
 - Historical or aspirational content is labeled as design archive (see the
   taxonomy) and never presented as current product truth.
