@@ -224,6 +224,13 @@ PROBLEM = {
 
 GOOD = "```python\nimport sys\nprint(int(sys.stdin.read())*2)\n```"
 BAD = "```python\nprint('nope')\n```"
+PUBLIC_ONLY = (
+    "```python\n"
+    "import sys\n"
+    "value = int(sys.stdin.read())\n"
+    "print(value * 2 if value == 2 else 0)\n"
+    "```"
+)
 
 
 @pytest.fixture()
@@ -321,6 +328,50 @@ def test_public_exec_selects_passing_sample(
     assert raw["oracle_private"] is True
     assert len(raw["samples"]) == 3
     assert [s["temperature"] for s in raw["samples"]] == [0.2, 0.6, 0.9]
+    assert raw["cost_usd"] == pytest.approx(0.003)
+
+
+def test_public_exec_tie_judge_can_recover_oracle_sample(
+    store: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def fake_complete(
+        self: _Client,
+        model: str,
+        prompt: str,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        del self, model
+        if "Every candidate tied" in prompt:
+            text = '{"best_index": 1}'
+        elif kwargs["temperature"] == 0.2:
+            text = PUBLIC_ONLY
+        else:
+            text = GOOD
+        return {
+            "text": text,
+            "prompt_tokens": 10,
+            "completion_tokens": 20,
+            "reasoning_tokens": 0,
+            "cost_usd": 0.001,
+            "finish_reason": "stop",
+        }
+
+    monkeypatch.setattr(_Client, "complete", fake_complete)
+
+    raw = LivecodebenchAdapter().run_instance(
+        "q1",
+        SUTTarget(base_url="http://local/v1", model="m"),
+        store,
+        {
+            "selection": "public-exec-tie-judge",
+            "n_samples": 2,
+            "temps": [0.2, 0.6],
+        },
+    )
+
+    assert raw["selected_index"] == 1
+    assert raw["resolved"] is True
+    assert raw["tie_breaker"]["candidate_indices"] == [0, 1]
     assert raw["cost_usd"] == pytest.approx(0.003)
 
 
