@@ -54,10 +54,11 @@ node .cursor/skills/docs-audit/ledger-plan.mjs --limit 10
 ```
 
 - `changed` — pages whose sources moved since last verification. Each changed
-  dependency carries structured `diffArgs`; when present, run
-  `git <diffArgs...>` (arguments, not an executable shell string) and
-  reconcile the page against that diff. A null anchor means the old object is
-  unavailable: fully re-verify that dependency instead.
+  dependency carries a root-owned `diffFile` in CI; read it and reconcile the
+  page against that diff. Interactive plans instead carry structured
+  `diffArgs`; run `git <diffArgs...>` (arguments, not an executable shell
+  string). A null anchor means the old object is unavailable: fully re-verify
+  that dependency instead.
 - `deferred*Count` fields — changed, rotation, warning, or unledgered pages
   intentionally left for later batches; never expand the current run to
   consume them.
