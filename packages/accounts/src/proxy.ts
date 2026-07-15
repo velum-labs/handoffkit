@@ -44,7 +44,7 @@ export class NoSubscriptionAccountsError extends Error {
 }
 
 function generateToken(): string {
-  return `fk-proxy-${randomBytes(24).toString("base64url")}`;
+  return `rk-proxy-${randomBytes(24).toString("base64url")}`;
 }
 
 /**

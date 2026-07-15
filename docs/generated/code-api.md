@@ -18,7 +18,8 @@ protocols. `startSubscriptionProxy` is the one-call programmatic entrypoint;
 `SubscriptionProxyClient` reads a running proxy's usage over a typed wire
 contract. Product CLIs can wrap this module without owning account logic.
 
-- `export { defaultSubscriptionAccountDirectory, defaultSubscriptionCredentialPath, enrollCurrentSubscription, loadSubscriptionCredential, persistSubscriptionCredential, sanitizeSubscriptionLabel, subscriptionCredentialLabel } from "./credentials.js";`
+- `export { defaultSubscriptionAccountDirectory, defaultSubscriptionCredentialPath, enrollCurrentSubscription, loadSubscriptionCredential, persistSubscriptionCredential, removeSubscriptionAccount, sanitizeSubscriptionLabel, subscriptionCredentialLabel } from "./credentials.js";`
+- `export type { RemoveSubscriptionAccountResult } from "./credentials.js";`
 - `export { resolveSubscriptionAccounts } from "./account-source.js";`
 - `export type { ResolvedSubscriptionAccounts, SubscriptionAccountSource } from "./account-source.js";`
 - `export { subscriptionProvider } from "./provider.js";`
@@ -35,6 +36,8 @@ contract. Product CLIs can wrap this module without owning account logic.
 - `export type { StartSubscriptionProxyOptions, SubscriptionProxy } from "./proxy.js";`
 - `export { SubscriptionProxyClient, SubscriptionProxyClientError } from "./client.js";`
 - `export type { SubscriptionProxyClientOptions } from "./client.js";`
+- `export { CLIPROXY_API_KEY_ENV, CLIPROXY_BASE_URL_ENV, CLIPROXY_HOME_ENV, CLIPROXY_LOGIN_FLAGS, CLIPROXY_PINNED_VERSION, cliproxyAssetName, cliproxyApiKey, cliproxyBaseUrl, cliproxyBinaryPath, cliproxyConfigPath, cliproxyHome, cliproxyStatus, ensureCliproxyConfig, installCliproxy, runCliproxyLogin, spawnCliproxy } from "./cliproxy.js";`
+- `export type { CliproxyInstallResult, CliproxyStatus } from "./cliproxy.js";`
 - `export { snapshotsToUsage, SUBSCRIPTION_USAGE_PATH, subscriptionUsageResponseSchema } from "./wire.js";`
 - `export type { SubscriptionUsageResponse } from "./wire.js";`
 - `export type { AccountLimits, CreditSnapshot, RateLimitWindow, SubscriptionAccountSetSnapshot, SubscriptionCredential, SubscriptionFailure, SubscriptionMemberStatus, SubscriptionSelectionStrategy } from "./types.js";`
@@ -280,6 +283,8 @@ Product-neutral RouteKit gateway and router.
 - `export type { ProviderBackendOptions } from "./provider-backends.js";`
 - `export { CatalogBackend, EndpointPool, modelEndpointSchema, parseRouterConfig, providerBackend, routerConfigSchema } from "./router.js";`
 - `export type { CatalogBackendOptions, EndpointPoolOptions, ModelEndpointConfig, RouterConfig } from "./router.js";`
+- `export { endpointHealthProbe, probeEndpointHealth, providerAuthHeaders } from "./endpoint-health.js";`
+- `export type { EndpointHealthProbe, EndpointHealthProbePlan, EndpointHealthResult } from "./endpoint-health.js";`
 - `export { CapacityPool } from "./capacity-pool.js";`
 - `export type { CapacityLease, CapacityPoolMember, CapacityPoolOptions, CapacityPoolStrategy } from "./capacity-pool.js";`
 - `export { effectiveModel, isStream, withDefaultModel } from "./adapters/chat.js";`
@@ -374,6 +379,12 @@ local model metadata lives in @routekit/registry.
 - `export type BenchmarkPanelPreset ...`
 - `export const DEFAULT_CLOUD_PANEL_MEMBERS: readonly CatalogPanelMember[] ...`
 - `export const BENCHMARK_PANEL_PRESETS: Readonly<Record<string, BenchmarkPanelPreset>> ...`
+
+### `packages/routekit-cli/src/index.ts`
+
+Executable entrypoint for the independent RouteKit router CLI.
+
+No exports found.
 
 ### `packages/routekit-registry/src/index.ts`
 

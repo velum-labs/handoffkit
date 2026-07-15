@@ -17,9 +17,11 @@ export {
   enrollCurrentSubscription,
   loadSubscriptionCredential,
   persistSubscriptionCredential,
+  removeSubscriptionAccount,
   sanitizeSubscriptionLabel,
   subscriptionCredentialLabel
 } from "./credentials.js";
+export type { RemoveSubscriptionAccountResult } from "./credentials.js";
 
 // Account sources (canonical / directory / explicit)
 export { resolveSubscriptionAccounts } from "./account-source.js";
@@ -81,6 +83,27 @@ export type {
 } from "./proxy.js";
 export { SubscriptionProxyClient, SubscriptionProxyClientError } from "./client.js";
 export type { SubscriptionProxyClientOptions } from "./client.js";
+
+// Managed CLIProxyAPI lifecycle
+export {
+  CLIPROXY_API_KEY_ENV,
+  CLIPROXY_BASE_URL_ENV,
+  CLIPROXY_HOME_ENV,
+  CLIPROXY_LOGIN_FLAGS,
+  CLIPROXY_PINNED_VERSION,
+  cliproxyAssetName,
+  cliproxyApiKey,
+  cliproxyBaseUrl,
+  cliproxyBinaryPath,
+  cliproxyConfigPath,
+  cliproxyHome,
+  cliproxyStatus,
+  ensureCliproxyConfig,
+  installCliproxy,
+  runCliproxyLogin,
+  spawnCliproxy
+} from "./cliproxy.js";
+export type { CliproxyInstallResult, CliproxyStatus } from "./cliproxy.js";
 
 // Wire contract for the proxy usage endpoint
 export {

@@ -1,5 +1,14 @@
 import {
+  CLIPROXY_API_KEY_ENV,
+  CLIPROXY_LOGIN_FLAGS,
+  CLIPROXY_PINNED_VERSION,
+  cliproxyBaseUrl,
+  cliproxyConfigPath,
+  cliproxyStatus,
   enrollCurrentSubscription,
+  installCliproxy,
+  runCliproxyLogin,
+  spawnCliproxy,
   startSubscriptionProxy,
   SubscriptionProxyClient,
   type SubscriptionAccountSetSnapshot,
@@ -13,16 +22,6 @@ import { contextFor } from "@routekit/cli-core";
 import type { Presenter } from "@routekit/cli-ui";
 import type { Command } from "commander";
 
-import {
-  CLIPROXY_LOGIN_FLAGS,
-  CLIPROXY_PINNED_VERSION,
-  cliproxyConfigPath,
-  cliproxyStatus,
-  installCliproxy,
-  runCliproxyLogin,
-  spawnCliproxy
-} from "../fusion/cliproxy.js";
-import { cliproxyBaseUrl, defaultKeyEnv } from "../fusion/env.js";
 import {
   discoverProxy,
   registerRunningProxy,
@@ -198,7 +197,7 @@ async function serveProxy(options: ProxyServeOptions, command: Command): Promise
  * for the providers FusionKit has no native OAuth adapter for.
  */
 function registerCliproxy(proxy: Command): void {
-  const keyEnv = defaultKeyEnv("cliproxy") ?? "CLIPROXY_API_KEY";
+  const keyEnv = CLIPROXY_API_KEY_ENV;
   const cliproxy = proxy
     .command("cliproxy")
     .description("manage the CLIProxyAPI sidecar (OAuth subscription models as a panel upstream)");
@@ -224,7 +223,8 @@ function registerCliproxy(proxy: Command): void {
           : `CLIProxyAPI v${result.version} already installed at ${result.binary}`
       );
       ctx.presenter.box("next steps", [
-        `export ${keyEnv}=${result.ingressKey}`,
+        `# generated credential remains private in ${result.configPath}`,
+        `# optional override: export ${keyEnv}=...`,
         "fusionkit proxy cliproxy login gemini   # or claude / codex / grok / kimi",
         "fusionkit proxy cliproxy serve"
       ]);

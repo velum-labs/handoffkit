@@ -7,7 +7,7 @@
     "url": "git+https://github.com/velum-labs/handoffkit.git",
     "directory": "packages/accounts"
   },
-  "description": "Provider subscription credentials, account pools, relays, and proxy clients.",
+  "description": "Provider subscription credentials, account pools, relays, proxy clients, and managed CLIProxyAPI lifecycle.",
   "license": "Apache-2.0",
   "type": "module",
   "exports": {
@@ -30,6 +30,7 @@
     "@routekit/gateway": "workspace:*",
     "@routekit/registry": "workspace:*",
     "@routekit/runtime": "workspace:*",
+    "yaml": "2.9.0",
     "zod": "4.4.3"
   },
   "keywords": [

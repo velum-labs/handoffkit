@@ -67,7 +67,10 @@
       "tagPattern": "handoffkit-v{version}",
       "releaseTrigger": "github-release",
       "publishWorkflow": "release-packages.yml",
-      "registries": [{ "kind": "npm", "package": "@fusionkit/cli" }],
+      "registries": [
+        { "kind": "npm", "package": "@routekit/cli" },
+        { "kind": "npm", "package": "@fusionkit/cli" }
+      ],
       "versionSources": ["package.json#version"],
       "preflight": ["pnpm", "check"],
       "changelog": "CHANGELOG.md",

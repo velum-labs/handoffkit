@@ -11,6 +11,8 @@ import { codexProfileFileToml } from "./launch.js";
 
 export type CodexInstallProfile = {
   modelId: string;
+  /** Safe Codex profile selector; defaults to `modelId`. */
+  profileId?: string;
   description?: string;
 };
 
@@ -50,8 +52,21 @@ function profileFilesComment(ownerId: string): string {
   return `# ${ownerId}-profile-files:`;
 }
 
-function profileFileName(modelId: string): string {
-  return `${modelId}.config.toml`;
+function profileSelector(profile: CodexInstallProfile): string {
+  return profile.profileId ?? profile.modelId;
+}
+
+function profileFileName(profile: CodexInstallProfile): string {
+  const selector = profileSelector(profile);
+  if (
+    selector.length === 0 ||
+    selector.includes("/") ||
+    selector.includes("\\") ||
+    selector.startsWith(".")
+  ) {
+    throw new Error(`Codex profile id is not a safe file name: ${JSON.stringify(selector)}`);
+  }
+  return `${selector}.config.toml`;
 }
 
 /** Serialize one additive, owner-marked Codex provider block. */
@@ -75,12 +90,12 @@ export function codexIntegrationBlock(input: CodexInstallInput): string {
     `# Managed by \`${input.owner.installCommand}\`; do not edit between these markers.`,
     `# Rerun that command to update; use \`${input.owner.uninstallCommand}\` to remove.`,
     `# Start the gateway first: ${input.owner.startCommand}`,
-    `# Then launch: codex --profile ${input.profiles[0]?.modelId ?? "gateway-model"}`,
+    `# Then launch: codex --profile ${input.profiles[0] !== undefined ? profileSelector(input.profiles[0]) : "gateway-model"}`,
     ...input.profiles.map(
       (profile) =>
-        `#   codex --profile ${profile.modelId}${profile.description !== undefined ? `  (${profile.description})` : ""}`
+        `#   codex --profile ${profileSelector(profile)}${profile.description !== undefined ? `  (${profile.description})` : ""}`
     ),
-    `${filesComment} ${input.profiles.map((profile) => profileFileName(profile.modelId)).join(" ")}`,
+    `${filesComment} ${input.profiles.map(profileFileName).join(" ")}`,
     "",
     body.trimEnd(),
     "",
@@ -152,9 +167,10 @@ function assertNoConflicts(
   }
   const legacyProfiles = outside.profiles;
   for (const profile of input.profiles) {
-    if (isRecord(legacyProfiles) && legacyProfiles[profile.modelId] !== undefined) {
+    const selector = profileSelector(profile);
+    if (isRecord(legacyProfiles) && legacyProfiles[selector] !== undefined) {
       throw new Error(
-        `your Codex config already defines [profiles.${profile.modelId}] outside the ` +
+        `your Codex config already defines [profiles.${selector}] outside the ` +
           `${input.owner.id}-managed block; remove or rename it, then rerun \`${input.owner.installCommand}\``
       );
     }
@@ -198,7 +214,7 @@ export function installCodexIntegration(input: CodexInstallInput): CodexInstallR
   }
   mkdirSync(codexHome, { recursive: true });
   const nextFiles = new Set(
-    input.profiles.map((profile) => join(codexHome, profileFileName(profile.modelId)))
+    input.profiles.map((profile) => join(codexHome, profileFileName(profile)))
   );
   for (const stale of ownedProfileFiles(managed, codexHome, input.owner.id)) {
     if (!nextFiles.has(stale)) removeOwnedProfileFile(stale, input.owner.id);
@@ -206,14 +222,14 @@ export function installCodexIntegration(input: CodexInstallInput): CodexInstallR
   writeFileSync(configPath, next);
   for (const profile of input.profiles) {
     writeFileSync(
-      join(codexHome, profileFileName(profile.modelId)),
+      join(codexHome, profileFileName(profile)),
       `# Managed by ${input.owner.id}\n${codexProfileFileToml(profile.modelId, input.owner.providerId)}`
     );
   }
   return {
     configPath,
     action: managed !== undefined ? "updated" : "installed",
-    profiles: input.profiles.map((profile) => profile.modelId)
+    profiles: input.profiles.map(profileSelector)
   };
 }
 

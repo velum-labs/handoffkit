@@ -110,6 +110,10 @@
       "name": "@routekit/tool-opencode"
     },
     {
+      "path": "packages/routekit-cli",
+      "name": "@routekit/cli"
+    },
+    {
       "path": "packages/cli",
       "name": "@fusionkit/cli"
     }

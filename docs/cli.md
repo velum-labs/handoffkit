@@ -1,5 +1,38 @@
 # CLI reference
 
+## RouteKit router CLI
+
+`@routekit/cli` installs the independent `routekit` executable. It needs no
+FusionKit package or executable and never starts or downloads a local model.
+Its canonical config is `.routekit/router.yaml`, layered over
+`~/.config/routekit/router.yaml`; `--config` and `ROUTEKIT_CONFIG` select an
+explicit file.
+
+```sh
+npm install -g @routekit/cli
+routekit config init
+routekit endpoints list
+routekit serve
+routekit codex opaque-endpoint-id
+```
+
+The command groups are `serve`, `codex|claude|cursor|opencode`, `accounts`,
+`endpoints`, `models list`, `config`, `doctor`, `install|uninstall codex`,
+`stop`, `telemetry`, `completion`, and `version`. Runtime state lives under
+`~/.routekit` (or `ROUTEKIT_HOME`). `routekit config migrate` is the only
+operation that reads the former subscription state, and it performs a
+one-time, permission-safe copy.
+
+`routekit accounts remove <provider> <name>` idempotently removes only a
+regular credential file inside the provider's managed account directory;
+traversal and symbolic-link targets are rejected.
+
+`routekit accounts cliproxy install|login|serve|status` owns the pinned
+CLIProxyAPI release and its OAuth account/model pool. Its config and auth store
+live under `~/.routekit/cliproxy`; credentials are never printed.
+
+## FusionKit ensemble CLI
+
 The `fusionkit` CLI (`@fusionkit/cli`) is the single front door to the ensemble
 product: it runs an ensemble of local + cloud models, both as a raw inference
 endpoint and behind a coding harness (Codex, Claude Code, Cursor). It is

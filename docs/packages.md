@@ -23,6 +23,7 @@ HTTP contracts, read [Specs and APIs](specs-and-apis.md).
 
 | Package | Responsibility | Start with |
 | --- | --- | --- |
+| `@routekit/cli` | Independent `routekit` configuration, gateway serving, endpoint/account management, and coding-tool launchers. | `packages/routekit-cli/src/cli.ts`, `packages/routekit-cli/src/commands.ts` |
 | `@fusionkit/cli` | `fusionkit` command line workflows for init, local models, harness launchers, sessions, config, prompts, and fusion. | `packages/cli/src/cli.ts`, `packages/cli/src/commands` |
 | `@routekit/cli-ui` | Brand-configurable Ink/plain presenters, prompts, wizards, and formatting. | `packages/cli-ui/src/index.ts` |
 | `@routekit/cli-core` | CLI context, errors, shared option parsing, completion, package versions, and test helpers. | `packages/cli-core/src/index.ts` |
@@ -30,7 +31,7 @@ HTTP contracts, read [Specs and APIs](specs-and-apis.md).
 | `@fusionkit/adapter-ai-sdk` | Product-local AI SDK utilities, worktree agents, local model adapters, and managed MLX helpers. | `packages/adapter-ai-sdk/src/index.ts` |
 | `@fusionkit/adapter-compute` | ComputeSDK-shaped sandbox surface backed by governed runner sessions. | `legacy/packages/adapter-compute/src/sandbox.ts` |
 | `@routekit/gateway` | Neutral HTTP gateway, dialect adapters, runtime router/catalog, pooled endpoints, provider egress, and single-call provenance. | `packages/model-gateway/src/index.ts` |
-| `@routekit/accounts` | Subscription credentials, reusable account pooling, provider relays, and proxy clients. | `packages/accounts/src/index.ts` |
+| `@routekit/accounts` | Subscription credentials, reusable account pooling, provider relays, proxy clients, and managed CLIProxyAPI lifecycle. | `packages/accounts/src/index.ts` |
 | `@fusionkit/gateway` | Fusion frontdoor, panel/synthesis orchestration, sessions, aggregate budgets, trajectory conversion, and local lifecycle. | `packages/fusion-gateway/src/index.ts` |
 
 ## Session and harness packages

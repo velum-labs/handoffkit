@@ -1,8 +1,16 @@
 import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  readFileSync,
+  realpathSync,
+  unlinkSync
+} from "node:fs";
 import { homedir, platform, userInfo } from "node:os";
-import { basename, join } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";
 
 import {
@@ -85,7 +93,16 @@ async function credentialBlob(
 }
 
 export function defaultSubscriptionAccountDirectory(mode: SubscriptionMode): string {
-  return expandHome(subscriptionInfo(mode).accountsDirectory);
+  const configured = subscriptionInfo(mode).accountsDirectory;
+  const stateHome = process.env.ROUTEKIT_HOME;
+  if (
+    stateHome !== undefined &&
+    stateHome.length > 0 &&
+    configured.startsWith("~/.routekit/")
+  ) {
+    return join(stateHome, configured.slice("~/.routekit/".length));
+  }
+  return expandHome(configured);
 }
 
 export function defaultSubscriptionCredentialPath(mode: SubscriptionMode): string {
@@ -252,11 +269,96 @@ export async function enrollCurrentSubscription(
   const directory =
     options.accountsDirectory ?? defaultSubscriptionAccountDirectory(mode);
   mkdirSync(directory, { recursive: true, mode: 0o700 });
+  chmodSync(directory, 0o700);
   const identity = credentialIdentity(credential);
   const label = sanitizeSubscriptionLabel(options.label ?? `${mode}-${identity}`);
   const target = join(directory, `${label}.json`);
   writeFileAtomic(target, `${JSON.stringify(source, null, 2)}\n`, { mode: 0o600 });
+  chmodSync(target, 0o600);
   return target;
+}
+
+export type RemoveSubscriptionAccountResult = {
+  mode: SubscriptionMode;
+  label: string;
+  path: string;
+  removed: boolean;
+};
+
+function isMissingPath(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as { code?: unknown }).code === "ENOENT"
+  );
+}
+
+function assertManagedAccountLabel(label: string): void {
+  if (
+    label.length === 0 ||
+    label.startsWith(".") ||
+    label === "." ||
+    label === ".." ||
+    sanitizeSubscriptionLabel(label) !== label
+  ) {
+    throw new Error(
+      "account name must be its exact lowercase managed label and contain only letters, numbers, dots, underscores, or hyphens"
+    );
+  }
+}
+
+/**
+ * Remove one enrolled account without following user-controlled paths or links.
+ *
+ * A missing account is an idempotent no-op. Existing managed directories and
+ * files are restored to their private modes before the credential is removed.
+ */
+export function removeSubscriptionAccount(
+  mode: SubscriptionMode,
+  label: string,
+  options: { accountsDirectory?: string } = {}
+): RemoveSubscriptionAccountResult {
+  assertManagedAccountLabel(label);
+  const managedDirectory = resolve(
+    options.accountsDirectory ?? defaultSubscriptionAccountDirectory(mode)
+  );
+  const target = resolve(managedDirectory, `${label}.json`);
+  if (dirname(target) !== managedDirectory) {
+    throw new Error("account path escapes the managed account directory");
+  }
+
+  let directoryStat: ReturnType<typeof lstatSync>;
+  try {
+    directoryStat = lstatSync(managedDirectory);
+  } catch (error) {
+    if (isMissingPath(error)) return { mode, label, path: target, removed: false };
+    throw error;
+  }
+  if (directoryStat.isSymbolicLink() || !directoryStat.isDirectory()) {
+    throw new Error(`managed account directory is not a real directory: ${managedDirectory}`);
+  }
+  if (realpathSync(managedDirectory) !== managedDirectory) {
+    throw new Error(`managed account directory contains a symbolic link: ${managedDirectory}`);
+  }
+  chmodSync(managedDirectory, 0o700);
+
+  let targetStat: ReturnType<typeof lstatSync>;
+  try {
+    targetStat = lstatSync(target);
+  } catch (error) {
+    if (isMissingPath(error)) return { mode, label, path: target, removed: false };
+    throw error;
+  }
+  if (targetStat.isSymbolicLink() || !targetStat.isFile()) {
+    throw new Error(`managed account is not a regular file: ${target}`);
+  }
+  if (dirname(realpathSync(target)) !== managedDirectory) {
+    throw new Error("account resolves outside the managed account directory");
+  }
+  chmodSync(target, 0o600);
+  unlinkSync(target);
+  return { mode, label, path: target, removed: true };
 }
 
 export function subscriptionCredentialLabel(path: string): string {

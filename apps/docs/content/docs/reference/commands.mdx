@@ -3,6 +3,27 @@ title: Command reference
 description: Every fusionkit command and the flags that shape a fused run.
 ---
 
+## RouteKit commands
+
+The independent `routekit` CLI serves opaque configured endpoint IDs and wires
+them into coding tools:
+
+| Command | What it does |
+| --- | --- |
+| `routekit serve` | Serve all configured endpoints through OpenAI, Anthropic, Responses, and Cursor dialects. |
+| `routekit codex\|claude\|cursor\|opencode [model]` | Start an embedded gateway or connect with `--gateway-url`, then invoke the selected tool launcher. |
+| `routekit endpoints list\|add\|remove\|health` | Manage and probe endpoint entries. Credentials are referenced only by `apiKeyEnv`. |
+| `routekit accounts add\|remove\|list\|status\|serve\|stop` | Manage pooled Claude/Codex subscription accounts under `~/.routekit`. |
+| `routekit accounts cliproxy install\|login\|serve\|status` | Manage the pinned CLIProxyAPI binary and its multi-provider OAuth account/model pool. |
+| `routekit config path\|show\|init\|edit\|migrate` | Manage layered router YAML; migration is explicit and idempotent. |
+| `routekit models list` | List configured opaque IDs. |
+| `routekit doctor` | Validate config, credential-variable presence, and tool binaries. |
+| `routekit install\|uninstall codex` | Add or remove the RouteKit-owned Codex provider and endpoint profiles. |
+| `routekit stop` | Stop only owner-tagged RouteKit services. |
+| `routekit telemetry`, `completion`, `version` | Control opt-in telemetry, generate completion, and print version information. |
+
+## FusionKit commands
+
 The `fusionkit` CLI boots the panel, synthesizer, and gateway, then launches your coding agent pre-wired to them. Run `fusionkit --help` for the live command tree, or `fusionkit <command> --help` for command-specific flags.
 
 ## Launch commands

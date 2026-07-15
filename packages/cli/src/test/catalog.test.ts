@@ -150,12 +150,12 @@ test("api-key provider falls back to curated when discovery fails", async () => 
 
 test("cliproxy with a key lists the proxy's models against its default base URL", async () => {
   const result = await listModelsForAuth("cliproxy", {
-    env: { CLIPROXY_API_KEY: "fk-test" },
+    env: { ROUTEKIT_CLIPROXY_API_KEY: "rk-test" },
     fetchImpl: async (url, init) => {
       if (String(url).includes("models.dev")) return jsonResponse({});
       assert.match(String(url), /^http:\/\/127\.0\.0\.1:8317\/v1\/models$/);
       const headers = new Headers(init?.headers);
-      assert.equal(headers.get("authorization"), "Bearer fk-test");
+      assert.equal(headers.get("authorization"), "Bearer rk-test");
       return jsonResponse({ data: [{ id: "gemini-3.1-pro-preview" }, { id: "kimi-k2.5" }] });
     }
   });
@@ -163,9 +163,12 @@ test("cliproxy with a key lists the proxy's models against its default base URL"
   assert.deepEqual(ids(result), ["gemini-3.1-pro-preview", "kimi-k2.5"]);
 });
 
-test("cliproxy honors the CLIPROXY_BASE_URL override for discovery", async () => {
+test("cliproxy honors the ROUTEKIT_CLIPROXY_BASE_URL override for discovery", async () => {
   const result = await listModelsForAuth("cliproxy", {
-    env: { CLIPROXY_API_KEY: "fk-test", CLIPROXY_BASE_URL: "http://127.0.0.1:9999" },
+    env: {
+      ROUTEKIT_CLIPROXY_API_KEY: "rk-test",
+      ROUTEKIT_CLIPROXY_BASE_URL: "http://127.0.0.1:9999"
+    },
     fetchImpl: async (url) => {
       if (String(url).includes("models.dev")) return jsonResponse({});
       assert.match(String(url), /^http:\/\/127\.0\.0\.1:9999\/v1\/models$/);

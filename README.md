@@ -10,6 +10,18 @@ FusionKit fuses a panel of models - including open-weight models at a fraction o
 
 ## Install + quickstart
 
+For independent routing to configured remote endpoints:
+
+```bash
+npm install -g @routekit/cli
+routekit config init
+routekit serve                      # or: routekit codex | claude | cursor | opencode
+```
+
+RouteKit has no FusionKit runtime dependency and does not download local models.
+
+For model ensembles:
+
 ```bash
 npm install -g @fusionkit/cli
 fusionkit setup                      # one-time: warm the Python fusion engine
@@ -76,6 +88,7 @@ Panel members run in lightweight git worktrees so parallel candidates can inspec
 
 | Area | What it is |
 | --- | --- |
+| [`packages/routekit-cli`](packages/routekit-cli) | The independent npm `@routekit/cli` router front door. |
 | [`packages/cli`](packages/cli) | The npm `@fusionkit/cli` front door. |
 | [`packages/model-gateway`](packages/model-gateway) | Dialect translation, fused/passthrough routing, streaming, sessions, and cost metering. |
 | [`packages/ensemble`](packages/ensemble) | Panel orchestration, worktrees, runtime-kernel workflows, judge adapters, and advanced harness tooling. |

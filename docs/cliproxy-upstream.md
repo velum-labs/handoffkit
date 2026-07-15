@@ -3,7 +3,8 @@
 [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) (MIT) is a local
 proxy that fronts OAuth **subscription** accounts — ChatGPT/Codex, Claude Code,
 Gemini (Antigravity), Grok, Kimi — behind an OpenAI-compatible API, with
-multi-account rotation. FusionKit consumes it as the `cliproxy` provider: a
+multi-account rotation. RouteKit owns the verified binary, private config, and
+OAuth account store. FusionKit can consume it as the `cliproxy` provider: a
 plain OpenAI-compatible upstream whose "API key" is the proxy's own ingress
 key. That puts subscription-backed frontier models (Gemini, Grok, Kimi — the
 providers FusionKit has no native OAuth adapter for) on a fusion panel with
@@ -11,12 +12,12 @@ zero engine changes.
 
 ## Where it fits vs the built-in subscription proxy
 
-| | built-in `fusionkit proxy serve` | `cliproxy` upstream |
+| | built-in `routekit accounts serve` | `cliproxy` upstream |
 |---|---|---|
 | Providers | Claude Code, Codex | Codex, Claude Code, **Gemini/Antigravity, Grok, Kimi, …** |
 | Wire | provider-native relays (Messages / Responses) | OpenAI Chat Completions |
 | Rotation | quota-aware (sticky / round_robin / capacity_weighted) | round-robin (+ session affinity) |
-| Owner | FusionKit (TypeScript, in-tree) | external Go binary (pinned release) |
+| Owner | RouteKit (TypeScript, in-tree) | RouteKit-managed external Go binary (pinned release) |
 
 Keep the built-in proxy as the default for Claude Code and Codex pooling — it
 has quota-aware selection and native wire relays. Reach for `cliproxy` when a
@@ -26,23 +27,23 @@ or when you already run CLIProxyAPI for other tools.
 ## Quick start (managed sidecar)
 
 ```bash
-fusionkit proxy cliproxy install         # pinned release, SHA-256 verified
-export CLIPROXY_API_KEY=<printed ingress key>
-fusionkit proxy cliproxy login gemini    # or claude / codex / grok / kimi / antigravity
-fusionkit proxy cliproxy serve           # http://127.0.0.1:8317
-fusionkit proxy cliproxy status          # install state, reachability, accounts
+routekit accounts cliproxy install         # pinned release, SHA-256 verified
+routekit accounts cliproxy login gemini    # or claude / codex / grok / kimi / antigravity
+routekit accounts cliproxy serve           # http://127.0.0.1:8317
+routekit accounts cliproxy status          # install state, reachability, accounts
 ```
 
-The managed instance lives under `~/.fusionkit/cliproxy/` (binary, `config.yaml`
+The managed instance lives under `~/.routekit/cliproxy/` (or `ROUTEKIT_HOME`;
+binary, `config.yaml`
 with the generated ingress key, and the proxy's OAuth `auth/` store, all
-0600/0700). A self-managed CLIProxyAPI works identically: export
-`CLIPROXY_API_KEY` (one of its `api-keys`) and, for a non-default host/port,
-`CLIPROXY_BASE_URL`.
+0600/0700). Commands never print credential values. A self-managed CLIProxyAPI
+works identically: export `ROUTEKIT_CLIPROXY_API_KEY` (one of its `api-keys`)
+and, for a non-default host/port, `ROUTEKIT_CLIPROXY_BASE_URL`.
 
 ## Panel members
 
 `fusionkit init`'s panel builder offers **CLIProxyAPI (local proxy)** as an
-auth choice; with `CLIPROXY_API_KEY` set, the model picker lists the proxy's
+auth choice; with `ROUTEKIT_CLIPROXY_API_KEY` set, the model picker lists the proxy's
 live `/v1/models` (the merged catalog of every account you logged in). In
 `.fusionkit/fusion.json` a member looks like:
 
@@ -57,15 +58,16 @@ endpoints:
   - id: gemini
     provider: cliproxy
     model: gemini-3.1-pro-preview
-    api_key_env: CLIPROXY_API_KEY
+    api_key_env: ROUTEKIT_CLIPROXY_API_KEY
 ```
 
-`base_url` defaults to `http://127.0.0.1:8317` (or `CLIPROXY_BASE_URL`).
+`base_url` defaults to `http://127.0.0.1:8317` (or
+`ROUTEKIT_CLIPROXY_BASE_URL`).
 Leave `pricing` unset: a subscription has no per-token billing, so cost
 estimates stay "unknown" rather than reporting a wrong dollar amount.
 
 `fusionkit doctor` probes the proxy (reachability + key) whenever
-`CLIPROXY_API_KEY` is set or a configured panel references the provider.
+`ROUTEKIT_CLIPROXY_API_KEY` is set or a configured panel references the provider.
 
 ## ToS caveat
 
@@ -78,7 +80,7 @@ as a hosted feature. Use at your own risk.
 ## Operational notes
 
 - The release is pinned (`CLIPROXY_PINNED_VERSION` in
-  `packages/cli/src/fusion/cliproxy.ts`) and verified against the release's
+  `packages/accounts/src/cliproxy.ts`) and verified against the release's
   `checksums.txt`; upgrades are a deliberate pin bump, not implicit.
 - Upstream endpoints can break when vendors change their private APIs; a
   broken member simply fails its panel slot (survivors are still fused), and

@@ -36,6 +36,16 @@ export type {
   ModelEndpointConfig,
   RouterConfig
 } from "./router.js";
+export {
+  endpointHealthProbe,
+  probeEndpointHealth,
+  providerAuthHeaders
+} from "./endpoint-health.js";
+export type {
+  EndpointHealthProbe,
+  EndpointHealthProbePlan,
+  EndpointHealthResult
+} from "./endpoint-health.js";
 
 export { CapacityPool } from "./capacity-pool.js";
 export type {

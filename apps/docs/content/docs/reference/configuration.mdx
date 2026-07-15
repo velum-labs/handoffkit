@@ -3,6 +3,34 @@ title: Configuration
 description: The committed .fusionkit/ per-repo config reference.
 ---
 
+## RouteKit router configuration
+
+RouteKit loads YAML with this precedence:
+
+```
+--config  >  ROUTEKIT_CONFIG  >  .routekit/router.yaml  >  ~/.config/routekit/router.yaml
+```
+
+Project and global files are layered when no explicit path is selected.
+Endpoints expose opaque `endpointId` values and store only credential
+references:
+
+```yaml
+endpoints:
+  - endpointId: primary
+    model: provider-model-id
+    provider: openai-compatible
+    baseUrl: https://provider.example/v1
+    dialect: openai
+    apiKeyEnv: PROVIDER_API_KEY
+defaultEndpointId: primary
+```
+
+Inline API keys, authorization headers, and tokens are rejected. `routekit
+config edit` validates a temporary file before atomically replacing the
+original. Runtime account, service, health, catalog, and telemetry state belongs
+under `~/.routekit` or `ROUTEKIT_HOME`.
+
 ## The `.fusionkit/` folder
 
 Fusion settings live in a committed `.fusionkit/` folder at your repo root. It is **safe to commit**. It stores only the env-var *names* that hold API keys (`keyEnv`), never the secret values.

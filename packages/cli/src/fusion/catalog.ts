@@ -27,8 +27,14 @@ import {
   providerDefaultBaseUrl,
   providerDiscovery
 } from "@routekit/registry";
+import {
+  CLIPROXY_API_KEY_ENV,
+  cliproxyApiKey,
+  cliproxyBaseUrl
+} from "@routekit/accounts";
+import { providerAuthHeaders } from "@routekit/gateway";
 
-import { cliproxyBaseUrl, defaultKeyEnv } from "./env.js";
+import { defaultKeyEnv } from "./env.js";
 import type { PanelProvider } from "./env.js";
 import { LOCAL_CATALOG_REPOS } from "./local-catalog.js";
 import { listOpenAiCompatibleModels } from "./openai-models.js";
@@ -295,7 +301,7 @@ async function fetchOpenAi(): Promise<CatalogModel[]> {
 async function fetchAnthropic(): Promise<CatalogModel[]> {
   const key = process.env[defaultKeyEnv("anthropic") ?? "ANTHROPIC_API_KEY"] ?? "";
   const body = await fetchJson("https://api.anthropic.com/v1/models?limit=100", {
-    "x-api-key": key,
+    ...providerAuthHeaders("x-api-key", key),
     "anthropic-version": "2023-06-01"
   });
   const data = Array.isArray(body.data) ? (body.data as JsonRecord[]) : [];
@@ -311,7 +317,7 @@ async function fetchGoogle(): Promise<CatalogModel[]> {
   const key = process.env[defaultKeyEnv("google") ?? "GEMINI_API_KEY"] ?? "";
   // Key in a header, never the query string: URLs land in logs and traces.
   const body = await fetchJson("https://generativelanguage.googleapis.com/v1beta/models?pageSize=200", {
-    "x-goog-api-key": key
+    ...providerAuthHeaders("x-goog-api-key", key)
   });
   const chatIds = new Set(parseGoogleModels(body));
   const data = Array.isArray(body.models) ? (body.models as JsonRecord[]) : [];
@@ -330,7 +336,10 @@ async function fetchGoogle(): Promise<CatalogModel[]> {
  * like the keyed provider listings). Requires the proxy's ingress key.
  */
 async function fetchCliproxy(): Promise<CatalogModel[]> {
-  const key = process.env[defaultKeyEnv("cliproxy") ?? "CLIPROXY_API_KEY"] ?? "";
+  const key =
+    process.env[defaultKeyEnv("cliproxy") ?? CLIPROXY_API_KEY_ENV] ??
+    cliproxyApiKey() ??
+    "";
   const data = await listOpenAiCompatibleModels({
     baseUrl: cliproxyBaseUrl(),
     apiKey: key
@@ -486,7 +495,7 @@ async function fetchProviderModels(
   timeoutMs: number,
   env: Record<string, string | undefined>
 ): Promise<string[]> {
-  // cliproxy runs locally, so its base URL honors the CLIPROXY_BASE_URL
+  // cliproxy runs locally, so its base URL honors the ROUTEKIT_CLIPROXY_BASE_URL
   // override; every other provider discovers against its registry default.
   const baseUrl = provider === "cliproxy" ? cliproxyBaseUrl(env) : providerDefaultBaseUrl(provider);
   if (baseUrl === undefined) return [];
@@ -506,22 +515,10 @@ async function fetchProviderModels(
   }
 
   const url = `${baseUrl}${discovery.path}`;
-  const headers: Record<string, string> = { ...discovery.extraHeaders };
-  switch (discovery.auth) {
-    case "bearer":
-      headers.authorization = `Bearer ${key}`;
-      break;
-    case "x-api-key":
-      headers["x-api-key"] = key;
-      break;
-    case "x-goog-api-key":
-      headers["x-goog-api-key"] = key;
-      break;
-    default: {
-      const exhaustive: never = discovery.auth;
-      throw new Error(`unknown discovery auth style ${String(exhaustive)}`);
-    }
-  }
+  const headers: Record<string, string> = {
+    ...discovery.extraHeaders,
+    ...providerAuthHeaders(discovery.auth, key)
+  };
   const response = await fetchImpl(url, { headers, signal: AbortSignal.timeout(timeoutMs) });
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
   const json: unknown = await response.json();

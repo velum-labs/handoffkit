@@ -14,7 +14,6 @@ import { DEFAULT_CLOUD_PANEL_MEMBERS } from "@fusionkit/registry";
 import {
   DEFAULT_REASONING_MODEL as REGISTRY_DEFAULT_REASONING_MODEL,
   PREFERRED_LOCAL_MODELS,
-  PROVIDERS,
   defaultKeyEnv as registryDefaultKeyEnv,
   providerDefaultBaseUrl as registryProviderDefaultBaseUrl,
   providerForAuthMode,
@@ -352,21 +351,6 @@ export function providerDefaultBaseUrl(provider: Exclude<PanelProvider, "mlx">):
     throw new Error(`unknown provider ${String(provider)}`);
   }
   return baseUrl;
-}
-
-/**
- * The base URL of the local CLIProxyAPI upstream: the registry-declared
- * `CLIPROXY_BASE_URL` env override when set (a non-default host/port), else the
- * registry default (`http://127.0.0.1:8317`). CLIProxyAPI is a local
- * OpenAI-compatible proxy fronting OAuth subscription accounts; see
- * docs/cliproxy-upstream.md.
- */
-export function cliproxyBaseUrl(env: Record<string, string | undefined> = process.env): string {
-  const info = PROVIDERS.cliproxy;
-  const override = info?.baseUrlEnv !== undefined ? env[info.baseUrlEnv] : undefined;
-  const baseUrl = override !== undefined && override.length > 0 ? override : info?.baseUrl;
-  if (baseUrl === undefined) throw new Error("cliproxy provider has no base URL in the registry");
-  return baseUrl.replace(/\/+$/, "");
 }
 
 /**

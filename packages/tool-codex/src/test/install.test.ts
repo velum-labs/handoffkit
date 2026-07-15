@@ -60,3 +60,20 @@ test("Codex managed install updates and removes only owner-marked config", () =>
     rmSync(home, { recursive: true, force: true });
   }
 });
+
+test("Codex profiles can preserve an opaque model id behind a safe selector", () => {
+  const home = mkdtempSync(join(tmpdir(), "routekit-codex-opaque-"));
+  try {
+    const result = installCodexIntegration({
+      gatewayUrl: "http://127.0.0.1:9999",
+      owner: OWNER,
+      profiles: [{ modelId: "provider/model", profileId: "route-1" }],
+      codexHome: home
+    });
+    assert.deepEqual(result.profiles, ["route-1"]);
+    assert.match(readFileSync(join(home, "route-1.config.toml"), "utf8"), /provider\/model/);
+    assert.equal(existsSync(join(home, "provider", "model.config.toml")), false);
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+});

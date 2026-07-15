@@ -3,12 +3,19 @@
  * the tool, panel, and options. The actual prerequisite check lives in
  * `../shared/preflight.ts`; this computes what to check.
  */
-import { providerKeyProbe } from "@routekit/registry";
+import { cliproxyBaseUrl } from "@routekit/accounts";
+import { probeEndpointHealth } from "@routekit/gateway";
+import type { ModelEndpointConfig } from "@routekit/gateway";
 
 import { toolRegistry } from "../tools.js";
 
-import { cliproxyBaseUrl, defaultKeyEnv, providerDefaultBaseUrl } from "./env.js";
-import type { FusionTool, PanelModelSpec, RunFusionOptions } from "./env.js";
+import { defaultKeyEnv, providerDefaultBaseUrl } from "./env.js";
+import type {
+  FusionTool,
+  PanelModelSpec,
+  PanelProvider,
+  RunFusionOptions
+} from "./env.js";
 import { catalogEntry, detectHost, usableRamGB } from "./local-catalog.js";
 import type { HostInfo } from "./local-catalog.js";
 import { estimateModelSizing } from "./model-sizing.js";
@@ -112,40 +119,42 @@ export async function localPanelMemoryWarning(
   );
 }
 
-/** One key-validation probe: where to call and how to authenticate. */
-type KeyProbe = { url: string; headers: Record<string, string>; invalidStatuses: number[] };
-
-/**
- * Build the cheap "is this key accepted at all" probe for a cloud member from
- * the provider registry's keyProbe metadata (e.g. OpenRouter's /v1/models is
- * public, so its probe targets the key-info endpoint; Google rejects a
- * malformed key with 400 API_KEY_INVALID). Returns undefined for providers
- * without probe metadata (mlx, openai-compatible, subscription auth).
- */
-function keyProbeFor(spec: PanelModelSpec, key: string): KeyProbe | undefined {
-  const provider = spec.provider;
-  if (spec.auth !== undefined || provider === undefined || provider === "mlx") return undefined;
-  const probe = providerKeyProbe(provider);
-  if (probe === undefined) return undefined;
-  const headers: Record<string, string> = { ...probe.extraHeaders };
-  switch (probe.auth) {
-    case "bearer":
-      headers.authorization = `Bearer ${key}`;
-      break;
-    case "x-api-key":
-      headers["x-api-key"] = key;
-      break;
-    case "x-goog-api-key":
-      headers["x-goog-api-key"] = key;
-      break;
+function probeDialect(
+  provider: Exclude<PanelProvider, "mlx">
+): ModelEndpointConfig["dialect"] {
+  switch (provider) {
+    case "anthropic":
+      return "anthropic";
+    case "google":
+      return "google";
+    case "openai":
+    case "openrouter":
+    case "cliproxy":
+    case "openai-compatible":
+      return "openai";
     default: {
-      const exhaustive: never = probe.auth;
-      throw new Error(`unknown probe auth style ${String(exhaustive)}`);
+      const exhaustive: never = provider;
+      throw new Error(`unknown panel provider ${String(exhaustive)}`);
     }
   }
+}
+
+/**
+ * Describe a cloud member for RouteKit's canonical provider-native health
+ * probe. Subscription and local members have no environment key to validate.
+ */
+function keyProbeEndpoint(spec: PanelModelSpec): ModelEndpointConfig | undefined {
+  const provider = spec.provider;
+  if (spec.auth !== undefined || provider === undefined || provider === "mlx") return undefined;
   const base =
     spec.baseUrl ?? (provider === "cliproxy" ? cliproxyBaseUrl() : providerDefaultBaseUrl(provider));
-  return { url: `${base}${probe.path}`, headers, invalidStatuses: [...probe.invalidStatuses] };
+  return {
+    endpointId: spec.id,
+    model: spec.model,
+    provider,
+    baseUrl: base,
+    dialect: probeDialect(provider)
+  };
 }
 
 /**
@@ -163,7 +172,12 @@ export async function validateProviderKeys(
   if (env.FUSIONKIT_SKIP_KEY_VALIDATION === "1") return [];
   const timeoutMs = options.timeoutMs ?? 4000;
   const seen = new Set<string>();
-  const probes: Array<{ keyEnv: string; provider: string; probe: KeyProbe }> = [];
+  const probes: Array<{
+    keyEnv: string;
+    provider: string;
+    endpoint: ModelEndpointConfig;
+    credential: string;
+  }> = [];
   for (const spec of models) {
     const provider = spec.provider ?? "mlx";
     if (provider === "mlx" || spec.auth !== undefined) continue;
@@ -171,24 +185,18 @@ export async function validateProviderKeys(
     if (keyEnv === undefined || seen.has(keyEnv)) continue;
     const key = env[keyEnv];
     if (key === undefined || key.length === 0) continue;
-    const probe = keyProbeFor(spec, key);
-    if (probe === undefined) continue;
+    const endpoint = keyProbeEndpoint(spec);
+    if (endpoint === undefined) continue;
     seen.add(keyEnv);
-    probes.push({ keyEnv, provider, probe });
+    probes.push({ keyEnv, provider, endpoint, credential: key });
   }
   const results = await Promise.all(
-    probes.map(async ({ keyEnv, provider, probe }) => {
-      try {
-        const response = await fetch(probe.url, {
-          headers: probe.headers,
-          signal: AbortSignal.timeout(timeoutMs)
-        });
-        if (probe.invalidStatuses.includes(response.status)) {
-          return `  - ${keyEnv} was rejected by ${provider} (HTTP ${response.status}) — check the key value (and that it has API access)`;
-        }
-      } catch {
-        // Unreachable provider (offline, proxy, DNS): not a key problem.
+    probes.map(async ({ keyEnv, provider, endpoint, credential }) => {
+      const result = await probeEndpointHealth(endpoint, { credential, timeoutMs });
+      if (result.kind === "response" && result.authRejected) {
+        return `  - ${keyEnv} was rejected by ${provider} (HTTP ${result.status}) — check the key value (and that it has API access)`;
       }
+      // Unsupported or unreachable providers are not key problems.
       return undefined;
     })
   );

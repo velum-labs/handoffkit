@@ -25,6 +25,7 @@ import type {
   SessionStore
 } from "@fusionkit/gateway";
 import type { Gateway } from "@routekit/gateway";
+import { cliproxyBaseUrl } from "@routekit/accounts";
 import type { CodexRelayOptions } from "@routekit/accounts";
 import { reservePort, spawnLogged, terminate, waitForHttp } from "@routekit/runtime";
 
@@ -38,7 +39,6 @@ import { PROMPT_CONFIG_KEY, PROMPT_IDS } from "../fusion-config.js";
 import type { PromptOverrides } from "../fusion-config.js";
 
 import {
-  cliproxyBaseUrl,
   defaultKeyEnv,
   fusionkitPyCommand,
   loadEnvFileInto,
@@ -347,7 +347,7 @@ export function routerConfigYaml(input: {
       entry.api_key = "not-needed";
     } else {
       // cliproxy is a locally run proxy, so its default base URL honors the
-      // CLIPROXY_BASE_URL override (a non-default host/port) instead of the
+      // ROUTEKIT_CLIPROXY_BASE_URL override (a non-default host/port) instead of the
       // registry constant; every other provider keeps its registry default.
       const defaultBaseUrl =
         provider === "cliproxy" ? cliproxyBaseUrl() : providerDefaultBaseUrl(provider);

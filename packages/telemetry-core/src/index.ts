@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { dirname } from "node:path";
 
 import { writeFileAtomic } from "@routekit/runtime";
@@ -47,8 +47,10 @@ export function createConsentManager(options: ConsentOptions) {
   };
   const write = (value: ConsentFile): void => {
     const path = options.path();
-    mkdirSync(dirname(path), { recursive: true });
-    writeFileAtomic(path, `${JSON.stringify(value, null, 2)}\n`);
+    mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
+    chmodSync(dirname(path), 0o700);
+    writeFileAtomic(path, `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600 });
+    chmodSync(path, 0o600);
   };
   const resolve = (env: NodeJS.ProcessEnv = process.env): ConsentDecision => {
     if (truthy(env[options.doNotTrackVariable ?? "DO_NOT_TRACK"])) {

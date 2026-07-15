@@ -13,10 +13,10 @@ import { bold, cyan, dim, formatBytes, green, red } from "@routekit/cli-ui";
 import { contextFor, probeBinaryVersion, readPackageVersion } from "@routekit/cli-core";
 import type { CommandContext } from "@routekit/cli-core";
 import type { Presenter, StatusKind } from "@routekit/cli-ui";
+import { cliproxyApiKey, cliproxyBaseUrl } from "@routekit/accounts";
 import { resolveWebSearchExecutor } from "@routekit/gateway";
 
 import {
-  cliproxyBaseUrl,
   DEFAULT_CLOUD_PANEL,
   defaultKeyEnv,
   gitToplevel,
@@ -230,7 +230,7 @@ async function reportCliproxy(
   report: DoctorEntry[],
   config: FusionConfig | undefined
 ): Promise<void> {
-  const keyEnv = defaultKeyEnv("cliproxy") ?? "CLIPROXY_API_KEY";
+  const keyEnv = defaultKeyEnv("cliproxy") ?? "ROUTEKIT_CLIPROXY_API_KEY";
   const referenced = configuredPanels(config).some((spec) => spec.provider === "cliproxy");
   if (!keyPresent(keyEnv) && !referenced) return;
 
@@ -242,7 +242,7 @@ async function reportCliproxy(
   };
   const probe = await probeOpenAiCompatibleModels({
     baseUrl: base,
-    apiKey: process.env[keyEnv] ?? "",
+    apiKey: process.env[keyEnv] ?? cliproxyApiKey() ?? "",
     timeoutMs: 2500
   });
   switch (probe.kind) {
@@ -267,7 +267,7 @@ async function reportCliproxy(
       return;
     }
     case "unreachable": {
-      const hint = "start CLIProxyAPI (see docs/cliproxy-upstream.md), or point CLIPROXY_BASE_URL at it";
+      const hint = "start CLIProxyAPI (see docs/cliproxy-upstream.md), or point ROUTEKIT_CLIPROXY_BASE_URL at it";
       presenter.status("fail", `not reachable at ${base}`, undefined, hint);
       push({ label: "cliproxy reachable", ok: false, detail: "unreachable", hint });
       return;

@@ -37,12 +37,28 @@ export const modelEndpointSchema = z
   })
   .strict();
 
+const subscriptionAccountPolicySchema = z
+  .object({
+    enabled: z.boolean().default(true),
+    strategy: z.enum(["sticky", "round_robin", "capacity_weighted"]).default("sticky"),
+    switchThreshold: z.number().min(0.01).max(1).default(0.9),
+    probeIntervalMs: z.number().int().nonnegative().optional()
+  })
+  .strict();
+
 export const routerConfigSchema = z
   .object({
     endpoints: z.array(modelEndpointSchema).min(1),
     strategy: z.enum(["sticky", "round_robin", "capacity_weighted"]).default("capacity_weighted"),
     cooldownMs: z.number().int().nonnegative().default(30_000),
-    defaultEndpointId: z.string().min(1).optional()
+    defaultEndpointId: z.string().min(1).optional(),
+    accounts: z
+      .object({
+        claudeCode: subscriptionAccountPolicySchema.optional(),
+        codex: subscriptionAccountPolicySchema.optional()
+      })
+      .strict()
+      .optional()
   })
   .strict();
 

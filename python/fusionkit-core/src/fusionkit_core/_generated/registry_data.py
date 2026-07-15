@@ -100,8 +100,8 @@ REGISTRY: Final[dict[str, Any]] = {
         "cliproxy": {
             "$comment": "CLIProxyAPI (github.com/router-for-me/CLIProxyAPI): a local OpenAI-compatible proxy fronting OAuth subscription accounts (Codex, Claude Code, Gemini/Antigravity, Grok, Kimi) with multi-account rotation. Personal/local use only.",
             "baseUrl": "http://127.0.0.1:8317",
-            "keyEnv": "CLIPROXY_API_KEY",
-            "baseUrlEnv": "CLIPROXY_BASE_URL",
+            "keyEnv": "ROUTEKIT_CLIPROXY_API_KEY",
+            "baseUrlEnv": "ROUTEKIT_CLIPROXY_BASE_URL",
             "apiCompatibility": "openai-chat-completions",
             "keyProbe": {
                 "path": "/v1/models",
@@ -146,7 +146,7 @@ REGISTRY: Final[dict[str, Any]] = {
         "claude-code": {
             "provider": "anthropic",
             "credentialsPath": "~/.claude/.credentials.json",
-            "accountsDirectory": "~/.fusionkit/subscriptions/claude-code",
+            "accountsDirectory": "~/.routekit/subscriptions/claude-code",
             "keychainService": "Claude Code-credentials",
             "defaultModel": "claude-sonnet-4-5",
             "oauthBetaHeader": "oauth-2025-04-20",
@@ -170,7 +170,7 @@ REGISTRY: Final[dict[str, Any]] = {
         "codex": {
             "provider": "codex",
             "credentialsPath": "~/.codex/auth.json",
-            "accountsDirectory": "~/.fusionkit/subscriptions/codex",
+            "accountsDirectory": "~/.routekit/subscriptions/codex",
             "configPath": "~/.codex/config.toml",
             "modelsCachePath": "~/.codex/models_cache.json",
             "authFileName": "auth.json",

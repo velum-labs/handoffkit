@@ -5,6 +5,20 @@ description: Install the CLI and the tools it orchestrates.
 
 ## Install the CLI
 
+For standalone routing without the ensemble runtime, install RouteKit:
+
+```bash
+npm install -g @routekit/cli
+routekit config init
+routekit doctor
+```
+
+This provides `routekit` and requires neither the FusionKit package nor its
+Python executable. RouteKit uses configured remote endpoints and does not
+download or start local models.
+
+For model ensembles, install FusionKit:
+
 ```bash
 npm install -g @fusionkit/cli
 ```

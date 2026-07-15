@@ -23,7 +23,8 @@ export const CANONICAL_SHARED_PACKAGES = new Map([
   ["packages/tool-codex", "@routekit/tool-codex"],
   ["packages/tool-claude", "@routekit/tool-claude"],
   ["packages/tool-cursor", "@routekit/tool-cursor"],
-  ["packages/tool-opencode", "@routekit/tool-opencode"]
+  ["packages/tool-opencode", "@routekit/tool-opencode"],
+  ["packages/routekit-cli", "@routekit/cli"]
 ]);
 
 export function canonicalSharedPackageViolations(manifests) {

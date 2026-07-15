@@ -56,6 +56,9 @@ importers:
       '@routekit/runtime':
         specifier: workspace:*
         version: link:../runtime-utils
+      yaml:
+        specifier: 2.9.0
+        version: 2.9.0
       zod:
         specifier: 4.4.3
         version: 4.4.3
@@ -343,6 +346,54 @@ importers:
         version: link:../contracts
 
   packages/registry: {}
+
+  packages/routekit-cli:
+    dependencies:
+      '@routekit/accounts':
+        specifier: workspace:*
+        version: link:../accounts
+      '@routekit/cli-core':
+        specifier: workspace:*
+        version: link:../cli-core
+      '@routekit/cli-ui':
+        specifier: workspace:*
+        version: link:../cli-ui
+      '@routekit/config-core':
+        specifier: workspace:*
+        version: link:../config-core
+      '@routekit/gateway':
+        specifier: workspace:*
+        version: link:../model-gateway
+      '@routekit/registry':
+        specifier: workspace:*
+        version: link:../routekit-registry
+      '@routekit/runtime':
+        specifier: workspace:*
+        version: link:../runtime-utils
+      '@routekit/telemetry-core':
+        specifier: workspace:*
+        version: link:../telemetry-core
+      '@routekit/tool-claude':
+        specifier: workspace:*
+        version: link:../tool-claude
+      '@routekit/tool-codex':
+        specifier: workspace:*
+        version: link:../tool-codex
+      '@routekit/tool-cursor':
+        specifier: workspace:*
+        version: link:../tool-cursor
+      '@routekit/tool-opencode':
+        specifier: workspace:*
+        version: link:../tool-opencode
+      '@routekit/tools':
+        specifier: workspace:*
+        version: link:../tools
+      commander:
+        specifier: 14.0.3
+        version: 14.0.3
+      yaml:
+        specifier: 2.9.0
+        version: 2.9.0
 
   packages/routekit-registry: {}
 

@@ -60,7 +60,7 @@ test("specForAuthChoice maps API-key providers to a keyEnv, no auth", () => {
     id: "cp",
     model: "gemini-3.1-pro-preview",
     provider: "cliproxy",
-    keyEnv: "CLIPROXY_API_KEY"
+    keyEnv: "ROUTEKIT_CLIPROXY_API_KEY"
   });
 });
 
@@ -91,10 +91,10 @@ test("buildAuthOptions always offers API-key providers, cliproxy, and local", as
 
 test("buildAuthOptions cliproxy hint reflects the ingress key env", async () => {
   process.env.HOME = freshHome();
-  const set = (await buildAuthOptions({ CLIPROXY_API_KEY: "x" })).find((o) => o.value === "cliproxy");
+  const set = (await buildAuthOptions({ ROUTEKIT_CLIPROXY_API_KEY: "x" })).find((o) => o.value === "cliproxy");
   const unset = (await buildAuthOptions({})).find((o) => o.value === "cliproxy");
   assert.match(set?.hint ?? "", /is set/);
-  assert.match(unset?.hint ?? "", /set CLIPROXY_API_KEY/);
+  assert.match(unset?.hint ?? "", /set ROUTEKIT_CLIPROXY_API_KEY/);
 });
 
 test("buildAuthOptions hint reflects whether the API key env is set", async () => {
