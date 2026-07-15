@@ -1,6 +1,26 @@
 # Experiment Journal
 
 ## 2026-07-15 — alen (via agent)
+Deep e2e audit found the dominant flaw: shared max_tokens=16384 truncated
+reasoning models to EMPTY code on most shards (r1 72%, kimi26 68%, glm52 61%,
+kimikt 59%, nemotron3s 52%, dsv4pro 40%, qwen3t 28% — finish_reason=length).
+e002's open floor + complementarity matrix are invalid for those seven; e003's
+pair kernels inherited a crippled r1 partner, so only its self-diversity
+no-gain finding stands. Still valid: q37max~GPT-5.5 parity (both untruncated).
+Any re-screen must use registry per-endpoint budgets (32k/64k) and adapter v2.
+The thinking-32k report had already flagged kimi truncation — check priors.
+
+## 2026-07-15 — alen (via agent)
+Grading audit after e003's suspicious zero-headroom result: the 8 s wall clock
+undercut the 12 s CPU rlimit (environment-sensitive TLE of correct code), and
+12 manifest instances are exact-match-unfair special-judge problems. A
+zero-spend 30 s re-grade flipped only 10/478 unresolved shards, symmetrically:
+e002 parity and e003 no-headroom conclusions both survive. Adapter v2 (30 s
+wall, parallel sample draws, version bump) ships with
+manifests/special_judge_exclusions.txt — use both for all future sweeps;
+v1/v2 shard results must not be mixed in paired tests.
+
+## 2026-07-15 — alen (via agent)
 e003 analyzed at ~$22: every kernel (exec-select, repair, self-MoA,
 judge-select, judge-synth on q37+r1) reproduced solo qwen3.7-max's exact pass
 pattern — zero discordant wins at rung 25, all p=1.0. Fusion has no headroom

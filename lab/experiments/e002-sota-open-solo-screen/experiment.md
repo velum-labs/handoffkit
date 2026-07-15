@@ -43,6 +43,19 @@ both 37.3%; the rest 13.6-32.7%, all Wilson-dominated by qwen3.7-max.
 Residual errors: 15/1,430 provider timeouts after retries (10 on r1).
 Actual spend $52.40 of $65. Grafana run_id e002-sota-open-solo-screen;
 store s3://hypergrid-batch-052777341990-us-east-1/runs/e002-sota-open-solo-screen/.
+Erratum 2026-07-15: the 8 s grading wall clock sat below the 12 s CPU rlimit
+and TLE'd some correct code on 2-vCPU workers. A zero-spend re-grade at 30 s
+flipped 6 e002 outcomes (gpt55 46/60 = 76.7%, q37max 79/106 = 74.5%; paired
+1/1, p=1.0 — parity unchanged). 6 dev + 6 holdout instances are "any valid
+answer" problems unfair under exact match
+(manifests/special_judge_exclusions.txt); adapter v2 fixes the wall clock.
+Erratum 2 (2026-07-15): the shared max_tokens=16384 truncated reasoning
+models whose providers count thinking tokens against the cap — r1 72%,
+kimi26 68%, glm52 61%, kimikt 59%, nemotron3s 52%, dsv4pro 40%, qwen3t 28%
+of shards ended finish_reason=length, almost all with empty code. The open
+floor and the complementarity matrix are INVALID for those seven models;
+the q37max-vs-GPT-5.5 parity claim is unaffected (both <2% truncated).
+Re-screen requires registry per-endpoint budgets (32k/64k).
 
 ## Decision
 The <2pp saturation rule fired at the floor: qwen3.7-max is at GPT-5.5 parity

@@ -46,6 +46,19 @@ self-MoA 14/21 vs 15/21 (0/1); all McNemar p=1.0. Six exec shards never
 graded (sequential 3x1800 s sampling exceeds the 3600 s Batch wall clock) —
 these are the hardest instances and a documented limitation. Spend: $10.35
 metered + ~$12 serve-internal estimate = ~$22 of $65.
+Erratum 2026-07-15: a grading audit (8 s wall < 12 s CPU rlimit; TLE'd correct
+code on 2-vCPU workers) re-graded all unresolved shards at 30 s: 4 e003
+outcomes flipped, but every flip was concordant with solo — the gate still
+shows zero discordant kernel wins, so the no-headroom Decision stands.
+arc181_c is a special-judge instance that inverted exec-select's public
+signal; excluded going forward. Adapter v2 also parallelizes sample draws.
+Erratum 2 (2026-07-15): r1 was selected as panel partner from e002's
+complementarity matrix, which is invalid — r1 was token-truncated to empty
+code on 71% of e002 shards, and the same 16384 cap applied inside this
+experiment's serve configs. The pair-kernel cells (judge-select/judge-synth)
+therefore tested a crippled panel; their no-gain result is uninformative.
+The self-diversity no-gain result on q37max (exec-select, self-MoA) stands —
+q37max is not truncation-affected.
 
 ## Decision
 No promotion: every kernel has <2pp oracle headroom over its best member (the
