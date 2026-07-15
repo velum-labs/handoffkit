@@ -26,6 +26,8 @@ instance pairing) with max_tokens=65536, attempts=2, request_timeout_s=1500
 re-billed: anchors and the four untruncated solos come from the e002 store,
 re-graded locally at the v2 wall clock (zero spend) for like-for-like pairing.
 The six special-judge dev instances run but are excluded from analysis.
+2026-07-15 scope trim: qwen3t cell cancelled before start — mid-run projection
+hit the $45 ceiling; qwen3t was the least truncation-damaged of the seven.
 
 ## Out of scope
 Anchor re-runs, the four untruncated e002 solos, fused cells, prompt tuning,
