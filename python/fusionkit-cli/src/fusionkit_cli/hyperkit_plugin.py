@@ -20,6 +20,8 @@ from typing import BinaryIO
 import yaml
 from hyperkit.core.models import SUTTarget, TopologySpec
 
+_FUSION_ALIASES = {"heuristic", "panel", "self", "single"}
+
 
 def _free_port() -> int:
     with socket.socket() as sock:
@@ -69,7 +71,7 @@ class FusionKitServeSUT:
                 with urllib.request.urlopen(f"{url}/v1/models", timeout=1.0):
                     return SUTTarget(
                         base_url=f"{url}/v1",
-                        model=str(spec.params.get("model", "fusionkit/panel")),
+                        model=self._target_model(spec, config),
                     )
             except OSError:
                 time.sleep(1)
@@ -115,6 +117,19 @@ class FusionKitServeSUT:
         path = workdir / "fusionkit-config.yaml"
         path.write_text(yaml.safe_dump(payload, sort_keys=False))
         return path
+
+    def _target_model(self, spec: TopologySpec, config: Path) -> str:
+        explicit = spec.params.get("model")
+        if explicit is not None:
+            return str(explicit)
+
+        payload = yaml.safe_load(config.read_text(encoding="utf-8")) or {}
+        if not isinstance(payload, dict):
+            raise ValueError("fusionkit config must be a mapping")
+        mode = str(payload.get("default_mode", "heuristic"))
+        if mode not in _FUSION_ALIASES:
+            raise ValueError(f"unsupported fusionkit default_mode: {mode!r}")
+        return f"fusionkit/{mode}"
 
 
 def factory() -> FusionKitServeSUT:

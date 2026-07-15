@@ -244,20 +244,14 @@ class FusionRunManager:
             analysis: FusionAnalysis | None = None
             answer: str
             fused_synthesis = None
-            selected_trajectory_id = (
-                trajectory_infos[0].trajectory_id if trajectory_infos else None
-            )
+            selected_trajectory_id: str | None = None
             if selected_mode == "single":
                 answer = trajectories[0].content if trajectories else ""
-            else:
-                first_succeeded = next(
-                    (t for t in trajectories if t.status == "succeeded"),
-                    trajectories[0] if trajectories else None,
-                )
-                if first_succeeded is not None:
+                if trajectories:
                     selected_trajectory_id = _trajectory_id_for_source(
-                        trajectory_infos, first_succeeded.id
+                        trajectory_infos, trajectories[0].id
                     )
+            else:
                 await asyncio.to_thread(self._append_state, summary, "judging")
 
                 def after_judge(judge_response: ModelResponse | None) -> None:
@@ -309,6 +303,14 @@ class FusionRunManager:
                 fused_synthesis = (
                     fused.trajectory.synthesis if fused.trajectory is not None else None
                 )
+                if (
+                    fused_synthesis is not None
+                    and fused_synthesis.selected_trajectory_id is not None
+                ):
+                    selected_trajectory_id = _trajectory_id_for_source(
+                        trajectory_infos,
+                        fused_synthesis.selected_trajectory_id,
+                    )
 
             final_artifact = await asyncio.to_thread(
                 self.artifacts.write_text,
