@@ -314,6 +314,7 @@ export class FusionSessionManager {
     reasoning?: Record<string, unknown>;
     provider?: Record<string, unknown>;
     usage?: Record<string, unknown>;
+    parallelToolCalls?: boolean;
     k?: number;
     signal?: AbortSignal;
   }): { candidates: Promise<WireTrajectory[]>; abort: (reason?: unknown) => void } {
@@ -364,6 +365,9 @@ export class FusionSessionManager {
       ...(input.reasoning !== undefined ? { reasoning: input.reasoning } : {}),
       ...(input.provider !== undefined ? { provider: input.provider } : {}),
       ...(input.usage !== undefined ? { usage: input.usage } : {}),
+      ...(input.parallelToolCalls !== undefined
+        ? { parallelToolCalls: input.parallelToolCalls }
+        : {}),
       ...(input.k !== undefined ? { k: input.k } : {})
     });
     input.session.turns.set(input.turn, candidates);

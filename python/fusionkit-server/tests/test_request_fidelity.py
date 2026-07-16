@@ -21,6 +21,7 @@ REQUEST_CONTROLS = {
     },
     "reasoning": {"effort": "high"},
     "usage": {"include": True},
+    "parallel_tool_calls": False,
 }
 
 

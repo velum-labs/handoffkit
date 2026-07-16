@@ -67,6 +67,7 @@ test("a k=1 route passes k + caller tools to the panel and step mode to the fuse
     reasoning: { effort: "high" },
     provider: { order: ["FirstParty"], allow_fallbacks: false },
     usage: { include: true },
+    parallel_tool_calls: false,
     fusion: { include_evidence: true },
     tools: TOOLS,
     tool_choice: "auto"
@@ -88,6 +89,7 @@ test("a k=1 route passes k + caller tools to the panel and step mode to the fuse
     allow_fallbacks: false
   });
   assert.deepEqual(input?.usage, { include: true });
+  assert.equal(input?.parallelToolCalls, false);
 
   assert.deepEqual(recorded.stepBodies[0], {
     model: "fusion-step",
@@ -101,6 +103,7 @@ test("a k=1 route passes k + caller tools to the panel and step mode to the fuse
     reasoning: { effort: "high" },
     provider: { order: ["FirstParty"], allow_fallbacks: false },
     usage: { include: true },
+    parallel_tool_calls: false,
     include_evidence: true,
     tools: TOOLS,
     tool_choice: "auto",

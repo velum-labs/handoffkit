@@ -43,6 +43,7 @@ export type ProposalPanelOptions = {
   reasoning?: Record<string, unknown>;
   provider?: Record<string, unknown>;
   usage?: Record<string, unknown>;
+  parallelToolCalls?: boolean;
   /** Fallback OpenAI-compatible base URL (the shared router). */
   fusionBackendUrl: string;
   /** Per-member endpoint base URLs keyed by `EnsembleModel.id`. */
@@ -211,6 +212,9 @@ async function proposeOne(
         ...(options.reasoning !== undefined ? { reasoning: options.reasoning } : {}),
         ...(options.provider !== undefined ? { provider: options.provider } : {}),
         ...(options.usage !== undefined ? { usage: options.usage } : {}),
+        ...(options.parallelToolCalls !== undefined
+          ? { parallel_tool_calls: options.parallelToolCalls }
+          : {}),
         ...(options.tools !== undefined ? { tools: options.tools } : {}),
         ...(options.toolChoice !== undefined ? { tool_choice: options.toolChoice } : {}),
         stream: false

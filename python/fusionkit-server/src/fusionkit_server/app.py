@@ -141,6 +141,7 @@ class FusionRequest(BaseModel):
     # configured endpoint); the fusion path ignores them.
     tools: list[dict[str, Any]] | None = None
     tool_choice: str | dict[str, Any] | None = None
+    parallel_tool_calls: bool | None = None
     fusion: FusionOptions = Field(default_factory=FusionOptions)
 
     @model_validator(mode="after")
@@ -228,6 +229,7 @@ class FuseTrajectoriesRequest(BaseModel):
     seed: int | None = None
     tools: list[dict[str, Any]] | None = None
     tool_choice: str | dict[str, Any] | None = None
+    parallel_tool_calls: bool | None = None
     judge_model: str | None = None
     synthesizer_model: str | None = None
     # Per-request system-prompt overrides (a named ensemble's committed
@@ -825,6 +827,7 @@ def _request_extra(
             "provider": request.provider,
             "reasoning": request.reasoning,
             "usage": request.usage,
+            "parallel_tool_calls": request.parallel_tool_calls,
         }.items()
         if value is not None
     }

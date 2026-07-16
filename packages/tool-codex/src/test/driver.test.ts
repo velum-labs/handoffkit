@@ -66,6 +66,18 @@ test("codex driver pins custom gateways to HTTP Responses", () => {
       }
     }
   });
+
+  const ambient = driver.configSchema.parse({
+    command: repo.command,
+    provider: { baseUrl: "http://127.0.0.1:9000/v1" }
+  });
+  const ambientConfig = codexOptionsFor(ambient, undefined).config as {
+    model_providers?: Record<string, { env_key?: string }>;
+  };
+  assert.equal(
+    ambientConfig.model_providers?.["fusionkit-sdk-http"]?.env_key,
+    "OPENAI_API_KEY"
+  );
 });
 
 driverContractSuite({

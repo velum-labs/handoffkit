@@ -293,6 +293,9 @@ export class FusionBackend implements Backend {
       ...(req.chat.reasoning !== undefined ? { reasoning: req.chat.reasoning } : {}),
       ...(req.chat.provider !== undefined ? { provider: req.chat.provider } : {}),
       ...(req.chat.usage !== undefined ? { usage: req.chat.usage } : {}),
+      ...(req.chat.parallel_tool_calls !== undefined
+        ? { parallelToolCalls: req.chat.parallel_tool_calls }
+        : {}),
       ...(isFiniteK(route?.k) ? { k: route.k } : {}),
       ...(signal !== undefined ? { signal } : {})
     });

@@ -52,6 +52,7 @@ export type PanelRoundOptions = Omit<FusionPanelOptions, "repo" | "outputRoot" |
   reasoning?: Record<string, unknown>;
   provider?: Record<string, unknown>;
   usage?: Record<string, unknown>;
+  parallelToolCalls?: boolean;
   /** The caller's tool definitions / tool_choice, verbatim (k = 1 only). */
   tools?: unknown;
   toolChoice?: unknown;
@@ -91,6 +92,9 @@ export async function runPanelRound(options: PanelRoundOptions): Promise<WireTra
       ...(options.reasoning !== undefined ? { reasoning: options.reasoning } : {}),
       ...(options.provider !== undefined ? { provider: options.provider } : {}),
       ...(options.usage !== undefined ? { usage: options.usage } : {}),
+      ...(options.parallelToolCalls !== undefined
+        ? { parallelToolCalls: options.parallelToolCalls }
+        : {}),
       ...(options.modelEndpoints !== undefined ? { modelEndpoints: options.modelEndpoints } : {}),
       ...(options.fusionApiKey !== undefined ? { fusionApiKey: options.fusionApiKey } : {}),
       ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),

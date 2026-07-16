@@ -95,6 +95,7 @@ test("members receive the caller's messages and tools verbatim, one completion e
       reasoning: { effort: "high" },
       provider: { order: ["FirstParty"], allow_fallbacks: false },
       usage: { include: true },
+      parallelToolCalls: false,
       fusionBackendUrl: endpoint.url
     });
 
@@ -114,6 +115,7 @@ test("members receive the caller's messages and tools verbatim, one completion e
         allow_fallbacks: false
       });
       assert.deepEqual(request.body.usage, { include: true });
+      assert.equal(request.body.parallel_tool_calls, false);
       assert.equal(request.body.stream, false);
     }
     assert.deepEqual(new Set(endpoint.requests.map((r) => r.body.model)), new Set(["alpha", "beta"]));

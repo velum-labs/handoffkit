@@ -491,6 +491,7 @@ export async function startFusionStepGateway(input: {
     reasoning,
     provider,
     usage,
+    parallelToolCalls,
     k,
     signal
   }) => {
@@ -565,6 +566,7 @@ export async function startFusionStepGateway(input: {
         ...(reasoning !== undefined ? { reasoning } : {}),
         ...(provider !== undefined ? { provider } : {}),
         ...(usage !== undefined ? { usage } : {}),
+        ...(parallelToolCalls !== undefined ? { parallelToolCalls } : {}),
         ...(k !== undefined ? { k } : {}),
         ...(config.modelEndpoints !== undefined ? { modelEndpoints: config.modelEndpoints } : {}),
         ...(config.fusionApiKey !== undefined ? { fusionApiKey: config.fusionApiKey } : {}),

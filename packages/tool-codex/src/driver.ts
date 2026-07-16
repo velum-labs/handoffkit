@@ -125,6 +125,10 @@ export function codexOptionsFor(
       "OPENAI_API_KEY"
     ]
   });
+  const providerEnvKey =
+    apiKey !== undefined
+      ? "CODEX_API_KEY"
+      : (config.provider.apiKeyEnvName ?? "OPENAI_API_KEY");
   return {
     codexPathOverride: config.command,
     ...(config.provider.baseUrl !== undefined
@@ -138,7 +142,7 @@ export function codexOptionsFor(
                 wire_api: "responses",
                 requires_openai_auth: false,
                 supports_websockets: false,
-                env_key: "CODEX_API_KEY"
+                env_key: providerEnvKey
               }
             }
           }

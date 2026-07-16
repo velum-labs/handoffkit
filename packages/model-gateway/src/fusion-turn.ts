@@ -313,6 +313,9 @@ export class FusionTurnAssembler {
     if (req.chat.reasoning !== undefined) stepBody.reasoning = req.chat.reasoning;
     if (req.chat.provider !== undefined) stepBody.provider = req.chat.provider;
     if (req.chat.usage !== undefined) stepBody.usage = req.chat.usage;
+    if (req.chat.parallel_tool_calls !== undefined) {
+      stepBody.parallel_tool_calls = req.chat.parallel_tool_calls;
+    }
     if (req.chat.fusion?.include_evidence !== undefined) {
       stepBody.include_evidence = req.chat.fusion.include_evidence;
     }
