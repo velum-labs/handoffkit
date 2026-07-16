@@ -324,7 +324,7 @@ Use it with the narrative references when you need to find the module that owns 
 ### `packages/testkit`
 
 - `packages/testkit/src/behaviors.ts`: SimToolCall (type), SimError (type), SimBehavior (type), SimDialect (type), SimJournalEntry (type), SimBehaviorInput (type), asBehavior (function), simErrors (const)
-- `packages/testkit/src/clis.ts`: CliRunResult (type), cliAvailable (function), cliSkip (function), runClaudeCode (function), runCodexExec (function), runOpenCode (function)
+- `packages/testkit/src/clis.ts`: CliRunResult (type), cliAvailable (function), cliSkip (function), claudeCodeEnv (function), runClaudeCode (function), codexExecConfigToml (function), runCodexExec (function), openCodeInvocation (function), runOpenCode (function)
 - `packages/testkit/src/doors.ts`: DoorToolCall (type), DoorToolExchange (type), DoorRequestInput (type), DoorProfile (type), DOOR_PROFILES (const), callDoor (function), doorFrames (function)
 - `packages/testkit/src/engine.ts`: EngineHandle (type), startEngine (function)
 - `packages/testkit/src/proc.ts`: SpawnedProcess (type), spawnCaptured (function), waitForHttpReady (function)
