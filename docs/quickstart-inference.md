@@ -95,8 +95,8 @@ continue the turn, exactly as you would against the OpenAI API.
 ## Notes
 
 - **Auth.** Add `--auth-token <token>` to require `Authorization: Bearer <token>`
-  (or `x-api-key: <token>`) on every request. This is recommended if you bind beyond
-  loopback.
+  (or `x-api-key: <token>`) on every request. It is required when `--host` binds
+  beyond loopback.
 - **Routing.** Provider-facing configuration is `.routekit/router.yaml`; see
   [configuration](configuration.md).
 - **Cross-platform.** The cloud endpoint works on Linux, Windows, and macOS.

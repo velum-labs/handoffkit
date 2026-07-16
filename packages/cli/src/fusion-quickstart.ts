@@ -12,7 +12,7 @@ import { fusionModelId } from "@fusionkit/registry";
 import { shutdownFusionTracing } from "@fusionkit/tracing";
 import type { HarnessKind } from "@routekit/harness-core";
 import { loadRouterConfig } from "@routekit/config";
-import { registerCleanup } from "@routekit/runtime";
+import { registerCleanup, trimTrailingSlashes } from "@routekit/runtime";
 import type {
   AgentProfile,
   ToolLaunchContext,
@@ -115,7 +115,7 @@ async function externalEndpointIds(
   url: string,
   token?: string
 ): Promise<Set<string>> {
-  const root = url.replace(/\/v1\/?$/, "").replace(/\/+$/, "");
+  const root = trimTrailingSlashes(url.replace(/\/v1\/?$/, ""));
   const response = await fetch(`${root}/v1/models`, {
     headers:
       token !== undefined ? { authorization: `Bearer ${token}` } : undefined,
@@ -173,7 +173,7 @@ async function resolveRouter(
   }
   return {
     kind: "external",
-    url: router.url.replace(/\/v1\/?$/, "").replace(/\/+$/, ""),
+    url: trimTrailingSlashes(router.url.replace(/\/v1\/?$/, "")),
     ...(authToken !== undefined ? { authToken } : {})
   };
 }

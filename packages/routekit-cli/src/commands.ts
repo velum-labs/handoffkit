@@ -108,7 +108,7 @@ function registerServe(program: Command): void {
     .description("serve the configured model router in the foreground")
     .option("--host <host>", "bind host", "127.0.0.1")
     .option("--port <port>", "bind port", "8080")
-    .option("--auth-token <token>", "require a bearer or x-api-key token")
+    .option("--auth-token <token>", "authentication token (required for non-loopback hosts)")
     .option("--no-portless", "disable the stable local route")
     .action(
       async (

@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 
+import pytest
 from fusionkit_core.artifacts import LocalArtifactStore, hash_bytes, hash_text
 from fusionkit_core.metrics import JsonlRunLogger, RunRecord
 from fusionkit_core.router import FusionModeRouter
@@ -64,6 +66,40 @@ def test_local_artifact_store_writes_and_returns_ref(tmp_path) -> None:
     assert ref.hash == hash_text("hello world")
     assert ref.uri is not None
     assert Path(ref.uri).read_text(encoding="utf-8") == "hello world"
+    assert Path(ref.uri).relative_to(tmp_path / "runs").parts == (
+        hashlib.sha256(b"run_1").hexdigest(),
+        "artifacts",
+        f"{hashlib.sha256(b'artifact_1').hexdigest()}.txt",
+    )
+
+
+def test_local_artifact_store_hashes_malicious_logical_ids(tmp_path) -> None:
+    root = tmp_path / "runs"
+    store = LocalArtifactStore(root)
+    artifact_id = "../../../../outside/artifact"
+    ref = store.write_text("../../outside/run", artifact_id, "transcript", "contained")
+
+    assert ref.artifact_id == artifact_id
+    assert ref.uri is not None
+    path = Path(ref.uri)
+    assert path.is_relative_to(root)
+    assert path.parent.parent.name == hashlib.sha256(b"../../outside/run").hexdigest()
+    assert path.name == f"{hashlib.sha256(artifact_id.encode()).hexdigest()}.txt"
+    assert not (tmp_path / "outside").exists()
+
+
+@pytest.mark.parametrize(
+    "suffix",
+    ["", "txt", "../escape", ".txt/../../escape", "/tmp/escape", ".json\n", "." + "a" * 17],
+)
+def test_local_artifact_store_rejects_malicious_suffixes(tmp_path, suffix: str) -> None:
+    root = tmp_path / "runs"
+    store = LocalArtifactStore(root)
+
+    with pytest.raises(ValueError, match="artifact suffix"):
+        store.write_text("run", "artifact", "transcript", "must not be written", suffix=suffix)
+
+    assert list(root.iterdir()) == []
 
 
 def test_metrics_logger_appends_jsonl_records(tmp_path) -> None:

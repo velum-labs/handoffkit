@@ -6,6 +6,7 @@ import { loadFusionConfig } from "@fusionkit/config";
 import type { EnsembleConfig } from "@fusionkit/config";
 import { loadRouterConfig } from "@routekit/config";
 import { contextFor, probeBinaryVersion } from "@routekit/cli-core";
+import { trimTrailingSlashes } from "@routekit/runtime";
 
 import { gitToplevel } from "../fusion/env.js";
 import { hasBinary, INSTALL_HINTS } from "../shared/preflight.js";
@@ -91,9 +92,7 @@ async function runDoctor(command: Command): Promise<number> {
             hint: `export ${config.router.authEnv}=...`
           });
         }
-        const root = config.router.url
-          .replace(/\/v1\/?$/, "")
-          .replace(/\/+$/, "");
+        const root = trimTrailingSlashes(config.router.url.replace(/\/v1\/?$/, ""));
         const response = authReady
           ? await fetch(`${root}/v1/models`, {
               headers:

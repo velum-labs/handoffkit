@@ -13,6 +13,7 @@ import type {
   ToolPolicyDecision
 } from "@fusionkit/protocol";
 import type { JsonValue } from "@routekit/contracts";
+import { trimTrailingSlashes } from "@routekit/runtime";
 
 import type { ToolExecutor } from "./tool-executor.js";
 
@@ -93,7 +94,7 @@ export class FusionKitToolExecutorClient {
   private readonly authToken?: string;
 
   constructor(baseUrl: string, authToken?: string) {
-    this.baseUrl = baseUrl.replace(/\/$/, "");
+    this.baseUrl = trimTrailingSlashes(baseUrl);
     this.authToken = authToken;
   }
 

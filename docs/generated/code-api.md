@@ -536,9 +536,11 @@ No module JSDoc was found.
   Acquire an exclusive lock file. Creation is atomic; callers own retry policy and must release the returned handle.
 - `export function definedEnv(env: EnvInput): Record<string, string> ...`
 - `export function trimTrailingSlashes(value: string): string ...`
-  Strip trailing "/" characters in linear time (a `/\/+$/` regex backtracks polynomially on adversarial input, which code scanning rightly flags).
+  Strip trailing "/" characters in linear time. A quantified end-anchored regular expression can backtrack polynomially on adversarial input.
 - `export function trimSurroundingSlashes(value: string): string ...`
 - `export function normalizeApiBaseUrl(baseUrl: string): string ...`
+- `export function isLoopbackHost(host: string): boolean ...`
+- `export function assertAuthenticatedBind(host: string, authToken: string | undefined): void ...`
 - `export type BuildChildEnvInput ...`
 - `export function buildChildEnv(input: BuildChildEnvInput ...`
   Build a child environment from an explicit allowlist instead of spreading the entire parent environment: a harness CLI driven headlessly must not inherit every credential the parent process happens to hold. The baseline covers system plumbing (PATH/HOME/locale/TLS/proxy); everything else must be named by the caller.

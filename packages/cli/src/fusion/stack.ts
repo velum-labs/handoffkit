@@ -19,6 +19,7 @@ import {
   reservePort,
   spawnLogged,
   terminate,
+  trimTrailingSlashes,
   waitForHttp
 } from "@routekit/runtime";
 import { stringify } from "yaml";
@@ -137,7 +138,7 @@ export function sidecarConfigYaml(input: {
   synthesizer?: string;
   prompts?: Record<string, string>;
 }): string {
-  const routekitUrl = input.routekitUrl.replace(/\/+$/, "");
+  const routekitUrl = trimTrailingSlashes(input.routekitUrl);
   return (
     stringify({
       routekit_url: routekitUrl,

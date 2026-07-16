@@ -34,6 +34,20 @@ async function readAll(req: IncomingMessage): Promise<Buffer> {
   return Buffer.concat(chunks);
 }
 
+async function captureStderr<T>(run: () => Promise<T>): Promise<{ result: T; stderr: string }> {
+  const original = process.stderr.write.bind(process.stderr);
+  let stderr = "";
+  process.stderr.write = ((chunk: string | Uint8Array): boolean => {
+    stderr += typeof chunk === "string" ? chunk : new TextDecoder().decode(chunk);
+    return true;
+  }) as typeof process.stderr.write;
+  try {
+    return { result: await run(), stderr };
+  } finally {
+    process.stderr.write = original;
+  }
+}
+
 async function startMock(): Promise<Mock> {
   let lastChatBody: Record<string, unknown> | undefined;
   let lastModelCallId: string | undefined;
@@ -149,13 +163,14 @@ test("records failed upstream responses as failed model-call records", async () 
   }
 });
 
-test("records thrown backend failures as failed model-call records", async () => {
+test("redacts thrown backend failures from stderr and the wire response", async () => {
+  const secret = "sk-live-secret-from-upstream";
   const records: ModelCallRecord[] = [];
   const gateway = await startGateway({
     backend: {
       defaultModel: "throw-model",
       chat: async () => {
-        throw new Error("backend exploded");
+        throw new Error(`backend exploded with ${secret}`);
       },
       models: async () => new Response("{}", { status: 200 }),
       embeddings: async () => new Response("{}", { status: 200 })
@@ -163,12 +178,20 @@ test("records thrown backend failures as failed model-call records", async () =>
     provenance: { onModelCall: (record) => records.push(record) }
   });
   try {
-    const response = await fetch(`${gateway.url()}/v1/chat/completions`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ messages: [{ role: "user", content: "fail" }] })
+    const { result: response, stderr } = await captureStderr(async () => {
+      return await fetch(`${gateway.url()}/v1/chat/completions`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ messages: [{ role: "user", content: "fail" }] })
+      });
     });
     assert.equal(response.status, 502);
+    assert.deepEqual(await response.json(), {
+      error: { message: "upstream request failed", type: "upstream_error" }
+    });
+    assert.match(stderr, /routekit gateway upstream error: type=Error/);
+    assert.equal(stderr.includes(secret), false);
+    assert.equal(stderr.includes("backend exploded"), false);
     assert.equal(response.headers.get(MODEL_CALL_ID_HEADER), records[0]?.call_id);
     assert.equal(records.length, 1);
     assert.equal(records[0]?.status, "failed");

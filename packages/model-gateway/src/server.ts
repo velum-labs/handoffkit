@@ -491,7 +491,7 @@ function writeGatewayError(
     });
     return { statusCode: 429, payload };
   }
-  process.stderr.write(`routekit gateway upstream error: ${errorMessage(error)}\n`);
+  process.stderr.write(`routekit gateway upstream error: type=${safeErrorType(error)}\n`);
   const payload = writeErrorSafely(res, 502, {
     error: { message: "upstream request failed", type: "upstream_error" }
   });
@@ -620,6 +620,13 @@ async function pipeUpstream(
   return Buffer.concat(chunks);
 }
 
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
+function safeErrorType(error: unknown): string {
+  if (error instanceof AggregateError) return "AggregateError";
+  if (error instanceof TypeError) return "TypeError";
+  if (error instanceof RangeError) return "RangeError";
+  if (error instanceof ReferenceError) return "ReferenceError";
+  if (error instanceof SyntaxError) return "SyntaxError";
+  if (error instanceof URIError) return "URIError";
+  if (error instanceof Error) return "Error";
+  return "NonError";
 }

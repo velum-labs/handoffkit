@@ -6,6 +6,7 @@ import {
   canonicalSharedPackageViolations,
   fusionkitCompositionViolations,
   isInternalWorkspaceDependency,
+  polynomialTrailingSlashRegexViolations,
   routekitDependencyViolations,
   routekitProductionSources,
   routekitSourceViolations,
@@ -678,6 +679,11 @@ const productionSources = workspaceManifests.flatMap(({ dir }) =>
 );
 for (const violation of toolRegistryConstructionViolations(productionSources)) {
   fail(`tool registry construction violation: ${violation}`);
+}
+for (const { file, source } of productionSources) {
+  for (const violation of polynomialTrailingSlashRegexViolations(file, source)) {
+    fail(`unsafe trailing-slash normalization: ${violation}`);
+  }
 }
 for (const file of [
   "packages/tool-registry/package.json",

@@ -5,7 +5,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import {
+  assertAuthenticatedBind,
   estimateTokens,
+  isLoopbackHost,
   randomId,
   spawnTool,
   trimSurroundingSlashes,
@@ -39,6 +41,22 @@ test("slash trimming is linear and preserves interior separators", () => {
   assert.equal(trimTrailingSlashes("https://route.test////"), "https://route.test");
   assert.equal(trimSurroundingSlashes("////route/path////"), "route/path");
   assert.equal(trimSurroundingSlashes("////"), "");
+});
+
+test("authenticated bind validation recognizes only explicit loopback hosts", () => {
+  for (const host of ["localhost", "LOCALHOST", "127.0.0.1", "::1"]) {
+    assert.equal(isLoopbackHost(host), true);
+    assert.doesNotThrow(() => assertAuthenticatedBind(host, undefined));
+  }
+  for (const host of ["0.0.0.0", "127.0.0.2", "example.test", "[::1]"]) {
+    assert.equal(isLoopbackHost(host), false);
+    assert.throws(
+      () => assertAuthenticatedBind(host, undefined),
+      /non-loopback host .* requires an auth token/
+    );
+    assert.doesNotThrow(() => assertAuthenticatedBind(host, "secret"));
+  }
+  assert.throws(() => assertAuthenticatedBind("0.0.0.0", "  "), /requires an auth token/);
 });
 
 test("spawnTool forwards explicit tool env without leaking unrelated secrets", async () => {

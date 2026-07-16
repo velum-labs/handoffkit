@@ -209,6 +209,13 @@ export function toolRegistryConstructionViolations(sources) {
   return violations;
 }
 
+export function polynomialTrailingSlashRegexViolations(file, source) {
+  if (!/\\\/[+*]\$\//.test(source)) return [];
+  return [
+    `${file} uses a polynomial trailing-slash regex; use @routekit/runtime slash helpers`
+  ];
+}
+
 export function routekitSourceViolations(file, source) {
   const violations = [];
   const normalized = file.split(sep).join("/");

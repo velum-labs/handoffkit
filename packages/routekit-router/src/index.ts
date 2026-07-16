@@ -6,7 +6,7 @@ import {
 import type { SubscriptionAccountConfigs } from "@routekit/accounts";
 import { CatalogBackend, startGateway } from "@routekit/gateway";
 import type { Gateway, RouterConfig } from "@routekit/gateway";
-import { registerCleanup } from "@routekit/runtime";
+import { assertAuthenticatedBind, registerCleanup } from "@routekit/runtime";
 
 export type StartRouterOptions = {
   config: RouterConfig;
@@ -60,6 +60,8 @@ function accountConfigs(config: RouterConfig): SubscriptionAccountConfigs {
 }
 
 export async function startRouter(options: StartRouterOptions): Promise<RunningRouter> {
+  const host = options.host ?? "127.0.0.1";
+  assertAuthenticatedBind(host, options.authToken);
   const backend = new CatalogBackend({
     config: options.config,
     env: gatewayEnvironment(options.env ?? process.env)
@@ -71,7 +73,7 @@ export async function startRouter(options: StartRouterOptions): Promise<RunningR
       : { relays: {} };
   const gateway = await startGateway({
     backend,
-    ...(options.host !== undefined ? { host: options.host } : {}),
+    host,
     ...(options.port !== undefined ? { port: options.port } : {}),
     ...(options.authToken !== undefined ? { authToken: options.authToken } : {}),
     ...(Object.keys(relays).length > 0 ? { providerRelays: relays } : {})

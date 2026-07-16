@@ -83,6 +83,45 @@ test("dynamic completion follows the command tree", () => {
   ]);
 });
 
+test("serve CLI rejects an unauthenticated non-loopback bind", async () => {
+  const root = mkdtempSync(join(tmpdir(), "routekit-serve-auth-"));
+  const config = join(root, "router.yaml");
+  writeFileSync(
+    config,
+    [
+      "endpoints:",
+      "  - endpointId: opaque",
+      "    model: provider-model",
+      "    baseUrl: http://127.0.0.1:9/v1",
+      ""
+    ].join("\n")
+  );
+  try {
+    const program = buildProgram();
+    assert.match(
+      command(program, "serve").helpInformation(),
+      /authentication token \(required for non-loopback hosts\)/
+    );
+    await assert.rejects(
+      program.parseAsync([
+        "node",
+        "routekit",
+        "--config",
+        config,
+        "serve",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "0",
+        "--no-portless"
+      ]),
+      /binding to non-loopback host "0\.0\.0\.0" requires an auth token/
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("account removal completion only suggests managed labels for its provider", () => {
   const root = mkdtempSync(join(tmpdir(), "routekit-account-completion-"));
   const previousHome = process.env.ROUTEKIT_HOME;

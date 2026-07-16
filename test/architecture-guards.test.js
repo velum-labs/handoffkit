@@ -5,6 +5,7 @@ import {
   CANONICAL_SHARED_PACKAGES,
   canonicalSharedPackageViolations,
   fusionkitCompositionViolations,
+  polynomialTrailingSlashRegexViolations,
   routekitDependencyViolations,
   routekitSourceViolations,
   toolRegistryCliSourceViolations,
@@ -213,6 +214,26 @@ test("tool registry construction guard allows exactly one production owner", () 
   assert.deepEqual(toolRegistryConstructionViolations([]), [
     "packages/tool-registry/src/index.ts must construct the canonical registry exactly once"
   ]);
+});
+
+test("trailing slash guard rejects polynomial regexes but allows fixed /v1 matching", () => {
+  const file = "packages/example/src/url.ts";
+  assert.deepEqual(
+    polynomialTrailingSlashRegexViolations(
+      file,
+      'export const normalize = (url) => url.replace(/\\/+$/, "");'
+    ),
+    [
+      "packages/example/src/url.ts uses a polynomial trailing-slash regex; use @routekit/runtime slash helpers"
+    ]
+  );
+  assert.deepEqual(
+    polynomialTrailingSlashRegexViolations(
+      file,
+      'export const withoutV1 = (url) => url.replace(/\\/v1\\/?$/, "");'
+    ),
+    []
+  );
 });
 
 test("RouteKit source guard targets production paths, declarations, and imports", () => {
