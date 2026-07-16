@@ -11,7 +11,7 @@ from contextlib import asynccontextmanager
 from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as distribution_version
 from pathlib import Path
-from typing import Any, assert_never, cast, get_args
+from typing import Any, Literal, assert_never, cast, get_args
 
 from fastapi import FastAPI, Header, Query, Request
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -73,7 +73,15 @@ from fusionkit_core.types import (
     Trajectory,
     Usage,
 )
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
+from pydantic import (
+    AliasChoices,
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationError,
+    field_validator,
+    model_validator,
+)
 
 from fusionkit_server.cursor_endpoint import translate_cursor_request
 
@@ -148,13 +156,23 @@ class FusionRequest(BaseModel):
 
 class TrajectoryItemInput(BaseModel):
     index: int
-    type: str
+    type: Literal[
+        "message",
+        "reasoning",
+        "function_call",
+        "function_call_output",
+    ]
     text: str | None = None
     call_id: str | None = None
     name: str | None = None
     arguments: str | None = None
     is_error: bool | None = None
     output_hash: str | None = None
+
+    @field_validator("type", mode="before")
+    @classmethod
+    def _normalize_legacy_output_type(cls, value: object) -> object:
+        return "message" if value == "output" else value
 
 
 class TrajectoryInput(BaseModel):
@@ -163,7 +181,10 @@ class TrajectoryInput(BaseModel):
     trajectory_id: str
     model_id: str
     status: Status
-    items: list[TrajectoryItemInput] = Field(default_factory=list)
+    items: list[TrajectoryItemInput] = Field(
+        default_factory=list,
+        validation_alias=AliasChoices("items", "steps"),
+    )
     final_output: str
     candidate_id: str | None = None
     model: str | None = None

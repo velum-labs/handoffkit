@@ -163,6 +163,7 @@ def _attribution(
     result: dict[str, Any] | None,
     code: str,
     replay_pass: bool | None,
+    replay_error: str | None,
 ) -> str:
     if excluded:
         return "excluded_non_exact_task"
@@ -172,6 +173,8 @@ def _attribution(
         return "shard_error"
     if not code.strip():
         return "missing_generation_or_extraction_evidence"
+    if replay_error is not None:
+        return "missing_fixture_or_grader_evidence"
     historical_pass = bool(result.get("resolved"))
     if replay_pass is not None and replay_pass != historical_pass:
         return "grading_flip_to_pass" if replay_pass else "grading_flip_to_fail"
@@ -223,44 +226,48 @@ def replay(
             raw = result.get("raw") if isinstance(result, dict) else None
             code = str(raw.get("selected_code") or "") if isinstance(raw, dict) else ""
             replay_public = replay_private = replay_pass = None
+            replay_error: str | None = None
             if (
                 instance_id not in exclusions
                 and result is not None
                 and result.get("status") != "error"
                 and code.strip()
             ):
-                problem_key = f"lcb-store/{instance_id}.json"
-                problem_bytes = reader.get(problem_key)
-                problem = _legacy_problem(json.loads(problem_bytes))
-                cache_key = (_sha256(problem_bytes), _sha256(code))
-                grade = grade_cache.get(cache_key)
-                if grade is None:
-                    public_tests, private_tests = decode_tests(problem)
-                    public = run_tests(
-                        sandbox,
-                        code,
-                        public_tests,
-                        timeout_s=timeout_s,
-                        stop_on_failure=True,
-                    )
-                    private = (
-                        run_tests(
+                try:
+                    problem_key = f"lcb-store/{instance_id}.json"
+                    problem_bytes = reader.get(problem_key)
+                    problem = _legacy_problem(json.loads(problem_bytes))
+                    cache_key = (_sha256(problem_bytes), _sha256(code))
+                    grade = grade_cache.get(cache_key)
+                    if grade is None:
+                        public_tests, private_tests = decode_tests(problem)
+                        public = run_tests(
                             sandbox,
                             code,
-                            private_tests,
+                            public_tests,
                             timeout_s=timeout_s,
                             stop_on_failure=True,
                         )
-                        if public["all_passed"]
-                        else {"all_passed": False}
-                    )
-                    grade = (
-                        bool(public["all_passed"]),
-                        bool(private["all_passed"]),
-                        bool(public["all_passed"] and private["all_passed"]),
-                    )
-                    grade_cache[cache_key] = grade
-                replay_public, replay_private, replay_pass = grade
+                        private = (
+                            run_tests(
+                                sandbox,
+                                code,
+                                private_tests,
+                                timeout_s=timeout_s,
+                                stop_on_failure=True,
+                            )
+                            if public["all_passed"]
+                            else {"all_passed": False}
+                        )
+                        grade = (
+                            bool(public["all_passed"]),
+                            bool(private["all_passed"]),
+                            bool(public["all_passed"] and private["all_passed"]),
+                        )
+                        grade_cache[cache_key] = grade
+                    replay_public, replay_private, replay_pass = grade
+                except Exception as exc:  # noqa: BLE001 - evidence gap, not a run abort
+                    replay_error = f"{type(exc).__name__}: {exc}"
             rows.append(
                 {
                     "sweep_id": sweep_id,
@@ -274,6 +281,7 @@ def replay(
                     "replay_public_pass": replay_public,
                     "replay_private_pass": replay_private,
                     "replay_pass": replay_pass,
+                    "replay_error": replay_error,
                     "legacy_oracle_pass": _legacy_oracle(result) if result else None,
                     "excluded": instance_id in exclusions,
                     "attribution": _attribution(
@@ -281,6 +289,7 @@ def replay(
                         result=result,
                         code=code,
                         replay_pass=replay_pass,
+                        replay_error=replay_error,
                     ),
                     "result_s3_key": result.get("_s3_key") if result else None,
                 }
