@@ -171,6 +171,14 @@ const requiredFiles = [
   "docs/generated/code-api.md",
   "spec/testing/expected-behaviors.json",
   "docs/generated/expected-behaviors.md",
+  // self-healing docs: the style contract, the audit skill, its freshness
+  // ledger + helpers, and the workflow that runs the healer
+  "docs/style-guide.md",
+  ".cursor/skills/docs-audit/SKILL.md",
+  ".cursor/skills/docs-audit/ledger.json",
+  ".cursor/skills/docs-audit/ledger-plan.mjs",
+  ".cursor/skills/docs-audit/ledger-stamp.mjs",
+  ".github/workflows/docs-heal.yml",
   "references/trackcn.json",
   "references/THIRD_PARTY.md",
   "references/opencode/LICENSE",
@@ -244,6 +252,18 @@ for (const entry of [...manifest.demos, ...manifest.infra]) {
 
 for (const file of requiredFiles) {
   if (!existsSync(file)) fail(`missing ${file}`);
+}
+
+const docsLedgerCheck = spawnSync(
+  process.execPath,
+  [".cursor/skills/docs-audit/ledger-plan.mjs", "--limit", "0", "--rotation", "0"],
+  { encoding: "utf8" }
+);
+if (docsLedgerCheck.stderr.trim()) {
+  console.error(docsLedgerCheck.stderr.trim());
+}
+if (docsLedgerCheck.status !== 0) {
+  fail("documentation freshness ledger is invalid");
 }
 
 const traceConventionsCheck = spawnSync(

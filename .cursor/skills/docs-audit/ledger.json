@@ -1,0 +1,1458 @@
+{
+  "$comment": "Docs freshness ledger. Each page records the source paths it documents (dependsOn) and git object hashes of the page + deps captured when the page was last verified (verified). Content-addressed, so stamps survive squash merges. Maintained only via ledger-stamp.mjs; consumed by ledger-plan.mjs. See SKILL.md.",
+  "config": {
+    "rotationK": 5,
+    "surfaces": [
+      "docs/**/*.md",
+      "apps/docs/content/docs/**/*.mdx",
+      "README.md",
+      "CONTRIBUTING.md",
+      "SECURITY.md",
+      "packages/*/README.md",
+      "python/*/README.md",
+      "apps/*/README.md",
+      "infra/*/README.md",
+      "docker/*/README.md"
+    ],
+    "exclude": [
+      "apps/docs/content/docs/changelog.mdx",
+      "docs/fusion/FUSION_ARCHITECTURE_V2.md",
+      "docs/fusion/FUSION_VALUE_RUBRIC.md",
+      "docs/fusion/MOA_DESIGN.md",
+      "docs/fusion/MOA_IMPLEMENTATION_PROMPT.md",
+      "docs/fusion/MOA_IMPLEMENTATION_STATUS.md",
+      "docs/fusion/STABILIZATION.md",
+      "docs/fusion/capability-index-program.md",
+      "docs/fusion/capability-index-spec.md",
+      "docs/fusion/capability-index-status.md",
+      "docs/fusion/catalog-snapshot-2026-07-07.md",
+      "docs/fusion/coding-capability-index-report.md",
+      "docs/fusion/company-operating-system-2026-07.md",
+      "docs/fusion/driver-topology-spec-2026-07.md",
+      "docs/fusion/ensemble-hypotheses-v0-2026-07.md",
+      "docs/fusion/ensemble-launch-clean-room-2026-07.md",
+      "docs/fusion/ensemble-literature-review-2026-07.md",
+      "docs/fusion/incomplete-work-inventory.md",
+      "docs/fusion/k1-official-harness-plan-2026-07.md",
+      "docs/fusion/kernel-migration.md",
+      "docs/fusion/lab-loop-2026-07.md",
+      "docs/fusion/lab-loop-implementation-spec-2026-07.md",
+      "docs/fusion/oss-ensemble-launch-plan.md",
+      "docs/fusion/phase0-validation-report.md",
+      "docs/fusion/strategy-rethink-2026-07.md",
+      "docs/fusion/unicorn-roadmap-2026-07.md",
+      "docs/generated/",
+      "docs/model-fusion-learnings.md",
+      "docs/oss-release/",
+      "docs/planning/",
+      "docs/specs/"
+    ]
+  },
+  "pages": {
+    "apps/docs/content/docs/api/index.mdx": {
+      "dependsOn": [
+        "packages/model-gateway/src/server.ts",
+        "spec/model-fusion-contract/openapi",
+        "apps/docs/content/docs/meta.json",
+        "apps/docs/content/docs/api/meta.json"
+      ],
+      "verified": {
+        "apps/docs/content/docs/api/index.mdx": "7210593d4d8521644b0e8ad2a14c63e0e7dd506e",
+        "packages/model-gateway/src/server.ts": "d297695911054a05c95c14d4c1b2cdf96d83a6ae",
+        "spec/model-fusion-contract/openapi": "542ffd4a8576323b0f6aed07b1aa63c2821a99d4",
+        "apps/docs/content/docs/meta.json": "dd0480129b7d6c7a4c35f0205d07ed6d94e39899",
+        "apps/docs/content/docs/api/meta.json": "e4de13b892962d6a1ac0911ad29fdf30c7a5bc0d"
+      },
+      "verifiedAt": "2026-07-13"
+    },
+    "apps/docs/content/docs/api/v1/harness-executions.mdx": {
+      "dependsOn": [
+        "spec/model-fusion-contract/openapi",
+        "apps/docs/content/docs/meta.json",
+        "apps/docs/content/docs/api/meta.json",
+        "apps/docs/content/docs/api/v1/meta.json"
+      ],
+      "verified": {
+        "apps/docs/content/docs/api/v1/harness-executions.mdx": "8720b3be40bc52d267a0db2fc32f07e4d4235182",
+        "spec/model-fusion-contract/openapi": "db30044ef1ccbf508fe4957bc492d429678a5c67",
+        "apps/docs/content/docs/meta.json": "526845c120e0525b7ff9999672d7047c1f27dbea",
+        "apps/docs/content/docs/api/meta.json": "31785d8bea0d9f0439b3c21b96a8eafc222b4561",
+        "apps/docs/content/docs/api/v1/meta.json": "ba0893a6e0108b49960210b25354a3559e241e33"
+      },
+      "verifiedAt": "2026-07-13"
+    },
+    "apps/docs/content/docs/concepts/model-fusion.mdx": {
+      "dependsOn": [
+        "packages/ensemble/src",
+        "python/fusionkit-core/src",
+        "apps/docs/content/docs/meta.json",
+        "apps/docs/content/docs/concepts/meta.json"
+      ],
+      "verified": {
+        "apps/docs/content/docs/concepts/model-fusion.mdx": "9eabdc70ebe4f4d0ecaf5e43a652513022672413",
+        "packages/ensemble/src": "0e4100e436d42c96407735b5435c3210e8641758",
+        "python/fusionkit-core/src": "b91074c9ea896bdc5ca35c2c99d46dbbd8d1bb2d",
+        "apps/docs/content/docs/meta.json": "dd0480129b7d6c7a4c35f0205d07ed6d94e39899",
+        "apps/docs/content/docs/concepts/meta.json": "153d5f92d2e5b2a1995d65243af8b69ff55f6add"
+      },
+      "verifiedAt": "2026-07-13"
+    },
+    "apps/docs/content/docs/concepts/overview.mdx": {
+      "dependsOn": [
+        "packages/ensemble/src/workflows.ts",
+        "apps/docs/content/docs/meta.json",
+        "apps/docs/content/docs/concepts/meta.json"
+      ],
+      "verified": {
+        "apps/docs/content/docs/concepts/overview.mdx": "c1aad42a3281d3b92a91c143b4a9a744caf41fd8",
+        "packages/ensemble/src/workflows.ts": "5baa9da186cb0a782b6563c5c74b76446de6bc3b",
+        "apps/docs/content/docs/meta.json": "dd0480129b7d6c7a4c35f0205d07ed6d94e39899",
+        "apps/docs/content/docs/concepts/meta.json": "153d5f92d2e5b2a1995d65243af8b69ff55f6add"
+      },
+      "verifiedAt": "2026-07-13"
+    },
+    "apps/docs/content/docs/concepts/privacy.mdx": {
+      "dependsOn": [
+        "packages/cli/src/telemetry",
+        "apps/docs/content/docs/meta.json",
+        "apps/docs/content/docs/concepts/meta.json"
+      ],
+      "verified": {
+        "apps/docs/content/docs/concepts/privacy.mdx": "a77ff1205810ed4a50194d03802dcc296b438172",
+        "packages/cli/src/telemetry": "f18fc1f48b98f67d2e439c394df7c96f82a25498",
+        "apps/docs/content/docs/meta.json": "dd0480129b7d6c7a4c35f0205d07ed6d94e39899",
+        "apps/docs/content/docs/concepts/meta.json": "153d5f92d2e5b2a1995d65243af8b69ff55f6add"
+      },
+      "verifiedAt": "2026-07-13"
+    },
+    "apps/docs/content/docs/concepts/product-scope.mdx": {
+      "dependsOn": [
+        "pnpm-workspace.yaml",
+        "legacy/README.md",
+        "apps/docs/content/docs/meta.json",
+        "apps/docs/content/docs/concepts/meta.json"
+      ],
+      "verified": {
+        "apps/docs/content/docs/concepts/product-scope.mdx": "d21b8cdf792c832a70d5e7063f3f536b26f31b3b",
+        "pnpm-workspace.yaml": "17caacb89c1811a10637e577688124d5a9f742ec",
+        "legacy/README.md": "ea13b39fcae92514ee5c4e68d38fc13e4e291223",
+        "apps/docs/content/docs/meta.json": "dd0480129b7d6c7a4c35f0205d07ed6d94e39899",
+        "apps/docs/content/docs/concepts/meta.json": "153d5f92d2e5b2a1995d65243af8b69ff55f6add"
+      },
+      "verifiedAt": "2026-07-13"
+    },
+    "apps/docs/content/docs/concepts/runtime-kernel.mdx": {
+      "dependsOn": [
+        "packages/kernel/src",
+        "apps/docs/content/docs/meta.json",
+        "apps/docs/content/docs/concepts/meta.json"
+      ],
+      "verified": {
+        "apps/docs/content/docs/concepts/runtime-kernel.mdx": "9f7d7be8f20c55f1e0d38a32386903389fcda528",
+        "packages/kernel/src": "2c92266f41b2bd38216e5eb841443354317ac470",
+        "apps/docs/content/docs/meta.json": "dd0480129b7d6c7a4c35f0205d07ed6d94e39899",
+        "apps/docs/content/docs/concepts/meta.json": "153d5f92d2e5b2a1995d65243af8b69ff55f6add"
+      },
+      "verifiedAt": "2026-07-15"
+    },
+    "apps/docs/content/docs/getting-started/installation.mdx": {
+      "dependsOn": [
+        "packages/cli/src/commands/doctor.ts",
+        "packages/cli/package.json",
+        "apps/docs/content/docs/meta.json",
+        "apps/docs/content/docs/getting-started/meta.json"
+      ],
+      "verified": {
+        "apps/docs/content/docs/getting-started/installation.mdx": "0f5f4616235d34e281a5935249d7f1f2e236a4fa",
+        "packages/cli/src/commands/doctor.ts": "9fe6e6704a01c56d02390a66ea791b2c79b41a20",
+        "packages/cli/package.json": "99ccdbd8fa642fa8fbe3da065fd83f5daf3fd1c1",
+        "apps/docs/content/docs/meta.json": "dd0480129b7d6c7a4c35f0205d07ed6d94e39899",
+        "apps/docs/content/docs/getting-started/meta.json": "705cdda349a551c844daf308fe0b5027222b0888"
+      },
+      "verifiedAt": "2026-07-15"
+    },
+    "apps/docs/content/docs/getting-started/quickstart.mdx": {
+      "dependsOn": [
+        "packages/cli/src/commands",
+        "packages/cli/src/fusion",
+        "apps/docs/content/docs/meta.json",
+        "apps/docs/content/docs/getting-started/meta.json"
+      ],
+      "verified": {
+        "apps/docs/content/docs/getting-started/quickstart.mdx": "7d425ffaa5dc901fe9c546aaccecfcca86614f22",
+        "packages/cli/src/commands": "fd7968712ceb61a4ba85856a8931bf3a0cda0479",
+        "packages/cli/src/fusion": "1bcc06a62d864aba47b5af67d31e0d69b62f16a8",
+        "apps/docs/content/docs/meta.json": "dd0480129b7d6c7a4c35f0205d07ed6d94e39899",
+        "apps/docs/content/docs/getting-started/meta.json": "705cdda349a551c844daf308fe0b5027222b0888"
+      },
+      "verifiedAt": "2026-07-15"
+    },
+    "apps/docs/content/docs/guides/cliproxy-upstream.mdx": {
+      "dependsOn": [
+        "packages/cli/src/fusion",
+        "spec/registry/providers.json",
+        "apps/docs/content/docs/meta.json",
+        "apps/docs/content/docs/guides/meta.json"
+      ],
+      "verified": {
+        "apps/docs/content/docs/guides/cliproxy-upstream.mdx": "591a488dd07599ee5d9416ceed5155391e9cfd8d",
+        "packages/cli/src/fusion": "240a16437402c38dd3e17aa89452bac5fad75c7d",
+        "spec/registry/providers.json": "d72f06c957abebe6b84681e0d3320125196b13dd",
+        "apps/docs/content/docs/meta.json": "dd0480129b7d6c7a4c35f0205d07ed6d94e39899",
+        "apps/docs/content/docs/guides/meta.json": "3864b4ddfe7babe97261045040b0a27de8f489d9"
+      },
+      "verifiedAt": "2026-07-13"
+    },
+    "apps/docs/content/docs/guides/cost-and-models.mdx": {
+      "dependsOn": [
+        "packages/model-gateway/src/fusion-cost-meter.ts",
+        "spec/registry/pricing.json",
+        "apps/docs/content/docs/meta.json",
+        "apps/docs/content/docs/guides/meta.json"
+      ],
+      "verified": {
+        "apps/docs/content/docs/guides/cost-and-models.mdx": "aa6afd100c4c10f3e73a3f1800176fd9fd964a91",
+        "packages/model-gateway/src/fusion-cost-meter.ts": "7f084eb01fd50d8c1416390d58b39bb528f7f87f",
+        "spec/registry/pricing.json": "ea18ba5fdfce84c3f89219015551e6b8a1cc64f8",
+        "apps/docs/content/docs/meta.json": "dd0480129b7d6c7a4c35f0205d07ed6d94e39899",
+        "apps/docs/content/docs/guides/meta.json": "3864b4ddfe7babe97261045040b0a27de8f489d9"
+      },
+      "verifiedAt": "2026-07-15"
+    },
+    "apps/docs/content/docs/guides/examples.mdx": {
+      "dependsOn": [
+        "examples/manifest.json",
+        "apps/docs/content/docs/meta.json",
+        "apps/docs/content/docs/guides/meta.json"
+      ],
+      "verified": {
+        "apps/docs/content/docs/guides/examples.mdx": "332c745777595727727c9565779116dacf6b6868",
+        "examples/manifest.json": "2d61df4e48a56c26a02c1ae3529fa72868c7d9ba",
+        "apps/docs/content/docs/meta.json": "dd0480129b7d6c7a4c35f0205d07ed6d94e39899",
+        "apps/docs/content/docs/guides/meta.json": "025a7070b1a5947e98446250626c9fd6f0d5ef84"
+      },
+      "verifiedAt": "2026-07-13"
+    },
+    "apps/docs/content/docs/guides/inference-endpoint.mdx": {
+      "dependsOn": [
+        "packages/model-gateway/src/server.ts",
+        "apps/docs/content/docs/meta.json",
+        "apps/docs/content/docs/guides/meta.json"
+      ],
+      "verified": {
+        "apps/docs/content/docs/guides/inference-endpoint.mdx": "e91ffb40e854810fc51cb1c7ea33428ea3c9a9cc",
+        "packages/model-gateway/src/server.ts": "d297695911054a05c95c14d4c1b2cdf96d83a6ae",
+        "apps/docs/content/docs/meta.json": "dd0480129b7d6c7a4c35f0205d07ed6d94e39899",
+        "apps/docs/content/docs/guides/meta.json": "025a7070b1a5947e98446250626c9fd6f0d5ef84"
+      },
+      "verifiedAt": "2026-07-13"
+    },
+    "apps/docs/content/docs/guides/observability.mdx": {
+      "dependsOn": [
+        "apps/scope",
+        "packages/cli/src/fusion/observability.ts",
+        "apps/docs/content/docs/meta.json",
+        "apps/docs/content/docs/guides/meta.json"
+      ],
+      "verified": {
+        "apps/docs/content/docs/guides/observability.mdx": "74ff325ae261741c871315f1610cfd72510df57d",
+        "apps/scope": "c93ed8e6b0932e5e0085f6a4c2c44e039fb8844e",
+        "packages/cli/src/fusion/observability.ts": "2a15783a13828eb53ef70d28939a2486da956119",
+        "apps/docs/content/docs/meta.json": "dd0480129b7d6c7a4c35f0205d07ed6d94e39899",
+        "apps/docs/content/docs/guides/meta.json": "a6ecc07161249a3adb15ecc8cd056a5fcce69708"
+      },
+      "verifiedAt": "2026-07-13"
+    },
+    "apps/docs/content/docs/guides/rate-limit-handoff.mdx": {
+      "dependsOn": [
+        "packages/model-gateway/src/fusion-failover.ts",
+        "apps/docs/content/docs/meta.json",
+        "apps/docs/content/docs/guides/meta.json"
+      ],
+      "verified": {
+        "apps/docs/content/docs/guides/rate-limit-handoff.mdx": "6fe96da59bc8fb21767b23971bde53f7b5dd5ff8",
+        "packages/model-gateway/src/fusion-failover.ts": "bb28f13293e33245755cb9c0ae38ce6d8039b89c",
+        "apps/docs/content/docs/meta.json": "dd0480129b7d6c7a4c35f0205d07ed6d94e39899",
+        "apps/docs/content/docs/guides/meta.json": "a6ecc07161249a3adb15ecc8cd056a5fcce69708"
+      },
+      "verifiedAt": "2026-07-13"
+    },
+    "apps/docs/content/docs/guides/subscription-pooling.mdx": {
+      "dependsOn": [
+        "packages/model-gateway/src/subscriptions",
+        "packages/cli/src/commands/proxy.ts",
+        "apps/docs/content/docs/meta.json",
+        "apps/docs/content/docs/guides/meta.json"
+      ],
+      "verified": {
+        "apps/docs/content/docs/guides/subscription-pooling.mdx": "2f90da62e7cf2441e5fd24017715201fea7d7398",
+        "packages/model-gateway/src/subscriptions": "45516e47e797110e5d90146d3ee63a2807b36ae1",
+        "packages/cli/src/commands/proxy.ts": "c44bdfa737b7be14ff8b02fb160ef2d4998ef9ea",
+        "apps/docs/content/docs/meta.json": "dd0480129b7d6c7a4c35f0205d07ed6d94e39899",
+        "apps/docs/content/docs/guides/meta.json": "025a7070b1a5947e98446250626c9fd6f0d5ef84"
+      },
+      "verifiedAt": "2026-07-13"
+    },
+    "apps/docs/content/docs/guides/troubleshooting.mdx": {
+      "dependsOn": [
+        "packages/cli/src/commands/doctor.ts",
+        "apps/docs/content/docs/meta.json",
+        "apps/docs/content/docs/guides/meta.json"
+      ],
+      "verified": {
+        "apps/docs/content/docs/guides/troubleshooting.mdx": "d98a4f327aa3baa6389a2b9e9a464e6630c0e7af",
+        "packages/cli/src/commands/doctor.ts": "a3e6bb466577d2bd7af79ac75a70c213babef3f8",
+        "apps/docs/content/docs/meta.json": "dd0480129b7d6c7a4c35f0205d07ed6d94e39899",
+        "apps/docs/content/docs/guides/meta.json": "a6ecc07161249a3adb15ecc8cd056a5fcce69708"
+      },
+      "verifiedAt": "2026-07-13"
+    },
+    "apps/docs/content/docs/index.mdx": {
+      "dependsOn": [
+        "packages/cli/src/cli.ts",
+        "apps/docs/content/docs/meta.json"
+      ],
+      "verified": {
+        "apps/docs/content/docs/index.mdx": "68188ae44d23de538c1111bd76d05bd19a65be98",
+        "packages/cli/src/cli.ts": "a64abb2c40fa35de5be2763bef79e56010ff9e5a",
+        "apps/docs/content/docs/meta.json": "dd0480129b7d6c7a4c35f0205d07ed6d94e39899"
+      },
+      "verifiedAt": "2026-07-13"
+    },
+    "apps/docs/content/docs/reference/commands.mdx": {
+      "dependsOn": [
+        "packages/cli/src",
+        "apps/docs/content/docs/meta.json",
+        "apps/docs/content/docs/reference/meta.json"
+      ],
+      "verified": {
+        "apps/docs/content/docs/reference/commands.mdx": "c9182dcefd67c068268ac816cf147a2d8ed3415f",
+        "packages/cli/src": "e23a4e63cd30e8fd53bcdb755b2761110bac31cc",
+        "apps/docs/content/docs/meta.json": "dd0480129b7d6c7a4c35f0205d07ed6d94e39899",
+        "apps/docs/content/docs/reference/meta.json": "a33f4c07e4915888ea288c85232315f3c929c84b"
+      },
+      "verifiedAt": "2026-07-15"
+    },
+    "apps/docs/content/docs/reference/configuration.mdx": {
+      "dependsOn": [
+        "packages/cli/src/fusion-config.ts",
+        "packages/cli/src/fusion",
+        "packages/model-gateway/src/adapters",
+        "apps/docs/content/docs/meta.json",
+        "apps/docs/content/docs/reference/meta.json"
+      ],
+      "verified": {
+        "apps/docs/content/docs/reference/configuration.mdx": "abffa01cb1aa847729930fe2d8d46206dc3f8842",
+        "packages/cli/src/fusion-config.ts": "fca85d9cfc2969d5a624268da8dccc73a5dd815d",
+        "packages/cli/src/fusion": "1bcc06a62d864aba47b5af67d31e0d69b62f16a8",
+        "packages/model-gateway/src/adapters": "d0521d6e3a2af789dae19119be3aa7eba3a8f42a",
+        "apps/docs/content/docs/meta.json": "dd0480129b7d6c7a4c35f0205d07ed6d94e39899",
+        "apps/docs/content/docs/reference/meta.json": "a33f4c07e4915888ea288c85232315f3c929c84b"
+      },
+      "verifiedAt": "2026-07-15"
+    },
+    "apps/docs/content/docs/reference/models-and-panels.mdx": {
+      "dependsOn": [
+        "spec/registry",
+        "apps/docs/content/docs/meta.json",
+        "apps/docs/content/docs/reference/meta.json"
+      ],
+      "verified": {
+        "apps/docs/content/docs/reference/models-and-panels.mdx": "67c64db567b06db2fb6e433047092aba0078d305",
+        "spec/registry": "f122fb1150e513ea9a08ffc47521184593fd81cf",
+        "apps/docs/content/docs/meta.json": "dd0480129b7d6c7a4c35f0205d07ed6d94e39899",
+        "apps/docs/content/docs/reference/meta.json": "a33f4c07e4915888ea288c85232315f3c929c84b"
+      },
+      "verifiedAt": "2026-07-15"
+    },
+    "apps/docs/content/docs/reference/packages.mdx": {
+      "dependsOn": [
+        "pnpm-workspace.yaml",
+        "pyproject.toml",
+        "apps/docs/content/docs/meta.json",
+        "apps/docs/content/docs/reference/meta.json"
+      ],
+      "verified": {
+        "apps/docs/content/docs/reference/packages.mdx": "76cf0e535ec6edfc5c73fc035dda4144e42f98b8",
+        "pnpm-workspace.yaml": "17caacb89c1811a10637e577688124d5a9f742ec",
+        "pyproject.toml": "ae9a7b9f54ab997fbdc64f57d1f1a9dc4ffedc53",
+        "apps/docs/content/docs/meta.json": "dd0480129b7d6c7a4c35f0205d07ed6d94e39899",
+        "apps/docs/content/docs/reference/meta.json": "a33f4c07e4915888ea288c85232315f3c929c84b"
+      },
+      "verifiedAt": "2026-07-15"
+    },
+    "apps/docs/content/docs/tools/claude-code.mdx": {
+      "dependsOn": [
+        "packages/tool-claude/src",
+        "apps/docs/content/docs/meta.json",
+        "apps/docs/content/docs/tools/meta.json"
+      ],
+      "verified": {
+        "apps/docs/content/docs/tools/claude-code.mdx": "e79fcce34fb29dd6d40e4b7fe9ad9da7201e633e",
+        "packages/tool-claude/src": "d96d63a7fa1273d8de818ba7324e67f0d938bba6",
+        "apps/docs/content/docs/meta.json": "dd0480129b7d6c7a4c35f0205d07ed6d94e39899",
+        "apps/docs/content/docs/tools/meta.json": "f1f12c3162b7ac79b206ed574caf8a0975392b8a"
+      },
+      "verifiedAt": "2026-07-15"
+    },
+    "apps/docs/content/docs/tools/codex.mdx": {
+      "dependsOn": [
+        "packages/tool-codex/src",
+        "packages/cli/src/commands/install.ts",
+        "apps/docs/content/docs/meta.json",
+        "apps/docs/content/docs/tools/meta.json"
+      ],
+      "verified": {
+        "apps/docs/content/docs/tools/codex.mdx": "a87abfee9ed388696183341135707430e348cacc",
+        "packages/tool-codex/src": "5e910189bb758192b183c1f54dc8699ed4d13482",
+        "packages/cli/src/commands/install.ts": "7a2b80cfb9fb3e5c1aaf7121d859f19250e4e0eb",
+        "apps/docs/content/docs/meta.json": "dd0480129b7d6c7a4c35f0205d07ed6d94e39899",
+        "apps/docs/content/docs/tools/meta.json": "f1f12c3162b7ac79b206ed574caf8a0975392b8a"
+      },
+      "verifiedAt": "2026-07-13"
+    },
+    "apps/docs/content/docs/tools/cursor.mdx": {
+      "dependsOn": [
+        "packages/tool-cursor/src",
+        "apps/docs/content/docs/meta.json",
+        "apps/docs/content/docs/tools/meta.json"
+      ],
+      "verified": {
+        "apps/docs/content/docs/tools/cursor.mdx": "957423e26d5b48f3a05ff23f8e1092cca00a3b38",
+        "packages/tool-cursor/src": "632211c204e91ccebda977afc9ca0e186367e2ce",
+        "apps/docs/content/docs/meta.json": "dd0480129b7d6c7a4c35f0205d07ed6d94e39899",
+        "apps/docs/content/docs/tools/meta.json": "f1f12c3162b7ac79b206ed574caf8a0975392b8a"
+      },
+      "verifiedAt": "2026-07-13"
+    },
+    "apps/docs/content/docs/tools/index.mdx": {
+      "dependsOn": [
+        "packages/tools/src",
+        "packages/tool-opencode/src",
+        "apps/docs/content/docs/meta.json",
+        "apps/docs/content/docs/tools/meta.json"
+      ],
+      "verified": {
+        "apps/docs/content/docs/tools/index.mdx": "c4a0143fadb8100f4b1a9c0ce88bbf8aaed30088",
+        "packages/tools/src": "941a21a113412b53dd03e7bce4de70770be40362",
+        "packages/tool-opencode/src": "ec3eab2fd0413ec098247daf9e65625a6940f36c",
+        "apps/docs/content/docs/meta.json": "dd0480129b7d6c7a4c35f0205d07ed6d94e39899",
+        "apps/docs/content/docs/tools/meta.json": "f1f12c3162b7ac79b206ed574caf8a0975392b8a"
+      },
+      "verifiedAt": "2026-07-15"
+    },
+    "apps/docs/README.md": {
+      "dependsOn": [
+        "apps/docs/package.json",
+        "scripts/sync-docs-changelog.mjs"
+      ],
+      "verified": {
+        "apps/docs/README.md": "c188dc27ed88e471377db9df8c5c2fd720b8ee89",
+        "apps/docs/package.json": "04e1be867b639ee487b0e73039ccc6393defb3aa",
+        "scripts/sync-docs-changelog.mjs": "78865f3ed09ef5ea8f4cf9694e4d0b96c9462dca"
+      },
+      "verifiedAt": "2026-07-13"
+    },
+    "apps/scope/README.md": {
+      "dependsOn": [
+        "apps/scope/app",
+        "apps/scope/lib",
+        "apps/scope/package.json"
+      ],
+      "verified": {
+        "apps/scope/README.md": "8fd9a82a93904e83463c977ceb223e59f5311be1",
+        "apps/scope/app": "b09d534b01f1db0b8cbbedc9889bf0af60a4a18d",
+        "apps/scope/lib": "c09ff1773c03b1268372525404a0618feab2bd0d",
+        "apps/scope/package.json": "d14812ced5818be3affb00b0df5c96d1051604e6"
+      },
+      "verifiedAt": "2026-07-13"
+    },
+    "CONTRIBUTING.md": {
+      "dependsOn": [
+        "package.json",
+        ".github/workflows/ci.yml"
+      ],
+      "verified": {
+        "CONTRIBUTING.md": "680a0d6f813a46e3efd2ef31f8ee7a1634484d3b",
+        "package.json": "86424726f165d7a31290d30e22a014b595872c81",
+        ".github/workflows/ci.yml": "beb2a9b672c3d2fe3300646c5695dff724f27736"
+      },
+      "verifiedAt": "2026-07-13"
+    },
+    "docker/hyperkit-controller/README.md": {
+      "dependsOn": [
+        "docker/hyperkit-controller/Dockerfile"
+      ],
+      "verified": {
+        "docker/hyperkit-controller/README.md": "2fa3d73eeb4c166f19c0fff8cb41b3a06db5ea15",
+        "docker/hyperkit-controller/Dockerfile": "8387df66efc6071e1b62cb63c0740a7a25a272f4"
+      },
+      "verifiedAt": "2026-07-13"
+    },
+    "docker/hyperkit-runner/README.md": {
+      "dependsOn": [
+        "docker/hyperkit-runner/Dockerfile"
+      ],
+      "verified": {
+        "docker/hyperkit-runner/README.md": "9340e05287c71d557439eb89bab90250f57df1ca",
+        "docker/hyperkit-runner/Dockerfile": "6f2124974694a848b2be73fef1125d8d37beb5e1"
+      },
+      "verifiedAt": "2026-07-13"
+    },
+    "docs/apps-and-examples.md": {
+      "dependsOn": [
+        "examples/manifest.json",
+        "apps/scope",
+        "apps/docs/README.md"
+      ],
+      "verified": {
+        "docs/apps-and-examples.md": "255351c24f2373d07b25a3cf3f0c6d6a92b22b35",
+        "examples/manifest.json": "2d61df4e48a56c26a02c1ae3529fa72868c7d9ba",
+        "apps/scope": "7ca03c2109e99a2be19e7ecbe291c42fc1504a9f",
+        "apps/docs/README.md": "c188dc27ed88e471377db9df8c5c2fd720b8ee89"
+      },
+      "verifiedAt": "2026-07-13"
+    },
+    "docs/benchmarking-runbook.md": {
+      "dependsOn": [
+        "python/fusionkit-evals",
+        "configs"
+      ],
+      "verified": {
+        "docs/benchmarking-runbook.md": "ead0c2f26c26121693c95dc2679f97ed3c173e78",
+        "python/fusionkit-evals": "9bb182a8cb1da3e3136e313eed86e8a2011e8b1b",
+        "configs": "82a1deda135591f75e3e3dc136ad960dd4a5d8ab"
+      },
+      "verifiedAt": "2026-07-13"
+    },
+    "docs/cli.md": {
+      "dependsOn": [
+        "packages/cli/src",
+        "spec/registry"
+      ],
+      "verified": {
+        "docs/cli.md": "59413fbc9d14bfb060b53b8f67cb5bef81c665fe",
+        "packages/cli/src": "e23a4e63cd30e8fd53bcdb755b2761110bac31cc",
+        "spec/registry": "f122fb1150e513ea9a08ffc47521184593fd81cf"
+      },
+      "verifiedAt": "2026-07-15"
+    },
+    "docs/cliproxy-upstream.md": {
+      "dependsOn": [
+        "packages/cli/src/fusion",
+        "spec/registry/providers.json"
+      ],
+      "verified": {
+        "docs/cliproxy-upstream.md": "d33e983e8650cc494d198176a201f9359aa29800",
+        "packages/cli/src/fusion": "240a16437402c38dd3e17aa89452bac5fad75c7d",
+        "spec/registry/providers.json": "d72f06c957abebe6b84681e0d3320125196b13dd"
+      },
+      "verifiedAt": "2026-07-13"
+    },
+    "docs/configuration.md": {
+      "dependsOn": [
+        "packages/cli/src",
+        "packages/model-gateway/src/adapters",
+        "spec/registry"
+      ],
+      "verified": {
+        "docs/configuration.md": "f7af79569f4b8030e17195b435b015bba780efa3",
+        "packages/cli/src": "e23a4e63cd30e8fd53bcdb755b2761110bac31cc",
+        "packages/model-gateway/src/adapters": "d0521d6e3a2af789dae19119be3aa7eba3a8f42a",
+        "spec/registry": "f122fb1150e513ea9a08ffc47521184593fd81cf"
+      },
+      "verifiedAt": "2026-07-15"
+    },
+    "docs/documentation-taxonomy.md": {
+      "dependsOn": [],
+      "verified": {
+        "docs/documentation-taxonomy.md": "b8468d065cde7ccde4cb38472bb772c090ef59a5"
+      },
+      "verifiedAt": "2026-07-15"
+    },
+    "docs/fusion-harness-gateway.md": {
+      "dependsOn": [
+        "packages/model-gateway/src",
+        "packages/cli/src/commands/ensemble.ts",
+        "packages/tools/src"
+      ],
+      "verified": {
+        "docs/fusion-harness-gateway.md": "474f5f66aba1f15f57acbdd512faeb11dfb96952",
+        "packages/model-gateway/src": "e05d7c9fca791ed0e06ae7f848e53db222154447",
+        "packages/cli/src/commands/ensemble.ts": "3006b34f71ca30de52c718cd7ef14cfcfa063a9a",
+        "packages/tools/src": "941a21a113412b53dd03e7bce4de70770be40362"
+      },
+      "verifiedAt": "2026-07-15"
+    },
+    "docs/fusion-judge-trajectory.md": {
+      "dependsOn": [
+        "packages/ensemble/src",
+        "python/fusionkit-server/src",
+        "scripts/fusion-codex-e2e.mjs"
+      ],
+      "verified": {
+        "docs/fusion-judge-trajectory.md": "a7ab12a0e384bffacaf0781d2f516f95b3d385d2",
+        "packages/ensemble/src": "7dac3e2d0ea3b57a88dafba20e82269c05fe7578",
+        "python/fusionkit-server/src": "5fd0b98cc9d18ebd04e50868edb94cc139781063",
+        "scripts/fusion-codex-e2e.mjs": "9094b20f66d6867741f93fc074902f4e9dff52a0"
+      },
+      "verifiedAt": "2026-07-13"
+    },
+    "docs/fusion/runtime-kernel.md": {
+      "dependsOn": [
+        "packages/kernel/src",
+        "packages/ensemble/src"
+      ],
+      "verified": {
+        "docs/fusion/runtime-kernel.md": "7ed41e4a0dedad3e97c01ac7af1bee995abdc9dd",
+        "packages/kernel/src": "2c92266f41b2bd38216e5eb841443354317ac470",
+        "packages/ensemble/src": "7dac3e2d0ea3b57a88dafba20e82269c05fe7578"
+      },
+      "verifiedAt": "2026-07-15"
+    },
+    "docs/fusion/runtime-recipes.md": {
+      "dependsOn": [
+        "packages/kernel/src",
+        "packages/ensemble/src"
+      ],
+      "verified": {
+        "docs/fusion/runtime-recipes.md": "4814dc227315dd4419d048cab73e0a9c0ab78477",
+        "packages/kernel/src": "2c92266f41b2bd38216e5eb841443354317ac470",
+        "packages/ensemble/src": "7dac3e2d0ea3b57a88dafba20e82269c05fe7578"
+      },
+      "verifiedAt": "2026-07-13"
+    },
+    "docs/getting-started.md": {
+      "dependsOn": [
+        "package.json",
+        "examples/manifest.json",
+        "CONTRIBUTING.md"
+      ],
+      "verified": {
+        "docs/getting-started.md": "5b8a67e6739cf9efe082a400eadc50d02f0cbfda",
+        "package.json": "86424726f165d7a31290d30e22a014b595872c81",
+        "examples/manifest.json": "2d61df4e48a56c26a02c1ae3529fa72868c7d9ba",
+        "CONTRIBUTING.md": "680a0d6f813a46e3efd2ef31f8ee7a1634484d3b"
+      },
+      "verifiedAt": "2026-07-15"
+    },
+    "docs/handoffkit-fusion-bench.md": {
+      "dependsOn": [
+        "python/fusionkit-evals/tests/test_fusion_bench.py",
+        "python/fusionkit-cli/src/fusionkit_cli/commands/bench.py"
+      ],
+      "verified": {
+        "docs/handoffkit-fusion-bench.md": "c5d40fba8f901ffe7fe77c328a278d0f5dcec2b3",
+        "python/fusionkit-evals/tests/test_fusion_bench.py": "a0cc5426d694de8938cbbeabc62b8528a5246d5d",
+        "python/fusionkit-cli/src/fusionkit_cli/commands/bench.py": "7977962814e0093ec60dc9b59b2b0cffef01cd0e"
+      },
+      "verifiedAt": "2026-07-13"
+    },
+    "docs/hyperkit.md": {
+      "dependsOn": [
+        "python/hyperkit",
+        "infra/hyperkit",
+        "infra/hypergrid-batch",
+        "infra/hypergrid-obs",
+        "docker/hyperkit-runner",
+        "python/fusionkit-cli/src/fusionkit_cli/hyperkit_plugin.py"
+      ],
+      "verified": {
+        "docs/hyperkit.md": "4673161b6213b190bc0c58c25c3056dea5d05f40",
+        "python/hyperkit": "9287f460b1a8d1dc87b565366c6ac826f5877dc1",
+        "infra/hyperkit": "5f775f814f281a138cdc2eab1570515366cb5dbd",
+        "infra/hypergrid-batch": "a25c9c3114c5cbc33a39e518075eb90ae653a19c",
+        "infra/hypergrid-obs": "cb6691a2ed41b9222fbe88b143596705c77120b9",
+        "docker/hyperkit-runner": "0769038a54351760e35b243b5747a04aeefe6e42",
+        "python/fusionkit-cli/src/fusionkit_cli/hyperkit_plugin.py": "a625be8daf7f5e4c58b9a4dcec77cb0237c1b8c8"
+      },
+      "verifiedAt": "2026-07-13"
+    },
+    "docs/local-mlx-panel-demo.md": {
+      "dependsOn": [
+        "scripts/run_local_mlx_panel_demo.sh",
+        "python/fusionkit-server/src",
+        "spec/registry/local-catalog.json"
+      ],
+      "verified": {
+        "docs/local-mlx-panel-demo.md": "052d75906061980887683d2d29194ab133d48290",
+        "scripts/run_local_mlx_panel_demo.sh": "56e5d999709381bf9e8474338b964c8e61fc8866",
+        "python/fusionkit-server/src": "5fd0b98cc9d18ebd04e50868edb94cc139781063",
+        "spec/registry/local-catalog.json": "54e722e01dfb60b26cbeeab7350a9094ce30f130"
+      },
+      "verifiedAt": "2026-07-13"
+    },
+    "docs/model-catalog.md": {
+      "dependsOn": [
+        "spec/registry",
+        "packages/cli/src/fusion"
+      ],
+      "verified": {
+        "docs/model-catalog.md": "1ffbfc885333b3efcfd94568de13a914bf48831b",
+        "spec/registry": "f122fb1150e513ea9a08ffc47521184593fd81cf",
+        "packages/cli/src/fusion": "1bcc06a62d864aba47b5af67d31e0d69b62f16a8"
+      },
+      "verifiedAt": "2026-07-15"
+    },
+    "docs/model-fusion-protocol-consumption.md": {
+      "dependsOn": [
+        "spec/model-fusion-contract",
+        "packages/protocol"
+      ],
+      "verified": {
+        "docs/model-fusion-protocol-consumption.md": "1dc310f0b5675ba2dbd00e8f8ce2f9ac370a5322",
+        "spec/model-fusion-contract": "fa7d5cfb266015c6933b398592340ed096d9adb1",
+        "packages/protocol": "b2dd9225261bd165084af764d7664f5f6d421e25"
+      },
+      "verifiedAt": "2026-07-13"
+    },
+    "docs/model-fusion-protocol-release.md": {
+      "dependsOn": [
+        "spec/model-fusion-contract",
+        ".github/workflows/model-fusion-protocol-release.yml",
+        "scripts/build_protocol_python_package.py"
+      ],
+      "verified": {
+        "docs/model-fusion-protocol-release.md": "019c0987741c57fb3ad73df57c890efb20b97eb1",
+        "spec/model-fusion-contract": "fa7d5cfb266015c6933b398592340ed096d9adb1",
+        ".github/workflows/model-fusion-protocol-release.yml": "8be0a462929dbe1058bc389ea8f4245656a3e3e3",
+        "scripts/build_protocol_python_package.py": "6e361fb6777af2cd88de3120576dfd6460a9ceec"
+      },
+      "verifiedAt": "2026-07-13"
+    },
+    "docs/operations-and-scripts.md": {
+      "dependsOn": [
+        "scripts",
+        "package.json",
+        ".github/workflows",
+        "release"
+      ],
+      "verified": {
+        "docs/operations-and-scripts.md": "c4bc80c69fe4e53a81ec00fc53be16cd5b8e5e4b",
+        "scripts": "9b6ae138466f0c50ae0c222a41a46d80db87ccd9",
+        "package.json": "86424726f165d7a31290d30e22a014b595872c81",
+        ".github/workflows": "6ed840aef26d1721ce81b5d98d78686fa6bd8975",
+        "release": "1d41d871b84cb878e95e0942af064ea42556cf2f"
+      },
+      "verifiedAt": "2026-07-13"
+    },
+    "docs/packages.md": {
+      "dependsOn": [
+        "pnpm-workspace.yaml",
+        "pyproject.toml"
+      ],
+      "verified": {
+        "docs/packages.md": "b5ad89f32f638b337f017477383aab3ded086d67",
+        "pnpm-workspace.yaml": "17caacb89c1811a10637e577688124d5a9f742ec",
+        "pyproject.toml": "ae9a7b9f54ab997fbdc64f57d1f1a9dc4ffedc53"
+      },
+      "verifiedAt": "2026-07-13"
+    },
+    "docs/privacy.md": {
+      "dependsOn": [
+        "packages/cli/src/telemetry",
+        "packages/model-gateway/src/fusion-session.ts",
+        "packages/cli/src/fusion/observability.ts"
+      ],
+      "verified": {
+        "docs/privacy.md": "7bacffdd3b3c72d157d9d29510598159dfc9a9a7",
+        "packages/cli/src/telemetry": "f18fc1f48b98f67d2e439c394df7c96f82a25498",
+        "packages/model-gateway/src/fusion-session.ts": "38ac98599a88dbfcf941ac9810099139b108aa6d",
+        "packages/cli/src/fusion/observability.ts": "e1c82c8f11768966ca94d55127ba8b8585233e8a"
+      },
+      "verifiedAt": "2026-07-13"
+    },
+    "docs/prompt-tuning.md": {
+      "dependsOn": [
+        "python/fusionkit-evals/src/fusionkit_evals/prompt_tuning.py",
+        "python/fusionkit-cli/src/fusionkit_cli/commands/bench.py"
+      ],
+      "verified": {
+        "docs/prompt-tuning.md": "d5186a2c95d6a144ef66de97d4d77d9ff6e10d60",
+        "python/fusionkit-evals/src/fusionkit_evals/prompt_tuning.py": "7b9a4814d3a48ee04667a604918c297bf93bdfea",
+        "python/fusionkit-cli/src/fusionkit_cli/commands/bench.py": "7977962814e0093ec60dc9b59b2b0cffef01cd0e"
+      },
+      "verifiedAt": "2026-07-13"
+    },
+    "docs/public-benchmark-comparison.md": {
+      "dependsOn": [
+        "python/fusionkit-evals/src/fusionkit_evals/public_bench.py",
+        "python/fusionkit-evals/src/fusionkit_evals/adapters"
+      ],
+      "verified": {
+        "docs/public-benchmark-comparison.md": "90d08fc590d5872fa9cd767e9dff10d57d1bab35",
+        "python/fusionkit-evals/src/fusionkit_evals/public_bench.py": "cd82f05636fa98d3d5058cf99ad5b69227b97476",
+        "python/fusionkit-evals/src/fusionkit_evals/adapters": "2b4435462d2baaec08eebc45b36030ce2160796b"
+      },
+      "verifiedAt": "2026-07-13"
+    },
+    "docs/public-benchmark-smoke.md": {
+      "dependsOn": [
+        "python/fusionkit-evals/src/fusionkit_evals/public_smoke.py",
+        "python/fusionkit-evals/src/fusionkit_evals/data/fixtures/public-smoke"
+      ],
+      "verified": {
+        "docs/public-benchmark-smoke.md": "69dd93f9d0936b13e5666c39a7d233a2121ea537",
+        "python/fusionkit-evals/src/fusionkit_evals/public_smoke.py": "b5ecdfdfc00d638f29bf17608dcf5c17943ea929",
+        "python/fusionkit-evals/src/fusionkit_evals/data/fixtures/public-smoke": "df85a4e598569de2be820fcdac628baac28d2403"
+      },
+      "verifiedAt": "2026-07-13"
+    },
+    "docs/python-reference.md": {
+      "dependsOn": [
+        "python",
+        "pyproject.toml"
+      ],
+      "verified": {
+        "docs/python-reference.md": "4b0bbb1caae05242c601571562cc1c04c8bab610",
+        "python": "61fd2af4e3770a2ebab99357c37ec015f0a580b5",
+        "pyproject.toml": "ae9a7b9f54ab997fbdc64f57d1f1a9dc4ffedc53"
+      },
+      "verifiedAt": "2026-07-13"
+    },
+    "docs/quickstart-handoff.md": {
+      "dependsOn": [
+        "packages/model-gateway/src/fusion-failover.ts",
+        "packages/cli/src/shared/options.ts"
+      ],
+      "verified": {
+        "docs/quickstart-handoff.md": "181757dd0e6b64231c3322d8cd71a5c4c3a8977d",
+        "packages/model-gateway/src/fusion-failover.ts": "fb6a1d5530014180086e6348efe0a469fdc17b69",
+        "packages/cli/src/shared/options.ts": "da23da50f2ed3b74d6db0c1c4b05902e8faece4d"
+      },
+      "verifiedAt": "2026-07-13"
+    },
+    "docs/quickstart-harness.md": {
+      "dependsOn": [
+        "packages/cli/src/commands",
+        "packages/tools/src"
+      ],
+      "verified": {
+        "docs/quickstart-harness.md": "61dc5a95e0f0e54e9f147e6e56b74891556ba12e",
+        "packages/cli/src/commands": "b135a952340eeda8d14db25e7db7d2f7654ac209",
+        "packages/tools/src": "86ca442eda163a75256c634d867daaebf5488680"
+      },
+      "verifiedAt": "2026-07-13"
+    },
+    "docs/quickstart-inference.md": {
+      "dependsOn": [
+        "packages/model-gateway/src/server.ts",
+        "packages/cli/src/commands/fusion.ts"
+      ],
+      "verified": {
+        "docs/quickstart-inference.md": "15b8c457454fd70bb37344af196210aca99c8028",
+        "packages/model-gateway/src/server.ts": "d297695911054a05c95c14d4c1b2cdf96d83a6ae",
+        "packages/cli/src/commands/fusion.ts": "71c9177e3ce1ed957c87e4345429a14f97cce2c8"
+      },
+      "verifiedAt": "2026-07-13"
+    },
+    "docs/README.md": {
+      "dependsOn": [
+        ".github/workflows/docs-heal.yml",
+        ".cursor/skills/docs-audit/SKILL.md",
+        "scripts/check-repo.mjs"
+      ],
+      "verified": {
+        "docs/README.md": "3eda23094042b0083f02631ae8fa244236812f6c",
+        ".github/workflows/docs-heal.yml": "a8e1334d95d5f06e2d62a89fdf8704f6c552f991",
+        ".cursor/skills/docs-audit/SKILL.md": "78048512a958f5cff84cff371519cb2bc243bc6b",
+        "scripts/check-repo.mjs": "13714660085877caf895e4c09c348d18aa86cadd"
+      },
+      "verifiedAt": "2026-07-16T08:36:50.414Z"
+    },
+    "docs/release-publishing.md": {
+      "dependsOn": [
+        "scripts/publish-npm-workspaces.mjs",
+        "scripts/check-release-publish.mjs",
+        ".github/workflows/release-packages.yml",
+        "release/npm-packages.json"
+      ],
+      "verified": {
+        "docs/release-publishing.md": "bbafb6fc112af159d6d73f6e896e5f67bbfa5f82",
+        "scripts/publish-npm-workspaces.mjs": "77003ead3222169a145ee22358c42dc5d3ce258a",
+        "scripts/check-release-publish.mjs": "453ace7f730cf5a4d07f9263f1335cb25f853629",
+        ".github/workflows/release-packages.yml": "ddc49e81d9b57d85b8225535bf8a84af428bd415",
+        "release/npm-packages.json": "02c64a7cd397202382d9f34e0bece535809e9453"
+      },
+      "verifiedAt": "2026-07-13"
+    },
+    "docs/releasing.md": {
+      "dependsOn": [
+        "scripts/release.mjs",
+        "release",
+        ".github/workflows"
+      ],
+      "verified": {
+        "docs/releasing.md": "7fa5ebbfbef38eadb3768e9f57b3d67424042665",
+        "scripts/release.mjs": "7dd70f87b86849fbe6a56b5a7d764013cee57984",
+        "release": "1d41d871b84cb878e95e0942af064ea42556cf2f",
+        ".github/workflows": "6ed840aef26d1721ce81b5d98d78686fa6bd8975"
+      },
+      "verifiedAt": "2026-07-13"
+    },
+    "docs/repository-coverage-map.md": {
+      "dependsOn": [
+        "pnpm-workspace.yaml",
+        "pyproject.toml",
+        ".github/workflows"
+      ],
+      "verified": {
+        "docs/repository-coverage-map.md": "e6ba788cbe313f9e1d1d0b516cd3296be5cc9ca1",
+        "pnpm-workspace.yaml": "17caacb89c1811a10637e577688124d5a9f742ec",
+        "pyproject.toml": "ae9a7b9f54ab997fbdc64f57d1f1a9dc4ffedc53",
+        ".github/workflows": "6ed840aef26d1721ce81b5d98d78686fa6bd8975"
+      },
+      "verifiedAt": "2026-07-15"
+    },
+    "docs/repository-reference.md": {
+      "dependsOn": [
+        "pnpm-workspace.yaml",
+        "pyproject.toml",
+        "examples/manifest.json",
+        ".github/workflows",
+        "release"
+      ],
+      "verified": {
+        "docs/repository-reference.md": "3ea450768c0fed87921dd86bd216f6e9adbeb632",
+        "pnpm-workspace.yaml": "17caacb89c1811a10637e577688124d5a9f742ec",
+        "pyproject.toml": "ae9a7b9f54ab997fbdc64f57d1f1a9dc4ffedc53",
+        "examples/manifest.json": "2d61df4e48a56c26a02c1ae3529fa72868c7d9ba",
+        ".github/workflows": "6ed840aef26d1721ce81b5d98d78686fa6bd8975",
+        "release": "1d41d871b84cb878e95e0942af064ea42556cf2f"
+      },
+      "verifiedAt": "2026-07-15"
+    },
+    "docs/scope.md": {
+      "dependsOn": [
+        "packages/cli/src/cli.ts",
+        "pnpm-workspace.yaml",
+        "legacy/README.md"
+      ],
+      "verified": {
+        "docs/scope.md": "56cd2e3fab80fb01ede82d8c33c3178b416d5f21",
+        "packages/cli/src/cli.ts": "d23960e1cd88b66ba7840ef7362189bafe4936b3",
+        "pnpm-workspace.yaml": "17caacb89c1811a10637e577688124d5a9f742ec",
+        "legacy/README.md": "ea13b39fcae92514ee5c4e68d38fc13e4e291223"
+      },
+      "verifiedAt": "2026-07-15"
+    },
+    "docs/source-symbol-index.md": {
+      "dependsOn": [
+        "packages/cli/src/cli.ts",
+        "packages/ensemble/src/index.ts",
+        "packages/model-gateway/src/index.ts",
+        "packages/kernel/src/index.ts",
+        "packages/protocol/src/index.ts",
+        "packages/adapter-ai-sdk/src/index.ts",
+        "packages/testkit/src/index.ts",
+        "packages/tracing/src/index.ts",
+        "packages/registry/src/index.ts",
+        "pyproject.toml"
+      ],
+      "verified": {
+        "docs/source-symbol-index.md": "61e17189ce1d857de277524eac443169894ea936",
+        "packages/cli/src/cli.ts": "d23960e1cd88b66ba7840ef7362189bafe4936b3",
+        "packages/ensemble/src/index.ts": "9cd01158ad18942f429e8d7ec7f22d8881a47e86",
+        "packages/model-gateway/src/index.ts": "b6c21b22b49d3c8237fea631cbd2441541a65ae9",
+        "packages/kernel/src/index.ts": "a74b360fdcd0956cad13fddeed7fb693f7cc4980",
+        "packages/protocol/src/index.ts": "7f1c9d2369d0adf01b20585045d9570f74d7c9ec",
+        "packages/adapter-ai-sdk/src/index.ts": "06b8154c80e46b9a7250dc0243d47c7d02bc9168",
+        "packages/testkit/src/index.ts": "9741b63f39fe23dd4d7ff6eb4797ce63ee2a1b64",
+        "packages/tracing/src/index.ts": "98eb395bf99eeda35053454efd8511767d21d714",
+        "packages/registry/src/index.ts": "74ebb70b1fadfde5084fcbe13e1112f178d8f26c",
+        "pyproject.toml": "ae9a7b9f54ab997fbdc64f57d1f1a9dc4ffedc53"
+      },
+      "verifiedAt": "2026-07-15"
+    },
+    "docs/specs-and-apis.md": {
+      "dependsOn": [
+        "spec",
+        "packages/protocol"
+      ],
+      "verified": {
+        "docs/specs-and-apis.md": "054a0b0812947ba5badb4854831e027b6717e55d",
+        "spec": "5565637f287f0d40ab2285ecef7190712e36ff74",
+        "packages/protocol": "b2dd9225261bd165084af764d7664f5f6d421e25"
+      },
+      "verifiedAt": "2026-07-13"
+    },
+    "docs/style-guide.md": {
+      "dependsOn": [],
+      "verified": {
+        "docs/style-guide.md": "c76d1025347c7b4511696caa58fd0c8c1a73bb58"
+      },
+      "verifiedAt": "2026-07-15"
+    },
+    "docs/subscription-pooling.md": {
+      "dependsOn": [
+        "packages/model-gateway/src/subscriptions",
+        "packages/cli/src/commands/proxy.ts",
+        "spec/registry/subscriptions.json"
+      ],
+      "verified": {
+        "docs/subscription-pooling.md": "3ce4ee3c90155ea0866f8adccb159d67166e7f97",
+        "packages/model-gateway/src/subscriptions": "45516e47e797110e5d90146d3ee63a2807b36ae1",
+        "packages/cli/src/commands/proxy.ts": "c44bdfa737b7be14ff8b02fb160ef2d4998ef9ea",
+        "spec/registry/subscriptions.json": "f25e2b1ecd475e3e1e5a903220a9dc6642b3bb11"
+      },
+      "verifiedAt": "2026-07-13"
+    },
+    "docs/testing.md": {
+      "dependsOn": [
+        "packages/testkit/src",
+        "python/fusionkit-testkit",
+        ".github/workflows/ci.yml",
+        "spec/testing"
+      ],
+      "verified": {
+        "docs/testing.md": "7e54ab45b8c1714522e1ec11bcb534c971574dc1",
+        "packages/testkit/src": "3b7644e21b57c132f71fa4f6035bfdd2215b23d1",
+        "python/fusionkit-testkit": "f8374624578f84b6e50ad7fc22808bfcfb476871",
+        ".github/workflows/ci.yml": "beb2a9b672c3d2fe3300646c5695dff724f27736",
+        "spec/testing": "ab7cd123f9e0bdec14ea458c0541dfe45cec23fe"
+      },
+      "verifiedAt": "2026-07-13"
+    },
+    "docs/typescript-reference.md": {
+      "dependsOn": [
+        "packages/cli/src/cli.ts",
+        "packages/ensemble/src/index.ts",
+        "packages/model-gateway/src/index.ts",
+        "packages/kernel/src/index.ts",
+        "packages/protocol/src/index.ts",
+        "packages/adapter-ai-sdk/src/index.ts",
+        "packages/testkit/src/index.ts",
+        "packages/tracing/src/index.ts",
+        "packages/registry/src/index.ts"
+      ],
+      "verified": {
+        "docs/typescript-reference.md": "ba4a9c06cca654a9210f5c350263f91b075e247f",
+        "packages/cli/src/cli.ts": "9ef14172df4740d0c4ffbe92ed6ebb8146eed952",
+        "packages/ensemble/src/index.ts": "9cd01158ad18942f429e8d7ec7f22d8881a47e86",
+        "packages/model-gateway/src/index.ts": "b6c21b22b49d3c8237fea631cbd2441541a65ae9",
+        "packages/kernel/src/index.ts": "a74b360fdcd0956cad13fddeed7fb693f7cc4980",
+        "packages/protocol/src/index.ts": "7f1c9d2369d0adf01b20585045d9570f74d7c9ec",
+        "packages/adapter-ai-sdk/src/index.ts": "06b8154c80e46b9a7250dc0243d47c7d02bc9168",
+        "packages/testkit/src/index.ts": "9741b63f39fe23dd4d7ff6eb4797ce63ee2a1b64",
+        "packages/tracing/src/index.ts": "98eb395bf99eeda35053454efd8511767d21d714",
+        "packages/registry/src/index.ts": "74ebb70b1fadfde5084fcbe13e1112f178d8f26c"
+      },
+      "verifiedAt": "2026-07-13"
+    },
+    "infra/hypergrid-batch/README.md": {
+      "dependsOn": [
+        "infra/hypergrid-batch/deploy.py"
+      ],
+      "verified": {
+        "infra/hypergrid-batch/README.md": "664c763f48699a12d2f6283bd7c6d99953ac66d8",
+        "infra/hypergrid-batch/deploy.py": "32d292cd5a7f7e802575e89abace0f797f559b3c"
+      },
+      "verifiedAt": "2026-07-13"
+    },
+    "infra/hypergrid-obs/README.md": {
+      "dependsOn": [
+        "infra/hypergrid-obs/compose.yaml",
+        "infra/hypergrid-obs/datasources.yaml",
+        "infra/hypergrid-obs/deploy.py",
+        "infra/hypergrid-obs/join-tailnet.sh",
+        "infra/hypergrid-obs/nginx.conf",
+        "infra/hypergrid-obs/prometheus.yml"
+      ],
+      "verified": {
+        "infra/hypergrid-obs/README.md": "156bc13f5d8215a02aca48641f1239314dde406a",
+        "infra/hypergrid-obs/compose.yaml": "adc66cf3e4dc365d3f54b96f156e78e61fd9e373",
+        "infra/hypergrid-obs/datasources.yaml": "649cacd5732889865506469d78393f984df6e5d6",
+        "infra/hypergrid-obs/deploy.py": "3a996dd170124ed2360470baeb01b38a96ad7a51",
+        "infra/hypergrid-obs/join-tailnet.sh": "bac07a0ec0cf38a0f193383e60488b9bf0d80d43",
+        "infra/hypergrid-obs/nginx.conf": "83bec1f91df68caac1885e4106d98820742e137b",
+        "infra/hypergrid-obs/prometheus.yml": "d9f6aab56f59049da7ec7ec68f562bc0c4d4e61b"
+      },
+      "verifiedAt": "2026-07-13"
+    },
+    "infra/hyperkit/README.md": {
+      "dependsOn": [
+        "infra/hyperkit/main.tf",
+        "infra/hyperkit/controller.tf",
+        "infra/hyperkit/modules",
+        "infra/hyperkit/grafana",
+        "infra/hyperkit/outputs.tf",
+        "infra/hyperkit/variables.tf",
+        "infra/hyperkit/terraform.tfvars.example"
+      ],
+      "verified": {
+        "infra/hyperkit/README.md": "810044cc8cd005cd2b4f5bde0827de2e7385a7e5",
+        "infra/hyperkit/main.tf": "440b263672db5e1ea372cc56506bdd96284a492c",
+        "infra/hyperkit/controller.tf": "94531f62a8e5f2bfc77d5e306a02f8d301dd28a8",
+        "infra/hyperkit/modules": "375e5d4c9d907cc7fbe812f686b673453da5a13e",
+        "infra/hyperkit/grafana": "2453b3ca26dc2a1937a5b28b5c51055e030cee68",
+        "infra/hyperkit/outputs.tf": "50bfcb6fc41d05948fe88ec8f2dd404703ba3e19",
+        "infra/hyperkit/variables.tf": "b966f3975c4864a0a13698bd03bc91df27580bea",
+        "infra/hyperkit/terraform.tfvars.example": "d72ca1dd41ee023465ab4027634780703c0627a0"
+      },
+      "verifiedAt": "2026-07-13"
+    },
+    "packages/adapter-ai-sdk/README.md": {
+      "dependsOn": [
+        "packages/adapter-ai-sdk/src",
+        "packages/adapter-ai-sdk/package.json"
+      ],
+      "verified": {
+        "packages/adapter-ai-sdk/README.md": "c78abdac0ec3c1c1db37f95bd96f068c5b02eb5c",
+        "packages/adapter-ai-sdk/src": "881f4265d7654754aead98168a48fefd15c5eef1",
+        "packages/adapter-ai-sdk/package.json": "c26c65f08e41f9a186cfe190269827cda7d8fd4b"
+      },
+      "verifiedAt": "2026-07-13"
+    },
+    "packages/cli-ui/README.md": {
+      "dependsOn": [
+        "packages/cli-ui/src",
+        "packages/cli-ui/package.json"
+      ],
+      "verified": {
+        "packages/cli-ui/README.md": "bf57a0486438b7ac2b69c147669de6b29edd65d4",
+        "packages/cli-ui/src": "593a3e91458caf6129d584fbe311a3aceffdb342",
+        "packages/cli-ui/package.json": "98d6090dc502f3fb51821f861be50a5037267a57"
+      },
+      "verifiedAt": "2026-07-13"
+    },
+    "packages/cli/README.md": {
+      "dependsOn": [
+        "packages/cli/src",
+        "packages/cli/package.json"
+      ],
+      "verified": {
+        "packages/cli/README.md": "18c53c0d8e8b9383d92feffa15eb350459447f68",
+        "packages/cli/src": "e23a4e63cd30e8fd53bcdb755b2761110bac31cc",
+        "packages/cli/package.json": "99ccdbd8fa642fa8fbe3da065fd83f5daf3fd1c1"
+      },
+      "verifiedAt": "2026-07-15"
+    },
+    "packages/ensemble/README.md": {
+      "dependsOn": [
+        "packages/ensemble/src",
+        "packages/ensemble/package.json"
+      ],
+      "verified": {
+        "packages/ensemble/README.md": "45522dc710a182a549569c52bccf45e726b7414a",
+        "packages/ensemble/src": "7dac3e2d0ea3b57a88dafba20e82269c05fe7578",
+        "packages/ensemble/package.json": "22df89b378f021723dd8e83b73851e0901fa5710"
+      },
+      "verifiedAt": "2026-07-13"
+    },
+    "packages/example-utils/README.md": {
+      "dependsOn": [
+        "packages/example-utils/src",
+        "packages/example-utils/package.json"
+      ],
+      "verified": {
+        "packages/example-utils/README.md": "a375427915356e95579fcb91966cb3debfed1835",
+        "packages/example-utils/src": "290aedfdc601283ddde11d25a2d8143f74290549",
+        "packages/example-utils/package.json": "45872a6d919a291e0c748f48f122e5279f4b7307"
+      },
+      "verifiedAt": "2026-07-13"
+    },
+    "packages/harness-core/README.md": {
+      "dependsOn": [
+        "packages/harness-core/src",
+        "packages/harness-core/package.json"
+      ],
+      "verified": {
+        "packages/harness-core/README.md": "ac7685fa4c8b99b62977260f9de0d7cbf5edd8d6",
+        "packages/harness-core/src": "1b63449981fc589f5cfd732925bf801b51a8dc8e",
+        "packages/harness-core/package.json": "32dfd47e03db59f18c499d4dd848f04a0167faaa"
+      },
+      "verifiedAt": "2026-07-13"
+    },
+    "packages/kernel/README.md": {
+      "dependsOn": [
+        "packages/kernel/src",
+        "packages/kernel/package.json"
+      ],
+      "verified": {
+        "packages/kernel/README.md": "8f974f8a73139e35a07d51ad90b59e26a6f4ceed",
+        "packages/kernel/src": "2c92266f41b2bd38216e5eb841443354317ac470",
+        "packages/kernel/package.json": "1959af86c8ddd7776d9c7849da24a0ef67f5a9e4"
+      },
+      "verifiedAt": "2026-07-13"
+    },
+    "packages/model-gateway/README.md": {
+      "dependsOn": [
+        "packages/model-gateway/src",
+        "packages/model-gateway/package.json"
+      ],
+      "verified": {
+        "packages/model-gateway/README.md": "a811c7982bbc4f31b440fcc02dca85e7a97e90b4",
+        "packages/model-gateway/src": "e05d7c9fca791ed0e06ae7f848e53db222154447",
+        "packages/model-gateway/package.json": "2471a1a6e1204e29bd4ad77a6c57a0de0768cccf"
+      },
+      "verifiedAt": "2026-07-13"
+    },
+    "packages/protocol/README.md": {
+      "dependsOn": [
+        "packages/protocol/src",
+        "packages/protocol/package.json"
+      ],
+      "verified": {
+        "packages/protocol/README.md": "96443a6c81f423c9f1c1a128fb7a2cb3bb72b2b2",
+        "packages/protocol/src": "a0a6985c0365cdd34ce517fc813675ed941373ad",
+        "packages/protocol/package.json": "a2ed1002166f918a65e088943ff0ed1207389975"
+      },
+      "verifiedAt": "2026-07-13"
+    },
+    "packages/registry/README.md": {
+      "dependsOn": [
+        "packages/registry/src",
+        "packages/registry/package.json"
+      ],
+      "verified": {
+        "packages/registry/README.md": "50d525e675679feb7b0bf66a7e8c3225c3bfbeca",
+        "packages/registry/src": "112b3fbbd12ab8f0c50d0da9adf5a886f3b037fd",
+        "packages/registry/package.json": "ca76842e0245630fbb3f48f74196d7a589528440"
+      },
+      "verifiedAt": "2026-07-13"
+    },
+    "packages/runtime-utils/README.md": {
+      "dependsOn": [
+        "packages/runtime-utils/src",
+        "packages/runtime-utils/package.json"
+      ],
+      "verified": {
+        "packages/runtime-utils/README.md": "4169a400ba26062cf6b251851e0f820bbeb2f033",
+        "packages/runtime-utils/src": "86cd77921842d8bbf32dfa00f853476d5ba0da8b",
+        "packages/runtime-utils/package.json": "117db53fdca1b2de717af6a72c97742be7f9fb83"
+      },
+      "verifiedAt": "2026-07-13"
+    },
+    "packages/testkit/README.md": {
+      "dependsOn": [
+        "packages/testkit/src",
+        "packages/testkit/package.json"
+      ],
+      "verified": {
+        "packages/testkit/README.md": "f543732d5dc032cfe786d23216e9ee6ff5cfc205",
+        "packages/testkit/src": "3b7644e21b57c132f71fa4f6035bfdd2215b23d1",
+        "packages/testkit/package.json": "ea878f69ae97f1cfd334988fe8fa5b5cc8329c93"
+      },
+      "verifiedAt": "2026-07-13"
+    },
+    "packages/tool-claude/README.md": {
+      "dependsOn": [
+        "packages/tool-claude/src",
+        "packages/tool-claude/package.json"
+      ],
+      "verified": {
+        "packages/tool-claude/README.md": "dafa85cffc99b741bce6f99eb70e2f2e7c141141",
+        "packages/tool-claude/src": "3635d0b0a674814cb927b50846c1da882a53ad7e",
+        "packages/tool-claude/package.json": "b8d94eba5ff0bcb4264edac1f780c2fd3de644f9"
+      },
+      "verifiedAt": "2026-07-13"
+    },
+    "packages/tool-codex/README.md": {
+      "dependsOn": [
+        "packages/tool-codex/src",
+        "packages/tool-codex/package.json"
+      ],
+      "verified": {
+        "packages/tool-codex/README.md": "96a0fc54f08db4c2bbd9ebd4cdbe0c0e082632fc",
+        "packages/tool-codex/src": "5e910189bb758192b183c1f54dc8699ed4d13482",
+        "packages/tool-codex/package.json": "b7123640ed894d85f8ad5516f9d5d8edd4bdf0d0"
+      },
+      "verifiedAt": "2026-07-13"
+    },
+    "packages/tool-cursor/README.md": {
+      "dependsOn": [
+        "packages/tool-cursor/src",
+        "packages/tool-cursor/package.json"
+      ],
+      "verified": {
+        "packages/tool-cursor/README.md": "ff480909098cae4c9cde6e79d25b39c0f39e16d7",
+        "packages/tool-cursor/src": "632211c204e91ccebda977afc9ca0e186367e2ce",
+        "packages/tool-cursor/package.json": "308d9b7e1ead218ba5bf67c23d6781312180b11c"
+      },
+      "verifiedAt": "2026-07-13"
+    },
+    "packages/tool-opencode/README.md": {
+      "dependsOn": [
+        "packages/tool-opencode/src",
+        "packages/tool-opencode/package.json"
+      ],
+      "verified": {
+        "packages/tool-opencode/README.md": "7ae322fc210274c996f9546ce791cffb72b627d9",
+        "packages/tool-opencode/src": "ec3eab2fd0413ec098247daf9e65625a6940f36c",
+        "packages/tool-opencode/package.json": "3035d552b496c70be61b89f79face085edde21c2"
+      },
+      "verifiedAt": "2026-07-13"
+    },
+    "packages/tools/README.md": {
+      "dependsOn": [
+        "packages/tools/src",
+        "packages/tools/package.json"
+      ],
+      "verified": {
+        "packages/tools/README.md": "8f2bc61f5b55aa5bcdccb7fd30c03c9eb94b966a",
+        "packages/tools/src": "86ca442eda163a75256c634d867daaebf5488680",
+        "packages/tools/package.json": "ad3ce6e982f4a4d2ffb16e6c9acaefb309a35987"
+      },
+      "verifiedAt": "2026-07-13"
+    },
+    "packages/tracing/README.md": {
+      "dependsOn": [
+        "packages/tracing/src",
+        "packages/tracing/package.json"
+      ],
+      "verified": {
+        "packages/tracing/README.md": "2ce5d1ce64f56200c650f450f4b28b70e009362a",
+        "packages/tracing/src": "58fb5e77bdc4d3b07d982c25a5fa50d38edfddd7",
+        "packages/tracing/package.json": "109cc4c8e77c0b70a124c7ca43d8a119c0b10736"
+      },
+      "verifiedAt": "2026-07-13"
+    },
+    "packages/workspace/README.md": {
+      "dependsOn": [
+        "packages/workspace/src",
+        "packages/workspace/package.json"
+      ],
+      "verified": {
+        "packages/workspace/README.md": "4b4d653f5f3b7865c407aa6e9c2ac2282728bfeb",
+        "packages/workspace/src": "00fba0cf212c3af298d6612bf541b87227d29aa4",
+        "packages/workspace/package.json": "65065d0ef510160e3f82f0ceb96ce5b5660a6815"
+      },
+      "verifiedAt": "2026-07-13"
+    },
+    "python/fusionkit-cli/README.md": {
+      "dependsOn": [
+        "python/fusionkit-cli/src",
+        "python/fusionkit-cli/pyproject.toml"
+      ],
+      "verified": {
+        "python/fusionkit-cli/README.md": "d29f8ddf6466b8664852ec6b4bc2f3b9f1f2092e",
+        "python/fusionkit-cli/src": "168ade0d4195ef65907006e59140cb7b3d1e1692",
+        "python/fusionkit-cli/pyproject.toml": "aab15752fecdddf4ee6618f8495ba89c27f3c13c"
+      },
+      "verifiedAt": "2026-07-13"
+    },
+    "python/fusionkit-core/README.md": {
+      "dependsOn": [
+        "python/fusionkit-core/src",
+        "python/fusionkit-core/pyproject.toml"
+      ],
+      "verified": {
+        "python/fusionkit-core/README.md": "8b33340e9746e842588c84d182b246f9ea8d28fb",
+        "python/fusionkit-core/src": "ebef9e5319578a7a79fa58adbd9493f0bc48a4d8",
+        "python/fusionkit-core/pyproject.toml": "ff457a42b699a516f22a8498ca8d9e5e920861e7"
+      },
+      "verifiedAt": "2026-07-13"
+    },
+    "python/fusionkit-evals/README.md": {
+      "dependsOn": [
+        "python/fusionkit-evals/src",
+        "python/fusionkit-evals/pyproject.toml"
+      ],
+      "verified": {
+        "python/fusionkit-evals/README.md": "2e7a2f0cfc0afa83d97a01d4e542fe78cff30874",
+        "python/fusionkit-evals/src": "f01130ae450c5b145df40babd0564b73d1e97341",
+        "python/fusionkit-evals/pyproject.toml": "b03018e7cbbbecf429bbafb2430a4737e99dd710"
+      },
+      "verifiedAt": "2026-07-13"
+    },
+    "python/fusionkit-mlx/README.md": {
+      "dependsOn": [
+        "python/fusionkit-mlx/src",
+        "python/fusionkit-mlx/pyproject.toml"
+      ],
+      "verified": {
+        "python/fusionkit-mlx/README.md": "18b5a510fa67bf8e37daf270d62d35010e5aca59",
+        "python/fusionkit-mlx/src": "90b5a22ef1c0b256ea1cbda94c1463b63ef11a6b",
+        "python/fusionkit-mlx/pyproject.toml": "6b8d204715be8716b78dade8194276fc693b9426"
+      },
+      "verifiedAt": "2026-07-13"
+    },
+    "python/fusionkit-server/README.md": {
+      "dependsOn": [
+        "python/fusionkit-server/src",
+        "python/fusionkit-server/pyproject.toml"
+      ],
+      "verified": {
+        "python/fusionkit-server/README.md": "bbc69198cd1d211f0c3f7e09803e78763769eae2",
+        "python/fusionkit-server/src": "5fd0b98cc9d18ebd04e50868edb94cc139781063",
+        "python/fusionkit-server/pyproject.toml": "e4161a40f00f796d7fd30403973e27ef3f95f34e"
+      },
+      "verifiedAt": "2026-07-13"
+    },
+    "python/fusionkit-testkit/README.md": {
+      "dependsOn": [
+        "python/fusionkit-testkit/src",
+        "python/fusionkit-testkit/pyproject.toml"
+      ],
+      "verified": {
+        "python/fusionkit-testkit/README.md": "bb58ac3eea82d3d385b5c280ffc2c6c74d4fb266",
+        "python/fusionkit-testkit/src": "b05a8bead7814fcc977ee8e6a424aa447da4d30c",
+        "python/fusionkit-testkit/pyproject.toml": "2b2bbe45fa8a262b7c37d734552ed92eb70a4e33"
+      },
+      "verifiedAt": "2026-07-13"
+    },
+    "python/hyperkit/README.md": {
+      "dependsOn": [
+        "python/hyperkit/src",
+        "python/hyperkit/pyproject.toml"
+      ],
+      "verified": {
+        "python/hyperkit/README.md": "2c2bac61b6302eb8714fa757905080dc60d3c27d",
+        "python/hyperkit/src": "2de39f26769996ebace911f48ec886de715b4078",
+        "python/hyperkit/pyproject.toml": "88fa71720b7911640f1ce7b329e3a690b26851ae"
+      },
+      "verifiedAt": "2026-07-13"
+    },
+    "python/uniroute-mlx/README.md": {
+      "dependsOn": [
+        "python/uniroute-mlx/src",
+        "python/uniroute-mlx/pyproject.toml"
+      ],
+      "verified": {
+        "python/uniroute-mlx/README.md": "7baf4bf0f106e5dfd52f0b5755e128c41f17731f",
+        "python/uniroute-mlx/src": "b58b8b894ffd70540062bae432bd0ed05c0df4c3",
+        "python/uniroute-mlx/pyproject.toml": "b153249020322010fd3b34a85f8efd8bee412919"
+      },
+      "verifiedAt": "2026-07-13"
+    },
+    "python/uniroute/README.md": {
+      "dependsOn": [
+        "python/uniroute/src",
+        "python/uniroute/pyproject.toml"
+      ],
+      "verified": {
+        "python/uniroute/README.md": "0ed81b1fbc570b746bb9361abb7add6d28420ed2",
+        "python/uniroute/src": "6ec88c172dcdab0b14bc0cdddefd35b988457039",
+        "python/uniroute/pyproject.toml": "06a7773118c551a64d54031830967a64eebe9bc3"
+      },
+      "verifiedAt": "2026-07-13"
+    },
+    "README.md": {
+      "dependsOn": [
+        "packages/cli/src",
+        "examples/manifest.json",
+        "pnpm-workspace.yaml",
+        "pyproject.toml"
+      ],
+      "verified": {
+        "README.md": "9e1ee31cb621003c951fb277f6d23740f0e7ae15",
+        "packages/cli/src": "e23a4e63cd30e8fd53bcdb755b2761110bac31cc",
+        "examples/manifest.json": "2d61df4e48a56c26a02c1ae3529fa72868c7d9ba",
+        "pnpm-workspace.yaml": "17caacb89c1811a10637e577688124d5a9f742ec",
+        "pyproject.toml": "ae9a7b9f54ab997fbdc64f57d1f1a9dc4ffedc53"
+      },
+      "verifiedAt": "2026-07-15"
+    },
+    "SECURITY.md": {
+      "dependsOn": [
+        "packages/cli/package.json"
+      ],
+      "verified": {
+        "SECURITY.md": "b543727267ade8bdca211c316a89360149aad74d",
+        "packages/cli/package.json": "a8dcd8a4c41d32c029c87fda56111eee455fa31b"
+      },
+      "verifiedAt": "2026-07-13"
+    }
+  },
+  "version": 1
+}
