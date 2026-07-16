@@ -349,7 +349,10 @@ export function codexConfigToml(input: CodexConfigTomlInput): string {
       `name = ${tomlString(input.provider.name ?? DEFAULT_PROVIDER_NAME)}`,
       `base_url = ${tomlString(normalizeApiBaseUrl(stripResponsesRoute(input.provider.baseUrl)))}`,
       `wire_api = "responses"`,
-      `requires_openai_auth = ${input.provider.requiresOpenAiAuth ? "true" : "false"}`
+      `requires_openai_auth = ${input.provider.requiresOpenAiAuth ? "true" : "false"}`,
+      // FusionKit's OpenAI-compatible gateways expose HTTP/SSE Responses.
+      // New Codex releases otherwise probe /v1/responses as a WebSocket first.
+      "supports_websockets = false"
     );
     if (input.provider.apiKeyEnvName !== undefined) {
       lines.push(`env_key = ${tomlString(input.provider.apiKeyEnvName)}`);

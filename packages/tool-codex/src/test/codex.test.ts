@@ -162,6 +162,7 @@ test("codexConfigToml declares a Responses provider without requiring auth", () 
   assert.ok(toml.includes('base_url = "http://127.0.0.1:9000/v1"'));
   assert.ok(toml.includes('wire_api = "responses"'));
   assert.ok(toml.includes("requires_openai_auth = false"));
+  assert.ok(toml.includes("supports_websockets = false"));
 });
 
 test("codexConfigToml emits danger-full-access when the panel runs at full trust", () => {
