@@ -733,6 +733,90 @@ def _generation_status(completion: dict[str, Any]) -> str:
     return "incomplete"
 
 
+def _grade_fusion_evidence(
+    sandbox: _Sandbox,
+    fusion: object,
+    public_tests: Sequence[dict[str, str]],
+    private_tests: Sequence[dict[str, str]],
+    *,
+    timeout_s: float,
+    synthesis_pass: bool,
+) -> dict[str, Any] | None:
+    """Grade retained inner trajectories after outer selection is frozen."""
+
+    if not isinstance(fusion, dict):
+        return None
+    raw_candidates = fusion.get("input_trajectories")
+    if not isinstance(raw_candidates, list):
+        return None
+    trajectory = fusion.get("trajectory")
+    synthesis = trajectory.get("synthesis") if isinstance(trajectory, dict) else None
+    selected_id = (
+        synthesis.get("selected_trajectory_id")
+        if isinstance(synthesis, dict)
+        else None
+    )
+    candidates: list[dict[str, Any]] = []
+    for raw_candidate in raw_candidates:
+        if not isinstance(raw_candidate, dict):
+            continue
+        code = extract_code(str(raw_candidate.get("final_output") or ""))
+        public = run_tests(
+            sandbox,
+            code,
+            public_tests,
+            timeout_s=timeout_s,
+            stop_on_failure=True,
+        )
+        private = (
+            run_tests(
+                sandbox,
+                code,
+                private_tests,
+                timeout_s=timeout_s,
+                stop_on_failure=True,
+            )
+            if public["all_passed"]
+            else {"all_passed": False}
+        )
+        candidates.append(
+            {
+                "trajectory_id": raw_candidate.get("trajectory_id"),
+                "model_id": raw_candidate.get("model_id"),
+                "status": raw_candidate.get("status"),
+                "code_sha256": _sha256(code),
+                "public_all": bool(public["all_passed"]),
+                "private_all": bool(private["all_passed"]),
+                "all_tests_passed": bool(
+                    public["all_passed"] and private["all_passed"]
+                ),
+            }
+        )
+    selected = next(
+        (
+            candidate
+            for candidate in candidates
+            if candidate["trajectory_id"] == selected_id
+        ),
+        None,
+    )
+    selected_pass = (
+        bool(selected["all_tests_passed"]) if selected is not None else None
+    )
+    return {
+        "candidate_count": len(candidates),
+        "candidates": candidates,
+        "oracle_pass": any(
+            bool(candidate["all_tests_passed"]) for candidate in candidates
+        ),
+        "selected_trajectory_id": selected_id,
+        "selected_pass": selected_pass,
+        "synthesis_pass": synthesis_pass,
+        "synthesis_damage": selected_pass is True and not synthesis_pass,
+        "synthesis_rescue": selected_pass is False and synthesis_pass,
+    }
+
+
 def _bounded_int(
     params: dict[str, Any],
     name: str,
@@ -1252,6 +1336,16 @@ class LivecodebenchAdapter:
             sample["all_tests_passed"] = bool(
                 sample["public_all"] and private["all_passed"]
             )
+            fusion_evidence = _grade_fusion_evidence(
+                sandbox,
+                sample.get("fusion"),
+                public_tests,
+                private_tests,
+                timeout_s=timeout_s,
+                synthesis_pass=sample["all_tests_passed"],
+            )
+            if fusion_evidence is not None:
+                sample["fusion_evidence"] = fusion_evidence
 
         resolved = bool(samples[selected]["all_tests_passed"])
         total_cost = sum(float(s["cost_usd"]) for s in samples) + (
@@ -1319,7 +1413,11 @@ class LivecodebenchAdapter:
             "selection": selection,
             "repair_used": repair_used,
             "tie_breaker": checkpoint_tie_breaker,
-            "oracle_private": any(s["all_tests_passed"] for s in samples),
+            "oracle_private": any(
+                s["all_tests_passed"]
+                or bool((s.get("fusion_evidence") or {}).get("oracle_pass"))
+                for s in samples
+            ),
             "oracle_private_only": any(s["private_passed_all"] for s in samples),
             "samples": checkpoint_samples,
             "selected_code": samples[selected]["code"],

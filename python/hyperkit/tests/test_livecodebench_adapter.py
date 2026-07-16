@@ -477,6 +477,62 @@ def test_final_score_requires_public_and_private_tests(
     assert raw["resolved"] is False
 
 
+def test_fusion_evidence_attributes_oracle_and_synthesis_damage(
+    store: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fake_complete(
+        self: _Client,
+        model: str,
+        prompt: str,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        del self, model, prompt, kwargs
+        return {
+            "text": BAD,
+            "prompt_tokens": 10,
+            "completion_tokens": 20,
+            "reasoning_tokens": 0,
+            "cost_usd": 0.001,
+            "finish_reason": "stop",
+            "fusion": {
+                "trajectory": {
+                    "synthesis": {"selected_trajectory_id": "candidate-good"}
+                },
+                "input_trajectories": [
+                    {
+                        "trajectory_id": "candidate-good",
+                        "model_id": "open/model-a",
+                        "status": "succeeded",
+                        "final_output": GOOD,
+                    },
+                    {
+                        "trajectory_id": "candidate-bad",
+                        "model_id": "open/model-b",
+                        "status": "succeeded",
+                        "final_output": BAD,
+                    },
+                ],
+            },
+        }
+
+    monkeypatch.setattr(_Client, "complete", fake_complete)
+    raw = LivecodebenchAdapter().run_instance(
+        "q1",
+        SUTTarget(base_url="http://local/v1", model="fusionkit/panel"),
+        store,
+        _params(selection="first", include_evidence=True),
+    )
+
+    evidence = raw["samples"][0]["fusion_evidence"]
+    assert evidence["candidate_count"] == 2
+    assert evidence["oracle_pass"] is True
+    assert evidence["selected_pass"] is True
+    assert evidence["synthesis_pass"] is False
+    assert evidence["synthesis_damage"] is True
+    assert raw["oracle_private"] is True
+
+
 def test_public_exec_selects_passing_sample(
     store: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
