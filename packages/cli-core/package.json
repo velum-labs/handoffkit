@@ -28,7 +28,7 @@
   },
   "dependencies": {
     "@routekit/cli-ui": "workspace:*",
-    "commander": "14.0.3"
+    "commander": "15.0.0"
   },
   "keywords": ["routekit", "cli", "commander", "terminal"],
   "scripts": {

@@ -41,7 +41,7 @@
     "@routekit/telemetry-core": "workspace:*",
     "@routekit/tool-registry": "workspace:*",
     "@routekit/tools": "workspace:*",
-    "commander": "14.0.3",
+    "commander": "15.0.0",
     "yaml": "2.9.0"
   },
   "keywords": [
