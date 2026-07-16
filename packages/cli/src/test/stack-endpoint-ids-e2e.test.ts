@@ -201,7 +201,8 @@ test(
       const bridgeUrl = stack.endpoints.opaque;
       assert.notEqual(bridgeUrl, routerUrl);
       const bridged = await fetch(`${bridgeUrl}/v1/models`);
-      assert.equal(bridged.status, 200);
+      const bridgedBody = await bridged.text();
+      assert.equal(bridged.status, 200, bridgedBody);
       await scriptFusedTurn(sim, {
         candidates: { "provider-model": "candidate through auth bridge" },
         judgeModel: "provider-model",

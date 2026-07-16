@@ -67,7 +67,7 @@ type ChatChoice = {
 
 // --- multi-ensemble routing + per-ensemble prompts -------------------------------------
 
-test("multi-ensemble routing fans out only the requested ensemble's members and judge", { skip: SKIP }, async () => {
+test("multi-ensemble routing forwards the requested ensemble's prompt override", { skip: SKIP }, async () => {
   await stack.sim.reset();
   await stack.sim.queue("gpt-deep-a", ["mini candidate"]);
   await stack.sim.queue("gpt-mini-judge", [{ reply: judgeAnalysis() }, { reply: "mini fused answer" }]);

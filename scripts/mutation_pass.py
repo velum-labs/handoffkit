@@ -19,12 +19,19 @@ documentation intentionally avoids a fixed score (see docs/testing.md).
 
 from __future__ import annotations
 
+import os
+import signal
 import subprocess
 import sys
+import time
+from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+TEST_TIMEOUT_SECONDS = 180.0
+BUILD_TIMEOUT_SECONDS = 300.0
+TERMINATION_GRACE_SECONDS = 5.0
 
 
 @dataclass
@@ -37,6 +44,14 @@ class Mutation:
     cmd: str
     replace_all: bool = False
     build: bool = False
+    timeout_seconds: float = TEST_TIMEOUT_SECONDS
+
+
+@dataclass(frozen=True)
+class CommandResult:
+    returncode: int | None
+    timed_out: bool
+    output: bytes
 
 
 MUTATIONS = [
@@ -113,7 +128,10 @@ MUTATIONS = [
         old="model: model.id,",
         new="model: model.model,",
         build=True,
-        cmd="PORTLESS=0 node --test packages/cli/dist/test/stack-endpoint-ids-e2e.test.js",
+        cmd=(
+            "node --test --test-name-pattern 'members receive' "
+            "packages/ensemble/dist/test/panel-propose.test.js"
+        ),
     ),
     Mutation(
         id="M9",
@@ -189,7 +207,10 @@ MUTATIONS = [
         old='delta: { type: "input_json_delta", partial_json: args }',
         new='delta: { type: "input_json_delta", partial_json: "{}" }',
         build=True,
-        cmd="PORTLESS=0 node --test packages/cli/dist/test/stack-cli-e2e.test.js",
+        cmd=(
+            "node --test --test-name-pattern 'streams a routed tool call' "
+            "packages/model-gateway/dist/test/anthropic.test.js"
+        ),
     ),
     Mutation(
         id="M15",
@@ -223,8 +244,8 @@ MUTATIONS = [
         new='    const endpointUrl = options.modelEndpoints?.["__missing__"];',
         build=True,
         cmd=(
-            "PORTLESS=0 node --test --test-name-pattern claude-agent-sdk "
-            "packages/cli/dist/test/stack-drivers-e2e.test.js"
+            "node --test --test-name-pattern 'model-specific endpoint' "
+            "packages/ensemble/dist/test/driver-adapter.test.js"
         ),
     ),
     Mutation(
@@ -235,8 +256,8 @@ MUTATIONS = [
         new="  return false;",
         build=True,
         cmd=(
-            "PORTLESS=0 node --test --test-name-pattern claude-agent-sdk "
-            "packages/cli/dist/test/stack-drivers-e2e.test.js"
+            "node --test --test-name-pattern 'stale native resume cursor' "
+            "packages/ensemble/dist/test/driver-adapter.test.js"
         ),
     ),
     Mutation(
@@ -325,19 +346,19 @@ MUTATIONS = [
         build=True,
         cmd=(
             "PORTLESS=0 node --test --test-name-pattern "
-            "'\\[claude\\].*fusion-mini' packages/cli/dist/test/stack-cli-e2e.test.js"
+            "'\\[claude\\].*fusion-mini' packages/testkit/dist/test/clis.test.js"
         ),
     ),
     Mutation(
         id="M29",
         what="the real Codex CLI ignores the injected named fused model",
         file="packages/testkit/src/clis.ts",
-        old='      `model = "${input.model ?? "fusion-panel"}"`,',
-        new='      \'model = "fusion-panel"\',',
+        old='    `model = "${input.model ?? "fusion-panel"}"`,',
+        new='    \'model = "fusion-panel"\',',
         build=True,
         cmd=(
             "PORTLESS=0 node --test --test-name-pattern "
-            "'\\[codex\\].*fusion-mini' packages/cli/dist/test/stack-cli-e2e.test.js"
+            "'\\[codex\\].*fusion-mini' packages/testkit/dist/test/clis.test.js"
         ),
     ),
     Mutation(
@@ -349,7 +370,7 @@ MUTATIONS = [
         build=True,
         cmd=(
             "PORTLESS=0 node --test --test-name-pattern "
-            "'\\[opencode\\].*fusion-mini' packages/cli/dist/test/stack-cli-e2e.test.js"
+            "'\\[opencode\\].*fusion-mini' packages/testkit/dist/test/clis.test.js"
         ),
     ),
     Mutation(
@@ -403,7 +424,7 @@ MUTATIONS = [
         new='extra["usage"] = _usage_payload(final_result.turn_usage())',
         cmd=(
             "uv run pytest python/fusionkit-server/tests/test_streaming.py -q -x "
-            "-k fused_streaming_streams_synthesizer"
+            "-k internal_fuse_streams_reasoning_tools_and_exact_usage"
         ),
     ),
     Mutation(
@@ -572,7 +593,11 @@ MUTATIONS = [
         old="      endpoint_ids: input.endpointIds,",
         new='      endpoint_ids: input.endpointIds.map((id) => `provider-${id}`),',
         build=True,
-        cmd="PORTLESS=0 node --test packages/cli/dist/test/stack-endpoint-ids-e2e.test.js",
+        cmd=(
+            "node --test --test-name-pattern "
+            "'Python sidecar receives RouteKit endpoint ids' "
+            "packages/cli/dist/test/composition.test.js"
+        ),
     ),
     Mutation(
         id="M48",
@@ -600,14 +625,113 @@ MUTATIONS = [
 ]
 
 
-def _run(cmd: str) -> int:
-    return subprocess.run(cmd, shell=True, cwd=ROOT, capture_output=True).returncode
+def _descendant_process_groups(root_pid: int) -> set[int]:
+    processes: dict[int, tuple[int, int]] = {}
+    try:
+        entries = tuple(Path("/proc").iterdir())
+    except OSError:
+        return {root_pid}
+    for entry in entries:
+        if not entry.name.isdigit():
+            continue
+        try:
+            fields = (entry / "stat").read_text().rsplit(")", 1)[1].split()
+            processes[int(entry.name)] = (int(fields[1]), int(fields[2]))
+        except (IndexError, OSError, ValueError):
+            continue
+
+    descendants = {root_pid}
+    changed = True
+    while changed:
+        changed = False
+        for pid, (parent_pid, _group_id) in processes.items():
+            if parent_pid in descendants and pid not in descendants:
+                descendants.add(pid)
+                changed = True
+    return {
+        processes[pid][1]
+        for pid in descendants
+        if pid in processes
+    } | {root_pid}
+
+
+def _signal_process_groups(group_ids: set[int], sig: signal.Signals) -> None:
+    for group_id in group_ids:
+        with suppress(ProcessLookupError, PermissionError):
+            os.killpg(group_id, sig)
+
+
+def _live_process_groups(group_ids: set[int]) -> set[int]:
+    live: set[int] = set()
+    for group_id in group_ids:
+        try:
+            os.killpg(group_id, 0)
+        except (ProcessLookupError, PermissionError):
+            continue
+        live.add(group_id)
+    return live
+
+
+def _terminate(process: subprocess.Popen[bytes]) -> bytes:
+    group_ids = _descendant_process_groups(process.pid)
+    _signal_process_groups(group_ids, signal.SIGTERM)
+    try:
+        output, _ = process.communicate(timeout=TERMINATION_GRACE_SECONDS)
+    except subprocess.TimeoutExpired:
+        output = b""
+
+    deadline = time.monotonic() + TERMINATION_GRACE_SECONDS
+    live = _live_process_groups(group_ids)
+    while live and time.monotonic() < deadline:
+        time.sleep(0.05)
+        live = _live_process_groups(live)
+    _signal_process_groups(live, signal.SIGKILL)
+    if process.poll() is None:
+        output, _ = process.communicate()
+    return output
+
+
+def _run_command(cmd: str, timeout_seconds: float) -> CommandResult:
+    process = subprocess.Popen(
+        cmd,
+        shell=True,
+        cwd=ROOT,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        start_new_session=True,
+    )
+    try:
+        output, _ = process.communicate(timeout=timeout_seconds)
+    except subprocess.TimeoutExpired:
+        output = _terminate(process)
+        return CommandResult(returncode=None, timed_out=True, output=output)
+    return CommandResult(
+        returncode=process.returncode,
+        timed_out=False,
+        output=output,
+    )
+
+
+def _run(mutation: Mutation) -> CommandResult:
+    result = _run_command(mutation.cmd, mutation.timeout_seconds)
+    if result.timed_out:
+        print(
+            f"{mutation.id}: TIMEOUT after {mutation.timeout_seconds:g}s: {mutation.cmd}",
+            file=sys.stderr,
+            flush=True,
+        )
+    return result
 
 
 def _build() -> None:
-    result = subprocess.run("pnpm build", shell=True, cwd=ROOT, capture_output=True)
+    result = _run_command("pnpm build", BUILD_TIMEOUT_SECONDS)
+    if result.timed_out:
+        sys.stderr.write(result.output.decode(errors="replace")[-4000:])
+        raise SystemExit(
+            f"pnpm build timed out after {BUILD_TIMEOUT_SECONDS:g}s during mutation pass"
+        )
     if result.returncode != 0:
-        sys.stderr.write(result.stdout.decode()[-2000:] + result.stderr.decode()[-2000:])
+        sys.stderr.write(result.output.decode(errors="replace")[-4000:])
         raise SystemExit("pnpm build failed during mutation pass")
 
 
@@ -630,43 +754,72 @@ def main() -> None:
         raise SystemExit(f"unknown mutation id(s): {sorted(requested - known)}")
     # Validate every mechanical target before running an expensive suite, so a
     # stale/non-unique pattern fails immediately rather than halfway through.
-    originals: dict[str, str] = {}
+    originals: dict[str, bytes] = {}
     for mutation in selected:
         original = originals.setdefault(
-            mutation.file, (ROOT / mutation.file).read_text()
+            mutation.file, (ROOT / mutation.file).read_bytes()
         )
-        occurrences = original.count(mutation.old)
+        old = mutation.old.encode()
+        occurrences = original.count(old)
         if occurrences < 1:
             raise SystemExit(f"{mutation.id}: pattern not found in {mutation.file}")
         if not mutation.replace_all and occurrences != 1:
             raise SystemExit(f"{mutation.id}: pattern is not unique ({occurrences}x)")
 
-    results: list[tuple[Mutation, str]] = []
+    results: list[tuple[Mutation, str, str | None]] = []
     for mutation in selected:
         path = ROOT / mutation.file
         original = originals[mutation.file]
         try:
-            path.write_text(original.replace(mutation.old, mutation.new))
+            path.write_bytes(
+                original.replace(mutation.old.encode(), mutation.new.encode())
+            )
             if mutation.build:
                 _build()
-            caught = _run(mutation.cmd) != 0
+            mutated = _run(mutation)
+            caught = mutated.timed_out or mutated.returncode != 0
         finally:
-            path.write_text(original)
-            if mutation.build:
-                _build()
-        restored = _run(mutation.cmd) == 0
+            try:
+                path.write_bytes(original)
+                if mutation.build:
+                    _build()
+            finally:
+                # A generator invoked by the build may rewrite its own source.
+                # The mutation pass must leave the exact bytes it started with,
+                # even when the restore build fails.
+                path.write_bytes(original)
+        restored = _run(mutation)
         verdict = (
             "KILLED"
-            if caught and restored
+            if caught and not restored.timed_out and restored.returncode == 0
             else ("SURVIVED" if not caught else "RESTORE-FAIL")
         )
-        results.append((mutation, verdict))
-        print(f"{mutation.id:>3}  {verdict:<12} {mutation.what}", flush=True)
+        detail = (
+            "mutated test TIMEOUT (treated as killed)"
+            if verdict == "KILLED" and mutated.timed_out
+            else (
+                "restored test TIMEOUT"
+                if restored.timed_out
+                else None
+            )
+        )
+        results.append((mutation, verdict, detail))
+        suffix = f" [{detail}]" if detail is not None else ""
+        print(
+            f"{mutation.id:>3}  {verdict:<12} {mutation.what}{suffix}",
+            flush=True,
+        )
 
     survivors = [entry for entry in results if entry[1] != "KILLED"]
     print("\n=== mutation pass summary ===")
-    for mutation, verdict in results:
-        print(f"{mutation.id}: {verdict}\n    mutation: {mutation.what}\n    suite: {mutation.cmd}")
+    for mutation, verdict, detail in results:
+        detail_line = f"\n    detail: {detail}" if detail is not None else ""
+        print(
+            f"{mutation.id}: {verdict}\n"
+            f"    mutation: {mutation.what}\n"
+            f"    suite: {mutation.cmd}"
+            f"{detail_line}"
+        )
     print(f"\nscore: {len(results) - len(survivors)}/{len(results)} mutations killed")
     if survivors:
         raise SystemExit(1)
