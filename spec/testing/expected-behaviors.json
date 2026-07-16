@@ -490,6 +490,14 @@
       "anchor": "boots its production stack"
     },
     {
+      "id": "process.routekit-cli-serve",
+      "category": "process",
+      "expectation": "The real RouteKit CLI process reports machine-readable readiness and serves model discovery plus every supported gateway dialect against a local upstream.",
+      "status": "required",
+      "testFile": "packages/routekit-cli/src/test/serve-process-e2e.test.ts",
+      "anchor": "reports JSON readiness and serves every supported door"
+    },
+    {
       "id": "cli.management-surfaces",
       "category": "cli",
       "expectation": "The FusionKit CLI exposes fusion launchers and management surfaces while excluding proxy, account, install/uninstall, and direct-mode commands.",
@@ -498,12 +506,28 @@
       "anchor": "Fusion CLI contains only fusion product launch surfaces"
     },
     {
+      "id": "cli.routekit-command-surfaces",
+      "category": "cli",
+      "expectation": "The real RouteKit CLI independently executes version, completion, config, endpoint, model, telemetry, doctor, and install surfaces while rejecting Fusion-only commands.",
+      "status": "required",
+      "testFile": "packages/routekit-cli/src/test/cli-process-e2e.test.ts",
+      "anchor": "real routekit command surfaces execute independently"
+    },
+    {
       "id": "composition.routekit-endpoint-ids",
       "category": "composition",
-      "expectation": "Opaque RouteKit endpoint IDs cross the real embedded-router, Python-sidecar, and Fusion-gateway stack, and closing Fusion leaves external RouteKit routers running.",
+      "expectation": "Opaque RouteKit endpoint IDs cross the real embedded-router, Python-sidecar, and Fusion-gateway stack without exposing provider model names.",
       "status": "required",
       "testFile": "packages/cli/src/test/stack-endpoint-ids-e2e.test.ts",
       "anchor": "embedded RouteKit routes opaque endpoint ids"
+    },
+    {
+      "id": "composition.routekit-authenticated-cli-bridge",
+      "category": "composition",
+      "expectation": "Fusion bridges authenticated external RouteKit CLI traffic over loopback and closes only the bridge, leaving the independently owned RouteKit process alive.",
+      "status": "required",
+      "testFile": "packages/cli/src/test/stack-endpoint-ids-e2e.test.ts",
+      "anchor": "authenticated external routekit serve CLI uses a Fusion-owned loopback bridge"
     },
     {
       "id": "observability.trace-semantics",

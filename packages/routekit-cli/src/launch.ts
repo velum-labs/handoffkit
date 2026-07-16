@@ -7,6 +7,7 @@ import type {
   ToolModelFeatureStatus
 } from "@routekit/tools";
 import type { ModelEndpointConfig, RouterConfig } from "@routekit/gateway";
+import { commandOnPath } from "@routekit/runtime";
 
 import { startRouter } from "./serve.js";
 
@@ -115,6 +116,12 @@ export async function launchTool(input: {
 }): Promise<number> {
   const integration = routekitToolRegistry.get(input.tool);
   if (integration === undefined) throw new Error(`unknown tool: ${input.tool}`);
+  if (integration.binary !== undefined && !commandOnPath(integration.binary)) {
+    throw new Error(
+      `routekit preflight failed: "${integration.binary}" was not found on PATH — ` +
+        (integration.installHint ?? `install ${integration.binary}`)
+    );
+  }
   const running =
     input.gatewayUrl === undefined
       ? await startRouter({

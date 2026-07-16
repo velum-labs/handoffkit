@@ -199,6 +199,8 @@ checks targeted.
 | Concurrency | 24 parallel passthrough streams + 8 parallel fused streams with per-request content identity (cross-talk detection), abort isolation | provider | `packages/cli/src/test/stack-concurrency-e2e.test.ts` |
 | Sidecar runs | native create/inspect/events/idempotency and tool resume over internal APIs | none | `python/fusionkit-server/tests/test_fusion_runs_api.py`, `test_tool_resume.py` |
 | **Real product CLI** | the ACTUAL `fusionkit serve` entrypoint booting its production stack: fusion.json loading, preflight probes, `uv run` router spawn, gateway + setup snippets | provider only | `packages/cli/src/test/stack-npm-cli-e2e.test.ts` |
+| **Real RouteKit CLI** | the ACTUAL `routekit serve --json` process, model discovery, all supported gateway dialects, command surfaces, doctor, install, and missing-harness preflight | provider only | `packages/routekit-cli/src/test/serve-process-e2e.test.ts`, `cli-process-e2e.test.ts` |
+| RouteKit/Fusion composition | opaque endpoint IDs through embedded routing plus an authenticated external `routekit serve` process behind a Fusion-owned bridge; Fusion close leaves external RouteKit alive | provider only | `packages/cli/src/test/stack-endpoint-ids-e2e.test.ts` |
 | Real command CLI | actual built entrypoint: version/completions/runtime, config CRUD/export, prompts, install/uninstall, telemetry, setup, doctor | provider only for doctor probes | `packages/cli/src/test/cli-command-surfaces-e2e.test.ts` |
 | **Real-CLI e2e** | the ACTUAL `claude` / `codex` / `opencode` binaries: production wire/toolsets and real local tool execution | provider only | `packages/cli/src/test/stack-cli-e2e.test.ts` |
 | Live (env-gated) | everything incl. real provider accounts | nothing | `FUSIONKIT_GATEWAY_LIVE_*` tests, billed benchmarks |
@@ -229,6 +231,8 @@ pnpm build && pnpm test
 # Just the cross-stack suites
 PORTLESS=0 node --test "packages/testkit/dist/test/*.test.js"
 PORTLESS=0 node --test packages/cli/dist/test/stack-e2e.test.js
+PORTLESS=0 node --test packages/cli/dist/test/stack-endpoint-ids-e2e.test.js
+node --test "packages/routekit-cli/dist/test/*process-e2e.test.js"
 ```
 
 CI runs the Python layers in the `python` job, and the cross-stack suites in
@@ -241,21 +245,23 @@ boots seeded Prometheus and Grafana and executes every panel query via
 
 A suite that has never been seen to fail is unproven. `scripts/mutation_pass.py`
 applies targeted breaks to **product** code (dropping parallel tool-call
-slots, disabling transient retries, losing Anthropic prompt tokens, dropping
-reasoning fields, dropping the caller's tools, skipping the Cursor hybrid
-translation, omitting SSE `[DONE]`, routing panel proposals by the wrong
-identifier), runs the suite expected to catch each one (must fail), reverts,
-and reruns (must pass). Run it when touching the testkit, the provider
-clients, or the engine/gateway wire paths:
+slots, disabling transient retries, dropping reasoning fields, dropping the
+caller's tools, skipping the Cursor hybrid translation, omitting SSE `[DONE]`,
+routing panel proposals by the wrong identifier, and falsifying CLI
+readiness), runs the suite expected to catch each one (must fail), reverts, and
+reruns (must pass). Run it when touching the testkit, provider clients, CLI
+process boundaries, or engine/gateway wire paths:
 
 ```bash
 uv run python scripts/mutation_pass.py   # clean tree + built workspace required
 ```
 
-Current score: **46/46 killed**. A subset can be run by id
-(`uv run python scripts/mutation_pass.py M34 M42`). M34–M46 pin the
+The inventory is intentionally open-ended, so this document does not publish
+a fixed mutation score. The script prints the authoritative score for each
+run. A subset can be run by id (`uv run python scripts/mutation_pass.py M34
+M42`). M34–M46 pin the
 second-wave audit's bug contracts: streamed fused usage including panel
-tokens (M34), unknown-model rejection (M35), atomic idempotent run
+tokens (M34), unknown-endpoint rejection (M35), atomic idempotent run
 initialization (M36), Anthropic mid-stream provider error events (M37),
 TTL hint eviction / fresh-opener isolation (M38), caller-abort propagation
 into in-flight panels (M39), the request-body size cap (M40), allowlisted
@@ -269,14 +275,17 @@ prove cross-talk detection bites). Before them: candidate reasoning
 entering judge evidence, streamed synthesizer reasoning on the gateway, and
 real Claude/Codex/OpenCode selection of injected named fused models.
 
+M47–M49 pin the RouteKit/Fusion split directly: opaque endpoint IDs in the
+sidecar config, authenticated external RouteKit bridging, and truthful
+`routekit serve --json` process readiness.
+
 The preceding mutations pin finite-k terminal
 proposal summaries, k=1 straggler grace, native driver dialect routing,
-stale-session fallback, OpenRouter generation-cost association, configured
-provider base URLs in the real product CLI, budget gating, failed-tool
-observations, durable unbounded resume, and bearer authentication.
+stale-session fallback, configured provider base URLs in the real product CLI,
+budget gating, failed-tool observations, durable unbounded resume, and bearer
+authentication.
 
-The earlier depth mutations M9–M12 pin per-request
-prompt forwarding, the context-overflow candidate fallback, the
+The earlier depth mutations M9, M11, and M12 pin per-request prompt forwarding,
 judge-doubles-as-synthesizer request resolution, and the gateway's ensemble
 prompt forwarding; M13/M14 pin the Anthropic adapter's tool-call rendering on
 its JSON and streaming paths — M14 is killed by the REAL claude binary
@@ -289,8 +298,8 @@ back to the *config* synthesizer instead of the pinned judge, silently
 synthesizing a named ensemble's turns on the default ensemble's judge
 endpoint (fixed in `app.py`, guarded by M11).
 
-The first pass scored 6/8, and both survivors
-were real test weaknesses that got fixed:
+The first pass had two survivors, and both were real test weaknesses that got
+fixed:
 
 - the retry test queued one 500, which the openai SDK's *internal* retry
   absorbed — FusionKit's own retry layer was never exercised. The test now
@@ -317,8 +326,8 @@ JavaScript/Python internals, rejected garbage never fans out to providers,
 arbitrary stream chunking reassembles byte-exactly, concurrent turns keep
 their own content, and the gateway survives everything.
 
-These layers have found **25 real production bugs** on a previously
-all-green stack, all fixed and pinned by regressions + mutations. The first
+These layers have found real production bugs on a previously all-green stack,
+all fixed and pinned by regressions + mutations. The first
 hostile-input run found the original four:
 
 - **Leaked TypeErrors as 502s.** A `model` array or `messages` non-array

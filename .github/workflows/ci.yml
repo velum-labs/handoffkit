@@ -56,6 +56,9 @@ jobs:
       - name: FusionKit clean-install smoke
         run: node scripts/check-fusionkit-cli-pack.mjs
 
+      - name: RouteKit and FusionKit co-install smoke
+        run: node scripts/check-dual-cli-pack.mjs
+
       - name: OOTB CLI shape smoke (RouteKit + FusionKit)
         run: node scripts/check-ootb-cli.mjs
 
@@ -159,6 +162,9 @@ jobs:
 
       - name: Full-stack front-door matrix suite
         run: PORTLESS=0 node --test packages/cli/dist/test/stack-e2e.test.js
+
+      - name: Endpoint IDs and external RouteKit CLI bridge suite
+        run: PORTLESS=0 node --test packages/cli/dist/test/stack-endpoint-ids-e2e.test.js
 
       - name: Full-stack depth suite
         run: PORTLESS=0 node --test packages/cli/dist/test/stack-depth-e2e.test.js

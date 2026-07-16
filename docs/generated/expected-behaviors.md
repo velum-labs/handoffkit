@@ -106,6 +106,23 @@ environment-gated rows name the reason and exact live command.
 | `harness.path-confinement` | Managed file tools reject worktree path traversal and record the failure as trajectory evidence. | required | `packages/cli/src/test/stack-harness-k-e2e.test.ts` — `reject path traversal` |
 | `security.gateway-auth` | Missing or incorrect gateway bearer credentials fail every door before provider spend. | required | `packages/cli/src/test/stack-auth-e2e.test.ts` — `rejects every door before provider spend` |
 
+## robustness
+
+| ID | Expected behavior | Status | Evidence |
+|---|---|---|---|
+| `robustness.malformed-rejected-without-fanout` | A structurally malformed body on any door is a 400 in the door's native error envelope with zero provider fanout. | required | `packages/cli/src/test/stack-fuzz-e2e.test.ts` — `400 in the native envelope, zero provider fanout` |
+| `robustness.no-leaked-internals` | No wire response ever carries JavaScript/Python internals (TypeError text, tracebacks), including for seeded random garbage. | required | `packages/cli/src/test/stack-fuzz-e2e.test.ts` — `seeded random bodies` |
+| `robustness.engine-malformed-rejected` | The internal Python sidecar rejects invalid endpoint ids as a stable 4xx without leaking tracebacks. | required | `python/fusionkit-server/tests/test_server.py` — `test_fuse_rejects_unknown_routekit_endpoint` |
+| `robustness.chunk-boundary-reassembly` | OpenAI-compatible streams split at arbitrary byte boundaries, including mid-UTF-8-rune, reassemble byte-exactly. | required | `packages/model-gateway/src/test/sse-codec.test.ts` — `handles events split at arbitrary byte boundaries` |
+
+## concurrency
+
+| ID | Expected behavior | Status | Evidence |
+|---|---|---|---|
+| `concurrency.no-cross-talk` | Concurrent streaming turns each carry exactly their own request's content, with per-request provider accounting. | required | `packages/cli/src/test/stack-concurrency-e2e.test.ts` — `without cross-talk` |
+| `concurrency.cross-door-isolation` | Concurrent fused streams across every gateway dialect preserve per-request content and accounting. | required | `packages/cli/src/test/stack-differential-e2e.test.ts` — `cross-door concurrent fused streams preserve request isolation` |
+| `concurrency.abort-isolation` | A client abort mid-stream leaves concurrent sibling streams and the gateway intact. | required | `packages/cli/src/test/stack-concurrency-e2e.test.ts` — `leaves concurrent siblings and the gateway intact` |
+
 ## sessions
 
 | ID | Expected behavior | Status | Evidence |
@@ -133,12 +150,21 @@ environment-gated rows name the reason and exact live command.
 | ID | Expected behavior | Status | Evidence |
 |---|---|---|---|
 | `process.product-cli-boot` | The real FusionKit CLI loads config, starts RouteKit and the internal Python sidecar, then serves fusion. | required | `packages/cli/src/test/stack-npm-cli-e2e.test.ts` — `boots its production stack` |
+| `process.routekit-cli-serve` | The real RouteKit CLI process reports machine-readable readiness and serves model discovery plus every supported gateway dialect against a local upstream. | required | `packages/routekit-cli/src/test/serve-process-e2e.test.ts` — `reports JSON readiness and serves every supported door` |
 
 ## cli
 
 | ID | Expected behavior | Status | Evidence |
 |---|---|---|---|
 | `cli.management-surfaces` | The FusionKit CLI exposes fusion launchers and management surfaces while excluding proxy, account, install/uninstall, and direct-mode commands. | required | `packages/cli/src/test/composition.test.ts` — `Fusion CLI contains only fusion product launch surfaces` |
+| `cli.routekit-command-surfaces` | The real RouteKit CLI independently executes version, completion, config, endpoint, model, telemetry, doctor, and install surfaces while rejecting Fusion-only commands. | required | `packages/routekit-cli/src/test/cli-process-e2e.test.ts` — `real routekit command surfaces execute independently` |
+
+## composition
+
+| ID | Expected behavior | Status | Evidence |
+|---|---|---|---|
+| `composition.routekit-endpoint-ids` | Opaque RouteKit endpoint IDs cross the real embedded-router, Python-sidecar, and Fusion-gateway stack without exposing provider model names. | required | `packages/cli/src/test/stack-endpoint-ids-e2e.test.ts` — `embedded RouteKit routes opaque endpoint ids` |
+| `composition.routekit-authenticated-cli-bridge` | Fusion bridges authenticated external RouteKit CLI traffic over loopback and closes only the bridge, leaving the independently owned RouteKit process alive. | required | `packages/cli/src/test/stack-endpoint-ids-e2e.test.ts` — `authenticated external routekit serve CLI uses a Fusion-owned loopback bridge` |
 
 ## observability
 

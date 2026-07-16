@@ -1,0 +1,241 @@
+import assert from "node:assert/strict";
+import { spawn } from "node:child_process";
+import type { ChildProcess } from "node:child_process";
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
+import { tmpdir } from "node:os";
+import { dirname, join, resolve } from "node:path";
+import test from "node:test";
+import { fileURLToPath } from "node:url";
+
+import { terminateGroup } from "@routekit/runtime";
+
+const CLI_ENTRY = resolve(dirname(fileURLToPath(import.meta.url)), "..", "index.js");
+
+type SpawnedCli = {
+  child: ChildProcess;
+  stdout: () => string;
+  stderr: () => string;
+  close(): Promise<void>;
+};
+
+function spawnCli(args: readonly string[], input: { cwd: string; env: NodeJS.ProcessEnv }): SpawnedCli {
+  const child = spawn(process.execPath, [CLI_ENTRY, ...args], {
+    cwd: input.cwd,
+    env: input.env,
+    detached: true,
+    stdio: ["ignore", "pipe", "pipe"]
+  });
+  let stdout = "";
+  let stderr = "";
+  child.stdout?.on("data", (chunk: Buffer) => {
+    stdout += chunk.toString("utf8");
+  });
+  child.stderr?.on("data", (chunk: Buffer) => {
+    stderr += chunk.toString("utf8");
+  });
+  return {
+    child,
+    stdout: () => stdout,
+    stderr: () => stderr,
+    close: async () => {
+      if (child.exitCode !== null || child.signalCode !== null) return;
+      const exited = new Promise<void>((resolveExit) => child.once("exit", () => resolveExit()));
+      terminateGroup(child, 1_000);
+      await exited;
+    }
+  };
+}
+
+async function waitForJsonLine(
+  processHandle: SpawnedCli,
+  timeoutMs = 10_000
+): Promise<Record<string, unknown>> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const output = processHandle.stdout().trim();
+    if (output.startsWith("{")) {
+      try {
+        return JSON.parse(output) as Record<string, unknown>;
+      } catch {
+        // emitJson pretty-prints; wait until the complete object has arrived.
+      }
+    }
+    if (processHandle.child.exitCode !== null) {
+      throw new Error(
+        `routekit exited during startup (${processHandle.child.exitCode})\n` +
+          `${processHandle.stdout()}\n${processHandle.stderr()}`
+      );
+    }
+    await new Promise((resolveWait) => setTimeout(resolveWait, 20));
+  }
+  throw new Error(
+    `timed out waiting for routekit --json readiness\n` +
+      `${processHandle.stdout()}\n${processHandle.stderr()}`
+  );
+}
+
+async function requestJson(
+  url: string,
+  path: string,
+  body?: Record<string, unknown>
+): Promise<Response> {
+  return await fetch(`${url}${path}`, {
+    ...(body !== undefined
+      ? {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(body)
+        }
+      : {})
+  });
+}
+
+test("real routekit serve process reports JSON readiness and serves every supported door", async () => {
+  const root = mkdtempSync(join(tmpdir(), "routekit-serve-process-"));
+  const project = join(root, "project");
+  const stateHome = join(root, "state");
+  mkdirSync(join(project, ".routekit"), { recursive: true });
+  const upstreamRequests: Array<{
+    url: string;
+    authorization?: string;
+    body: Record<string, unknown>;
+  }> = [];
+  const upstream = createServer((request, response) => {
+    if (request.url === "/v1/models") {
+      response.setHeader("content-type", "application/json");
+      response.end(
+        JSON.stringify({
+          object: "list",
+          data: [{ id: "provider-model", object: "model", owned_by: "mock" }]
+        })
+      );
+      return;
+    }
+    const chunks: Buffer[] = [];
+    request.on("data", (chunk: Buffer) => chunks.push(chunk));
+    request.on("end", () => {
+      const body = JSON.parse(Buffer.concat(chunks).toString("utf8")) as Record<string, unknown>;
+      upstreamRequests.push({
+        url: request.url ?? "",
+        ...(typeof request.headers.authorization === "string"
+          ? { authorization: request.headers.authorization }
+          : {}),
+        body
+      });
+      response.setHeader("content-type", "application/json");
+      response.end(
+        JSON.stringify({
+          id: "chatcmpl-routekit-process",
+          object: "chat.completion",
+          created: 0,
+          model: "provider-model",
+          choices: [
+            {
+              index: 0,
+              message: { role: "assistant", content: "mock upstream answer" },
+              finish_reason: "stop"
+            }
+          ],
+          usage: { prompt_tokens: 2, completion_tokens: 3, total_tokens: 5 }
+        })
+      );
+    });
+  });
+  await new Promise<void>((resolveListen) => upstream.listen(0, "127.0.0.1", resolveListen));
+  const upstreamPort = (upstream.address() as AddressInfo).port;
+  const configPath = join(project, ".routekit", "router.yaml");
+  writeFileSync(
+    configPath,
+    [
+      "endpoints:",
+      "  - endpointId: opaque",
+      "    model: provider-model",
+      "    provider: mock",
+      `    baseUrl: http://127.0.0.1:${upstreamPort}/v1`,
+      "    dialect: openai",
+      "    apiKeyEnv: ROUTEKIT_PROCESS_TEST_KEY",
+      "defaultEndpointId: opaque",
+      ""
+    ].join("\n")
+  );
+  const routekit = spawnCli(
+    [
+      "--config",
+      configPath,
+      "serve",
+      "--host",
+      "127.0.0.1",
+      "--port",
+      "0",
+      "--no-portless",
+      "--json"
+    ],
+    {
+      cwd: project,
+      env: {
+        ...process.env,
+        ROUTEKIT_HOME: stateHome,
+        ROUTEKIT_PROCESS_TEST_KEY: "mock-secret",
+        PORTLESS: "0",
+        NO_COLOR: "1"
+      }
+    }
+  );
+  try {
+    const readiness = await waitForJsonLine(routekit);
+    assert.equal(readiness.authenticated, false);
+    assert.equal(readiness.config, configPath);
+    assert.equal(typeof readiness.url, "string");
+    const routekitUrl = readiness.url as string;
+
+    const models = await requestJson(routekitUrl, "/v1/models");
+    assert.equal(models.status, 200);
+    assert.deepEqual(
+      ((await models.json()) as { data: Array<{ id: string }> }).data.map((entry) => entry.id),
+      ["opaque"]
+    );
+
+    const openai = await requestJson(routekitUrl, "/v1/chat/completions", {
+      model: "opaque",
+      messages: [{ role: "user", content: "openai door" }]
+    });
+    assert.equal(openai.status, 200);
+    assert.match(await openai.text(), /mock upstream answer/);
+
+    const anthropic = await requestJson(routekitUrl, "/v1/messages", {
+      model: "opaque",
+      max_tokens: 32,
+      messages: [{ role: "user", content: "anthropic door" }]
+    });
+    assert.equal(anthropic.status, 200);
+    assert.equal(((await anthropic.json()) as { type?: string }).type, "message");
+
+    const responses = await requestJson(routekitUrl, "/v1/responses", {
+      model: "opaque",
+      input: "responses door"
+    });
+    assert.equal(responses.status, 200);
+    assert.equal(((await responses.json()) as { object?: string }).object, "response");
+
+    const cursor = await requestJson(routekitUrl, "/v1/cursor/chat/completions", {
+      model: "opaque",
+      input: "cursor door"
+    });
+    assert.equal(cursor.status, 200);
+
+    assert.equal(upstreamRequests.length, 4);
+    for (const request of upstreamRequests) {
+      assert.equal(request.url, "/v1/chat/completions");
+      assert.equal(request.authorization, "Bearer mock-secret");
+      assert.equal(request.body.model, "provider-model");
+    }
+  } finally {
+    await routekit.close();
+    await new Promise<void>((resolveClose, rejectClose) => {
+      upstream.close((error) => (error === undefined ? resolveClose() : rejectClose(error)));
+    });
+    rmSync(root, { recursive: true, force: true });
+  }
+});

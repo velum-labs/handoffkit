@@ -196,7 +196,9 @@ const requiredFiles = [
   "packages/routekit-cli/src/test/cli.test.ts",
   "packages/routekit-cli/src/test/cliproxy-command.test.ts",
   "packages/routekit-cli/src/test/config.test.ts",
+  "packages/routekit-cli/src/test/cli-process-e2e.test.ts",
   "packages/routekit-cli/src/test/launch.test.ts",
+  "packages/routekit-cli/src/test/serve-process-e2e.test.ts",
   "packages/routekit-cli/src/test/serve.test.ts",
   "packages/routekit-cli/src/test/state.test.ts",
   "packages/model-gateway/src/test/endpoint-health.test.ts",
@@ -214,6 +216,7 @@ const requiredFiles = [
   "scripts/check-release-publish.mjs",
   "scripts/build-fusionkit-python-packages.mjs",
   "scripts/check-routekit-cli-pack.mjs",
+  "scripts/check-dual-cli-pack.mjs",
   "scripts/check-model-fusion-protocol.mjs",
   "scripts/check-generated-model-fusion-sdk.mjs",
   "scripts/generate-model-fusion-openapi-sdk.mjs",
@@ -473,6 +476,16 @@ if (!/^pnpm@\d+\.\d+\.\d+$/.test(pkg.packageManager ?? "")) {
 }
 if (pkg.scripts?.check !== "node scripts/check-repo.mjs") {
   fail("check script must run scripts/check-repo.mjs");
+}
+if (pkg.scripts?.["test:dual-cli-pack"] !== "node scripts/check-dual-cli-pack.mjs") {
+  fail("test:dual-cli-pack script must run scripts/check-dual-cli-pack.mjs");
+}
+const ciWorkflow = readFileSync(".github/workflows/ci.yml", "utf8");
+for (const command of [
+  "node scripts/check-dual-cli-pack.mjs",
+  "node --test packages/cli/dist/test/stack-endpoint-ids-e2e.test.js"
+]) {
+  if (!ciWorkflow.includes(command)) fail(`CI workflow must run ${command}`);
 }
 
 const npmrc = readFileSync(".npmrc", "utf8");

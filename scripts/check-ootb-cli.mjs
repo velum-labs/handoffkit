@@ -3,7 +3,9 @@
 // actionable Fusion preflight behavior without needing a real npm publish.
 // Run after `pnpm build`.
 import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 const FUSION_CLI = "packages/cli/dist/index.js";
 const ROUTE_CLI = "packages/routekit-cli/dist/index.js";
@@ -128,7 +130,75 @@ if (
   fail(`expected a preflight failure, got:\n${preflightOutput}`);
 }
 
-// 4) Packaged shape: both published names, bins, and global-install files.
+// 4) RouteKit doctor is useful without harness binaries, and launch fails
+// before opening a gateway when the selected real harness is absent.
+const routekitRoot = mkdtempSync(join(tmpdir(), "routekit-ootb-"));
+const routekitProject = join(routekitRoot, "project");
+const routekitConfig = join(routekitProject, "router.yaml");
+mkdirSync(routekitProject, { recursive: true });
+writeFileSync(
+  routekitConfig,
+  [
+    "endpoints:",
+    "  - endpointId: ootb",
+    "    model: provider-private",
+    "    baseUrl: http://127.0.0.1:9/v1",
+    "defaultEndpointId: ootb",
+    ""
+  ].join("\n")
+);
+try {
+  const routekitEnv = {
+    HOME: routekitRoot,
+    ROUTEKIT_HOME: join(routekitRoot, "state"),
+    ROUTEKIT_TELEMETRY: "0",
+    PORTLESS: "0",
+    PATH: "/nonexistent",
+    NO_COLOR: "1"
+  };
+  const doctor = runCli(
+    ROUTE_CLI,
+    ["--config", routekitConfig, "doctor", "--json"],
+    routekitEnv
+  );
+  if (doctor.status !== 1) fail(`\`routekit doctor --json\` exited ${doctor.status}, expected 1`);
+  try {
+    const diagnosis = JSON.parse(doctor.stdout);
+    if (diagnosis.ready !== false) fail("RouteKit doctor must report ready:false without harnesses");
+    if (
+      !diagnosis.checks?.some(
+        (check) => check.label === "router config" && check.ok === true
+      )
+    ) {
+      fail("RouteKit doctor did not validate its router config");
+    }
+    if (!diagnosis.checks?.some((check) => check.label === "codex" && check.ok === false)) {
+      fail("RouteKit doctor did not report the missing Codex harness");
+    }
+  } catch (error) {
+    fail(`RouteKit doctor did not emit valid JSON: ${error instanceof Error ? error.message : error}`);
+  }
+
+  const missingHarness = runCli(
+    ROUTE_CLI,
+    ["--config", routekitConfig, "codex", "ootb"],
+    routekitEnv
+  );
+  if (missingHarness.status === 0) {
+    fail("`routekit codex` unexpectedly succeeded with no Codex harness");
+  }
+  const missingHarnessOutput = `${missingHarness.stdout}${missingHarness.stderr}`;
+  if (
+    !missingHarnessOutput.includes("routekit preflight failed") ||
+    !missingHarnessOutput.includes('"codex" was not found on PATH')
+  ) {
+    fail(`expected an actionable RouteKit harness preflight, got:\n${missingHarnessOutput}`);
+  }
+} finally {
+  rmSync(routekitRoot, { recursive: true, force: true });
+}
+
+// 5) Packaged shape: both published names, bins, and global-install files.
 for (const expected of [
   {
     path: "packages/cli/package.json",
