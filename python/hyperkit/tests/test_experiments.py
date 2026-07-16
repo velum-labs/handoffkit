@@ -6,7 +6,7 @@ import hyperkit.adapters  # noqa: F401
 from hyperkit.core.contracts import ExperimentContext
 from hyperkit.core.experiments import CartesianExperiment, load_experiment
 from hyperkit.core.lock import load_lock
-from hyperkit.core.models import BackendSubmission, Cell, ShardPlan, ShardResult
+from hyperkit.core.models import BackendSubmission, ShardPlan, ShardResult
 from hyperkit.core.registry import register_backend
 from hyperkit.core.sweep import SweepEngine
 

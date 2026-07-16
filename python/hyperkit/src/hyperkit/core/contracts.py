@@ -13,6 +13,7 @@ from typing import Any, Protocol, runtime_checkable
 
 from hyperkit.core.models import (
     BackendSubmission,
+    Cell,
     ResourceProfile,
     ShardPlan,
     ShardResult,
