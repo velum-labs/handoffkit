@@ -13,6 +13,7 @@ import hashlib
 import json
 from collections import Counter, defaultdict
 from collections.abc import Iterable
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
@@ -88,8 +89,10 @@ def _exclusions(path: Path) -> set[str]:
 
 def _manifest_entries(reader: EvidenceReader, sweep_id: str) -> dict[str, dict[str, Any]]:
     entries: dict[str, dict[str, Any]] = {}
-    for key in reader.keys(f"runs/{sweep_id}/manifests/"):
-        manifest = reader.json(key)
+    keys = reader.keys(f"runs/{sweep_id}/manifests/")
+    with ThreadPoolExecutor(max_workers=16) as pool:
+        manifests = list(pool.map(reader.json, keys))
+    for key, manifest in zip(keys, manifests, strict=True):
         if not isinstance(manifest, dict):
             raise ValueError(f"invalid manifest object: {key}")
         for raw_entry in manifest.values():
@@ -109,8 +112,10 @@ def _manifest_entries(reader: EvidenceReader, sweep_id: str) -> dict[str, dict[s
 
 def _results(reader: EvidenceReader, sweep_id: str) -> dict[str, dict[str, Any]]:
     results: dict[str, dict[str, Any]] = {}
-    for key in reader.keys(f"runs/{sweep_id}/results/"):
-        result = reader.json(key)
+    keys = reader.keys(f"runs/{sweep_id}/results/")
+    with ThreadPoolExecutor(max_workers=32) as pool:
+        payloads = list(pool.map(reader.json, keys))
+    for key, result in zip(keys, payloads, strict=True):
         if not isinstance(result, dict):
             raise ValueError(f"invalid result object: {key}")
         shard_id = str(result["shard_id"])
@@ -123,8 +128,10 @@ def _results(reader: EvidenceReader, sweep_id: str) -> dict[str, dict[str, Any]]
 
 def _cell_labels(reader: EvidenceReader, sweep_id: str) -> dict[str, str]:
     labels: dict[str, str] = {}
-    for key in reader.keys(f"runs/{sweep_id}/cells/"):
-        payload = reader.json(key)
+    keys = reader.keys(f"runs/{sweep_id}/cells/")
+    with ThreadPoolExecutor(max_workers=16) as pool:
+        payloads = list(pool.map(reader.json, keys))
+    for key, payload in zip(keys, payloads, strict=True):
         cell = payload.get("cell", {}) if isinstance(payload, dict) else {}
         if isinstance(cell, dict):
             cell_id = Path(key).stem
@@ -164,6 +171,7 @@ def _attribution(
     code: str,
     replay_pass: bool | None,
     replay_error: str | None,
+    regrade_requested: bool,
 ) -> str:
     if excluded:
         return "excluded_non_exact_task"
@@ -173,6 +181,8 @@ def _attribution(
         return "shard_error"
     if not code.strip():
         return "missing_generation_or_extraction_evidence"
+    if not regrade_requested:
+        return "not_regraded"
     if replay_error is not None:
         return "missing_fixture_or_grader_evidence"
     historical_pass = bool(result.get("resolved"))
@@ -201,6 +211,7 @@ def replay(
     output: Path,
     exclusions: set[str],
     timeout_s: float,
+    regrade_labels: set[str] | None = None,
 ) -> list[dict[str, Any]]:
     output.mkdir(parents=True, exist_ok=True)
     sandbox = _Sandbox(require_isolation=True)
@@ -227,13 +238,16 @@ def replay(
             if not isinstance(cell, dict):
                 raise ValueError(f"manifest shard {shard_id} has no cell")
             cell_id = str(entry["_cell_id"])
+            label = labels.get(cell_id, cell_id)
             result = results.get(shard_id)
             raw = result.get("raw") if isinstance(result, dict) else None
             code = str(raw.get("selected_code") or "") if isinstance(raw, dict) else ""
             replay_public = replay_private = replay_pass = None
             replay_error: str | None = None
+            regrade_requested = regrade_labels is None or label in regrade_labels
             if (
-                instance_id not in exclusions
+                regrade_requested
+                and instance_id not in exclusions
                 and result is not None
                 and result.get("status") != "error"
                 and code.strip()
@@ -290,7 +304,7 @@ def replay(
                 {
                     "sweep_id": sweep_id,
                     "cell_id": cell_id,
-                    "label": labels.get(cell_id, cell_id),
+                    "label": label,
                     "instance_id": instance_id,
                     "shard_id": shard_id,
                     "result_present": result is not None,
@@ -300,6 +314,7 @@ def replay(
                     "replay_private_pass": replay_private,
                     "replay_pass": replay_pass,
                     "replay_error": replay_error,
+                    "regrade_requested": regrade_requested,
                     "legacy_oracle_pass": _legacy_oracle(result) if result else None,
                     "excluded": instance_id in exclusions,
                     "attribution": _attribution(
@@ -308,6 +323,7 @@ def replay(
                         code=code,
                         replay_pass=replay_pass,
                         replay_error=replay_error,
+                        regrade_requested=regrade_requested,
                     ),
                     "result_s3_key": result.get("_s3_key") if result else None,
                 }
@@ -394,6 +410,12 @@ def main() -> int:
     parser.add_argument("--out", type=Path, default=Path("/tmp/hypergrid-frozen-replay"))
     parser.add_argument("--test-timeout-s", type=float, default=30.0)
     parser.add_argument(
+        "--regrade-label",
+        action="append",
+        dest="regrade_labels",
+        help="regrade only exact cell label(s); all cohorts remain in ITT output",
+    )
+    parser.add_argument(
         "--exclusions",
         type=Path,
         default=Path("analysis/hypergrid/manifests/special_judge_exclusions.txt"),
@@ -405,6 +427,7 @@ def main() -> int:
         output=args.out,
         exclusions=_exclusions(args.exclusions),
         timeout_s=args.test_timeout_s,
+        regrade_labels=set(args.regrade_labels) if args.regrade_labels else None,
     )
     print(f"wrote {len(rows)} frozen-attribution rows to {args.out}")
     return 0
