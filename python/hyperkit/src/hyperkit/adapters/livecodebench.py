@@ -84,7 +84,7 @@ REPAIR_TEMPLATE = (
 _ENV_ALLOWLIST = ("PATH", "LANG", "LC_ALL", "LC_CTYPE", "PYTHONHASHSEED")
 _OUTPUT_LIMIT = 1 << 20
 _RESPONSE_LIMIT = 32 << 20
-_FIXTURE_LIMIT = 64 << 20
+_FIXTURE_LIMIT = 256 << 20
 _CPU_SECONDS = 12
 _MEMORY_BYTES = 1 << 30
 _MAX_SAMPLES = 8
@@ -209,7 +209,7 @@ def _legacy_fixture_json(value: str) -> Any:
         or decompressor.unused_data
         or not decompressor.eof
     ):
-        raise ValueError("decoded private fixture exceeds the size limit")
+        raise ValueError("private fixture is truncated, malformed, or exceeds the size limit")
     try:
         raw_json = _DataOnlyUnpickler(io.BytesIO(raw_pickle)).load()
     except (EOFError, pickle.UnpicklingError) as exc:
