@@ -25,7 +25,7 @@ dependencies = [
   "opentelemetry-sdk>=1.39.0",
   "pydantic>=2.12.5",
   "pyyaml>=6.0.2",
-  "typer>=0.15.0",
+  "typer>=0.27.0",
 ]
 
 [project.optional-dependencies]
