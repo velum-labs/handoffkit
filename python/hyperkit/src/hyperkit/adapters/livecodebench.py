@@ -14,8 +14,8 @@ Harness-side kernels are cell coordinates via ``Cell.params``:
   ``public-exec-repair`` (public-exec + one failure-directed repair round when
   the winner still fails a public test). Final correctness requires all public
   and private tests.
-- ``max_tokens`` (default 16384), ``test_timeout_s`` (default 30.0 wall;
-  the 12 s CPU rlimit is the binding, environment-independent limit),
+- ``max_tokens`` (default 16384), ``test_timeout_s`` (default 6.0 per compile
+  and test, matching the pinned official runner),
   ``model`` (override the target's served model id, e.g. a fusionkit
   passthrough endpoint id).
 
@@ -961,10 +961,8 @@ class LivecodebenchAdapter:
         include_evidence = params.get("include_evidence", False)
         if not isinstance(include_evidence, bool):
             raise ValueError("include_evidence must be a boolean")
-        # Wall clock must exceed the CPU rlimit or grading becomes a lottery on
-        # slow hosts: a CPU-bound solution must always get its full CPU budget.
         timeout_s = _bounded_float(
-            params, "test_timeout_s", 30.0, minimum=13.0, maximum=300.0
+            params, "test_timeout_s", 6.0, minimum=1.0, maximum=300.0
         )
         model = str(params.get("model", target.model))
         # Multi-stage SUTs (panel -> judge -> synth) legitimately take much

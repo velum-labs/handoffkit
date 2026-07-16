@@ -392,6 +392,7 @@ def replay(
                     for key in sorted(reader.objects)
                 ],
                 "runner": "livecodebench-v5-official-28fef95e",
+                "test_timeout_s": timeout_s,
                 "exclusions_sha256": _sha256(
                     "\n".join(sorted(exclusions))
                 ),
@@ -408,7 +409,7 @@ def main() -> int:
     parser.add_argument("--bucket", default=DEFAULT_BUCKET)
     parser.add_argument("--sweep", action="append", dest="sweeps")
     parser.add_argument("--out", type=Path, default=Path("/tmp/hypergrid-frozen-replay"))
-    parser.add_argument("--test-timeout-s", type=float, default=30.0)
+    parser.add_argument("--test-timeout-s", type=float, default=6.0)
     parser.add_argument(
         "--regrade-label",
         action="append",
