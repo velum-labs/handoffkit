@@ -1,8 +1,5 @@
 import { toolRegistry as routekitToolRegistry } from "@routekit/tool-registry";
-import {
-  configuredEndpointIds,
-  resolveEndpointId
-} from "@routekit/config";
+import { resolveModelId } from "@routekit/config";
 import { createToolLaunchContext } from "@routekit/tools";
 import type {
   ToolIntegration,
@@ -10,20 +7,15 @@ import type {
   ToolModel,
   ToolModelFeatureStatus
 } from "@routekit/tools";
-import type { ModelEndpointConfig, RouterConfig } from "@routekit/gateway";
+import type { RouterConfig } from "@routekit/gateway";
 import { commandOnPath } from "@routekit/runtime";
 
+import { fetchLiveCatalog, type LiveModel } from "./catalog.js";
 import { startRouter } from "./serve.js";
 
 export { routekitToolRegistry };
 
-function featureStatus(
-  status: ModelEndpointConfig["capabilities"] extends infer Capabilities
-    ? Capabilities extends Record<string, infer Value>
-      ? Value | undefined
-      : never
-    : never
-): ToolModelFeatureStatus {
+function featureStatus(status: string | undefined): ToolModelFeatureStatus {
   switch (status) {
     case "supported":
       return "full";
@@ -34,24 +26,23 @@ function featureStatus(
     case "unknown":
     case undefined:
       return "unknown";
-    default: {
-      const unreachable: never = status;
-      throw new Error(`unsupported endpoint capability: ${String(unreachable)}`);
-    }
+    default:
+      return "unknown";
   }
 }
 
-function configuredModels(config: RouterConfig): ToolModel[] {
-  return configuredEndpointIds(config).map((endpointId) => {
-    const endpoint = config.endpoints.find((entry) => entry.endpointId === endpointId)!;
+function liveModels(models: readonly LiveModel[]): ToolModel[] {
+  return models.map((model) => {
     return {
-      id: endpoint.endpointId,
-      label: endpoint.endpointId,
+      id: model.id,
+      label: model.id,
       features: {
-        streaming: featureStatus(endpoint.capabilities?.streaming),
-        tools: featureStatus(endpoint.capabilities?.tools),
-        images: featureStatus(endpoint.capabilities?.images),
-        reasoning_controls: featureStatus(endpoint.capabilities?.reasoning_controls)
+        streaming: featureStatus(model.capabilities.streaming),
+        tools: featureStatus(model.capabilities.tools),
+        images: featureStatus(model.capabilities.images),
+        reasoning_controls: featureStatus(
+          model.capabilities.reasoning_controls
+        )
       }
     };
   });
@@ -59,6 +50,7 @@ function configuredModels(config: RouterConfig): ToolModel[] {
 
 export function buildToolLaunchSpec(input: {
   config: RouterConfig;
+  catalog: readonly LiveModel[];
   gatewayUrl: string;
   model?: string;
   args?: readonly string[];
@@ -66,8 +58,12 @@ export function buildToolLaunchSpec(input: {
   authToken?: string;
   ide?: boolean;
 }): ToolLaunchSpec {
-  const models = configuredModels(input.config);
-  const defaultModel = resolveEndpointId(input.config, input.model);
+  const models = liveModels(input.catalog);
+  const defaultModel = resolveModelId(
+    input.config,
+    models.map((model) => model.id),
+    input.model
+  );
   return {
     gatewayUrl: input.gatewayUrl,
     defaultModel,
@@ -130,10 +126,17 @@ export async function launchTool(input: {
       : undefined;
   const gatewayUrl = input.gatewayUrl ?? running!.url;
   try {
+    const catalog = await fetchLiveCatalog(gatewayUrl, {
+      ...(input.authToken !== undefined ? { authToken: input.authToken } : {}),
+      ...(input.config.defaultModel !== undefined
+        ? { defaultModel: input.config.defaultModel }
+        : {})
+    });
     return await launchToolWithIntegration(
       integration,
       buildToolLaunchSpec({
         config: input.config,
+        catalog: catalog.models,
         gatewayUrl,
         ...(input.model !== undefined ? { model: input.model } : {}),
         ...(input.args !== undefined ? { args: input.args } : {}),

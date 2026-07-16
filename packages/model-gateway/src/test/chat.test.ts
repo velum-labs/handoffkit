@@ -234,7 +234,7 @@ test("forceModel overrides the requested model on every upstream call", async ()
     });
     assert.equal(response.status, 200);
     // The driving client's model is ignored; the dedicated capture gateway routes
-    // every call to its candidate's real endpoint id.
+    // every call to its candidate's routed model id.
     assert.equal(mock.lastChatBody()?.model, "routed-endpoint");
   } finally {
     await gateway.close();

@@ -57,7 +57,7 @@ sequenceDiagram
 
   CLI->>Server: trajectories:fuse request
   Server->>Engine: normalized trajectories
-  Engine->>Clients: judge/synth calls by opaque endpoint id
+  Engine->>Clients: judge/synth calls by namespaced model id
   Clients->>RouteKit: neutral Chat Completions
   RouteKit-->>Clients: ModelResponse and usage
   Engine->>Judge: candidate trajectories
@@ -76,8 +76,8 @@ manager, contract models, tracing, metrics, and artifacts.
 
 This module defines the configuration that the Python engine consumes.
 
-`FusionConfig` contains one `routekit_url`, opaque `endpoint_ids`, default,
-judge and synthesizer endpoint ids, and fusion policy. `RunBudget`,
+`FusionConfig` contains one `routekit_url`, namespaced `endpoint_ids`, default,
+judge and synthesizer model ids, and fusion policy. `RunBudget`,
 `SamplingConfig`, `ContextPolicy`, and `PromptOverrides` carry policy only.
 Provider names, credentials, base URLs, retries, and pricing are intentionally
 absent. `load_config(path)` validates this schema.
@@ -111,7 +111,7 @@ print(message.model_dump())
 This module builds the single neutral RouteKit client used by FusionKit.
 
 `ChatClient` is the provider-neutral protocol, `RouteKitClient` speaks RouteKit's
-OpenAI-compatible gateway using opaque endpoint ids, and `FakeModelClient`
+OpenAI-compatible gateway using namespaced model ids, and `FakeModelClient`
 supports deterministic tests. `build_clients(config)` creates one RouteKit
 client per configured id. There are no credentials, provider branches, retry
 classifiers, balancing rules, or pricing tables in Python.
@@ -338,7 +338,7 @@ uv run --package fusionkit-mlx python -c "import fusionkit_mlx; print(fusionkit_
 
 `fusionkit-testkit` is never published. Its neutral OpenAI-compatible simulator
 acts as a controllable RouteKit upstream for Python sidecar tests.
-`fusionkit_testkit.endpoints` builds opaque-id `FusionConfig` objects and
+`fusionkit_testkit.endpoints` builds namespaced-model `FusionConfig` objects and
 `EngineProcess` runs the real `fusionkit-sidecar` child process. RouteKit-wire
 coverage belongs to the TypeScript RouteKit gateway tests.
 

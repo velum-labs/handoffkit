@@ -196,7 +196,7 @@ const requiredFiles = [
   "packages/routekit-cli/src/commands/serve.ts",
   "packages/routekit-cli/src/commands/launchers.ts",
   "packages/routekit-cli/src/commands/accounts.ts",
-  "packages/routekit-cli/src/commands/endpoints.ts",
+  "packages/routekit-cli/src/commands/providers.ts",
   "packages/routekit-cli/src/commands/models.ts",
   "packages/routekit-cli/src/commands/config.ts",
   "packages/routekit-cli/src/commands/doctor.ts",
@@ -204,6 +204,7 @@ const requiredFiles = [
   "packages/routekit-cli/src/commands/telemetry.ts",
   "packages/routekit-cli/src/commands/stop.ts",
   "packages/routekit-cli/src/config.ts",
+  "packages/routekit-cli/src/catalog.ts",
   "packages/routekit-cli/src/serve.ts",
   "packages/routekit-cli/src/launch.ts",
   "packages/routekit-cli/src/accounts.ts",
@@ -211,6 +212,7 @@ const requiredFiles = [
   "packages/routekit-cli/src/telemetry.ts",
   "packages/routekit-cli/src/completion.ts",
   "packages/routekit-cli/src/test/accounts-command.test.ts",
+  "packages/routekit-cli/src/test/providers-command.test.ts",
   "packages/routekit-cli/src/test/cli.test.ts",
   "packages/routekit-cli/src/test/cliproxy-command.test.ts",
   "packages/routekit-cli/src/test/config.test.ts",
@@ -320,7 +322,7 @@ const requiredFiles = [
   "packages/routekit-router/src/test/router.test.ts",
   "packages/fusion-config/src/test/config.test.ts",
   "packages/cli/src/test/composition.test.ts",
-  "packages/cli/src/test/stack-endpoint-ids-e2e.test.ts",
+  "packages/cli/src/test/stack-model-ids-e2e.test.ts",
   "packages/cli/src/test/v4-commands.test.ts",
   "test/demos.test.js",
   "examples/mlx/src/test/run.test.ts"
@@ -502,7 +504,7 @@ if (pkg.scripts?.["test:dual-cli-pack"] !== "node scripts/check-dual-cli-pack.mj
 const ciWorkflow = readFileSync(".github/workflows/ci.yml", "utf8");
 for (const command of [
   "node scripts/check-dual-cli-pack.mjs",
-  "node --test packages/cli/dist/test/stack-endpoint-ids-e2e.test.js"
+  "node --test packages/cli/dist/test/stack-model-ids-e2e.test.js"
 ]) {
   if (!ciWorkflow.includes(command)) fail(`CI workflow must run ${command}`);
 }
@@ -856,7 +858,7 @@ const envSpreadListing = spawnSync(
 // A deliberate exception for a trusted infrastructure child must carry an
 // `env-spread-allowed: <reason>` comment on the preceding line. The internal
 // Python sidecar is not such an exception: it receives a restricted environment
-// and calls opaque RouteKit endpoint IDs.
+// and calls namespaced RouteKit model IDs.
 if (envSpreadListing.status === 0) {
   const envSpreadPattern = /\.\.\.process\.env\b/;
   const waiverPattern = /env-spread-allowed:\s*\S/;

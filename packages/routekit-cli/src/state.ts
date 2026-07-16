@@ -47,6 +47,22 @@ export function writeStateSnapshot(
   return path;
 }
 
+export function readStateSnapshot(
+  category: "catalog" | "health",
+  name: string
+): unknown {
+  if (!/^[a-z0-9-]+$/i.test(name)) {
+    throw new Error(`invalid state snapshot name: ${name}`);
+  }
+  const path = join(routekitHome(), category, `${name}.json`);
+  if (!existsSync(path)) return undefined;
+  try {
+    return JSON.parse(readFileSync(path, "utf8")) as unknown;
+  } catch {
+    return undefined;
+  }
+}
+
 function portlessOptions(log?: (line: string) => void): PortlessOptions {
   return {
     project: "routekit",

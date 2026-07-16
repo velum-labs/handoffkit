@@ -25,7 +25,7 @@ export PROVIDER_API_KEY=...     # whichever apiKeyEnv your router references
 `git`. Run `fusionkit doctor` to verify them.
 
 Provider variables are referenced by `.routekit/router.yaml`; FusionKit v4
-reads only opaque endpoint IDs. This repository's router needs
+reads only namespaced RouteKit model IDs. This repository's router needs
 `OPENROUTER_API_KEY`.
 
 ## 2. Start the endpoint

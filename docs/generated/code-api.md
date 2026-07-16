@@ -316,10 +316,12 @@ Product-neutral RouteKit gateway and router.
 - `export type { Backend, BackendRequestOptions, ModelRoutedBackendOptions, OpenAiBackendOptions } from "./backend.js";`
 - `export { AnthropicBackend, CodexResponsesBackend, GoogleGenAiBackend } from "./provider-backends.js";`
 - `export type { ProviderBackendOptions, ProviderTransport } from "./provider-backends.js";`
-- `export { CatalogBackend, EndpointPool, isAccountEndpointConfig, modelEndpointSchema, normalizeRouterConfigAliases, parseRouterConfig, providerBackend, routerConfigSchema, UnknownEndpointError } from "./router.js";`
-- `export type { AccountEndpointConfig, CatalogBackendOptions, EndpointPoolOptions, ModelEndpointConfig, RouterConfig, UrlEndpointConfig } from "./router.js";`
+- `export { CatalogBackend, isSubscriptionProvider, normalizeRouterConfigAliases, parseRouterConfig, routerConfigSchema, splitNamespacedModel, UnknownModelError } from "./router.js";`
+- `export type { CatalogBackendOptions, ProviderPolicy, RouterConfig, } from "./router.js";`
+- `export { API_PROVIDER_IDS, ApiProviderSource, parseDiscoveredModels, PROVIDER_IDS, SUBSCRIPTION_PROVIDER_IDS } from "./provider-source.js";`
+- `export type { ApiProviderId, ApiProviderSourceOptions, DiscoveredModel, ProviderId, ProviderSource, ProviderSourceTransport, SubscriptionProviderId } from "./provider-source.js";`
 - `export { endpointHealthProbe, probeEndpointHealth, providerAuthHeaders } from "./endpoint-health.js";`
-- `export type { EndpointHealthProbe, EndpointHealthProbePlan, EndpointHealthResult } from "./endpoint-health.js";`
+- `export type { AccountEndpointConfig, EndpointHealthProbe, EndpointHealthProbePlan, EndpointHealthResult, ModelEndpointConfig, UrlEndpointConfig } from "./endpoint-health.js";`
 - `export { CapacityPool } from "./capacity-pool.js";`
 - `export type { CapacityLease, CapacityPoolMember, CapacityPoolOptions, CapacityPoolStrategy } from "./capacity-pool.js";`
 - `export { effectiveModel, isStream, withDefaultModel } from "./adapters/chat.js";`
@@ -429,16 +431,16 @@ No module JSDoc was found.
 - `export type LoadedRouterConfig ...`
 - `export type RouterConfigPaths ...`
 - `export type UpdateRouterConfigInput ...`
-- `export function configuredEndpointIds(config: RouterConfig): string[] ...`
-  Unique configured endpoint ids in declaration order.
-- `export function missingEndpointIds(`
-  Required endpoint ids absent from the configured/advertised set.
-- `export function assertEndpointIdsConfigured(`
-  Reject when any required endpoint id is absent.
-- `export function resolveEndpointId(config: RouterConfig, requested?: string): string ...`
-  Resolve an explicit endpoint, or the configured default/first endpoint.
-- `export const selectEndpointId ...`
-  Alias retained for callers that describe endpoint resolution as selection.
+- `export function configuredProviderIds(config: RouterConfig): string[] ...`
+  Explicit provider ids in schema declaration order.
+- `export function missingModelIds(`
+  Required namespaced model ids absent from a live catalog.
+- `export function assertModelsAvailable(`
+  Reject when any required namespaced model id is absent from a live catalog.
+- `export function resolveModelId(`
+  Resolve an explicit model, or the configured default/first live model.
+- `export const selectModelId ...`
+  Alias retained for callers that describe model resolution as selection.
 - `export function routekitHome(env: NodeJS.ProcessEnv ...`
 - `export function globalRouterConfigPath(home: string ...`
 - `export function projectRouterConfigPath(cwd: string ...`
@@ -462,6 +464,9 @@ panel presets are deliberately excluded.
 - `export type ProviderAuthStyle ...`
 - `export type ProviderKeyProbe ...`
 - `export type ProviderDiscovery ...`
+- `export type ProviderDiscoveryResponseShape ...`
+- `export type ProviderWireProtocol ...`
+- `export type ProviderWire ...`
 - `export type ProviderInfo ...`
 - `export const PROVIDERS: Readonly<Record<string, ProviderInfo>> ...`
 - `export function providerDefaultBaseUrl(provider: string): string | undefined ...`
@@ -595,8 +600,8 @@ Composable layers for realistic end-to-end tests (see docs/testing.md):
 - {@link startProviderSim}: the scriptable provider simulator
   (python/fusionkit-testkit) as a child process, driven over its HTTP
   control plane and observed through its wire journal.
-- {@link simSidecarConfigYaml}: production-shaped sidecar config over opaque
-  simulator endpoint IDs.
+- {@link simSidecarConfigYaml}: production-shaped sidecar config over stable
+  namespaced RouteKit model IDs.
 - {@link startEngine}: the internal Python synthesis sidecar as a child
   process — the same entrypoint the production CLI spawns.
 - {@link parseSse} / {@link sseText}: structured SSE observation.
@@ -618,7 +623,7 @@ Composable layers for realistic end-to-end tests (see docs/testing.md):
 - `export { detectStackTooling, repoRoot, stackToolingSkip, uvRunArgv } from "./python.js";`
 - `export type { StackTooling } from "./python.js";`
 - `export { CODEX_TEST_TOKEN_ENV, simSidecarConfigYaml } from "./router-config.js";`
-- `export type { SimEndpointSpec } from "./router-config.js";`
+- `export type { SimModelSpec } from "./router-config.js";`
 - `export { judgeAnalysis, scriptFusedTurn } from "./scenarios.js";`
 - `export type { FusedTurnScript } from "./scenarios.js";`
 - `export { parseSse, sseDone, sseReasoning, sseText } from "./sse.js";`

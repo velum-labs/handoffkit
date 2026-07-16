@@ -104,11 +104,15 @@ async def test_tiny_benchmark_runner_writes_required_jsonl_fields(tmp_path) -> N
     engine = FusionEngine(
         config=FusionConfig(
             routekit_url="http://routekit.test",
-            endpoint_ids=["fast"],
-            default_model="fast",
+            routekit_model_ids=["test/fast"],
+            default_model="test/fast",
             default_mode="single",
         ),
-        clients={"fast": FakeModelClient("fast", ["Paris", '{"color":"blue","count":3}'])},
+        clients={
+            "test/fast": FakeModelClient(
+                "test/fast", ["Paris", '{"color":"blue","count":3}']
+            )
+        },
     )
 
     results = await run_tiny_benchmark(
@@ -116,7 +120,7 @@ async def test_tiny_benchmark_runner_writes_required_jsonl_fields(tmp_path) -> N
         config_id="test",
         mode="single",
         tasks=tasks,
-        model_versions={"fast": "fake-fast"},
+        model_versions={"test/fast": "fake-fast"},
     )
     output = tmp_path / "tiny.jsonl"
     write_tiny_jsonl(output, results)
@@ -125,7 +129,7 @@ async def test_tiny_benchmark_runner_writes_required_jsonl_fields(tmp_path) -> N
     assert len(loaded) == 2
     assert loaded[0].schema_bundle_hash.startswith("sha256:")
     assert loaded[0].repo_sha
-    assert loaded[0].model_versions == {"fast": "fake-fast"}
+    assert loaded[0].model_versions == {"test/fast": "fake-fast"}
     assert loaded[0].run_ids == [None]
     assert loaded[0].task["schema"] == "benchmark-task-record.v1"
 

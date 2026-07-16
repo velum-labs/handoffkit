@@ -55,7 +55,7 @@ export type CostLedgerEntry = TurnCost & {
   recordedAt: number;
   turn?: number;
   provider?: string;
-  endpointId?: string;
+  routekitModelId?: string;
   latencyMs?: number;
   localCompute?: LocalComputeUsage;
 };
@@ -117,7 +117,7 @@ export function meterCall(input: {
   pricing?: Readonly<Record<string, ModelPricing>>;
   turn?: number;
   provider?: string;
-  endpointId?: string;
+  routekitModelId?: string;
   latencyMs?: number;
   providerCost?: ProviderCostMetadata;
   localCompute?: LocalComputeUsage;
@@ -138,7 +138,9 @@ export function meterCall(input: {
     recordedAt: input.recordedAt ?? Date.now(),
     ...(input.turn !== undefined ? { turn: input.turn } : {}),
     ...(input.provider !== undefined ? { provider: input.provider } : {}),
-    ...(input.endpointId !== undefined ? { endpointId: input.endpointId } : {}),
+    ...(input.routekitModelId !== undefined
+      ? { routekitModelId: input.routekitModelId }
+      : {}),
     ...(input.latencyMs !== undefined ? { latencyMs: input.latencyMs } : {}),
     ...(input.localCompute !== undefined ? { localCompute: input.localCompute } : {}),
     ...(localComputeCostUsd !== undefined ? { localComputeCostUsd } : {})

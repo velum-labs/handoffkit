@@ -113,11 +113,11 @@ def test_public_smoke_docs_contain_claim_disclaimer() -> None:
 def _engine() -> FusionEngine:
     config = FusionConfig(
         routekit_url="http://routekit.test",
-        endpoint_ids=["fast"],
-        default_model="fast",
+        routekit_model_ids=["test/fast"],
+        default_model="test/fast",
         default_mode="single",
     )
     return FusionEngine(
         config=config,
-        clients={"fast": FakeModelClient("fast", ["unused"])},
+        clients={"test/fast": FakeModelClient("test/fast", ["unused"])},
     )

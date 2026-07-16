@@ -122,7 +122,22 @@ function codexOptionsFor(
   });
   return {
     codexPathOverride: config.command,
-    ...(config.provider.baseUrl !== undefined ? { baseUrl: config.provider.baseUrl } : {}),
+    ...(config.provider.baseUrl !== undefined
+      ? {
+          config: {
+            model_provider: "routekit",
+            model_providers: {
+              routekit: {
+                name: "RouteKit gateway",
+                base_url: config.provider.baseUrl,
+                wire_api: "responses",
+                requires_openai_auth: false,
+                supports_websockets: false
+              }
+            }
+          }
+        }
+      : {}),
     ...(apiKey !== undefined ? { apiKey } : {}),
     env: childEnv
   };

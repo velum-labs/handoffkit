@@ -154,7 +154,7 @@ export function registerFusion(program: Command): void {
   }
   program
     .command("init")
-    .description("scaffold .fusionkit/fusion.json from RouteKit endpoint ids")
+    .description("scaffold .fusionkit/fusion.json from namespaced RouteKit model ids")
     .option("--repo <dir>", "repository root")
     .option("--force", "replace an existing Fusion config")
     .action(async (options: FusionOpts) => {

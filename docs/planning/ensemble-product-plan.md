@@ -15,10 +15,13 @@ The end-to-end loop is real today, verified across the codebase:
 - **Harness gateway loop**: `fusionkit codex|claude|cursor|serve` auto-wires each harness to the Node gateway → runs a per-model panel (each model in its own git worktree, driven through the launched harness) → sends completed trajectories to the internal `fusionkit-sidecar` → returns a native-shaped answer in the tool's own dialect (OpenAI Responses / Anthropic Messages / OpenAI Chat).
 - **Auto-wiring** per harness: Codex via ephemeral `CODEX_HOME` config.toml; Claude via `ANTHROPIC_BASE_URL`/`ANTHROPIC_AUTH_TOKEN`; Cursor via the bundled cursorkit bridge driving `cursor-agent`.
 - **Onboarding**: `fusionkit init` (interactive panel wizard), `fusionkit doctor` (preflight), `fusionkit models download|list|rm` (resumable HF download for MLX, RAM-fit guard) — **all in the Node CLI**.
-- **Cloud auth**: RouteKit URL-backed endpoints use `apiKeyEnv`; account-backed endpoints use the canonical `claude-code` or `codex` subscription kind.
+- **Cloud auth**: RouteKit API providers use registry-defined credential
+  variables; `claude-code` and `codex` use named, pooled subscription accounts.
 - **Ensemble fault-tolerance**: a failed model becomes a `status="failed"` trajectory; survivors are still fused (`producers.py`); only zero survivors raises.
 - **Native passthrough**: the gateway also exposes each panel model as a direct (non-fused) pick — the substrate for "use the vendor, fall back to fusion."
-- **Config**: `.fusionkit/fusion.json` v4 contains opaque RouteKit endpoint IDs and Fusion policy; `.routekit/router.yaml` owns provider models, URLs, keys, and accounts.
+- **Config**: `.fusionkit/fusion.json` v4 contains namespaced RouteKit model IDs
+  and Fusion policy; `.routekit/router.yaml` owns explicit provider and pooling
+  policy while the live catalog supplies models.
 
 So this is a **gap-closing** effort, not greenfield. The gaps cluster into 8 workstreams below.
 
@@ -48,7 +51,7 @@ Current implementation uses three cooperating layers:
 
 1. **RouteKit** owns endpoint routing, provider dialects, credentials, and subscription accounts.
 2. **`@fusionkit/cli`** (Node) owns the public gateway, Fusion v4 config, harness wiring, worktrees, onboarding, and sessions.
-3. **`fusionkit-sidecar`** (Python, provisioned from PyPI) is internal and performs judge/synthesis calls through opaque RouteKit endpoint IDs.
+3. **`fusionkit-sidecar`** (Python, provisioned from PyPI) is internal and performs judge/synthesis calls through namespaced RouteKit model IDs.
 
 Git worktrees stay (lightweight, and essential for multiple harnesses editing one repo in parallel) — they are not "VM isolation." We drop only the governance/VM packages from the shipped surface.
 

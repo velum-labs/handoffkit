@@ -14,7 +14,7 @@ routekit doctor
 ```
 
 This provides `routekit` and requires neither the FusionKit package nor its
-Python executable. RouteKit uses configured remote endpoints and does not
+Python executable. RouteKit uses explicitly configured providers and does not
 download or start local models.
 
 For model ensembles, install FusionKit:
@@ -60,19 +60,20 @@ At least one of:
 You only need the agent you plan to launch. For example, `fusionkit codex` does
 not require Claude Code or Cursor to be installed.
 
-### RouteKit endpoints and provider keys
+### RouteKit providers and credentials
 
-Run `fusionkit init`, then edit `.routekit/router.yaml`. Each endpoint references
-its provider key by environment-variable name:
+Run `fusionkit init`, then edit `.routekit/router.yaml` to enable providers.
+API providers read the registry-defined environment variable:
 
 ```bash
-export PROVIDER_API_KEY=...
+export OPENAI_API_KEY=...
 ```
 
-FusionKit v4 stores only RouteKit endpoint IDs and never reads provider
-credentials. This repository's committed router uses `OPENROUTER_API_KEY`.
-`fusionkit doctor` reports missing endpoint IDs; `routekit doctor` owns provider
-credential checks.
+Subscription providers use named accounts enrolled with
+`routekit accounts add <kind> --name <label>`. FusionKit v4 stores only live
+namespaced RouteKit model IDs and never reads provider credentials. This
+repository's committed router uses `OPENROUTER_API_KEY`. `fusionkit doctor`
+reports missing model IDs; `routekit doctor` owns provider credential checks.
 
 ### A git repository (required)
 

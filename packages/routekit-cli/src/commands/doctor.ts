@@ -3,7 +3,9 @@ import {
   cliproxyApiKey
 } from "@routekit/accounts";
 import { contextFor, probeBinaryVersion } from "@routekit/cli-core";
+import { configuredProviderIds } from "@routekit/config";
 import type { RouterConfig } from "@routekit/gateway";
+import { defaultKeyEnv } from "@routekit/registry";
 import { commandOnPath } from "@routekit/runtime";
 import type { Command } from "commander";
 
@@ -25,9 +27,10 @@ export function registerDoctor(program: Command): void {
         config = result.config;
         checks.push({ label: "router config", ok: true, detail: result.path });
         for (const name of new Set(
-          result.config.endpoints
-            .map((entry) => entry.apiKeyEnv)
-            .filter((entry): entry is string => entry !== undefined)
+          configuredProviderIds(result.config).flatMap((provider) => {
+            const keyEnv = defaultKeyEnv(provider);
+            return keyEnv === undefined ? [] : [keyEnv];
+          })
         )) {
           const credential =
             process.env[name] ??
@@ -48,7 +51,7 @@ export function registerDoctor(program: Command): void {
       if (config !== undefined) {
         const status = await accountsStatus(config);
         for (const subscriptionKind of ["claude-code", "codex"] as const) {
-          if (config.accounts?.[subscriptionKind]?.enabled !== true) continue;
+          if (config.providers[subscriptionKind] === undefined) continue;
           const entries = status.accounts.filter(
             (entry) => entry.subscriptionKind === subscriptionKind
           );

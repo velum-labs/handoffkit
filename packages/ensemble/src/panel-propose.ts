@@ -180,7 +180,7 @@ async function proposeOne(
         ...(options.fusionApiKey !== undefined ? { authorization: `Bearer ${options.fusionApiKey}` } : {})
       },
       body: JSON.stringify({
-        // The shared router routes by endpoint id; a dedicated endpoint ignores it.
+        // The shared router routes by namespaced model id; a dedicated backend ignores it.
         model: model.id,
         messages: options.messages,
         ...(options.tools !== undefined ? { tools: options.tools } : {}),

@@ -149,11 +149,15 @@ def test_dirty_dozen_readme_documents_setup_scoring_and_contamination() -> None:
 def _engine() -> FusionEngine:
     config = FusionConfig(
         routekit_url="http://routekit.test",
-        endpoint_ids=["fast"],
-        default_model="fast",
+        routekit_model_ids=["test/fast"],
+        default_model="test/fast",
         default_mode="single",
     )
     return FusionEngine(
         config=config,
-        clients={"fast": FakeModelClient("fast", ["metadata trace artifact capability"])},
+        clients={
+            "test/fast": FakeModelClient(
+                "test/fast", ["metadata trace artifact capability"]
+            )
+        },
     )

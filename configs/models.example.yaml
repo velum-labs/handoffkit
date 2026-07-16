@@ -2,70 +2,29 @@
 #
 #   routekit --config configs/models.example.yaml serve --no-portless --port 8787
 #
-# Fusion v4 does not embed these provider details; it references the opaque
-# endpointId values from .fusionkit/fusion.json.
-endpoints:
-  - endpointId: gpt
-    model: gpt-5.5
-    provider: openai
-    baseUrl: https://api.openai.com/v1
-    dialect: openai
-    apiKeyEnv: OPENAI_API_KEY
-    capabilities:
-      streaming: supported
-      tools: supported
-      images: unknown
-      reasoning_controls: supported
+# Fusion v4 references live namespaced provider/model ids. Provider URLs,
+# credentials, wire protocols, and discovery metadata come from the registry.
+providers:
+  openai: {}
+  anthropic: {}
+  google: {}
+  openrouter: {}
 
-  - endpointId: opus
-    model: claude-opus-4-8
-    provider: anthropic
-    baseUrl: https://api.anthropic.com/v1
-    dialect: anthropic
-    apiKeyEnv: ANTHROPIC_API_KEY
-    capabilities:
-      streaming: supported
-      tools: supported
-      images: unknown
-      reasoning_controls: supported
+  # Start CLIProxyAPI separately, then enable its live catalog with:
+  #   routekit providers add cliproxy
+  cliproxy: {}
 
-  - endpointId: gemini
-    model: gemini-3-pro
-    provider: google
-    baseUrl: https://generativelanguage.googleapis.com/v1beta
-    dialect: google
-    apiKeyEnv: GEMINI_API_KEY
-    capabilities:
-      streaming: supported
-      tools: supported
-      images: supported
-      reasoning_controls: unknown
-
-  # CLIProxyAPI is URL-backed. Login and keep the proxy serving, then add this
-  # endpoint explicitly; login alone does not change router configuration.
-  - endpointId: gemini-subscription
-    model: gemini-3.1-pro-preview
-    provider: cliproxy
-    baseUrl: http://127.0.0.1:8317/v1
-    dialect: openai
-    apiKeyEnv: ROUTEKIT_CLIPROXY_API_KEY
-
-  # Native subscription endpoints use only endpointId, model, and account.
-  # Before serving, import the official CLI logins:
-  #   routekit accounts add claude-code
-  #   routekit accounts add codex
-  - endpointId: private-review
-    model: claude-sonnet-4-5
-    account: claude-code
-
-  - endpointId: private-coder
-    model: gpt-5.5-codex
-    account: codex
-
-accounts:
+  # Import any number of named official CLI logins before serving:
+  #   routekit accounts add claude-code --name personal
+  #   routekit accounts add claude-code --name work
   claude-code:
-    enabled: true
-  codex:
-    enabled: true
+    strategy: capacity_weighted
+    switchThreshold: 0.9
 
-defaultEndpointId: gpt
+  #   routekit accounts add codex --name personal
+  #   routekit accounts add codex --name work
+  codex:
+    strategy: capacity_weighted
+    switchThreshold: 0.9
+
+defaultModel: openai/gpt-5.5

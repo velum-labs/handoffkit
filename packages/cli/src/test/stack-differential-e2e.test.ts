@@ -51,7 +51,7 @@ for (const door of DOOR_PROFILES) {
       // fixture design. Script the same semantic answer for both calls.
       await stack.sim.queue("differential-member", [marker, marker]);
       const buffered = await callDoor(stack.gatewayUrl, door, {
-        model: "member",
+        model: "openai/differential-member",
         user: marker
       });
       const bufferedRaw = await buffered.text();
@@ -59,7 +59,7 @@ for (const door of DOOR_PROFILES) {
       const bufferedText = door.textOf(JSON.parse(bufferedRaw) as unknown);
 
       const streamed = await callDoor(stack.gatewayUrl, door, {
-        model: "member",
+        model: "openai/differential-member",
         user: marker,
         stream: true
       });

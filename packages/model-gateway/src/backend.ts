@@ -81,7 +81,7 @@ export type OpenAiBackendOptions = {
    * forwarded upstream, regardless of what the client sent. Used by per-candidate
    * capture gateways that are dedicated to one routed endpoint: the driving CLI
    * (e.g. Claude Code) picks its own model label, but the router must always
-   * receive the endpoint id. Absent means the client's model passes through.
+   * receive the routed model id. Absent means the client's model passes through.
    */
   forceModel?: string;
   /** Extra headers sent on every request. */

@@ -28,10 +28,10 @@ def stack():
     with RouteKitSimulator() as simulator:
         config = FusionConfig(
             routekit_url=simulator.url,
-            endpoint_ids=["judge"],
-            default_model="judge",
-            judge_model="judge",
-            synthesizer_model="judge",
+            routekit_model_ids=["test/judge"],
+            default_model="test/judge",
+            judge_model="test/judge",
+            synthesizer_model="test/judge",
         )
         with EngineProcess(config) as sidecar:
             yield simulator, sidecar
@@ -49,7 +49,7 @@ def test_sidecar_process_health_and_route_scope(stack) -> None:
 def test_sidecar_process_fuses_trajectories_through_routekit(stack) -> None:
     simulator, sidecar = stack
     simulator.queue(
-        "judge",
+        "test/judge",
         Behavior(reply=JUDGE_ANALYSIS, prompt_tokens=7, completion_tokens=2),
         Behavior(reply="fused across processes"),
     )
@@ -70,16 +70,16 @@ def test_sidecar_process_fuses_trajectories_through_routekit(stack) -> None:
         )
     assert response.status_code == 200
     assert response.json()["choices"][0]["message"]["content"] == "fused across processes"
-    assert [entry["model"] for entry in simulator.calls(model="judge")] == [
-        "judge",
-        "judge",
+    assert [entry["model"] for entry in simulator.calls(model="test/judge")] == [
+        "test/judge",
+        "test/judge",
     ]
 
 
 def test_sidecar_process_streams_losslessly_across_routekit_byte_boundaries(stack) -> None:
     simulator, sidecar = stack
     simulator.queue(
-        "judge",
+        "test/judge",
         Behavior(reply=JUDGE_ANALYSIS, prompt_tokens=7, completion_tokens=2),
         Behavior(
             reply="héllo fused 🌍",
@@ -136,7 +136,7 @@ def test_sidecar_process_stabilizes_broken_routekit_streams(
 ) -> None:
     simulator, sidecar = stack
     simulator.queue(
-        "judge",
+        "test/judge",
         Behavior(reply=JUDGE_ANALYSIS),
         Behavior(reply="partial output", broken_stream=broken_stream),
     )
@@ -185,8 +185,8 @@ def test_sidecar_process_startup_failure_carries_the_log(monkeypatch) -> None:
     monkeypatch.setattr(engine_module, "free_port", lambda host="127.0.0.1": 1)
     config = FusionConfig(
         routekit_url="http://127.0.0.1:9",
-        endpoint_ids=["judge"],
-        default_model="judge",
+        routekit_model_ids=["test/judge"],
+        default_model="test/judge",
     )
     broken = EngineProcess(config, startup_timeout_s=30.0)
     try:

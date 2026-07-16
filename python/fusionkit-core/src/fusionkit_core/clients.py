@@ -6,8 +6,8 @@ from fusionkit_core.routekit_client import RouteKitClient
 
 def build_clients(config: FusionConfig) -> dict[str, ChatClient]:
     return {
-        endpoint_id: RouteKitClient(config.routekit_url, endpoint_id)
-        for endpoint_id in config.endpoint_ids
+        model_id: RouteKitClient(config.routekit_url, model_id)
+        for model_id in config.routekit_model_ids
     }
 
 

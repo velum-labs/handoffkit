@@ -141,8 +141,8 @@ A small structure describing the run, available wherever we build a prompt:
 ```
 FusionIdentity:
   panel:        list[str]   # panel member model_ids (e.g. ["qwen-fast", "gemma-writer", "codex"])
-  judge:        str | None  # judge endpoint id
-  synthesizer:  str | None  # synthesizer endpoint id
+  judge:        str | None  # judge namespaced model id
+  synthesizer:  str | None  # synthesizer namespaced model id
   self_id:      str | None  # the id of THIS role (a panel member's own id), when applicable
   self_ordinal: int | None  # 1-based peer index for a panel member
 ```

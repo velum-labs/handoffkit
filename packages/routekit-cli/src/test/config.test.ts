@@ -1,5 +1,11 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, statSync, writeFileSync } from "node:fs";
+import {
+  mkdtempSync,
+  mkdirSync,
+  readFileSync,
+  statSync,
+  writeFileSync
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -7,23 +13,22 @@ import test from "node:test";
 import { stringify as stringifyYaml } from "yaml";
 
 import {
+  convertLegacyRouterConfig,
   loadRouterConfig,
+  migrateLegacyRouterConfig,
   migrateLegacyState,
   projectRouterConfigPath,
   writeRouterConfig
 } from "../config.js";
 
-function config(id: string, extra: Record<string, unknown> = {}): Record<string, unknown> {
+function config(
+  provider: "openai" | "anthropic" | "codex",
+  model: string,
+  extra: Record<string, unknown> = {}
+): Record<string, unknown> {
   return {
-    endpoints: [
-      {
-        endpointId: id,
-        model: `${id}-upstream`,
-        baseUrl: "https://example.test/v1",
-        apiKeyEnv: "TEST_API_KEY"
-      }
-    ],
-    defaultEndpointId: id,
+    providers: { [provider]: {} },
+    defaultModel: `${provider}/${model}`,
     ...extra
   };
 }
@@ -34,16 +39,19 @@ test("project config overrides global and explicit config overrides both", () =>
   const project = join(root, "project");
   const nested = join(project, "src");
   mkdirSync(nested, { recursive: true });
-  writeRouterConfig(join(home, ".config", "routekit", "router.yaml"), config("global", {
-    cooldownMs: 10
-  }));
-  writeRouterConfig(projectRouterConfigPath(project), config("project"));
+  writeRouterConfig(
+    join(home, ".config", "routekit", "router.yaml"),
+    config("openai", "global", {
+      providers: { openai: { fallbackCooldownSeconds: 10 } }
+    })
+  );
+  writeRouterConfig(projectRouterConfigPath(project), config("codex", "project"));
   const explicit = join(root, "explicit.yaml");
-  writeRouterConfig(explicit, config("explicit"));
+  writeRouterConfig(explicit, config("anthropic", "explicit"));
 
   const layered = loadRouterConfig({ cwd: nested, home, env: {} });
-  assert.equal(layered.config.defaultEndpointId, "project");
-  assert.equal(layered.config.cooldownMs, 10);
+  assert.equal(layered.config.defaultModel, "codex/project");
+  assert.equal(layered.config.providers.openai?.fallbackCooldownSeconds, 10);
   assert.deepEqual(layered.sources, ["project", "global"]);
 
   const overridden = loadRouterConfig({
@@ -51,19 +59,20 @@ test("project config overrides global and explicit config overrides both", () =>
     home,
     env: { ROUTEKIT_CONFIG: explicit }
   });
-  assert.equal(overridden.config.defaultEndpointId, "explicit");
+  assert.equal(overridden.config.defaultModel, "anthropic/explicit");
   assert.deepEqual(overridden.sources, ["environment"]);
 });
 
-test("project account overlays merge providers and individual policy fields", () => {
+test("project overlays merge providers and individual policy fields", () => {
   const root = mkdtempSync(join(tmpdir(), "routekit-config-accounts-"));
   const home = join(root, "home");
   const project = join(root, "project");
   mkdirSync(project, { recursive: true });
   writeRouterConfig(
     join(home, ".config", "routekit", "router.yaml"),
-    config("global", {
-      accounts: {
+    config("openai", "gpt", {
+      providers: {
+        openai: {},
         codex: {
           strategy: "round_robin",
           switchThreshold: 0.75
@@ -73,38 +82,31 @@ test("project account overlays merge providers and individual policy fields", ()
   );
   writeRouterConfig(
     projectRouterConfigPath(project),
-    config("project", {
-      accounts: {
-        claudeCode: { enabled: false },
+    {
+      providers: {
+        claudeCode: {},
         codex: { probeIntervalMs: 12_000 }
       }
-    })
+    }
   );
 
   const loaded = loadRouterConfig({ cwd: project, home, env: {} });
-  assert.equal(loaded.config.accounts?.["claude-code"]?.enabled, false);
-  assert.equal(loaded.config.accounts?.codex?.strategy, "round_robin");
-  assert.equal(loaded.config.accounts?.codex?.switchThreshold, 0.75);
-  assert.equal(loaded.config.accounts?.codex?.probeIntervalMs, 12_000);
+  assert.equal(loaded.config.providers["claude-code"]?.strategy, "capacity_weighted");
+  assert.equal(loaded.config.providers.codex?.strategy, "round_robin");
+  assert.equal(loaded.config.providers.codex?.switchThreshold, 0.75);
+  assert.equal(loaded.config.providers.codex?.probeIntervalMs, 12_000);
 });
 
 test("config rejects inline credentials and writes atomically with private permissions", () => {
   const root = mkdtempSync(join(tmpdir(), "routekit-config-safe-"));
   const path = join(root, "router.yaml");
-  writeRouterConfig(path, config("safe"));
+  writeRouterConfig(path, config("openai", "safe"));
   assert.equal(statSync(path).mode & 0o777, 0o600);
 
   writeFileSync(
     path,
     stringifyYaml({
-      endpoints: [
-        {
-          endpointId: "unsafe",
-          model: "model",
-          baseUrl: "https://example.test/v1",
-          apiKey: "must-not-be-stored"
-        }
-      ]
+      providers: { openai: { apiKey: "must-not-be-stored" } }
     })
   );
   assert.throws(
@@ -114,21 +116,78 @@ test("config rejects inline credentials and writes atomically with private permi
   writeFileSync(
     path,
     stringifyYaml({
-      endpoints: [
-        {
-          endpointId: "unsafe-google",
-          model: "model",
-          baseUrl: "https://example.test/v1beta",
-          dialect: "google",
-          headers: { "x-goog-api-key": "must-not-be-stored" }
-        }
-      ]
+      providers: {
+        google: { headers: { "x-goog-api-key": "must-not-be-stored" } }
+      }
     })
   );
   assert.throws(
     () => loadRouterConfig({ configPath: path, env: {} }),
-    /inline credential field "endpoints\[0\]\.headers\.x-goog-api-key"/
+    /inline credential field "providers\.google\.headers\.x-goog-api-key"/
   );
+});
+
+test("legacy endpoint/account config converts with explicit alias diagnostics", () => {
+  const result = convertLegacyRouterConfig({
+    endpoints: [
+      {
+        endpointId: "gpt",
+        model: "gpt-5.5",
+        account: "codex"
+      },
+      {
+        endpointId: "kimi",
+        model: "moonshotai/kimi-k2-thinking",
+        provider: "openrouter",
+        baseUrl: "https://openrouter.ai/api/v1",
+        apiKeyEnv: "OPENROUTER_API_KEY"
+      }
+    ],
+    defaultEndpointId: "gpt",
+    accounts: {
+      codex: { enabled: true, strategy: "round_robin" }
+    }
+  });
+  assert.equal(result.changed, true);
+  assert.deepEqual(Object.keys(result.config?.providers ?? {}), [
+    "openrouter",
+    "codex"
+  ]);
+  assert.equal(result.config?.defaultModel, "codex/gpt-5.5");
+  assert.equal(result.config?.providers.codex?.strategy, "round_robin");
+  assert.equal(
+    result.diagnostics.filter((diagnostic) => diagnostic.code === "custom-alias")
+      .length,
+    2
+  );
+});
+
+test("legacy migration reports non-representable pools and custom URLs without writing", () => {
+  const root = mkdtempSync(join(tmpdir(), "routekit-config-convert-"));
+  const path = join(root, "router.yaml");
+  const legacy = stringifyYaml({
+    endpoints: [
+      {
+        endpointId: "pooled",
+        instanceId: "one",
+        model: "gpt",
+        provider: "openai",
+        baseUrl: "https://custom.example/v1"
+      }
+    ]
+  });
+  writeFileSync(path, legacy);
+  const result = migrateLegacyRouterConfig(path);
+  assert.equal(result.changed, false);
+  assert.equal(
+    result.diagnostics.some((diagnostic) => diagnostic.code === "endpoint-pool"),
+    true
+  );
+  assert.equal(
+    result.diagnostics.some((diagnostic) => diagnostic.code === "custom-url"),
+    true
+  );
+  assert.equal(readFileSync(path, "utf8"), legacy);
 });
 
 test("migration is explicit, idempotent, and preserves private permissions", () => {

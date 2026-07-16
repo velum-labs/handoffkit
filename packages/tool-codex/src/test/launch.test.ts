@@ -27,7 +27,7 @@ const PROFILE: AgentProfile = {
   instructions: "Return concise findings."
 };
 
-test("Codex launcher serializes opaque models without interpreting endpoint ids", () => {
+test("Codex launcher serializes namespaced models without interpreting provider ids", () => {
   const template = { slug: "stock", display_name: "Stock", visibility: "list" };
   const entries = codexCatalogEntries(SPEC, template, [
     template,

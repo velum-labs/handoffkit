@@ -45,7 +45,7 @@ test("independent command surface is complete and has no compatibility aliases",
     "cursor",
     "opencode",
     "accounts",
-    "endpoints",
+    "providers",
     "models",
     "config",
     "doctor",
@@ -73,8 +73,8 @@ test("independent command surface is complete and has no compatibility aliases",
     ["install", "login", "serve", "status"]
   );
   assert.deepEqual(
-    command(program, "endpoints").commands.map((entry) => entry.name()).sort(),
-    ["add", "health", "list", "remove"]
+    command(program, "providers").commands.map((entry) => entry.name()).sort(),
+    ["add", "remove", "status"]
   );
   assert.deepEqual(
     command(program, "config").commands.map((entry) => entry.name()).sort(),
@@ -104,10 +104,8 @@ test("serve CLI rejects an unauthenticated non-loopback bind", async () => {
   writeFileSync(
     config,
     [
-      "endpoints:",
-      "  - endpointId: opaque",
-      "    model: provider-model",
-      "    baseUrl: http://127.0.0.1:9/v1",
+      "providers:",
+      "  openai: {}",
       ""
     ].join("\n")
   );

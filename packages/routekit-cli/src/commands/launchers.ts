@@ -13,7 +13,7 @@ export function registerLaunchers(program: Command): void {
     const command = program
       .command(integration.id)
       .description(`launch ${integration.displayName} through RouteKit`)
-      .argument("[model]", "configured endpoint id")
+      .argument("[model]", "live namespaced provider/model id")
       .argument("[toolArgs...]", `arguments passed to ${integration.displayName}`)
       .option("--gateway-url <url>", "connect to an existing RouteKit gateway")
       .option("--host <host>", "embedded gateway bind host", "127.0.0.1")

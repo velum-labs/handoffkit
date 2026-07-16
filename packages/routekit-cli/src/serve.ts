@@ -9,6 +9,7 @@ export type RouterServeOptions = {
   host?: string;
   port?: number;
   authToken?: string;
+  env?: NodeJS.ProcessEnv;
   portless?: boolean;
   register?: boolean;
 };
@@ -24,7 +25,8 @@ export async function startRouter(options: RouterServeOptions): Promise<RunningR
     config: options.config,
     ...(options.host !== undefined ? { host: options.host } : {}),
     ...(options.port !== undefined ? { port: options.port } : {}),
-    ...(options.authToken !== undefined ? { authToken: options.authToken } : {})
+    ...(options.authToken !== undefined ? { authToken: options.authToken } : {}),
+    ...(options.env !== undefined ? { env: options.env } : {})
   });
 
   let registration: ServiceRegistration | undefined;

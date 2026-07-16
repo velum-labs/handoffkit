@@ -25,7 +25,7 @@ from typing import Protocol
 
 import pytest
 
-from fusionkit_testkit.endpoints import SimEndpoint, panel_config
+from fusionkit_testkit.endpoints import SimModel, panel_config
 from fusionkit_testkit.engine import EngineProcess
 from fusionkit_testkit.server import RouteKitSimulator
 
@@ -34,9 +34,9 @@ class SimStackFactory(Protocol):
     def __call__(
         self,
         *,
-        members: list[SimEndpoint],
-        judge: SimEndpoint | None = None,
-        synthesizer: SimEndpoint | None = None,
+        members: list[SimModel],
+        judge: SimModel | None = None,
+        synthesizer: SimModel | None = None,
     ) -> tuple[RouteKitSimulator, EngineProcess]: ...
 
 
@@ -52,9 +52,9 @@ def sim_stack(routekit_sim: RouteKitSimulator) -> Iterator[SimStackFactory]:
 
     def factory(
         *,
-        members: list[SimEndpoint],
-        judge: SimEndpoint | None = None,
-        synthesizer: SimEndpoint | None = None,
+        members: list[SimModel],
+        judge: SimModel | None = None,
+        synthesizer: SimModel | None = None,
     ) -> tuple[RouteKitSimulator, EngineProcess]:
         config = panel_config(
             routekit_sim, members=members, judge=judge, synthesizer=synthesizer

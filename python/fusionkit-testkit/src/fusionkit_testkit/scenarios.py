@@ -56,10 +56,10 @@ def script_fused_turn(
 ) -> None:
     """Script one full fused turn: panel candidates, judge analysis, synthesis.
 
-    ``candidates`` maps opaque endpoint ids (what the simulator journals) to
-    their panel replies. When ``synthesizer_model`` is unset the judge endpoint
-    serves both fuse-step roles, consumed in order: analysis first, answer
-    second.
+    ``candidates`` maps namespaced RouteKit model ids (what the simulator
+    journals) to their panel replies. When ``synthesizer_model`` is unset the
+    judge model serves both fuse-step roles, consumed in order: analysis first,
+    answer second.
     """
     for model, reply in candidates.items():
         sim.queue(model, as_behavior(reply))

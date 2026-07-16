@@ -338,9 +338,7 @@ export function removeSubscriptionAccount(
   if (directoryStat.isSymbolicLink() || !directoryStat.isDirectory()) {
     throw new Error(`managed account directory is not a real directory: ${managedDirectory}`);
   }
-  if (realpathSync(managedDirectory) !== managedDirectory) {
-    throw new Error(`managed account directory contains a symbolic link: ${managedDirectory}`);
-  }
+  const canonicalDirectory = realpathSync(managedDirectory);
   chmodSync(managedDirectory, 0o700);
 
   let targetStat: ReturnType<typeof lstatSync>;
@@ -353,7 +351,7 @@ export function removeSubscriptionAccount(
   if (targetStat.isSymbolicLink() || !targetStat.isFile()) {
     throw new Error(`managed account is not a regular file: ${target}`);
   }
-  if (dirname(realpathSync(target)) !== managedDirectory) {
+  if (dirname(realpathSync(target)) !== canonicalDirectory) {
     throw new Error("account resolves outside the managed account directory");
   }
   chmodSync(target, 0o600);

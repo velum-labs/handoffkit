@@ -123,7 +123,7 @@ MUTATIONS = [
     ),
     Mutation(
         id="M8",
-        what="Node panel proposals send provider model names instead of opaque endpoint ids",
+        what="Node panel proposals send bare provider model names instead of namespaced model ids",
         file="packages/ensemble/src/panel-propose.ts",
         old="model: model.id,",
         new="model: model.model,",
@@ -588,14 +588,14 @@ MUTATIONS = [
     ),
     Mutation(
         id="M47",
-        what="Fusion rewrites opaque endpoint ids before generating the sidecar config",
+        what="Fusion rewrites namespaced model ids before generating the sidecar config",
         file="packages/cli/src/fusion/stack.ts",
-        old="      endpoint_ids: input.endpointIds,",
-        new='      endpoint_ids: input.endpointIds.map((id) => `provider-${id}`),',
+        old="      routekit_model_ids: input.routekitModelIds,",
+        new='      routekit_model_ids: input.routekitModelIds.map((id) => `provider-${id}`),',
         build=True,
         cmd=(
             "node --test --test-name-pattern "
-            "'Python sidecar receives RouteKit endpoint ids' "
+            "'Python sidecar receives namespaced RouteKit model ids' "
             "packages/cli/dist/test/composition.test.js"
         ),
     ),
@@ -608,7 +608,7 @@ MUTATIONS = [
         build=True,
         cmd=(
             "PORTLESS=0 node --test --test-name-pattern 'authenticated external routekit' "
-            "packages/cli/dist/test/stack-endpoint-ids-e2e.test.js"
+            "packages/cli/dist/test/stack-model-ids-e2e.test.js"
         ),
     ),
     Mutation(

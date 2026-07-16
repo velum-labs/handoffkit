@@ -3,6 +3,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  realpathSync,
   rmSync,
   writeFileSync
 } from "node:fs";
@@ -33,10 +34,8 @@ test("accounts add canonically enrolls and activates the selected config", async
   writeFileSync(
     configPath,
     [
-      "endpoints:",
-      "  - endpointId: default",
-      "    model: provider-model",
-      "    baseUrl: https://example.test/v1",
+      "providers:",
+      "  openai: {}",
       ""
     ].join("\n")
   );
@@ -76,7 +75,8 @@ test("accounts add canonically enrolls and activates the selected config", async
       join(stateHome, "subscriptions", "codex", "primary.json")
     );
     const persisted = readFileSync(configPath, "utf8");
-    assert.match(persisted, /accounts:\n  codex:\n    enabled: true/);
+    assert.match(persisted, /providers:\n  openai: \{\}\n  codex: \{\}/);
+    assert.doesNotMatch(persisted, /accounts:|enabled:/);
     assert.doesNotMatch(persisted, /strategy:|switchThreshold:|cooldownMs:/);
   } finally {
     process.stdout.write = originalWrite;
@@ -89,7 +89,9 @@ test("accounts add canonically enrolls and activates the selected config", async
 });
 
 test("accounts remove emits JSON and plain idempotent results without credential data", async () => {
-  const root = mkdtempSync(join(tmpdir(), "routekit-accounts-command-"));
+  const root = realpathSync(
+    mkdtempSync(join(tmpdir(), "routekit-accounts-command-"))
+  );
   const directory = join(root, "subscriptions", "codex");
   const previousHome = process.env.ROUTEKIT_HOME;
   const originalWrite = process.stdout.write;

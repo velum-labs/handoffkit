@@ -32,7 +32,7 @@ Historical two-member product defaults were lopsided: one member was far stronge
 so the oracle ceiling barely exceeded the best single model. Benchmark fusion with
 a decorrelated peer panel instead (the `decorrelated-peers` registry preset:
 gpt-5.5 + claude-opus-4.8 + gemini-3-pro). See
-`configs/benchmark-panel.example.yaml` for the endpoint-ID-only internal eval
+`configs/benchmark-panel.example.yaml` for the namespaced-model-only internal eval
 config and `configs/benchmark-router.example.yaml` for the RouteKit model and
 provider definitions.
 

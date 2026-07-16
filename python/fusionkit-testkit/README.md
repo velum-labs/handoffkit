@@ -21,8 +21,8 @@ Each dialect renders text, reasoning, tool calls, errors, streaming, and usage
 in its native wire shape. The journal labels are `openai-chat`,
 `anthropic-messages`, `google-generate`, and `openai-responses`.
 
-Point `FusionConfig.routekit_url` at `simulator.url`; the sidecar sends opaque
-endpoint ids in the request model field.
+Point `FusionConfig.routekit_url` at `simulator.url`; the sidecar sends
+namespaced RouteKit model ids in the request model field.
 
 ## Scripting (the control plane)
 

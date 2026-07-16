@@ -7,37 +7,48 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 import { loadFusionConfig } from "@fusionkit/config";
+import { startProviderSim } from "@fusionkit/testkit";
 import { loadRouterConfig } from "@routekit/config";
 
 import { configuredDefaultToolArgv } from "../commands/palette.js";
 
 const cli = fileURLToPath(new URL("../index.js", import.meta.url));
 
-function run(args: readonly string[]): string {
+function run(
+  args: readonly string[],
+  env: Readonly<Record<string, string | undefined>> = {}
+): string {
   return execFileSync(process.execPath, [cli, ...args], {
     encoding: "utf8",
     env: {
       ...process.env,
+      ...env,
       FUSIONKIT_NO_TUI: "1",
       PORTLESS: "0"
     }
   });
 }
 
-test("init, config, and ensemble commands persist only Fusion v4 endpoint ids", () => {
+test("init, config, and ensemble commands persist only Fusion v4 model ids", async () => {
+  const sim = await startProviderSim();
+  await sim.queue("gpt-5.5", ["discovery fixture"]);
+  const providerEnv = {
+    OPENAI_API_KEY: "test-provider-key",
+    OPENAI_BASE_URL: `${sim.url}/v1`
+  };
   const repo = mkdtempSync(join(tmpdir(), "fusionkit-v4-commands-"));
   try {
     execFileSync("git", ["init", "-q"], { cwd: repo });
-    run(["--no-input", "init", "--repo", repo]);
+    run(["--no-input", "init", "--repo", repo], providerEnv);
     const initial = loadFusionConfig(repo);
     assert.equal(initial?.version, "fusionkit.fusion.v4");
     assert.deepEqual(initial?.router, { config: ".routekit/router.yaml" });
-    assert.deepEqual(initial?.ensembles.default?.members, ["default"]);
+    assert.deepEqual(initial?.ensembles.default?.members, ["openai/gpt-5.5"]);
 
     const router = loadRouterConfig({
       configPath: join(repo, ".routekit", "router.yaml")
     });
-    assert.equal(router.config.endpoints[0]?.apiKeyEnv, "PROVIDER_API_KEY");
+    assert.ok(router.config.providers.openai !== undefined);
     assert.doesNotMatch(
       readFileSync(router.path, "utf8"),
       /(?:apiKey|authorization|token):/
@@ -49,9 +60,9 @@ test("init, config, and ensemble commands persist only Fusion v4 endpoint ids", 
       "add",
       "review",
       "--member",
-      "default",
+      "openai/gpt-5.5",
       "--judge",
-      "default",
+      "openai/gpt-5.5",
       "--repo",
       repo
     ]);
@@ -76,8 +87,8 @@ test("init, config, and ensemble commands persist only Fusion v4 endpoint ids", 
     assert.deepEqual(updated?.router, { config: ".routekit/router.yaml" });
     assert.deepEqual(configuredDefaultToolArgv(repo), ["claude"]);
     assert.deepEqual(updated?.ensembles.review, {
-      members: ["default"],
-      judge: "default"
+      members: ["openai/gpt-5.5"],
+      judge: "openai/gpt-5.5"
     });
     const persisted = JSON.parse(
       readFileSync(join(repo, ".fusionkit", "fusion.json"), "utf8")
@@ -85,6 +96,7 @@ test("init, config, and ensemble commands persist only Fusion v4 endpoint ids", 
     assert.equal("provider" in persisted, false);
     assert.equal("subscriptionAccounts" in persisted, false);
   } finally {
+    await sim.close();
     rmSync(repo, { recursive: true, force: true });
   }
 });

@@ -5,6 +5,8 @@ import {
 import type {
   Backend,
   BackendRequestOptions,
+  DiscoveredModel,
+  ProviderSource,
   ProviderTransport
 } from "@routekit/gateway";
 import { subscriptionInfo } from "@routekit/registry";
@@ -15,13 +17,28 @@ import { subscriptionProvider } from "./provider.js";
 
 export type SubscriptionAccountBackendOptions = {
   accountSet: SubscriptionAccountSet;
-  model: string;
+  model?: string;
 };
 
 function bodyRecord(body: unknown): Record<string, unknown> {
   return typeof body === "object" && body !== null && !Array.isArray(body)
     ? (body as Record<string, unknown>)
     : {};
+}
+
+function modelFromRequest(body: unknown): string | undefined {
+  if (typeof body !== "string") return undefined;
+  try {
+    const parsed: unknown = JSON.parse(body);
+    return typeof parsed === "object" &&
+      parsed !== null &&
+      !Array.isArray(parsed) &&
+      typeof (parsed as { model?: unknown }).model === "string"
+      ? (parsed as { model: string }).model
+      : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function withSubscriptionInstructions(
@@ -53,8 +70,9 @@ function backendBaseUrl(mode: SubscriptionMode): string {
  * The provider-native backend performs wire translation while this wrapper
  * selects and authenticates an account for each request.
  */
-export class SubscriptionAccountBackend implements Backend {
-  readonly defaultModel: string;
+export class SubscriptionAccountBackend implements Backend, ProviderSource {
+  readonly sourceId: SubscriptionMode;
+  readonly defaultModel: string | undefined;
   readonly #accountSet: SubscriptionAccountSet;
   readonly #backend: Backend;
 
@@ -62,9 +80,10 @@ export class SubscriptionAccountBackend implements Backend {
     this.defaultModel = options.model;
     this.#accountSet = options.accountSet;
     const mode = options.accountSet.mode;
+    this.sourceId = mode;
     const provider = subscriptionProvider(mode);
     const transport: ProviderTransport = async (url, init) =>
-      await this.#accountSet.execute(this.defaultModel, async (credential) => {
+      await this.#accountSet.execute(modelFromRequest(init.body), async (credential) => {
         const headers = new Headers(init.headers);
         headers.delete("x-api-key");
         for (const [name, value] of Object.entries(provider.authHeaders(credential))) {
@@ -75,7 +94,9 @@ export class SubscriptionAccountBackend implements Backend {
     const backendOptions = {
       baseUrl: backendBaseUrl(mode),
       apiKey: "",
-      defaultModel: this.defaultModel,
+      ...(this.defaultModel !== undefined
+        ? { defaultModel: this.defaultModel }
+        : {}),
       transport
     };
     switch (mode) {
@@ -93,25 +114,31 @@ export class SubscriptionAccountBackend implements Backend {
   }
 
   listModelIds(): readonly string[] {
-    return [this.defaultModel];
+    return this.defaultModel === undefined
+      ? this.#accountSet.listModelIds()
+      : [this.defaultModel];
   }
 
   servesModel(model: string): boolean {
-    return model === this.defaultModel;
+    return this.listModelIds().includes(model);
   }
 
   resolveModel(requested: string | undefined): string | undefined {
-    return requested === undefined || requested === this.defaultModel
-      ? this.defaultModel
-      : undefined;
+    if (requested === undefined) return this.defaultModel ?? this.listModelIds()[0];
+    return this.servesModel(requested) ? requested : undefined;
   }
 
-  capabilities(): Readonly<Record<string, string>> {
+  capabilities(_model?: string): Readonly<Record<string, string>> {
     return {
       streaming: "supported",
       tools: "supported",
       reasoning_controls: "supported"
     };
+  }
+
+  async discoverModels(signal?: AbortSignal): Promise<readonly DiscoveredModel[]> {
+    const models = await this.#accountSet.discoverModels(signal);
+    return models.map((id) => ({ id, capabilities: this.capabilities(id) }));
   }
 
   chat(

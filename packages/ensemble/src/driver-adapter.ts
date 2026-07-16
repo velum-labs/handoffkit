@@ -48,7 +48,7 @@ function truncate(text: string, max: number): string {
 export type DriverModelRoute = {
   /** The ensemble model id (routing key). */
   modelId: string;
-  /** The model id the CLI should request (the endpoint id when per-model routed). */
+  /** The namespaced model id the CLI should request when routed per model. */
   model: string;
   /** OpenAI-compatible endpoint the CLI's model calls go to. */
   endpointUrl: string;

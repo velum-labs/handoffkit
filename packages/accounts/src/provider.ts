@@ -1,9 +1,15 @@
+import { existsSync, readFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
+
 import {
   providerDefaultBaseUrl,
   subscriptionInfo,
   type SubscriptionMode
 } from "@routekit/registry";
 import { parseRetryAfterSeconds } from "@routekit/contracts";
+import { parseDiscoveredModels } from "@routekit/gateway";
+import { trimSurroundingSlashes, trimTrailingSlashes } from "@routekit/runtime";
 
 import {
   loadSubscriptionCredential,
@@ -32,6 +38,10 @@ export type SubscriptionProvider = {
   readonly upstreamBaseUrl: string;
   readonly requestPath: string;
   loadCredential(path: string): Promise<SubscriptionCredential>;
+  discoverModels(
+    credential: SubscriptionCredential,
+    signal?: AbortSignal
+  ): Promise<readonly string[]>;
   authHeaders(credential: SubscriptionCredential): Record<string, string>;
   refresh(credential: SubscriptionCredential, signal?: AbortSignal): Promise<SubscriptionCredential>;
   fetchUsage(credential: SubscriptionCredential, signal?: AbortSignal): Promise<AccountLimits>;
@@ -105,6 +115,79 @@ function errorMessage(body: unknown, fallback: string): string {
   if (isRecord(error) && typeof error.message === "string") return error.message;
   if (typeof body.message === "string") return body.message;
   return fallback;
+}
+
+function joinUrl(baseUrl: string, path: string): string {
+  return `${trimTrailingSlashes(baseUrl)}/${trimSurroundingSlashes(path)}`;
+}
+
+function expandedPath(path: string): string {
+  return path.startsWith("~/") ? join(homedir(), path.slice(2)) : path;
+}
+
+function readCodexModelsCache(): unknown | undefined {
+  const path = subscriptionInfo("codex").modelsCachePath;
+  if (path === undefined || !existsSync(expandedPath(path))) return undefined;
+  try {
+    return JSON.parse(readFileSync(expandedPath(path), "utf8")) as unknown;
+  } catch {
+    return undefined;
+  }
+}
+
+function cachedCodexClientVersion(): string | undefined {
+  const cache = readCodexModelsCache();
+  return isRecord(cache) && typeof cache.client_version === "string"
+    ? cache.client_version
+    : undefined;
+}
+
+export function codexModelsSearch(
+  search: string,
+  clientVersion: string | undefined = cachedCodexClientVersion()
+): string {
+  const query = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
+  if (query.has("client_version") || clientVersion === undefined) return search;
+  const separator = search.length === 0 ? "?" : search.includes("?") ? "&" : "?";
+  return `${search}${separator}client_version=${encodeURIComponent(clientVersion)}`;
+}
+
+async function discoverSubscriptionModels(
+  mode: SubscriptionMode,
+  baseUrl: string,
+  authHeaders: Record<string, string>,
+  signal?: AbortSignal
+): Promise<readonly string[]> {
+  const info = subscriptionInfo(mode);
+  try {
+    const discoveryPath =
+      mode === "codex"
+        ? `${info.discovery.path}${codexModelsSearch("")}`
+        : info.discovery.path;
+    const response = await fetch(joinUrl(baseUrl, discoveryPath), {
+      headers: {
+        accept: "application/json",
+        ...(info.discovery.extraHeaders ?? {}),
+        ...authHeaders
+      },
+      ...(signal !== undefined ? { signal } : {})
+    });
+    if (!response.ok) {
+      throw new Error(`model discovery returned HTTP ${response.status}`);
+    }
+    return parseDiscoveredModels(
+      info.discovery.responseShape,
+      await response.json()
+    ).map((model) => model.id);
+  } catch (error) {
+    if (mode !== "codex" || info.discovery.cacheFallback !== true) throw error;
+    const cached = readCodexModelsCache();
+    if (cached === undefined) throw error;
+    const cachedModels = parseDiscoveredModels(info.discovery.responseShape, cached)
+      .map((model) => model.id)
+      .filter((model) => !model.includes("/"));
+    return [...new Set([info.defaultModel, ...cachedModels])];
+  }
 }
 
 function refreshPayload(body: unknown): {
@@ -296,6 +379,13 @@ function anthropicProvider(): SubscriptionProvider {
     upstreamBaseUrl: providerDefaultBaseUrl("anthropic") ?? "https://api.anthropic.com",
     requestPath: "/v1/messages",
     loadCredential: (path) => loadSubscriptionCredential(mode, path),
+    discoverModels: (credential, signal) =>
+      discoverSubscriptionModels(
+        mode,
+        providerDefaultBaseUrl("anthropic") ?? "https://api.anthropic.com",
+        thisAnthropicHeaders(info, credential),
+        signal
+      ),
     authHeaders: (credential) => ({
       authorization: `Bearer ${credential.accessToken}`,
       "anthropic-beta": info.oauthBetaHeader ?? "oauth-2025-04-20"
@@ -387,6 +477,19 @@ function codexProvider(): SubscriptionProvider {
     upstreamBaseUrl: providerDefaultBaseUrl("codex") ?? "https://chatgpt.com/backend-api/codex",
     requestPath: "/responses",
     loadCredential: (path) => loadSubscriptionCredential(mode, path),
+    discoverModels: (credential, signal) =>
+      discoverSubscriptionModels(
+        mode,
+        providerDefaultBaseUrl("codex") ??
+          "https://chatgpt.com/backend-api/codex",
+        {
+          authorization: `Bearer ${credential.accessToken}`,
+          ...(credential.accountId !== undefined
+            ? { "chatgpt-account-id": credential.accountId }
+            : {})
+        },
+        signal
+      ),
     authHeaders: (credential) => ({
       authorization: `Bearer ${credential.accessToken}`,
       ...(credential.accountId !== undefined ? { "chatgpt-account-id": credential.accountId } : {}),

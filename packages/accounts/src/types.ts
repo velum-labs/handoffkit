@@ -49,6 +49,7 @@ export type SubscriptionMemberStatus = {
   expiresAt?: number;
   coolingUntil?: number;
   active: boolean;
+  models: string[];
   limits?: AccountLimits;
 };
 

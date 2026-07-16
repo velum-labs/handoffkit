@@ -23,7 +23,8 @@ fusionkit sessions rm <id>
 ```
 
 FusionKit has no separate cloud-cost consent file or consent prompt. Review the
-RouteKit endpoints before launch and use `--budget` to cap observed spend.
+RouteKit providers and live model catalog before launch and use `--budget` to
+cap observed spend.
 
 ## Telemetry is opt-in
 
@@ -35,7 +36,7 @@ Tracing is OpenTelemetry-based and exports nowhere by default: `--observe` point
 
 ## Where code travels
 
-A fused turn is sent to the providers behind the opaque RouteKit endpoint IDs
+A fused turn is sent to the providers named by the namespaced RouteKit model IDs
 in your active ensemble. Inspect both layers before a run:
 
 ```bash
@@ -43,12 +44,12 @@ fusionkit config show
 routekit config show
 ```
 
-The repository's `.fusionkit/fusion.json` contains endpoint IDs only; its
+The repository's `.fusionkit/fusion.json` contains namespaced model IDs only; its
 `.routekit/router.yaml` maps them to OpenRouter and therefore requires
 `OPENROUTER_API_KEY`. OpenRouter is an aggregator, so requests from this
 checkout go to OpenRouter and then to the selected upstream models. In your own
 repo, run `fusionkit init`, choose providers in `.routekit/router.yaml`, and
-compose those endpoint IDs in the Fusion config.
+compose those live `provider/model` IDs in the Fusion config.
 
 ## Rate-limit failover
 

@@ -102,7 +102,7 @@ async def test_fusion_bench_runs_native_task_and_joins_records(tmp_path) -> None
         run_root=tmp_path / "runs",
         config_id="test",
         mode="single",
-        model_versions={"fast": "fake-fast"},
+        model_versions={"test/fast": "fake-fast"},
     )
 
     rows = await runner.run_tasks([task])
@@ -120,7 +120,7 @@ async def test_fusion_bench_runs_native_task_and_joins_records(tmp_path) -> None
     assert row.artifact_records
     assert row.model_call_metadata == [
         {
-            "endpoint_id": "fast",
+            "routekit_model_id": "test/fast",
             "finish_reason": None,
             "role": "panel",
             "unknown_usage": False,
@@ -129,7 +129,7 @@ async def test_fusion_bench_runs_native_task_and_joins_records(tmp_path) -> None
     assert row.cost_estimate is None
     assert row.schema_bundle_hash.startswith("sha256:")
     assert row.repo_sha
-    assert row.model_versions == {"fast": "fake-fast"}
+    assert row.model_versions == {"test/fast": "fake-fast"}
     assert row.manifest_hash.startswith("sha256:")
     assert all(
         "candidate with evidence" not in json.dumps(record)
@@ -986,13 +986,13 @@ json.dump({"records": records}, sys.stdout)
 def _engine() -> FusionEngine:
     config = FusionConfig(
         routekit_url="http://routekit.test",
-        endpoint_ids=["fast"],
-        default_model="fast",
+        routekit_model_ids=["test/fast"],
+        default_model="test/fast",
         default_mode="single",
     )
     return FusionEngine(
         config=config,
-        clients={"fast": FakeModelClient("fast", ["candidate with evidence"])},
+        clients={"test/fast": FakeModelClient("test/fast", ["candidate with evidence"])},
     )
 
 

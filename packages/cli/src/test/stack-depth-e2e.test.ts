@@ -109,7 +109,7 @@ test("the default ensemble's prompt override reaches its judge wire", { skip: SK
 
 // --- durable session accounting ----------------------------------------------------------
 
-test("fused turns persist usage without resolving opaque endpoint ids to provider pricing", { skip: SKIP }, async () => {
+test("fused turns persist usage without resolving namespaced model ids to provider pricing", { skip: SKIP }, async () => {
   await stack.scriptFusedTurn({
     candidates: { "gpt-deep-a": "a", "claude-deep-b": "b" },
     answer: { reply: "accounted answer", prompt_tokens: 1000, completion_tokens: 500 },
@@ -130,7 +130,11 @@ test("fused turns persist usage without resolving opaque endpoint ids to provide
   const cost = detail.meta.cost;
   assert.ok(cost !== undefined, "session cost accounting must be persisted");
   assert.ok(cost.totalTokens > 0, `expected persisted usage, got ${JSON.stringify(cost)}`);
-  assert.equal(cost.totalUsd, 0, "FusionKit must not infer provider pricing from opaque endpoint ids");
+  assert.equal(
+    cost.totalUsd,
+    0,
+    "FusionKit must not infer provider pricing from namespaced model ids"
+  );
   assert.ok((cost.unknownCostEntries ?? 0) > 0);
 });
 

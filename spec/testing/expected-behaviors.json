@@ -28,7 +28,7 @@
     {
       "id": "models.native-members-advertised",
       "category": "model-exposure",
-      "expectation": "Opaque RouteKit endpoint ids remain available as native passthrough choices.",
+      "expectation": "Live namespaced RouteKit model ids remain available as native passthrough choices.",
       "status": "required",
       "testFile": "packages/cli/src/test/stack-e2e.test.ts",
       "anchor": "must be advertised as a passthrough"
@@ -124,10 +124,10 @@
     {
       "id": "fusion.judge-then-synth",
       "category": "fusion",
-      "expectation": "Candidates are judged before synthesis, using the configured judge and synthesizer endpoints.",
+      "expectation": "Candidates are judged before synthesis, using the configured judge and synthesizer models.",
       "status": "required",
-      "testFile": "packages/cli/src/test/stack-endpoint-ids-e2e.test.ts",
-      "anchor": "embedded RouteKit routes opaque endpoint ids"
+      "testFile": "packages/cli/src/test/stack-model-ids-e2e.test.ts",
+      "anchor": "embedded RouteKit routes namespaced model ids"
     },
     {
       "id": "fusion.named-ensemble-isolation",
@@ -140,10 +140,10 @@
     {
       "id": "fusion.passthrough-bypasses-fusion",
       "category": "fusion",
-      "expectation": "Selecting an opaque RouteKit endpoint performs exactly one endpoint call and never invokes the judge.",
+      "expectation": "Selecting a namespaced RouteKit model performs exactly one provider call and never invokes the judge.",
       "status": "required",
       "testFile": "packages/cli/src/test/stack-e2e.test.ts",
-      "anchor": "RouteKit endpoint passthrough routes each opaque id"
+      "anchor": "RouteKit model passthrough routes each namespaced id"
     },
     {
       "id": "fusion.extension-metadata",
@@ -164,7 +164,7 @@
     {
       "id": "fusion.mode-single",
       "category": "fusion",
-      "expectation": "The internal single fusion mode calls only the default endpoint.",
+      "expectation": "The internal single fusion mode calls only the default model.",
       "status": "required",
       "testFile": "python/fusionkit-core/tests/test_fusion_run.py",
       "anchor": "test_tracked_fusion_run_records_failure"
@@ -332,7 +332,7 @@
     {
       "id": "policy.failover-passthrough",
       "category": "policy",
-      "expectation": "Passthrough policy surfaces RouteKit's native endpoint failure verbatim.",
+      "expectation": "Passthrough policy surfaces RouteKit's native provider failure verbatim.",
       "status": "required",
       "testFile": "packages/cli/src/test/stack-policies-e2e.test.ts",
       "anchor": "onRateLimit=passthrough"
@@ -348,10 +348,10 @@
     {
       "id": "policy.budget-before-spend",
       "category": "policy",
-      "expectation": "An exhausted budget is refused with 402 before any RouteKit endpoint call.",
+      "expectation": "An exhausted budget is refused with 402 before any RouteKit model call.",
       "status": "required",
       "testFile": "packages/cli/src/test/stack-policies-e2e.test.ts",
-      "anchor": "exhausted budget is refused before any RouteKit endpoint call"
+      "anchor": "exhausted budget is refused before any RouteKit model call"
     },
     {
       "id": "security.gateway-auth",
@@ -380,10 +380,10 @@
     {
       "id": "session.cost-persisted",
       "category": "sessions",
-      "expectation": "Fused usage is persisted without inferring provider pricing from opaque endpoint ids.",
+      "expectation": "Fused usage is persisted without inferring provider pricing from namespaced model ids.",
       "status": "required",
       "testFile": "packages/cli/src/test/stack-depth-e2e.test.ts",
-      "anchor": "without resolving opaque endpoint ids to provider pricing"
+      "anchor": "without resolving namespaced model ids to provider pricing"
     },
     {
       "id": "lifecycle.straggler-bounded",
@@ -428,10 +428,10 @@
     {
       "id": "robustness.engine-malformed-rejected",
       "category": "robustness",
-      "expectation": "The internal Python sidecar rejects invalid endpoint ids as a stable 4xx without leaking tracebacks.",
+      "expectation": "The internal Python sidecar rejects invalid model ids as a stable 4xx without leaking tracebacks.",
       "status": "required",
       "testFile": "python/fusionkit-server/tests/test_server.py",
-      "anchor": "test_fuse_rejects_unknown_routekit_endpoint"
+      "anchor": "test_fuse_rejects_unknown_routekit_model"
     },
     {
       "id": "robustness.chunk-boundary-reassembly",
@@ -508,25 +508,25 @@
     {
       "id": "cli.routekit-command-surfaces",
       "category": "cli",
-      "expectation": "The real RouteKit CLI independently executes version, completion, config, endpoint, model, telemetry, doctor, and install surfaces while rejecting Fusion-only commands.",
+      "expectation": "The real RouteKit CLI independently executes version, completion, config, provider, model, telemetry, doctor, and install surfaces while rejecting Fusion-only commands.",
       "status": "required",
       "testFile": "packages/routekit-cli/src/test/cli-process-e2e.test.ts",
       "anchor": "real routekit command surfaces execute independently"
     },
     {
-      "id": "composition.routekit-endpoint-ids",
+      "id": "composition.routekit-model-ids",
       "category": "composition",
-      "expectation": "Opaque RouteKit endpoint IDs cross the real embedded-router, Python-sidecar, and Fusion-gateway stack without exposing provider model names.",
+      "expectation": "Namespaced RouteKit model IDs cross the real embedded-router, Python-sidecar, and Fusion-gateway stack while provider credentials remain behind RouteKit.",
       "status": "required",
-      "testFile": "packages/cli/src/test/stack-endpoint-ids-e2e.test.ts",
-      "anchor": "embedded RouteKit routes opaque endpoint ids"
+      "testFile": "packages/cli/src/test/stack-model-ids-e2e.test.ts",
+      "anchor": "embedded RouteKit routes namespaced model ids"
     },
     {
       "id": "composition.routekit-authenticated-cli-bridge",
       "category": "composition",
       "expectation": "Fusion bridges authenticated external RouteKit CLI traffic over loopback and closes only the bridge, leaving the independently owned RouteKit process alive.",
       "status": "required",
-      "testFile": "packages/cli/src/test/stack-endpoint-ids-e2e.test.ts",
+      "testFile": "packages/cli/src/test/stack-model-ids-e2e.test.ts",
       "anchor": "authenticated external routekit serve CLI uses a Fusion-owned loopback bridge"
     },
     {
@@ -562,20 +562,20 @@
       "anchor": "Claude account backend serves OpenAI chat with managed auth and normalized usage"
     },
     {
-      "id": "composition.account-backed-fusion",
+      "id": "composition.subscription-provider-fusion",
       "category": "composition",
-      "expectation": "Subscription-backed opaque endpoint ids drive panel, judge, and synthesis while credentials remain absent from Fusion responses.",
+      "expectation": "Subscription-backed namespaced model ids drive panel, judge, and synthesis while credentials remain absent from Fusion responses.",
       "status": "required",
-      "testFile": "packages/cli/src/test/stack-endpoint-ids-e2e.test.ts",
-      "anchor": "subscription-backed endpoint ids drive panel judge and synthesis without leaking credentials"
+      "testFile": "packages/cli/src/test/stack-model-ids-e2e.test.ts",
+      "anchor": "subscription-backed model ids drive panel judge and synthesis without leaking credentials"
     },
     {
       "id": "routing.unknown-id-rejected",
       "category": "robustness",
-      "expectation": "An explicit unknown endpoint id is rejected instead of silently routing through the default endpoint.",
+      "expectation": "An explicit unknown model id is rejected instead of silently routing through the default model.",
       "status": "required",
       "testFile": "packages/model-gateway/src/test/router.test.ts",
-      "anchor": "unknown endpoint ids fail instead of routing through the default endpoint"
+      "anchor": "unknown models never fall through to the default source"
     },
     {
       "id": "config.sparse-layer-mutation",
@@ -583,7 +583,7 @@
       "expectation": "Legacy account aliases normalize canonically and project mutations preserve sparse overlays without inherited defaults.",
       "status": "required",
       "testFile": "packages/routekit-config/src/test/config.test.ts",
-      "anchor": "legacy account aliases normalize while sparse project mutations stay sparse"
+      "anchor": "provider aliases normalize while sparse project mutations stay sparse"
     },
     {
       "id": "cli.strict-flags-json-and-passthrough",

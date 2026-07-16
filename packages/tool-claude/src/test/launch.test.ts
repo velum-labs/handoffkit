@@ -43,7 +43,23 @@ test("claudeAgentsJson serializes generic profiles", () => {
 
 test("claudeLaunchArgs adds profiles unless the user supplied agents", () => {
   const args = claudeLaunchArgs(context(["--verbose"]));
-  assert.deepEqual(args.slice(0, 2), ["--verbose", "--agents"]);
-  assert.deepEqual(claudeLaunchArgs(context(["--agents={}"])), ["--agents={}"]);
-  assert.deepEqual(claudeLaunchArgs(context([], [])), []);
+  assert.deepEqual(args.slice(0, 4), [
+    "--model",
+    "claude-opaque-model",
+    "--verbose",
+    "--agents"
+  ]);
+  assert.deepEqual(claudeLaunchArgs(context(["--agents={}"])), [
+    "--model",
+    "claude-opaque-model",
+    "--agents={}"
+  ]);
+  assert.deepEqual(claudeLaunchArgs(context([], [])), [
+    "--model",
+    "claude-opaque-model"
+  ]);
+  assert.deepEqual(
+    claudeLaunchArgs(context(["--model", "claude-user-selected"], [])),
+    ["--model", "claude-user-selected"]
+  );
 });

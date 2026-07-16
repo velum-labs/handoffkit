@@ -7,6 +7,7 @@ current working directory when serving from elsewhere) > built-in defaults.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Literal
 
@@ -14,6 +15,7 @@ import yaml
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 FusionMode = Literal["single", "self", "panel", "heuristic"]
+_ROUTEKIT_MODEL_ID = re.compile(r"^[a-z0-9][a-z0-9-]*/[^/\s][^\s]*$")
 
 
 class RunBudget(BaseModel):
@@ -91,14 +93,14 @@ class FusionConfig(BaseModel):
     """Configuration for the internal synthesis sidecar.
 
     RouteKit owns accounts, providers, retries, balancing, and pricing. FusionKit
-    receives only its neutral OpenAI-compatible gateway URL and opaque endpoint
-    identifiers.
+    receives only its neutral OpenAI-compatible gateway URL and stable,
+    namespaced RouteKit model identifiers.
     """
 
     model_config = ConfigDict(extra="forbid")
 
     routekit_url: str
-    endpoint_ids: list[str] = Field(min_length=1)
+    routekit_model_ids: list[str] = Field(min_length=1)
     default_model: str
     judge_model: str | None = None
     synthesizer_model: str | None = None
@@ -131,11 +133,22 @@ class FusionConfig(BaseModel):
             raise ValueError("routekit_url must not be empty")
         return normalized
 
+    @field_validator("routekit_model_ids")
+    @classmethod
+    def validate_routekit_model_ids(cls, values: list[str]) -> list[str]:
+        invalid = [value for value in values if _ROUTEKIT_MODEL_ID.fullmatch(value) is None]
+        if invalid:
+            raise ValueError(
+                "routekit_model_ids must use provider/model namespaces: "
+                + ", ".join(invalid)
+            )
+        return values
+
     @model_validator(mode="after")
     def _validate_model_references(self) -> FusionConfig:
-        known = set(self.endpoint_ids)
-        if len(known) != len(self.endpoint_ids):
-            raise ValueError("endpoint ids must be unique")
+        known = set(self.routekit_model_ids)
+        if len(known) != len(self.routekit_model_ids):
+            raise ValueError("RouteKit model ids must be unique")
         references = {
             "default_model": self.default_model,
             "judge_model": self.judge_model,
@@ -143,20 +156,20 @@ class FusionConfig(BaseModel):
         }
         for field, model_id in references.items():
             if model_id is not None and model_id not in known:
-                raise ValueError(f"{field} references unknown endpoint {model_id!r}")
+                raise ValueError(f"{field} references unknown RouteKit model {model_id!r}")
         if len(set(self.panel_models)) != len(self.panel_models):
             raise ValueError("panel_models must not contain duplicates")
         unknown_panel = [model_id for model_id in self.panel_models if model_id not in known]
         if unknown_panel:
             raise ValueError(
-                f"panel_models reference unknown endpoints: {', '.join(unknown_panel)}"
+                f"panel_models reference unknown RouteKit models: {', '.join(unknown_panel)}"
             )
         return self
 
-    def require_endpoint(self, endpoint_id: str) -> str:
-        if endpoint_id not in self.endpoint_ids:
-            raise KeyError(f"Unknown RouteKit endpoint: {endpoint_id}")
-        return endpoint_id
+    def require_model(self, model_id: str) -> str:
+        if model_id not in self.routekit_model_ids:
+            raise KeyError(f"Unknown RouteKit model: {model_id}")
+        return model_id
 
     @property
     def resolved_judge_model(self) -> str:

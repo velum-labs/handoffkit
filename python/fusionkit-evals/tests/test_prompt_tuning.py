@@ -60,14 +60,14 @@ def test_verify_solution_pass_and_fail() -> None:
 def _panel_engine() -> FusionEngine:
     config = FusionConfig(
         routekit_url="http://routekit.test",
-        endpoint_ids=["pass", "fail"],
-        default_model="pass",
-        panel_models=["pass", "fail"],
+        routekit_model_ids=["test/pass", "test/fail"],
+        default_model="test/pass",
+        panel_models=["test/pass", "test/fail"],
         default_mode="panel",
     )
     clients = {
-        "pass": FakeModelClient("pass", [CORRECT]),
-        "fail": FakeModelClient("fail", [WRONG]),
+        "test/pass": FakeModelClient("test/pass", [CORRECT]),
+        "test/fail": FakeModelClient("test/fail", [WRONG]),
     }
     return FusionEngine(config=config, clients=clients)
 
@@ -85,13 +85,13 @@ async def test_build_candidate_bank_records_candidate_pass() -> None:
     assert bank_task.n_pass == 1
     assert bank_task.is_decision_task is True
     passed_by_model = {c.model_id: c.passed for c in bank_task.candidates}
-    assert passed_by_model == {"pass": True, "fail": False}
+    assert passed_by_model == {"test/pass": True, "test/fail": False}
 
 
 def test_bank_signature_ignores_judge_config() -> None:
     engine = _panel_engine()
     sig1 = bank_signature(engine, prompt_suffix="X")
-    engine.config.judge_model = "fail"  # judge change must not move the bank signature
+    engine.config.judge_model = "test/fail"  # judge change must not move the bank signature
     sig2 = bank_signature(engine, prompt_suffix="X")
     assert sig1 == sig2
 

@@ -101,18 +101,18 @@ def test_native_fusion_run_missing_run_returns_native_error(tmp_path) -> None:
 def _client(tmp_path) -> TestClient:
     config = FusionConfig(
         routekit_url="http://routekit.test",
-        endpoint_ids=["fast", "judge"],
-        default_model="fast",
-        judge_model="judge",
+        routekit_model_ids=["test/fast", "test/judge"],
+        default_model="test/fast",
+        judge_model="test/judge",
         default_mode="panel",
-        panel_models=["fast"],
+        panel_models=["test/fast"],
     )
     app = create_app(
         config,
         clients={
-            "fast": FakeModelClient("fast", ["fast candidate with evidence"]),
-            "judge": FakeModelClient(
-                "judge",
+            "test/fast": FakeModelClient("test/fast", ["fast candidate with evidence"]),
+            "test/judge": FakeModelClient(
+                "test/judge",
                 [
                     '{"consensus":["candidate has evidence"],"contradictions":[],'
                     '"unique_insights":[],"coverage_gaps":[],"likely_errors":[],'
@@ -138,7 +138,7 @@ def _request_payload(request_id: str, mode: str = "panel") -> dict:
                 )
             ],
             "sampling": {},
-            "requested_models": ["fast"] if mode == "panel" else None,
+            "requested_models": ["test/fast"] if mode == "panel" else None,
         }
     )
     return request.model_dump(mode="json")

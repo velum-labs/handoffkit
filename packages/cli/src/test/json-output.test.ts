@@ -28,8 +28,8 @@ const BASE_CONFIG = {
   tool: "claude",
   ensembles: {
     default: {
-      members: ["route-fast", "route-deep"],
-      judge: "route-deep"
+      members: ["openai/route-fast", "anthropic/route-deep"],
+      judge: "anthropic/route-deep"
     }
   }
 };
@@ -65,7 +65,7 @@ function parseJson<T>(stdout: string): T {
   return JSON.parse(stdout) as T;
 }
 
-test("config show --json emits v4 router and effective opaque ensembles", () => {
+test("config show --json emits v4 router and effective namespaced ensembles", () => {
   const repo = makeRepo();
   const result = runCli(["config", "show", "--repo", repo, "--json"]);
   assert.equal(result.status, 0, result.stderr);
@@ -81,10 +81,13 @@ test("config show --json emits v4 router and effective opaque ensembles", () => 
   assert.equal(payload.router.url, "http://127.0.0.1:9");
   assert.equal(payload.effective.tool.value, "claude");
   assert.deepEqual(payload.effective.ensembles.value[0]?.members, [
-    "route-fast",
-    "route-deep"
+    "openai/route-fast",
+    "anthropic/route-deep"
   ]);
-  assert.equal(payload.effective.ensembles.value[0]?.judge, "route-deep");
+  assert.equal(
+    payload.effective.ensembles.value[0]?.judge,
+    "anthropic/route-deep"
+  );
 });
 
 test("config get/set/unset --json round-trips validated v4 values", () => {
@@ -123,16 +126,16 @@ test("config get/set/unset --json round-trips validated v4 values", () => {
   });
 });
 
-test("ensemble JSON CRUD stores only opaque RouteKit endpoint ids", () => {
+test("ensemble JSON CRUD stores only namespaced RouteKit model ids", () => {
   const repo = makeRepo();
   const added = runCli([
     "ensemble",
     "add",
     "review",
     "--member",
-    "route-deep",
+    "openai/route-deep",
     "--judge",
-    "route-deep",
+    "openai/route-deep",
     "--repo",
     repo,
     "--json"
@@ -153,8 +156,8 @@ test("ensemble JSON CRUD stores only opaque RouteKit endpoint ids", () => {
       name: "review",
       modelId: "fusion-review",
       default: false,
-      members: ["route-deep"],
-      judge: "route-deep"
+      members: ["openai/route-deep"],
+      judge: "openai/route-deep"
     }
   );
   const serialized = readFileSync(
@@ -207,5 +210,5 @@ test("v3 --json errors return actionable migration guidance", () => {
   assert.equal(result.status, 1);
   const payload = parseJson<{ error: { message: string } }>(result.stdout);
   assert.match(payload.error.message, /routekit\/router\.yaml/i);
-  assert.match(payload.error.message, /provider\/baseUrl\/keyEnv/i);
+  assert.match(payload.error.message, /provider\/model/i);
 });

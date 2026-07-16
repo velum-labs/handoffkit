@@ -21,7 +21,8 @@ fusionkit sessions rm <id>
 
 Use `FUSIONKIT_SESSIONS_DIR` to move the durable session store.
 FusionKit does not maintain a separate cloud-cost consent file; review the
-RouteKit endpoints before launch and use `--budget` for a spend cap.
+explicit RouteKit providers and live model catalog before launch and use
+`--budget` for a spend cap.
 
 ## Telemetry
 
@@ -56,21 +57,24 @@ Fusion runs are instrumented with OpenTelemetry. By default nothing is exported:
 
 ## Provider egress
 
-Your code and prompts are sent to the providers behind the opaque RouteKit
-endpoint IDs selected by the active ensemble, plus any passthrough endpoint you
-explicitly select. Inspect both configuration layers before a run:
+Your code and prompts are sent to the providers named by the namespaced RouteKit
+model IDs selected by the active ensemble, plus any passthrough model you
+explicitly select. Inspect both configuration layers and the live catalog
+before a run:
 
 ```bash
 fusionkit config show
 routekit config show
+routekit providers status
+routekit models list
 ```
 
-The committed `.fusionkit/fusion.json` contains endpoint IDs only. This
-repository's `.routekit/router.yaml` maps them to OpenRouter and requires
-`OPENROUTER_API_KEY`. OpenRouter is an aggregator, so requests sent from this
-checkout go to OpenRouter and then to the selected upstream models. In your own
-repository, run `fusionkit init`, edit `.routekit/router.yaml` to choose
-providers, and compose those endpoint IDs in `.fusionkit/fusion.json`.
+The committed `.fusionkit/fusion.json` contains namespaced model IDs only. This
+repository explicitly enables OpenRouter in `.routekit/router.yaml` and
+requires `OPENROUTER_API_KEY`. OpenRouter is an aggregator, so requests sent
+from this checkout go to OpenRouter and then to the selected upstream models.
+In your own repository, run `fusionkit init`, choose explicit providers, and
+compose their live `provider/model` IDs in `.fusionkit/fusion.json`.
 
 ## Rate-limit failover
 

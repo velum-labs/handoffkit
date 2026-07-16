@@ -90,7 +90,7 @@ export function createAgentHarness(options: AgentHarnessOptions): HarnessAdapter
   const id = options.id ?? "agent";
   // The base URL is shared across panel models (one RouteKit gateway), which
   // routes by the request `model` field. So the request model is the panel
-  // *endpoint id* (what RouteKit matches), not the provider model
+  // namespaced model id (what RouteKit matches), not the native provider model
   // name. With a dedicated per-model endpoint the id is ignored, so this is safe
   // either way.
   return {

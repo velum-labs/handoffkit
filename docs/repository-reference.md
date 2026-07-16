@@ -26,7 +26,7 @@ flowchart LR
   Core --> Records[Protocol records and run store]
 ```
 
-The most important operational fact is the process boundary. Node owns harness UX, tool launchers, worktrees, sessions, the public gateway, provider accounts, routing, pricing, retries, and user configuration. Python is an internal synthesis sidecar: it receives trajectories, calls opaque RouteKit endpoint IDs for judge/synthesis, and owns fusion prompts and native run records.
+The most important operational fact is the process boundary. Node owns harness UX, tool launchers, worktrees, sessions, the public gateway, provider accounts, routing, pricing, retries, and user configuration. Python is an internal synthesis sidecar: it receives trajectories, calls namespaced RouteKit model IDs for judge/synthesis, and owns fusion prompts and native run records.
 
 ## Top-level repository layout
 
@@ -61,7 +61,7 @@ RouteKit translates wire dialects and performs provider egress, while the
 Fusion backend records aggregate cost and session state, runs the panel, and
 sends completed trajectories to Python for synthesis.
 
-The Python side receives trajectories and synthesizes results. `fusionkit_core.fusion.FusionEngine` coordinates fusion-mode policy and judge synthesis. Its only production model client speaks RouteKit's neutral OpenAI-compatible gateway using opaque endpoint IDs. `fusionkit_core.run.FusionRunManager` creates durable native run records, tool policy pauses, idempotency records, and protocol artifacts.
+The Python side receives trajectories and synthesizes results. `fusionkit_core.fusion.FusionEngine` coordinates fusion-mode policy and judge synthesis. Its only production model client speaks RouteKit's neutral OpenAI-compatible gateway using namespaced model IDs. `fusionkit_core.run.FusionRunManager` creates durable native run records, tool policy pauses, idempotency records, and protocol artifacts.
 
 ```mermaid
 sequenceDiagram
@@ -77,12 +77,12 @@ sequenceDiagram
   CLI->>PY: start fusionkit-sidecar through uvx
   CLI->>User: launch harness with gateway URL
   User->>GW: harness request
-  GW->>RK: panel calls by opaque endpoint ID
+  GW->>RK: panel calls by namespaced model ID
   RK->>Models: provider-owned calls
   Models-->>RK: provider responses
   RK-->>GW: candidate trajectories and usage
   GW->>PY: POST trajectories:fuse
-  PY->>RK: judge and synthesis calls by opaque endpoint ID
+  PY->>RK: judge and synthesis calls by namespaced model ID
   RK-->>PY: neutral completions
   PY-->>GW: response, records, metrics
   GW-->>User: native harness response
@@ -94,7 +94,7 @@ sequenceDiagram
 
 `@fusionkit/cli` is the primary product surface and publishes the `fusionkit` binary. Its entry script is `packages/cli/src/index.ts`, which builds the Commander program and handles top-level process errors. The command tree is built by `buildProgram()` in `packages/cli/src/cli.ts`.
 
-The package owns Fusion-only launcher commands for `codex`, `claude`, `cursor`, `opencode`, and `serve`; local-model lifecycle; sessions; config; setup; doctor; and named endpoint-ID ensembles. RouteKit owns provider routing, accounts, proxies, and direct/single-model launches.
+The package owns Fusion-only launcher commands for `codex`, `claude`, `cursor`, `opencode`, and `serve`; local-model lifecycle; sessions; config; setup; doctor; and named namespaced-model ensembles. RouteKit owns provider routing, accounts, proxies, and direct/single-model launches.
 
 Important behavior includes preflight validation through `PreflightError`, version reporting that names both the npm CLI and pinned PyPI synthesizer, bare invocation help, and fail-closed policy error reporting for governed execution paths.
 
@@ -138,7 +138,7 @@ await runWorkflow(workflow, {
 ### `@routekit/gateway`, `@routekit/accounts`, and `@fusionkit/gateway`
 
 `@routekit/gateway` is the canonical neutral router and HTTP boundary. It owns
-wire dialects, SSE, ACP, provider egress, opaque endpoint catalogs, reusable
+wire dialects, SSE, ACP, provider egress, live namespaced catalogs, reusable
 capacity pooling, and normalized single-call cost/provenance.
 
 `@routekit/accounts` owns subscription credential sources, quota/health
@@ -344,9 +344,9 @@ console.log(Boolean(plane), Boolean(runner));
 
 `fusionkit-core` contains provider-neutral model-fusion primitives. It is the implementation center for sidecar configuration, the thin RouteKit client, fusion-mode selection, trajectory production, judge synthesis, run records, artifacts, metrics, tracing, and protocol conversions.
 
-`fusionkit_core.config` defines `RunBudget`, `ContextPolicy`, `SamplingConfig`, `PromptOverrides`, `FusionConfig`, and `load_config()`. `FusionConfig` contains one RouteKit URL, opaque endpoint IDs, model-role selections, and fusion policy only.
+`fusionkit_core.config` defines `RunBudget`, `ContextPolicy`, `SamplingConfig`, `PromptOverrides`, `FusionConfig`, and `load_config()`. `FusionConfig` contains one RouteKit URL, namespaced model IDs, model-role selections, and fusion policy only.
 
-`fusionkit_core.model_client` defines the neutral `ChatClient` protocol. `fusionkit_core.routekit_client` implements that protocol over RouteKit's OpenAI-compatible gateway, while `fusionkit_core.fake_client` supports deterministic tests. `build_clients()` creates one RouteKit client per opaque endpoint ID.
+`fusionkit_core.model_client` defines the neutral `ChatClient` protocol. `fusionkit_core.routekit_client` implements that protocol over RouteKit's OpenAI-compatible gateway, while `fusionkit_core.fake_client` supports deterministic tests. `build_clients()` creates one RouteKit client per namespaced model ID.
 
 `fusionkit_core.fusion` defines `FusionEngine` and `normalize_messages()`. The engine runs panel calls, direct calls, streaming calls, tool-aware calls, and fusion requests.
 
@@ -442,7 +442,7 @@ Use this package only on machines that can run MLX. The Node CLI should fail ear
 
 ### `fusionkit-testkit`
 
-`fusionkit-testkit` is the never-published test tooling package: a scriptable, observable RouteKit gateway simulator, config builders that point sidecar configs at opaque endpoint IDs, a real `fusionkit-sidecar serve` child-process harness, and workspace-wide pytest fixtures. The standalone simulator runs as `fusionkit-sim`. See [Testing](testing.md).
+`fusionkit-testkit` is the never-published test tooling package: a scriptable, observable RouteKit gateway simulator, config builders that point sidecar configs at namespaced model IDs, a real `fusionkit-sidecar serve` child-process harness, and workspace-wide pytest fixtures. The standalone simulator runs as `fusionkit-sim`. See [Testing](testing.md).
 
 ### `hyperkit`
 
@@ -591,7 +591,7 @@ To add a model-fusion contract field, update the JSON Schema, add or update fixt
 To add a provider, implement its backend and wire normalization in
 `@routekit/gateway`, add RouteKit config/catalog support, and test success,
 streaming, usage, and failure behavior there. The Python sidecar remains
-provider-neutral and continues to call opaque endpoint IDs through
+provider-neutral and continues to call namespaced model IDs through
 `RouteKitClient`; it must not gain provider credentials or provider-specific
 clients.
 

@@ -44,7 +44,7 @@ test("account state and service records live under ROUTEKIT_HOME with private mo
       0o600
     );
     const catalog = writeStateSnapshot("catalog", "models", { models: ["opaque"] });
-    const health = writeStateSnapshot("health", "endpoints", { endpoints: [] });
+    const health = writeStateSnapshot("health", "providers", { providers: [] });
     assert.equal(statSync(catalog).mode & 0o777, 0o600);
     assert.equal(statSync(health).mode & 0o777, 0o600);
     await registration.release();

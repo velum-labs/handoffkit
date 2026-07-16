@@ -34,7 +34,7 @@ import type {
   ModelGatewayCallContext,
   ProvenanceSink
 } from "./provenance.js";
-import { UnknownEndpointError } from "./router.js";
+import { UnknownModelError } from "./router.js";
 
 /**
  * The local-model gateway HTTP server. It fronts a single OpenAI Chat
@@ -105,6 +105,49 @@ export type Gateway = {
   port(): number;
   close(): Promise<void>;
 };
+
+function codexModelInfo(id: string, priority: number): Record<string, unknown> {
+  return {
+    slug: id,
+    prefer_websockets: false,
+    display_name: id,
+    description: "RouteKit live model",
+    default_reasoning_level: "medium",
+    supported_reasoning_levels: [
+      {
+        effort: "medium",
+        description: "Balanced reasoning through the RouteKit gateway"
+      }
+    ],
+    shell_type: "shell_command",
+    visibility: "list",
+    supported_in_api: true,
+    priority,
+    availability_nux: null,
+    upgrade: null,
+    base_instructions: "You are a coding agent.",
+    model_messages: {
+      instructions_template: "You are a coding agent.",
+      instructions_variables: null
+    },
+    supports_reasoning_summaries: true,
+    default_reasoning_summary: "none",
+    support_verbosity: true,
+    default_verbosity: "low",
+    apply_patch_tool_type: "freeform",
+    web_search_tool_type: "text_and_image",
+    truncation_policy: { mode: "tokens", limit: 10_000 },
+    supports_parallel_tool_calls: true,
+    supports_image_detail_original: true,
+    context_window: 272_000,
+    max_context_window: 272_000,
+    effective_context_window_percent: 95,
+    experimental_supported_tools: [],
+    input_modalities: ["text", "image"],
+    supports_search_tool: true,
+    use_responses_lite: false
+  };
+}
 
 async function mergeAnthropicCatalogs(
   configured: Response,
@@ -218,13 +261,9 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
             data?: Array<{ id: string } & Record<string, unknown>>;
           };
           if (merged.etag !== undefined) res.setHeader("etag", merged.etag);
-          const configuredModels = (base.data ?? []).map((entry) => ({
-            slug: entry.id,
-            display_name: entry.id,
-            description: "RouteKit configured endpoint",
-            visibility: "list",
-            priority: 0
-          }));
+          const configuredModels = (base.data ?? []).map((entry, priority) =>
+            codexModelInfo(entry.id, priority)
+          );
           const seenModels = new Set(configuredModels.map((entry) => entry.slug));
           const nativeModels = merged.models.filter((entry) => {
             const slug =
@@ -245,7 +284,26 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
           return;
         }
       }
-      await pipeUpstream(res, await backend.models());
+      const modelResponse = await backend.models();
+      if (!modelResponse.ok) {
+        await pipeUpstream(res, modelResponse);
+        return;
+      }
+      const modelPayload = (await modelResponse.json()) as {
+        object?: unknown;
+        data?: Array<{ id?: unknown } & Record<string, unknown>>;
+      };
+      const data = modelPayload.data ?? [];
+      writeJson(res, 200, {
+        ...modelPayload,
+        object: typeof modelPayload.object === "string" ? modelPayload.object : "list",
+        data,
+        models: data.flatMap((entry, priority) =>
+          typeof entry.id === "string"
+            ? [codexModelInfo(entry.id, priority)]
+            : []
+        )
+      });
       return;
     }
 
@@ -558,7 +616,7 @@ function writeGatewayError(
   res: ServerResponse,
   error: unknown
 ): { statusCode: number; payload: Buffer } {
-  if (error instanceof UnknownEndpointError) {
+  if (error instanceof UnknownModelError) {
     const payload = writeErrorSafely(res, 400, {
       error: {
         message: error.message,

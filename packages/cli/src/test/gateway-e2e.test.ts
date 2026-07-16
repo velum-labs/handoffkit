@@ -59,7 +59,7 @@ for (const door of DOOR_PROFILES) {
   );
 }
 
-test("FusionBackend discovery exposes fused and opaque RouteKit endpoint ids", {
+test("FusionBackend discovery exposes fused and namespaced RouteKit model ids", {
   skip: SKIP
 }, async () => {
   const response = await stack.door.models();
@@ -67,10 +67,17 @@ test("FusionBackend discovery exposes fused and opaque RouteKit endpoint ids", {
   const body = (await response.json()) as { data: Array<{ id: string }> };
   assert.deepEqual(
     body.data.map((entry) => entry.id).sort(),
-    ["fusion-panel", "member-a", "member-b", "judge"].sort()
+    [
+      "fusion-panel",
+      "openai/dialect-a",
+      "anthropic/dialect-b",
+      "openai/dialect-judge"
+    ].sort()
   );
   assert.ok(
-    body.data.every((entry) => !entry.id.startsWith("dialect-")),
-    "provider model names must remain behind RouteKit"
+    body.data.every(
+      (entry) => entry.id === "fusion-panel" || entry.id.includes("/")
+    ),
+    "passthrough models must stay namespaced"
   );
 });

@@ -65,7 +65,7 @@ export type ToolHarnessResolveOptions = {
   /**
    * Per-model router endpoints keyed by `EnsembleModel.id`. When a candidate's
    * model id is present, its harness is pointed at that endpoint (and requests
-   * the endpoint id as its model) instead of the shared `fusionBackendUrl`, so
+   * the namespaced model id as its model) instead of the shared `fusionBackendUrl`, so
    * each panel model backs its own routed candidate through the one launched
    * harness.
    */

@@ -96,6 +96,7 @@ export function codexCatalogEntries(
   const listed = new Set(ids);
   const entries: Record<string, unknown>[] = ids.map((id, priority) => ({
     ...template,
+    prefer_websockets: false,
     slug: id,
     display_name: spec.models.find((model) => model.id === id)?.label ?? id,
     description: "Gateway-routed model.",

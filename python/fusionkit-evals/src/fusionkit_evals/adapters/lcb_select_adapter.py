@@ -76,7 +76,7 @@ def cache_dir() -> Path:
 def signature(engine: FusionEngine, samples: int, temps: list[float]) -> str:
     config = engine.config
     payload = {
-        "endpoint_ids": sorted(config.endpoint_ids),
+        "routekit_model_ids": sorted(config.routekit_model_ids),
         "panel_models": sorted(config.panel_models),
         "samples": samples,
         "temps": temps,
@@ -146,7 +146,7 @@ async def evaluate_problem(
     if not public or not private:
         return _terminal(sig, task_id, "excluded", "missing public/private tests")
     prompt = (problem.get("question_content") or "") + LCB_PROMPT_SUFFIX
-    models = list(engine.config.panel_models) or list(engine.config.endpoint_ids)
+    models = list(engine.config.panel_models) or list(engine.config.routekit_model_ids)
 
     async with semaphore:
         started = time.monotonic()
@@ -300,7 +300,8 @@ async def main() -> None:
     semaphore = asyncio.Semaphore(concurrency)
     log(
         f"execution-guided selection: {len(problems)} problems, {samples} samples x "
-        f"{len(config.panel_models) or len(config.endpoint_ids)} models, temps={temps}, sig={sig}"
+        f"{len(config.panel_models) or len(config.routekit_model_ids)} models, "
+        f"temps={temps}, sig={sig}"
     )
 
     rows = await asyncio.gather(
@@ -333,7 +334,7 @@ async def main() -> None:
         "tasks": rows,
         "provenance": build_provenance(
             prompt_template=LCB_PROMPT_SUFFIX,
-            model_versions={endpoint_id: endpoint_id for endpoint_id in config.endpoint_ids},
+            model_versions={model_id: model_id for model_id in config.routekit_model_ids},
             dataset_revision=os.environ.get("LCB_VERSION", "release_v6"),
             extra={
                 "method": "execution-guided best-of-N: select on public tests, grade on private",

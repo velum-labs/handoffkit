@@ -40,6 +40,7 @@ const memberStatusSchema = z.object({
   expiresAt: z.number().optional(),
   coolingUntil: z.number().optional(),
   active: z.boolean(),
+  models: z.array(z.string()),
   limits: accountLimitsSchema.optional()
 });
 

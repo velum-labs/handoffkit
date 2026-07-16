@@ -28,7 +28,7 @@ def _stream_response(body: str, *, chunk_size: int = 64) -> httpx.Response:
 
 
 @pytest.mark.asyncio
-async def test_routekit_client_sends_opaque_endpoint_id_and_parses_tools() -> None:
+async def test_routekit_client_sends_namespaced_model_id_and_parses_tools() -> None:
     observed: dict[str, object] = {}
 
     async def handler(request: httpx.Request) -> httpx.Response:
@@ -67,7 +67,7 @@ async def test_routekit_client_sends_opaque_endpoint_id_and_parses_tools() -> No
     http_client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
     client = RouteKitClient(
         "http://routekit.test",
-        "opaque-endpoint-7",
+        "openai/gpt-5.5",
         http_client=http_client,
     )
     try:
@@ -84,8 +84,8 @@ async def test_routekit_client_sends_opaque_endpoint_id_and_parses_tools() -> No
     finally:
         await http_client.aclose()
 
-    assert observed["model"] == "opaque-endpoint-7"
-    assert response.model_id == "opaque-endpoint-7"
+    assert observed["model"] == "openai/gpt-5.5"
+    assert response.model_id == "openai/gpt-5.5"
     assert response.tool_calls[0].name == "read_file"
     assert response.usage.total_tokens == 10
 

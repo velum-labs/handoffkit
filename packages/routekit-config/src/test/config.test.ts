@@ -1,5 +1,11 @@
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -7,171 +13,132 @@ import test from "node:test";
 import { parseRouterConfig } from "@routekit/gateway";
 
 import {
-  assertEndpointIdsConfigured,
-  configuredEndpointIds,
+  assertModelsAvailable,
+  configuredProviderIds,
   globalRouterConfigPath,
   loadRouterConfig,
-  missingEndpointIds,
+  missingModelIds,
   projectRouterConfigPath,
-  resolveEndpointId,
+  resolveModelId,
   updateEffectiveRouterConfig,
   writeRouterConfig
 } from "../index.js";
 
-test("router config discovery and IO are reusable outside the CLI", () => {
+test("router config persists only explicit providers", () => {
   const directory = mkdtempSync(join(tmpdir(), "routekit-config-sdk-"));
   try {
     const path = projectRouterConfigPath(directory);
     writeRouterConfig(path, {
-      endpoints: [
-        {
-          endpointId: "opaque",
-          model: "provider-model",
-          baseUrl: "https://example.test",
-          dialect: "openai",
-          apiKeyEnv: "EXAMPLE_API_KEY"
-        }
-      ],
-      defaultEndpointId: "opaque"
+      providers: { openai: {}, codex: { strategy: "round_robin" } },
+      defaultModel: "codex/gpt-5.5"
     });
     const persisted = readFileSync(path, "utf8");
-    assert.doesNotMatch(persisted, /cooldownMs|strategy|accounts/);
-    const loaded = loadRouterConfig({ cwd: directory, home: directory, env: {} });
+    assert.doesNotMatch(persisted, /switchThreshold|probeIntervalMs/);
+    const loaded = loadRouterConfig({
+      cwd: directory,
+      home: directory,
+      env: {}
+    });
     assert.equal(loaded.path, path);
-    assert.equal(loaded.config.endpoints[0]?.endpointId, "opaque");
-    assert.deepEqual(loaded.sources, ["project"]);
+    assert.deepEqual(configuredProviderIds(loaded.config), ["openai", "codex"]);
+    assert.equal(loaded.config.defaultModel, "codex/gpt-5.5");
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
 });
 
-test("router config rejects inline credentials", () => {
+test("router config rejects inline credentials and legacy endpoint fields", () => {
   const directory = mkdtempSync(join(tmpdir(), "routekit-config-sdk-"));
   try {
     assert.throws(
       () =>
         writeRouterConfig(join(directory, "router.yaml"), {
-          endpoints: [
-            {
-              endpointId: "opaque",
-              model: "provider-model",
-              baseUrl: "https://example.test",
-              dialect: "openai",
-              apiKey: "secret"
-            }
-          ]
+          providers: { openai: { apiKey: "secret" } }
         }),
       /inline credential/
+    );
+    assert.throws(
+      () =>
+        writeRouterConfig(join(directory, "router.yaml"), {
+          providers: { openai: {} },
+          endpoints: []
+        }),
+      /unrecognized key/i
     );
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
 });
 
-test("legacy account aliases normalize while sparse project mutations stay sparse", () => {
+test("provider aliases normalize while sparse project mutations stay sparse", () => {
   const directory = mkdtempSync(join(tmpdir(), "routekit-config-layers-"));
   const home = join(directory, "home");
   const project = join(directory, "project");
   try {
     mkdirSync(project, { recursive: true });
     writeRouterConfig(globalRouterConfigPath(home), {
-      endpoints: [
-        {
-          endpointId: "global",
-          model: "upstream",
-          baseUrl: "https://example.test/v1"
-        }
-      ],
-      strategy: "round_robin"
+      providers: { openai: {} }
     });
     const projectPath = projectRouterConfigPath(project);
     mkdirSync(join(project, ".routekit"), { recursive: true });
-    writeFileSync(projectPath, "accounts:\n  claudeCode:\n    enabled: false\n");
+    writeFileSync(
+      projectPath,
+      "providers:\n  claudeCode:\n    strategy: round_robin\n"
+    );
 
     const loaded = loadRouterConfig({ cwd: project, home, env: {} });
-    assert.equal(loaded.config.accounts?.["claude-code"]?.enabled, false);
+    assert.equal(
+      loaded.config.providers["claude-code"]?.strategy,
+      "round_robin"
+    );
     updateEffectiveRouterConfig({ cwd: project, home, env: {} }, (draft) => {
-      draft.accounts = {
-        ...(draft.accounts as Record<string, unknown>),
-        "claude-code": { enabled: true }
+      draft.providers = {
+        ...(draft.providers as Record<string, unknown>),
+        "claude-code": { switchThreshold: 0.8 }
       };
     });
 
     const persisted = readFileSync(projectPath, "utf8");
     assert.match(persisted, /claude-code:/);
-    assert.doesNotMatch(persisted, /claudeCode|endpoints|strategy|cooldownMs/);
-    assert.equal(
-      loadRouterConfig({ cwd: project, home, env: {} }).config.accounts?.[
-        "claude-code"
-      ]?.enabled,
-      true
-    );
+    assert.doesNotMatch(persisted, /claudeCode|openai|defaultModel/);
+    const effective = loadRouterConfig({ cwd: project, home, env: {} }).config;
+    assert.equal(effective.providers["claude-code"]?.switchThreshold, 0.8);
+    assert.equal(effective.providers.openai?.strategy, "capacity_weighted");
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
 });
 
-const endpointConfig = parseRouterConfig({
-  endpoints: [
-    {
-      endpointId: "alpha",
-      instanceId: "alpha-primary",
-      model: "upstream-a",
-      baseUrl: "https://example.test/a",
-      dialect: "openai"
-    },
-    {
-      endpointId: "beta",
-      model: "upstream-b",
-      baseUrl: "https://example.test/b",
-      dialect: "openai"
-    },
-    {
-      endpointId: "alpha",
-      instanceId: "alpha-secondary",
-      model: "upstream-a",
-      baseUrl: "https://example.test/a-secondary",
-      dialect: "openai"
-    }
-  ],
-  defaultEndpointId: "beta"
+const config = parseRouterConfig({
+  providers: { openai: {}, codex: {} },
+  defaultModel: "codex/gpt-5.5"
 });
+const catalog = ["openai/gpt-5.5", "codex/gpt-5.5"];
 
-test("configuredEndpointIds returns unique ids in declaration order", () => {
-  assert.deepEqual(configuredEndpointIds(endpointConfig), ["alpha", "beta"]);
-});
-
-test("resolveEndpointId accepts explicit ids and resolves configured defaults", () => {
-  assert.equal(resolveEndpointId(endpointConfig), "beta");
-  assert.equal(resolveEndpointId(endpointConfig, "alpha"), "alpha");
-
-  const withoutDefault = parseRouterConfig({ endpoints: endpointConfig.endpoints });
-  assert.equal(resolveEndpointId(withoutDefault), "alpha");
-
+test("resolveModelId validates against the live catalog", () => {
+  assert.equal(resolveModelId(config, catalog), "codex/gpt-5.5");
+  assert.equal(
+    resolveModelId(config, catalog, "openai/gpt-5.5"),
+    "openai/gpt-5.5"
+  );
   assert.throws(
-    () => resolveEndpointId(endpointConfig, "gamma"),
-    /unknown endpoint "gamma" \(configured: alpha, beta\)/
+    () => resolveModelId(config, catalog, "openrouter/other"),
+    /unknown model "openrouter\/other"/
   );
 });
-
-test("missingEndpointIds returns unique missing ids in required order", () => {
+test("model availability helpers preserve required order", () => {
   assert.deepEqual(
-    missingEndpointIds(["beta", "gamma", "gamma", "alpha", "delta"], ["alpha", "beta"]),
-    ["gamma", "delta"]
+    missingModelIds(
+      ["codex/gpt-5.5", "google/gemini", "google/gemini", "anthropic/claude"],
+      catalog
+    ),
+    ["google/gemini", "anthropic/claude"]
   );
-});
-
-test("assertEndpointIdsConfigured rejects missing required ids", () => {
   assert.doesNotThrow(() =>
-    assertEndpointIdsConfigured(["alpha", "beta"], configuredEndpointIds(endpointConfig))
+    assertModelsAvailable(["codex/gpt-5.5"], catalog)
   );
   assert.throws(
-    () =>
-      assertEndpointIdsConfigured(
-        ["gamma", "delta"],
-        configuredEndpointIds(endpointConfig),
-        "bad routes"
-      ),
-    /bad routes: gamma, delta/
+    () => assertModelsAvailable(["google/gemini"], catalog, "bad routes"),
+    /bad routes: google\/gemini/
   );
 });

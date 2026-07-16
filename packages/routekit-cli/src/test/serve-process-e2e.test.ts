@@ -149,14 +149,9 @@ test("real routekit serve process reports JSON readiness and serves every suppor
   writeFileSync(
     configPath,
     [
-      "endpoints:",
-      "  - endpointId: opaque",
-      "    model: provider-model",
-      "    provider: mock",
-      `    baseUrl: http://127.0.0.1:${upstreamPort}/v1`,
-      "    dialect: openai",
-      "    apiKeyEnv: ROUTEKIT_PROCESS_TEST_KEY",
-      "defaultEndpointId: opaque",
+      "providers:",
+      "  openai: {}",
+      "defaultModel: openai/provider-model",
       ""
     ].join("\n")
   );
@@ -177,7 +172,8 @@ test("real routekit serve process reports JSON readiness and serves every suppor
       env: {
         ...process.env,
         ROUTEKIT_HOME: stateHome,
-        ROUTEKIT_PROCESS_TEST_KEY: "mock-secret",
+        OPENAI_API_KEY: "mock-secret",
+        OPENAI_BASE_URL: `http://127.0.0.1:${upstreamPort}/v1`,
         PORTLESS: "0",
         NO_COLOR: "1"
       }
@@ -194,18 +190,18 @@ test("real routekit serve process reports JSON readiness and serves every suppor
     assert.equal(models.status, 200);
     assert.deepEqual(
       ((await models.json()) as { data: Array<{ id: string }> }).data.map((entry) => entry.id),
-      ["opaque"]
+      ["openai/provider-model"]
     );
 
     const openai = await requestJson(routekitUrl, "/v1/chat/completions", {
-      model: "opaque",
+      model: "openai/provider-model",
       messages: [{ role: "user", content: "openai door" }]
     });
     assert.equal(openai.status, 200);
     assert.match(await openai.text(), /mock upstream answer/);
 
     const anthropic = await requestJson(routekitUrl, "/v1/messages", {
-      model: "opaque",
+      model: "openai/provider-model",
       max_tokens: 32,
       messages: [{ role: "user", content: "anthropic door" }]
     });
@@ -213,14 +209,14 @@ test("real routekit serve process reports JSON readiness and serves every suppor
     assert.equal(((await anthropic.json()) as { type?: string }).type, "message");
 
     const responses = await requestJson(routekitUrl, "/v1/responses", {
-      model: "opaque",
+      model: "openai/provider-model",
       input: "responses door"
     });
     assert.equal(responses.status, 200);
     assert.equal(((await responses.json()) as { object?: string }).object, "response");
 
     const cursor = await requestJson(routekitUrl, "/v1/cursor/chat/completions", {
-      model: "opaque",
+      model: "openai/provider-model",
       input: "cursor door"
     });
     assert.equal(cursor.status, 200);

@@ -29,53 +29,57 @@ export type UpdateRouterConfigInput = {
   configPath?: string;
 };
 
-/** Unique configured endpoint ids in declaration order. */
-export function configuredEndpointIds(config: RouterConfig): string[] {
-  return [...new Set(config.endpoints.map((endpoint) => endpoint.endpointId))];
+/** Explicit provider ids in schema declaration order. */
+export function configuredProviderIds(config: RouterConfig): string[] {
+  return Object.keys(config.providers);
 }
 
-/** Required endpoint ids absent from the configured/advertised set. */
-export function missingEndpointIds(
+/** Required namespaced model ids absent from a live catalog. */
+export function missingModelIds(
   required: Iterable<string>,
-  configured: Iterable<string>
+  availableModels: Iterable<string>
 ): string[] {
-  const available = new Set(configured);
-  return [...new Set(required)].filter((endpointId) => !available.has(endpointId));
+  const available = new Set(availableModels);
+  return [...new Set(required)].filter((model) => !available.has(model));
 }
 
-/** Reject when any required endpoint id is absent. */
-export function assertEndpointIdsConfigured(
+/** Reject when any required namespaced model id is absent from a live catalog. */
+export function assertModelsAvailable(
   required: Iterable<string>,
-  configured: Iterable<string>,
-  message = "missing endpoint ids"
+  availableModels: Iterable<string>,
+  message = "missing models"
 ): void {
-  const missing = missingEndpointIds(required, configured);
+  const missing = missingModelIds(required, availableModels);
   if (missing.length > 0) throw new Error(`${message}: ${missing.join(", ")}`);
 }
 
-/** Resolve an explicit endpoint, or the configured default/first endpoint. */
-export function resolveEndpointId(config: RouterConfig, requested?: string): string {
-  const configured = configuredEndpointIds(config);
+/** Resolve an explicit model, or the configured default/first live model. */
+export function resolveModelId(
+  config: RouterConfig,
+  availableModels: Iterable<string>,
+  requested?: string
+): string {
+  const available = [...new Set(availableModels)];
   if (requested !== undefined) {
-    if (!configured.includes(requested)) {
+    if (!available.includes(requested)) {
       throw new Error(
-        `unknown endpoint "${requested}" (configured: ${configured.join(", ")})`
+        `unknown model "${requested}" (available: ${available.join(", ")})`
       );
     }
     return requested;
   }
-  const selected = config.defaultEndpointId ?? configured[0];
-  if (selected === undefined) throw new Error("router config has no endpoints");
-  assertEndpointIdsConfigured(
+  const selected = config.defaultModel ?? available[0];
+  if (selected === undefined) throw new Error("router catalog has no models");
+  assertModelsAvailable(
     [selected],
-    configured,
-    "router config default endpoint is not configured"
+    available,
+    "router config default model is not available"
   );
   return selected;
 }
 
-/** Alias retained for callers that describe endpoint resolution as selection. */
-export const selectEndpointId = resolveEndpointId;
+/** Alias retained for callers that describe model resolution as selection. */
+export const selectModelId = resolveModelId;
 
 export function routekitHome(env: NodeJS.ProcessEnv = process.env): string {
   const override = env.ROUTEKIT_HOME;
@@ -147,7 +151,7 @@ function assertNoInlineCredentials(value: unknown, source: string, path = ""): v
       lowered === "clientsecret"
     ) {
       throw new Error(
-        `${source}: inline credential field "${path.length > 0 ? `${path}.` : ""}${key}" is not allowed; use apiKeyEnv`
+        `${source}: inline credential field "${path.length > 0 ? `${path}.` : ""}${key}" is not allowed; use the provider registry's environment variable`
       );
     }
     assertNoInlineCredentials(child, source, path.length > 0 ? `${path}.${key}` : key);
@@ -173,18 +177,20 @@ function mergeConfig(
   globalConfig: Record<string, unknown>,
   projectConfig: Record<string, unknown>
 ): Record<string, unknown> {
-  const globalAccounts = isRecord(globalConfig.accounts) ? globalConfig.accounts : {};
-  const projectAccounts = isRecord(projectConfig.accounts) ? projectConfig.accounts : {};
-  const accounts = { ...globalAccounts, ...projectAccounts };
-  for (const key of new Set([...Object.keys(globalAccounts), ...Object.keys(projectAccounts)])) {
-    if (isRecord(globalAccounts[key]) && isRecord(projectAccounts[key])) {
-      accounts[key] = { ...globalAccounts[key], ...projectAccounts[key] };
+  const globalProviders = isRecord(globalConfig.providers) ? globalConfig.providers : {};
+  const projectProviders = isRecord(projectConfig.providers) ? projectConfig.providers : {};
+  const providers = { ...globalProviders, ...projectProviders };
+  for (const key of new Set([...Object.keys(globalProviders), ...Object.keys(projectProviders)])) {
+    if (isRecord(globalProviders[key]) && isRecord(projectProviders[key])) {
+      providers[key] = { ...globalProviders[key], ...projectProviders[key] };
     }
   }
   return {
     ...globalConfig,
     ...projectConfig,
-    ...(isRecord(globalConfig.accounts) || isRecord(projectConfig.accounts) ? { accounts } : {})
+    ...(isRecord(globalConfig.providers) || isRecord(projectConfig.providers)
+      ? { providers }
+      : {})
   };
 }
 
@@ -299,21 +305,8 @@ export function updateRouterConfig(
 }
 
 export const DEFAULT_ROUTER_CONFIG: RouterConfig = parseRouterConfig({
-  endpoints: [
-    {
-      endpointId: "default",
-      model: "provider-model-id",
-      provider: "openai-compatible",
-      baseUrl: "https://api.example.com/v1",
-      dialect: "openai",
-      apiKeyEnv: "PROVIDER_API_KEY",
-      capabilities: {
-        streaming: "supported",
-        tools: "supported",
-        images: "unknown",
-        reasoning_controls: "unknown"
-      }
-    }
-  ],
-  defaultEndpointId: "default"
+  providers: {
+    openai: {}
+  },
+  defaultModel: "openai/gpt-5.5"
 });

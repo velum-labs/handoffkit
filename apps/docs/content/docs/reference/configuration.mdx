@@ -1,6 +1,6 @@
 ---
 title: Configuration
-description: FusionKit v4 ensembles composed from opaque RouteKit endpoint IDs.
+description: FusionKit v4 ensembles composed from live namespaced RouteKit models.
 ---
 
 ## Two configuration owners
@@ -8,18 +8,19 @@ description: FusionKit v4 ensembles composed from opaque RouteKit endpoint IDs.
 FusionKit v4 separates fusion policy from model routing:
 
 - `.fusionkit/fusion.json` defines ensembles, prompts, and Fusion behavior.
-- `.routekit/router.yaml` defines provider models, URLs, credentials, accounts,
-  and opaque endpoint IDs.
+- `.routekit/router.yaml` explicitly enables providers and configures pooling
+  policy.
 
-FusionKit sees endpoint IDs. RouteKit never sees ensembles.
+FusionKit sees namespaced `provider/model` IDs from RouteKit's live catalog.
+RouteKit never sees ensembles.
 
 ```bash
 fusionkit init
 ```
 
-This creates Fusion config and, when absent, a safe RouteKit placeholder with an
-`apiKeyEnv` reference. Install `@routekit/cli` separately if you want its
-endpoint/account commands; FusionKit does not depend on that executable.
+This creates Fusion config and, when absent, a safe provider-based RouteKit
+placeholder. Install `@routekit/cli` separately if you want its provider,
+catalog, and account commands; FusionKit does not depend on that executable.
 
 ## FusionKit v4 schema
 
@@ -31,9 +32,9 @@ endpoint/account commands; FusionKit does not depend on that executable.
   "defaultEnsemble": "default",
   "ensembles": {
     "default": {
-      "members": ["fast", "deep"],
-      "judge": "deep",
-      "synthesizer": "deep",
+      "members": ["openai/gpt-5.5", "anthropic/claude-sonnet-4-5"],
+      "judge": "anthropic/claude-sonnet-4-5",
+      "synthesizer": "anthropic/claude-sonnet-4-5",
       "k": 1
     }
   },
@@ -53,53 +54,51 @@ endpoint/account commands; FusionKit does not depend on that executable.
 - `url` plus optional `authEnv`: connect to an external RouteKit gateway.
   FusionKit validates its `/v1/models` list and never stops it.
 
-Ensemble `members`, `judge`, and optional `synthesizer` values are opaque
-RouteKit endpoint IDs. Provider names, model IDs, `baseUrl`, `apiKeyEnv`,
-pricing, and subscription-account settings are rejected here.
+Ensemble `members`, `judge`, and optional `synthesizer` values are namespaced
+IDs advertised by RouteKit's live catalog. Provider policy, credentials,
+registry URLs, pricing, and subscription-account enrollment are rejected here.
 
 ## RouteKit router
 
-URL-backed endpoints retain their provider connection details in RouteKit:
+Enable API providers explicitly. RouteKit obtains URL and credential metadata
+from its registry and performs live discovery at startup:
 
 ```yaml
-endpoints:
-  - endpointId: deep
-    model: provider-model-id
-    provider: openai-compatible
-    baseUrl: https://provider.example/v1
-    dialect: openai
-    apiKeyEnv: PROVIDER_API_KEY
-defaultEndpointId: deep
+providers:
+  openai: {}
+  anthropic: {}
+defaultModel: openai/gpt-5.5
 ```
 
-Account-backed endpoints instead set only an opaque ID, upstream model, and
-canonical subscription kind:
+Subscription providers use the same map and carry account-selection policy:
 
 ```yaml
-endpoints:
-  - endpointId: private-review
-    model: claude-sonnet-4-5
-    account: claude-code
-accounts:
+providers:
   claude-code:
-    enabled: true
+    strategy: capacity_weighted
+    switchThreshold: 0.9
+  codex:
+    strategy: capacity_weighted
+    switchThreshold: 0.9
+defaultModel: codex/gpt-5.5
 ```
 
 ```bash
-routekit accounts add claude-code
-routekit endpoints add private-review \
-  --model claude-sonnet-4-5 --account claude-code
-routekit claude private-review
+routekit accounts add claude-code --name personal
+routekit accounts add claude-code --name work
+routekit models list
+routekit claude claude-code/claude-sonnet-4-5
 ```
 
-`routekit accounts add` automatically enables that account kind in the
-effective router config. The tool command remains `routekit claude`;
-`claude-code` is the subscription kind. `routekit accounts serve` is advanced
-external-proxy mode, not a prerequisite for normal account-backed endpoints.
+The first `routekit accounts add` enables that provider in the effective router
+config. RouteKit discovers each healthy member, publishes the union, and routes
+a model only to accounts that advertise it. Quotas, refresh, cooldowns, and
+reset windows remain per account.
 
-Inline API keys and authorization tokens are rejected. Omitting an endpoint ID
-uses the configured default/first endpoint; an explicit unknown ID is rejected
-and never default-routed.
+Inline API keys and authorization tokens are rejected. Omitting a model uses
+the configured default/first live model; an explicit unknown or unnamespaced ID
+is rejected and never default-routed. Discovery failure for any configured
+provider fails startup.
 
 ## Edit and inspect
 
@@ -107,12 +106,14 @@ and never default-routed.
 fusionkit config show
 fusionkit config get budgetUsd
 fusionkit config set budgetUsd 5
-fusionkit config set ensembles.default.judge deep
+fusionkit config set ensembles.default.judge anthropic/claude-sonnet-4-5
 fusionkit config unset budgetUsd
 fusionkit config edit
 
 fusionkit ensemble add review \
-  --member fast --member deep --judge deep --synthesizer deep
+  --member openai/gpt-5.5 \
+  --member anthropic/claude-sonnet-4-5 \
+  --judge anthropic/claude-sonnet-4-5
 ```
 
 Precedence is CLI flag, then `.fusionkit/fusion.json`, then built-in default.
@@ -126,11 +127,13 @@ ensemble. Manage them with `fusionkit prompts list|edit|reset`.
 
 ## Migrating from v3
 
-v1-v3 files are not silently dual-read. Move provider/model/key/account fields
-to `.routekit/router.yaml`, assign endpoint IDs, replace panels with
-`members`/`judge`/`synthesizer`, and set `fusionkit.fusion.v4`.
+v1-v3 files are not silently dual-read. Run `routekit config migrate`, replace
+opaque aliases with live `provider/model` IDs, and set `fusionkit.fusion.v4`.
+Runtime loading rejects legacy `endpoints`, `accounts`, and
+`defaultEndpointId` fields.
 
 <Callout type="warn">
   Keep provider credentials out of `.fusionkit/`. The generated Python sidecar
-  receives endpoint IDs and the RouteKit gateway URL, not provider credentials.
+  receives namespaced model IDs and the RouteKit gateway URL, not provider
+  credentials.
 </Callout>

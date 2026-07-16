@@ -8,11 +8,14 @@ import {
 import type { SubscriptionAccountConfigs } from "@routekit/accounts";
 import {
   CatalogBackend,
-  isAccountEndpointConfig,
-  providerBackend,
   startGateway
 } from "@routekit/gateway";
-import type { Gateway, RouterConfig } from "@routekit/gateway";
+import type {
+  Gateway,
+  ProviderId,
+  ProviderSource,
+  RouterConfig
+} from "@routekit/gateway";
 import { assertAuthenticatedBind, registerCleanup } from "@routekit/runtime";
 
 export type StartRouterOptions = {
@@ -21,6 +24,7 @@ export type StartRouterOptions = {
   port?: number;
   authToken?: string;
   env?: NodeJS.ProcessEnv;
+  sources?: Partial<Record<ProviderId, ProviderSource>>;
 };
 
 export type RunningRouter = {
@@ -39,10 +43,10 @@ function gatewayEnvironment(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
 }
 
 function accountConfigs(config: RouterConfig): SubscriptionAccountConfigs {
-  const configured = config.accounts;
+  const configured = config.providers;
   const accounts: SubscriptionAccountConfigs = {};
-  const claude = configured?.["claude-code"];
-  if (claude?.enabled === true) {
+  const claude = configured["claude-code"];
+  if (claude !== undefined) {
     accounts["claude-code"] = {
       source: { kind: "auto" },
       strategy: claude.strategy,
@@ -52,8 +56,8 @@ function accountConfigs(config: RouterConfig): SubscriptionAccountConfigs {
         : {})
     };
   }
-  const codex = configured?.codex;
-  if (codex?.enabled === true) {
+  const codex = configured.codex;
+  if (codex !== undefined) {
     accounts.codex = {
       source: { kind: "auto" },
       strategy: codex.strategy,
@@ -72,9 +76,11 @@ export async function startRouter(options: StartRouterOptions): Promise<RunningR
   const accounts = accountConfigs(options.config);
   const accountSets = await openSubscriptionAccountSets(accounts);
   const requiredKinds = new Set(
-    options.config.endpoints
-      .filter(isAccountEndpointConfig)
-      .map((endpoint) => endpoint.account)
+    (["claude-code", "codex"] as const).filter(
+      (provider) =>
+        options.config.providers[provider] !== undefined &&
+        options.sources?.[provider] === undefined
+    )
   );
   for (const kind of requiredKinds) {
     if ((accountSets[kind]?.size ?? 0) === 0) {
@@ -82,7 +88,7 @@ export async function startRouter(options: StartRouterOptions): Promise<RunningR
         Object.values(accountSets).map(async (accountSet) => await accountSet.close())
       );
       throw new Error(
-        `account endpoint requires an enrolled ${kind} account; run \`routekit accounts add ${kind}\``
+        `provider "${kind}" requires an enrolled account; run \`routekit accounts add ${kind}\``
       );
     }
   }
@@ -92,17 +98,27 @@ export async function startRouter(options: StartRouterOptions): Promise<RunningR
       await accountSet.close();
     }
   }
-  const backend = new CatalogBackend({
-    config: options.config,
-    env: gatewayEnvironment(options.env ?? process.env),
-    createBackend: (endpoint, apiKey) =>
-      isAccountEndpointConfig(endpoint)
-        ? new SubscriptionAccountBackend({
-            accountSet: accountSets[endpoint.account]!,
-            model: endpoint.model
-          })
-        : providerBackend(endpoint, apiKey)
-  });
+  const sources: Partial<Record<ProviderId, ProviderSource>> = {
+    ...options.sources
+  };
+  for (const kind of requiredKinds) {
+    sources[kind] = new SubscriptionAccountBackend({
+      accountSet: accountSets[kind]!
+    });
+  }
+  let backend: CatalogBackend;
+  try {
+    backend = await CatalogBackend.create({
+      config: options.config,
+      env: gatewayEnvironment(options.env ?? process.env),
+      sources
+    });
+  } catch (error) {
+    await Promise.all(
+      Object.values(accountSets).map(async (accountSet) => await accountSet.close())
+    );
+    throw error;
+  }
   let gateway: Gateway;
   try {
     gateway = await startGateway({

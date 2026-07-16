@@ -8,11 +8,11 @@ package, and the PyPI FusionKit sidecar package set. Release tags are named
 ## Unreleased
 
 - Split the neutral routing foundation into `@routekit/*` packages and the
-  independent `routekit` CLI. RouteKit now owns endpoint/provider configuration,
-  credentials, accounts, proxies, provider egress, and direct coding-tool
-  launches.
-- Made `@fusionkit/cli` a Fusion-only front door over opaque RouteKit endpoint
-  IDs. Removed Fusion forwarding surfaces for account/proxy management,
+  independent `routekit` CLI. RouteKit now owns explicit provider configuration,
+  live namespaced model catalogs, credentials, multi-subscription account
+  pooling, proxies, provider egress, and direct coding-tool launches.
+- Made `@fusionkit/cli` a Fusion-only front door over live namespaced RouteKit
+  model IDs. Removed Fusion forwarding surfaces for account/proxy management,
   install/uninstall, provider/model/key flags, and direct/single-model mode.
 - Reduced the PyPI `fusionkit` distribution to the internal
   `fusionkit-sidecar` command. The sidecar has no public chat/model routes or

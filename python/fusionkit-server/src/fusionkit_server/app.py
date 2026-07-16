@@ -215,13 +215,13 @@ def create_app(
             or request.judge_model
             or config.resolved_synthesizer_model
         )
-        for endpoint_id in (judge_model, synthesizer_model):
+        for model_id in (judge_model, synthesizer_model):
             try:
-                config.require_endpoint(endpoint_id)
+                config.require_model(model_id)
             except KeyError:
                 return _error_response(
-                    "unknown_endpoint",
-                    f"Unknown RouteKit endpoint {endpoint_id!r}.",
+                    "unknown_model",
+                    f"Unknown RouteKit model {model_id!r}.",
                     status_code=400,
                 )
         trajectories = [

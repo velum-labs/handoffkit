@@ -20,11 +20,17 @@ type FakeCredentialFile = {
   expiresAt?: number;
 };
 
-function fakeProvider(state: { refreshes: number }): SubscriptionProvider {
+function fakeProvider(
+  state: { refreshes: number },
+  modelsByToken: Readonly<Record<string, readonly string[]>> = {}
+): SubscriptionProvider {
   return {
     mode: "codex",
     upstreamBaseUrl: "https://example.invalid",
     requestPath: "/responses",
+    async discoverModels(credential) {
+      return modelsByToken[credential.accessToken] ?? ["gpt-5.3-codex"];
+    },
     async loadCredential(path) {
       const raw = JSON.parse(await readFile(path, "utf8")) as FakeCredentialFile;
       return {
@@ -183,6 +189,55 @@ test("pool coalesces near-expiry credential refresh before serving", async () =>
     );
     assert.equal(await response.text(), "token-a-refreshed");
     assert.equal(state.refreshes, 1);
+  } finally {
+    await pool.close();
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("pool unions heterogeneous member catalogs and routes only eligible accounts", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "routekit-pool-models-"));
+  writeMember(directory, "personal", { accessToken: "token-personal" });
+  writeMember(directory, "work", { accessToken: "token-work" });
+  const pool = await SubscriptionAccountSet.open(
+    fakeProvider(
+      { refreshes: 0 },
+      {
+        "token-personal": ["gpt-shared", "gpt-personal"],
+        "token-work": ["gpt-shared", "gpt-work"]
+      }
+    ),
+    {
+      mode: "codex",
+      source: { kind: "directory", path: directory },
+      strategy: "round_robin"
+    }
+  );
+  try {
+    assert.deepEqual(await pool.discoverModels(), [
+      "gpt-shared",
+      "gpt-personal",
+      "gpt-work"
+    ]);
+    const personal = await pool.execute("gpt-personal", (credential) =>
+      Promise.resolve(new Response(credential.accessToken))
+    );
+    const work = await pool.execute("gpt-work", (credential) =>
+      Promise.resolve(new Response(credential.accessToken))
+    );
+    assert.equal(await personal.text(), "token-personal");
+    assert.equal(await work.text(), "token-work");
+    assert.deepEqual(
+      pool.snapshot().members.map((member) => [member.id, member.models]),
+      [
+        ["personal", ["gpt-shared", "gpt-personal"]],
+        ["work", ["gpt-shared", "gpt-work"]]
+      ]
+    );
+    await assert.rejects(
+      pool.execute("gpt-unknown", () => Promise.resolve(new Response("wrong"))),
+      /all codex subscription pool members are unavailable/
+    );
   } finally {
     await pool.close();
     rmSync(directory, { recursive: true, force: true });

@@ -78,10 +78,7 @@ function registerCliproxy(accounts: Command): void {
           ctx.presenter.success(`${provider} account added`);
           ctx.presenter.note("Next: routekit accounts cliproxy serve");
           ctx.presenter.note(
-            "Then add an endpoint with `routekit endpoints add <id> --model <model> " +
-              "--provider cliproxy --base-url http://127.0.0.1:8317/v1 " +
-              `--api-key-env ${CLIPROXY_API_KEY_ENV}` +
-              "`."
+            "Then enable its live model catalog with `routekit providers add cliproxy`."
           );
         }
         process.exitCode = code;
@@ -128,7 +125,7 @@ function registerCliproxy(accounts: Command): void {
       );
       ctx.presenter.status(
         status.reachable && status.keyRejected !== true ? "ok" : "pending",
-        "endpoint",
+        "proxy API",
         status.reachable
           ? status.keyRejected === true
             ? "reachable; credential rejected"
@@ -156,11 +153,11 @@ export function registerAccounts(program: Command): void {
       const updated = updateEffectiveRouterConfig(
         { configPath: configOverride(command) },
         (draft) => {
-          const accounts = record(draft.accounts);
-          const policy = record(accounts[result.subscriptionKind]);
-          draft.accounts = {
-            ...accounts,
-            [result.subscriptionKind]: { ...policy, enabled: true }
+          const providers = record(draft.providers);
+          const policy = record(providers[result.subscriptionKind]);
+          draft.providers = {
+            ...providers,
+            [result.subscriptionKind]: { ...policy }
           };
         }
       );
@@ -196,7 +193,7 @@ export function registerAccounts(program: Command): void {
         ) {
           ctx.presenter.note(
             `The official ${result.mode} login may be imported again on startup; ` +
-              `disable accounts["${result.mode}"] to stop subscription routing.`
+              `run \`routekit providers remove ${result.mode}\` to stop subscription routing.`
           );
         }
       } else {

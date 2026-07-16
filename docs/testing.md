@@ -21,7 +21,7 @@ Historically each layer was tested against ad-hoc inline mocks of the layer
 below it: Node tests hand-rolled tiny HTTP servers pretending to be
 the sidecar, and Python tests injected `FakeModelClient` behind the model-call
 boundary. The shared simulator now exercises neutral wire parsing, SSE chunk
-reassembly, the Node↔Python endpoint-ID seam, and process startup without
+reassembly, the Node↔Python namespaced-model seam, and process startup without
 recreating provider accounts or routing in Python.
 
 ## The tooling
@@ -45,7 +45,7 @@ stream pacing, or a deliberately broken stream
 so any language can drive it.
 
 **Observation plane** (instrumentable): every request is journaled — dialect,
-opaque endpoint ID, full request body, stream flag, which behavior answered
+namespaced RouteKit model ID, full request body, stream flag, which behavior answered
 it (queued vs default), and the response status/kind. Tests assert on the
 journal (`sim.journal()` / `GET /__sim/journal`): *what actually crossed the
 RouteKit wire*, not whether a mock function was called.
@@ -57,7 +57,7 @@ spawnable anywhere and gives byte-level wire control.
 
 ### 2. Config builders — `fusionkit_testkit.endpoints`
 
-`sim_endpoint(...)` / `panel_config(...)` return opaque IDs and the production
+`sim_endpoint(...)` / `panel_config(...)` return namespaced IDs and the production
 `FusionConfig` pointed at the simulator, so the real `build_clients` factory
 constructs RouteKit clients against it.
 
@@ -98,7 +98,7 @@ different package that reuses the name.)
 - `scriptFusedTurn(sim, {...})` / `judgeAnalysis(...)` — one-call fused-turn
   scripting (mirrors the Python scenario helpers).
 - `simSidecarConfigYaml(...)` — production-shaped internal sidecar YAML over a
-  RouteKit-compatible simulator URL and opaque endpoint IDs.
+  RouteKit-compatible simulator URL and namespaced model IDs.
 - `startEngine(...)` — the internal Python sidecar as a child process via
   `uv run --package fusionkit fusionkit-sidecar`, readiness-probed and
   log-captured.
@@ -159,7 +159,7 @@ live command. Node/Python meta-tests compare its door/tool/provider axes to
 the executable registries, and `pnpm check` fails if the generated list or
 anchors drift. Provider/account matrices are TypeScript RouteKit tests; Python
 has one RouteKit-client matrix over buffered/streamed text, usage, reasoning,
-tool calls, malformed responses, and opaque endpoint IDs.
+tool calls, malformed responses, and namespaced model IDs.
 
 - **Door axis** — `@fusionkit/testkit`'s `DOOR_PROFILES`: one `DoorProfile`
   per gateway front door (OpenAI chat, Anthropic Messages, Codex Responses,
@@ -184,7 +184,7 @@ checks targeted.
 |---|---|---|---|
 | Unit / component | one module | everything around it | `packages/*/src/test`, `python/*/tests` (existing suites, incl. `FakeModelClient`-based server tests) |
 | Sidecar API | internal route scope, health, trajectory fusion, native runs, and tool resume | none | `python/fusionkit-server/tests/` |
-| Neutral RouteKit client | opaque endpoint ids, buffered/stream parsing, reasoning, usage, and tools | none | `python/fusionkit-core/tests/test_routekit_client.py` |
+| Neutral RouteKit client | namespaced model ids, buffered/stream parsing, reasoning, usage, and tools | none | `python/fusionkit-core/tests/test_routekit_client.py` |
 | Sidecar process e2e | real `fusionkit-sidecar serve` child process over a simulated RouteKit upstream | none | `python/fusionkit-testkit/tests/test_engine_process.py` |
 | Cross-stack door matrix | door × {fused JSON, fused SSE, tool loop} through the whole stack | provider | `packages/testkit/src/test/`, `packages/cli/src/test/stack-e2e.test.ts` |
 | Cross-stack depth | multi-ensemble routing + prompts, session/cost accounting, narration | provider | `packages/cli/src/test/stack-depth-e2e.test.ts` |
@@ -200,7 +200,7 @@ checks targeted.
 | Sidecar runs | native create/inspect/events/idempotency and tool resume over internal APIs | none | `python/fusionkit-server/tests/test_fusion_runs_api.py`, `test_tool_resume.py` |
 | **Real product CLI** | the ACTUAL `fusionkit serve` entrypoint booting its production stack: fusion.json loading, preflight probes, `uv run` router spawn, gateway + setup snippets | provider only | `packages/cli/src/test/stack-npm-cli-e2e.test.ts` |
 | **Real RouteKit CLI** | the ACTUAL `routekit serve --json` process, model discovery, all supported gateway dialects, command surfaces, doctor, install, and missing-harness preflight | provider only | `packages/routekit-cli/src/test/serve-process-e2e.test.ts`, `cli-process-e2e.test.ts` |
-| RouteKit/Fusion composition | opaque endpoint IDs through embedded routing plus an authenticated external `routekit serve` process behind a Fusion-owned bridge; Fusion close leaves external RouteKit alive | provider only | `packages/cli/src/test/stack-endpoint-ids-e2e.test.ts` |
+| RouteKit/Fusion composition | namespaced model IDs through embedded routing plus an authenticated external `routekit serve` process behind a Fusion-owned bridge; Fusion close leaves external RouteKit alive | provider only | `packages/cli/src/test/stack-model-ids-e2e.test.ts` |
 | Real command CLI | actual built entrypoint: version/completions/runtime, config CRUD/export, prompts, install/uninstall, telemetry, setup, doctor | provider only for doctor probes | `packages/cli/src/test/cli-command-surfaces-e2e.test.ts` |
 | **Real-CLI e2e** | the ACTUAL `claude` / `codex` / `opencode` binaries: production wire/toolsets and real local tool execution | provider only | `packages/cli/src/test/stack-cli-e2e.test.ts` |
 | Live (env-gated) | everything incl. real provider accounts | nothing | `FUSIONKIT_GATEWAY_LIVE_*` tests, billed benchmarks |
@@ -231,7 +231,7 @@ pnpm build && pnpm test
 # Just the cross-stack suites
 PORTLESS=0 node --test "packages/testkit/dist/test/*.test.js"
 PORTLESS=0 node --test packages/cli/dist/test/stack-e2e.test.js
-PORTLESS=0 node --test packages/cli/dist/test/stack-endpoint-ids-e2e.test.js
+PORTLESS=0 node --test packages/cli/dist/test/stack-model-ids-e2e.test.js
 node --test "packages/routekit-cli/dist/test/*process-e2e.test.js"
 ```
 
@@ -275,7 +275,7 @@ prove cross-talk detection bites). Before them: candidate reasoning
 entering judge evidence, streamed synthesizer reasoning on the gateway, and
 real Claude/Codex/OpenCode selection of injected named fused models.
 
-M47–M49 pin the RouteKit/Fusion split directly: opaque endpoint IDs in the
+M47–M49 pin the RouteKit/Fusion split directly: namespaced model IDs in the
 sidecar config, authenticated external RouteKit bridging, and truthful
 `routekit serve --json` process readiness.
 
@@ -373,7 +373,7 @@ differential/stateful probes) found twenty-one more, spanning both stacks:
   OpenAI `choices` raised a raw `IndexError`; `spawnTool` leaked every
   parent env var (unrelated secrets) into vendor CLIs; the quota classifier
   treated any 400 containing the word "billing" as exhausted quota; and
-  invalid fusion configs (duplicate/unknown endpoint ids, unknown
+  invalid fusion configs (duplicate/unknown model ids, unknown
   judge/panel references, `sample_count=0`) parsed successfully and failed
   only at request time.
 

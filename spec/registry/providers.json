@@ -6,6 +6,10 @@
       "keyEnv": "OPENAI_API_KEY",
       "baseUrlEnv": "OPENAI_BASE_URL",
       "apiCompatibility": "openai-chat-completions",
+      "wire": {
+        "protocol": "openai",
+        "basePath": "/v1"
+      },
       "keyProbe": {
         "path": "/v1/models",
         "auth": "bearer",
@@ -23,6 +27,10 @@
       "authTokenEnv": "ANTHROPIC_AUTH_TOKEN",
       "baseUrlEnv": "ANTHROPIC_BASE_URL",
       "apiCompatibility": "custom",
+      "wire": {
+        "protocol": "anthropic",
+        "basePath": "/v1"
+      },
       "keyProbe": {
         "path": "/v1/models",
         "auth": "x-api-key",
@@ -40,6 +48,10 @@
       "baseUrl": "https://generativelanguage.googleapis.com",
       "keyEnv": "GEMINI_API_KEY",
       "apiCompatibility": "custom",
+      "wire": {
+        "protocol": "google",
+        "basePath": "/v1beta"
+      },
       "keyProbe": {
         "path": "/v1beta/models",
         "auth": "x-goog-api-key",
@@ -55,6 +67,10 @@
       "baseUrl": "https://openrouter.ai/api",
       "keyEnv": "OPENROUTER_API_KEY",
       "apiCompatibility": "openai-chat-completions",
+      "wire": {
+        "protocol": "openai",
+        "basePath": "/v1"
+      },
       "attributionHeaders": {
         "HTTP-Referer": "https://github.com/velum-labs/handoffkit",
         "X-Title": "RouteKit"
@@ -81,6 +97,10 @@
       "keyEnv": "ROUTEKIT_CLIPROXY_API_KEY",
       "baseUrlEnv": "ROUTEKIT_CLIPROXY_BASE_URL",
       "apiCompatibility": "openai-chat-completions",
+      "wire": {
+        "protocol": "openai",
+        "basePath": "/v1"
+      },
       "keyProbe": {
         "path": "/v1/models",
         "auth": "bearer",
@@ -95,7 +115,16 @@
     "codex": {
       "baseUrl": "https://chatgpt.com/backend-api/codex",
       "apiCompatibility": "openai-responses",
-      "credentialEnvNames": ["CODEX_API_KEY", "OPENAI_API_KEY"]
+      "credentialEnvNames": ["CODEX_API_KEY", "OPENAI_API_KEY"],
+      "wire": {
+        "protocol": "codex",
+        "basePath": ""
+      },
+      "discovery": {
+        "path": "/models",
+        "auth": "bearer",
+        "responseShape": "codex"
+      }
     },
     "ai-gateway": {
       "baseUrl": "https://ai-gateway.vercel.sh",

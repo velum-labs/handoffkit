@@ -7,19 +7,22 @@
   "defaultEnsemble": "default",
   "ensembles": {
     "default": {
-      "members": ["kimi", "qwen3"],
-      "judge": "kimi",
-      "synthesizer": "kimi"
+      "members": [
+        "openrouter/moonshotai/kimi-k2-thinking",
+        "openrouter/qwen/qwen3-coder"
+      ],
+      "judge": "openrouter/moonshotai/kimi-k2-thinking",
+      "synthesizer": "openrouter/moonshotai/kimi-k2-thinking"
     },
     "kimi": {
-      "members": ["kimi"],
-      "judge": "kimi",
-      "synthesizer": "kimi"
+      "members": ["openrouter/moonshotai/kimi-k2-thinking"],
+      "judge": "openrouter/moonshotai/kimi-k2-thinking",
+      "synthesizer": "openrouter/moonshotai/kimi-k2-thinking"
     },
     "qwen3": {
-      "members": ["qwen3"],
-      "judge": "qwen3",
-      "synthesizer": "qwen3"
+      "members": ["openrouter/qwen/qwen3-coder"],
+      "judge": "openrouter/qwen/qwen3-coder",
+      "synthesizer": "openrouter/qwen/qwen3-coder"
     }
   },
   "observe": true,

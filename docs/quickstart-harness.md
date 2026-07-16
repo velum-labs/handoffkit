@@ -25,9 +25,10 @@ fusionkit doctor                 # verify uv, git, config, endpoints, and your a
 Install the agent CLI you want to use (`codex`, `claude`, `cursor-agent`, or
 `opencode`) before running `doctor`.
 
-FusionKit composes the endpoint IDs in `.fusionkit/fusion.json`; it does not
+FusionKit composes live namespaced model IDs in `.fusionkit/fusion.json`; it does not
 read provider credentials or skip unavailable panel members. Use
-`routekit doctor` and `routekit endpoints health` for provider checks. This
+`routekit doctor`, `routekit providers status`, and `routekit models list` for
+provider checks. This
 repository's committed router uses OpenRouter and needs `OPENROUTER_API_KEY`.
 
 ## 2. Run it
@@ -42,7 +43,7 @@ That single command spawns everything and tears it all down on one `Ctrl+C`:
 - an embedded or external **RouteKit router** that owns endpoint routing and
   provider egress;
 - the internal **Python synthesis sidecar**, which receives completed
-  trajectories and calls judge/synthesizer endpoint IDs through RouteKit;
+  trajectories and calls namespaced judge/synthesizer models through RouteKit;
 - the **Node Fusion gateway**, translating to the agent's dialect (OpenAI Responses
   for Codex, Anthropic Messages for Claude Code, OpenAI Chat for Cursor); and
 - the chosen **agent, pre-wired** to the gateway.
@@ -74,7 +75,7 @@ forwarded to the agent.
 
 ```bash
 fusionkit claude --repo /path/to/repo                     # fuse over another repo
-fusionkit codex --ensemble review                         # configured endpoint-ID ensemble
+fusionkit codex --ensemble review                         # configured namespaced-model ensemble
 fusionkit codex --budget 5                                # stop at $5 of spend
 fusionkit codex --continue                                # resume the last session
 fusionkit codex --on-rate-limit fusion                    # handoff policy (default)

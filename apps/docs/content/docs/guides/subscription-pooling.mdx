@@ -1,11 +1,11 @@
 ---
 title: Subscription pooling
-description: RouteKit owns subscription accounts and proxy lifecycle.
+description: RouteKit pools named subscriptions behind live provider catalogs.
 ---
 
 Subscription accounts, CLIProxyAPI, and single-model routing are RouteKit
-responsibilities. FusionKit v4 may reference endpoint IDs backed by those
-accounts, but it does not expose account or proxy commands.
+responsibilities. FusionKit v4 references live namespaced model IDs but does
+not expose account or proxy commands.
 
 Install the independent CLI:
 
@@ -13,31 +13,32 @@ Install the independent CLI:
 npm install -g @routekit/cli
 routekit config init
 claude
-routekit accounts add claude-code
-routekit endpoints add private-review \
-  --model claude-sonnet-4-5 --account claude-code
+routekit accounts add claude-code --name personal
+routekit accounts add claude-code --name work
+routekit providers status claude-code
+routekit models list
 routekit serve
 ```
 
 The canonical subscription kinds are `claude-code` and `codex`. Use
-`codex login` followed by `routekit accounts add codex` for a Codex
-subscription. Adding an account imports the current official CLI login and
-automatically enables that kind in the effective router config. The Claude Code
-tool command remains `routekit claude [endpoint-id]`.
+`codex login` followed by `routekit accounts add codex --name <label>` for each
+Codex subscription. Adding an account imports the current official CLI login;
+the first enrollment enables that provider. The Claude Code tool command
+remains `routekit claude [provider/model]`.
 
-Account-backed endpoint YAML uses only `endpointId`, `model`, and `account`:
+Pool policy lives on the provider:
 
 ```yaml
-endpoints:
-  - endpointId: private-review
-    model: claude-sonnet-4-5
-    account: claude-code
-accounts:
+providers:
   claude-code:
-    enabled: true
+    strategy: capacity_weighted
+    switchThreshold: 0.9
 ```
 
-The endpoint ID is opaque. Use it unchanged in `.fusionkit/fusion.json`:
+RouteKit discovers each healthy account, publishes the union, and routes a
+model only to members that advertise it. Quota windows, refresh, cooldowns, and
+reset times remain independent per account. Use the advertised namespaced ID
+in `.fusionkit/fusion.json`:
 
 ```json
 {
@@ -45,32 +46,29 @@ The endpoint ID is opaque. Use it unchanged in `.fusionkit/fusion.json`:
   "router": { "config": ".routekit/router.yaml" },
   "ensembles": {
     "default": {
-      "members": ["subscription-fast", "subscription-deep"],
-      "judge": "subscription-deep"
+      "members": ["claude-code/claude-sonnet-4-5"],
+      "judge": "claude-code/claude-sonnet-4-5"
     }
   }
 }
 ```
 
-Normal embedded routing does not require a separate account proxy.
+Normal embedded provider routing does not require a separate account proxy.
 `routekit accounts serve` is advanced mode for exposing the subscription pool
 to an external consumer.
 
-For CLIProxyAPI, login, keep the proxy serving, and explicitly add a URL-backed
-endpoint:
+For CLIProxyAPI, login, keep the proxy serving, and enable its provider:
 
 ```bash
 routekit accounts cliproxy install
 routekit accounts cliproxy login gemini
 routekit accounts cliproxy serve
-routekit endpoints add gemini-subscription \
-  --model gemini-3.1-pro-preview \
-  --provider cliproxy \
-  --base-url http://127.0.0.1:8317/v1 \
-  --api-key-env ROUTEKIT_CLIPROXY_API_KEY
+routekit providers add cliproxy
+routekit providers status cliproxy
+routekit models list
 ```
 
-CLIProxy login does not create a RouteKit endpoint.
+CLIProxy login does not enable a RouteKit provider.
 
 `fusionkit stop` never stops an external RouteKit daemon. An embedded RouteKit
 router composed by FusionKit is process-owned and closes with the Fusion stack.

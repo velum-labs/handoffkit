@@ -1,8 +1,28 @@
 import { PROVIDERS, providerKeyProbe } from "@routekit/registry";
 import type { ProviderAuthStyle, ProviderKeyProbe } from "@routekit/registry";
 
-import { isAccountEndpointConfig } from "./router.js";
-import type { ModelEndpointConfig, UrlEndpointConfig } from "./router.js";
+export type UrlEndpointConfig = {
+  endpointId: string;
+  model: string;
+  provider?: string;
+  baseUrl: string;
+  dialect: "openai" | "anthropic" | "google" | "codex";
+  headers?: Record<string, string>;
+};
+
+export type AccountEndpointConfig = {
+  endpointId: string;
+  model: string;
+  account: "claude-code" | "codex";
+};
+
+export type ModelEndpointConfig = UrlEndpointConfig | AccountEndpointConfig;
+
+function isAccountEndpointConfig(
+  endpoint: ModelEndpointConfig
+): endpoint is AccountEndpointConfig {
+  return "account" in endpoint;
+}
 
 export type EndpointHealthProbe = {
   url: string;

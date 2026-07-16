@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdtempSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import test from "node:test";
@@ -46,20 +53,15 @@ test("real routekit command surfaces execute independently of FusionKit", () => 
   const project = join(root, "project");
   const stateHome = join(root, "state");
   const home = join(root, "home");
-  const codexHome = join(root, "codex");
   mkdirSync(join(project, ".routekit"), { recursive: true });
   mkdirSync(home);
   const configPath = join(project, ".routekit", "router.yaml");
   writeFileSync(
     configPath,
     [
-      "endpoints:",
-      "  - endpointId: command-opaque",
-      "    model: provider-private",
-      "    provider: mock",
-      "    baseUrl: http://127.0.0.1:9/v1",
-      "    dialect: openai",
-      "defaultEndpointId: command-opaque",
+      "providers:",
+      "  openai: {}",
+      "defaultModel: openai/command-model",
       ""
     ].join("\n")
   );
@@ -94,25 +96,18 @@ test("real routekit command surfaces execute independently of FusionKit", () => 
     assert.equal(path.path, configPath);
     assert.equal(path.exists, true);
     const shown = JSON.parse(configured(["config", "show", "--json"])) as {
-      config?: { defaultEndpointId?: string };
+      config?: { defaultModel?: string };
     };
-    assert.equal(shown.config?.defaultEndpointId, "command-opaque");
+    assert.equal(shown.config?.defaultModel, "openai/command-model");
 
-    const endpoints = JSON.parse(configured(["endpoints", "list", "--json"])) as {
-      endpoints?: Array<{ endpointId?: string; model?: string }>;
+    const provider = JSON.parse(
+      configured(["providers", "add", "codex", "--json"])
+    ) as {
+      provider?: string;
+      added?: boolean;
     };
-    assert.deepEqual(
-      endpoints.endpoints?.map((entry) => entry.endpointId),
-      ["command-opaque"]
-    );
-    assert.equal(endpoints.endpoints?.[0]?.model, "provider-private");
-
-    const models = JSON.parse(configured(["models", "--json"])) as {
-      defaultModel?: string;
-      models?: string[];
-    };
-    assert.equal(models.defaultModel, "command-opaque");
-    assert.deepEqual(models.models, ["command-opaque"]);
+    assert.equal(provider.provider, "codex");
+    assert.equal(provider.added, true);
 
     const telemetry = JSON.parse(mustRun(["telemetry", "status", "--json"], input)) as {
       enabled?: boolean;
@@ -147,20 +142,6 @@ test("real routekit command surfaces execute independently of FusionKit", () => 
     assert.match(installHelp.stdout, /--gateway-url/);
     assert.match(installHelp.stdout, /--codex-home/);
 
-    const installed = JSON.parse(
-      configured([
-        "install",
-        "codex",
-        "--gateway-url",
-        "http://127.0.0.1:8080",
-        "--codex-home",
-        codexHome,
-        "--json"
-      ])
-    ) as { action?: string; profiles?: string[] };
-    assert.equal(installed.action, "installed");
-    assert.deepEqual(installed.profiles, ["command-opaque"]);
-
     for (const fusionOnly of ["setup", "prompts", "sessions", "ensemble"]) {
       const rejected = runCli([fusionOnly], input);
       assert.equal(rejected.status, 1);
@@ -177,17 +158,15 @@ test("real routekit launcher fails preflight before starting a gateway when its 
   writeFileSync(
     configPath,
     [
-      "endpoints:",
-      "  - endpointId: opaque",
-      "    model: private",
-      "    baseUrl: http://127.0.0.1:9/v1",
-      "defaultEndpointId: opaque",
+      "providers:",
+      "  openai: {}",
+      "defaultModel: openai/private",
       ""
     ].join("\n")
   );
   try {
     const result = runCli(
-      ["--config", configPath, "codex", "opaque"],
+      ["--config", configPath, "codex", "openai/private"],
       {
         cwd: root,
         env: {
@@ -204,6 +183,76 @@ test("real routekit launcher fails preflight before starting a gateway when its 
     assert.match(`${result.stdout}${result.stderr}`, /routekit preflight failed/i);
     assert.match(`${result.stdout}${result.stderr}`, /"codex" was not found on PATH/);
     assert.equal(existsSync(join(root, "state", "services", "gateway.json")), false);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("config migrate diagnoses and converts legacy endpoint config explicitly", () => {
+  const root = mkdtempSync(join(tmpdir(), "routekit-config-migrate-command-"));
+  const configPath = join(root, "router.yaml");
+  writeFileSync(
+    configPath,
+    [
+      "endpoints:",
+      "  - endpointId: kimi",
+      "    model: moonshotai/kimi-k2-thinking",
+      "    provider: openrouter",
+      "    baseUrl: https://openrouter.ai/api/v1",
+      "    apiKeyEnv: OPENROUTER_API_KEY",
+      "defaultEndpointId: kimi",
+      ""
+    ].join("\n")
+  );
+  const input = {
+    cwd: root,
+    env: {
+      ...process.env,
+      HOME: root,
+      ROUTEKIT_HOME: join(root, "state"),
+      PORTLESS: "0",
+      NO_COLOR: "1"
+    }
+  };
+  try {
+    const preview = JSON.parse(
+      mustRun(
+        [
+          "--config",
+          configPath,
+          "config",
+          "migrate",
+          "--dry-run",
+          "--json"
+        ],
+        input
+      )
+    ) as {
+      migration?: {
+        changed?: boolean;
+        diagnostics?: Array<{ code?: string }>;
+      };
+    };
+    assert.equal(preview.migration?.changed, true);
+    assert.equal(
+      preview.migration?.diagnostics?.some(
+        (diagnostic) => diagnostic.code === "custom-alias"
+      ),
+      true
+    );
+    assert.match(readFileSync(configPath, "utf8"), /^endpoints:/);
+
+    mustRun(
+      ["--config", configPath, "config", "migrate", "--json"],
+      input
+    );
+    const migrated = readFileSync(configPath, "utf8");
+    assert.match(migrated, /^providers:/);
+    assert.match(
+      migrated,
+      /defaultModel: openrouter\/moonshotai\/kimi-k2-thinking/
+    );
+    assert.doesNotMatch(migrated, /endpoints:|defaultEndpointId:/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

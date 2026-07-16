@@ -2,7 +2,7 @@
 
 > **Historical plan:** configuration and command examples below predate the
 > RouteKit/Fusion v4 split. Current product config is
-> `.fusionkit/fusion.json` v4 (opaque endpoint IDs only) plus
+> `.fusionkit/fusion.json` v4 (namespaced RouteKit model IDs only) plus
 > `.routekit/router.yaml` (models, providers, URLs, and key env names). The
 > public `fusionkit serve` command does not accept a config-file flag.
 
@@ -499,15 +499,15 @@ For each non-deferred hypothesis, produce:
 
 | File | Contents |
 |---|---|
-| `.routekit/router.yaml` | Endpoint IDs plus provider model, URL, dialect, and `apiKeyEnv` definitions |
-| `.fusionkit/fusion.json` v4 | `router`, `ensembles.*.members`, `judge`, and optional `synthesizer` endpoint IDs |
-| Internal sidecar/eval YAML, when needed | `routekit_url`, `endpoint_ids`, panel/judge/synthesizer IDs, and sampling/budget policy |
+| `.routekit/router.yaml` | Explicit providers whose credentials and live catalogs produce namespaced model IDs |
+| `.fusionkit/fusion.json` v4 | `router`, `ensembles.*.members`, `judge`, and optional `synthesizer` namespaced model IDs |
+| Internal sidecar/eval YAML, when needed | `routekit_url`, namespaced model IDs (including the legacy internal `endpoint_ids` key), panel/judge/synthesizer IDs, and sampling/budget policy |
 
 The product loader accepts only the per-repository v4 JSON path. Keep
 maintainer-only sidecar YAML clearly labeled and pass it directly to the eval
 consumer.
 
-**H4 (Self-MoA):** one endpoint, K=3 in sampling config, topology
+**H4 (Self-MoA):** one namespaced model, K=3 in sampling config, topology
 `exec_select` — selection uses public tests then grades on private tests via
 the existing execution-guided selection path.
 

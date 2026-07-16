@@ -72,23 +72,30 @@ test("listModelIds advertises the fused model first, then each native model", ()
     runPanels: async () => [candidate("a")],
     defaultModel: "fusion-panel",
     passthrough: [
-      { modelId: "gpt-5.5", endpointId: "codex", endpointUrl: "http://127.0.0.1:1" },
-      { modelId: "claude-opus-4-8", endpointId: "claude-code", endpointUrl: "http://127.0.0.1:1" }
+      { routekitModelId: "codex/gpt-5.5", routekitUrl: "http://127.0.0.1:1" },
+      { routekitModelId: "claude-code/claude-opus-4-8", routekitUrl: "http://127.0.0.1:1" }
     ]
   });
-  assert.deepEqual(backend.listModelIds(), ["fusion-panel", "gpt-5.5", "claude-opus-4-8"]);
+  assert.deepEqual(backend.listModelIds(), [
+    "fusion-panel",
+    "codex/gpt-5.5",
+    "claude-code/claude-opus-4-8"
+  ]);
 });
 
-test("resolveModel keeps a native id but folds fusion/unknown ids to the default", () => {
+test("resolveModel keeps a RouteKit model id but folds fusion/unknown ids to the default", () => {
   const backend = new FusionBackend({
     stepUrl: UNREACHABLE_STEP,
     runPanels: async () => [candidate("a")],
     defaultModel: "fusion-panel",
-    passthrough: [{ modelId: "gpt-5.5", endpointId: "codex", endpointUrl: "http://127.0.0.1:1" }]
+    passthrough: [{ routekitModelId: "codex/gpt-5.5", routekitUrl: "http://127.0.0.1:1" }]
   });
-  assert.equal(backend.resolveModel("gpt-5.5"), "gpt-5.5");
-  assert.equal(backend.resolveModel("codex"), "gpt-5.5", "an endpoint id resolves to the native model too");
-  assert.equal(backend.resolveModel("claude-gpt-5.5"), "gpt-5.5", "the claude-aliased native id resolves too");
+  assert.equal(backend.resolveModel("codex/gpt-5.5"), "codex/gpt-5.5");
+  assert.equal(
+    backend.resolveModel("claude-codex/gpt-5.5"),
+    "codex/gpt-5.5",
+    "the Claude-aliased RouteKit id resolves too"
+  );
   assert.equal(backend.resolveModel("fusion-panel"), "fusion-panel");
   assert.equal(backend.resolveModel("claude-fusion-panel"), "fusion-panel", "the claude fusion alias fuses");
   assert.equal(backend.resolveModel(undefined), "fusion-panel");
@@ -99,11 +106,10 @@ test("servesModel distinguishes gateway-served ids from unknown ids (no default 
     stepUrl: UNREACHABLE_STEP,
     runPanels: async () => [candidate("a")],
     defaultModel: "fusion-panel",
-    passthrough: [{ modelId: "gpt-5.5", endpointId: "codex", endpointUrl: "http://127.0.0.1:1" }]
+    passthrough: [{ routekitModelId: "codex/gpt-5.5", routekitUrl: "http://127.0.0.1:1" }]
   });
   assert.equal(backend.servesModel("fusion-panel"), true);
-  assert.equal(backend.servesModel("gpt-5.5"), true);
-  assert.equal(backend.servesModel("codex"), true, "the endpoint id is served too");
+  assert.equal(backend.servesModel("codex/gpt-5.5"), true);
   // Unknown ids are NOT claimed: the gateway can relay them (e.g. a Codex
   // client's stock model pick) instead of silently fusing.
   assert.equal(backend.servesModel("gpt-5.3-codex"), false);
@@ -120,13 +126,13 @@ test("a claude-aliased native model proxies to its provider (Claude picker path)
         return [candidate("a")];
       },
       defaultModel: "fusion-panel",
-      passthrough: [{ modelId: "gpt-5.5", endpointId: "codex", endpointUrl: chat.baseUrl }]
+      passthrough: [{ routekitModelId: "codex/gpt-5.5", routekitUrl: chat.baseUrl }]
     });
     // Claude Code selects the aliased id from its picker and sends it verbatim.
-    const res = await backend.chat({ ...userTurn, model: "claude-gpt-5.5", stream: false });
+    const res = await backend.chat({ ...userTurn, model: "claude-codex/gpt-5.5", stream: false });
     assert.equal(res.status, 200);
     assert.equal(panelCalls, 0, "the aliased native skips the fusion panel");
-    assert.equal((chat.lastBody() as { model?: string }).model, "codex");
+    assert.equal((chat.lastBody() as { model?: string }).model, "codex/gpt-5.5");
   } finally {
     await chat.close();
   }
@@ -143,16 +149,16 @@ test("a native model is proxied to its provider verbatim and never runs the pane
         return [candidate("a")];
       },
       defaultModel: "fusion-panel",
-      passthrough: [{ modelId: "gpt-5.5", endpointId: "codex", endpointUrl: chat.baseUrl }]
+      passthrough: [{ routekitModelId: "codex/gpt-5.5", routekitUrl: chat.baseUrl }]
     });
-    const res = await backend.chat({ ...userTurn, model: "gpt-5.5", stream: false });
+    const res = await backend.chat({ ...userTurn, model: "codex/gpt-5.5", stream: false });
     assert.equal(res.status, 200);
     const body = (await res.json()) as { choices: Array<{ message: { content: string } }> };
     assert.equal(body.choices[0]?.message.content, "native answer");
     assert.equal(panelCalls, 0, "selecting a native model skips the fusion panel");
     assert.equal(chat.calls(), 1);
     const sent = chat.lastBody() as { model?: string };
-    assert.equal(sent.model, "codex", "the request's model is rewritten to the router endpoint id");
+    assert.equal(sent.model, "codex/gpt-5.5");
   } finally {
     await chat.close();
   }
@@ -173,7 +179,7 @@ test("the fused model still runs the panel when natives are also configured", as
         return [candidate("a")];
       },
       defaultModel: "fusion-panel",
-      passthrough: [{ modelId: "gpt-5.5", endpointId: "codex", endpointUrl: chat.baseUrl }]
+      passthrough: [{ routekitModelId: "codex/gpt-5.5", routekitUrl: chat.baseUrl }]
     });
     const res = await backend.chat({ ...userTurn, model: "fusion-panel", stream: false });
     assert.equal(res.status, 200);
@@ -193,8 +199,8 @@ test("the gateway serves native+fusion discovery in both OpenAI and Anthropic sh
     runPanels: async () => [candidate("a")],
     defaultModel: "fusion-panel",
     passthrough: [
-      { modelId: "claude-opus-4-8", endpointId: "claude-code", endpointUrl: "http://127.0.0.1:1" },
-      { modelId: "gpt-5.5", endpointId: "codex", endpointUrl: "http://127.0.0.1:1" }
+      { routekitModelId: "claude-code/claude-opus-4-8", routekitUrl: "http://127.0.0.1:1" },
+      { routekitModelId: "codex/gpt-5.5", routekitUrl: "http://127.0.0.1:1" }
     ]
   });
   const gateway = await startGateway({ backend, host: "127.0.0.1", port: 0 });
@@ -204,7 +210,7 @@ test("the gateway serves native+fusion discovery in both OpenAI and Anthropic sh
     };
     assert.deepEqual(
       openai.data.map((entry) => entry.id),
-      ["fusion-panel", "claude-opus-4-8", "gpt-5.5"]
+      ["fusion-panel", "claude-code/claude-opus-4-8", "codex/gpt-5.5"]
     );
 
     const anthropic = (await (
@@ -212,9 +218,9 @@ test("the gateway serves native+fusion discovery in both OpenAI and Anthropic sh
     ).json()) as { data: Array<{ id: string; display_name: string }> };
     // Anthropic discovery aliases every model past Claude Code's picker filter:
     // the claude-family native as-is, the non-Anthropic one under a claude- alias.
-    assert.ok(anthropic.data.some((entry) => entry.id === "claude-opus-4-8"));
-    const gpt = anthropic.data.find((entry) => entry.id === "claude-gpt-5.5");
-    assert.equal(gpt?.display_name, "gpt-5.5");
+    assert.ok(anthropic.data.some((entry) => entry.id === "claude-code/claude-opus-4-8"));
+    const gpt = anthropic.data.find((entry) => entry.id === "claude-codex/gpt-5.5");
+    assert.equal(gpt?.display_name, "codex/gpt-5.5");
     assert.ok(anthropic.data.every((entry) => entry.id.startsWith("claude") || entry.id.startsWith("anthropic")));
   } finally {
     await gateway.close();
@@ -226,12 +232,12 @@ test("models() returns the OpenAI-shaped multi-model discovery list", async () =
     stepUrl: UNREACHABLE_STEP,
     runPanels: async () => [candidate("a")],
     defaultModel: "fusion-panel",
-    passthrough: [{ modelId: "gpt-5.5", endpointId: "codex", endpointUrl: "http://127.0.0.1:1" }]
+    passthrough: [{ routekitModelId: "codex/gpt-5.5", routekitUrl: "http://127.0.0.1:1" }]
   });
   const body = (await (await backend.models()).json()) as { data: Array<{ id: string }> };
   assert.deepEqual(
     body.data.map((entry) => entry.id),
-    ["fusion-panel", "gpt-5.5"]
+    ["fusion-panel", "codex/gpt-5.5"]
   );
 });
 

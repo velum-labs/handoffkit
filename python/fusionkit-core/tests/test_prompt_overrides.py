@@ -93,8 +93,8 @@ def test_prompt_overrides_default_to_none() -> None:
     config = FusionConfig.model_validate(
         {
             "routekit_url": "http://routekit.test",
-            "endpoint_ids": ["a"],
-            "default_model": "a",
+            "routekit_model_ids": ["test/a"],
+            "default_model": "test/a",
         }
     )
     assert config.prompts == PromptOverrides()
@@ -105,8 +105,8 @@ def test_prompt_overrides_parsed_from_config_mapping() -> None:
     config = FusionConfig.model_validate(
         {
             "routekit_url": "http://routekit.test",
-            "endpoint_ids": ["a"],
-            "default_model": "a",
+            "routekit_model_ids": ["test/a"],
+            "default_model": "test/a",
             "prompts": {
                 "judge_system": "CUSTOM JUDGE",
                 "synthesizer_system": "CUSTOM SYNTH",
@@ -120,8 +120,8 @@ def test_prompt_overrides_parsed_from_config_mapping() -> None:
 def test_request_prompt_overrides_win_fieldwise_over_config() -> None:
     config = FusionConfig(
         routekit_url="http://routekit.test",
-        endpoint_ids=["a"],
-        default_model="a",
+        routekit_model_ids=["test/a"],
+        default_model="test/a",
         prompts=PromptOverrides(
             judge_system="CONFIG JUDGE",
             synthesizer_system="CONFIG SYNTH",
@@ -141,9 +141,9 @@ def test_load_config_uses_prompt_files_when_yaml_unset(tmp_path: Path) -> None:
     config_path = tmp_path / "fusionkit.yaml"
     config_path.write_text(
         "routekit_url: http://routekit.test\n"
-        "endpoint_ids:\n"
-        "  - a\n"
-        "default_model: a\n",
+        "routekit_model_ids:\n"
+        "  - test/a\n"
+        "default_model: test/a\n",
         encoding="utf-8",
     )
     prompts_dir = tmp_path / ".fusionkit" / "prompts"
@@ -161,9 +161,9 @@ def test_yaml_prompt_overrides_win_over_prompt_files(tmp_path: Path) -> None:
     config_path = tmp_path / "fusionkit.yaml"
     config_path.write_text(
         "routekit_url: http://routekit.test\n"
-        "endpoint_ids:\n"
-        "  - a\n"
-        "default_model: a\n"
+        "routekit_model_ids:\n"
+        "  - test/a\n"
+        "default_model: test/a\n"
         "prompts:\n"
         "  judge_system: YAML JUDGE\n",
         encoding="utf-8",

@@ -55,11 +55,11 @@ before(async function () {
     configYaml: simSidecarConfigYaml({
       simUrl: sim.url,
       members: [
-        { id: "alpha", model: "alpha" },
-        { id: "beta", model: "beta" },
-        { id: "judge", model: "judge" }
+        { id: "openai/alpha", model: "alpha" },
+        { id: "anthropic/beta", model: "beta" },
+        { id: "openai/judge", model: "judge" }
       ],
-      judgeId: "judge"
+      judgeId: "openai/judge"
     })
   });
 });
@@ -90,9 +90,12 @@ test("provider simulator is scriptable and observable from Node", { skip: SKIP }
   assert.equal(journal[0]?.source, "queued");
 });
 
-test("internal sidecar: fused streaming step calls opaque RouteKit judge id", { skip: SKIP }, async () => {
+test("internal sidecar: fused streaming step calls namespaced RouteKit judge id", { skip: SKIP }, async () => {
   await sim.reset();
-  await sim.queue("judge", [{ reply: JUDGE_ANALYSIS }, { reply: "fused across the stack" }]);
+  await sim.queue("openai/judge", [
+    { reply: JUDGE_ANALYSIS },
+    { reply: "fused across the stack" }
+  ]);
   const response = await fetch(`${engine.url}/v1/fusion/trajectories:fuse`, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -103,13 +106,13 @@ test("internal sidecar: fused streaming step calls opaque RouteKit judge id", { 
       trajectories: [
         {
           trajectory_id: "traj-alpha",
-          model_id: "alpha",
+          model_id: "openai/alpha",
           status: "succeeded",
           final_output: "candidate A"
         },
         {
           trajectory_id: "traj-beta",
-          model_id: "beta",
+          model_id: "anthropic/beta",
           status: "succeeded",
           final_output: "candidate B"
         }
@@ -123,14 +126,14 @@ test("internal sidecar: fused streaming step calls opaque RouteKit judge id", { 
   assert.ok(sseDone(frames), "fused stream must terminate with [DONE]");
 
   // Panel trajectories are produced by Node; the sidecar calls only judge and
-  // synthesis through the opaque RouteKit endpoint.
+  // synthesis through the namespaced RouteKit model.
   const models = (await sim.journal()).map((entry) => entry.model);
-  assert.deepEqual(models, ["judge", "judge"]);
+  assert.deepEqual(models, ["openai/judge", "openai/judge"]);
 });
 
 test("internal sidecar can synthesize after RouteKit judge analysis fails", { skip: SKIP }, async () => {
   await sim.reset();
-  await sim.queue("judge", [{ error: simErrors.invalidApiKey() }]);
+  await sim.queue("openai/judge", [{ error: simErrors.invalidApiKey() }]);
   const response = await fetch(`${engine.url}/v1/fusion/trajectories:fuse`, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -140,7 +143,7 @@ test("internal sidecar can synthesize after RouteKit judge analysis fails", { sk
       trajectories: [
         {
           trajectory_id: "traj-alpha",
-          model_id: "alpha",
+          model_id: "openai/alpha",
           status: "succeeded",
           final_output: "candidate"
         }
@@ -152,7 +155,7 @@ test("internal sidecar can synthesize after RouteKit judge analysis fails", { sk
     choices: Array<{ message: { content: string } }>;
   };
   assert.match(body.choices[0]?.message.content ?? "", /judge default reply/);
-  const journal = await sim.journalFor("judge");
+  const journal = await sim.journalFor("openai/judge");
   assert.deepEqual(journal.map((entry) => entry.status), [401, 200]);
 });
 

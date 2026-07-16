@@ -1,17 +1,40 @@
 import { Command } from "commander";
 
 import { completionCandidates as coreCompletionCandidates } from "@routekit/cli-core";
-import { configuredEndpointIds } from "@routekit/config";
+import { configuredProviderIds } from "@routekit/config";
+import { PROVIDER_IDS } from "@routekit/gateway";
 
 import { listAccounts } from "./accounts.js";
 import { loadRouterConfig } from "./config.js";
+import { readStateSnapshot } from "./state.js";
 
-function endpointIds(): string[] {
+function providerIds(): string[] {
   try {
-    return configuredEndpointIds(loadRouterConfig().config);
+    return configuredProviderIds(loadRouterConfig().config);
   } catch {
     return [];
   }
+}
+
+function modelIds(): string[] {
+  const snapshot = readStateSnapshot("catalog", "models");
+  if (typeof snapshot !== "object" || snapshot === null || Array.isArray(snapshot)) {
+    return [];
+  }
+  const models = (snapshot as { models?: unknown }).models;
+  if (!Array.isArray(models)) return [];
+  return models.flatMap((model) => {
+    if (typeof model === "string") return [model];
+    if (
+      typeof model === "object" &&
+      model !== null &&
+      !Array.isArray(model) &&
+      typeof (model as { id?: unknown }).id === "string"
+    ) {
+      return [(model as { id: string }).id];
+    }
+    return [];
+  });
 }
 
 function dynamicValues(
@@ -21,11 +44,19 @@ function dynamicValues(
 ): string[] {
   const [group, subcommand] = path;
   if (
-    group === "endpoints" &&
-    (subcommand === "remove" || subcommand === "health") &&
+    group === "providers" &&
+    (subcommand === "remove" || subcommand === "status") &&
     argumentDepth === 0
   ) {
-    return endpointIds();
+    return providerIds();
+  }
+  if (
+    group === "providers" &&
+    subcommand === "add" &&
+    argumentDepth === 0
+  ) {
+    const configured = new Set(providerIds());
+    return PROVIDER_IDS.filter((provider) => !configured.has(provider));
   }
   if (
     (group === "codex" ||
@@ -34,7 +65,7 @@ function dynamicValues(
       group === "opencode") &&
     argumentDepth === 0
   ) {
-    return endpointIds();
+    return modelIds();
   }
   if (
     group === "accounts" &&

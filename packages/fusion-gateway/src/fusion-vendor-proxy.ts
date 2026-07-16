@@ -71,15 +71,15 @@ export class FusionVendorProxy {
     // A passthrough request is its own tiny trace: one root span per proxy call.
     const span = startFusionSpan("gateway", "fusion.passthrough", undefined, {
       [ATTR.FUSION_DIALECT]: "native-passthrough",
-      [ATTR.GEN_AI_REQUEST_MODEL]: target.modelId,
-      [ATTR.FUSION_MODEL_ID]: target.modelId,
-      [ATTR.FUSION_ENDPOINT_ID]: target.endpointId,
+      [ATTR.GEN_AI_REQUEST_MODEL]: target.routekitModelId,
+      [ATTR.FUSION_MODEL_ID]: target.routekitModelId,
+      [ATTR.FUSION_ROUTEKIT_MODEL_ID]: target.routekitModelId,
       [ATTR.FUSION_SESSION_ID]: req.sessionKey
     });
     const headers: Record<string, string> = { "content-type": "application/json" };
     if (req.modelCallId) headers["x-velum-model-call-id"] = req.modelCallId;
-    const body = JSON.stringify({ ...chat, model: target.endpointId });
-    const response = await fetch(joinPath(target.endpointUrl, "/v1/chat/completions"), {
+    const body = JSON.stringify({ ...chat, model: target.routekitModelId });
+    const response = await fetch(joinPath(target.routekitUrl, "/v1/chat/completions"), {
       method: "POST",
       headers,
       body,
@@ -91,7 +91,7 @@ export class FusionVendorProxy {
     });
 
     if (this.#onRateLimit === "passthrough") {
-      await this.#cost.meterResponseClone(response, costSessionId, target.modelId, span.carrier);
+      await this.#cost.meterResponseClone(response, costSessionId, target.routekitModelId, span.carrier);
       return { kind: "response", response };
     }
 
@@ -106,7 +106,7 @@ export class FusionVendorProxy {
     if (chat.stream === true && contentType.includes("text/event-stream") && response.body !== null) {
       return this.#proxyVendorStream(response.body, target, req, costSessionId);
     }
-    await this.#cost.meterResponseClone(response, costSessionId, target.modelId, span.carrier);
+    await this.#cost.meterResponseClone(response, costSessionId, target.routekitModelId, span.carrier);
     return { kind: "response", response };
   }
 
@@ -146,12 +146,12 @@ export class FusionVendorProxy {
     switch (decision) {
       case "fail-fast":
         this.#logger.error(
-          `fusion: ${target.modelId} failed (${failure.category}); not failing over to the ensemble.`
+          `fusion: ${target.routekitModelId} failed (${failure.category}); not failing over to the ensemble.`
         );
         return { kind: "response", response: verbatim() };
       case "fail-error": {
         const message =
-          `${target.modelId} ${failure.category} (${failure.message}); ` +
+          `${target.routekitModelId} ${failure.category} (${failure.message}); ` +
           `failover disabled by --on-rate-limit fail`;
         this.#logger.error(`fusion: ${message}`);
         return {
@@ -163,12 +163,12 @@ export class FusionVendorProxy {
       }
       case "failover":
         this.#logger.error(
-          `fusion: ${target.modelId} ${failure.category}; handing the turn off to the ensemble.`
+          `fusion: ${target.routekitModelId} ${failure.category}; handing the turn off to the ensemble.`
         );
         return {
           kind: "failover",
-          excludeModelIds: [target.endpointId],
-          notice: failoverNotice(target.modelId, failure)
+          excludeModelIds: [target.routekitModelId],
+          notice: failoverNotice(target.routekitModelId, failure)
         };
       default: {
         const unreachable: never = decision;
@@ -261,7 +261,7 @@ export class FusionVendorProxy {
     const meter = (text: string): void => {
       const providerCost = providerCostFromSse(text);
       this.#cost.meterEntry(sessionId, {
-        model: target.modelId,
+        model: target.routekitModelId,
         usage: usageWithProviderCost(parseUsageFromSse(text), providerCost),
         stage: "passthrough",
         ...(providerCost !== undefined ? { providerCost } : {})
@@ -279,7 +279,7 @@ export class FusionVendorProxy {
             const event = pending.slice(0, idx + 2);
             pending = pending.slice(idx + 2);
             if (onError === "resume-notice" && sseEventError(event) !== undefined) {
-              controller.enqueue(encoder.encode(noticeChunk(resumeNotice(target.modelId, fusedModel))));
+              controller.enqueue(encoder.encode(noticeChunk(resumeNotice(target.routekitModelId, fusedModel))));
               controller.enqueue(encoder.encode(finishChunk("stop")));
               controller.enqueue(encoder.encode("data: [DONE]\n\n"));
               terminated = true;

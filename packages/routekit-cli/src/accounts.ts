@@ -103,7 +103,7 @@ export async function accountsStatus(config?: RouterConfig): Promise<AccountsSta
         credentialValid = false;
       }
       const configured =
-        config?.accounts?.[entry.subscriptionKind]?.enabled === true;
+        config?.providers[entry.subscriptionKind] !== undefined;
       return {
         ...entry,
         credentialValid,

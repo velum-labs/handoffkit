@@ -21,7 +21,7 @@ import { startFusionStack } from "../fusion/stack.js";
 const SKIP = stackToolingSkip();
 
 function initializeRepository(): string {
-  const directory = mkdtempSync(join(tmpdir(), "fusionkit-endpoint-e2e-"));
+  const directory = mkdtempSync(join(tmpdir(), "fusionkit-model-e2e-"));
   execFileSync("git", ["init", "-q", "-b", "main"], { cwd: directory });
   execFileSync(
     "git",
@@ -42,53 +42,44 @@ function initializeRepository(): string {
 }
 
 test(
-  "embedded RouteKit routes opaque endpoint ids through the full fusion stack",
+  "embedded RouteKit routes namespaced model ids through the full fusion stack",
   { skip: SKIP },
   async () => {
     const sim = await startProviderSim();
     const repo = initializeRepository();
+    await scriptFusedTurn(sim, {
+      candidates: { "provider-fast": "candidate from namespaced model" },
+      judgeModel: "provider-deep",
+      answer: "fused through namespaced model ids"
+    });
+    const previousApiKey = process.env.OPENAI_API_KEY;
+    const previousBaseUrl = process.env.OPENAI_BASE_URL;
+    process.env.OPENAI_API_KEY = "test-provider-key";
+    process.env.OPENAI_BASE_URL = `${sim.url}/v1`;
     const routerConfig = parseRouterConfig({
-      endpoints: [
-        {
-          endpointId: "fast",
-          model: "provider-fast",
-          provider: "simulator",
-          baseUrl: `${sim.url}/v1`,
-          dialect: "openai"
-        },
-        {
-          endpointId: "deep",
-          model: "provider-deep",
-          provider: "simulator",
-          baseUrl: `${sim.url}/v1`,
-          dialect: "openai"
-        }
-      ],
-      defaultEndpointId: "fast"
+      providers: { openai: {} },
+      defaultModel: "openai/provider-fast"
     });
-    const stack = await startFusionStack({
-      repo,
-      outputRoot: join(repo, "runs"),
-      ensembles: [
-        {
-          name: "default",
-          members: ["fast"],
-          judge: "deep",
-          synthesizer: "deep",
-          k: 1
-        }
-      ],
-      router: { kind: "embedded", config: routerConfig },
-      fusionkitDir: process.cwd(),
-      log: () => {}
-    });
-    const routekitUrl = stack.endpoints.fast;
+    let stack: Awaited<ReturnType<typeof startFusionStack>> | undefined;
+    let routekitUrl: string | undefined;
     try {
-      await scriptFusedTurn(sim, {
-        candidates: { "provider-fast": "candidate from opaque fast" },
-        judgeModel: "provider-deep",
-        answer: "fused through opaque endpoint ids"
+      stack = await startFusionStack({
+        repo,
+        outputRoot: join(repo, "runs"),
+        ensembles: [
+          {
+            name: "default",
+            members: ["openai/provider-fast"],
+            judge: "openai/provider-deep",
+            synthesizer: "openai/provider-deep",
+            k: 1
+          }
+        ],
+        router: { kind: "embedded", config: routerConfig },
+        fusionkitDir: process.cwd(),
+        log: () => {}
       });
+      routekitUrl = stack.routekitUrl;
       const response = await fetch(`${stack.fusionUrl}/v1/chat/completions`, {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -103,23 +94,28 @@ test(
       };
       assert.match(
         body.choices[0]?.message.content ?? "",
-        /fused through opaque endpoint ids/
+        /fused through namespaced model ids/
       );
       assert.deepEqual(
         (await sim.journal()).map((entry) => entry.model),
         ["provider-fast", "provider-deep", "provider-deep"]
       );
     } finally {
-      await stack.close();
+      await stack?.close();
       await sim.close();
+      if (previousApiKey === undefined) delete process.env.OPENAI_API_KEY;
+      else process.env.OPENAI_API_KEY = previousApiKey;
+      if (previousBaseUrl === undefined) delete process.env.OPENAI_BASE_URL;
+      else process.env.OPENAI_BASE_URL = previousBaseUrl;
       rmSync(repo, { recursive: true, force: true });
     }
+    assert.ok(routekitUrl !== undefined);
     await assert.rejects(fetch(`${routekitUrl}/v1/models`));
   }
 );
 
 test(
-  "subscription-backed endpoint ids drive panel judge and synthesis without leaking credentials",
+  "subscription-backed model ids drive panel judge and synthesis without leaking credentials",
   { skip: SKIP },
   async () => {
     const repo = initializeRepository();
@@ -145,6 +141,11 @@ test(
       const url = String(input);
       if (!url.startsWith("https://chatgpt.com/backend-api/codex/")) {
         return await originalFetch(input, init);
+      }
+      if (url.endsWith("/models")) {
+        return Response.json({
+          models: [{ slug: "gpt-panel" }, { slug: "gpt-judge" }, { slug: "gpt-synth" }]
+        });
       }
       const request = JSON.parse(String(init?.body)) as {
         model?: string;
@@ -193,13 +194,8 @@ test(
     let stack: Awaited<ReturnType<typeof startFusionStack>> | undefined;
     try {
       const routerConfig = parseRouterConfig({
-        endpoints: [
-          { endpointId: "panel-account", model: "gpt-panel", account: "codex" },
-          { endpointId: "judge-account", model: "gpt-judge", account: "codex" },
-          { endpointId: "synth-account", model: "gpt-synth", account: "codex" }
-        ],
-        accounts: { codex: { enabled: true } },
-        defaultEndpointId: "panel-account"
+        providers: { codex: {} },
+        defaultModel: "codex/gpt-panel"
       });
       stack = await startFusionStack({
         repo,
@@ -207,9 +203,9 @@ test(
         ensembles: [
           {
             name: "default",
-            members: ["panel-account"],
-            judge: "judge-account",
-            synthesizer: "synth-account",
+            members: ["codex/gpt-panel"],
+            judge: "codex/gpt-judge",
+            synthesizer: "codex/gpt-synth",
             k: 1
           }
         ],
@@ -260,16 +256,17 @@ test(
     const sim = await startProviderSim();
     const repo = initializeRepository();
     const configPath = join(repo, "routekit.yaml");
+    await scriptFusedTurn(sim, {
+      candidates: { "provider-model": "candidate through auth bridge" },
+      judgeModel: "provider-model",
+      answer: "fused through auth bridge"
+    });
     writeFileSync(
       configPath,
       [
-        "endpoints:",
-        "  - endpointId: opaque",
-        "    model: provider-model",
-        "    provider: simulator",
-        `    baseUrl: ${sim.url}/v1`,
-        "    dialect: openai",
-        "defaultEndpointId: opaque",
+        "providers:",
+        "  openai: {}",
+        "defaultModel: openai/provider-model",
         ""
       ].join("\n")
     );
@@ -295,6 +292,8 @@ test(
       env: {
         ...process.env,
         ROUTEKIT_HOME: join(repo, ".routekit-state"),
+        OPENAI_API_KEY: "test-provider-key",
+        OPENAI_BASE_URL: `${sim.url}/v1`,
         PORTLESS: "0",
         NO_COLOR: "1"
       }
@@ -320,9 +319,9 @@ test(
         ensembles: [
           {
             name: "default",
-            members: ["opaque"],
-            judge: "opaque",
-            synthesizer: "opaque",
+            members: ["openai/provider-model"],
+            judge: "openai/provider-model",
+            synthesizer: "openai/provider-model",
             k: 1
           }
         ],
@@ -334,16 +333,11 @@ test(
         fusionkitDir: process.cwd(),
         log: () => {}
       });
-      const bridgeUrl = stack.endpoints.opaque;
+      const bridgeUrl = stack.routekitUrl;
       assert.notEqual(bridgeUrl, routerUrl);
       const bridged = await fetch(`${bridgeUrl}/v1/models`);
       const bridgedBody = await bridged.text();
       assert.equal(bridged.status, 200, bridgedBody);
-      await scriptFusedTurn(sim, {
-        candidates: { "provider-model": "candidate through auth bridge" },
-        judgeModel: "provider-model",
-        answer: "fused through auth bridge"
-      });
       const fused = await fetch(`${stack.fusionUrl}/v1/chat/completions`, {
         method: "POST",
         headers: { "content-type": "application/json" },

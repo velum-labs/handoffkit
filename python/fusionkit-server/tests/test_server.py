@@ -8,15 +8,15 @@ from fusionkit_server import create_app
 def _app() -> FastAPI:
     config = FusionConfig(
         routekit_url="http://routekit.test",
-        endpoint_ids=["judge"],
-        default_model="judge",
-        judge_model="judge",
+        routekit_model_ids=["test/judge"],
+        default_model="test/judge",
+        judge_model="test/judge",
     )
     return create_app(
         config,
         clients={
-            "judge": FakeModelClient(
-                "judge",
+            "test/judge": FakeModelClient(
+                "test/judge",
                 [
                     '{"consensus":["candidate is sound"],"contradictions":[],'
                     '"unique_insights":[],"coverage_gaps":[],"likely_errors":[],'
@@ -57,7 +57,7 @@ def test_health_is_the_sidecar_readiness_endpoint() -> None:
     assert response.json() == {"status": "ok"}
 
 
-def test_fuse_rejects_unknown_routekit_endpoint() -> None:
+def test_fuse_rejects_unknown_routekit_model() -> None:
     response = _client().post(
         "/v1/fusion/trajectories:fuse",
         json={
@@ -71,9 +71,9 @@ def test_fuse_rejects_unknown_routekit_endpoint() -> None:
                     "final_output": "candidate",
                 }
             ],
-            "judge_model": "missing",
+            "judge_model": "test/missing",
         },
     )
 
     assert response.status_code == 400
-    assert response.json()["error"]["code"] == "unknown_endpoint"
+    assert response.json()["error"]["code"] == "unknown_model"

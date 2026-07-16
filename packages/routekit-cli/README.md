@@ -47,11 +47,11 @@ Set `ROUTEKIT_DEV_SKIP_BUILD=1` after a build for a faster local check.
 | Command | RouteKit responsibility |
 | --- | --- |
 | `serve` | Run the configured OpenAI-compatible model gateway. |
-| `codex`, `claude`, `cursor`, `opencode` | Launch one coding tool against an embedded gateway or `--gateway-url`; the optional model argument is an endpoint ID. |
-| `endpoints list`, `add`, `remove`, `health` | Manage and probe configured endpoint IDs without printing credentials. |
-| `models list` | List the endpoint IDs advertised as models. |
-| `accounts add`, `remove`, `list`, `status` | Manage RouteKit-owned `claude-code` and `codex` subscription accounts. Adding an account enables that kind in the effective router config. |
-| `accounts serve`, `stop` | Advanced mode: expose the subscription pool as a separate external proxy. Normal account-backed endpoints do not require it. |
+| `codex`, `claude`, `cursor`, `opencode` | Launch one coding tool against an embedded gateway or `--gateway-url`; the optional argument is a namespaced `provider/model` ID. |
+| `providers add`, `remove`, `status` | Manage explicit providers and run live discovery without printing credentials. |
+| `models list` | Discover and list the live namespaced model catalog. |
+| `accounts add`, `remove`, `list`, `status` | Enroll any number of named `claude-code` and `codex` subscription accounts. The first account enables that provider. |
+| `accounts serve`, `stop` | Advanced mode: expose subscription pools as a separate external proxy. Normal provider routing does not require it. |
 | `accounts cliproxy install`, `login`, `serve`, `status` | Manage RouteKit's pinned CLIProxyAPI integration. |
 | `config path`, `show`, `init`, `edit`, `migrate` | Locate, validate, create, edit, or explicitly import RouteKit router state. |
 | `install codex`, `uninstall codex` | Add or remove RouteKit-owned Codex provider/profile blocks. |
@@ -62,25 +62,27 @@ Set `ROUTEKIT_DEV_SKIP_BUILD=1` after a build for a faster local check.
 | `version`, `--version` | Print the `@routekit/cli` version. |
 
 Global options are `--config`, `--json`, `--no-input`, `--yes`, and `--quiet`.
-Provider models, base URLs, endpoint pools, account relays, and credential
-environment-variable references are RouteKit-owned. Fusion policy, panels,
+Provider activation, live model catalogs, account relays, and registry-defined
+credential environment variables are RouteKit-owned. Fusion policy, panels,
 judging, synthesis, and Fusion sessions are intentionally outside this package.
 
 Subscription kinds are `claude-code` and `codex`; the Claude Code launcher
-command remains `routekit claude [endpoint-id]`. Account-backed endpoints use
-only `endpointId`, `model`, and `account`:
+command remains `routekit claude [provider/model]`. Pool policy uses the same
+provider map as API-key sources:
 
 ```yaml
-endpoints:
-  - endpointId: private-review
-    model: claude-sonnet-4-5
-    account: claude-code
-accounts:
+providers:
   claude-code:
-    enabled: true
+    strategy: capacity_weighted
+    switchThreshold: 0.9
+  codex:
+    strategy: capacity_weighted
+    switchThreshold: 0.9
+defaultModel: codex/gpt-5.5
 ```
 
-The endpoint ID is opaque and can be referenced unchanged from a Fusion v4
-ensemble. URL-backed endpoints instead use `baseUrl`, `dialect`, and optional
-`apiKeyEnv`; they do not set `account`. An explicitly requested unknown
-endpoint ID is rejected rather than routed to the default.
+API providers infer their key and optional base URL from registry-defined
+environment variables. Subscription providers discover the union of models
+offered by healthy enrolled accounts and keep per-account quota, refresh,
+cooldown, and model eligibility state. An explicitly requested unknown or
+unnamespaced model is rejected rather than routed to the default.

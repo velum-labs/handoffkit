@@ -231,10 +231,11 @@ Use it with the narrative references when you need to find the module that owns 
 - `packages/model-gateway/src/backend.ts`: Backend (type), BackendRequestOptions (type), OpenAiBackendOptions (type), joinPath (function), OpenAiBackend (class), ModelRoutedBackendOptions (type), ModelRoutedBackend (class)
 - `packages/model-gateway/src/capacity-pool.ts`: CapacityPoolStrategy (type), CapacityPoolMember (type), CapacityLease (type), CapacityPoolOptions (type), CapacityPool (class)
 - `packages/model-gateway/src/cost.ts`: ModelPricing (type), TokenUsage (type), ProviderCostMetadata (type), CallCostRecord (type), DEFAULT_MODEL_PRICING (const), parseUsage (function), parseUsageFromSse (function), lookupPricing (function), estimateCost (function), meterCall (function), formatUsd (function)
-- `packages/model-gateway/src/endpoint-health.ts`: EndpointHealthProbe (type), EndpointHealthProbePlan (type), EndpointHealthResult (type), providerAuthHeaders (function), endpointHealthProbe (function), probeEndpointHealth (function)
+- `packages/model-gateway/src/endpoint-health.ts`: UrlEndpointConfig (type), AccountEndpointConfig (type), ModelEndpointConfig (type), EndpointHealthProbe (type), EndpointHealthProbePlan (type), EndpointHealthResult (type), providerAuthHeaders (function), endpointHealthProbe (function), probeEndpointHealth (function)
 - `packages/model-gateway/src/provenance.ts`: GatewayDialect (type), MODEL_CALL_ID_HEADER (const), UNKNOWN_GIT_SHA (const), resolveProducerGitSha (function), readProducerVersion (function), ModelGatewayCallContext (type), ModelGatewayCallResult (type), ModelCallRecord (type), ProvenanceSink (type), buildModelCallRecord (function), modelCallId (function), responseBodyHash (function)
 - `packages/model-gateway/src/provider-backends.ts`: ProviderBackendOptions (type), ProviderTransport (type), AnthropicBackend (class), GoogleGenAiBackend (class), CodexResponsesBackend (class)
-- `packages/model-gateway/src/router.ts`: UnknownEndpointError (class), modelEndpointSchema (const), routerConfigSchema (const), ModelEndpointConfig (type), AccountEndpointConfig (type), UrlEndpointConfig (type), RouterConfig (type), isAccountEndpointConfig (function), normalizeRouterConfigAliases (function), parseRouterConfig (function), EndpointPoolOptions (type), EndpointPool (class), CatalogBackendOptions (type), CatalogBackend (class), providerBackend (function)
+- `packages/model-gateway/src/provider-source.ts`: API_PROVIDER_IDS (const), SUBSCRIPTION_PROVIDER_IDS (const), PROVIDER_IDS (const), ApiProviderId (type), SubscriptionProviderId (type), ProviderId (type), DiscoveredModel (type), ProviderSource (type), ProviderSourceTransport (type), parseDiscoveredModels (function), ApiProviderSourceOptions (type), ApiProviderSource (class)
+- `packages/model-gateway/src/router.ts`: UnknownModelError (class), routerConfigSchema (const), ProviderPolicy (type), RouterConfig (type), normalizeRouterConfigAliases (function), splitNamespacedModel (function), parseRouterConfig (function), CatalogBackendOptions (type), CatalogBackend (class), isSubscriptionProvider (function)
 - `packages/model-gateway/src/server.ts`: GatewayOptions (type), ProviderRelayDialect (type), ProviderRelay (type), Gateway (type), startGateway (function)
 - `packages/model-gateway/src/sse-wire.ts`: noticeChunk (function), errorEvent (function), finishChunk (function), reasoningChunk (function), sseResponse (function)
 - `packages/model-gateway/src/sse/chat-assembler.ts`: AssembledToolCall (type), AssembledTurn (type), ChatStreamAssembler (class)
@@ -268,34 +269,35 @@ Use it with the narrative references when you need to find the module that owns 
 ### `packages/routekit-cli`
 
 - `packages/routekit-cli/src/accounts.ts`: parseAccountMode (function), AccountListEntry (type), listAccounts (function), addAccount (function), removeAccount (function), AccountsStatus (type), accountsStatus (function), serveAccounts (function), stopAccounts (function)
+- `packages/routekit-cli/src/catalog.ts`: LiveModel (type), LiveCatalog (type), fetchLiveCatalog (function), discoverCatalog (function)
 - `packages/routekit-cli/src/cli.ts`: routekitVersion (function), buildProgram (function)
 - `packages/routekit-cli/src/commands/accounts.ts`: registerAccounts (function)
 - `packages/routekit-cli/src/commands/config.ts`: registerConfig (function)
 - `packages/routekit-cli/src/commands/context.ts`: configOverride (function), editableConfigPath (function), loaded (function), numberOption (function)
 - `packages/routekit-cli/src/commands/doctor.ts`: registerDoctor (function)
-- `packages/routekit-cli/src/commands/endpoints.ts`: registerEndpoints (function)
 - `packages/routekit-cli/src/commands/index.ts`: registerCommands (function)
 - `packages/routekit-cli/src/commands/install.ts`: registerInstall (function)
 - `packages/routekit-cli/src/commands/launchers.ts`: registerLaunchers (function)
 - `packages/routekit-cli/src/commands/models.ts`: registerModels (function)
+- `packages/routekit-cli/src/commands/providers.ts`: ProviderStatus (type), registerProviders (function)
 - `packages/routekit-cli/src/commands/serve.ts`: registerServe (function)
 - `packages/routekit-cli/src/commands/stop.ts`: registerStop (function)
 - `packages/routekit-cli/src/commands/telemetry.ts`: registerTelemetry (function)
 - `packages/routekit-cli/src/completion.ts`: completionCandidates (function), registerDynamicCompletion (function)
-- `packages/routekit-cli/src/config.ts`: MigrationAction (type), migrateLegacyState (function)
+- `packages/routekit-cli/src/config.ts`: MigrationAction (type), ConfigMigrationDiagnostic (type), LegacyConfigMigration (type), convertLegacyRouterConfig (function), migrateLegacyRouterConfig (function), migrateLegacyState (function)
 - `packages/routekit-cli/src/launch.ts`: buildToolLaunchSpec (function), launchToolWithIntegration (function), launchTool (function)
 - `packages/routekit-cli/src/serve.ts`: RouterServeOptions (type), RunningRouter (type), startRouter (function), waitForShutdown (function)
-- `packages/routekit-cli/src/state.ts`: ServiceKind (type), RouteKitServiceRecord (type), writeStateSnapshot (function), readServiceRecord (function), ServiceRegistration (type), registerService (function), StopServiceResult (type), stopService (function), stopAllServices (function)
+- `packages/routekit-cli/src/state.ts`: ServiceKind (type), RouteKitServiceRecord (type), writeStateSnapshot (function), readStateSnapshot (function), readServiceRecord (function), ServiceRegistration (type), registerService (function), StopServiceResult (type), stopService (function), stopAllServices (function)
 - `packages/routekit-cli/src/telemetry.ts`: telemetryPath (function), resolveTelemetry (const), enableTelemetry (const), disableTelemetry (const), TELEMETRY_FIELDS (const)
 
 ### `packages/routekit-config`
 
-- `packages/routekit-config/src/index.ts`: RouterConfigSource (type), LoadedRouterConfig (type), RouterConfigPaths (type), UpdateRouterConfigInput (type), configuredEndpointIds (function), missingEndpointIds (function), assertEndpointIdsConfigured (function), resolveEndpointId (function), selectEndpointId (const), routekitHome (function), globalRouterConfigPath (function), projectRouterConfigPath (function), findProjectRouterConfig (function), routerConfigPaths (function), loadRouterConfig (function), writeRouterConfig (function), updateEffectiveRouterConfig (function), updateRouterConfig (function), DEFAULT_ROUTER_CONFIG (const)
+- `packages/routekit-config/src/index.ts`: RouterConfigSource (type), LoadedRouterConfig (type), RouterConfigPaths (type), UpdateRouterConfigInput (type), configuredProviderIds (function), missingModelIds (function), assertModelsAvailable (function), resolveModelId (function), selectModelId (const), routekitHome (function), globalRouterConfigPath (function), projectRouterConfigPath (function), findProjectRouterConfig (function), routerConfigPaths (function), loadRouterConfig (function), writeRouterConfig (function), updateEffectiveRouterConfig (function), updateRouterConfig (function), DEFAULT_ROUTER_CONFIG (const)
 
 ### `packages/routekit-registry`
 
 - `packages/routekit-registry/src/generated/data.ts`: REGISTRY (const)
-- `packages/routekit-registry/src/index.ts`: ProviderAuthStyle (type), ProviderKeyProbe (type), ProviderDiscovery (type), ProviderInfo (type), PROVIDERS (const), providerDefaultBaseUrl (function), defaultKeyEnv (function), providerKeyProbe (function), providerDiscovery (function), SubscriptionMode (type), SubscriptionOAuthInfo (type), SubscriptionRateLimitInfo (type), SubscriptionAdminInfo (type), SubscriptionInfo (type), SUBSCRIPTIONS (const), subscriptionInfo (function), providerForAuthMode (function), DEFAULT_REASONING_MODEL (const), catalogDefaultModel (function), curatedModels (function), smokeModelForTool (function), samplingOverridesForModel (function), chatTemplateKwargsForModel (function), RegistryModelPricing (type), PRICING_ALIASES (const), DEFAULT_MODEL_PRICING (const), LocalModelRole (type), LocalCatalogModel (type), LOCAL_CATALOG_ENTRIES (const), PreferredLocalModel (type), PREFERRED_LOCAL_MODELS (const), GATEWAY_DEFAULT_MLX_MODEL (const), LOCAL_PROBE_MODEL (const)
+- `packages/routekit-registry/src/index.ts`: ProviderAuthStyle (type), ProviderKeyProbe (type), ProviderDiscovery (type), ProviderDiscoveryResponseShape (type), ProviderWireProtocol (type), ProviderWire (type), ProviderInfo (type), PROVIDERS (const), providerDefaultBaseUrl (function), defaultKeyEnv (function), providerKeyProbe (function), providerDiscovery (function), SubscriptionMode (type), SubscriptionOAuthInfo (type), SubscriptionRateLimitInfo (type), SubscriptionAdminInfo (type), SubscriptionInfo (type), SUBSCRIPTIONS (const), subscriptionInfo (function), providerForAuthMode (function), DEFAULT_REASONING_MODEL (const), catalogDefaultModel (function), curatedModels (function), smokeModelForTool (function), samplingOverridesForModel (function), chatTemplateKwargsForModel (function), RegistryModelPricing (type), PRICING_ALIASES (const), DEFAULT_MODEL_PRICING (const), LocalModelRole (type), LocalCatalogModel (type), LOCAL_CATALOG_ENTRIES (const), PreferredLocalModel (type), PREFERRED_LOCAL_MODELS (const), GATEWAY_DEFAULT_MLX_MODEL (const), LOCAL_PROBE_MODEL (const)
 
 ### `packages/routekit-router`
 
@@ -331,7 +333,7 @@ Use it with the narrative references when you need to find the module that owns 
 - `packages/testkit/src/proc.ts`: SpawnedProcess (type), spawnCaptured (function), waitForHttpReady (function)
 - `packages/testkit/src/provider-sim.ts`: SimCallFilter (type), ProviderSimHandle (type), startProviderSim (function)
 - `packages/testkit/src/python.ts`: repoRoot (function), StackTooling (type), detectStackTooling (function), stackToolingSkip (function), uvRunArgv (function)
-- `packages/testkit/src/router-config.ts`: CODEX_TEST_TOKEN_ENV (const), SimEndpointSpec (type), simSidecarConfigYaml (function)
+- `packages/testkit/src/router-config.ts`: CODEX_TEST_TOKEN_ENV (const), SimModelSpec (type), simSidecarConfigYaml (function)
 - `packages/testkit/src/scenarios.ts`: judgeAnalysis (function), FusedTurnScript (type), scriptFusedTurn (function)
 - `packages/testkit/src/sse.ts`: SseFrame (type), parseSse (function), sseText (function), sseReasoning (function), sseDone (function)
 
@@ -547,7 +549,7 @@ Use it with the narrative references when you need to find the module that owns 
 
 - `python/fusionkit-testkit/src/fusionkit_testkit/behaviors.py`: SimToolCall (class, public), SimError (class, public), Behavior (class, public)
 - `python/fusionkit-testkit/src/fusionkit_testkit/cli.py`: main (function, public)
-- `python/fusionkit-testkit/src/fusionkit_testkit/endpoints.py`: SimEndpoint (class, public), sim_endpoint (function, public), panel_config (function, public)
+- `python/fusionkit-testkit/src/fusionkit_testkit/endpoints.py`: SimModel (class, public), sim_model (function, public), panel_config (function, public)
 - `python/fusionkit-testkit/src/fusionkit_testkit/engine.py`: free_port (function, public), _engine_argv (function, internal), EngineProcessError (class, public), EngineProcess (class, public)
 - `python/fusionkit-testkit/src/fusionkit_testkit/pytest_plugin.py`: SimStackFactory (class, public), routekit_sim (function, public), sim_stack (function, public)
 - `python/fusionkit-testkit/src/fusionkit_testkit/scenarios.py`: as_behavior (function, public), judge_analysis (function, public), script_fused_turn (function, public)

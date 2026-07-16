@@ -46,6 +46,7 @@ type PoolMember = {
   label: string;
   sourcePath: string;
   credential: SubscriptionCredential;
+  models: Set<string>;
   coolingUntil?: number;
   lastUsed: number;
   inFlight: number;
@@ -248,6 +249,7 @@ export class SubscriptionAccountSet {
   readonly #tracker: RateLimitTracker;
   readonly #refreshes = new Map<string, Promise<void>>();
   #activeId: string | undefined;
+  #catalogReady = false;
   #probeTimer: NodeJS.Timeout | undefined;
   #closed = false;
 
@@ -294,6 +296,7 @@ export class SubscriptionAccountSet {
           label: id,
           sourcePath,
           credential,
+          models: new Set(),
           ...(tracker.coolingUntil(id) !== undefined
             ? { coolingUntil: tracker.coolingUntil(id) }
             : {}),
@@ -326,6 +329,28 @@ export class SubscriptionAccountSet {
       switchThreshold: this.#options.switchThreshold,
       members: this.#members.map((member) => this.#memberStatus(member))
     };
+  }
+
+  async discoverModels(signal?: AbortSignal): Promise<readonly string[]> {
+    await Promise.allSettled(
+      this.#members.map(async (member) => {
+        member.models.clear();
+        await this.#ensureFresh(member);
+        member.models = new Set(
+          await this.#provider.discoverModels(member.credential, signal)
+        );
+      })
+    );
+    this.#catalogReady = true;
+    return this.listModelIds();
+  }
+
+  listModelIds(): readonly string[] {
+    const models = new Set<string>();
+    for (const member of this.#members) {
+      for (const model of member.models) models.add(model);
+    }
+    return [...models];
   }
 
   async close(): Promise<void> {
@@ -421,6 +446,7 @@ export class SubscriptionAccountSet {
         : {}),
       ...(member.coolingUntil !== undefined ? { coolingUntil: member.coolingUntil } : {}),
       active: member.id === this.#activeId,
+      models: [...member.models],
       ...(this.#tracker.limits(member.id) !== undefined
         ? { limits: this.#tracker.limits(member.id) }
         : {})
@@ -477,6 +503,10 @@ export class SubscriptionAccountSet {
   }
 
   #eligible(member: PoolMember, model: string | undefined, now: number): boolean {
+    if (this.#catalogReady && member.models.size === 0) return false;
+    if (this.#catalogReady && model !== undefined && !member.models.has(model)) {
+      return false;
+    }
     if (member.coolingUntil !== undefined && member.coolingUntil > now) return false;
     if (
       member.credential.expiresAt !== undefined &&
@@ -511,6 +541,10 @@ export class SubscriptionAccountSet {
     const now = Date.now() / 1000;
     const resets: number[] = [];
     for (const member of this.#members) {
+      if (this.#catalogReady && member.models.size === 0) continue;
+      if (this.#catalogReady && model !== undefined && !member.models.has(model)) {
+        continue;
+      }
       if (member.coolingUntil !== undefined && member.coolingUntil > now) {
         resets.push(member.coolingUntil);
       }

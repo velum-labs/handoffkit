@@ -87,6 +87,7 @@ test("the usage wire schema round-trips an account-set snapshot", () => {
         label: "work",
         sourcePath: "/tmp/work.json",
         active: true,
+        models: ["gpt-5.5"],
         limits: {
           windows: { "codex:primary": { utilization: 0.4, resetsAt: 1_777_000_000 } },
           observedAt: 1_776_000_000,

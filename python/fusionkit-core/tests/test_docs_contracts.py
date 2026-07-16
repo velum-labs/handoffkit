@@ -12,6 +12,6 @@ def test_documented_internal_fusion_configs_use_the_production_schema() -> None:
         "configs/benchmark-panel.gpt-opus.yaml",
     ):
         config = load_config(ROOT / relative_path)
-        assert config.endpoint_ids
-        assert config.default_model in config.endpoint_ids
-        assert config.judge_model in config.endpoint_ids
+        assert config.routekit_model_ids
+        assert config.default_model in config.routekit_model_ids
+        assert config.judge_model in config.routekit_model_ids

@@ -20,15 +20,16 @@ import {
   startProviderSim
 } from "@fusionkit/testkit";
 import type { ProviderSimHandle } from "@fusionkit/testkit";
-import { parseRouterConfig } from "@routekit/gateway";
+import { OpenAiBackend, parseRouterConfig } from "@routekit/gateway";
+import type { ProviderSource } from "@routekit/gateway";
 import { startRouter } from "@routekit/router";
 import type { RunningRouter } from "@routekit/router";
 
 const SKIP = stackToolingSkip();
 
 const MODELS = [
-  { id: "alpha", model: "managed-alpha" },
-  { id: "beta", model: "managed-beta" }
+  { id: "openai/managed-alpha", model: "managed-alpha" },
+  { id: "openai/managed-beta", model: "managed-beta" }
 ] as const;
 
 let sim: ProviderSimHandle;
@@ -39,28 +40,25 @@ let repo: string;
 before(async function () {
   if (SKIP !== false) return;
   sim = await startProviderSim();
+  const backend = new OpenAiBackend({
+    baseUrl: `${sim.url}/v1`,
+    apiKey: "test-provider-key"
+  });
+  const source: ProviderSource = {
+    sourceId: "openai",
+    discoverModels: async () => MODELS.map(({ model }) => ({ id: model })),
+    chat: async (body, signal, options) =>
+      await backend.chat(body, signal, options),
+    embeddings: async (body, signal) => await backend.embeddings(body, signal)
+  };
   router = await startRouter({
     config: parseRouterConfig({
-      endpoints: [
-        {
-          endpointId: "alpha",
-          model: "managed-alpha",
-          provider: "simulator",
-          baseUrl: `${sim.url}/v1`,
-          dialect: "openai"
-        },
-        {
-          endpointId: "beta",
-          model: "managed-beta",
-          provider: "simulator",
-          baseUrl: `${sim.url}/v1`,
-          dialect: "openai"
-        }
-      ],
-      defaultEndpointId: "alpha"
+      providers: { openai: {} },
+      defaultModel: MODELS[0].id
     }),
     host: "127.0.0.1",
-    port: 0
+    port: 0,
+    sources: { openai: source }
   });
   root = mkdtempSync(join(tmpdir(), "fusionkit-managed-k-"));
   repo = join(root, "repo");
@@ -142,7 +140,10 @@ test(
       models: [...MODELS],
       harness: "agent",
       fusionBackendUrl: router.url,
-      modelEndpoints: { alpha: router.url, beta: router.url },
+      modelEndpoints: {
+        "openai/managed-alpha": router.url,
+        "openai/managed-beta": router.url
+      },
       k: 2
     });
 
@@ -218,7 +219,10 @@ test(
       models: [...MODELS],
       harness: "agent",
       fusionBackendUrl: router.url,
-      modelEndpoints: { alpha: router.url, beta: router.url }
+      modelEndpoints: {
+        "openai/managed-alpha": router.url,
+        "openai/managed-beta": router.url
+      }
       // k intentionally omitted: the managed agent rolls out until completion.
     });
 
@@ -264,7 +268,10 @@ test(
       models: [...MODELS],
       harness: "agent",
       fusionBackendUrl: router.url,
-      modelEndpoints: { alpha: router.url, beta: router.url },
+      modelEndpoints: {
+        "openai/managed-alpha": router.url,
+        "openai/managed-beta": router.url
+      },
       k: 2
     });
 

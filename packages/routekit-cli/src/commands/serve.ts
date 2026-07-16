@@ -1,7 +1,9 @@
 import { contextFor, parsePort } from "@routekit/cli-core";
 import type { Command } from "commander";
 
+import { fetchLiveCatalog } from "../catalog.js";
 import { startRouter, waitForShutdown } from "../serve.js";
+import { writeStateSnapshot } from "../state.js";
 
 import { loaded } from "./context.js";
 
@@ -32,12 +34,27 @@ export function registerServe(program: Command): void {
           ...(options.authToken !== undefined ? { authToken: options.authToken } : {}),
           ...(options.portless !== undefined ? { portless: options.portless } : {})
         });
+        const catalog = await fetchLiveCatalog(running.gateway.url(), {
+          ...(options.authToken !== undefined
+            ? { authToken: options.authToken }
+            : {}),
+          ...(result.config.defaultModel !== undefined
+            ? { defaultModel: result.config.defaultModel }
+            : {})
+        });
+        writeStateSnapshot("catalog", "models", {
+          updatedAt: new Date().toISOString(),
+          defaultModel: catalog.defaultModel,
+          models: catalog.models
+        });
         if (ctx.json) {
           ctx.emit({
             url: running.url,
             port: running.gateway.port(),
             config: result.path,
-            authenticated: options.authToken !== undefined
+            authenticated: options.authToken !== undefined,
+            defaultModel: catalog.defaultModel,
+            models: catalog.models.map((model) => model.id)
           });
         } else {
           ctx.presenter.success(`RouteKit gateway listening at ${running.url}`);

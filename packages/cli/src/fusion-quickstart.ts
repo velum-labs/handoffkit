@@ -12,8 +12,7 @@ import { fusionModelId } from "@fusionkit/registry";
 import { shutdownFusionTracing } from "@fusionkit/tracing";
 import type { HarnessKind } from "@routekit/harness-core";
 import {
-  assertEndpointIdsConfigured,
-  configuredEndpointIds,
+  assertModelsAvailable,
   loadRouterConfig
 } from "@routekit/config";
 import { registerCleanup, trimTrailingSlashes } from "@routekit/runtime";
@@ -112,7 +111,7 @@ export function fusionToolLaunchSpec(input: {
   };
 }
 
-async function externalEndpointIds(
+async function externalModelIds(
   url: string,
   token?: string
 ): Promise<Set<string>> {
@@ -147,11 +146,6 @@ async function resolveRouter(
   if (typeof router.config === "string") {
     const path = resolveRouterConfigPath(repo, router.config);
     const loaded = loadRouterConfig({ configPath: path });
-    assertEndpointIdsConfigured(
-      required,
-      configuredEndpointIds(loaded.config),
-      `Fusion ensemble references RouteKit endpoint ids not present in ${path}`
-    );
     return { kind: "embedded", config: loaded.config };
   }
   const authToken =
@@ -161,11 +155,11 @@ async function resolveRouter(
       `external RouteKit authentication environment variable is not set: ${router.authEnv}`
     );
   }
-  const available = await externalEndpointIds(router.url, authToken);
-  assertEndpointIdsConfigured(
+  const available = await externalModelIds(router.url, authToken);
+  assertModelsAvailable(
     required,
     available,
-    "Fusion ensemble references endpoint ids not advertised by external RouteKit"
+    "Fusion ensemble references models not advertised by external RouteKit"
   );
   return {
     kind: "external",
@@ -188,7 +182,7 @@ export async function runFusion(
   }
   if (options.ensembles === undefined || options.ensembles.length === 0) {
     throw new Error(
-      "no fusion ensembles configured; run `fusionkit init` and select RouteKit endpoint ids"
+      "no fusion ensembles configured; run `fusionkit init` and select namespaced RouteKit model ids"
     );
   }
   const selectedName = options.ensemble ?? options.ensembles[0]!.name;
@@ -207,7 +201,7 @@ export async function runFusion(
   if (selectedIndex > 0) ensembles.unshift(...ensembles.splice(selectedIndex, 1));
   if (options.k !== undefined) ensembles[0]!.k = options.k;
 
-  const endpointIds = [
+  const routekitModelIds = [
     ...new Set(
       ensembles.flatMap((ensemble) => [
         ...ensemble.members,
@@ -216,7 +210,7 @@ export async function runFusion(
       ])
     )
   ];
-  const router = await resolveRouter(repo, options, endpointIds);
+  const router = await resolveRouter(repo, options, routekitModelIds);
   const integration = tool === "serve" ? undefined : toolRegistry.get(tool);
   if (tool !== "serve" && integration === undefined) {
     throw new Error(`unknown fusion tool: ${tool}`);

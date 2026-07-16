@@ -220,14 +220,14 @@ export class FusionCostMeter {
     for (const candidate of input.candidates) {
       const metadata = trajectoryMetadata(candidate);
       const model = optionalString(candidate.model) ?? candidate.model_id;
-      const endpointId = candidate.model_id;
+      const routekitModelId = candidate.model_id;
       const provider = optionalString(metadata.provider);
       const latencyMs = trajectoryLatencyMs(candidate);
       const providerCost = providerCostMetadata(metadata.provider_cost ?? metadata.providerCost);
       const usage = usageWithProviderCost(trajectoryUsage(candidate), providerCost);
       const localCompute = this.#localComputeFor({
         model,
-        endpointId,
+        routekitModelId,
         ...(provider !== undefined ? { provider } : {}),
         ...(latencyMs !== undefined ? { latencyMs } : {})
       });
@@ -239,7 +239,7 @@ export class FusionCostMeter {
           stage: "panel",
           turn: input.turn,
           ...(provider !== undefined ? { provider } : {}),
-          endpointId,
+          routekitModelId,
           ...(latencyMs !== undefined ? { latencyMs } : {}),
           ...(providerCost !== undefined ? { providerCost } : {}),
           ...(localCompute !== undefined ? { localCompute } : {})
@@ -257,7 +257,7 @@ export class FusionCostMeter {
       stage: CostStage;
       turn?: number;
       provider?: string;
-      endpointId?: string;
+      routekitModelId?: string;
       latencyMs?: number;
       providerCost?: ProviderCostMetadata;
       localCompute?: ReturnType<typeof localComputeFromLatency>;
@@ -271,7 +271,9 @@ export class FusionCostMeter {
       pricing: this.#pricing,
       ...(input.turn !== undefined ? { turn: input.turn } : {}),
       ...(input.provider !== undefined ? { provider: input.provider } : {}),
-      ...(input.endpointId !== undefined ? { endpointId: input.endpointId } : {}),
+      ...(input.routekitModelId !== undefined
+        ? { routekitModelId: input.routekitModelId }
+        : {}),
       ...(input.latencyMs !== undefined ? { latencyMs: input.latencyMs } : {}),
       ...(input.providerCost !== undefined ? { providerCost: input.providerCost } : {}),
       ...(input.localCompute !== undefined ? { localCompute: input.localCompute } : {})
@@ -347,14 +349,15 @@ export class FusionCostMeter {
 
   #localComputeFor(input: {
     model: string;
-    endpointId: string;
+    routekitModelId: string;
     provider?: string;
     latencyMs?: number;
   }): ReturnType<typeof localComputeFromLatency> {
-    const pricing = this.#localCompute[input.model] ?? this.#localCompute[input.endpointId];
+    const pricing =
+      this.#localCompute[input.model] ?? this.#localCompute[input.routekitModelId];
     const looksLocal =
       this.#localModels.has(input.model) ||
-      this.#localModels.has(input.endpointId) ||
+      this.#localModels.has(input.routekitModelId) ||
       input.provider === "mlx-lm";
     if (pricing === undefined && !looksLocal) return undefined;
     return localComputeFromLatency({

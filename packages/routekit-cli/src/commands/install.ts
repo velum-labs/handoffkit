@@ -7,6 +7,8 @@ import {
 import type { CodexInstallOwner } from "@routekit/tool-registry";
 import type { Command } from "commander";
 
+import { fetchLiveCatalog } from "../catalog.js";
+
 import { loaded } from "./context.js";
 
 const CODEX_OWNER: CodexInstallOwner = {
@@ -28,7 +30,7 @@ function codexProfileId(modelId: string, index: number): string {
     !modelId.includes("\\") &&
     !modelId.startsWith(".")
     ? modelId
-    : `routekit-endpoint-${index + 1}`;
+    : `routekit-model-${index + 1}`;
 }
 
 export function registerInstall(program: Command): void {
@@ -38,7 +40,7 @@ export function registerInstall(program: Command): void {
     .requiredOption("--gateway-url <url>", "running gateway URL")
     .option("--codex-home <dir>", "Codex home directory")
     .action(
-      (
+      async (
         tool: string,
         options: { gatewayUrl: string; codexHome?: string },
         command: Command
@@ -46,7 +48,12 @@ export function registerInstall(program: Command): void {
         assertCodex(tool);
         const ctx = contextFor(command);
         const config = loaded(command).config;
-        const ids = [...new Set(config.endpoints.map((entry) => entry.endpointId))];
+        const catalog = await fetchLiveCatalog(options.gatewayUrl, {
+          ...(config.defaultModel !== undefined
+            ? { defaultModel: config.defaultModel }
+            : {})
+        });
+        const ids = catalog.models.map((model) => model.id);
         const result = installCodexIntegration({
           gatewayUrl: trimTrailingSlashes(options.gatewayUrl),
           profiles: ids.map((modelId, index) => ({

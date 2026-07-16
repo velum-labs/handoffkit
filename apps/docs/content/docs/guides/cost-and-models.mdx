@@ -5,7 +5,7 @@ description: Understand and control what a fused run spends.
 
 ## Why cost matters here
 
-An ensemble can run multiple RouteKit endpoints plus judge/synthesis calls on
+An ensemble can run multiple live RouteKit models plus judge/synthesis calls on
 every prompt. Fusion trades extra calls for better answers, so usage can add up
 faster than a single-model RouteKit session.
 
@@ -17,11 +17,13 @@ spend control.
 
 ### Pick cheaper models
 
-Choose cheaper endpoints in `.routekit/router.yaml`, then compose their IDs:
+Choose cheaper entries from `routekit models list`, then compose their IDs:
 
 ```bash
 fusionkit ensemble add economical \
-  --member fast --member alt --judge fast
+  --member openai/gpt-5-mini \
+  --member openrouter/qwen/qwen3-coder \
+  --judge openai/gpt-5-mini
 ```
 
 Or commit it via the [`.fusionkit/` folder](/docs/reference/configuration).
@@ -46,7 +48,10 @@ Persist the same cap in `.fusionkit/fusion.json`:
   "version": "fusionkit.fusion.v4",
   "router": { "config": ".routekit/router.yaml" },
   "ensembles": {
-    "default": { "members": ["fast"], "judge": "fast" }
+    "default": {
+      "members": ["openai/gpt-5-mini"],
+      "judge": "openai/gpt-5-mini"
+    }
   },
   "budgetUsd": 5
 }
@@ -58,7 +63,7 @@ Persist the same cap in `.fusionkit/fusion.json`:
 fusionkit config show
 ```
 
-shows the effective endpoint-ID ensembles and judge.
+shows the effective namespaced-model ensembles and judge.
 
 Inspect accumulated cost later:
 

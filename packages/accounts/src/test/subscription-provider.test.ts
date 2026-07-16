@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { subscriptionProvider } from "../index.js";
+import { codexModelsSearch } from "../provider.js";
 
 test("Anthropic adapter parses first-party unified subscription windows", () => {
   const provider = subscriptionProvider("claude-code");
@@ -91,4 +92,50 @@ test("Codex adapter recognizes usage_limit_reached as quota exhaustion", () => {
   );
   assert.equal(failure?.category, "quota_exhausted");
   assert.equal(failure?.resetsAt, 1775000000);
+});
+
+test("Codex model discovery supplies the required client version query", () => {
+  assert.equal(codexModelsSearch("", "0.144.5"), "?client_version=0.144.5");
+  assert.equal(
+    codexModelsSearch("?include_hidden=true", "0.144.5"),
+    "?include_hidden=true&client_version=0.144.5"
+  );
+  assert.equal(
+    codexModelsSearch("?client_version=0.142.5", "0.144.5"),
+    "?client_version=0.142.5"
+  );
+});
+
+test("subscription adapters discover native models with member credentials", async () => {
+  const originalFetch = globalThis.fetch;
+  const requests: Array<{ url: string; headers: Headers }> = [];
+  globalThis.fetch = async (input, init) => {
+    const url = String(input);
+    requests.push({ url, headers: new Headers(init?.headers) });
+    return url.includes("anthropic")
+      ? Response.json({ data: [{ id: "claude-opus-4-1" }] })
+      : Response.json({ models: [{ slug: "gpt-5.5" }] });
+  };
+  try {
+    const claude = await subscriptionProvider("claude-code").discoverModels({
+      mode: "claude-code",
+      accessToken: "claude-token",
+      sourcePath: "/tmp/claude.json"
+    });
+    const codex = await subscriptionProvider("codex").discoverModels({
+      mode: "codex",
+      accessToken: "codex-token",
+      accountId: "acct",
+      sourcePath: "/tmp/codex.json"
+    });
+    assert.deepEqual(claude, ["claude-opus-4-1"]);
+    assert.deepEqual(codex, ["gpt-5.5"]);
+    assert.equal(requests[0]?.headers.get("authorization"), "Bearer claude-token");
+    assert.equal(requests[0]?.headers.get("anthropic-version"), "2023-06-01");
+    assert.equal(requests[1]?.headers.get("authorization"), "Bearer codex-token");
+    assert.equal(requests[1]?.headers.get("chatgpt-account-id"), "acct");
+    assert.equal(requests[1]?.headers.get("originator"), "routekit");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });

@@ -63,21 +63,23 @@ _ANALYSIS = (
 
 def _stream_client(synth: _StreamingClient) -> TestClient:
     judge = _StreamingClient(
-        "judge",
+        "test/judge",
         response=ModelResponse(
-            model_id="judge",
+            model_id="test/judge",
             content=_ANALYSIS,
             usage=Usage(prompt_tokens=5, completion_tokens=3),
         ),
     )
     config = FusionConfig(
         routekit_url="http://routekit.test",
-        endpoint_ids=["judge", "synth"],
-        default_model="judge",
-        judge_model="judge",
-        synthesizer_model="synth",
+        routekit_model_ids=["test/judge", "test/synth"],
+        default_model="test/judge",
+        judge_model="test/judge",
+        synthesizer_model="test/synth",
     )
-    return TestClient(create_app(config, clients={"judge": judge, "synth": synth}))
+    return TestClient(
+        create_app(config, clients={"test/judge": judge, "test/synth": synth})
+    )
 
 
 def _payload(**updates: Any) -> dict[str, Any]:
@@ -115,15 +117,15 @@ def _sse_payloads(response) -> list[dict[str, Any]]:
 def test_internal_fuse_streams_openai_neutral_wire() -> None:
     config = FusionConfig(
         routekit_url="http://routekit.test",
-        endpoint_ids=["judge"],
-        default_model="judge",
+        routekit_model_ids=["test/judge"],
+        default_model="test/judge",
     )
     client = TestClient(
         create_app(
             config,
             clients={
-                "judge": FakeModelClient(
-                    "judge",
+                "test/judge": FakeModelClient(
+                    "test/judge",
                     [
                         '{"consensus":["ok"],"contradictions":[],"unique_insights":[],'
                         '"coverage_gaps":[],"likely_errors":[],'

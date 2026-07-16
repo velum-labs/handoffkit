@@ -6,12 +6,11 @@ description: Put Gemini, Grok, and Kimi subscription models on a fusion panel th
 [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) is an MIT-licensed
 local proxy that fronts OAuth subscription accounts — ChatGPT/Codex, Claude
 Code, Gemini (Antigravity), Grok, Kimi — behind an OpenAI-compatible API with
-multi-account rotation. RouteKit owns its binary, config, and OAuth state;
-RouteKit exposes it as a URL-backed endpoint and FusionKit consumes only that
-endpoint's opaque ID.
+multi-account rotation. RouteKit owns its binary, config, and OAuth state and
+exposes its live models under the `cliproxy/` namespace.
 
-Use native account-backed endpoints for Claude Code and Codex; they are
-provider-native and quota-aware without a separate proxy. `routekit accounts
+Use native `claude-code` and `codex` providers for those subscriptions; they are
+provider-native, multi-account, and quota-aware without a separate proxy. `routekit accounts
 serve` is advanced external-proxy mode. Use `cliproxy` for Gemini, Grok, Kimi,
 or when you already run CLIProxyAPI for another tool.
 
@@ -35,34 +34,26 @@ Already running CLIProxyAPI yourself? Skip all of this: export
 `ROUTEKIT_CLIPROXY_API_KEY` (one of the proxy's `api-keys`) and, for a
 non-default host/port, `ROUTEKIT_CLIPROXY_BASE_URL`.
 
-In another shell, add an explicit URL-backed endpoint and verify it:
+In another shell, enable the explicit provider and verify its live catalog:
 
 ```bash
-routekit endpoints add gemini-subscription \
-  --model gemini-3.1-pro-preview \
-  --provider cliproxy \
-  --base-url http://127.0.0.1:8317/v1 \
-  --api-key-env ROUTEKIT_CLIPROXY_API_KEY
-routekit endpoints health gemini-subscription
+routekit providers add cliproxy
+routekit providers status cliproxy
+routekit models list
 routekit accounts cliproxy status
 ```
 
-Login does not add an endpoint. Keep CLIProxyAPI serving while RouteKit uses
-the configured URL. The resulting router entry is:
+Login does not enable the provider. Keep CLIProxyAPI serving while RouteKit
+uses the registry-defined URL and credential. The router entry is:
 
 ```yaml
-endpoints:
-  - endpointId: gemini-subscription
-    model: gemini-3.1-pro-preview
-    provider: cliproxy
-    baseUrl: http://127.0.0.1:8317/v1
-    dialect: openai
-    apiKeyEnv: ROUTEKIT_CLIPROXY_API_KEY
+providers:
+  cliproxy: {}
 ```
 
-## Add the endpoint to an ensemble
+## Add a live model to an ensemble
 
-Fusion config v4 contains opaque endpoint IDs only:
+Fusion config v4 contains namespaced model IDs only:
 
 ```json
 {
@@ -70,14 +61,17 @@ Fusion config v4 contains opaque endpoint IDs only:
   "router": { "config": ".routekit/router.yaml" },
   "ensembles": {
     "default": {
-      "members": ["gemini-subscription", "api-key-peer"],
-      "judge": "api-key-peer"
+      "members": [
+        "cliproxy/gemini-3.1-pro-preview",
+        "openai/gpt-5.5"
+      ],
+      "judge": "openai/gpt-5.5"
     }
   }
 }
 ```
 
-`fusionkit doctor` checks that all referenced endpoint IDs are advertised by
+`fusionkit doctor` checks that all referenced namespaced model IDs are advertised by
 RouteKit.
 
 ## Terms-of-service caveat

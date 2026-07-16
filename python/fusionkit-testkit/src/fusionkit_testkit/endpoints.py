@@ -10,43 +10,43 @@ from fusionkit_testkit.server import RouteKitSimulator
 
 
 @dataclass(frozen=True)
-class SimEndpoint:
-    """Opaque endpoint identifier accepted by the simulated RouteKit gateway."""
+class SimModel:
+    """Namespaced model identifier accepted by the simulated RouteKit gateway."""
 
     id: str
 
 
-def sim_endpoint(
+def sim_model(
     _sim: RouteKitSimulator,
     *,
     id: str,
     model: str | None = None,
-) -> SimEndpoint:
-    """Create an opaque endpoint id; ``model`` is accepted for fixture readability."""
+) -> SimModel:
+    """Create a RouteKit model id; ``model`` is accepted for fixture readability."""
 
     del model
-    return SimEndpoint(id=id)
+    return SimModel(id=id)
 
 
 def panel_config(
     sim: RouteKitSimulator,
     *,
-    members: list[SimEndpoint],
-    judge: SimEndpoint | None = None,
-    synthesizer: SimEndpoint | None = None,
+    members: list[SimModel],
+    judge: SimModel | None = None,
+    synthesizer: SimModel | None = None,
     default_mode: FusionMode = "panel",
 ) -> FusionConfig:
-    """Build a production-shaped sidecar config over opaque endpoint ids."""
+    """Build a production-shaped sidecar config over namespaced RouteKit model ids."""
 
-    endpoints = list(members)
-    if judge is not None and judge not in endpoints:
-        endpoints.append(judge)
-    if synthesizer is not None and synthesizer not in endpoints:
-        endpoints.append(synthesizer)
+    models = list(members)
+    if judge is not None and judge not in models:
+        models.append(judge)
+    if synthesizer is not None and synthesizer not in models:
+        models.append(synthesizer)
     first = members[0]
     return FusionConfig(
         routekit_url=sim.url,
-        endpoint_ids=[endpoint.id for endpoint in endpoints],
+        routekit_model_ids=[model.id for model in models],
         default_model=first.id,
         judge_model=(judge or first).id,
         synthesizer_model=(synthesizer or judge or first).id,
@@ -55,4 +55,4 @@ def panel_config(
     )
 
 
-__all__ = ["SimEndpoint", "panel_config", "sim_endpoint"]
+__all__ = ["SimModel", "panel_config", "sim_model"]

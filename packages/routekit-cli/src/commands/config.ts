@@ -16,6 +16,7 @@ import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 import {
   DEFAULT_ROUTER_CONFIG,
   migrateLegacyState,
+  migrateLegacyRouterConfig,
   routerConfigPaths,
   updateEffectiveRouterConfig,
   updateRouterConfig,
@@ -119,17 +120,46 @@ export function registerConfig(program: Command): void {
 
   config
     .command("migrate")
-    .description("explicitly import legacy subscription state")
-    .action((_options: unknown, command: Command) => {
+    .description("convert legacy endpoint/account config and import subscription state")
+    .option("--dry-run", "diagnose and print the conversion without writing")
+    .action((options: { dryRun?: boolean }, command: Command) => {
       const ctx = contextFor(command);
-      const actions = migrateLegacyState();
+      const paths = routerConfigPaths({ configPath: configOverride(command) });
+      const path = paths.override ?? paths.project ?? paths.global;
+      if (!existsSync(path)) {
+        throw new Error(`router config not found: ${path}`);
+      }
+      const migration = migrateLegacyRouterConfig(path, {
+        write: options.dryRun !== true
+      });
+      const hasErrors = migration.diagnostics.some(
+        (diagnostic) => diagnostic.level === "error"
+      );
+      const actions =
+        hasErrors || options.dryRun === true ? [] : migrateLegacyState();
       if (ctx.json) {
-        ctx.emit({ actions });
+        ctx.emit({ migration, actions, dryRun: options.dryRun === true });
+        if (hasErrors) process.exitCode = 1;
         return;
       }
-      if (actions.length === 0) {
-        ctx.presenter.note("no legacy subscription state found");
-        return;
+      for (const diagnostic of migration.diagnostics) {
+        ctx.presenter.status(
+          diagnostic.level === "error" ? "fail" : "pending",
+          diagnostic.code,
+          diagnostic.message
+        );
+      }
+      if (migration.changed) {
+        if (options.dryRun === true) {
+          ctx.presenter.note(`legacy config at ${path} is convertible`);
+        } else {
+          ctx.presenter.success(`converted legacy config at ${path}`);
+          if (migration.backupPath !== undefined) {
+            ctx.presenter.note(`backup: ${migration.backupPath}`);
+          }
+        }
+      } else if (!migration.legacy && !hasErrors) {
+        ctx.presenter.note("router config already uses providers");
       }
       for (const action of actions) {
         ctx.presenter.status(
@@ -138,5 +168,9 @@ export function registerConfig(program: Command): void {
           `${action.source} -> ${action.destination}`
         );
       }
+      if (actions.length === 0 && !hasErrors && options.dryRun !== true) {
+        ctx.presenter.note("no legacy subscription state found");
+      }
+      if (hasErrors) process.exitCode = 1;
     });
 }

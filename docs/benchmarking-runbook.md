@@ -147,7 +147,7 @@ Reuse a prebuilt bank by pointing `--bank` at an existing file (skips the panel 
 
 | Var | Default | Meaning |
 | --- | --- | --- |
-| `FUSIONKIT_BENCH_CONFIG` | (required) | Internal sidecar/eval YAML: RouteKit URL plus opaque endpoint IDs; not a public Fusion v4 config. |
+| `FUSIONKIT_BENCH_CONFIG` | (required) | Internal sidecar/eval YAML: RouteKit URL plus namespaced model IDs; not a public Fusion v4 config. |
 | `BENCH_SANDBOX` | `local` | `local` or `docker` sandbox backend |
 | `LCB_VERSION` | `release_v6` | dataset version tag |
 | `LCB_MIN_DATE` | `2025-01-01` | contamination window floor (recent-N mode) |

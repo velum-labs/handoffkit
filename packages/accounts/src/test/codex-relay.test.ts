@@ -327,8 +327,12 @@ test("a gateway auth token disables the relay entirely", async () => {
   try {
     const models = (await (
       await fetch(`${gateway.url()}/v1/models`, { headers: { authorization: "Bearer gateway-token" } })
-    ).json()) as { data: Array<{ id: string }>; models?: unknown };
-    assert.equal(models.models, undefined, "no merged catalog under gateway auth");
+    ).json()) as { data: Array<{ id: string }>; models: Array<{ slug: string }> };
+    assert.deepEqual(
+      models.models.map((entry) => entry.slug),
+      ["local-primary", "gpt-native"],
+      "gateway auth exposes only the local dual-shape catalog"
+    );
     assert.deepEqual(
       models.data.map((entry) => entry.id),
       ["local-primary", "gpt-native"]

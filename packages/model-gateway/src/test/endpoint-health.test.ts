@@ -5,7 +5,7 @@ import {
   endpointHealthProbe,
   probeEndpointHealth
 } from "../endpoint-health.js";
-import type { UrlEndpointConfig } from "../router.js";
+import type { UrlEndpointConfig } from "../endpoint-health.js";
 
 function endpoint(
   provider: string,

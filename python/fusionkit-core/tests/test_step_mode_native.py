@@ -16,11 +16,13 @@ from fusionkit_core.prompts import (
 def _engine() -> FusionEngine:
     config = FusionConfig(
         routekit_url="http://routekit.test",
-        endpoint_ids=["m1"],
-        default_model="m1",
+        routekit_model_ids=["test/m1"],
+        default_model="test/m1",
         default_mode="panel",
     )
-    return FusionEngine(config, {"m1": FakeModelClient("m1", ["hello"])})
+    return FusionEngine(
+        config, {"test/m1": FakeModelClient("test/m1", ["hello"])}
+    )
 
 
 def test_tool_carrying_fuse_uses_step_synthesizer() -> None:

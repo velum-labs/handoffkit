@@ -44,8 +44,8 @@ function backendWithRoutes(routes: Array<{ modelId: string; k?: number }>): {
     fusedModels: routes.map((route) => ({
       modelId: route.modelId,
       name: route.modelId,
-      memberEndpointIds: ["alpha", "beta"],
-      judgeEndpointId: "alpha",
+      memberRoutekitModelIds: ["openai/alpha", "anthropic/beta"],
+      judgeRoutekitModelId: "openai/alpha",
       judgeModelName: "provider/alpha",
       ...(route.k !== undefined ? { k: route.k } : {})
     }))

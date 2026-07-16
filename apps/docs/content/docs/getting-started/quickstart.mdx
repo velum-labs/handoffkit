@@ -13,8 +13,9 @@ fusionkit init
 fusionkit doctor
 ```
 
-Edit the generated `.routekit/router.yaml` with your endpoint IDs, provider
-models, and `apiKeyEnv` references. FusionKit stores no provider credentials.
+Edit the generated `.routekit/router.yaml` to enable providers, then use
+`routekit models list` to inspect their live namespaced catalog. FusionKit
+stores no provider credentials.
 `fusionkit setup` warms the Python engine before the first session.
 
 ## 2. Launch a coding agent
@@ -30,7 +31,7 @@ On a TTY you will see a live boot checklist as the panel, synthesizer, and
 gateway come up, then your agent launches pre-wired to the gateway. One
 `Ctrl+C` tears the stack down. FusionKit does not implement a separate cloud
 cost-consent prompt; use `--budget` and review the configured RouteKit
-endpoints before launching.
+providers and live models before launching.
 
 A healthy launch prints three useful things before handing control to the agent:
 
@@ -95,7 +96,7 @@ and tool-calling examples.
 
 ## Common flags
 
-- `--ensemble <name>`: select a configured endpoint-ID ensemble.
+- `--ensemble <name>`: select a configured namespaced-model ensemble.
 - `--budget <usd>`: stop after gateway-observed spend crosses the cap.
 - `--on-rate-limit fusion|passthrough|fail`: choose failover behavior for vendor throttling.
 - `--continue` or `--resume <id>`: resume a durable session.
@@ -115,9 +116,10 @@ fusionkit serve --no-portless --port 8787
 ## Pick a fused ensemble
 
 The gateway exposes the default ensemble as `fusion-panel` and every other
-ensemble as `fusion-<name>`. RouteKit endpoint IDs remain the routing boundary.
+ensemble as `fusion-<name>`. Namespaced RouteKit model IDs remain the routing boundary.
 Use the independent RouteKit CLI for single-model launches.
 
 Run `fusionkit models list` to inspect local MLX models, and use
-`fusionkit config show` to see the effective endpoint-ID ensembles
+`routekit models list` to inspect live provider models. Use
+`fusionkit config show` to see the effective namespaced-model ensembles
 for the current repo.

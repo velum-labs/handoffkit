@@ -76,6 +76,10 @@ class _SimulatorState:
         with self._lock:
             return [dict(entry) for entry in self._journal]
 
+    def models(self) -> list[str]:
+        with self._lock:
+            return sorted(self._queues)
+
     def next_response_id(self, prefix: str) -> str:
         with self._lock:
             self._response_seq += 1
@@ -185,6 +189,15 @@ class _Handler(BaseHTTPRequestHandler):
             return
         if self.path.startswith("/__sim/journal"):
             self._send_json({"entries": self._state.journal()})
+            return
+        if urlsplit(self.path).path in ("/v1/models", "/models"):
+            models = self._state.models()
+            self._send_json(
+                {
+                    "data": [{"id": model} for model in models],
+                    "models": [{"slug": model} for model in models],
+                }
+            )
             return
         self._send_json({"error": {"message": f"no route {self.path}"}}, status=404)
 
