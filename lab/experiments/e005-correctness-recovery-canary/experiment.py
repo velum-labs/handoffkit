@@ -88,32 +88,53 @@ COMMON = {
 }
 
 
-def _self_config() -> dict[str, Any]:
+def _fusion_config() -> dict[str, Any]:
     return {
+        "version": "fusionkit.fusion.v4",
+        "router": {"config": ".routekit/router.yaml"},
+        "defaultEnsemble": "default",
+        "ensembles": {
+            "default": {
+                "members": ["dsv4", "qwen"],
+                "judge": "qwen",
+                "synthesizer": "qwen",
+            }
+        },
+        "observe": True,
+        "reasoning": True,
+    }
+
+
+def _routekit_config() -> dict[str, Any]:
+    capabilities = {
+        "streaming": "supported",
+        "tools": "supported",
+        "images": "unknown",
+        "reasoning_controls": "supported",
+    }
+    return {
+        "version": "routekit.router.v1",
         "endpoints": [
             {
-                "id": "qwen",
+                "endpointId": "dsv4",
+                "model": DSV4,
                 "provider": "openrouter",
+                "baseUrl": "https://openrouter.ai/api/v1",
+                "dialect": "openai",
+                "apiKeyEnv": "OPENROUTER_API_KEY",
+                "capabilities": capabilities,
+            },
+            {
+                "endpointId": "qwen",
                 "model": QWEN3T,
-                "base_url": "https://openrouter.ai/api",
-                "api_key_env": "OPENROUTER_API_KEY",
-                "timeout_s": 1800.0,
-            }
+                "provider": "openrouter",
+                "baseUrl": "https://openrouter.ai/api/v1",
+                "dialect": "openai",
+                "apiKeyEnv": "OPENROUTER_API_KEY",
+                "capabilities": capabilities,
+            },
         ],
-        "default_model": "qwen",
-        "judge_model": "qwen",
-        "synthesizer_model": "qwen",
-        "panel_models": ["qwen"],
-        "default_mode": "self",
-        "sample_count": 4,
-        "self_temperatures": [0.2, 0.5, 0.8, 1.0],
-        "synthesis_select_best": False,
-        "sampling": {
-            "temperature": 0.6,
-            "top_p": 0.95,
-            "max_tokens": 65536,
-            "seed": 20260716,
-        },
+        "defaultEndpointId": "qwen",
     }
 
 
@@ -215,18 +236,21 @@ class CorrectnessRecoveryCanary(Experiment):
             },
         )
         yield cell(
-            "self4-qwen-synth",
+            "panel2-dsv4-qwen-synth",
             TopologySpec(
                 kind="fusionkit-serve",
-                params={"serve_config": _self_config()},
+                params={
+                    "model": "fusion-panel",
+                    "fusion_config": _fusion_config(),
+                    "routekit_config": _routekit_config(),
+                },
             ),
             {
-                "topology": "self-moa-synth",
-                "panel": ["qwen"],
+                "topology": "panel-synth",
+                "panel": ["dsv4", "qwen"],
                 "judge": "qwen",
-                "provider": QWEN_PROVIDER,
+                "provider": {"allow_fallbacks": False},
                 "reasoning": REASONING,
-                "seed": 20260716,
                 "include_evidence": True,
             },
         )
