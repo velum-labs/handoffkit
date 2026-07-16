@@ -42,7 +42,11 @@ Update this app when public user-facing behavior changes, especially installatio
 
 ### `apps/scope`
 
-`apps/scope` is the local observability companion for FusionKit traces, sessions, judge flow, and run inspection. It is also outside the root pnpm workspace.
+`apps/scope` is the local observability companion for FusionKit traces,
+sessions, judge flow, and run inspection. It is outside the root pnpm
+workspace, but it is not a separately installed user product: release builds
+stage its Next standalone output into `packages/cli/scope`, which
+`@fusionkit/cli` publishes.
 
 Run or test it from its own directory:
 
@@ -51,6 +55,22 @@ cd apps/scope
 pnpm install
 pnpm test
 ```
+
+Build and stage the exact release layout:
+
+```bash
+cd apps/scope
+pnpm build
+cd ../..
+node scripts/stage-scope.mjs
+node scripts/check-fusionkit-cli-pack.mjs --require-scope
+```
+
+`stage-scope.mjs` copies the standalone server, `.next/static`, and any public
+assets, then asserts `packages/cli/scope/server.js` exists. The normal
+source-checkout CLI may instead build and reuse `apps/scope/.next` based on its
+source identity, so contributors do not need to stage on every development
+run.
 
 Use this app when validating observability behavior, trace rendering, session inspection, or local debugging workflows. When the trace semantic conventions change (`spec/fusion-trace/registry.json`), regenerate the bindings and update both the app and [Specs and APIs](specs-and-apis.md).
 

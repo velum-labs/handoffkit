@@ -118,8 +118,9 @@ forwarded unchanged to the coding tool.
   (Codex reasoning summaries, Claude thinking, `reasoning_content` on the chat
   API). Disable with `--no-reasoning` or `"reasoning": false` in
   `.fusionkit/fusion.json`.
-- `--observe` boots a local dashboard that streams live trace events. It is a
-  separate app staged into release builds of the npm package.
+- `--observe` boots the Scope dashboard that streams live trace events.
+  Published npm packages bundle its standalone server; `fusionkit-dev` builds
+  and reuses the companion `apps/scope` source instead.
 - `cursor` only needs a logged-in `cursor-agent` CLI; Cursorkit ships bundled
   with this package, so no separate checkout is required.
 

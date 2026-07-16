@@ -38,11 +38,17 @@ Then correct the endpoint's `model`, `baseUrl`, or `apiKeyEnv` in
 `.routekit/router.yaml`. FusionKit does not own provider retries or credential
 resolution.
 
-## `--observe` says the dashboard isn't available
+## `--observe` cannot find or start Scope
 
-The dashboard ships separately from the npm package. Follow the printed
-instructions to install its dependencies once. See
-[Observability](/docs/guides/observability).
+Published `@fusionkit/cli` packages include `scope/server.js`; a missing-bundle
+error after an npm install indicates an incomplete package and should not be
+fixed by installing the Scope app separately. Reinstall the npm package and
+report the package version if the file is still absent.
+
+In a repository checkout, install `apps/scope` dependencies so the development
+CLI can build and run the source fallback. Maintainers validating a release
+must build the standalone app and run `node scripts/stage-scope.mjs` before the
+strict FusionKit pack smoke. See [Observability](/docs/guides/observability).
 
 ## Cursor needs a logged-in CLI
 

@@ -18,7 +18,7 @@ flowchart TD
   protocol["fusionkit-protocol (npm + PyPI)"]
   fusionpy["fusionkit-pypi (5 PyPI pkgs)"]
   cursor["cursorkit (npm)"]
-  handoff["handoffkit (19 @routekit/* + 10 @fusionkit/* npm)"]
+  handoff["handoffkit (20 @routekit/* + 10 @fusionkit/* npm)"]
   mlx["mlx-lm (private PyPI)"]
   protocol --> fusionpy
   protocol --> cursor
@@ -26,9 +26,10 @@ flowchart TD
   fusionpy --> mlx
 ```
 
-The Python `uniroute` packages, `apps/scope`/`apps/docs`, and the Docker image
-are `tracked` only: visible in plans for version awareness, never published by
-this tool.
+The Python `uniroute` packages, app source versions, and the Docker image are
+`tracked` only: visible in plans for version awareness, not independent release
+units. The handoffkit npm workflow stages `apps/scope` into `@fusionkit/cli`;
+`apps/docs` deploys separately through Vercel.
 
 Each unit's `publishWorkflow` in `release/workspace.release.json` names a
 workflow in that unit's own repository. For `mlx-lm` that is

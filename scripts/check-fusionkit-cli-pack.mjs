@@ -11,6 +11,11 @@ import {
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
+const args = process.argv.slice(2);
+for (const arg of args) {
+  if (arg !== "--require-scope") throw new Error(`unknown argument: ${arg}`);
+}
+const requireScope = args.includes("--require-scope");
 const root = process.cwd();
 const entries = readdirSync(join(root, "packages"), { withFileTypes: true })
   .filter((entry) => entry.isDirectory())
@@ -50,6 +55,16 @@ while (pending.length > 0) {
 for (const required of ["@routekit/config", "@routekit/router", "@routekit/gateway"]) {
   if (!seen.has(required)) throw new Error(`FusionKit package closure is missing ${required}`);
 }
+const cliEntry = byName.get("@fusionkit/cli");
+if (cliEntry === undefined) throw new Error("FusionKit package closure is missing @fusionkit/cli");
+const sourceScopeServer = join(cliEntry.directory, "scope", "server.js");
+const scopeIsStaged = existsSync(sourceScopeServer);
+if (requireScope && !scopeIsStaged) {
+  throw new Error(
+    "FusionKit Scope bundle is required but packages/cli/scope/server.js is not staged; " +
+      "build apps/scope and run node scripts/stage-scope.mjs first"
+  );
+}
 
 const temporary = mkdtempSync(join(tmpdir(), "fusionkit-pack-smoke-"));
 const tarballs = join(temporary, "tarballs");
@@ -78,6 +93,17 @@ try {
   if (existsSync(join(install, "node_modules", ".bin", "routekit"))) {
     throw new Error("FusionKit clean install unexpectedly includes the routekit executable");
   }
+  const installedScopeServer = join(
+    install,
+    "node_modules",
+    "@fusionkit",
+    "cli",
+    "scope",
+    "server.js"
+  );
+  if (scopeIsStaged && !existsSync(installedScopeServer)) {
+    throw new Error("packed @fusionkit/cli is missing the staged scope/server.js bundle");
+  }
   const output = execFileSync(
     join(install, "node_modules", ".bin", "fusionkit"),
     ["--version"],
@@ -86,7 +112,10 @@ try {
   if (!output.includes("@fusionkit/cli")) {
     throw new Error(`installed FusionKit returned unexpected output: ${output}`);
   }
-  process.stdout.write(`fusionkit pack/install smoke passed (${closure.length} packages)\n`);
+  process.stdout.write(
+    `fusionkit pack/install smoke passed (${closure.length} packages; ` +
+      `Scope bundle ${scopeIsStaged ? "verified" : "not staged"})\n`
+  );
 } finally {
   rmSync(temporary, { recursive: true, force: true });
 }

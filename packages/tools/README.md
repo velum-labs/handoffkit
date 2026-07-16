@@ -1,18 +1,32 @@
 # @routekit/tools
 
-Product-neutral tool launcher, canonical driver, and capability registry contracts.
+`packages/tools` publishes `@routekit/tools`: product-neutral coding-tool
+launcher, canonical-driver, lifecycle, and capability-registry contracts.
 
 ## Architecture
 
-This package defines the launcher and driver metadata registered for Codex, Claude Code, Cursor, and OpenCode.
+This package defines the host/integration boundary used by Codex, Claude Code,
+Cursor, and OpenCode adapters. Individual `@routekit/tool-*` packages implement
+`ToolIntegration`; hosts assemble immutable registries and supply an opaque
+`ToolLaunchSpec`.
 
 ## Usage
 
 Use this package when adding a coding-tool integration to a RouteKit host.
 
 ```ts
-import { createToolRegistry } from "@routekit/tools";
+import {
+  createToolCapabilityMatrix,
+  createToolLaunchContext,
+  createToolRegistry
+} from "@routekit/tools";
 ```
+
+`createToolRegistry()` validates and indexes integrations.
+`createToolCapabilityMatrix()` compares declared model features across tools.
+`createToolLaunchContext()` pairs host lifecycle callbacks and a launch spec
+with reverse-order, exactly-once disposer cleanup; `createDisposerRunner()` is
+available when a host only needs that cleanup primitive.
 
 ## Docs
 

@@ -1,10 +1,16 @@
 # FusionKit
 
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
+[![npm: @routekit/cli](https://img.shields.io/npm/v/@routekit/cli.svg)](https://www.npmjs.com/package/@routekit/cli)
 [![npm: @fusionkit/cli](https://img.shields.io/npm/v/@fusionkit/cli.svg)](https://www.npmjs.com/package/@fusionkit/cli)
 [![PyPI: fusionkit](https://img.shields.io/pypi/v/fusionkit.svg)](https://pypi.org/project/fusionkit/)
 
 FusionKit fuses a panel of models - including open-weight models at a fraction of frontier prices - behind your unmodified coding agent. A single turn fans out to the panel, captures candidate trajectories, runs judge + synthesis, and returns one native Codex / Claude Code / Cursor response; the harness never knows fusion happened.
+
+The npm packages provide the user-facing `routekit` and `fusionkit` CLIs. The
+PyPI `fusionkit` distribution is an internal sidecar runtime used by the Node
+CLI; maintainer benchmarks use the separate `fusionkit-evals` distribution. It
+does not install a user-facing Python `fusionkit` command.
 
 > **Canonical docs:** user-facing docs live at [fusionkit.velum-labs.com/docs](https://fusionkit.velum-labs.com/docs). Maintainer docs live in [`docs/`](docs), and the docs site source is [`apps/docs`](apps/docs).
 

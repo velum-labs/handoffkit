@@ -124,7 +124,7 @@
     {
       "key": "apps",
       "repo": "handoffkit",
-      "description": "apps/scope (staged into @fusionkit/cli) and apps/docs (local only). Not deployed.",
+      "description": "apps/scope (staged into @fusionkit/cli) and apps/docs (deployed separately through Vercel). Neither is published as an independent release unit.",
       "versionSources": ["apps/scope/package.json#version"]
     },
     {

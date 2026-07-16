@@ -120,6 +120,7 @@ pnpm docs:check-code
 | Script | Purpose |
 | --- | --- |
 | `scripts/check-ootb-cli.mjs` | Out-of-the-box shape smoke for the published `fusionkit` CLI: bin name, top-level command surface, packaged files, and loud preflight failures. Run after `pnpm build`. |
+| `scripts/check-fusionkit-cli-pack.mjs` | Packs and clean-installs the FusionKit dependency closure. If a Scope bundle is staged, it verifies `scope/server.js` survives packing; release validation passes `--require-scope` to fail when staging was skipped. |
 | `scripts/check-model-fusion-protocol.mjs` | Validates the model-fusion protocol package state. |
 | `scripts/check-generated-model-fusion-sdk.mjs` | Checks the generated OpenAPI SDK outputs (TypeScript and Python) for drift. |
 | `scripts/check-release-publish.mjs` | Validates release publishing assumptions. |
@@ -156,7 +157,7 @@ pnpm docs:check-code
 | `scripts/fusionkit-dev.mjs` | Rebuild-then-run wrapper for this checkout's CLI (`pnpm dev:run-cli`). |
 | `scripts/publish-npm-workspaces.mjs` | Publishes the npm workspace packages during release workflows. |
 | `scripts/sync-docs-changelog.mjs` | Regenerates the docs-site changelog page from the root `CHANGELOG.md` (`--check` for drift). |
-| `scripts/stage-scope.mjs` | Stages the `apps/scope` standalone build into `@fusionkit/cli` so `fusionkit --observe` works for npm installs. |
+| `scripts/stage-scope.mjs` | Copies the `apps/scope/.next/standalone` server plus static/public assets into `packages/cli/scope`, removes build-time state, and asserts the staged `server.js` exists. Run it only after building `apps/scope`. |
 
 ### Fusion end-to-end scripts
 
@@ -187,7 +188,7 @@ infra deploy scripts live at `infra/hypergrid-batch/deploy.py` and
 
 ## Release files
 
-The `release/` directory stores desired release state, observed state, package lists, and release graph metadata. It is operational state, not product runtime code.
+The `release/` directory stores desired release state, observed state, package lists, and release graph metadata. It is operational state, not product runtime code. `apps/scope` is tracked as source but its standalone output is staged into the published `@fusionkit/cli` tarball; `apps/docs` is deployed separately and is not a package release unit.
 
 Important files include:
 

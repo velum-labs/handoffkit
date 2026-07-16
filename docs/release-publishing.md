@@ -21,6 +21,10 @@ Draft a GitHub Release against a `handoffkit-v<version>` tag, review the notes,
 and publishing happens when you click **Publish release**. A bare tag push does
 not publish.
 
+Use one release tag, not two. `handoffkit-v<version>` is the canonical tag
+created by the release coordinator; the workflow still accepts the historical
+`v<version>` form for an older release, but a release does not need both tags.
+
 The workflow job is guarded with:
 
 ```yaml
@@ -82,9 +86,17 @@ node scripts/check-release-publish.mjs
 corepack pnpm check
 corepack pnpm build
 node scripts/check-routekit-cli-pack.mjs
-node scripts/check-fusionkit-cli-pack.mjs
+corepack pnpm --dir apps/scope install --frozen-lockfile
+corepack pnpm --dir apps/scope build
+node scripts/stage-scope.mjs
+node scripts/check-fusionkit-cli-pack.mjs --require-scope
 corepack pnpm test
 ```
+
+The strict FusionKit pack smoke proves the tarball contains
+`scope/server.js`. Ordinary source-checkout pack smokes remain valid without a
+staged dashboard, but verify it whenever `packages/cli/scope/server.js` is
+present.
 
 `scripts/check-release-publish.mjs` verifies:
 
@@ -92,6 +104,7 @@ corepack pnpm test
 - public npm registry, public access, and provenance settings;
 - dependency-ordered package metadata, LICENSE/files/provenance fields, and the
   `routekit`/`fusionkit` bins for every publishable workspace;
+- the `@fusionkit/cli` Scope directory declaration and release-stage ordering;
 - both clean-install package-closure smokes;
 - all five PyPI release packages plus the required `fusionkit-sidecar` and
   `fusionkit-bench` binaries and forbidden Python `fusionkit` executable;

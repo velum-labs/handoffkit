@@ -42,23 +42,26 @@ default when the variables are unset.
 
 ## Availability
 
-The dashboard is a separate app (it is not bundled inside the npm package). If it
-isn't available, fusionkit prints exactly how to enable it instead of failing
-with a filesystem error:
+Published `@fusionkit/cli` tarballs include a prebuilt, self-contained Scope
+server at `scope/server.js`, so npm-installed users do not install dashboard
+dependencies separately. `fusionkit --observe` starts that bundled server.
 
-```
-the observability dashboard is not available in this install.
-  It is a separate app and is not bundled with the npm package.
-  To enable --observe, install its dependencies once: cd <scope-app> && pnpm install
-```
-
-In this repository, the app lives at `apps/scope`.
+In a source checkout, the app lives at `apps/scope`. `fusionkit-dev`
+deliberately ignores any staged release bundle: it hashes the Scope source,
+rebuilds when that identity changes, and runs the checkout's Next server. A
+direct source launch without development mode prefers a staged bundle and uses
+the same source fallback when none exists. Install the app's isolated
+dependencies before using that fallback:
 
 ```bash
 cd apps/scope
 pnpm install
-pnpm test
+pnpm build
 ```
+
+Maintainers can copy the standalone build into `packages/cli/scope` with
+`node scripts/stage-scope.mjs`. That staging step is for package/release
+validation; normal source development can use the build-on-change fallback.
 
 When portless is enabled, the dashboard uses a stable local HTTPS name. Without
 portless, FusionKit prints the raw loopback URL. In both cases, the gateway,

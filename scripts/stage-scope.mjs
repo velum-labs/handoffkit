@@ -50,4 +50,10 @@ if (existsSync(publicDir)) {
 //    generation; the CLI always points the server at a fresh per-run db.
 rmSync(join(dest, ".scopekit"), { recursive: true, force: true });
 
+const stagedServer = join(dest, "server.js");
+if (!existsSync(stagedServer)) {
+  rmSync(dest, { recursive: true, force: true });
+  throw new Error(`stage-scope: standalone copy did not produce ${stagedServer}`);
+}
+
 console.log(`stage-scope: staged dashboard into ${dest}`);

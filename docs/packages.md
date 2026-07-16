@@ -9,6 +9,28 @@ functions and classes, examples, and change guidance, read
 [Python reference](python-reference.md). For schemas, generated bindings, and
 HTTP contracts, read [Specs and APIs](specs-and-apis.md).
 
+## Non-obvious directory to package mappings
+
+Workspace directory names are implementation names, not always npm package
+names. Use the manifest name when importing or installing:
+
+| Directory | Published package |
+| --- | --- |
+| `packages/cli` | `@fusionkit/cli` |
+| `packages/routekit-cli` | `@routekit/cli` |
+| `packages/runtime-utils` | `@routekit/runtime` |
+| `packages/routekit-config` | `@routekit/config` |
+| `packages/routekit-router` | `@routekit/router` |
+| `packages/model-gateway` | `@routekit/gateway` |
+| `packages/fusion-gateway` | `@fusionkit/gateway` |
+| `packages/harness-core` | `@routekit/harness-core` (plus `@routekit/harness-core/testing`) |
+| `packages/tools` | `@routekit/tools` |
+| `packages/registry` | `@fusionkit/registry` |
+| `packages/routekit-registry` | `@routekit/registry` |
+| `packages/tracing` | `@fusionkit/tracing` |
+| `packages/routekit-tracing` | `@routekit/tracing` |
+| `packages/cli-ui` | `@routekit/cli-ui` |
+
 ## Core packages
 
 | Package | Responsibility | Start with |
@@ -24,7 +46,7 @@ HTTP contracts, read [Specs and APIs](specs-and-apis.md).
 | Package | Responsibility | Start with |
 | --- | --- | --- |
 | `@routekit/cli` | Independent `routekit` configuration, gateway serving, endpoint/account management, and coding-tool launchers. | `packages/routekit-cli/src/cli.ts`, `packages/routekit-cli/src/commands/index.ts` |
-| `@routekit/config` | Reusable RouterConfig discovery, layered loading, validation, and atomic writes. | `packages/routekit-config/src/index.ts` |
+| `@routekit/config` | Reusable RouterConfig discovery, layered loading, validation, atomic writes, and endpoint-ID selection/assertion helpers. | `packages/routekit-config/src/index.ts` |
 | `@routekit/router` | Reusable embedded RouteKit router composition, including account relays and gateway ownership. | `packages/routekit-router/src/index.ts` |
 | `@fusionkit/config` | Fusion-only v4 config, opaque endpoint-ID ensembles, prompt loading, validation, and atomic writes. | `packages/fusion-config/src/index.ts` |
 | `@fusionkit/cli` | Fusion-only init, local-panel lifecycle, generic harness launchers, sessions, config, prompts, and observability. It composes RouteKit SDKs but never `@routekit/cli`. | `packages/cli/src/cli.ts`, `packages/cli/src/commands` |
@@ -46,8 +68,8 @@ HTTP contracts, read [Specs and APIs](specs-and-apis.md).
 | `@fusionkit/session-harness` | AI SDK harness bindings for vendor coding agents in governed sessions. | `legacy/packages/session-harness/src/index.ts` |
 | `@fusionkit/ensemble` | FusionKit runtime kernel, typed operator graphs, schedulers, workflow recipes, harness-agnostic model-fusion runner, artifacts, worktrees, dashboards, judge synthesis, and protocol records. | `packages/ensemble/src/index.ts`, `packages/ensemble/src/kernel.ts`, `packages/ensemble/src/workflows.ts` |
 | `@fusionkit/kernel` | Dependency-free runtime kernel substrate: artifacts, operators, graphs, validation, wire artifacts, and replay records. | `packages/kernel/src/index.ts` |
-| `@routekit/harness-core` | Product-neutral coding-agent driver, event, error, approval, and status contracts. | `packages/harness-core/src/index.ts` |
-| `@routekit/tools` | Neutral launcher, canonical-driver, and capability registry. | `packages/tools/src/index.ts` |
+| `@routekit/harness-core` | Product-neutral coding-agent driver, event, error, approval, and status contracts; shared cached-driver/version-probe factories; published `./testing` contract helpers. | `packages/harness-core/src/index.ts` |
+| `@routekit/tools` | Neutral launcher, canonical-driver, capability registry, launch-context, and disposer lifecycle. | `packages/tools/src/index.ts` |
 | `@routekit/tool-registry` | Canonical registry composition for every shipped coding-tool integration; both CLIs consume this one registry. | `packages/tool-registry/src/index.ts` |
 | `@routekit/tool-codex`, `@routekit/tool-claude`, `@routekit/tool-cursor`, `@routekit/tool-opencode` | One launcher/serializer and one canonical driver per coding tool. | `packages/tool-<name>/src/index.ts` |
 
@@ -57,7 +79,7 @@ HTTP contracts, read [Specs and APIs](specs-and-apis.md).
 | --- | --- | --- |
 | `@fusionkit/registry` | Fusion-only aliases and panel presets generated from `spec/registry/fusion.json`. | `packages/registry/src/index.ts` |
 | `@routekit/registry` | Provider catalogs, capabilities, discovery, and pricing used by the TypeScript routing stack. | `packages/routekit-registry/src/index.ts` |
-| `@routekit/runtime` | Shared process supervision, child environments, cleanup, atomic files, locks, ports, and portless registration. | `packages/runtime-utils/src/index.ts` |
+| `@routekit/runtime` | Shared process supervision, allowlisted child environments, URL/bind safety, cleanup, atomic files, locks, ports, and identity-aware portless registration. | `packages/runtime-utils/src/index.ts` |
 | `@routekit/config-core` | Layered config resolution, validated JSON IO, migration, and edit primitives. | `packages/config-core/src/index.ts` |
 | `@routekit/telemetry-core` | Parameterized consent, redaction, anonymous events, and bounded shutdown. | `packages/telemetry-core/src/index.ts` |
 | `@routekit/tracing` | Generic OpenTelemetry providers, propagation, listeners, and export redaction. | `packages/routekit-tracing/src/index.ts` |

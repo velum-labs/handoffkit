@@ -66,11 +66,18 @@ for (const required of [
   "corepack pnpm check",
   "corepack pnpm build",
   "scripts/check-routekit-cli-pack.mjs",
-  "scripts/check-fusionkit-cli-pack.mjs",
+  "scripts/stage-scope.mjs",
+  "scripts/check-fusionkit-cli-pack.mjs --require-scope",
   "corepack pnpm test",
   "scripts/publish-npm-workspaces.mjs"
 ]) {
   if (!workflow.includes(required)) fail(`release workflow missing: ${required}`);
+}
+if (
+  workflow.indexOf("scripts/stage-scope.mjs") >
+  workflow.indexOf("scripts/check-fusionkit-cli-pack.mjs --require-scope")
+) {
+  fail("release workflow must stage Scope before validating the FusionKit tarball");
 }
 
 const openApiHash = `sha256:${createHash("sha256")
@@ -157,6 +164,15 @@ for (const [packageName, binary] of [
   const pkg = readJson(`${entry.path}/package.json`);
   if (typeof pkg.bin?.[binary] !== "string") {
     fail(`${packageName} must publish the ${binary} executable`);
+  }
+}
+const fusionCliEntry = (manifest.packages ?? []).find(
+  (candidate) => candidate.name === "@fusionkit/cli"
+);
+if (fusionCliEntry !== undefined) {
+  const fusionCli = readJson(`${fusionCliEntry.path}/package.json`);
+  if (!fusionCli.files?.includes("scope")) {
+    fail("@fusionkit/cli must publish the staged Scope dashboard directory");
   }
 }
 
