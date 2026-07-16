@@ -8,6 +8,7 @@ standard library. The behavior intentionally follows LiveCodeBench
 from __future__ import annotations
 
 import ast
+import contextlib
 import faulthandler
 import json
 import signal
@@ -93,8 +94,8 @@ class MockStdinWithBuffer:
     def read(self, *_args: object) -> str:
         return self.inputs
 
-    def readline(self, *args: object) -> str:
-        return self._stringio.readline(*args)
+    def readline(self, size: int = -1) -> str:
+        return self._stringio.readline(size)
 
     def readlines(self, *_args: object) -> list[str]:
         return self.inputs.split("\n")
@@ -118,13 +119,13 @@ def clean_if_name(code: str) -> str:
     try:
         tree = ast.parse(code)
         last_block = tree.body[-1]
-        if isinstance(last_block, ast.If):
-            if ast.unparse(last_block.test).strip() == "__name__ == '__main__'":
-                return (
-                    ast.unparse(tree.body[:-1])
-                    + "\n"
-                    + ast.unparse(last_block.body)
-                )
+        if (
+            isinstance(last_block, ast.If)
+            and ast.unparse(last_block.test).strip() == "__name__ == '__main__'"
+        ):
+            before = ast.Module(body=tree.body[:-1], type_ignores=[])
+            body = ast.Module(body=last_block.body, type_ignores=[])
+            return ast.unparse(before) + "\n" + ast.unparse(body)
     except Exception:
         pass
     return code
@@ -151,12 +152,16 @@ def make_function(code: str) -> str:
             ),
             body=body,
             decorator_list=[],
+            returns=None,
+            type_comment=None,
+            type_params=[],
             lineno=-1,
         )
+        import_module = ast.Module(body=imports, type_ignores=[])
         return (
             IMPORT_STRING
             + "\n"
-            + ast.unparse(imports)
+            + ast.unparse(import_module)
             + "\n"
             + ast.unparse(function)
         )
@@ -184,10 +189,8 @@ def _call(method: Any, inputs: str) -> None:
     @patch("sys.stdin.readlines", lambda *_args: inputs.split("\n"))
     @patch("sys.stdin.read", lambda *_args: inputs)
     def invoke(target: Any) -> None:
-        try:
+        with contextlib.suppress(SystemExit):
             target()
-        except SystemExit:
-            pass
 
     invoke(method)
 
@@ -203,7 +206,7 @@ def execute_suite(
     transformed = make_function(clean_if_name(code))
     try:
         module = _compile(transformed, timeout_s)
-        method = getattr(module, "wrapped_function")
+        method = module.wrapped_function
     except Exception as exc:
         return {
             "compile_error": repr(exc),
