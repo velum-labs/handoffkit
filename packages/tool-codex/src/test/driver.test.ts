@@ -7,7 +7,7 @@ import { test } from "node:test";
 import { driverContractSuite } from "@fusionkit/harness-core/testing";
 import type { HarnessEvent } from "@fusionkit/harness-core";
 
-import { createCodexDriver } from "../driver.js";
+import { codexOptionsFor, createCodexDriver } from "../driver.js";
 
 /**
  * A fake `codex` CLI: honors `--version`, and for `exec --experimental-json`
@@ -42,6 +42,31 @@ function fakeCodexRepo(): { command: string; cwd: string; cleanup: () => void } 
 }
 
 const repo = fakeCodexRepo();
+
+test("codex driver pins custom gateways to HTTP Responses", () => {
+  const driver = createCodexDriver();
+  const config = driver.configSchema.parse({
+    command: repo.command,
+    provider: {
+      baseUrl: "http://127.0.0.1:9000/v1",
+      apiKey: "test-key"
+    }
+  });
+
+  assert.deepEqual(codexOptionsFor(config, undefined).config, {
+    model_provider: "fusionkit-sdk-http",
+    model_providers: {
+      "fusionkit-sdk-http": {
+        name: "FusionKit SDK HTTP",
+        base_url: "http://127.0.0.1:9000/v1",
+        wire_api: "responses",
+        requires_openai_auth: false,
+        supports_websockets: false,
+        env_key: "CODEX_API_KEY"
+      }
+    }
+  });
+});
 
 driverContractSuite({
   name: "codex driver",
