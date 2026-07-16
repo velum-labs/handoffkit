@@ -459,7 +459,7 @@ def run_tests(
         code,
         tests,
         timeout_s=timeout_s,
-        stop_on_failure=False,
+        stop_on_failure=stop_on_failure,
     )
     compile_error = suite.get("compile_error")
     raw_results = suite["results"]

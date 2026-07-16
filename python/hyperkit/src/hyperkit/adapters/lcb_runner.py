@@ -15,6 +15,7 @@ import signal
 import sys
 import time
 from contextlib import AbstractContextManager
+from decimal import Decimal, InvalidOperation
 from io import StringIO
 from pathlib import Path
 from types import ModuleType
@@ -195,6 +196,28 @@ def _call(method: Any, inputs: str) -> None:
     invoke(method)
 
 
+def _outputs_match(expected: str, actual: str) -> bool:
+    expected_lines = [line.strip() for line in expected.strip().split("\n")]
+    actual_lines = [line.strip() for line in actual.strip().split("\n")]
+    if expected_lines == actual_lines:
+        return True
+    if len(expected_lines) != len(actual_lines):
+        return False
+    try:
+        for expected_line, actual_line in zip(
+            expected_lines,
+            actual_lines,
+            strict=True,
+        ):
+            expected_tokens = [Decimal(token) for token in expected_line.split()]
+            actual_tokens = [Decimal(token) for token in actual_line.split()]
+            if expected_tokens != actual_tokens:
+                return False
+        return True
+    except InvalidOperation:
+        return False
+
+
 def execute_suite(
     code: str,
     tests: list[dict[str, str]],
@@ -232,16 +255,19 @@ def execute_suite(
         finally:
             signal.alarm(0)
             faulthandler.disable()
+        stdout = captured[0] if captured else ""
+        passed = error is None and _outputs_match(test["output"], stdout)
         results.append(
             {
-                "stdout": captured[0] if captured else "",
+                "stdout": stdout,
                 "stderr": error or "",
                 "timed_out": timed_out,
                 "returncode": 0 if error is None else 1,
                 "duration_s": time.monotonic() - started,
+                "passed": passed,
             }
         )
-        if error is not None and stop_on_failure:
+        if not passed and stop_on_failure:
             break
     return {"compile_error": None, "results": results}
 
