@@ -78,10 +78,32 @@ def main() -> int:
     _configure_otel()
     adapter = get_benchmark(cell.benchmark)
     sut = get_sut(cell.sut.kind)
+    planned_adapter_version = str(entry.get("adapter_version", ""))
+    if planned_adapter_version != adapter.version:
+        raise ValueError(
+            f"manifest adapter version {planned_adapter_version!r} does not match "
+            f"runner version {adapter.version!r}"
+        )
+    planned_source_sha = str(entry.get("source_sha", ""))
+    runtime_source_sha = os.environ.get("HYPERKIT_SOURCE_SHA", "")
+    if planned_source_sha != runtime_source_sha:
+        raise ValueError(
+            f"manifest source SHA {planned_source_sha!r} does not match "
+            f"runner source SHA {runtime_source_sha!r}"
+        )
+    planned_image_digest = str(entry.get("image_digest", ""))
+    runtime_image_digest = os.environ.get("HYPERKIT_RUNNER_IMAGE_DIGEST", "")
+    if planned_image_digest != runtime_image_digest:
+        raise ValueError(
+            f"manifest image digest {planned_image_digest!r} does not match "
+            f"runner image digest {runtime_image_digest!r}"
+        )
     expected_shard_id = cell.shard_id(
         instance_id,
         adapter_version=adapter.version,
         dataset_hash=cell.dataset_hash,
+        source_sha=planned_source_sha,
+        image_digest=planned_image_digest,
     )
     if entry.get("shard_id") != expected_shard_id:
         raise ValueError(
@@ -93,6 +115,8 @@ def main() -> int:
     orchestrator = RunOrchestrator(
         sweep_id=run_id,
         generation=generation,
+        source_sha=planned_source_sha,
+        image_digest=planned_image_digest,
         adapter=adapter,
         sut=sut,
         store=store,

@@ -11,7 +11,14 @@ from collections.abc import Iterable, Sequence
 from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
 
-from hyperkit.core.models import Cell, ResourceProfile, ShardResult, SUTTarget, TopologySpec
+from hyperkit.core.models import (
+    BackendSubmission,
+    ResourceProfile,
+    ShardPlan,
+    ShardResult,
+    SUTTarget,
+    TopologySpec,
+)
 
 
 @runtime_checkable
@@ -94,7 +101,11 @@ class ComputeBackend(Protocol):
 
     name: str
 
-    def submit(self, shards: Sequence[tuple[Cell, str]], sweep_id: str) -> None: ...
+    def submit(
+        self,
+        shards: Sequence[ShardPlan],
+        sweep_id: str,
+    ) -> BackendSubmission: ...
 
     def results(self, sweep_id: str) -> list[ShardResult]: ...
 

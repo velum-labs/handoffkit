@@ -7,15 +7,59 @@ per-benchmark oracle so fused cells can be scored against best-member/headroom.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import Any
 
-from hyperkit.core.models import Cell, RunResult, ShardResult
+from hyperkit.core.models import Cell, RunResult, ShardResult, ShardStatus, SubmittedShard
 from hyperkit.stats import wilson_interval
 
 
 def _is_solo(cell: Cell) -> bool:
-    return cell.sut.kind in {"solo-model", "solo"}
+    return (
+        cell.sut.kind in {"solo-model", "solo"}
+        and int(cell.params.get("n_samples", 1)) == 1
+        and cell.params.get("selection", "first") == "first"
+    )
+
+
+def validate_submitted_result(
+    result: ShardResult,
+    expected: SubmittedShard,
+) -> None:
+    mismatches: list[str] = []
+    expected_fields = {
+        "shard_id": expected.shard_id,
+        "cell_id": expected.cell_id,
+        "instance_id": expected.instance_id,
+        "generation": expected.generation,
+        "benchmark": expected.benchmark,
+        "sut_hash": expected.sut_hash,
+        "adapter_version": expected.adapter_version,
+        "dataset_hash": expected.dataset_hash,
+        "source_sha": expected.source_sha,
+        "image_digest": expected.image_digest,
+    }
+    for field, value in expected_fields.items():
+        if getattr(result, field) != value:
+            mismatches.append(
+                f"{field}={getattr(result, field)!r} (expected {value!r})"
+            )
+    terminal = {
+        ShardStatus.RESOLVED,
+        ShardStatus.UNRESOLVED,
+        ShardStatus.ERROR,
+    }
+    if result.status not in terminal:
+        mismatches.append(f"status={result.status!r} is not terminal")
+    if result.resolved != (result.status == ShardStatus.RESOLVED):
+        mismatches.append(
+            f"resolved={result.resolved!r} is inconsistent with status={result.status!r}"
+        )
+    if mismatches:
+        raise ValueError(
+            f"result {result.shard_id} does not match its submitted shard: "
+            + "; ".join(mismatches)
+        )
 
 
 def aggregate(
@@ -23,11 +67,14 @@ def aggregate(
     cells: Sequence[Cell],
     results: Sequence[ShardResult],
     *,
-    submitted_instances: dict[str, set[str]] | None = None,
+    submitted_shards: Mapping[str, Mapping[str, SubmittedShard]] | None = None,
 ) -> RunResult:
     by_cell: dict[str, list[ShardResult]] = {}
+    known_cell_ids = {cell.cell_id for cell in cells}
     seen: set[tuple[str, str]] = set()
     for r in results:
+        if r.cell_id not in known_cell_ids:
+            raise ValueError(f"result references unknown cell {r.cell_id}")
         key = (r.cell_id, r.instance_id)
         if key in seen:
             raise ValueError(
@@ -49,9 +96,14 @@ def aggregate(
     rows: list[dict[str, Any]] = []
     for cell in cells:
         shards = by_cell.get(cell.cell_id, [])
+        expected_by_instance = (
+            submitted_shards.get(cell.cell_id, {})
+            if submitted_shards is not None
+            else {}
+        )
         expected = (
-            submitted_instances.get(cell.cell_id, set())
-            if submitted_instances is not None
+            set(expected_by_instance)
+            if submitted_shards is not None
             else set(cell.instances)
         )
         unexpected = {shard.instance_id for shard in shards} - expected
@@ -60,6 +112,12 @@ def aggregate(
                 f"results outside the declared cohort for cell {cell.cell_id}: "
                 f"{sorted(unexpected)}"
             )
+        if submitted_shards is not None:
+            for shard in shards:
+                validate_submitted_result(
+                    shard,
+                    expected_by_instance[shard.instance_id],
+                )
         completed = [
             shard
             for shard in shards
@@ -101,7 +159,7 @@ def aggregate(
             "complete": bool(expected) and not missing,
             "cohort_source": (
                 "submission_ledger"
-                if submitted_instances is not None
+                if submitted_shards is not None
                 else "planned_fallback"
             ),
             "wilson_low": ci.low if ci else None,

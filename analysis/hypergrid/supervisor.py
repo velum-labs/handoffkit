@@ -21,6 +21,7 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+from hyperkit.core.aggregate import validate_submitted_result
 from hyperkit.core.lock import load_lock
 from hyperkit.core.store import ResultStore
 from hyperkit.stats import wilson_interval
@@ -52,10 +53,11 @@ def load(workdir: Path) -> tuple[Any, list[Any], dict[str, dict[str, Any]]]:
 
 def analyze(workdir: Path) -> dict[str, Any]:
     lock, results, cells = load(workdir)
-    submitted_instances = lock.submitted_instances()
-    cohort_verified = bool(lock.submissions)
+    submitted_shards = lock.submitted_shards()
     by_cell: dict[str, dict[str, Any]] = defaultdict(dict)  # cell -> instance -> result
     for result in results:
+        if result.cell_id not in cells:
+            raise ValueError(f"result references unknown active cell {result.cell_id}")
         if result.instance_id in by_cell[result.cell_id]:
             raise ValueError(
                 f"duplicate results for cell {result.cell_id} instance {result.instance_id}"
@@ -66,17 +68,18 @@ def analyze(workdir: Path) -> dict[str, Any]:
     for cell_id, meta in cells.items():
         cell = meta["cell"]
         shard_map = by_cell.get(cell_id, {})
-        expected = (
-            submitted_instances.get(cell_id, set())
-            if cohort_verified
-            else set(cell.instances)
-        )
+        expected_shards = submitted_shards.get(cell_id)
+        cohort_verified = expected_shards is not None and bool(expected_shards)
+        expected = set(expected_shards or {})
         unexpected = set(shard_map) - expected
         if unexpected:
             raise ValueError(
                 f"results outside the declared cohort for cell {cell_id}: "
                 f"{sorted(unexpected)}"
             )
+        if expected_shards is not None:
+            for instance_id, result in shard_map.items():
+                validate_submitted_result(result, expected_shards[instance_id])
         terminal = {
             inst: result
             for inst, result in shard_map.items()
@@ -115,6 +118,7 @@ def analyze(workdir: Path) -> dict[str, Any]:
                     cohort_verified
                     and bool(expected)
                     and not missing
+                    and errors == 0
                     and len({result.adapter_version for result in terminal.values()}) == 1
                 ),
                 "resolved": resolved,
@@ -145,11 +149,22 @@ def analyze(workdir: Path) -> dict[str, Any]:
         if not r["label"].startswith(ANCHOR_PREFIX) and r["decision_eligible"]
     ]
     best_anchor = max(anchors, key=lambda r: r["rate"], default=None)
-    solo_opens = [r for r in opens if r["sut"] == "solo-model"]
+    solo_opens = [
+        r
+        for r in opens
+        if r["sut"] == "solo-model"
+        and int(r["params"].get("n_samples", 1)) == 1
+        and r["params"].get("selection", "first") == "first"
+    ]
     best_solo = max(solo_opens, key=lambda r: r["rate"], default=None)
 
     # Paired comparisons on shared instances.
     def paired(a: dict[str, Any], b: dict[str, Any]) -> dict[str, Any]:
+        if a["adapter_versions"] != b["adapter_versions"]:
+            raise ValueError(
+                f"cannot compare mixed adapter protocols: "
+                f"{a['adapter_versions']} != {b['adapter_versions']}"
+            )
         shared = set(a["pass_vector"]) & set(b["pass_vector"])
         b_only = sum(1 for i in shared if a["pass_vector"][i] and not b["pass_vector"][i])
         c_only = sum(1 for i in shared if b["pass_vector"][i] and not a["pass_vector"][i])
@@ -191,6 +206,8 @@ def analyze(workdir: Path) -> dict[str, Any]:
             row["flags"].append("PRUNE:wilson-dominated-by-best-solo")
         if row["errors"] > max(2, 0.1 * max(row["n"], 1)):
             row["flags"].append("FORENSICS:high-error-count")
+        if row["errors"]:
+            row["flags"].append("BLOCK:infrastructure-errors")
         if not row["cohort_verified"]:
             row["flags"].append("BLOCK:unverified-submission-cohort")
         if row["missing"]:

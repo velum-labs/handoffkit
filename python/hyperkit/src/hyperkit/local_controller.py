@@ -46,12 +46,12 @@ def snapshot_workdir(workdir: Path) -> list[CellSnapshot]:
         if cell.cell_id in active
     ]
     results = ResultStore(workdir / "results").get_all(lock.sweep_id)
-    submitted = lock.submitted_instances()
+    submitted = lock.submitted_shards()
     return build_cell_snapshots(
         lock.sweep_id,
         cells,
         results,
-        submitted_instances=submitted or None,
+        submitted_shards=submitted or None,
     )
 
 

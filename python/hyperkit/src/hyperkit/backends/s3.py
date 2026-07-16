@@ -56,12 +56,32 @@ class S3ResultStore(ResultStore):
         return True
 
     def put(self, sweep_id: str, result: ShardResult) -> None:
-        self.client.put_object(
-            Bucket=self.bucket,
-            Key=self.result_key(sweep_id, result.shard_id),
-            Body=result.model_dump_json(indent=2).encode(),
-            ContentType="application/json",
-        )
+        key = self.result_key(sweep_id, result.shard_id)
+        payload = result.model_dump_json(indent=2).encode()
+        try:
+            self.client.put_object(
+                Bucket=self.bucket,
+                Key=key,
+                Body=payload,
+                ContentType="application/json",
+                IfNoneMatch="*",
+            )
+        except Exception as exc:
+            response = getattr(exc, "response", {})
+            error = response.get("Error", {}) if isinstance(response, dict) else {}
+            status = response.get("ResponseMetadata", {}).get("HTTPStatusCode")
+            if str(error.get("Code", "")) not in {
+                "412",
+                "ConditionalRequestConflict",
+                "PreconditionFailed",
+            } and status != 412:
+                raise
+            existing_response = self.client.get_object(Bucket=self.bucket, Key=key)
+            existing = ShardResult.model_validate_json(existing_response["Body"].read())
+            if existing != result:
+                raise ValueError(
+                    f"conflicting immutable result for shard {result.shard_id}"
+                ) from None
 
     def get_all(self, sweep_id: str) -> list[ShardResult]:
         prefix = self._key(f"runs/{sweep_id}/results/")

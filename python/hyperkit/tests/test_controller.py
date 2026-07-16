@@ -4,13 +4,18 @@ import io
 import json
 from typing import Any
 
-import pytest
 from hyperkit.cloud.controller import (
     HypergridController,
     S3SweepRepository,
     _sweep_ids_from_message,
 )
-from hyperkit.core.models import Cell, ShardResult, ShardStatus, TopologySpec
+from hyperkit.core.models import (
+    Cell,
+    ShardResult,
+    ShardStatus,
+    SubmittedShard,
+    TopologySpec,
+)
 
 
 class FakeS3:
@@ -59,6 +64,19 @@ def _result(cell: Cell, instance: str, resolved: bool) -> ShardResult:
     )
 
 
+def _submitted(result: ShardResult) -> SubmittedShard:
+    return SubmittedShard(
+        cell_id=result.cell_id,
+        instance_id=result.instance_id,
+        shard_id=result.shard_id,
+        generation=result.generation,
+        benchmark=result.benchmark,
+        sut_hash=result.sut_hash,
+        adapter_version=result.adapter_version,
+        dataset_hash=result.dataset_hash,
+    )
+
+
 def test_controller_recomputes_and_persists_snapshots() -> None:
     s3 = FakeS3()
     repo = S3SweepRepository("bucket", client=s3)
@@ -72,9 +90,19 @@ def test_controller_recomputes_and_persists_snapshots() -> None:
                 {"cell": cell.model_dump(mode="json"), "generation": generation}
             ).encode(),
         )
+    results: list[ShardResult] = []
     for cell, outcomes in ((solo, [True, False]), (fused, [True, True])):
         for instance, resolved in zip(cell.instances, outcomes, strict=True):
-            repo.store.put("run", _result(cell, instance, resolved))
+            result = _result(cell, instance, resolved)
+            results.append(result)
+            repo.store.put("run", result)
+    s3.put_object(
+        Bucket="bucket",
+        Key="runs/run/submissions/verified.json",
+        Body=json.dumps(
+            {"shards": [_submitted(result).model_dump(mode="json") for result in results]}
+        ).encode(),
+    )
 
     controller = HypergridController(repo)
     snapshots = controller.reconcile("run")
@@ -87,9 +115,7 @@ def test_controller_recomputes_and_persists_snapshots() -> None:
     assert ("bucket", f"runs/run/snapshots/{fused.cell_id}.json") in s3.objects
 
 
-def test_controller_resumes_counter_deltas_from_persisted_snapshots(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_controller_marks_legacy_cohort_unverified() -> None:
     s3 = FakeS3()
     repo = S3SweepRepository("bucket", client=s3)
     cell = _cell("solo-model", "solo")
@@ -99,16 +125,10 @@ def test_controller_resumes_counter_deltas_from_persisted_snapshots(
         Body=json.dumps({"cell": cell.model_dump(mode="json"), "generation": 0}).encode(),
     )
     repo.store.put("run", _result(cell, "i1", True))
-    HypergridController(repo).reconcile("run")
-    calls: list[tuple[int, int]] = []
+    snapshots = HypergridController(repo).reconcile("run")
 
-    def capture(previous: list, current: list) -> None:
-        calls.append((len(previous), len(current)))
-
-    monkeypatch.setattr("hyperkit.cloud.controller.record_snapshot_deltas", capture)
-    HypergridController(repo).reconcile("run")
-
-    assert calls == [(1, 1)]
+    assert snapshots[0].cohort_verified is False
+    assert snapshots[0].decision_eligible is False
     assert len(repo.snapshots("run")) == 1
 
 
@@ -127,6 +147,9 @@ def test_s3_event_extracts_sweep_id() -> None:
         }
     )
     assert _sweep_ids_from_message(body) == {"run-123"}
+
+    snapshot_body = body.replace("results/shard.json", "snapshots/cell.json")
+    assert _sweep_ids_from_message(snapshot_body) == set()
 
 
 def test_repository_finds_sweeps_below_a_team_prefix() -> None:

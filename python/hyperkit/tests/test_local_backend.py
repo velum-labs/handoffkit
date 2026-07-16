@@ -4,7 +4,7 @@ import threading
 from typing import cast
 
 from hyperkit.backends.local import LocalComputeBackend
-from hyperkit.core.models import Cell, ShardResult, ShardStatus, TopologySpec
+from hyperkit.core.models import Cell, ShardPlan, ShardResult, ShardStatus, TopologySpec
 from hyperkit.core.orchestrator import RunOrchestrator
 
 
@@ -39,6 +39,19 @@ def _cell() -> Cell:
     )
 
 
+def _plans(cell: Cell) -> list[ShardPlan]:
+    return [
+        ShardPlan(
+            cell=cell,
+            instance_id=instance_id,
+            shard_id=f"s-{instance_id}",
+            generation=0,
+            adapter_version="1",
+        )
+        for instance_id in cell.instances
+    ]
+
+
 def test_parallel_backend_runs_every_shard_once() -> None:
     seen: set[str] = set()
     lock = threading.Lock()
@@ -46,11 +59,12 @@ def test_parallel_backend_runs_every_shard_once() -> None:
         lambda cell: cast(RunOrchestrator, _FakeOrchestrator(seen, lock)), max_workers=8
     )
     cell = _cell()
-    backend.submit([(cell, i) for i in cell.instances], "sweep")
+    acknowledgement = backend.submit(_plans(cell), "sweep")
     results = backend.results("sweep")
     assert len(results) == 20
     assert seen == set(cell.instances)
     assert {r.instance_id for r in results} == set(cell.instances)
+    assert len(acknowledgement.accepted_shard_ids) == 20
 
 
 def test_sequential_backend_matches_parallel() -> None:
@@ -60,5 +74,5 @@ def test_sequential_backend_matches_parallel() -> None:
         lambda cell: cast(RunOrchestrator, _FakeOrchestrator(seen, lock)), max_workers=1
     )
     cell = _cell()
-    backend.submit([(cell, i) for i in cell.instances], "sweep")
+    backend.submit(_plans(cell), "sweep")
     assert len(backend.results("sweep")) == 20

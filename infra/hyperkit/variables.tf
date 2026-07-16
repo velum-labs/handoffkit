@@ -97,13 +97,13 @@ variable "controller_poll_interval" {
 }
 
 variable "controller_s3_prefix" {
-  description = "S3 key prefix watched by the controller and used for bucket notifications."
+  description = "Optional storage namespace prepended before runs/."
   type        = string
-  default     = "runs/"
+  default     = ""
 
   validation {
-    condition     = var.controller_s3_prefix != "" && !startswith(var.controller_s3_prefix, "/") && endswith(var.controller_s3_prefix, "/")
-    error_message = "controller_s3_prefix must be non-empty, relative, and end with a slash."
+    condition     = !startswith(var.controller_s3_prefix, "/")
+    error_message = "controller_s3_prefix must be relative."
   }
 }
 

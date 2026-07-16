@@ -15,7 +15,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from hyperkit.core.models import Cell, ShardResult, ShardStatus
+from hyperkit.core.aggregate import validate_submitted_result
+from hyperkit.core.models import Cell, ShardResult, ShardStatus, SubmittedShard
 from hyperkit.stats import wilson_interval
 
 
@@ -44,6 +45,8 @@ class CellSnapshot(BaseModel):
     missing_shards: int = 0
     unresolved_shards: int = 0
     complete: bool = False
+    cohort_verified: bool = False
+    decision_eligible: bool = False
     resolution_rate: float
     wilson_low: float
     wilson_high: float
@@ -99,12 +102,15 @@ def build_cell_snapshots(
     cells: Sequence[tuple[Cell, int]],
     results: Sequence[ShardResult],
     *,
-    submitted_instances: Mapping[str, set[str]] | None = None,
+    submitted_shards: Mapping[str, Mapping[str, SubmittedShard]] | None = None,
 ) -> list[CellSnapshot]:
     """Recompute all cell snapshots from materialized cells + durable results."""
 
     by_cell: dict[str, list[ShardResult]] = {}
+    known_cell_ids = {cell.cell_id for cell, _generation in cells}
     for result in results:
+        if result.cell_id not in known_cell_ids:
+            raise ValueError(f"result references unknown cell {result.cell_id}")
         by_cell.setdefault(result.cell_id, []).append(result)
 
     snapshots = [
@@ -113,10 +119,10 @@ def build_cell_snapshots(
             cell,
             generation,
             by_cell.get(cell.cell_id, []),
-            expected_instances=(
-                submitted_instances.get(cell.cell_id, set())
-                if submitted_instances is not None
-                else set(cell.instances)
+            expected_shards=(
+                submitted_shards.get(cell.cell_id, {})
+                if submitted_shards is not None
+                else None
             ),
         )
         for cell, generation in cells
@@ -124,21 +130,21 @@ def build_cell_snapshots(
 
     best_solo: dict[str, float] = {}
     for snapshot in snapshots:
-        if snapshot.sut_kind == "solo-model" and snapshot.complete:
+        if snapshot.sut_kind == "solo-model" and snapshot.decision_eligible:
             best_solo[snapshot.benchmark] = max(
                 best_solo.get(snapshot.benchmark, 0.0),
                 snapshot.resolution_rate,
             )
 
     for snapshot in snapshots:
-        if snapshot.complete and snapshot.benchmark in best_solo:
+        if snapshot.decision_eligible and snapshot.benchmark in best_solo:
             snapshot.delta_vs_best_single = (
                 snapshot.resolution_rate - best_solo[snapshot.benchmark]
             )
 
     by_benchmark: dict[str, list[CellSnapshot]] = {}
     for snapshot in snapshots:
-        if snapshot.complete:
+        if snapshot.decision_eligible:
             by_benchmark.setdefault(snapshot.benchmark, []).append(snapshot)
     for group in by_benchmark.values():
         ordered = sorted(
@@ -157,8 +163,11 @@ def _snapshot(
     generation: int,
     results: Sequence[ShardResult],
     *,
-    expected_instances: set[str],
+    expected_shards: Mapping[str, SubmittedShard] | None,
 ) -> CellSnapshot:
+    expected_instances = (
+        set(expected_shards) if expected_shards is not None else set(cell.instances)
+    )
     seen: set[str] = set()
     for result in results:
         if result.instance_id in seen:
@@ -172,6 +181,12 @@ def _snapshot(
             f"results outside the declared cohort for cell {cell.cell_id}: "
             f"{sorted(unexpected)}"
         )
+    if expected_shards is not None:
+        for result in results:
+            validate_submitted_result(
+                result,
+                expected_shards[result.instance_id],
+            )
     completed = [
         result
         for result in results
@@ -218,6 +233,12 @@ def _snapshot(
         unresolved_shards=unresolved,
         errors=errors,
         complete=bool(expected_instances) and not missing,
+        cohort_verified=expected_shards is not None and bool(expected_instances),
+        decision_eligible=(
+            expected_shards is not None
+            and bool(expected_instances)
+            and not missing
+        ),
         resolution_rate=ci.estimate,
         wilson_low=ci.low,
         wilson_high=ci.high,

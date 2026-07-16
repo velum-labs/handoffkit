@@ -13,6 +13,7 @@ from hyperkit.core.models import (
     ResourceProfile,
     ShardResult,
     ShardStatus,
+    SubmittedShard,
     TopologySpec,
 )
 from hyperkit.core.store import ResultStore
@@ -153,4 +154,38 @@ def test_aggregate_counts_terminal_errors_as_failures() -> None:
     assert row["rate"] == pytest.approx(1 / 3)
     assert row["completed_rate"] == 1.0
     assert row["complete"] is False
+
+
+def test_aggregate_rejects_result_from_different_submitted_shard() -> None:
+    c = cell()
+    result = ShardResult(
+        shard_id="old-shard",
+        cell_id=c.cell_id,
+        generation=0,
+        benchmark=c.benchmark,
+        instance_id="a",
+        sut_hash=c.sut.hash,
+        status=ShardStatus.RESOLVED,
+        resolved=True,
+        adapter_version="old",
+        dataset_hash=c.dataset_hash,
+    )
+    expected = SubmittedShard(
+        shard_id="new-shard",
+        cell_id=c.cell_id,
+        generation=0,
+        benchmark=c.benchmark,
+        instance_id="a",
+        sut_hash=c.sut.hash,
+        adapter_version="new",
+        dataset_hash=c.dataset_hash,
+    )
+
+    with pytest.raises(ValueError, match="does not match its submitted shard"):
+        aggregate(
+            "sweep",
+            [c],
+            [result],
+            submitted_shards={c.cell_id: {"a": expected}},
+        )
 

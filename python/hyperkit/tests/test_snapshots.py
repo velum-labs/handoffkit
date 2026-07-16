@@ -2,7 +2,13 @@ from __future__ import annotations
 
 import pytest
 from hyperkit import telemetry
-from hyperkit.core.models import Cell, ShardResult, ShardStatus, TopologySpec
+from hyperkit.core.models import (
+    Cell,
+    ShardResult,
+    ShardStatus,
+    SubmittedShard,
+    TopologySpec,
+)
 from hyperkit.core.snapshots import build_cell_snapshots
 
 
@@ -41,6 +47,24 @@ def _result(cell: Cell, instance: str, resolved: bool, cost: float, latency: flo
     )
 
 
+def _submitted(
+    results: list[ShardResult],
+) -> dict[str, dict[str, SubmittedShard]]:
+    expected: dict[str, dict[str, SubmittedShard]] = {}
+    for result in results:
+        expected.setdefault(result.cell_id, {})[result.instance_id] = SubmittedShard(
+            cell_id=result.cell_id,
+            instance_id=result.instance_id,
+            shard_id=result.shard_id,
+            generation=result.generation,
+            benchmark=result.benchmark,
+            sut_hash=result.sut_hash,
+            adapter_version=result.adapter_version,
+            dataset_hash=result.dataset_hash,
+        )
+    return expected
+
+
 def test_snapshots_rank_delta_pareto_and_progress() -> None:
     solo = _cell("solo-model", "solo", "solo")
     fused = _cell("fusionkit-serve", "fused", "fused")
@@ -54,10 +78,7 @@ def test_snapshots_rank_delta_pareto_and_progress() -> None:
         "run",
         [(solo, 0), (fused, 1)],
         results,
-        submitted_instances={
-            solo.cell_id: {"i1", "i2"},
-            fused.cell_id: {"i1", "i2"},
-        },
+        submitted_shards=_submitted(results),
     )
     by_label = {snapshot.label: snapshot for snapshot in snapshots}
 

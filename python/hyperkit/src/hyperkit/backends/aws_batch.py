@@ -8,13 +8,12 @@ import math
 import os
 import re
 import time
-from collections import defaultdict
 from collections.abc import Callable, Sequence
 from importlib import import_module
 from typing import Any
 
 from hyperkit.backends.s3 import S3ResultStore
-from hyperkit.core.models import Cell, ShardResult
+from hyperkit.core.models import BackendSubmission, ShardPlan, ShardResult
 from hyperkit.core.registry import get_benchmark
 
 _MAX_ARRAY_SIZE = 10_000
@@ -47,6 +46,7 @@ class AwsBatchComputeBackend:
         job_definition: str,
         prefix: str = "",
         generation: int = 0,
+        image_digest: str = "",
         s3_client: Any | None = None,
         batch_client: Any | None = None,
         adapter_version_for: Callable[[str], str] | None = None,
@@ -57,49 +57,94 @@ class AwsBatchComputeBackend:
         self.job_queue = job_queue
         self.job_definition = job_definition
         self.generation = generation
+        self.image_digest = image_digest
         self.batch_client = batch_client if batch_client is not None else _default_batch_client()
         self.adapter_version_for = adapter_version_for or _adapter_version
         self.last_submitted_job_ids: list[str] = []
 
-    def submit(self, shards: Sequence[tuple[Cell, str]], sweep_id: str) -> None:
-        """Submit missing shards, deduplicated and grouped by cell."""
+    def submit(
+        self,
+        shards: Sequence[ShardPlan],
+        sweep_id: str,
+    ) -> BackendSubmission:
+        """Submit exact materialized shards and return backend acknowledgements."""
 
         self.last_submitted_job_ids = []
         if not shards:
-            return
+            return BackendSubmission(image_digest=self.image_digest)
 
         present = self.store.present_ids(sweep_id)
-        versions: dict[str, str] = {}
-        missing: dict[str, tuple[Cell, str, str]] = {}
-        for cell, instance_id in shards:
-            version = versions.get(cell.benchmark)
-            if version is None:
-                version = self.adapter_version_for(cell.benchmark)
-                versions[cell.benchmark] = version
-            shard_id = cell.shard_id(
-                instance_id,
-                adapter_version=version,
-                dataset_hash=cell.dataset_hash,
+        accepted_ids = {shard.shard_id for shard in shards if shard.shard_id in present}
+        missing: dict[str, ShardPlan] = {}
+        for shard in shards:
+            current_version = self.adapter_version_for(shard.cell.benchmark)
+            if current_version != shard.adapter_version:
+                raise ValueError(
+                    f"adapter version drift for {shard.cell.benchmark}: "
+                    f"planned {shard.adapter_version!r}, runtime {current_version!r}"
+                )
+            if shard.image_digest != self.image_digest:
+                raise ValueError(
+                    f"image digest drift: planned {shard.image_digest!r}, "
+                    f"backend {self.image_digest!r}"
+                )
+            expected_id = shard.cell.shard_id(
+                shard.instance_id,
+                adapter_version=shard.adapter_version,
+                dataset_hash=shard.cell.dataset_hash,
+                source_sha=shard.source_sha,
+                image_digest=shard.image_digest,
             )
-            if shard_id not in present:
-                missing.setdefault(shard_id, (cell, instance_id, shard_id))
+            if shard.shard_id != expected_id:
+                raise ValueError(
+                    f"planned shard id {shard.shard_id!r} does not match "
+                    f"materialized identity {expected_id!r}"
+                )
+            if shard.shard_id not in present:
+                missing.setdefault(shard.shard_id, shard)
         if not missing:
-            return
+            return BackendSubmission(
+                accepted_shard_ids=sorted(accepted_ids),
+                image_digest=self.image_digest,
+            )
 
-        by_cell: dict[str, list[tuple[Cell, str, str]]] = defaultdict(list)
-        for entry in missing.values():
-            by_cell[entry[0].cell_id].append(entry)
+        by_cell: dict[tuple[str, int], list[ShardPlan]] = {}
+        for shard in missing.values():
+            by_cell.setdefault((shard.cell.cell_id, shard.generation), []).append(shard)
 
-        for cell_id in sorted(by_cell):
-            entries = sorted(by_cell[cell_id], key=lambda item: item[2])
+        manifest_uris: list[str] = []
+        errors: list[str] = []
+        for cell_key in sorted(by_cell):
+            entries = sorted(by_cell[cell_key], key=lambda item: item.shard_id)
+            cell_id, _generation = cell_key
             if len(entries) > _MAX_ARRAY_SIZE:
                 raise ValueError(
                     f"cell {cell_id} has {len(entries)} missing shards; "
                     f"AWS Batch arrays support at most {_MAX_ARRAY_SIZE}"
                 )
-            job_id = self._submit_cell(sweep_id, entries)
+            try:
+                job_id, manifest_uri, acknowledged, submit_errors = self._submit_cell(
+                    sweep_id,
+                    entries,
+                )
+            except Exception as exc:
+                errors.append(f"{type(exc).__name__}: {exc}")
+                break
+            accepted_ids.update(acknowledged)
+            errors.extend(submit_errors)
+            if manifest_uri is not None:
+                manifest_uris.append(manifest_uri)
             if job_id is not None:
                 self.last_submitted_job_ids.append(job_id)
+            if submit_errors:
+                break
+        return BackendSubmission(
+            accepted_shard_ids=sorted(accepted_ids),
+            job_ids=list(self.last_submitted_job_ids),
+            manifest_uris=manifest_uris,
+            errors=errors,
+            image_digest=self.image_digest,
+        )
 
     def results(self, sweep_id: str) -> list[ShardResult]:
         return self.store.get_all(sweep_id)
@@ -135,64 +180,55 @@ class AwsBatchComputeBackend:
     def _submit_cell(
         self,
         sweep_id: str,
-        entries: list[tuple[Cell, str, str]],
-    ) -> str | None:
-        cell = entries[0][0]
-        cell_key = self.store._key(f"runs/{sweep_id}/cells/{cell.cell_id}.json")
-        existing_cell_payload = self._get_json_if_present(cell_key)
-        observed_instances = {instance_id for _, instance_id, _ in entries}
-        observed_instances.update(
-            result.instance_id
-            for result in self.store.get_all(sweep_id)
-            if result.cell_id == cell.cell_id
-        )
-        if existing_cell_payload is not None:
-            existing_cell = existing_cell_payload.get("cell")
-            if isinstance(existing_cell, dict):
-                previous_instances = existing_cell.get("instances")
-                if isinstance(previous_instances, list):
-                    observed_instances.update(str(value) for value in previous_instances)
-        observed_cell = cell.model_copy(
-            update={
-                "instances": [
-                    instance_id
-                    for instance_id in cell.instances
-                    if instance_id in observed_instances
-                ]
-            }
-        )
-        self.store.client.put_object(
-            Bucket=self.store.bucket,
-            Key=cell_key,
-            Body=json.dumps(
-                {
-                    "cell": observed_cell.model_dump(mode="json"),
-                    "generation": self.generation,
-                },
-                sort_keys=True,
-            ).encode(),
-            ContentType="application/json",
-        )
+        entries: list[ShardPlan],
+    ) -> tuple[str | None, str | None, set[str], list[str]]:
+        cell = entries[0].cell
+        generation = entries[0].generation
         manifest = {
             str(index): {
                 # A shard only needs its own instance. Since instances are not
                 # part of cell identity, this avoids an O(n^2) array manifest.
-                "cell": item_cell.model_copy(update={"instances": [instance_id]}).model_dump(
-                    mode="json"
-                ),
-                "generation": self.generation,
-                "instance_id": instance_id,
-                "shard_id": shard_id,
+                "cell": shard.cell.model_copy(
+                    update={"instances": [shard.instance_id]}
+                ).model_dump(mode="json"),
+                "generation": shard.generation,
+                "instance_id": shard.instance_id,
+                "shard_id": shard.shard_id,
+                "adapter_version": shard.adapter_version,
+                "source_sha": shard.source_sha,
+                "image_digest": self.image_digest,
             }
-            for index, (item_cell, instance_id, shard_id) in enumerate(entries)
+            for index, shard in enumerate(entries)
         }
         encoded = json.dumps(manifest, sort_keys=True, separators=(",", ":")).encode()
         digest = hashlib.sha256(encoded).hexdigest()[:16]
         manifest_key = self.store._key(f"runs/{sweep_id}/manifests/{cell.cell_id}-{digest}.json")
-        receipt_key = self.store._key(f"runs/{sweep_id}/submissions/{cell.cell_id}-{digest}.json")
-        receipt = self._get_json_if_present(receipt_key)
-        if receipt is not None and receipt.get("job_id"):
-            return None
+        receipt_prefix = self.store._key(
+            f"runs/{sweep_id}/submissions/{cell.cell_id}-{digest}"
+        )
+        receipts = self._submission_receipts(receipt_prefix)
+        receipt_job_ids = [
+            str(receipt["job_id"])
+            for _key, receipt in receipts
+            if receipt.get("job_id")
+        ]
+        if receipt_job_ids:
+            statuses = self.status(receipt_job_ids)
+            if any(status not in _TERMINAL_STATUSES for status in statuses.values()):
+                manifest_uri = next(
+                    (
+                        str(receipt.get("manifest_s3_uri"))
+                        for _key, receipt in reversed(receipts)
+                        if receipt.get("manifest_s3_uri")
+                    ),
+                    f"s3://{self.store.bucket}/{manifest_key}",
+                )
+                return (
+                    None,
+                    manifest_uri,
+                    {entry.shard_id for entry in entries},
+                    [],
+                )
 
         self.store.client.put_object(
             Bucket=self.store.bucket,
@@ -236,17 +272,71 @@ class AwsBatchComputeBackend:
         if array_properties is not None:
             submit_kwargs["arrayProperties"] = array_properties
         response = self.batch_client.submit_job(**submit_kwargs)
-        job_id = response["jobId"]
-        self.store.client.put_object(
-            Bucket=self.store.bucket,
-            Key=receipt_key,
-            Body=json.dumps(
-                {"job_id": job_id, "manifest_s3_uri": manifest_uri},
-                sort_keys=True,
-            ).encode(),
-            ContentType="application/json",
+        job_id = str(response["jobId"])
+        attempt = len(receipts) + 1
+        receipt_key = f"{receipt_prefix}-attempt-{attempt}.json"
+        receipt_errors: list[str] = []
+        try:
+            self.store.client.put_object(
+                Bucket=self.store.bucket,
+                Key=receipt_key,
+                Body=json.dumps(
+                    {
+                        "job_id": job_id,
+                        "job_definition": self.job_definition,
+                        "manifest_s3_uri": manifest_uri,
+                        "manifest_sha256": hashlib.sha256(encoded).hexdigest(),
+                        "generation": generation,
+                        "image_digest": self.image_digest,
+                        "shards": [
+                            entry.submitted_shard().model_dump(mode="json")
+                            for entry in entries
+                        ],
+                    },
+                    sort_keys=True,
+                ).encode(),
+                ContentType="application/json",
+            )
+            cell_key = self.store._key(
+                f"runs/{sweep_id}/cells/{cell.cell_id}.json"
+            )
+            self.store.client.put_object(
+                Bucket=self.store.bucket,
+                Key=cell_key,
+                Body=json.dumps(
+                    {
+                        "cell": cell.model_dump(mode="json"),
+                        "generation": generation,
+                    },
+                    sort_keys=True,
+                ).encode(),
+                ContentType="application/json",
+            )
+        except Exception as exc:
+            receipt_errors.append(
+                f"submitted job {job_id} but failed to persist its receipt: "
+                f"{type(exc).__name__}: {exc}"
+            )
+        return (
+            job_id,
+            manifest_uri,
+            {entry.shard_id for entry in entries},
+            receipt_errors,
         )
-        return str(job_id)
+
+    def _submission_receipts(
+        self,
+        receipt_prefix: str,
+    ) -> list[tuple[str, dict[str, Any]]]:
+        receipts: list[tuple[str, dict[str, Any]]] = []
+        for item in self.store._list_objects(receipt_prefix):
+            key = str(item.get("Key", ""))
+            if not key.endswith(".json"):
+                continue
+            payload = self._get_json_if_present(key)
+            if payload is not None:
+                receipts.append((key, payload))
+        return sorted(receipts, key=lambda item: item[0])
 
     def _get_json_if_present(self, key: str) -> dict[str, Any] | None:
         try:
@@ -280,8 +370,12 @@ class _EnvironmentAwsBatchBackend:
     def __init__(self) -> None:
         self._delegate: AwsBatchComputeBackend | None = None
 
-    def submit(self, shards: Sequence[tuple[Cell, str]], sweep_id: str) -> None:
-        self._get_delegate().submit(shards, sweep_id)
+    def submit(
+        self,
+        shards: Sequence[ShardPlan],
+        sweep_id: str,
+    ) -> BackendSubmission:
+        return self._get_delegate().submit(shards, sweep_id)
 
     def results(self, sweep_id: str) -> list[ShardResult]:
         return self._get_delegate().results(sweep_id)
@@ -315,6 +409,7 @@ def _backend_from_environment() -> AwsBatchComputeBackend:
         "bucket": os.environ.get("HYPERKIT_AWS_BUCKET") or os.environ.get("HYPERKIT_S3_BUCKET"),
         "job_queue": os.environ.get("HYPERKIT_AWS_BATCH_JOB_QUEUE"),
         "job_definition": os.environ.get("HYPERKIT_AWS_BATCH_JOB_DEFINITION"),
+        "image_digest": os.environ.get("HYPERKIT_RUNNER_IMAGE_DIGEST"),
     }
     missing = [key for key, value in required.items() if not value]
     if missing:
@@ -324,6 +419,7 @@ def _backend_from_environment() -> AwsBatchComputeBackend:
         bucket=required["bucket"] or "",
         job_queue=required["job_queue"] or "",
         job_definition=required["job_definition"] or "",
+        image_digest=required["image_digest"] or "",
         prefix=os.environ.get("HYPERKIT_S3_PREFIX", ""),
         generation=int(os.environ.get("HYPERKIT_GENERATION", "0")),
     )

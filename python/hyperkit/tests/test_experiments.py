@@ -6,7 +6,7 @@ import hyperkit.adapters  # noqa: F401
 from hyperkit.core.contracts import ExperimentContext
 from hyperkit.core.experiments import CartesianExperiment, load_experiment
 from hyperkit.core.lock import load_lock
-from hyperkit.core.models import Cell, ShardResult
+from hyperkit.core.models import BackendSubmission, Cell, ShardPlan, ShardResult
 from hyperkit.core.registry import register_backend
 from hyperkit.core.sweep import SweepEngine
 
@@ -68,11 +68,15 @@ def test_apply_records_exact_submitted_denominator(tmp_path: Path) -> None:
         name = "recording-submissions"
 
         def __init__(self) -> None:
-            self.shards: list[tuple[Cell, str]] = []
+            self.shards: list[ShardPlan] = []
 
-        def submit(self, shards, sweep_id: str) -> None:
+        def submit(self, shards, sweep_id: str) -> BackendSubmission:
             assert sweep_id == "smoke"
             self.shards.extend(shards)
+            return BackendSubmission(
+                accepted_shard_ids=[shard.shard_id for shard in shards],
+                image_digest="local",
+            )
 
         def results(self, sweep_id: str) -> list[ShardResult]:
             return []
@@ -109,6 +113,54 @@ axes:
     assert row["n_missing"] == 1
     assert row["rate"] == 0.0
     assert row["complete"] is False
+
+
+def test_resume_retries_only_previously_declared_rung(tmp_path: Path) -> None:
+    class RecordingBackend:
+        name = "recording-resume"
+
+        def __init__(self) -> None:
+            self.calls: list[list[ShardPlan]] = []
+
+        def submit(self, shards, sweep_id: str) -> BackendSubmission:
+            assert sweep_id == "resume-smoke"
+            captured = list(shards)
+            self.calls.append(captured)
+            return BackendSubmission(
+                accepted_shard_ids=[shard.shard_id for shard in captured],
+                image_digest="local",
+            )
+
+        def results(self, sweep_id: str) -> list[ShardResult]:
+            return []
+
+    matrix = tmp_path / "matrix.yaml"
+    manifest = tmp_path / "manifest.txt"
+    manifest.write_text("task-a\ntask-b\ntask-c\n")
+    matrix.write_text(
+        f"""
+id: resume-smoke
+benchmarks: [swebench_verified]
+instances:
+  swebench_verified: {manifest}
+sut: fusionkit-serve
+axes:
+  topology: [driver]
+  k: [1]
+"""
+    )
+    backend = RecordingBackend()
+    register_backend(backend)
+    engine = SweepEngine(tmp_path / "run")
+    engine.plan(CartesianExperiment.from_yaml(matrix), sweep_id="resume-smoke")
+
+    assert engine.apply(backend.name, rung=1) == 1
+    assert engine.resume(backend.name) == 1
+
+    assert [[shard.instance_id for shard in call] for call in backend.calls] == [
+        ["task-a"],
+        ["task-a"],
+    ]
 
 
 def test_matrix_as_code_loads_and_materializes_once(tmp_path: Path) -> None:

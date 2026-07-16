@@ -92,9 +92,9 @@ def resume(
     workdir: Annotated[Path, typer.Option()] = Path(".hyperkit"),
     backend: Annotated[str, typer.Option()] = "aws-batch",
 ) -> None:
-    """Alias for apply-from-lock: experiment code is not re-executed."""
+    """Retry only the exact cohort declared by earlier apply calls."""
 
-    count = SweepEngine(workdir, backend=backend).apply(backend)
+    count = SweepEngine(workdir, backend=backend).resume(backend)
     typer.echo(f"resumed {count} missing shards via {backend} (frozen lock)")
 
 
@@ -122,12 +122,20 @@ def pull(
         resolved_bucket, prefix=prefix or os.environ.get("HYPERKIT_S3_PREFIX", "")
     )
     local = ResultStore(workdir / "results")
-    present = local.present_ids(lock.sweep_id)
+    present = {
+        result.shard_id: result
+        for result in local.get_all(lock.sweep_id)
+    }
     pulled = 0
     for result in remote.get_all(lock.sweep_id):
-        if result.shard_id not in present:
+        existing = present.get(result.shard_id)
+        if existing is None:
             local.put(lock.sweep_id, result)
             pulled += 1
+        elif existing != result:
+            raise RuntimeError(
+                f"local and S3 checkpoints conflict for shard {result.shard_id}"
+            )
     typer.echo(f"pulled {pulled} new results from s3://{resolved_bucket}")
 
 
