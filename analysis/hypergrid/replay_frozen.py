@@ -205,6 +205,11 @@ def replay(
     output.mkdir(parents=True, exist_ok=True)
     sandbox = _Sandbox(require_isolation=True)
     grade_cache: dict[tuple[str, str], tuple[bool, bool, bool]] = {}
+    problem_cache: dict[
+        str,
+        tuple[str, list[dict[str, str]], list[dict[str, str]]],
+    ] = {}
+    problem_errors: dict[str, str] = {}
     rows: list[dict[str, Any]] = []
 
     for sweep_id in sweeps:
@@ -234,13 +239,24 @@ def replay(
                 and code.strip()
             ):
                 try:
-                    problem_key = f"lcb-store/{instance_id}.json"
-                    problem_bytes = reader.get(problem_key)
-                    problem = _legacy_problem(json.loads(problem_bytes))
-                    cache_key = (_sha256(problem_bytes), _sha256(code))
+                    if instance_id in problem_errors:
+                        raise ValueError(problem_errors[instance_id])
+                    cached_problem = problem_cache.get(instance_id)
+                    if cached_problem is None:
+                        problem_key = f"lcb-store/{instance_id}.json"
+                        problem_bytes = reader.get(problem_key)
+                        problem = _legacy_problem(json.loads(problem_bytes))
+                        public_tests, private_tests = decode_tests(problem)
+                        cached_problem = (
+                            _sha256(problem_bytes),
+                            public_tests,
+                            private_tests,
+                        )
+                        problem_cache[instance_id] = cached_problem
+                    problem_sha256, public_tests, private_tests = cached_problem
+                    cache_key = (problem_sha256, _sha256(code))
                     grade = grade_cache.get(cache_key)
                     if grade is None:
-                        public_tests, private_tests = decode_tests(problem)
                         public = run_tests(
                             sandbox,
                             code,
@@ -268,6 +284,8 @@ def replay(
                     replay_public, replay_private, replay_pass = grade
                 except Exception as exc:  # noqa: BLE001 - evidence gap, not a run abort
                     replay_error = f"{type(exc).__name__}: {exc}"
+                    if instance_id not in problem_cache:
+                        problem_errors[instance_id] = replay_error
             rows.append(
                 {
                     "sweep_id": sweep_id,
