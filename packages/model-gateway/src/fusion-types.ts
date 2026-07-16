@@ -53,6 +53,7 @@ export type ChatBody = {
   reasoning?: Record<string, unknown>;
   provider?: Record<string, unknown>;
   usage?: Record<string, unknown>;
+  stream_options?: Record<string, unknown>;
   fusion?: { include_evidence?: boolean };
   tools?: unknown;
   tool_choice?: unknown;

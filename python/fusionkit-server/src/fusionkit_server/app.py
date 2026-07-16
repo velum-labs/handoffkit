@@ -132,6 +132,10 @@ class FusionRequest(BaseModel):
     reasoning: dict[str, Any] | None = None
     provider: dict[str, Any] | None = None
     usage: dict[str, Any] | None = None
+    # OpenAI-compatible gateways request usage on the terminal SSE chunk.
+    # FusionKit always emits terminal usage, so this is accepted for wire
+    # compatibility but does not alter provider request semantics.
+    stream_options: dict[str, Any] | None = None
     stream: bool = False
     # Forwarded only on the per-model passthrough path (when `model` names a
     # configured endpoint); the fusion path ignores them.
