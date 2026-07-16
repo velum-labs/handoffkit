@@ -134,13 +134,16 @@ uv run pytest tests -q
 uv run pytest python -q
 ```
 
-Link the local dev CLI without replacing the published `fusionkit` binary:
+Link the local dev CLIs without replacing the published binaries:
 
 ```bash
 pnpm dev:link-cli
+pnpm dev:link-routekit
 cd any-git-repo
 fusionkit-dev doctor
 fusionkit-dev codex
+routekit-dev doctor
+routekit-dev codex
 ```
 
 ## Dependency policy

@@ -11,6 +11,7 @@ The root `package.json` is private and defines the TypeScript workspace commands
 | `pnpm check` | Runs `scripts/check-repo.mjs`, protocol package checks, generated OpenAPI SDK checks, generated code docs checks, expected-behavior checks, and release publish checks. | Before committing package, protocol, release, or documentation changes. |
 | `pnpm build` | Runs `tsc -b tsconfig.json` across TypeScript project references. | After changing TypeScript packages or examples. |
 | `pnpm build:cli` | Runs `tsc -b packages/cli` only. | For fast CLI-only rebuilds. |
+| `pnpm build:routekit` | Runs `tsc -b packages/routekit-cli` only. | For fast RouteKit CLI-only rebuilds. |
 | `pnpm clean` | Cleans TypeScript build outputs through project references. | When build output is stale or a package graph changed. |
 | `pnpm test` | Runs compiled Node tests under packages, examples, and root `test/`. | After `pnpm build` when TypeScript behavior changed. |
 | `pnpm test:root` | Runs only the root `test/*.test.js` suites. | For root-level test iteration. |
@@ -19,6 +20,8 @@ The root `package.json` is private and defines the TypeScript workspace commands
 | `pnpm demo all` | Runs every manifest-enabled non-interactive example. | Before changing example infrastructure. |
 | `pnpm dev:link-cli` | Runs `scripts/link-fusionkit-dev.mjs` to link the `fusionkit-dev` wrapper globally. | To run this checkout's CLI from other repos. |
 | `pnpm dev:run-cli` | Runs `scripts/fusionkit-dev.mjs`, rebuilding the local CLI before each run. | For dev-loop CLI runs. |
+| `pnpm dev:link-routekit` | Runs `scripts/link-routekit-dev.mjs` to link the `routekit-dev` wrapper globally. | To run this checkout's RouteKit CLI from other repos. |
+| `pnpm dev:run-routekit` | Runs `scripts/routekit-dev.mjs`, rebuilding the local RouteKit CLI before each run. | For RouteKit dev-loop CLI runs. |
 | `pnpm mlx` / `pnpm mlx:stress` | Run the built `examples/mlx` smoke and stress tools. | On Apple Silicon when validating the managed-MLX path. |
 | `pnpm docs:generate-code` | Regenerates `docs/generated/code-api.md` from TypeScript JSDoc and Python docstrings. | After changing package entry point comments or Python package docstrings. |
 | `pnpm docs:check-code` | Checks that `docs/generated/code-api.md` is current. | Before committing source comment changes. |
@@ -155,6 +158,8 @@ pnpm docs:check-code
 | --- | --- |
 | `scripts/link-fusionkit-dev.mjs` | Links the `fusionkit-dev` wrapper globally (`pnpm dev:link-cli`). |
 | `scripts/fusionkit-dev.mjs` | Rebuild-then-run wrapper for this checkout's CLI (`pnpm dev:run-cli`). |
+| `scripts/link-routekit-dev.mjs` | Links the `routekit-dev` wrapper globally (`pnpm dev:link-routekit`). |
+| `scripts/routekit-dev.mjs` | Rebuild-then-run wrapper for this checkout's RouteKit CLI (`pnpm dev:run-routekit`). |
 | `scripts/publish-npm-workspaces.mjs` | Publishes the npm workspace packages during release workflows. |
 | `scripts/sync-docs-changelog.mjs` | Regenerates the docs-site changelog page from the root `CHANGELOG.md` (`--check` for drift). |
 | `scripts/stage-scope.mjs` | Copies the `apps/scope/.next/standalone` server plus static/public assets into `packages/cli/scope`, removes build-time state, and asserts the staged `server.js` exists. Run it only after building `apps/scope`. |

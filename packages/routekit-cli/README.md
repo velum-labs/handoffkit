@@ -18,6 +18,30 @@ Configuration is loaded from `.routekit/router.yaml`, then
 `~/.config/routekit/router.yaml`. Set `ROUTEKIT_CONFIG` to use an explicit
 file and `ROUTEKIT_HOME` to relocate runtime state.
 
+## Local checkout development
+
+Contributors can install a separate global `routekit-dev` command that always
+runs their local checkout instead of the published npm package:
+
+```bash
+corepack enable
+pnpm install --frozen-lockfile
+pnpm dev:link-routekit
+routekit-dev --version
+```
+
+Run it from any project repo:
+
+```bash
+cd your-project
+routekit-dev doctor
+routekit-dev codex
+```
+
+The dev command rebuilds `packages/routekit-cli` before launch, preserves the
+caller's working directory, and does not replace the normal `routekit` binary.
+Set `ROUTEKIT_DEV_SKIP_BUILD=1` after a build for a faster local check.
+
 ## Command ownership
 
 | Command | RouteKit responsibility |

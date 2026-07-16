@@ -24,6 +24,8 @@
     "demo": "node scripts/demo.mjs",
     "dev:link-cli": "node scripts/link-fusionkit-dev.mjs",
     "dev:run-cli": "node scripts/fusionkit-dev.mjs",
+    "dev:link-routekit": "node scripts/link-routekit-dev.mjs",
+    "dev:run-routekit": "node scripts/routekit-dev.mjs",
     "docs:generate-code": "node scripts/generate-code-docs.mjs",
     "docs:check-code": "node scripts/generate-code-docs.mjs --check",
     "docs:generate-behaviors": "node scripts/generate-expected-behaviors.mjs",
