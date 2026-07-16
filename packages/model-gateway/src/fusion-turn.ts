@@ -303,6 +303,19 @@ export class FusionTurnAssembler {
       trajectories: candidates,
       stream: req.streaming
     };
+    if (req.chat.temperature !== undefined) stepBody.temperature = req.chat.temperature;
+    if (req.chat.top_p !== undefined) stepBody.top_p = req.chat.top_p;
+    if (req.chat.max_tokens !== undefined) stepBody.max_tokens = req.chat.max_tokens;
+    if (req.chat.max_completion_tokens !== undefined) {
+      stepBody.max_completion_tokens = req.chat.max_completion_tokens;
+    }
+    if (req.chat.seed !== undefined) stepBody.seed = req.chat.seed;
+    if (req.chat.reasoning !== undefined) stepBody.reasoning = req.chat.reasoning;
+    if (req.chat.provider !== undefined) stepBody.provider = req.chat.provider;
+    if (req.chat.usage !== undefined) stepBody.usage = req.chat.usage;
+    if (req.chat.fusion?.include_evidence !== undefined) {
+      stepBody.include_evidence = req.chat.fusion.include_evidence;
+    }
     if (req.chat.tools !== undefined) stepBody.tools = req.chat.tools;
     if (req.chat.tool_choice !== undefined) stepBody.tool_choice = req.chat.tool_choice;
     const route = this.#routeFor(req);

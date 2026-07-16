@@ -26,6 +26,9 @@ KEEP_FIELDS = (
     "difficulty",
     "contest_date",
     "platform",
+    "starter_code",
+    "metadata",
+    "version_tag",
     "public_test_cases",
     "private_test_cases",
 )
@@ -55,6 +58,14 @@ def _normalize_fixtures(value: object, *, private: bool) -> str:
     return json.dumps(decoded, sort_keys=True, separators=(",", ":"))
 
 
+def _normalize_metadata(value: object) -> dict[str, object]:
+    if isinstance(value, str):
+        value = json.loads(value)
+    if not isinstance(value, dict):
+        raise ValueError("LiveCodeBench metadata must be an object")
+    return {str(key): item for key, item in value.items()}
+
+
 def _content_sha256(row: dict[str, object]) -> str:
     canonical = json.dumps(row, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
@@ -63,6 +74,11 @@ def _content_sha256(row: dict[str, object]) -> str:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--jsonl-dir", type=Path, default=Path("/tmp/lcb"))
+    parser.add_argument(
+        "--source-revision",
+        required=True,
+        help="immutable Hugging Face dataset commit SHA",
+    )
     parser.add_argument(
         "--out",
         type=Path,
@@ -94,6 +110,13 @@ def main() -> int:
                 if qid not in remaining:
                     continue
                 slim = {k: row.get(k) for k in KEEP_FIELDS}
+                slim["store_schema_version"] = 2
+                slim["source_revision"] = args.source_revision
+                slim["metadata"] = _normalize_metadata(slim["metadata"])
+                if slim["starter_code"] not in {"", None}:
+                    raise ValueError(f"{qid} is not a no-starter-code task")
+                if slim["metadata"].get("func_name") is not None:
+                    raise ValueError(f"{qid} is not a stdin task")
                 slim["public_test_cases"] = _normalize_fixtures(
                     slim["public_test_cases"], private=False
                 )

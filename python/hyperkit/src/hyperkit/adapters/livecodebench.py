@@ -81,10 +81,6 @@ REPAIR_TEMPLATE = (
     "Respond with ONLY a single corrected Python code block."
 )
 
-_FENCED_PYTHON = re.compile(r"```(?:python|py)\s*\n(.*?)```", re.DOTALL | re.IGNORECASE)
-_FENCED_ANY = re.compile(r"```[^\n`]*\n(.*?)```", re.DOTALL)
-_CODE_START = re.compile(r"^\s*(import |from |def |class |if __name__|#!|@)")
-
 _ENV_ALLOWLIST = ("PATH", "LANG", "LC_ALL", "LC_CTYPE", "PYTHONHASHSEED")
 _OUTPUT_LIMIT = 1 << 20
 _RESPONSE_LIMIT = 32 << 20
@@ -144,25 +140,19 @@ def _store_dir() -> Path:
 
 
 def extract_code(text: str) -> str:
-    """Best-effort extraction of a runnable Python program from a response."""
+    """Apply LiveCodeBench's generic chat-model fence extraction exactly."""
 
     if not text or not text.strip():
         return ""
-    python_blocks = _FENCED_PYTHON.findall(text)
-    if python_blocks:
-        return python_blocks[-1].strip()
-    any_blocks = _FENCED_ANY.findall(text)
-    if any_blocks:
-        return any_blocks[-1].strip()
-    lines = text.splitlines()
-    for index, line in enumerate(lines):
-        if _CODE_START.match(line):
-            return "\n".join(lines[index:]).strip()
-    return text.strip()
+    lines = text.split("\n")
+    fence_lines = [index for index, line in enumerate(lines) if "```" in line]
+    if len(fence_lines) < 2:
+        return ""
+    return "\n".join(lines[fence_lines[-2] + 1 : fence_lines[-1]]).strip()
 
 
 def _stripped_lines(output: str) -> list[str]:
-    return [line.strip() for line in output.strip().splitlines()]
+    return [line.strip() for line in output.strip().split("\n")]
 
 
 def _outputs_match(expected: str, actual: str) -> bool:
@@ -213,7 +203,12 @@ def _legacy_fixture_json(value: str) -> Any:
     compressed = base64.b64decode(encoded, validate=True)
     decompressor = zlib.decompressobj()
     raw_pickle = decompressor.decompress(compressed, _FIXTURE_LIMIT + 1)
-    if len(raw_pickle) > _FIXTURE_LIMIT or decompressor.unconsumed_tail:
+    if (
+        len(raw_pickle) > _FIXTURE_LIMIT
+        or decompressor.unconsumed_tail
+        or decompressor.unused_data
+        or not decompressor.eof
+    ):
         raise ValueError("decoded private fixture exceeds the size limit")
     try:
         raw_json = _DataOnlyUnpickler(io.BytesIO(raw_pickle)).load()
@@ -242,6 +237,11 @@ def _validated_tests(value: Any, *, label: str) -> list[dict[str, str]]:
     for index, test in enumerate(value):
         if not isinstance(test, dict):
             raise ValueError(f"{label} fixture {index} must be an object")
+        if set(test) != {"input", "output", "testtype"}:
+            raise ValueError(
+                f"{label} fixture {index} must contain exactly "
+                "input, output, and testtype"
+            )
         normalized: dict[str, str] = {}
         for key in ("input", "output", "testtype"):
             item = test.get(key)
@@ -257,15 +257,22 @@ def _validated_tests(value: Any, *, label: str) -> list[dict[str, str]]:
 def decode_tests(row: dict[str, Any]) -> tuple[list[dict[str, str]], list[dict[str, str]]]:
     """Decode public/private stdin tests, failing closed on corrupt fixtures."""
 
+    if row.get("store_schema_version") != 2:
+        raise ValueError("LiveCodeBench problem requires store_schema_version=2")
+    if row.get("starter_code") not in {"", None}:
+        raise ValueError("LiveCodeBench problem is not a no-starter-code task")
+    metadata = row.get("metadata")
+    if not isinstance(metadata, dict) or metadata.get("func_name") is not None:
+        raise ValueError("LiveCodeBench problem is not a stdin task")
     public = _validated_tests(row.get("public_test_cases"), label="public")
     private = _validated_tests(row.get("private_test_cases"), label="private")
-    public_stdin = [t for t in public if t.get("testtype") == "stdin"]
-    private_stdin = [t for t in private if t.get("testtype") == "stdin"]
-    if not public_stdin:
+    if any(test["testtype"] != "stdin" for test in [*public, *private]):
+        raise ValueError("LiveCodeBench problem contains non-stdin fixtures")
+    if not public:
         raise ValueError("LiveCodeBench problem has no decodable public stdin tests")
-    if not private_stdin:
+    if not private:
         raise ValueError("LiveCodeBench problem has no decodable private stdin tests")
-    return public_stdin, private_stdin
+    return public, private
 
 
 class _Sandbox:
@@ -274,24 +281,19 @@ class _Sandbox:
     def __init__(self, *, require_isolation: bool = True):
         self.require_isolation = require_isolation
 
-    def _limits(self):  # pragma: no cover - runs in the forked child
+    def _limits(self, cpu_seconds: int = _CPU_SECONDS):  # pragma: no cover - child
         def set_limits() -> None:
             if _resource is None:
-                return
-            with contextlib.suppress(Exception):
-                _resource.setrlimit(_resource.RLIMIT_CPU, (_CPU_SECONDS, _CPU_SECONDS))
-            with contextlib.suppress(Exception):
-                _resource.setrlimit(_resource.RLIMIT_FSIZE, (_OUTPUT_LIMIT, _OUTPUT_LIMIT))
-            with contextlib.suppress(Exception):
-                _resource.setrlimit(_resource.RLIMIT_AS, (_MEMORY_BYTES, _MEMORY_BYTES))
-            with contextlib.suppress(Exception):
-                _resource.setrlimit(_resource.RLIMIT_NOFILE, (64, 64))
-            with contextlib.suppress(Exception):
-                _resource.setrlimit(_resource.RLIMIT_CORE, (0, 0))
+                raise RuntimeError("POSIX resource limits are unavailable")
+            _resource.setrlimit(_resource.RLIMIT_CPU, (cpu_seconds, cpu_seconds))
+            _resource.setrlimit(_resource.RLIMIT_FSIZE, (_OUTPUT_LIMIT, _OUTPUT_LIMIT))
+            _resource.setrlimit(_resource.RLIMIT_AS, (_MEMORY_BYTES, _MEMORY_BYTES))
+            _resource.setrlimit(_resource.RLIMIT_NOFILE, (64, 64))
+            _resource.setrlimit(_resource.RLIMIT_CORE, (0, 0))
 
         return set_limits
 
-    def _command(self) -> tuple[list[str], bool]:
+    def _command(self, script: str = "sol.py") -> tuple[list[str], bool]:
         unshare = shutil.which("unshare")
         system_python = Path("/usr/bin/python3")
         if sys.platform == "linux" and unshare and system_python.exists():
@@ -307,7 +309,7 @@ class _Sandbox:
                     str(system_python),
                     "-I",
                     "-S",
-                    "sol.py",
+                    script,
                 ],
                 True,
             )
@@ -316,7 +318,7 @@ class _Sandbox:
                 "LiveCodeBench requires Linux user/network/PID namespaces; "
                 "set require_isolation=false only for trusted local fixtures"
             )
-        return ([sys.executable, "-I", "-S", "sol.py"], False)
+        return ([sys.executable, "-I", "-S", script], False)
 
     def run(self, code: str, stdin: str, *, timeout_s: float) -> dict[str, Any]:
         with tempfile.TemporaryDirectory() as tmp:
@@ -369,6 +371,70 @@ class _Sandbox:
                 "isolated": isolated,
             }
 
+    def run_suite(
+        self,
+        code: str,
+        tests: Sequence[dict[str, str]],
+        *,
+        timeout_s: float,
+        stop_on_failure: bool,
+    ) -> dict[str, Any]:
+        """Run one candidate against a suite using pinned official semantics."""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "sol.py").write_text(code, encoding="utf-8")
+            (root / "tests.json").write_text(
+                json.dumps(list(tests), sort_keys=True),
+                encoding="utf-8",
+            )
+            runner_source = Path(__file__).with_name("lcb_runner.py").read_text(
+                encoding="utf-8"
+            )
+            (root / "lcb_runner.py").write_text(runner_source, encoding="utf-8")
+            result_path = root / "suite-result.json"
+            env = {key: os.environ[key] for key in _ENV_ALLOWLIST if key in os.environ}
+            env.setdefault("PATH", os.defpath)
+            env["HOME"] = tmp
+            env["TMPDIR"] = tmp
+            per_test_timeout = max(1, int(timeout_s))
+            cpu_seconds = per_test_timeout * (len(tests) + 1) + 5
+            outer_timeout = float(cpu_seconds + 5)
+            command, isolated = self._command("lcb_runner.py")
+            command.extend(
+                [
+                    "sol.py",
+                    "tests.json",
+                    result_path.name,
+                    str(per_test_timeout),
+                    "1" if stop_on_failure else "0",
+                ]
+            )
+            completed = subprocess.run(
+                command,
+                cwd=tmp,
+                env=env,
+                capture_output=True,
+                timeout=outer_timeout,
+                check=False,
+                preexec_fn=self._limits(cpu_seconds) if os.name == "posix" else None,
+                start_new_session=True,
+            )
+            if not result_path.exists():
+                stderr = completed.stderr.decode(errors="replace")[:2000]
+                raise RuntimeError(
+                    "LiveCodeBench sandbox failed before producing a result: "
+                    f"returncode={completed.returncode}, stderr={stderr!r}"
+                )
+            payload = json.loads(result_path.read_text(encoding="utf-8"))
+            if not isinstance(payload, dict) or not isinstance(
+                payload.get("results"),
+                list,
+            ):
+                raise RuntimeError("LiveCodeBench sandbox produced an invalid result")
+            payload["isolated"] = isolated
+            return payload
+
 
 def run_tests(
     sandbox: _Sandbox,
@@ -389,14 +455,34 @@ def run_tests(
             "passed_indices": [],
             "results": [],
         }
+    suite = sandbox.run_suite(
+        code,
+        tests,
+        timeout_s=timeout_s,
+        stop_on_failure=False,
+    )
+    compile_error = suite.get("compile_error")
+    raw_results = suite["results"]
+    if compile_error is not None:
+        raw_results = [
+            {
+                "stdout": "",
+                "stderr": str(compile_error),
+                "timed_out": False,
+                "returncode": 1,
+                "duration_s": 0.0,
+            }
+        ]
+
     passed = 0
     passed_indices: list[int] = []
     results: list[dict[str, Any]] = []
     failure: dict[str, Any] | None = None
-    for index, test in enumerate(tests):
+    for index, (test, result) in enumerate(
+        zip(tests, raw_results, strict=False)
+    ):
         expected = test.get("output", "")
-        result = sandbox.run(code, test.get("input", ""), timeout_s=timeout_s)
-        ok = result["ok"] and _outputs_match(expected, result["stdout"])
+        ok = result["returncode"] == 0 and _outputs_match(expected, result["stdout"])
         results.append(
             {
                 "index": index,
@@ -405,7 +491,7 @@ def run_tests(
                 "returncode": result["returncode"],
                 "duration_s": result["duration_s"],
                 "stdout_sha256": _sha256(result["stdout"]),
-                "isolated": result["isolated"],
+                "isolated": suite["isolated"],
             }
         )
         if ok:
@@ -422,6 +508,14 @@ def run_tests(
             }
         if stop_on_failure:
             break
+    if len(raw_results) < len(tests) and failure is None:
+        failure = {
+            "stdin": tests[len(raw_results)].get("input", "")[:2000],
+            "expected": tests[len(raw_results)].get("output", "")[:2000],
+            "actual": "",
+            "stderr": "runner stopped before executing this test",
+            "timed_out": False,
+        }
     return {
         "passed": passed,
         "total": len(tests),
@@ -471,8 +565,10 @@ class _Client:
         temperature: float,
         max_tokens: int,
         top_p: float | None = None,
+        seed: int | None = None,
         reasoning: dict[str, Any] | None = None,
         provider: dict[str, Any] | None = None,
+        include_evidence: bool = False,
         timeout_s: float = 900.0,
         attempts: int = 3,
     ) -> dict[str, Any]:
@@ -486,10 +582,14 @@ class _Client:
         }
         if top_p is not None:
             payload["top_p"] = top_p
+        if seed is not None:
+            payload["seed"] = seed
         if reasoning is not None:
             payload["reasoning"] = reasoning
         if provider is not None:
             payload["provider"] = provider
+        if include_evidence:
+            payload["fusion"] = {"include_evidence": True}
         headers = {"Content-Type": "application/json"}
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
@@ -673,10 +773,9 @@ class LivecodebenchGrader:
 
 class LivecodebenchAdapter:
     name = "livecodebench"
-    # v4: line-preserving comparison, safe fixture decoding, namespaced and
-    # bounded execution, heterogeneous candidate specs, strict/fail-soft tie
-    # judging, and complete request/response/test evidence.
-    version = "4"
+    # v5: revision-pinned official stdio execution/extraction/comparison
+    # semantics, content-locked fixture schema, plus v4's complete evidence.
+    version = "5"
 
     def manifest(self, ref: str) -> TextManifest:
         return TextManifest(ref)
@@ -722,6 +821,15 @@ class LivecodebenchAdapter:
         self, instance_id: str, target: SUTTarget, workdir: Path, params: dict[str, Any]
     ) -> dict[str, Any]:
         problem = self.load_problem(instance_id)
+        content_lock = params.get("dataset_content_sha256")
+        if not isinstance(content_lock, dict):
+            raise ValueError("dataset_content_sha256 is required for LiveCodeBench")
+        expected_content_sha256 = content_lock.get(instance_id)
+        if expected_content_sha256 != problem.get("content_sha256"):
+            raise ValueError(
+                f"LiveCodeBench problem {instance_id!r} does not match "
+                "the cell's content lock"
+            )
         question = problem.get("question_content") or ""
         public_tests, private_tests = decode_tests(problem)
 
@@ -763,6 +871,12 @@ class LivecodebenchAdapter:
         provider = params.get("provider")
         if provider is not None and not isinstance(provider, dict):
             raise ValueError("provider must be an object")
+        seed = params.get("seed")
+        if seed is not None and (isinstance(seed, bool) or not isinstance(seed, int)):
+            raise ValueError("seed must be an integer")
+        include_evidence = params.get("include_evidence", False)
+        if not isinstance(include_evidence, bool):
+            raise ValueError("include_evidence must be a boolean")
         # Wall clock must exceed the CPU rlimit or grading becomes a lottery on
         # slow hosts: a CPU-bound solution must always get its full CPU budget.
         timeout_s = _bounded_float(
@@ -801,6 +915,7 @@ class LivecodebenchAdapter:
                     raise ValueError(f"candidate_specs[{index}] must be an object")
                 spec_reasoning = raw_spec.get("reasoning", reasoning)
                 spec_provider = raw_spec.get("provider", provider)
+                spec_seed = raw_spec.get("seed", seed)
                 if spec_reasoning is not None and not isinstance(spec_reasoning, dict):
                     raise ValueError(
                         f"candidate_specs[{index}].reasoning must be an object"
@@ -808,6 +923,12 @@ class LivecodebenchAdapter:
                 if spec_provider is not None and not isinstance(spec_provider, dict):
                     raise ValueError(
                         f"candidate_specs[{index}].provider must be an object"
+                    )
+                if spec_seed is not None and (
+                    isinstance(spec_seed, bool) or not isinstance(spec_seed, int)
+                ):
+                    raise ValueError(
+                        f"candidate_specs[{index}].seed must be an integer"
                     )
                 spec_temperature = float(
                     raw_spec.get("temperature", temps[index % len(temps)])
@@ -837,6 +958,7 @@ class LivecodebenchAdapter:
                         "top_p": spec_top_p,
                         "reasoning": spec_reasoning,
                         "provider": spec_provider,
+                        "seed": spec_seed,
                     }
                 )
         else:
@@ -853,6 +975,7 @@ class LivecodebenchAdapter:
                     "top_p": top_p,
                     "reasoning": reasoning,
                     "provider": provider,
+                    "seed": seed,
                 }
                 for index in range(n_samples)
             ]
@@ -874,8 +997,10 @@ class LivecodebenchAdapter:
                 temperature=temperature,
                 max_tokens=spec["max_tokens"],
                 top_p=spec["top_p"],
+                seed=spec["seed"],
                 reasoning=spec["reasoning"],
                 provider=spec["provider"],
+                include_evidence=include_evidence,
                 timeout_s=request_timeout_s,
                 attempts=attempts,
             )
@@ -973,8 +1098,10 @@ class LivecodebenchAdapter:
                             temperature=0.0,
                             max_tokens=tie_judge_max_tokens,
                             top_p=1.0,
+                            seed=seed,
                             reasoning=reasoning,
                             provider=provider,
+                            include_evidence=include_evidence,
                             timeout_s=request_timeout_s,
                             attempts=attempts,
                         )
@@ -1054,8 +1181,10 @@ class LivecodebenchAdapter:
                     candidate_specs[int(winner["index"])]["max_tokens"]
                 ),
                 top_p=candidate_specs[int(winner["index"])]["top_p"],
+                seed=candidate_specs[int(winner["index"])]["seed"],
                 reasoning=candidate_specs[int(winner["index"])]["reasoning"],
                 provider=candidate_specs[int(winner["index"])]["provider"],
+                include_evidence=include_evidence,
                 timeout_s=request_timeout_s,
                 attempts=attempts,
             )

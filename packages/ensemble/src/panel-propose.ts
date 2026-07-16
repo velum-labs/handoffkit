@@ -35,6 +35,14 @@ export type ProposalPanelOptions = {
   /** The caller's tool definitions / tool_choice, verbatim. */
   tools?: unknown;
   toolChoice?: unknown;
+  temperature?: number;
+  topP?: number;
+  maxTokens?: number;
+  maxCompletionTokens?: number;
+  seed?: number;
+  reasoning?: Record<string, unknown>;
+  provider?: Record<string, unknown>;
+  usage?: Record<string, unknown>;
   /** Fallback OpenAI-compatible base URL (the shared router). */
   fusionBackendUrl: string;
   /** Per-member endpoint base URLs keyed by `EnsembleModel.id`. */
@@ -81,6 +89,8 @@ function completionToWire(input: {
   model: EnsembleModel;
   message: ChatCompletionMessage | undefined;
   usage?: unknown;
+  providerCost?: unknown;
+  responseIdentity?: Record<string, unknown>;
 }): WireTrajectory {
   const items: Array<Record<string, unknown>> = [];
   let index = 0;
@@ -116,6 +126,14 @@ function completionToWire(input: {
     items,
     final_output: text,
     ...(usage !== undefined ? { usage } : {}),
+    ...(input.providerCost !== undefined || input.responseIdentity !== undefined
+      ? {
+          metadata: {
+            ...(input.providerCost !== undefined ? { provider_cost: input.providerCost } : {}),
+            ...(input.responseIdentity !== undefined ? { raw_response: input.responseIdentity } : {})
+          }
+        }
+      : {}),
     end_reason: { kind: "completed" }
   };
 }
@@ -183,6 +201,16 @@ async function proposeOne(
         // The shared router routes by endpoint id; a dedicated endpoint ignores it.
         model: model.id,
         messages: options.messages,
+        ...(options.temperature !== undefined ? { temperature: options.temperature } : {}),
+        ...(options.topP !== undefined ? { top_p: options.topP } : {}),
+        ...(options.maxTokens !== undefined ? { max_tokens: options.maxTokens } : {}),
+        ...(options.maxCompletionTokens !== undefined
+          ? { max_completion_tokens: options.maxCompletionTokens }
+          : {}),
+        ...(options.seed !== undefined ? { seed: options.seed } : {}),
+        ...(options.reasoning !== undefined ? { reasoning: options.reasoning } : {}),
+        ...(options.provider !== undefined ? { provider: options.provider } : {}),
+        ...(options.usage !== undefined ? { usage: options.usage } : {}),
         ...(options.tools !== undefined ? { tools: options.tools } : {}),
         ...(options.toolChoice !== undefined ? { tool_choice: options.toolChoice } : {}),
         stream: false
@@ -194,14 +222,30 @@ async function proposeOne(
       wire = failedWire(candidateId, model, `endpoint returned ${response.status}${detail ? `: ${detail}` : ""}`);
     } else {
       const payload = (await response.json()) as {
+        id?: unknown;
+        model?: unknown;
+        provider?: unknown;
         choices?: Array<{ message?: ChatCompletionMessage }>;
         usage?: unknown;
+        provider_cost?: unknown;
       };
       const message = payload.choices?.[0]?.message;
       if (message === undefined) {
         wire = failedWire(candidateId, model, "endpoint returned no choices");
       } else {
-        wire = completionToWire({ candidateId, model, message, usage: payload.usage });
+        const responseIdentity = {
+          ...(typeof payload.id === "string" ? { id: payload.id } : {}),
+          ...(typeof payload.model === "string" ? { model: payload.model } : {}),
+          ...(typeof payload.provider === "string" ? { provider: payload.provider } : {})
+        };
+        wire = completionToWire({
+          candidateId,
+          model,
+          message,
+          usage: payload.usage,
+          ...(payload.provider_cost !== undefined ? { providerCost: payload.provider_cost } : {}),
+          ...(Object.keys(responseIdentity).length > 0 ? { responseIdentity } : {})
+        });
       }
     }
   } catch (error) {

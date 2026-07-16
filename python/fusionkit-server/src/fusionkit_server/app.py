@@ -31,7 +31,9 @@ from fusionkit_core.config import (
     model_sampling_defaults,
 )
 from fusionkit_core.contracts import (
+    ContractUsage,
     FusionRunRequestV1,
+    Status,
     TrajectoryV1,
     contract_metadata,
 )
@@ -115,6 +117,7 @@ class FusionRequest(BaseModel):
     # OpenAI's modern spelling of `max_tokens` (required by reasoning models);
     # the Node gateway adapters emit it. Folded into `max_tokens` below.
     max_completion_tokens: int | None = Field(default=None, ge=1)
+    seed: int | None = None
     # OpenRouter request extensions used by scientific runs. They are
     # forwarded to every configured OpenRouter stage and rejected by clients
     # that cannot honor them.
@@ -155,15 +158,18 @@ class TrajectoryItemInput(BaseModel):
 
 
 class TrajectoryInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     trajectory_id: str
     model_id: str
-    status: str
+    status: Status
     items: list[TrajectoryItemInput] = Field(default_factory=list)
     final_output: str
     candidate_id: str | None = None
     model: str | None = None
     harness_kind: str | None = None
     diff: str | None = None
+    usage: ContractUsage | None = None
     metadata: dict[str, Any] | None = None
 
 
@@ -178,11 +184,18 @@ class FuseTrajectoriesRequest(BaseModel):
     the ``fusion`` extension.
     """
 
+    model_config = ConfigDict(extra="forbid")
+
     model: str = FUSION_DEFAULT_ALIAS
     # ChatMessage accepts OpenAI's nested assistant tool calls, null content,
     # and content-part arrays while still requiring a valid role.
     messages: list[ChatMessage] = Field(min_length=1)
     trajectories: list[TrajectoryInput] = Field(default_factory=list)
+    temperature: float | None = Field(default=None, ge=0, le=2)
+    top_p: float | None = Field(default=None, gt=0, le=1)
+    max_tokens: int | None = Field(default=None, ge=1)
+    max_completion_tokens: int | None = Field(default=None, ge=1)
+    seed: int | None = None
     tools: list[dict[str, Any]] | None = None
     tool_choice: str | dict[str, Any] | None = None
     judge_model: str | None = None
@@ -203,6 +216,16 @@ class FuseTrajectoriesRequest(BaseModel):
 
     @model_validator(mode="after")
     def _require_successful_trajectory(self) -> FuseTrajectoriesRequest:
+        if (
+            self.max_tokens is not None
+            and self.max_completion_tokens is not None
+            and self.max_tokens != self.max_completion_tokens
+        ):
+            raise ValueError(
+                "max_tokens and max_completion_tokens must match when both are supplied"
+            )
+        if self.max_tokens is None and self.max_completion_tokens is not None:
+            self.max_tokens = self.max_completion_tokens
         if not any(trajectory.status == "succeeded" for trajectory in self.trajectories):
             raise ValueError("at least one succeeded trajectory is required")
         return self
@@ -519,7 +542,7 @@ def create_app(
                 trajectories,
                 judge_model=judge_model,
                 synthesizer_model=synthesizer_model,
-                sampling=config.sampling,
+                sampling=_request_sampling(config, request),
                 tools=tools,
                 tool_choice=tool_choice,
                 prompts=request.prompts,
@@ -542,7 +565,7 @@ def create_app(
                 trajectories,
                 judge_model=judge_model,
                 synthesizer_model=synthesizer_model,
-                sampling=config.sampling,
+                sampling=_request_sampling(config, request),
                 tools=tools,
                 tool_choice=tool_choice,
                 prompts=request.prompts,
@@ -722,7 +745,10 @@ async def _fusion_tool_step(
     )
 
 
-def _request_sampling(config: FusionConfig, request: FusionRequest) -> SamplingConfig:
+def _request_sampling(
+    config: FusionConfig,
+    request: FusionRequest | FuseTrajectoriesRequest,
+) -> SamplingConfig:
     return config.sampling.model_copy(
         update={
             key: value
@@ -730,6 +756,7 @@ def _request_sampling(config: FusionConfig, request: FusionRequest) -> SamplingC
                 "temperature": request.temperature,
                 "top_p": request.top_p,
                 "max_tokens": request.max_tokens,
+                "seed": request.seed,
             }.items()
             if value is not None
         }

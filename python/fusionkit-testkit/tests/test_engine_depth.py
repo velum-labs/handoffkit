@@ -190,9 +190,8 @@ def test_wire_request_shape_matrix(provider_sim: ProviderSimulator) -> None:
 def test_rate_limit_storm_exhausts_retries_then_fuses_from_survivors(
     provider_sim: ProviderSimulator, client: TestClient
 ) -> None:
-    # Member A is rate-limited for every attempt (SDK-internal retries x
-    # FusionKit retries); member B answers. The fused turn must still succeed,
-    # and the journal must show the full retry storm on A.
+    # Member A is rate-limited for every FusionKit-owned attempt; member B
+    # answers. Hidden SDK retries are disabled.
     provider_sim.queue(
         "gpt-deep-a", *[Behavior(error=SimError.rate_limited(retry_after=0.0)) for _ in range(12)]
     )
@@ -207,10 +206,7 @@ def test_rate_limit_storm_exhausts_retries_then_fuses_from_survivors(
     assert response.status_code == 200, response.text
     assert response.json()["choices"][0]["message"]["content"] == "fused despite the storm"
     storm = provider_sim.calls(model="gpt-deep-a", status=429)
-    # FusionKit retries transient failures up to 3 attempts, each of which the
-    # openai SDK expands into up to 3 wire requests: more than one SDK budget
-    # (3) proves FusionKit's retry layer engaged; every attempt was throttled.
-    assert len(storm) > 3, provider_sim.describe_journal()
+    assert len(storm) == 3, provider_sim.describe_journal()
     assert provider_sim.calls(model="claude-deep-b")[0]["status"] == 200
 
 

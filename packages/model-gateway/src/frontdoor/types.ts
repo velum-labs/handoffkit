@@ -18,6 +18,15 @@ import type { TurnNarration } from "./narration.js";
 export type FrontdoorChatBody = {
   model?: string;
   messages?: ChatMessageLike[];
+  temperature?: number;
+  top_p?: number;
+  max_tokens?: number;
+  max_completion_tokens?: number;
+  seed?: number;
+  reasoning?: Record<string, unknown>;
+  provider?: Record<string, unknown>;
+  usage?: Record<string, unknown>;
+  fusion?: { include_evidence?: boolean };
   tools?: unknown;
   tool_choice?: unknown;
   stream?: boolean;

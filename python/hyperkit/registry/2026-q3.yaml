@@ -15,6 +15,9 @@ models:
     lineage:
       - deepseek-v3
     generation: 2025-h2
+    weight_eligibility: verified_open_weight
+    weights_url: https://huggingface.co/deepseek-ai/DeepSeek-R1-0528
+    license_id: MIT
   - endpoint_id: terminus
     provider: openrouter
     model: deepseek/deepseek-v3.1-terminus
@@ -27,6 +30,9 @@ models:
     lineage:
       - deepseek-v3
     generation: 2025-h2
+    weight_eligibility: verified_open_weight
+    weights_url: https://huggingface.co/deepseek-ai/DeepSeek-V3.1-Terminus
+    license_id: MIT
   - endpoint_id: qwen3t
     provider: openrouter
     model: qwen/qwen3-235b-a22b-thinking-2507
@@ -39,6 +45,9 @@ models:
     lineage:
       - qwen3
     generation: 2025-h2
+    weight_eligibility: verified_open_weight
+    weights_url: https://huggingface.co/Qwen/Qwen3-235B-A22B-Thinking-2507
+    license_id: Apache-2.0
   - endpoint_id: ds32
     provider: openrouter
     model: deepseek/deepseek-v3.2
@@ -51,6 +60,9 @@ models:
     lineage:
       - deepseek-v3
     generation: 2025-h2
+    weight_eligibility: verified_open_weight
+    weights_url: https://huggingface.co/deepseek-ai/DeepSeek-V3.2
+    license_id: MIT
   - endpoint_id: nemotron3s
     provider: openrouter
     model: nvidia/nemotron-3-super-120b-a12b
@@ -63,6 +75,9 @@ models:
     lineage:
       - nemotron-3-super
     generation: 2026-h1
+    weight_eligibility: restricted_weight
+    weights_url: https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-FP8
+    license_id: NVIDIA-Nemotron-Open-Model-License
   - endpoint_id: dsv4pro
     provider: openrouter
     model: deepseek/deepseek-v4-pro
@@ -75,6 +90,9 @@ models:
     lineage:
       - deepseek-v4
     generation: 2026-h1
+    weight_eligibility: verified_open_weight
+    weights_url: https://huggingface.co/deepseek-ai/DeepSeek-V4-Pro
+    license_id: MIT
   - endpoint_id: glm52
     provider: openrouter
     model: z-ai/glm-5.2
@@ -87,6 +105,9 @@ models:
     lineage:
       - glm-5
     generation: 2026-h1
+    weight_eligibility: verified_open_weight
+    weights_url: https://huggingface.co/zai-org/GLM-5.2
+    license_id: MIT
   - endpoint_id: qwen37max
     provider: openrouter
     model: qwen/qwen3.7-max
@@ -99,6 +120,8 @@ models:
     lineage:
       - qwen3.7
     generation: 2026-h1
+    weight_eligibility: proprietary
+    license_id: proprietary
   - endpoint_id: ds32_64k
     provider: openrouter
     model: deepseek/deepseek-v3.2
@@ -111,6 +134,9 @@ models:
     lineage:
       - deepseek-v3
     generation: 2025-h2
+    weight_eligibility: verified_open_weight
+    weights_url: https://huggingface.co/deepseek-ai/DeepSeek-V3.2
+    license_id: MIT
   - endpoint_id: nemotron3s_64k
     provider: openrouter
     model: nvidia/nemotron-3-super-120b-a12b
@@ -123,6 +149,9 @@ models:
     lineage:
       - nemotron-3-super
     generation: 2026-h1
+    weight_eligibility: restricted_weight
+    weights_url: https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-FP8
+    license_id: NVIDIA-Nemotron-Open-Model-License
   - endpoint_id: kimi26_64k
     provider: openrouter
     model: moonshotai/kimi-k2.6
@@ -135,3 +164,6 @@ models:
     lineage:
       - kimi-k2
     generation: 2026-h1
+    weight_eligibility: restricted_weight
+    weights_url: https://huggingface.co/moonshotai/Kimi-K2.6
+    license_id: Modified-MIT

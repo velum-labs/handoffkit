@@ -71,8 +71,12 @@ const CALLER_TOOLS = [
 
 test("members receive the caller's messages and tools verbatim, one completion each", async () => {
   const endpoint = await startEndpoint(() => ({
+    id: "response-id",
+    model: "effective/model",
+    provider: "FirstParty",
     choices: [{ message: { content: "an answer" } }],
-    usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 }
+    usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+    provider_cost: { source: "provider", cost_usd: 0.01 }
   }));
   try {
     const wires = await runProposalPanels({
@@ -84,6 +88,13 @@ test("members receive the caller's messages and tools verbatim, one completion e
       messages: CALLER_MESSAGES,
       tools: CALLER_TOOLS,
       toolChoice: "auto",
+      temperature: 0.6,
+      topP: 0.9,
+      maxCompletionTokens: 4096,
+      seed: 7,
+      reasoning: { effort: "high" },
+      provider: { order: ["FirstParty"], allow_fallbacks: false },
+      usage: { include: true },
       fusionBackendUrl: endpoint.url
     });
 
@@ -93,9 +104,27 @@ test("members receive the caller's messages and tools verbatim, one completion e
       assert.deepEqual(request.body.messages, CALLER_MESSAGES, "messages must be verbatim");
       assert.deepEqual(request.body.tools, CALLER_TOOLS, "tools must be verbatim");
       assert.equal(request.body.tool_choice, "auto");
+      assert.equal(request.body.temperature, 0.6);
+      assert.equal(request.body.top_p, 0.9);
+      assert.equal(request.body.max_completion_tokens, 4096);
+      assert.equal(request.body.seed, 7);
+      assert.deepEqual(request.body.reasoning, { effort: "high" });
+      assert.deepEqual(request.body.provider, {
+        order: ["FirstParty"],
+        allow_fallbacks: false
+      });
+      assert.deepEqual(request.body.usage, { include: true });
       assert.equal(request.body.stream, false);
     }
     assert.deepEqual(new Set(endpoint.requests.map((r) => r.body.model)), new Set(["alpha", "beta"]));
+    assert.deepEqual(wires[0]?.metadata, {
+      provider_cost: { source: "provider", cost_usd: 0.01 },
+      raw_response: {
+        id: "response-id",
+        model: "effective/model",
+        provider: "FirstParty"
+      }
+    });
 
     assert.equal(wires.length, 2);
     for (const wire of wires) {

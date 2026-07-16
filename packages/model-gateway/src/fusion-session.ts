@@ -306,6 +306,14 @@ export class FusionSessionManager {
     panelDepth?: number;
     tools?: unknown;
     toolChoice?: unknown;
+    temperature?: number;
+    topP?: number;
+    maxTokens?: number;
+    maxCompletionTokens?: number;
+    seed?: number;
+    reasoning?: Record<string, unknown>;
+    provider?: Record<string, unknown>;
+    usage?: Record<string, unknown>;
     k?: number;
     signal?: AbortSignal;
   }): { candidates: Promise<WireTrajectory[]>; abort: (reason?: unknown) => void } {
@@ -346,6 +354,16 @@ export class FusionSessionManager {
       ...(input.panelDepth !== undefined && input.panelDepth > 0 ? { panelDepth: input.panelDepth } : {}),
       ...(input.tools !== undefined ? { tools: input.tools } : {}),
       ...(input.toolChoice !== undefined ? { toolChoice: input.toolChoice } : {}),
+      ...(input.temperature !== undefined ? { temperature: input.temperature } : {}),
+      ...(input.topP !== undefined ? { topP: input.topP } : {}),
+      ...(input.maxTokens !== undefined ? { maxTokens: input.maxTokens } : {}),
+      ...(input.maxCompletionTokens !== undefined
+        ? { maxCompletionTokens: input.maxCompletionTokens }
+        : {}),
+      ...(input.seed !== undefined ? { seed: input.seed } : {}),
+      ...(input.reasoning !== undefined ? { reasoning: input.reasoning } : {}),
+      ...(input.provider !== undefined ? { provider: input.provider } : {}),
+      ...(input.usage !== undefined ? { usage: input.usage } : {}),
       ...(input.k !== undefined ? { k: input.k } : {})
     });
     input.session.turns.set(input.turn, candidates);

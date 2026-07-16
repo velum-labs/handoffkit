@@ -209,6 +209,10 @@ def test_trajectory_fuse_filters_failures_and_reports_stage_cost_only(tmp_path) 
             "model": "fusionkit/panel",
             "messages": [{"role": "user", "content": "fuse"}],
             "include_evidence": True,
+                "temperature": 0.6,
+                "top_p": 0.9,
+                "max_completion_tokens": 4096,
+                "seed": 7,
             **REQUEST_CONTROLS,
             "trajectories": [
                 {
@@ -237,6 +241,10 @@ def test_trajectory_fuse_filters_failures_and_reports_stage_cost_only(tmp_path) 
 
     assert response.status_code == 200
     _assert_controls(judge.calls)
+    assert all(call["sampling"].temperature == 0.6 for call in judge.calls)
+    assert all(call["sampling"].top_p == 0.9 for call in judge.calls)
+    assert all(call["sampling"].max_tokens == 4096 for call in judge.calls)
+    assert all(call["sampling"].seed == 7 for call in judge.calls)
     body = response.json()
     assert body["provider_cost"]["cost_usd"] == 0.5
     assert body["usage"]["total_tokens"] == 5 + 9

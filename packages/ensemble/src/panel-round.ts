@@ -44,6 +44,14 @@ export type PanelRoundOptions = Omit<FusionPanelOptions, "repo" | "outputRoot" |
   prompt?: string;
   /** The caller's message history, verbatim. Required when k = 1. */
   messages?: readonly unknown[];
+  temperature?: number;
+  topP?: number;
+  maxTokens?: number;
+  maxCompletionTokens?: number;
+  seed?: number;
+  reasoning?: Record<string, unknown>;
+  provider?: Record<string, unknown>;
+  usage?: Record<string, unknown>;
   /** The caller's tool definitions / tool_choice, verbatim (k = 1 only). */
   tools?: unknown;
   toolChoice?: unknown;
@@ -73,6 +81,16 @@ export async function runPanelRound(options: PanelRoundOptions): Promise<WireTra
       ...(options.id !== undefined ? { id: options.id } : {}),
       ...(options.tools !== undefined ? { tools: options.tools } : {}),
       ...(options.toolChoice !== undefined ? { toolChoice: options.toolChoice } : {}),
+      ...(options.temperature !== undefined ? { temperature: options.temperature } : {}),
+      ...(options.topP !== undefined ? { topP: options.topP } : {}),
+      ...(options.maxTokens !== undefined ? { maxTokens: options.maxTokens } : {}),
+      ...(options.maxCompletionTokens !== undefined
+        ? { maxCompletionTokens: options.maxCompletionTokens }
+        : {}),
+      ...(options.seed !== undefined ? { seed: options.seed } : {}),
+      ...(options.reasoning !== undefined ? { reasoning: options.reasoning } : {}),
+      ...(options.provider !== undefined ? { provider: options.provider } : {}),
+      ...(options.usage !== undefined ? { usage: options.usage } : {}),
       ...(options.modelEndpoints !== undefined ? { modelEndpoints: options.modelEndpoints } : {}),
       ...(options.fusionApiKey !== undefined ? { fusionApiKey: options.fusionApiKey } : {}),
       ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),

@@ -41,9 +41,9 @@ def test_extract_code_prefers_python_fence() -> None:
     assert extract_code(text) == "print(1)"
 
 
-def test_extract_code_falls_back_to_any_fence_and_heuristics() -> None:
+def test_extract_code_requires_official_chat_fences() -> None:
     assert extract_code("```\nprint(2)\n```") == "print(2)"
-    assert extract_code("Some prose\nimport sys\nprint(3)") == "import sys\nprint(3)"
+    assert extract_code("Some prose\nimport sys\nprint(3)") == ""
     assert extract_code("") == ""
 
 
@@ -58,13 +58,15 @@ def test_extract_code_uses_the_final_corrected_fence() -> None:
 
 def test_decode_tests_splits_public_private() -> None:
     row = {
+        "store_schema_version": 2,
+        "starter_code": "",
+        "metadata": {"func_name": None},
         "public_test_cases": json.dumps(
             [{"input": "1\n", "output": "2\n", "testtype": "stdin"}]
         ),
         "private_test_cases": json.dumps(
             [
                 {"input": "3\n", "output": "4\n", "testtype": "stdin"},
-                {"input": "x", "output": "y", "testtype": "functional"},
             ]
         ),
     }
@@ -75,12 +77,32 @@ def test_decode_tests_splits_public_private() -> None:
 
 def test_decode_tests_fails_closed_without_private_tests() -> None:
     row = {
+        "store_schema_version": 2,
+        "starter_code": "",
+        "metadata": {"func_name": None},
         "public_test_cases": json.dumps(
             [{"input": "1\n", "output": "2\n", "testtype": "stdin"}]
         ),
         "private_test_cases": "",
     }
-    with pytest.raises(ValueError, match="private stdin"):
+    with pytest.raises(ValueError, match="private"):
+        decode_tests(row)
+
+
+def test_decode_tests_rejects_mixed_execution_modes() -> None:
+    row = {
+        "store_schema_version": 2,
+        "starter_code": "",
+        "metadata": {"func_name": None},
+        "public_test_cases": json.dumps(
+            [{"input": "1\n", "output": "2\n", "testtype": "stdin"}]
+        ),
+        "private_test_cases": json.dumps(
+            [{"input": "x", "output": "y", "testtype": "functional"}]
+        ),
+    }
+
+    with pytest.raises(ValueError, match="non-stdin"):
         decode_tests(row)
 
 
@@ -88,6 +110,9 @@ def test_decode_tests_rejects_executable_pickle(tmp_path: Path) -> None:
     marker = tmp_path / "pickle-executed"
 
     row = {
+        "store_schema_version": 2,
+        "starter_code": "",
+        "metadata": {"func_name": None},
         "public_test_cases": json.dumps(
             [{"input": "1\n", "output": "2\n", "testtype": "stdin"}]
         ),
@@ -126,6 +151,34 @@ def test_run_tests_accepts_equivalent_numeric_output() -> None:
 def test_output_matching_preserves_line_boundaries() -> None:
     assert _outputs_match("1 2\n3\n", "1\n2 3\n") is False
     assert _outputs_match("1 2.0\n", "1.0 2\n") is True
+    assert _outputs_match("1\n2", "1\r2") is False
+
+
+def test_run_tests_matches_official_import_and_system_exit_semantics() -> None:
+    result = run_tests(
+        _Sandbox(),
+        "print(gcd(6, 9))\nraise SystemExit(1)",
+        [{"input": "", "output": "3\n"}],
+        timeout_s=10.0,
+    )
+
+    assert result["all_passed"] is True
+
+
+def test_run_tests_matches_official_buffer_readline_mock() -> None:
+    result = run_tests(
+        _Sandbox(),
+        (
+            "import sys\n"
+            "first = int(sys.stdin.buffer.readline())\n"
+            "second = int(sys.stdin.buffer.readline())\n"
+            "print(first + second)"
+        ),
+        [{"input": "2\n3\n", "output": "4\n"}],
+        timeout_s=10.0,
+    )
+
+    assert result["all_passed"] is True
 
 
 def test_run_tests_reports_first_failure() -> None:
@@ -308,10 +361,14 @@ def test_client_enforces_wall_clock_deadline_despite_heartbeats() -> None:
 
 
 PROBLEM = {
+    "store_schema_version": 2,
+    "source_revision": "test-revision",
     "question_id": "q1",
     "question_content": "Double the input integer.",
     "difficulty": "medium",
     "contest_date": "2024-09-01",
+    "starter_code": "",
+    "metadata": {"func_name": None},
     "public_test_cases": json.dumps([{"input": "2\n", "output": "4\n", "testtype": "stdin"}]),
     "private_test_cases": json.dumps(
         [
@@ -321,6 +378,14 @@ PROBLEM = {
     ),
 }
 PROBLEM["content_sha256"] = _problem_content_sha256(PROBLEM)
+
+
+def _params(**values: Any) -> dict[str, Any]:
+    return {
+        "dataset_content_sha256": {"q1": PROBLEM["content_sha256"]},
+        **values,
+    }
+
 
 GOOD = "```python\nimport sys\nprint(int(sys.stdin.read())*2)\n```"
 BAD = "```python\nprint('nope')\n```"
@@ -372,17 +437,19 @@ def _patch_completions(
 def test_selection_first_grades_sample_zero(
     store: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    _patch_completions(monkeypatch, [GOOD])
+    calls = _patch_completions(monkeypatch, [GOOD])
     raw = LivecodebenchAdapter().run_instance(
         "q1",
         SUTTarget(base_url="http://local/v1", model="m"),
         store,
-        {"selection": "first"},
+        _params(selection="first", seed=7, include_evidence=True),
     )
     assert raw["resolved"] is True
     assert raw["selected_index"] == 0
     assert raw["cost_usd"] == pytest.approx(0.001)
     assert raw["samples"][0]["code"] == extract_code(GOOD)
+    assert calls[0]["seed"] == 7
+    assert calls[0]["include_evidence"] is True
     assert (store / raw["candidate_artifact"]).exists()
 
 
@@ -401,7 +468,7 @@ def test_final_score_requires_public_and_private_tests(
         "q1",
         SUTTarget(base_url="http://local/v1", model="m"),
         store,
-        {"selection": "first"},
+        _params(selection="first"),
     )
 
     assert raw["samples"][0]["private_passed_all"] is True
@@ -421,7 +488,7 @@ def test_public_exec_selects_passing_sample(
         "q1",
         SUTTarget(base_url="http://local/v1", model="m"),
         store,
-        {"selection": "public-exec", "n_samples": 3, "temps": [0.2, 0.6, 0.9]},
+        _params(selection="public-exec", n_samples=3, temps=[0.2, 0.6, 0.9]),
     )
     assert raw["selected_index"] == 1
     assert raw["resolved"] is True
@@ -465,7 +532,7 @@ def test_public_exec_prioritizes_execution_over_finish_reason(
         "q1",
         SUTTarget(base_url="http://local/v1", model="m"),
         store,
-        {"selection": "public-exec", "n_samples": 2, "temps": [0.2, 0.6]},
+        _params(selection="public-exec", n_samples=2, temps=[0.2, 0.6]),
     )
 
     assert raw["selected_index"] == 1
@@ -501,13 +568,13 @@ def test_heterogeneous_candidate_specs_share_one_execution_selector(
         "q1",
         SUTTarget(base_url="http://local/v1", model="unused"),
         store,
-        {
-            "selection": "public-exec",
-            "candidate_specs": [
+        _params(
+            selection="public-exec",
+            candidate_specs=[
                 {"model": "open/model-a", "temperature": 0.2},
                 {"model": "open/model-b", "temperature": 0.6},
             ],
-        },
+        ),
     )
 
     assert raw["resolved"] is True
@@ -549,11 +616,11 @@ def test_public_exec_tie_judge_can_recover_oracle_sample(
         "q1",
         SUTTarget(base_url="http://local/v1", model="m"),
         store,
-        {
-            "selection": "public-exec-tie-judge",
-            "n_samples": 2,
-            "temps": [0.2, 0.6],
-        },
+        _params(
+            selection="public-exec-tie-judge",
+            n_samples=2,
+            temps=[0.2, 0.6],
+        ),
     )
 
     assert raw["selected_index"] == 1
@@ -589,11 +656,11 @@ def test_tie_judge_failure_preserves_deterministic_selector(
         "q1",
         SUTTarget(base_url="http://local/v1", model="m"),
         store,
-        {
-            "selection": "public-exec-tie-judge",
-            "n_samples": 2,
-            "temps": [0.2, 0.6],
-        },
+        _params(
+            selection="public-exec-tie-judge",
+            n_samples=2,
+            temps=[0.2, 0.6],
+        ),
     )
 
     assert raw["resolved"] is True
@@ -621,7 +688,7 @@ def test_public_exec_repair_fixes_failing_winner(
         "q1",
         SUTTarget(base_url="http://local/v1", model="m"),
         store,
-        {"selection": "public-exec-repair", "n_samples": 1},
+        _params(selection="public-exec-repair", n_samples=1),
     )
     assert raw["repair_used"] is True
     assert raw["resolved"] is True
@@ -637,7 +704,7 @@ def test_first_selection_never_repairs_or_extra_samples(
         "q1",
         SUTTarget(base_url="http://local/v1", model="m"),
         store,
-        {},
+        _params(),
     )
     assert raw["resolved"] is False
     assert raw["repair_used"] is False
