@@ -1,0 +1,22 @@
+# RouteKit router for the maintainer benchmark sidecar configs in this folder.
+# Provider details stay here; benchmark-panel.*.yaml contains endpoint IDs only.
+endpoints:
+  - endpointId: gpt
+    model: gpt-5.5
+    provider: openai
+    baseUrl: https://api.openai.com/v1
+    dialect: openai
+    apiKeyEnv: OPENAI_API_KEY
+  - endpointId: opus
+    model: claude-opus-4-8
+    provider: anthropic
+    baseUrl: https://api.anthropic.com/v1
+    dialect: anthropic
+    apiKeyEnv: ANTHROPIC_API_KEY
+  - endpointId: gemini
+    model: gemini-3-pro
+    provider: google
+    baseUrl: https://generativelanguage.googleapis.com/v1beta
+    dialect: google
+    apiKeyEnv: GEMINI_API_KEY
+defaultEndpointId: gpt

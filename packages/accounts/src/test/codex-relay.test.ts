@@ -185,7 +185,7 @@ test("GET /v1/models with ChatGPT auth merges the live stock catalog behind loca
     // Codex's ModelInfo catalog: local entries first, then the live stock list.
     assert.deepEqual(
       body.models.map((entry) => entry.slug),
-      ["local-primary", "gpt-5.5", "gpt-5.3-codex"]
+      ["local-primary", "gpt-native", "gpt-5.5", "gpt-5.3-codex"]
     );
     // OpenAI-shape clients still see `data`, extended with the stock slugs.
     assert.deepEqual(
@@ -215,7 +215,7 @@ test("GET /v1/models falls back to the stock snapshot without auth or when upstr
     };
     assert.deepEqual(
       anonymous.models.map((entry) => entry.slug),
-      ["local-primary", "gpt-5.5-cached"]
+      ["local-primary", "gpt-native", "gpt-5.5-cached"]
     );
     assert.equal(upstream.modelsRequests.length, 0);
     // Upstream down: authenticated fetch degrades to the same snapshot merge.
@@ -225,7 +225,7 @@ test("GET /v1/models falls back to the stock snapshot without auth or when upstr
     ).json()) as { models: Array<Record<string, unknown>> };
     assert.deepEqual(
       degraded.models.map((entry) => entry.slug),
-      ["local-primary", "gpt-5.5-cached"]
+      ["local-primary", "gpt-native", "gpt-5.5-cached"]
     );
   } finally {
     await gateway.close();
@@ -245,7 +245,7 @@ test("GET /v1/models validates the upstream shape: bad envelopes fall back, bad 
     ).json()) as { models: Array<Record<string, unknown>> };
     assert.deepEqual(
       degraded.models.map((entry) => entry.slug),
-      ["local-primary", "gpt-5.5-cached"]
+      ["local-primary", "gpt-native", "gpt-5.5-cached"]
     );
     // Per-entry salvage: malformed entries (no string slug, non-objects) are
     // dropped without costing the rest of the live catalog.
@@ -257,7 +257,7 @@ test("GET /v1/models validates the upstream shape: bad envelopes fall back, bad 
     ).json()) as { models: Array<Record<string, unknown>> };
     assert.deepEqual(
       salvaged.models.map((entry) => entry.slug),
-      ["local-primary", "gpt-5.5", "gpt-5.3-codex"]
+      ["local-primary", "gpt-native", "gpt-5.5", "gpt-5.3-codex"]
     );
   } finally {
     await gateway.close();

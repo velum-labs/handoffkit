@@ -1022,6 +1022,18 @@ export function claudeModelAlias(id: string): string {
   return isAnthropicFamilyId(id) ? id : `${CLAUDE_ALIAS_PREFIX}${id}`;
 }
 
+export function resolveClaudeModelAlias(
+  requested: string | undefined,
+  modelIds: readonly string[] = []
+): string | undefined {
+  if (requested === undefined || modelIds.includes(requested)) return requested;
+  if (!requested.startsWith(CLAUDE_ALIAS_PREFIX)) return requested;
+  const candidate = requested.slice(CLAUDE_ALIAS_PREFIX.length);
+  return modelIds.includes(candidate) && claudeModelAlias(candidate) === requested
+    ? candidate
+    : requested;
+}
+
 /**
  * Anthropic-shaped `/v1/models` discovery response. Every advertised model is
  * listed so it appears in Claude Code's `/model` picker: Anthropic-family ids

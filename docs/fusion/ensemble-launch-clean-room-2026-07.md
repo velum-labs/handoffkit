@@ -1,5 +1,11 @@
 # Ensemble Launch — Clean-Room Plan (2026-07)
 
+> **Historical plan:** configuration and command examples below predate the
+> RouteKit/Fusion v4 split. Current product config is
+> `.fusionkit/fusion.json` v4 (opaque endpoint IDs only) plus
+> `.routekit/router.yaml` (models, providers, URLs, and key env names). The
+> public `fusionkit serve` command does not accept a config-file flag.
+
 **Status:** working plan, adopted 2026-07-07.
 **Reader:** anyone assembling the first FusionKit ensemble configs. No prior
 documents are required; everything needed to start is in this report.
@@ -487,21 +493,19 @@ Run `fklab models list` and `fklab models show <id>` to verify parsing. Record
 identity hashes on the cards — if a card hash and registry hash diverge, the
 config drifted.
 
-### Step B2 — Emit FusionKit fusion configs
+### Step B2 — Emit current consumer configs
 
-For each non-deferred hypothesis, produce a fusion config file the engine
-already consumes (same shape as `.fusionkit/fusion.json`):
+For each non-deferred hypothesis, produce:
 
-| Field | Source |
+| File | Contents |
 |---|---|
-| `endpoints[]` | Registry entries for panel members + judge |
-| `panel_models` | Ordered list of panel endpoint_ids |
-| `judge_model` | Judge endpoint_id |
-| `sampling` | From hypothesis card (temperature, max_tokens per role) |
-| `topology` | Metadata field or separate manifest — parallel / cascade / exec_select |
+| `.routekit/router.yaml` | Endpoint IDs plus provider model, URL, dialect, and `apiKeyEnv` definitions |
+| `.fusionkit/fusion.json` v4 | `router`, `ensembles.*.members`, `judge`, and optional `synthesizer` endpoint IDs |
+| Internal sidecar/eval YAML, when needed | `routekit_url`, `endpoint_ids`, panel/judge/synthesizer IDs, and sampling/budget policy |
 
-**Location:** `labruns/<cycle>/configs/h1-backbone.fusion.json` (or YAML if
-the product loader prefers it — match whatever `fusionkit serve -c` accepts).
+The product loader accepts only the per-repository v4 JSON path. Keep
+maintainer-only sidecar YAML clearly labeled and pass it directly to the eval
+consumer.
 
 **H4 (Self-MoA):** one endpoint, K=3 in sampling config, topology
 `exec_select` — selection uses public tests then grades on private tests via
@@ -525,7 +529,8 @@ Mechanical checks before spending money:
 Per config, one trivial non-benchmark request through the real path:
 
 ```
-fusionkit serve -c <config>   # or FusionEngine directly
+fusionkit init                # once per disposable smoke repository
+fusionkit serve               # reads .fusionkit/fusion.json v4
 POST a single "write hello world" or one tiny algorithmic fixture task
 ```
 

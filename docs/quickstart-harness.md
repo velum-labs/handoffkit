@@ -16,17 +16,14 @@ See also: [inference endpoint](quickstart-inference.md) ·
 ```bash
 pnpm add -g @fusionkit/cli      # or: npm i -g @fusionkit/cli
 fusionkit setup                 # pre-provision the Python engine (warm the uv cache)
-fusionkit doctor                # verify uv, git, config, endpoints, and your agent CLI
-```
-
-Install the agent CLI you want to use (`codex`, `claude`, `cursor-agent`, or
-`opencode`), run `fusionkit init`, and configure RouteKit:
-
-```bash
 fusionkit init
 $EDITOR .routekit/router.yaml
 export PROVIDER_API_KEY=...      # the apiKeyEnv named by your endpoints
+fusionkit doctor                 # verify uv, git, config, endpoints, and your agent CLI
 ```
+
+Install the agent CLI you want to use (`codex`, `claude`, `cursor-agent`, or
+`opencode`) before running `doctor`.
 
 FusionKit composes the endpoint IDs in `.fusionkit/fusion.json`; it does not
 read provider credentials or skip unavailable panel members. Use

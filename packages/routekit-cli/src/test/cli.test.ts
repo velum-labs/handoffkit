@@ -93,7 +93,7 @@ test("dynamic completion follows the command tree", () => {
   ]);
   assert.ok(completionCandidates(program, ["serve", "--p"]).includes("--port"));
   assert.deepEqual(completionCandidates(program, ["accounts", "remove", ""]), [
-    "claude",
+    "claude-code",
     "codex"
   ]);
 });

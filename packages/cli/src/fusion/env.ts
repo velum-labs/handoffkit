@@ -39,6 +39,7 @@ export type RunFusionOptions = {
   k?: number;
   resume?: string;
   continueLatest?: boolean;
+  json?: boolean;
   log?: (line: string) => void;
 };
 

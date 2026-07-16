@@ -11,13 +11,33 @@ Install the independent CLI:
 
 ```bash
 npm install -g @routekit/cli
-routekit accounts --help
-routekit accounts cliproxy --help
+routekit config init
+claude
+routekit accounts add claude-code
+routekit endpoints add private-review \
+  --model claude-sonnet-4-5 --account claude-code
 routekit serve
 ```
 
-Configure account-backed endpoints in `.routekit/router.yaml`, then use their
-opaque `endpointId` values in `.fusionkit/fusion.json`.
+The canonical subscription kinds are `claude-code` and `codex`. Use
+`codex login` followed by `routekit accounts add codex` for a Codex
+subscription. Adding an account imports the current official CLI login and
+automatically enables that kind in the effective router config. The Claude Code
+tool command remains `routekit claude [endpoint-id]`.
+
+Account-backed endpoint YAML uses only `endpointId`, `model`, and `account`:
+
+```yaml
+endpoints:
+  - endpointId: private-review
+    model: claude-sonnet-4-5
+    account: claude-code
+accounts:
+  claude-code:
+    enabled: true
+```
+
+The endpoint ID is opaque. Use it unchanged in `.fusionkit/fusion.json`:
 
 ```json
 {
@@ -31,6 +51,26 @@ opaque `endpointId` values in `.fusionkit/fusion.json`.
   }
 }
 ```
+
+Normal embedded routing does not require a separate account proxy.
+`routekit accounts serve` is advanced mode for exposing the subscription pool
+to an external consumer.
+
+For CLIProxyAPI, login, keep the proxy serving, and explicitly add a URL-backed
+endpoint:
+
+```bash
+routekit accounts cliproxy install
+routekit accounts cliproxy login gemini
+routekit accounts cliproxy serve
+routekit endpoints add gemini-subscription \
+  --model gemini-3.1-pro-preview \
+  --provider cliproxy \
+  --base-url http://127.0.0.1:8317/v1 \
+  --api-key-env ROUTEKIT_CLIPROXY_API_KEY
+```
+
+CLIProxy login does not create a RouteKit endpoint.
 
 `fusionkit stop` never stops an external RouteKit daemon. An embedded RouteKit
 router composed by FusionKit is process-owned and closes with the Fusion stack.

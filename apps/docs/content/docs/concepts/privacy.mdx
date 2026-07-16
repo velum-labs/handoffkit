@@ -13,8 +13,6 @@ Durable sessions live in `~/.fusionkit/sessions/` unless `FUSIONKIT_SESSIONS_DIR
 - `meta.json`: session metadata such as tool, repo, model ids, timestamps, and panel state.
 - `costs.jsonl`: per-turn token and USD estimates when pricing data is available.
 
-Cloud-panel cost consent is stored in `~/.fusionkit/consent.json` unless `FUSIONKIT_CONSENT_PATH` overrides it.
-
 ## Retention
 
 FusionKit keeps local session files until you delete them:
@@ -23,6 +21,9 @@ FusionKit keeps local session files until you delete them:
 fusionkit sessions
 fusionkit sessions rm <id>
 ```
+
+FusionKit has no separate cloud-cost consent file or consent prompt. Review the
+RouteKit endpoints before launch and use `--budget` to cap observed spend.
 
 ## Telemetry is opt-in
 
@@ -34,13 +35,20 @@ Tracing is OpenTelemetry-based and exports nowhere by default: `--observe` point
 
 ## Where code travels
 
-A fused turn is sent to the providers in your effective panel config. Inspect the panel before a run:
+A fused turn is sent to the providers behind the opaque RouteKit endpoint IDs
+in your active ensemble. Inspect both layers before a run:
 
 ```bash
 fusionkit config show
+routekit config show
 ```
 
-The FusionKit repository's committed `.fusionkit/fusion.json` routes through OpenRouter and requires `OPENROUTER_API_KEY`. OpenRouter is an aggregator, so requests from this checkout go to OpenRouter and then to the selected upstream models. In your own repo, run `fusionkit init` to choose a different panel.
+The repository's `.fusionkit/fusion.json` contains endpoint IDs only; its
+`.routekit/router.yaml` maps them to OpenRouter and therefore requires
+`OPENROUTER_API_KEY`. OpenRouter is an aggregator, so requests from this
+checkout go to OpenRouter and then to the selected upstream models. In your own
+repo, run `fusionkit init`, choose providers in `.routekit/router.yaml`, and
+compose those endpoint IDs in the Fusion config.
 
 ## Rate-limit failover
 

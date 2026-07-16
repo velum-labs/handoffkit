@@ -46,6 +46,10 @@ export {
 } from "./account-set.js";
 export type { SubscriptionAccountSetOptions } from "./account-set.js";
 
+// OpenAI-compatible backend over a subscription account set
+export { SubscriptionAccountBackend } from "./backend.js";
+export type { SubscriptionAccountBackendOptions } from "./backend.js";
+
 // Relays (provider-native forwarding)
 export { CodexBackendRelay, codexRelayAuth } from "./codex-relay.js";
 export type {
@@ -68,11 +72,16 @@ export type {
 } from "./relay.js";
 
 // Gateway relay construction
-export { openSubscriptionRelays } from "./gateway.js";
+export {
+  openSubscriptionAccountSets,
+  openSubscriptionRelays,
+  subscriptionRelaysFromAccountSets
+} from "./gateway.js";
 export type {
   OpenSubscriptionRelaysOptions,
   OpenSubscriptionRelaysResult,
-  SubscriptionAccountConfigs
+  SubscriptionAccountConfigs,
+  SubscriptionAccountSets
 } from "./gateway.js";
 
 // Programmatic proxy + typed client

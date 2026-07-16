@@ -2,7 +2,13 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import type { Backend } from "../backend.js";
-import { CatalogBackend, EndpointPool, parseRouterConfig } from "../router.js";
+import {
+  CatalogBackend,
+  EndpointPool,
+  parseRouterConfig,
+  UnknownEndpointError
+} from "../router.js";
+import type { ModelEndpointConfig } from "../router.js";
 
 function fakeBackend(
   name: string,
@@ -14,6 +20,11 @@ function fakeBackend(
     models: async () => Response.json({ object: "list", data: [{ id: name }] }),
     embeddings: async () => invoke()
   };
+}
+
+function endpointBaseUrl(endpoint: ModelEndpointConfig): string {
+  assert.notEqual(endpoint.baseUrl, undefined);
+  return endpoint.baseUrl as string;
 }
 
 test("RouterConfig validates endpoint identity and defaults", () => {
@@ -64,6 +75,62 @@ test("RouterConfig validates endpoint identity and defaults", () => {
   );
 });
 
+test("RouterConfig accepts canonical account endpoints and rejects unsafe variants", () => {
+  const config = parseRouterConfig({
+    endpoints: [
+      {
+        endpointId: "sonnet-sub",
+        model: "claude-sonnet-4-5",
+        account: "claude-code"
+      }
+    ],
+    accounts: { "claude-code": { enabled: true } }
+  });
+  assert.equal(config.endpoints[0]?.account, "claude-code");
+  assert.throws(
+    () =>
+      parseRouterConfig({
+        endpoints: [
+          {
+            endpointId: "unsafe",
+            model: "claude-sonnet-4-5",
+            account: "claude-code",
+            baseUrl: "https://attacker.test"
+          }
+        ],
+        accounts: { "claude-code": { enabled: true } }
+      }),
+    /invalid input|unrecognized|expected never/i
+  );
+  assert.throws(
+    () =>
+      parseRouterConfig({
+        endpoints: [
+          {
+            endpointId: "disabled",
+            model: "gpt-5.5",
+            account: "codex"
+          }
+        ]
+      }),
+    /requires accounts\["codex"\]\.enabled/
+  );
+  assert.throws(
+    () =>
+      parseRouterConfig({
+        endpoints: [
+          { endpointId: "fast", model: "a", baseUrl: "https://one.test" },
+          {
+            endpointId: "claude-fast",
+            model: "b",
+            baseUrl: "https://two.test"
+          }
+        ]
+      }),
+    /collide as Claude model alias/
+  );
+});
+
 test("CatalogBackend advertises opaque ids and balances endpoint instances", async () => {
   const calls: string[] = [];
   const backend = new CatalogBackend({
@@ -84,15 +151,17 @@ test("CatalogBackend advertises opaque ids and balances endpoint instances", asy
         }
       ]
     },
-    createBackend: (endpoint) =>
-      fakeBackend(endpoint.baseUrl, () => {
-        calls.push(endpoint.baseUrl);
+    createBackend: (endpoint) => {
+      const baseUrl = endpointBaseUrl(endpoint);
+      return fakeBackend(baseUrl, () => {
+        calls.push(baseUrl);
         return Response.json({ ok: true });
-      })
+      });
+    }
   });
 
   assert.deepEqual(backend.listModelIds(), ["opaque-a"]);
-  assert.equal(backend.resolveModel("unknown"), "opaque-a");
+  assert.equal(backend.resolveModel("unknown"), undefined);
   assert.equal(backend.capabilities("opaque-a").tools, "supported");
   await backend.chat({ model: "opaque-a", messages: [] });
   await backend.chat({ model: "opaque-a", messages: [] });
@@ -103,6 +172,26 @@ test("CatalogBackend advertises opaque ids and balances endpoint instances", asy
   };
   assert.equal(models.data[0]?.id, "opaque-a");
   assert.equal(models.data[0]?.capabilities.streaming, "supported");
+});
+
+test("unknown endpoint ids fail instead of routing through the default endpoint", () => {
+  const backend = new CatalogBackend({
+    config: {
+      endpoints: [
+        {
+          endpointId: "default",
+          model: "native",
+          baseUrl: "https://example.test/v1"
+        }
+      ]
+    },
+    createBackend: () => fakeBackend("native")
+  });
+  assert.throws(
+    () => backend.chat({ model: "unknown", messages: [] }),
+    (error: unknown) =>
+      error instanceof UnknownEndpointError && error.endpointId === "unknown"
+  );
 });
 
 test("EndpointPool cools a throttled instance and retries another", async () => {
@@ -124,13 +213,15 @@ test("EndpointPool cools a throttled instance and retries another", async () => 
         }
       ]
     },
-    createBackend: (endpoint) =>
-      fakeBackend(endpoint.baseUrl, () => {
-        calls.push(endpoint.baseUrl);
-        return endpoint.baseUrl.includes("limited")
+    createBackend: (endpoint) => {
+      const baseUrl = endpointBaseUrl(endpoint);
+      return fakeBackend(baseUrl, () => {
+        calls.push(baseUrl);
+        return baseUrl.includes("limited")
           ? Response.json({ error: "limited" }, { status: 429, headers: { "retry-after": "60" } })
           : Response.json({ ok: true });
-      })
+      });
+    }
   });
 
   const response = await backend.chat({ model: "opaque", messages: [] });
@@ -158,7 +249,7 @@ test("EndpointPool does not poison an instance after caller cancellation", async
       ]
     },
     createBackend: (endpoint) =>
-      fakeBackend(endpoint.baseUrl, () => {
+      fakeBackend(endpointBaseUrl(endpoint), () => {
         calls += 1;
         if (calls === 1) {
           throw new DOMException("cancelled", "AbortError");

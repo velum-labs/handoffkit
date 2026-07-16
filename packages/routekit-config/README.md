@@ -28,11 +28,13 @@ assertEndpointIdsConfigured([endpointId], configuredEndpointIds(loaded.config));
 
 `configuredEndpointIds()`, `missingEndpointIds()`, and
 `assertEndpointIdsConfigured()` provide declaration-order endpoint checks.
-`resolveEndpointId()` (also exported as `selectEndpointId`) selects an explicit,
-default, or first configured endpoint. `writeRouterConfig()` and
+`resolveEndpointId()` (also exported as `selectEndpointId`) validates an
+explicit endpoint ID, or selects the configured default/first endpoint only
+when no ID was requested. Explicit unknown IDs are rejected; they never fall
+through to the default. `writeRouterConfig()` and
 `updateRouterConfig()` validate before atomically writing mode-0600 YAML.
 
 ## Docs
 
-- Product docs: https://fusionkit.velum-labs.com
+- Product docs: [fusionkit.velum-labs.com](https://fusionkit.velum-labs.com)
 - Maintainer reference: [../../docs/typescript-reference.md](../../docs/typescript-reference.md)

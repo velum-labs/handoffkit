@@ -622,6 +622,94 @@ MUTATIONS = [
             "node --test packages/routekit-cli/dist/test/serve-process-e2e.test.js"
         ),
     ),
+    Mutation(
+        id="M50",
+        what="unknown endpoint ids silently fall back to the default endpoint",
+        file="packages/model-gateway/src/router.ts",
+        old="    return this.#pools.has(requested) ? requested : undefined;",
+        new="    return this.#pools.has(requested) ? requested : this.defaultModel;",
+        build=True,
+        cmd=(
+            "node --test --test-name-pattern 'unknown endpoint ids fail' "
+            "packages/model-gateway/dist/test/router.test.js"
+        ),
+    ),
+    Mutation(
+        id="M51",
+        what="legacy Claude account keys stop normalizing to claude-code",
+        file="packages/model-gateway/src/router.ts",
+        old='  if (claudeKey !== undefined && claudeKey !== "claude-code") {',
+        new=(
+            '  if (claudeKey !== undefined && claudeKey !== "claude-code" '
+            "&& claudeKey.length < 0) {"
+        ),
+        build=True,
+        cmd=(
+            "node --test --test-name-pattern 'legacy account aliases normalize' "
+            "packages/routekit-config/dist/test/config.test.js"
+        ),
+    ),
+    Mutation(
+        id="M52",
+        what="account enrollment stores credentials without activating routing",
+        file="packages/routekit-cli/src/commands/accounts.ts",
+        old="[result.subscriptionKind]: { ...policy, enabled: true }",
+        new="[result.subscriptionKind]: { ...policy, enabled: false }",
+        build=True,
+        cmd=(
+            "node --test --test-name-pattern 'accounts add canonically' "
+            "packages/routekit-cli/dist/test/accounts-command.test.js"
+        ),
+    ),
+    Mutation(
+        id="M53",
+        what="project config mutation materializes the merged global config",
+        file="packages/routekit-config/src/index.ts",
+        old="  writeRouterConfigDocument(target, draft);",
+        new="  writeRouterConfigDocument(target, effective);",
+        build=True,
+        cmd=(
+            "node --test --test-name-pattern 'sparse project mutations' "
+            "packages/routekit-config/dist/test/config.test.js"
+        ),
+    ),
+    Mutation(
+        id="M54",
+        what="subscription account credentials are not injected at provider egress",
+        file="packages/accounts/src/backend.ts",
+        old="          headers.set(name, value);",
+        new="          headers.set(name, `missing-${value.length}`);",
+        build=True,
+        cmd=(
+            "node --test --test-name-pattern 'Claude account backend serves' "
+            "packages/accounts/dist/test/subscription-backend.test.js"
+        ),
+    ),
+    Mutation(
+        id="M55",
+        what="Fusion config set retains both router.url and router.config",
+        file="packages/cli/src/commands/config.ts",
+        old='  if (path === "router.url") writePath(shape, "router.config", undefined);',
+        new='  if (false && path === "router.url") writePath(shape, "router.config", undefined);',
+        build=True,
+        cmd="node --test packages/cli/dist/test/v4-commands.test.js",
+    ),
+    Mutation(
+        id="M56",
+        what="Fusion launchers accept typo flags before the passthrough delimiter",
+        file="packages/cli/src/commands/fusion.ts",
+        old='    .option("--continue", "resume the latest Fusion session");',
+        new=(
+            '    .option("--continue", "resume the latest Fusion session")\n'
+            "    .allowUnknownOption()\n"
+            "    .passThroughOptions();"
+        ),
+        build=True,
+        cmd=(
+            "node --test --test-name-pattern 'CLI rejects typo flags' "
+            "packages/cli/dist/test/v4-commands.test.js"
+        ),
+    ),
 ]
 
 

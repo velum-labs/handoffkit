@@ -11,17 +11,29 @@ import { spawnSync } from "node:child_process";
 
 import { contextFor } from "@routekit/cli-core";
 import type { Command } from "commander";
-import { stringify as stringifyYaml } from "yaml";
+import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 
 import {
   DEFAULT_ROUTER_CONFIG,
-  loadRouterConfig,
   migrateLegacyState,
   routerConfigPaths,
+  updateEffectiveRouterConfig,
+  updateRouterConfig,
   writeRouterConfig
 } from "../config.js";
 
 import { configOverride, editableConfigPath, loaded } from "./context.js";
+
+function replaceRecord(
+  target: Record<string, unknown>,
+  replacement: unknown
+): void {
+  if (typeof replacement !== "object" || replacement === null || Array.isArray(replacement)) {
+    throw new Error("router config must be a YAML object");
+  }
+  for (const key of Object.keys(target)) delete target[key];
+  Object.assign(target, replacement);
+}
 
 export function registerConfig(program: Command): void {
   const config = program.command("config").description("manage router configuration");
@@ -69,7 +81,13 @@ export function registerConfig(program: Command): void {
     .option("--global", "edit the global config")
     .action((options: { global?: boolean }, command: Command) => {
       const ctx = contextFor(command);
-      const path = editableConfigPath({ command, global: options.global });
+      if (ctx.json) {
+        throw new Error("`config edit` is interactive and does not support --json");
+      }
+      const path =
+        options.global === true
+          ? editableConfigPath({ command, global: true })
+          : loaded(command).path;
       if (!existsSync(path)) {
         throw new Error(`${path} does not exist; run \`routekit config init\``);
       }
@@ -84,13 +102,19 @@ export function registerConfig(program: Command): void {
         const result = spawnSync(editor, [temporary], { stdio: "inherit" });
         if (result.error !== undefined) throw result.error;
         if (result.status !== 0) throw new Error(`${editor} exited with status ${result.status}`);
-        const validated = loadRouterConfig({ configPath: temporary }).config;
-        writeRouterConfig(path, validated);
+        const edited = parseYaml(readFileSync(temporary, "utf8")) as unknown;
+        if (options.global === true) {
+          updateRouterConfig(path, (draft) => replaceRecord(draft, edited));
+        } else {
+          updateEffectiveRouterConfig(
+            { configPath: configOverride(command) },
+            (draft) => replaceRecord(draft, edited)
+          );
+        }
       } finally {
         rmSync(directory, { recursive: true, force: true });
       }
-      if (ctx.json) ctx.emit({ path, updated: true });
-      else ctx.presenter.success(`updated ${path}`);
+      ctx.presenter.success(`updated ${path}`);
     });
 
   config

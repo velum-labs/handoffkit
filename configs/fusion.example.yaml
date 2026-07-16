@@ -1,16 +1,31 @@
-mode: router
-policies:
-  single:
-    description: Use the default model directly for short/simple prompts.
-  self:
-    description: Generate multiple samples from the default model, then rank and synthesize.
-    sample_count: 4
-  panel:
-    description: Generate candidates from multiple local models, then rank and synthesize.
-    panel_models: [qwen-fast, gemma-writer]
-evaluation:
-  required_claim_controls:
-    - compare against best single local model
-    - compare against self-fusion
-    - report latency and memory
-    - report confidence intervals for judged benchmarks
+# Internal fusion-sidecar / fusionkit-evals schema.
+#
+# This is not accepted by the public `fusionkit serve` command. The Node CLI
+# reads `.fusionkit/fusion.json` v4, starts RouteKit, and generates this
+# endpoint-ID-only sidecar configuration internally.
+#
+# For direct maintainer use, start the matching RouteKit gateway first:
+#
+#   routekit --config configs/benchmark-router.example.yaml serve --no-portless --port 8787
+routekit_url: http://127.0.0.1:8787
+endpoint_ids:
+  - gpt
+  - opus
+  - gemini
+default_model: gpt
+judge_model: gpt
+synthesizer_model: gpt
+default_mode: panel
+panel_models:
+  - gpt
+  - opus
+  - gemini
+sampling:
+  temperature: 0.2
+  top_p: 0.95
+  max_tokens: 4096
+budget:
+  max_candidates: 3
+  wall_clock_s: 1800
+  max_tool_rounds: 24
+  max_tool_calls: 200

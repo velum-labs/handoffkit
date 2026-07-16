@@ -16,30 +16,60 @@ import {
   CodexResponsesBackend,
   GoogleGenAiBackend
 } from "./provider-backends.js";
+import { claudeModelAlias } from "./adapters/anthropic.js";
 
 function isAbortError(error: unknown): boolean {
   return error instanceof Error && error.name === "AbortError";
 }
 
-export const modelEndpointSchema = z
-  .object({
-    endpointId: z.string().min(1),
+export class UnknownEndpointError extends Error {
+  constructor(readonly endpointId: string) {
+    super(`unknown endpoint id: ${endpointId}`);
+    this.name = "UnknownEndpointError";
+  }
+}
+
+const endpointCommonSchema = z.object({
+  endpointId: z.string().min(1),
+  model: z.string().min(1),
+  capabilities: z
+    .record(
+      z.string(),
+      z.enum(["supported", "unsupported", "degraded", "unknown"])
+    )
+    .optional()
+});
+
+const urlEndpointSchema = endpointCommonSchema
+  .extend({
     instanceId: z.string().min(1).optional(),
-    model: z.string().min(1),
     provider: z.string().min(1).optional(),
     baseUrl: z.url(),
     dialect: z.enum(["openai", "anthropic", "google", "codex"]).default("openai"),
     apiKeyEnv: z.string().min(1).optional(),
     headers: z.record(z.string(), z.string()).optional(),
-    capabilities: z
-      .record(
-        z.string(),
-        z.enum(["supported", "unsupported", "degraded", "unknown"])
-      )
-      .optional(),
-    capacity: z.number().positive().optional()
+    capacity: z.number().positive().optional(),
+    account: z.never().optional()
   })
   .strict();
+
+const accountEndpointSchema = endpointCommonSchema
+  .extend({
+    account: z.enum(["claude-code", "codex"]),
+    instanceId: z.never().optional(),
+    provider: z.never().optional(),
+    baseUrl: z.never().optional(),
+    dialect: z.never().optional(),
+    apiKeyEnv: z.never().optional(),
+    headers: z.never().optional(),
+    capacity: z.never().optional()
+  })
+  .strict();
+
+export const modelEndpointSchema = z.union([
+  accountEndpointSchema,
+  urlEndpointSchema
+]);
 
 const subscriptionAccountPolicySchema = z
   .object({
@@ -58,7 +88,7 @@ export const routerConfigSchema = z
     defaultEndpointId: z.string().min(1).optional(),
     accounts: z
       .object({
-        claudeCode: subscriptionAccountPolicySchema.optional(),
+        "claude-code": subscriptionAccountPolicySchema.optional(),
         codex: subscriptionAccountPolicySchema.optional()
       })
       .strict()
@@ -67,16 +97,78 @@ export const routerConfigSchema = z
   .strict();
 
 export type ModelEndpointConfig = z.infer<typeof modelEndpointSchema>;
+export type AccountEndpointConfig = z.infer<typeof accountEndpointSchema>;
+export type UrlEndpointConfig = z.infer<typeof urlEndpointSchema>;
 export type RouterConfig = z.infer<typeof routerConfigSchema>;
 
+export function isAccountEndpointConfig(
+  endpoint: ModelEndpointConfig
+): endpoint is AccountEndpointConfig {
+  return endpoint.account !== undefined;
+}
+
+export function normalizeRouterConfigAliases(value: unknown): unknown {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return value;
+  const config = value as Record<string, unknown>;
+  const rawAccounts = config.accounts;
+  if (typeof rawAccounts !== "object" || rawAccounts === null || Array.isArray(rawAccounts)) {
+    return value;
+  }
+  const accounts = rawAccounts as Record<string, unknown>;
+  const claudeKeys = ["claude-code", "claudeCode", "claude"].filter((key) =>
+    Object.hasOwn(accounts, key)
+  );
+  if (claudeKeys.length > 1) {
+    throw new Error(
+      `router config contains conflicting Claude account keys: ${claudeKeys.join(", ")}`
+    );
+  }
+  const normalizedAccounts = { ...accounts };
+  const claudeKey = claudeKeys[0];
+  if (claudeKey !== undefined && claudeKey !== "claude-code") {
+    normalizedAccounts["claude-code"] = normalizedAccounts[claudeKey];
+    delete normalizedAccounts[claudeKey];
+  }
+  return { ...config, accounts: normalizedAccounts };
+}
+
 export function parseRouterConfig(value: unknown): RouterConfig {
-  const config = routerConfigSchema.parse(value);
+  const config = routerConfigSchema.parse(normalizeRouterConfigAliases(value));
   const ids = new Set(config.endpoints.map((endpoint) => endpoint.endpointId));
+  const claudeAliases = new Map<string, string>();
+  for (const endpointId of ids) {
+    const alias = claudeModelAlias(endpointId);
+    const previous = claudeAliases.get(alias);
+    if (previous !== undefined && previous !== endpointId) {
+      throw new Error(
+        `endpoint ids "${previous}" and "${endpointId}" collide as Claude model alias "${alias}"`
+      );
+    }
+    claudeAliases.set(alias, endpointId);
+  }
   const instanceIds = config.endpoints
     .map((endpoint) => endpoint.instanceId)
     .filter((instanceId): instanceId is string => instanceId !== undefined);
   if (new Set(instanceIds).size !== instanceIds.length) {
     throw new Error("endpoint instance ids must be unique");
+  }
+  const grouped = new Map<string, ModelEndpointConfig[]>();
+  for (const endpoint of config.endpoints) {
+    const entries = grouped.get(endpoint.endpointId) ?? [];
+    entries.push(endpoint);
+    grouped.set(endpoint.endpointId, entries);
+  }
+  for (const [endpointId, endpoints] of grouped) {
+    if (endpoints.some(isAccountEndpointConfig) && endpoints.length > 1) {
+      throw new Error(`account endpoint cannot be pooled with other instances: ${endpointId}`);
+    }
+  }
+  for (const endpoint of config.endpoints.filter(isAccountEndpointConfig)) {
+    if (config.accounts?.[endpoint.account]?.enabled !== true) {
+      throw new Error(
+        `account endpoint "${endpoint.endpointId}" requires accounts["${endpoint.account}"].enabled`
+      );
+    }
   }
   if (config.defaultEndpointId !== undefined && !ids.has(config.defaultEndpointId)) {
     throw new Error(`default endpoint is not configured: ${config.defaultEndpointId}`);
@@ -117,8 +209,9 @@ export class EndpointPool implements Backend {
     return model === this.defaultModel;
   }
 
-  resolveModel(requested: string | undefined): string {
-    return requested === this.defaultModel ? requested : this.defaultModel;
+  resolveModel(requested: string | undefined): string | undefined {
+    if (requested === undefined) return this.defaultModel;
+    return requested === this.defaultModel ? requested : undefined;
   }
 
   capabilities(): Readonly<Record<string, string>> {
@@ -321,8 +414,9 @@ export class CatalogBackend implements Backend {
     return this.#pools.has(model);
   }
 
-  resolveModel(requested: string | undefined): string {
-    return requested !== undefined && this.#pools.has(requested) ? requested : this.defaultModel;
+  resolveModel(requested: string | undefined): string | undefined {
+    if (requested === undefined) return this.defaultModel;
+    return this.#pools.has(requested) ? requested : undefined;
   }
 
   capabilities(model: string): Readonly<Record<string, string>> {
@@ -375,20 +469,27 @@ export class CatalogBackend implements Backend {
 
   #pool(requested: string | undefined): EndpointPool {
     const id = this.resolveModel(requested);
+    if (id === undefined) throw new UnknownEndpointError(requested ?? "undefined");
     const pool = this.#pools.get(id);
-    if (pool === undefined) throw new Error(`unknown endpoint id: ${id}`);
+    if (pool === undefined) throw new UnknownEndpointError(id);
     return pool;
   }
 }
 
 export function providerBackend(endpoint: ModelEndpointConfig, apiKey: string): Backend {
+  if (isAccountEndpointConfig(endpoint)) {
+    throw new Error(
+      `account endpoint "${endpoint.endpointId}" requires a subscription backend factory`
+    );
+  }
+  const urlEndpoint = endpoint as UrlEndpointConfig;
   const options = {
-    baseUrl: endpoint.baseUrl,
+    baseUrl: urlEndpoint.baseUrl,
     apiKey,
-    defaultModel: endpoint.model,
-    ...(endpoint.headers !== undefined ? { headers: endpoint.headers } : {})
+    defaultModel: urlEndpoint.model,
+    ...(urlEndpoint.headers !== undefined ? { headers: urlEndpoint.headers } : {})
   };
-  switch (endpoint.dialect) {
+  switch (urlEndpoint.dialect) {
     case "openai":
       return new OpenAiBackend(options);
     case "anthropic":
@@ -398,7 +499,7 @@ export function providerBackend(endpoint: ModelEndpointConfig, apiKey: string): 
     case "codex":
       return new CodexResponsesBackend(options);
     default: {
-      const unreachable: never = endpoint.dialect;
+      const unreachable: never = urlEndpoint.dialect;
       throw new Error(`unsupported provider dialect: ${String(unreachable)}`);
     }
   }

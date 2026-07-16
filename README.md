@@ -32,11 +32,12 @@ For model ensembles:
 npm install -g @fusionkit/cli
 fusionkit setup                      # one-time: warm the internal synthesis sidecar
 cd your-git-repo                     # FusionKit runs over the current git repo
+fusionkit init                       # scaffold Fusion v4 + RouteKit config
 fusionkit doctor                     # verifies configs, endpoint IDs, uv, and agent CLIs
 fusionkit codex                      # or: fusionkit claude | fusionkit cursor | fusionkit serve
 ```
 
-Run `fusionkit init`, then define models, URLs, and `apiKeyEnv` references in
+Then define models, URLs, and `apiKeyEnv` references in
 `.routekit/router.yaml`; `.fusionkit/fusion.json` composes those opaque endpoint
 IDs into ensembles. Every selected endpoint must be configured and available.
 This checkout's committed router uses OpenRouter

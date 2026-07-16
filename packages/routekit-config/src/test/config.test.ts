@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -9,10 +9,12 @@ import { parseRouterConfig } from "@routekit/gateway";
 import {
   assertEndpointIdsConfigured,
   configuredEndpointIds,
+  globalRouterConfigPath,
   loadRouterConfig,
   missingEndpointIds,
   projectRouterConfigPath,
   resolveEndpointId,
+  updateEffectiveRouterConfig,
   writeRouterConfig
 } from "../index.js";
 
@@ -60,6 +62,49 @@ test("router config rejects inline credentials", () => {
           ]
         }),
       /inline credential/
+    );
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("legacy account aliases normalize while sparse project mutations stay sparse", () => {
+  const directory = mkdtempSync(join(tmpdir(), "routekit-config-layers-"));
+  const home = join(directory, "home");
+  const project = join(directory, "project");
+  try {
+    mkdirSync(project, { recursive: true });
+    writeRouterConfig(globalRouterConfigPath(home), {
+      endpoints: [
+        {
+          endpointId: "global",
+          model: "upstream",
+          baseUrl: "https://example.test/v1"
+        }
+      ],
+      strategy: "round_robin"
+    });
+    const projectPath = projectRouterConfigPath(project);
+    mkdirSync(join(project, ".routekit"), { recursive: true });
+    writeFileSync(projectPath, "accounts:\n  claudeCode:\n    enabled: false\n");
+
+    const loaded = loadRouterConfig({ cwd: project, home, env: {} });
+    assert.equal(loaded.config.accounts?.["claude-code"]?.enabled, false);
+    updateEffectiveRouterConfig({ cwd: project, home, env: {} }, (draft) => {
+      draft.accounts = {
+        ...(draft.accounts as Record<string, unknown>),
+        "claude-code": { enabled: true }
+      };
+    });
+
+    const persisted = readFileSync(projectPath, "utf8");
+    assert.match(persisted, /claude-code:/);
+    assert.doesNotMatch(persisted, /claudeCode|endpoints|strategy|cooldownMs/);
+    assert.equal(
+      loadRouterConfig({ cwd: project, home, env: {} }).config.accounts?.[
+        "claude-code"
+      ]?.enabled,
+      true
     );
   } finally {
     rmSync(directory, { recursive: true, force: true });

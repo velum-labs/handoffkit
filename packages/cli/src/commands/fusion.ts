@@ -113,9 +113,7 @@ function applyFusionOptions(command: Command): Command {
     .option("--panel-trust <level>", "full | guarded")
     .option("--k <n>", "step boundaries per panel member")
     .option("--resume <id>", "resume a Fusion session")
-    .option("--continue", "resume the latest Fusion session")
-    .allowUnknownOption()
-    .passThroughOptions();
+    .option("--continue", "resume the latest Fusion session");
 }
 
 export function registerFusion(program: Command): void {
@@ -138,11 +136,19 @@ export function registerFusion(program: Command): void {
         )
         .argument("[args...]", `arguments forwarded to ${tool}`)
     ).action(async (args: string[], _opts: FusionOpts, command: Command) => {
+      if (tool === "serve" && args.length > 0) {
+        fail("fusionkit serve does not accept passthrough arguments");
+      }
+      if (tool !== "serve" && contextFor(command).json) {
+        fail(`\`${tool}\` is interactive and does not support --json`);
+      }
       const options = command.optsWithGlobals<FusionOpts>();
+      const runOptions = resolveContext(options);
+      if (contextFor(command).json) runOptions.json = true;
       process.exitCode = await runFusion(
         tool as FusionTool,
         args,
-        resolveContext(options)
+        runOptions
       );
     });
   }

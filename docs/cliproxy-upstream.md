@@ -4,33 +4,30 @@
 proxy that fronts OAuth **subscription** accounts — ChatGPT/Codex, Claude Code,
 Gemini (Antigravity), Grok, Kimi — behind an OpenAI-compatible API, with
 multi-account rotation. RouteKit owns the verified binary, private config, and
-OAuth account store. FusionKit can consume it as the `cliproxy` provider: a
-plain OpenAI-compatible upstream whose "API key" is the proxy's own ingress
-key. That puts subscription-backed frontier models (Gemini, Grok, Kimi — the
-providers FusionKit has no native OAuth adapter for) on a fusion panel with
+OAuth account store. RouteKit represents it as a URL-backed `cliproxy`
+endpoint: a plain OpenAI-compatible upstream whose "API key" is the proxy's own
+ingress key. FusionKit references only that endpoint's opaque ID, which puts
+subscription-backed models such as Gemini, Grok, and Kimi on an ensemble with
 zero engine changes.
 
-## Where it fits vs the built-in subscription proxy
+## Where it fits
 
-| | built-in `routekit accounts serve` | `cliproxy` upstream |
-|---|---|---|
-| Providers | Claude Code, Codex | Codex, Claude Code, **Gemini/Antigravity, Grok, Kimi, …** |
-| Wire | provider-native relays (Messages / Responses) | OpenAI Chat Completions |
-| Rotation | quota-aware (sticky / round_robin / capacity_weighted) | round-robin (+ session affinity) |
-| Owner | RouteKit (TypeScript, in-tree) | RouteKit-managed external Go binary (pinned release) |
+Use native RouteKit account-backed endpoints for Claude Code and Codex. They use
+provider-native relays and quota-aware selection without a separate proxy
+process. `routekit accounts serve` is only the advanced mode that exposes those
+pools to an external consumer.
 
-Keep the built-in proxy as the default for Claude Code and Codex pooling — it
-has quota-aware selection and native wire relays. Reach for `cliproxy` when a
-panel wants providers FusionKit cannot OAuth natively (Gemini, Grok, Kimi),
-or when you already run CLIProxyAPI for other tools.
+Reach for `cliproxy` when an ensemble needs a subscription provider RouteKit
+does not support natively (Gemini, Grok, Kimi), or when you already run
+CLIProxyAPI for another tool. CLIProxyAPI is a separate, URL-backed upstream.
 
 ## Quick start (managed sidecar)
 
 ```bash
+routekit config init
 routekit accounts cliproxy install         # pinned release, SHA-256 verified
 routekit accounts cliproxy login gemini    # or claude / codex / grok / kimi / antigravity
 routekit accounts cliproxy serve           # http://127.0.0.1:8317
-routekit accounts cliproxy status          # install state, reachability, accounts
 ```
 
 The managed instance lives under `~/.routekit/cliproxy/` (or `ROUTEKIT_HOME`;
@@ -40,34 +37,50 @@ with the generated ingress key, and the proxy's OAuth `auth/` store, all
 works identically: export `ROUTEKIT_CLIPROXY_API_KEY` (one of its `api-keys`)
 and, for a non-default host/port, `ROUTEKIT_CLIPROXY_BASE_URL`.
 
-## Panel members
+In another shell, add every model you want RouteKit to advertise:
 
-`fusionkit init`'s panel builder offers **CLIProxyAPI (local proxy)** as an
-auth choice; with `ROUTEKIT_CLIPROXY_API_KEY` set, the model picker lists the proxy's
-live `/v1/models` (the merged catalog of every account you logged in). In
-`.fusionkit/fusion.json` a member looks like:
-
-```json
-{ "id": "gemini", "model": "gemini-3.1-pro-preview", "provider": "cliproxy" }
+```bash
+routekit endpoints add gemini-subscription \
+  --model gemini-3.1-pro-preview \
+  --provider cliproxy \
+  --base-url http://127.0.0.1:8317/v1 \
+  --api-key-env ROUTEKIT_CLIPROXY_API_KEY
+routekit accounts cliproxy status
 ```
 
-Or in a raw `fusionkit serve` YAML config:
+CLIProxy login never creates a RouteKit endpoint automatically. The resulting
+`.routekit/router.yaml` entry is a normal URL-backed endpoint:
 
 ```yaml
 endpoints:
-  - id: gemini
-    provider: cliproxy
+  - endpointId: gemini-subscription
     model: gemini-3.1-pro-preview
-    api_key_env: ROUTEKIT_CLIPROXY_API_KEY
+    provider: cliproxy
+    baseUrl: http://127.0.0.1:8317/v1
+    dialect: openai
+    apiKeyEnv: ROUTEKIT_CLIPROXY_API_KEY
 ```
 
-`base_url` defaults to `http://127.0.0.1:8317` (or
-`ROUTEKIT_CLIPROXY_BASE_URL`).
-Leave `pricing` unset: a subscription has no per-token billing, so cost
-estimates stay "unknown" rather than reporting a wrong dollar amount.
+## Use the endpoint in Fusion
 
-`fusionkit doctor` probes the proxy (reachability + key) whenever
-`ROUTEKIT_CLIPROXY_API_KEY` is set or a configured panel references the provider.
+Fusion v4 contains the opaque endpoint ID only:
+
+```json
+{
+  "version": "fusionkit.fusion.v4",
+  "router": { "config": ".routekit/router.yaml" },
+  "ensembles": {
+    "default": {
+      "members": ["gemini-subscription", "api-key-peer"],
+      "judge": "api-key-peer"
+    }
+  }
+}
+```
+
+Run `routekit endpoints health gemini-subscription` to probe the proxy-backed
+endpoint. `fusionkit doctor` validates that every endpoint ID referenced by the
+ensemble is available from RouteKit.
 
 ## ToS caveat
 

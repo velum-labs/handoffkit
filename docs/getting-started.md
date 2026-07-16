@@ -86,8 +86,8 @@ remain on the Node gateway started by `fusionkit serve`.
 ## Product quick checks
 
 ```sh
-fusionkit doctor
 fusionkit init
+fusionkit doctor
 fusionkit config show
 fusionkit codex      # or: fusionkit claude | cursor | opencode
 fusionkit serve      # gateway/raw endpoint path

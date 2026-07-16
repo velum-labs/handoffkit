@@ -1,6 +1,6 @@
 import { resolve } from "node:path";
 
-import { parsePort } from "@routekit/cli-core";
+import { contextFor, parsePort } from "@routekit/cli-core";
 import { trimTrailingSlashes } from "@routekit/runtime";
 import type { Command } from "commander";
 
@@ -37,6 +37,11 @@ export function registerLaunchers(program: Command): void {
         },
         actionCommand: Command
       ) => {
+        if (contextFor(actionCommand).json) {
+          throw new Error(
+            `\`${integration.id}\` is interactive and does not support --json`
+          );
+        }
         const config = loaded(actionCommand).config;
         process.exitCode = await launchTool({
           tool: integration.id,

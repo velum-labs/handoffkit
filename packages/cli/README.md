@@ -8,6 +8,7 @@ one command.
 ```bash
 npm install -g @fusionkit/cli
 cd your-project        # a git repo
+fusionkit init         # scaffold Fusion v4 + RouteKit config
 fusionkit doctor       # check prerequisites
 fusionkit codex        # launch Codex backed by the fusion panel
 ```

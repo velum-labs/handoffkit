@@ -343,9 +343,20 @@ export async function runFusion(
       `fusion: ready at ${stack.fusionUrl} (${stack.embeddedRouter ? "embedded RouteKit" : "external RouteKit"})`
     );
     if (tool === "serve") {
-      process.stdout.write(
-        `${gatewaySetupSnippets(stack.fusionUrl, "", fusionModelId(ensembles[0]!.name))}\n`
-      );
+      if (options.json === true) {
+        process.stdout.write(
+          `${JSON.stringify({
+            ready: true,
+            url: stack.fusionUrl,
+            model: fusionModelId(ensembles[0]!.name),
+            router: stack.embeddedRouter ? "embedded" : "external"
+          })}\n`
+        );
+      } else {
+        process.stdout.write(
+          `${gatewaySetupSnippets(stack.fusionUrl, "", fusionModelId(ensembles[0]!.name))}\n`
+        );
+      }
       await new Promise<void>(() => undefined);
       return 0;
     }

@@ -102,8 +102,7 @@ before(async function () {
       repo,
       "--no-reasoning",
       "--no-observe",
-      "--no-subagents",
-      "--yes"
+      "--no-subagents"
     ],
     {
       cwd: repo,

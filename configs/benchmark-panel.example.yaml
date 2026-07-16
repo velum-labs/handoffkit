@@ -1,60 +1,24 @@
-# Decorrelated peer panel for fusion benchmarking.
+# Maintainer-only fusionkit-evals / internal sidecar configuration.
 #
-# This benchmark-only panel is separate from the product default and intentionally
-# uses frontier peer models for oracle-headroom experiments. Boot it with:
+# Provider URLs and credentials belong to RouteKit. Start the example router:
 #
-#   fusionkit serve -c configs/benchmark-panel.example.yaml
+#   routekit --config configs/benchmark-router.example.yaml serve --no-portless --port 8787
 #
-# then point an official public-benchmark runner (Aider, SWE-bench Pro, etc.) at
-# the gateway base URL using the `fusionkit/panel` model alias.
-endpoints:
-  - id: gpt
-    provider: openai
-    model: gpt-5.5
-    base_url: https://api.openai.com
-    api_key_env: OPENAI_API_KEY
-    capabilities:
-      structured_output: true
-      tool_calls: true
-      streaming: true
-    pricing:
-      input_per_1m_tokens: 1.25
-      output_per_1m_tokens: 10.0
-      currency: USD
-    tags: [cloud, peer]
-  - id: opus
-    provider: anthropic
-    model: claude-opus-4-8
-    base_url: https://api.anthropic.com
-    api_key_env: ANTHROPIC_API_KEY
-    capabilities:
-      structured_output: false
-      tool_calls: true
-      streaming: true
-    pricing:
-      input_per_1m_tokens: 5.0
-      output_per_1m_tokens: 25.0
-      currency: USD
-    tags: [cloud, peer]
-  - id: gemini
-    provider: google
-    model: gemini-3-pro
-    base_url: https://generativelanguage.googleapis.com
-    api_key_env: GEMINI_API_KEY
-    capabilities:
-      structured_output: true
-      tool_calls: true
-      streaming: true
-    pricing:
-      input_per_1m_tokens: 1.25
-      output_per_1m_tokens: 10.0
-      currency: USD
-    tags: [cloud, peer]
+# Then pass this file to `fusionkit-bench --config` or set
+# FUSIONKIT_BENCH_CONFIG. It is not a public `fusionkit serve` config.
+routekit_url: http://127.0.0.1:8787
+endpoint_ids:
+  - gpt
+  - opus
+  - gemini
 default_model: gpt
 judge_model: gpt
 synthesizer_model: gpt
 default_mode: panel
-panel_models: [gpt, opus, gemini]
+panel_models:
+  - gpt
+  - opus
+  - gemini
 sampling:
   temperature: 0.2
   top_p: 0.95
@@ -62,6 +26,5 @@ sampling:
 budget:
   max_candidates: 3
   wall_clock_s: 1800
-  max_cost: null
   max_tool_rounds: 24
   max_tool_calls: 200

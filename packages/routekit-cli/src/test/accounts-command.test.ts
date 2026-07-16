@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import {
   mkdirSync,
   mkdtempSync,
+  readFileSync,
   rmSync,
   writeFileSync
 } from "node:fs";
@@ -10,6 +11,82 @@ import { join } from "node:path";
 import { test } from "node:test";
 
 import { buildProgram } from "../cli.js";
+
+test("accounts add canonically enrolls and activates the selected config", async () => {
+  const root = mkdtempSync(join(tmpdir(), "routekit-accounts-add-"));
+  const stateHome = join(root, "state");
+  const configPath = join(root, "router.yaml");
+  const previousHome = process.env.HOME;
+  const previousStateHome = process.env.ROUTEKIT_HOME;
+  const originalWrite = process.stdout.write;
+  mkdirSync(join(root, ".codex"), { recursive: true });
+  writeFileSync(
+    join(root, ".codex", "auth.json"),
+    JSON.stringify({
+      tokens: {
+        access_token: "eyJhbGciOiJub25lIn0.eyJleHAiOjk5OTk5OTk5OTl9.",
+        refresh_token: "refresh",
+        account_id: "acct-test"
+      }
+    })
+  );
+  writeFileSync(
+    configPath,
+    [
+      "endpoints:",
+      "  - endpointId: default",
+      "    model: provider-model",
+      "    baseUrl: https://example.test/v1",
+      ""
+    ].join("\n")
+  );
+  process.env.HOME = root;
+  process.env.ROUTEKIT_HOME = stateHome;
+  try {
+    let output = "";
+    process.stdout.write = ((chunk: string | Uint8Array) => {
+      output += chunk.toString();
+      return true;
+    }) as typeof process.stdout.write;
+    await buildProgram().parseAsync([
+      "node",
+      "routekit",
+      "--config",
+      configPath,
+      "--json",
+      "accounts",
+      "add",
+      "codex",
+      "--name",
+      "primary"
+    ]);
+    const result = JSON.parse(output) as {
+      subscriptionKind?: string;
+      provider?: string;
+      activated?: boolean;
+      configPath?: string;
+      path?: string;
+    };
+    assert.equal(result.subscriptionKind, "codex");
+    assert.equal(result.provider, "codex");
+    assert.equal(result.activated, true);
+    assert.equal(result.configPath, configPath);
+    assert.equal(
+      result.path,
+      join(stateHome, "subscriptions", "codex", "primary.json")
+    );
+    const persisted = readFileSync(configPath, "utf8");
+    assert.match(persisted, /accounts:\n  codex:\n    enabled: true/);
+    assert.doesNotMatch(persisted, /strategy:|switchThreshold:|cooldownMs:/);
+  } finally {
+    process.stdout.write = originalWrite;
+    if (previousHome === undefined) delete process.env.HOME;
+    else process.env.HOME = previousHome;
+    if (previousStateHome === undefined) delete process.env.ROUTEKIT_HOME;
+    else process.env.ROUTEKIT_HOME = previousStateHome;
+    rmSync(root, { recursive: true, force: true });
+  }
+});
 
 test("accounts remove emits JSON and plain idempotent results without credential data", async () => {
   const root = mkdtempSync(join(tmpdir(), "routekit-accounts-command-"));
@@ -41,7 +118,8 @@ test("accounts remove emits JSON and plain idempotent results without credential
       mode: "codex",
       label: "primary",
       path: join(directory, "primary.json"),
-      removed: true
+      removed: true,
+      subscriptionKind: "codex"
     });
     assert.equal(output.includes("never-output"), false);
 

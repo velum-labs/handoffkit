@@ -13,7 +13,10 @@ import { configureBrand, uiStream } from "@routekit/cli-ui";
 import { CommanderError, type Command } from "commander";
 
 import { buildProgram } from "./cli.js";
-import { runCommandPalette } from "./commands/palette.js";
+import {
+  configuredDefaultToolArgv,
+  runCommandPalette
+} from "./commands/palette.js";
 import {
   CliError,
   emitJson,
@@ -142,7 +145,9 @@ async function main(): Promise<void> {
   try {
     try {
       if (argv.length === 0) {
-        const paletteArgv = await runCommandPalette();
+        const defaultToolArgv = configuredDefaultToolArgv();
+        const paletteArgv =
+          defaultToolArgv === undefined ? await runCommandPalette() : defaultToolArgv;
         if (paletteArgv === undefined) {
           program.outputHelp();
         } else {

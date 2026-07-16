@@ -26,12 +26,14 @@ contract. Product CLIs can wrap this module without owning account logic.
 - `export type { AdminUsageCost, AdminUsageRange, SubscriptionProvider } from "./provider.js";`
 - `export { RateLimitTracker, SubscriptionAccountSet, SubscriptionAccountSetExhaustedError } from "./account-set.js";`
 - `export type { SubscriptionAccountSetOptions } from "./account-set.js";`
+- `export { SubscriptionAccountBackend } from "./backend.js";`
+- `export type { SubscriptionAccountBackendOptions } from "./backend.js";`
 - `export { CodexBackendRelay, codexRelayAuth } from "./codex-relay.js";`
 - `export type { CodexCatalogEntry, CodexRelayAuth, CodexRelayAuthSource, CodexRelayOptions, ProviderRelayLogger, CodexStockEntry } from "./codex-relay.js";`
 - `export { AnthropicBackendRelay, forwardRelayHeaders, RelayOnlyBackend } from "./relay.js";`
 - `export type { AnthropicRelayOptions, SubscriptionRelay, SubscriptionRelayDialect } from "./relay.js";`
-- `export { openSubscriptionRelays } from "./gateway.js";`
-- `export type { OpenSubscriptionRelaysOptions, OpenSubscriptionRelaysResult, SubscriptionAccountConfigs } from "./gateway.js";`
+- `export { openSubscriptionAccountSets, openSubscriptionRelays, subscriptionRelaysFromAccountSets } from "./gateway.js";`
+- `export type { OpenSubscriptionRelaysOptions, OpenSubscriptionRelaysResult, SubscriptionAccountConfigs, SubscriptionAccountSets } from "./gateway.js";`
 - `export { NoSubscriptionAccountsError, startSubscriptionProxy } from "./proxy.js";`
 - `export type { StartSubscriptionProxyOptions, SubscriptionProxy } from "./proxy.js";`
 - `export { SubscriptionProxyClient, SubscriptionProxyClientError } from "./client.js";`
@@ -313,9 +315,9 @@ Product-neutral RouteKit gateway and router.
 - `export { joinPath, ModelRoutedBackend, OpenAiBackend } from "./backend.js";`
 - `export type { Backend, BackendRequestOptions, ModelRoutedBackendOptions, OpenAiBackendOptions } from "./backend.js";`
 - `export { AnthropicBackend, CodexResponsesBackend, GoogleGenAiBackend } from "./provider-backends.js";`
-- `export type { ProviderBackendOptions } from "./provider-backends.js";`
-- `export { CatalogBackend, EndpointPool, modelEndpointSchema, parseRouterConfig, providerBackend, routerConfigSchema } from "./router.js";`
-- `export type { CatalogBackendOptions, EndpointPoolOptions, ModelEndpointConfig, RouterConfig } from "./router.js";`
+- `export type { ProviderBackendOptions, ProviderTransport } from "./provider-backends.js";`
+- `export { CatalogBackend, EndpointPool, isAccountEndpointConfig, modelEndpointSchema, normalizeRouterConfigAliases, parseRouterConfig, providerBackend, routerConfigSchema, UnknownEndpointError } from "./router.js";`
+- `export type { AccountEndpointConfig, CatalogBackendOptions, EndpointPoolOptions, ModelEndpointConfig, RouterConfig, UrlEndpointConfig } from "./router.js";`
 - `export { endpointHealthProbe, probeEndpointHealth, providerAuthHeaders } from "./endpoint-health.js";`
 - `export type { EndpointHealthProbe, EndpointHealthProbePlan, EndpointHealthResult } from "./endpoint-health.js";`
 - `export { CapacityPool } from "./capacity-pool.js";`
@@ -426,6 +428,7 @@ No module JSDoc was found.
 - `export type RouterConfigSource ...`
 - `export type LoadedRouterConfig ...`
 - `export type RouterConfigPaths ...`
+- `export type UpdateRouterConfigInput ...`
 - `export function configuredEndpointIds(config: RouterConfig): string[] ...`
   Unique configured endpoint ids in declaration order.
 - `export function missingEndpointIds(`
@@ -443,6 +446,8 @@ No module JSDoc was found.
 - `export function routerConfigPaths(`
 - `export function loadRouterConfig(`
 - `export function writeRouterConfig(path: string, config: RouterConfig | unknown): string ...`
+- `export function updateEffectiveRouterConfig(`
+  Mutate only the selected raw config layer while validating the merged result.  This keeps project overlays sparse instead of materializing defaults or inherited global values into the project file.
 - `export function updateRouterConfig(`
 - `export const DEFAULT_ROUTER_CONFIG: RouterConfig ...`
 

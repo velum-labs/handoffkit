@@ -7,7 +7,8 @@ import { ProviderFailureError } from "@routekit/contracts";
 import {
   anthropicModelsResponse,
   handleAnthropicMessages,
-  handleCountTokens
+  handleCountTokens,
+  resolveClaudeModelAlias
 } from "./adapters/anthropic.js";
 import type { AnthropicRequest } from "./adapters/anthropic.js";
 import { effectiveModel, isStream, withDefaultModel } from "./adapters/chat.js";
@@ -33,6 +34,7 @@ import type {
   ModelGatewayCallContext,
   ProvenanceSink
 } from "./provenance.js";
+import { UnknownEndpointError } from "./router.js";
 
 /**
  * The local-model gateway HTTP server. It fronts a single OpenAI Chat
@@ -104,6 +106,39 @@ export type Gateway = {
   close(): Promise<void>;
 };
 
+async function mergeAnthropicCatalogs(
+  configured: Response,
+  native: Response
+): Promise<Response> {
+  if (!native.ok) return configured;
+  const configuredBody = (await configured.json()) as {
+    data?: Array<Record<string, unknown>>;
+  };
+  const nativeBody = (await native.json()) as {
+    data?: Array<Record<string, unknown>>;
+  };
+  const data = [...(configuredBody.data ?? [])];
+  const seen = new Set(
+    data.flatMap((entry) => (typeof entry.id === "string" ? [entry.id] : []))
+  );
+  for (const entry of nativeBody.data ?? []) {
+    if (typeof entry.id !== "string" || seen.has(entry.id)) continue;
+    seen.add(entry.id);
+    data.push(entry);
+  }
+  return Response.json(
+    {
+      ...nativeBody,
+      data,
+      has_more: false,
+      first_id: typeof data[0]?.id === "string" ? data[0].id : undefined,
+      last_id:
+        typeof data.at(-1)?.id === "string" ? data.at(-1)?.id : undefined
+    },
+    { headers: native.headers }
+  );
+}
+
 export async function startGateway(options: GatewayOptions): Promise<Gateway> {
   const host = options.host ?? "127.0.0.1";
   const { backend, authToken, provenance } = options;
@@ -156,11 +191,21 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
       // Claude Code's discovery probe carries `anthropic-version` and expects
       // the Anthropic-shaped model list; everyone else gets the OpenAI shape.
       if (req.headers["anthropic-version"] !== undefined) {
+        const configured = anthropicModelsResponse(
+          backend.defaultModel,
+          backend.listModelIds?.()
+        );
         if (anthropicRelay?.models !== undefined) {
-          await pipeUpstream(res, await anthropicRelay.models(req.headers, url.search));
+          await pipeUpstream(
+            res,
+            await mergeAnthropicCatalogs(
+              configured,
+              await anthropicRelay.models(req.headers, url.search)
+            )
+          );
           return;
         }
-        await pipeUpstream(res, anthropicModelsResponse(backend.defaultModel, backend.listModelIds?.()));
+        await pipeUpstream(res, configured);
         return;
       }
       if (codexCatalogRelay !== undefined) {
@@ -173,10 +218,29 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
             data?: Array<{ id: string } & Record<string, unknown>>;
           };
           if (merged.etag !== undefined) res.setHeader("etag", merged.etag);
+          const configuredModels = (base.data ?? []).map((entry) => ({
+            slug: entry.id,
+            display_name: entry.id,
+            description: "RouteKit configured endpoint",
+            visibility: "list",
+            priority: 0
+          }));
+          const seenModels = new Set(configuredModels.map((entry) => entry.slug));
+          const nativeModels = merged.models.filter((entry) => {
+            const slug =
+              typeof entry.slug === "string"
+                ? entry.slug
+                : typeof entry.id === "string"
+                  ? entry.id
+                  : undefined;
+            if (slug === undefined || seenModels.has(slug)) return false;
+            seenModels.add(slug);
+            return true;
+          });
           writeJson(res, 200, {
             object: "list",
             data: codexCatalogRelay.mergeDataIds?.(base.data ?? [], merged.models) ?? base.data ?? [],
-            models: merged.models
+            models: [...configuredModels, ...nativeModels]
           });
           return;
         }
@@ -197,10 +261,20 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
     // so any advertised/aliased id validates; routing is decided at chat time.
     if (method === "GET" && path.startsWith("/v1/models/")) {
       const id = decodeURIComponent(path.slice("/v1/models/".length));
+      const resolved = resolveClaudeModelAlias(id, backend.listModelIds?.());
+      if (
+        resolved === undefined ||
+        (!(backend.servesModel?.(resolved) ?? false) && anthropicRelay === undefined)
+      ) {
+        writeJson(res, 404, {
+          error: { message: `unknown model: ${id}`, type: "not_found" }
+        });
+        return;
+      }
       writeJson(res, 200, {
         type: "model",
         id,
-        display_name: id,
+        display_name: resolved,
         created_at: new Date(0).toISOString()
       });
       return;
@@ -281,7 +355,15 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
       const raw = await readJson(req, res);
       if (raw === NO_BODY) return;
       if (rejectInvalid(res, validateAnthropicRequest(raw))) return;
-      const body = raw as AnthropicRequest;
+      const rawBody = raw as AnthropicRequest;
+      const resolvedModel = resolveClaudeModelAlias(
+        rawBody.model,
+        backend.listModelIds?.()
+      );
+      const body =
+        resolvedModel === rawBody.model
+          ? rawBody
+          : { ...rawBody, model: resolvedModel };
       const requestedModel = typeof body.model === "string" ? body.model : undefined;
       if (
         anthropicRelay !== undefined &&
@@ -476,6 +558,16 @@ function writeGatewayError(
   res: ServerResponse,
   error: unknown
 ): { statusCode: number; payload: Buffer } {
+  if (error instanceof UnknownEndpointError) {
+    const payload = writeErrorSafely(res, 400, {
+      error: {
+        message: error.message,
+        type: "invalid_request_error",
+        param: "model"
+      }
+    });
+    return { statusCode: 400, payload };
+  }
   if (error instanceof ProviderFailureError) {
     const { failure } = error;
     const resetAt = failure.resetsAt;
@@ -521,7 +613,7 @@ async function handleModelCall(
     stream: isStream(route.body),
     requestBody: route.body,
     startedAt,
-    endpointId: route.defaultModel ?? route.dialect
+    endpointId: effectiveModel(route.body, route.defaultModel) ?? route.dialect
   };
   res.setHeader(MODEL_CALL_ID_HEADER, callId);
   // Cancel upstream work if the client hangs up before we finish responding.

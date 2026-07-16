@@ -9,7 +9,8 @@ import {
   chatToAnthropicMessage,
   claudeModelAlias,
   mapStopReason,
-  openAiSseToAnthropic
+  openAiSseToAnthropic,
+  resolveClaudeModelAlias
 } from "../adapters/anthropic.js";
 import { OpenAiBackend } from "../backend.js";
 import { MODEL_CALL_ID_HEADER } from "../provenance.js";
@@ -42,6 +43,17 @@ test("anthropicModelsResponse aliases every model past Claude Code's claude/anth
   const gpt = body.data.find((model) => model.id === "claude-gpt-5.5");
   assert.equal(gpt?.display_name, "gpt-5.5");
   assert.equal(claudeModelAlias("claude-opus-4-8"), "claude-opus-4-8");
+  assert.equal(
+    resolveClaudeModelAlias("claude-gpt-5.5", [
+      "route-primary",
+      "gpt-5.5"
+    ]),
+    "gpt-5.5"
+  );
+  assert.equal(
+    resolveClaudeModelAlias("claude-opus-4-8", ["gpt-5.5"]),
+    "claude-opus-4-8"
+  );
 });
 
 test("anthropicToChat tolerates thinking: null (same failure class as Responses reasoning: null)", () => {

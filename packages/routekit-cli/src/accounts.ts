@@ -4,6 +4,7 @@ import { join } from "node:path";
 import {
   defaultSubscriptionAccountDirectory,
   enrollCurrentSubscription,
+  loadSubscriptionCredential,
   removeSubscriptionAccount,
   startSubscriptionProxy,
   SubscriptionProxyClient
@@ -13,6 +14,7 @@ import type {
   SubscriptionUsageResponse
 } from "@routekit/accounts";
 import type { SubscriptionMode } from "@routekit/registry";
+import type { RouterConfig } from "@routekit/gateway";
 import { registerCleanup } from "@routekit/runtime";
 
 import { readServiceRecord, registerService, stopService } from "./state.js";
@@ -25,47 +27,54 @@ export function parseAccountMode(value: string): SubscriptionMode {
     case "codex":
       return "codex";
     default:
-      throw new Error("provider must be claude or codex");
+      throw new Error("subscription kind must be claude-code or codex");
   }
 }
 
 export type AccountListEntry = {
+  subscriptionKind: SubscriptionMode;
+  /** @deprecated Use subscriptionKind. */
   provider: SubscriptionMode;
   label: string;
   path: string;
 };
 
 export function listAccounts(): AccountListEntry[] {
-  const providers: readonly SubscriptionMode[] = ["claude-code", "codex"];
-  return providers.flatMap((provider) => {
-    const directory = defaultSubscriptionAccountDirectory(provider);
+  const subscriptionKinds: readonly SubscriptionMode[] = ["claude-code", "codex"];
+  return subscriptionKinds.flatMap((subscriptionKind) => {
+    const directory = defaultSubscriptionAccountDirectory(subscriptionKind);
     if (!existsSync(directory)) return [];
     return readdirSync(directory)
       .filter((name) => name.endsWith(".json") && !name.startsWith("."))
       .sort()
       .map((name) => ({
-        provider,
+        subscriptionKind,
+        provider: subscriptionKind,
         label: name.slice(0, -".json".length),
         path: join(directory, name)
       }));
   });
 }
 
-export async function addAccount(provider: string, label?: string): Promise<AccountListEntry> {
-  const mode = parseAccountMode(provider);
-  const path = await enrollCurrentSubscription(mode, {
+export async function addAccount(
+  subscriptionKindInput: string,
+  label?: string
+): Promise<AccountListEntry> {
+  const subscriptionKind = parseAccountMode(subscriptionKindInput);
+  const path = await enrollCurrentSubscription(subscriptionKind, {
     ...(label !== undefined ? { label } : {})
   });
   const name = path.split(/[\\/]/).at(-1) ?? path;
   return {
-    provider: mode,
+    subscriptionKind,
+    provider: subscriptionKind,
     label: name.endsWith(".json") ? name.slice(0, -".json".length) : name,
     path
   };
 }
 
-export function removeAccount(provider: string, label: string) {
-  return removeSubscriptionAccount(parseAccountMode(provider), label);
+export function removeAccount(subscriptionKindInput: string, label: string) {
+  return removeSubscriptionAccount(parseAccountMode(subscriptionKindInput), label);
 }
 
 export type AccountsStatus = {
@@ -73,12 +82,36 @@ export type AccountsStatus = {
   url?: string;
   pid?: number;
   usage?: SubscriptionUsageResponse;
-  accounts: AccountListEntry[];
+  accounts: Array<
+    AccountListEntry & {
+      credentialValid: boolean;
+      configured: boolean;
+      relayOpen: boolean;
+    }
+  >;
 };
 
-export async function accountsStatus(): Promise<AccountsStatus> {
+export async function accountsStatus(config?: RouterConfig): Promise<AccountsStatus> {
   const record = readServiceRecord("accounts");
-  const accounts = listAccounts();
+  const accounts = await Promise.all(
+    listAccounts().map(async (entry) => {
+      let credentialValid = false;
+      try {
+        await loadSubscriptionCredential(entry.subscriptionKind, entry.path);
+        credentialValid = true;
+      } catch {
+        credentialValid = false;
+      }
+      const configured =
+        config?.accounts?.[entry.subscriptionKind]?.enabled === true;
+      return {
+        ...entry,
+        credentialValid,
+        configured,
+        relayOpen: configured && credentialValid
+      };
+    })
+  );
   if (record === undefined) return { running: false, accounts };
   let usage: SubscriptionUsageResponse | undefined;
   if (record.authToken !== undefined) {

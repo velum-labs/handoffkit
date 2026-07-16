@@ -10,11 +10,12 @@ Use it with the narrative references when you need to find the module that owns 
 
 - `packages/accounts/src/account-set.ts`: SubscriptionAccountSetOptions (type), RateLimitTracker (class), SubscriptionAccountSetExhaustedError (class), SubscriptionAccountSet (class)
 - `packages/accounts/src/account-source.ts`: SubscriptionAccountSource (type), ResolvedSubscriptionAccounts (type), resolveSubscriptionAccounts (function)
+- `packages/accounts/src/backend.ts`: SubscriptionAccountBackendOptions (type), SubscriptionAccountBackend (class)
 - `packages/accounts/src/client.ts`: SubscriptionProxyClientOptions (type), SubscriptionProxyClient (class), SubscriptionProxyClientError (class)
 - `packages/accounts/src/cliproxy.ts`: CLIPROXY_PINNED_VERSION (const), CLIPROXY_API_KEY_ENV (const), CLIPROXY_BASE_URL_ENV (const), CLIPROXY_HOME_ENV (const), cliproxyHome (function), cliproxyBaseUrl (function), cliproxyConfigPath (function), cliproxyBinaryPath (function), cliproxyAssetName (function), cliproxyApiKey (function), ensureCliproxyConfig (function), CliproxyInstallResult (type), installCliproxy (function), CLIPROXY_LOGIN_FLAGS (const), runCliproxyLogin (function), spawnCliproxy (function), CliproxyStatus (type), cliproxyStatus (function)
 - `packages/accounts/src/codex-relay.ts`: CodexCatalogEntry (type), ProviderRelayLogger (type), CodexStockEntry (type), CodexRelayOptions (type), CodexRelayAuthSource (type), CodexRelayAuth (type), codexRelayAuth (function), CodexBackendRelay (class)
 - `packages/accounts/src/credentials.ts`: defaultSubscriptionAccountDirectory (function), defaultSubscriptionCredentialPath (function), loadSubscriptionCredential (function), persistSubscriptionCredential (function), sanitizeSubscriptionLabel (function), enrollCurrentSubscription (function), RemoveSubscriptionAccountResult (type), removeSubscriptionAccount (function), subscriptionCredentialLabel (function)
-- `packages/accounts/src/gateway.ts`: SubscriptionAccountConfigs (type), OpenSubscriptionRelaysOptions (type), OpenSubscriptionRelaysResult (type), openSubscriptionRelays (function)
+- `packages/accounts/src/gateway.ts`: SubscriptionAccountConfigs (type), OpenSubscriptionRelaysOptions (type), OpenSubscriptionRelaysResult (type), SubscriptionAccountSets (type), openSubscriptionAccountSets (function), subscriptionRelaysFromAccountSets (function), openSubscriptionRelays (function)
 - `packages/accounts/src/provider.ts`: AdminUsageRange (type), AdminUsageCost (type), SubscriptionProvider (type), subscriptionProvider (function)
 - `packages/accounts/src/proxy.ts`: StartSubscriptionProxyOptions (type), SubscriptionProxy (type), NoSubscriptionAccountsError (class), startSubscriptionProxy (function)
 - `packages/accounts/src/relay.ts`: SubscriptionRelayDialect (type), SubscriptionRelay (type), forwardRelayHeaders (function), AnthropicRelayOptions (type), RelayOnlyBackend (class), AnthropicBackendRelay (class)
@@ -62,7 +63,7 @@ Use it with the narrative references when you need to find the module that owns 
 - `packages/cli/src/commands/ensemble.ts`: registerEnsemble (function)
 - `packages/cli/src/commands/fusion.ts`: registerFusion (function)
 - `packages/cli/src/commands/models.ts`: provisionMlxRuntime (function), registerModels (function)
-- `packages/cli/src/commands/palette.ts`: PaletteAction (type), registerPaletteAction (function), paletteActions (function), runCommandPalette (function)
+- `packages/cli/src/commands/palette.ts`: PaletteAction (type), registerPaletteAction (function), paletteActions (function), configuredDefaultToolArgv (function), runCommandPalette (function)
 - `packages/cli/src/commands/prompts.ts`: registerPrompts (function)
 - `packages/cli/src/commands/sessions.ts`: resolveSessionId (function), registerSessions (function)
 - `packages/cli/src/commands/setup.ts`: registerSetup (function)
@@ -215,7 +216,7 @@ Use it with the narrative references when you need to find the module that owns 
 
 - `packages/model-gateway/src/acp-agent.ts`: ACP_PROTOCOL_VERSION (const), AcpRunnerInput (type), AcpRunnerResult (type), AcpRunner (type), AcpAgentOptions (type), runAcpAgent (function)
 - `packages/model-gateway/src/acp-registry.ts`: ACP_REGISTRY_URL (const), AcpRegistryAgent (type), AcpRegistry (type), AcpRegistryFetcher (type), InstalledAcpAdapter (type), fetchAcpRegistry (function), InstallAcpAdaptersOptions (type), installAcpAdapters (function)
-- `packages/model-gateway/src/adapters/anthropic.ts`: AnthropicRequest (type), AnthropicTranslationOptions (type), anthropicToChat (function), mapStopReason (function), chatToAnthropicMessage (function), openAiSseToAnthropic (function), countTokensEstimate (function), handleAnthropicMessages (function), handleCountTokens (function), CLAUDE_ALIAS_PREFIX (const), claudeModelAlias (function), anthropicModelsResponse (function)
+- `packages/model-gateway/src/adapters/anthropic.ts`: AnthropicRequest (type), AnthropicTranslationOptions (type), anthropicToChat (function), mapStopReason (function), chatToAnthropicMessage (function), openAiSseToAnthropic (function), countTokensEstimate (function), handleAnthropicMessages (function), handleCountTokens (function), CLAUDE_ALIAS_PREFIX (const), claudeModelAlias (function), resolveClaudeModelAlias (function), anthropicModelsResponse (function)
 - `packages/model-gateway/src/adapters/chat.ts`: withDefaultModel (function), isStream (function), effectiveModel (function)
 - `packages/model-gateway/src/adapters/cursor.ts`: isCursorChatBody (function), translateCursorRequest (function)
 - `packages/model-gateway/src/adapters/dropped.ts`: DialectName (type), DIALECT_DROPPED_ATTRIBUTE (const), DroppedFieldSpan (type), withDroppedFieldSpan (function), droppedField (function), resetDroppedFieldWarnings (function)
@@ -232,8 +233,8 @@ Use it with the narrative references when you need to find the module that owns 
 - `packages/model-gateway/src/cost.ts`: ModelPricing (type), TokenUsage (type), ProviderCostMetadata (type), CallCostRecord (type), DEFAULT_MODEL_PRICING (const), parseUsage (function), parseUsageFromSse (function), lookupPricing (function), estimateCost (function), meterCall (function), formatUsd (function)
 - `packages/model-gateway/src/endpoint-health.ts`: EndpointHealthProbe (type), EndpointHealthProbePlan (type), EndpointHealthResult (type), providerAuthHeaders (function), endpointHealthProbe (function), probeEndpointHealth (function)
 - `packages/model-gateway/src/provenance.ts`: GatewayDialect (type), MODEL_CALL_ID_HEADER (const), UNKNOWN_GIT_SHA (const), resolveProducerGitSha (function), readProducerVersion (function), ModelGatewayCallContext (type), ModelGatewayCallResult (type), ModelCallRecord (type), ProvenanceSink (type), buildModelCallRecord (function), modelCallId (function), responseBodyHash (function)
-- `packages/model-gateway/src/provider-backends.ts`: ProviderBackendOptions (type), AnthropicBackend (class), GoogleGenAiBackend (class), CodexResponsesBackend (class)
-- `packages/model-gateway/src/router.ts`: modelEndpointSchema (const), routerConfigSchema (const), ModelEndpointConfig (type), RouterConfig (type), parseRouterConfig (function), EndpointPoolOptions (type), EndpointPool (class), CatalogBackendOptions (type), CatalogBackend (class), providerBackend (function)
+- `packages/model-gateway/src/provider-backends.ts`: ProviderBackendOptions (type), ProviderTransport (type), AnthropicBackend (class), GoogleGenAiBackend (class), CodexResponsesBackend (class)
+- `packages/model-gateway/src/router.ts`: UnknownEndpointError (class), modelEndpointSchema (const), routerConfigSchema (const), ModelEndpointConfig (type), AccountEndpointConfig (type), UrlEndpointConfig (type), RouterConfig (type), isAccountEndpointConfig (function), normalizeRouterConfigAliases (function), parseRouterConfig (function), EndpointPoolOptions (type), EndpointPool (class), CatalogBackendOptions (type), CatalogBackend (class), providerBackend (function)
 - `packages/model-gateway/src/server.ts`: GatewayOptions (type), ProviderRelayDialect (type), ProviderRelay (type), Gateway (type), startGateway (function)
 - `packages/model-gateway/src/sse-wire.ts`: noticeChunk (function), errorEvent (function), finishChunk (function), reasoningChunk (function), sseResponse (function)
 - `packages/model-gateway/src/sse/chat-assembler.ts`: AssembledToolCall (type), AssembledTurn (type), ChatStreamAssembler (class)
@@ -289,7 +290,7 @@ Use it with the narrative references when you need to find the module that owns 
 
 ### `packages/routekit-config`
 
-- `packages/routekit-config/src/index.ts`: RouterConfigSource (type), LoadedRouterConfig (type), RouterConfigPaths (type), configuredEndpointIds (function), missingEndpointIds (function), assertEndpointIdsConfigured (function), resolveEndpointId (function), selectEndpointId (const), routekitHome (function), globalRouterConfigPath (function), projectRouterConfigPath (function), findProjectRouterConfig (function), routerConfigPaths (function), loadRouterConfig (function), writeRouterConfig (function), updateRouterConfig (function), DEFAULT_ROUTER_CONFIG (const)
+- `packages/routekit-config/src/index.ts`: RouterConfigSource (type), LoadedRouterConfig (type), RouterConfigPaths (type), UpdateRouterConfigInput (type), configuredEndpointIds (function), missingEndpointIds (function), assertEndpointIdsConfigured (function), resolveEndpointId (function), selectEndpointId (const), routekitHome (function), globalRouterConfigPath (function), projectRouterConfigPath (function), findProjectRouterConfig (function), routerConfigPaths (function), loadRouterConfig (function), writeRouterConfig (function), updateEffectiveRouterConfig (function), updateRouterConfig (function), DEFAULT_ROUTER_CONFIG (const)
 
 ### `packages/routekit-registry`
 

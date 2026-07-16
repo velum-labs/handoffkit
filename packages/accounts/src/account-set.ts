@@ -249,6 +249,7 @@ export class SubscriptionAccountSet {
   readonly #refreshes = new Map<string, Promise<void>>();
   #activeId: string | undefined;
   #probeTimer: NodeJS.Timeout | undefined;
+  #closed = false;
 
   private constructor(
     provider: SubscriptionProvider,
@@ -328,7 +329,12 @@ export class SubscriptionAccountSet {
   }
 
   async close(): Promise<void> {
-    if (this.#probeTimer !== undefined) clearInterval(this.#probeTimer);
+    if (this.#closed) return;
+    this.#closed = true;
+    if (this.#probeTimer !== undefined) {
+      clearInterval(this.#probeTimer);
+      this.#probeTimer = undefined;
+    }
     await Promise.allSettled(this.#refreshes.values());
   }
 

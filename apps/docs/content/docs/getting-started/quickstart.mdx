@@ -27,9 +27,10 @@ fusionkit codex      # or: fusionkit claude | cursor | opencode
 ```
 
 On a TTY you will see a live boot checklist as the panel, synthesizer, and
-gateway come up. The cloud panel asks for a one-line cost confirmation unless you
-pass `--yes`. Then your agent launches pre-wired to the gateway. One `Ctrl+C`
-tears the stack down.
+gateway come up, then your agent launches pre-wired to the gateway. One
+`Ctrl+C` tears the stack down. FusionKit does not implement a separate cloud
+cost-consent prompt; use `--budget` and review the configured RouteKit
+endpoints before launching.
 
 A healthy launch prints three useful things before handing control to the agent:
 

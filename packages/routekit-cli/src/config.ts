@@ -19,13 +19,15 @@ export {
   projectRouterConfigPath,
   routekitHome,
   routerConfigPaths,
+  updateEffectiveRouterConfig,
   updateRouterConfig,
   writeRouterConfig
 } from "@routekit/config";
 export type {
   LoadedRouterConfig,
   RouterConfigPaths,
-  RouterConfigSource
+  RouterConfigSource,
+  UpdateRouterConfigInput
 } from "@routekit/config";
 
 export type MigrationAction = {
@@ -37,6 +39,10 @@ export type MigrationAction = {
 function legacyStateRoot(home: string): string {
   const legacyName = `.${["fu", "sion", "kit"].join("")}`;
   return join(home, legacyName, "subscriptions");
+}
+
+function canonicalSubscriptionDirectory(name: string): string {
+  return name === "claude" || name === "claudeCode" ? "claude-code" : name;
 }
 
 function copyStateEntry(source: string, destination: string, actions: MigrationAction[]): void {
@@ -74,8 +80,17 @@ export function migrateLegacyState(
   mkdirSync(destination, { recursive: true, mode: 0o700 });
   chmodSync(destination, 0o700);
   const actions: MigrationAction[] = [];
+  const destinations = new Map<string, string>();
   for (const name of readdirSync(source)) {
-    copyStateEntry(join(source, name), join(destination, name), actions);
+    const canonical = canonicalSubscriptionDirectory(name);
+    const previous = destinations.get(canonical);
+    if (previous !== undefined) {
+      throw new Error(
+        `legacy subscription directories "${previous}" and "${name}" both map to "${canonical}"`
+      );
+    }
+    destinations.set(canonical, name);
+    copyStateEntry(join(source, name), join(destination, canonical), actions);
   }
   return actions;
 }

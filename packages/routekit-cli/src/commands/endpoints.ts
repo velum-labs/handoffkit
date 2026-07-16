@@ -3,10 +3,17 @@ import { contextFor } from "@routekit/cli-core";
 import { probeEndpointHealth } from "@routekit/gateway";
 import type { Command } from "commander";
 
-import { loadRouterConfig, updateRouterConfig, writeRouterConfig } from "../config.js";
+import { parseAccountMode } from "../accounts.js";
+import { updateEffectiveRouterConfig } from "../config.js";
 import { writeStateSnapshot } from "../state.js";
 
-import { editableConfigPath, loaded } from "./context.js";
+import { configOverride, loaded } from "./context.js";
+
+function record(value: unknown): Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
 
 export function registerEndpoints(program: Command): void {
   const endpoints = program.command("endpoints").description("manage configured endpoints");
@@ -24,10 +31,10 @@ export function registerEndpoints(program: Command): void {
       ctx.presenter.table(
         entries.map((entry) => [
           entry.endpointId,
-          entry.provider ?? "custom",
-          entry.dialect,
-          entry.baseUrl,
-          entry.apiKeyEnv ?? "none"
+          entry.account ?? entry.provider ?? "custom",
+          entry.account !== undefined ? "account" : entry.dialect,
+          entry.account !== undefined ? "managed subscription" : entry.baseUrl,
+          entry.account !== undefined ? "managed" : (entry.apiKeyEnv ?? "none")
         ]),
         { head: ["id", "provider", "dialect", "base URL", "credential env"] }
       );
@@ -35,11 +42,12 @@ export function registerEndpoints(program: Command): void {
 
   endpoints
     .command("add <id>")
-    .description("add an endpoint using an environment credential reference")
+    .description("add a URL-backed or subscription-account endpoint")
     .requiredOption("--model <model>", "upstream model id")
-    .requiredOption("--base-url <url>", "upstream API base URL")
+    .option("--base-url <url>", "upstream API base URL")
+    .option("--account <subscription-kind>", "claude-code | codex")
     .option("--provider <provider>", "provider label")
-    .option("--dialect <dialect>", "openai | anthropic | google | codex", "openai")
+    .option("--dialect <dialect>", "openai | anthropic | google | codex")
     .option("--api-key-env <name>", "environment variable holding the credential")
     .option("--instance-id <id>", "pool instance id")
     .option("--default", "make this endpoint the default")
@@ -48,43 +56,76 @@ export function registerEndpoints(program: Command): void {
         id: string,
         options: {
           model: string;
-          baseUrl: string;
+          baseUrl?: string;
+          account?: string;
           provider?: string;
-          dialect: string;
+          dialect?: string;
           apiKeyEnv?: string;
           instanceId?: string;
           default?: boolean;
         },
         command: Command
       ) => {
-        const path = editableConfigPath({ command });
-        const current = loadRouterConfig({ configPath: path }).config;
+        if (options.account === undefined && options.baseUrl === undefined) {
+          throw new Error("URL-backed endpoints require --base-url");
+        }
+        if (
+          options.account !== undefined &&
+          (options.baseUrl !== undefined ||
+            options.provider !== undefined ||
+            options.dialect !== undefined ||
+            options.apiKeyEnv !== undefined ||
+            options.instanceId !== undefined)
+        ) {
+          throw new Error(
+            "account endpoints accept only --account, --model, and optional --default"
+          );
+        }
+        const current = loaded(command).config;
         if (
           options.instanceId === undefined &&
           current.endpoints.some((entry) => entry.endpointId === id)
         ) {
           throw new Error(`endpoint already exists: ${id} (use --instance-id for a pool member)`);
         }
-        const next = {
-          ...current,
-          endpoints: [
-            ...current.endpoints,
-            {
-              endpointId: id,
-              model: options.model,
-              baseUrl: options.baseUrl,
-              dialect: options.dialect,
-              ...(options.provider !== undefined ? { provider: options.provider } : {}),
-              ...(options.apiKeyEnv !== undefined ? { apiKeyEnv: options.apiKeyEnv } : {}),
-              ...(options.instanceId !== undefined ? { instanceId: options.instanceId } : {})
-            }
-          ],
-          ...(options.default === true ? { defaultEndpointId: id } : {})
+        const endpoint = {
+          endpointId: id,
+          model: options.model,
+          ...(options.account !== undefined
+            ? { account: parseAccountMode(options.account) }
+            : {
+                baseUrl: options.baseUrl,
+                dialect: options.dialect ?? "openai",
+                ...(options.provider !== undefined ? { provider: options.provider } : {}),
+                ...(options.apiKeyEnv !== undefined
+                  ? { apiKeyEnv: options.apiKeyEnv }
+                  : {}),
+                ...(options.instanceId !== undefined
+                  ? { instanceId: options.instanceId }
+                  : {})
+              })
         };
-        writeRouterConfig(path, next);
+        const next = updateEffectiveRouterConfig(
+          { configPath: configOverride(command) },
+          (draft) => {
+            draft.endpoints = [...current.endpoints, endpoint];
+            if (options.account !== undefined) {
+              const subscriptionKind = parseAccountMode(options.account);
+              const accounts = record(draft.accounts);
+              draft.accounts = {
+                ...accounts,
+                [subscriptionKind]: {
+                  ...record(accounts[subscriptionKind]),
+                  enabled: true
+                }
+              };
+            }
+            if (options.default === true) draft.defaultEndpointId = id;
+          }
+        );
         const ctx = contextFor(command);
-        if (ctx.json) ctx.emit({ path, endpointId: id, added: true });
-        else ctx.presenter.success(`added ${id} to ${path}`);
+        if (ctx.json) ctx.emit({ path: next.path, endpointId: id, added: true });
+        else ctx.presenter.success(`added ${id} to ${next.path}`);
       }
     );
 
@@ -92,26 +133,28 @@ export function registerEndpoints(program: Command): void {
     .command("remove <id>")
     .description("remove an endpoint and all of its pool members")
     .action((id: string, _options: unknown, command: Command) => {
-      const path = editableConfigPath({ command });
-      const next = updateRouterConfig(path, (draft) => {
-        const entries = Array.isArray(draft.endpoints) ? draft.endpoints : [];
-        const filtered = entries.filter(
-          (entry) =>
-            typeof entry !== "object" ||
-            entry === null ||
-            (entry as { endpointId?: unknown }).endpointId !== id
-        );
-        if (filtered.length === entries.length) throw new Error(`endpoint not found: ${id}`);
+      const current = loaded(command).config;
+      const filtered = current.endpoints.filter((entry) => entry.endpointId !== id);
+      if (filtered.length === current.endpoints.length) {
+        throw new Error(`endpoint not found: ${id}`);
+      }
+      const next = updateEffectiveRouterConfig(
+        { configPath: configOverride(command) },
+        (draft) => {
         draft.endpoints = filtered;
-        if (draft.defaultEndpointId === id) {
-          const first = filtered[0] as { endpointId?: unknown } | undefined;
-          if (typeof first?.endpointId === "string") draft.defaultEndpointId = first.endpointId;
+        if (current.defaultEndpointId === id) {
+          const first = filtered[0];
+          if (first !== undefined) draft.defaultEndpointId = first.endpointId;
           else delete draft.defaultEndpointId;
         }
-      });
+        }
+      );
       const ctx = contextFor(command);
-      if (ctx.json) ctx.emit({ path, endpointId: id, removed: true, config: next });
-      else ctx.presenter.success(`removed ${id} from ${path}`);
+      if (ctx.json) {
+        ctx.emit({ path: next.path, endpointId: id, removed: true, config: next.config });
+      } else {
+        ctx.presenter.success(`removed ${id} from ${next.path}`);
+      }
     });
 
   endpoints

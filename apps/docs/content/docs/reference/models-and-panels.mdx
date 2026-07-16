@@ -24,6 +24,23 @@ endpoints:
     apiKeyEnv: PROVIDER_API_KEY
 ```
 
+For a subscription login, use an account-backed endpoint instead:
+
+```yaml
+# .routekit/router.yaml
+endpoints:
+  - endpointId: opaque-subscription-peer
+    model: gpt-5.5-codex
+    account: codex
+accounts:
+  codex:
+    enabled: true
+```
+
+The only subscription kinds are `claude-code` and `codex`. URL-backed
+endpoints keep `baseUrl`, `dialect`, and optional `apiKeyEnv`; account-backed
+endpoints do not accept those fields.
+
 Compose only opaque IDs in Fusion:
 
 ```json
@@ -51,6 +68,8 @@ fusionkit config set defaultEnsemble review
 
 Use `routekit <tool> <endpoint-id>` for a single-model session. FusionKit has no
 direct mode or provider/model/key launch flags.
+
+An explicit unknown endpoint ID fails instead of using the router default.
 
 `fusionkit models` remains the lifecycle command for the Fusion-owned local MLX
 cache; local endpoints still need to be exposed through RouteKit before an

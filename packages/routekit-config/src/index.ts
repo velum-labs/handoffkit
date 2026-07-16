@@ -3,7 +3,7 @@ import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 
 import { isRecord } from "@routekit/config-core";
-import { parseRouterConfig } from "@routekit/gateway";
+import { normalizeRouterConfigAliases, parseRouterConfig } from "@routekit/gateway";
 import type { RouterConfig } from "@routekit/gateway";
 import { writeFileAtomic } from "@routekit/runtime";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
@@ -20,6 +20,13 @@ export type RouterConfigPaths = {
   project?: string;
   global: string;
   override?: string;
+};
+
+export type UpdateRouterConfigInput = {
+  cwd?: string;
+  home?: string;
+  env?: NodeJS.ProcessEnv;
+  configPath?: string;
 };
 
 /** Unique configured endpoint ids in declaration order. */
@@ -156,9 +163,10 @@ function readYamlObject(path: string): Record<string, unknown> {
       `${path}: invalid YAML (${error instanceof Error ? error.message : String(error)})`
     );
   }
-  if (!isRecord(parsed)) throw new Error(`${path}: router config must be a YAML object`);
-  assertNoInlineCredentials(parsed, path);
-  return parsed;
+  const normalized = normalizeRouterConfigAliases(parsed);
+  if (!isRecord(normalized)) throw new Error(`${path}: router config must be a YAML object`);
+  assertNoInlineCredentials(normalized, path);
+  return normalized;
 }
 
 function mergeConfig(
@@ -215,14 +223,67 @@ export function loadRouterConfig(
 }
 
 export function writeRouterConfig(path: string, config: RouterConfig | unknown): string {
-  assertNoInlineCredentials(config, path);
-  parseRouterConfig(config);
+  const normalized = normalizeRouterConfigAliases(config);
+  assertNoInlineCredentials(normalized, path);
+  parseRouterConfig(normalized);
+  return writeRouterConfigDocument(path, normalized);
+}
+
+function writeRouterConfigDocument(path: string, config: unknown): string {
   mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
-  // Persist only fields the caller supplied. Materializing schema defaults in
-  // a project overlay would accidentally override explicit global settings.
   writeFileAtomic(path, stringifyYaml(config), { mode: 0o600 });
   chmodSync(path, 0o600);
   return path;
+}
+
+/**
+ * Mutate only the selected raw config layer while validating the merged result.
+ *
+ * This keeps project overlays sparse instead of materializing defaults or
+ * inherited global values into the project file.
+ */
+export function updateEffectiveRouterConfig(
+  input: UpdateRouterConfigInput,
+  mutate: (draft: Record<string, unknown>) => void
+): LoadedRouterConfig {
+  const paths = routerConfigPaths(input);
+  const override = paths.override;
+  if (override !== undefined) {
+    if (!existsSync(override)) throw new Error(`router config not found: ${override}`);
+    const draft = structuredClone(readYamlObject(override));
+    mutate(draft);
+    assertNoInlineCredentials(draft, override);
+    const config = parseRouterConfig(draft);
+    writeRouterConfigDocument(override, draft);
+    return {
+      config,
+      path: override,
+      sources: [input.configPath !== undefined ? "flag" : "environment"]
+    };
+  }
+
+  const hasGlobal = existsSync(paths.global);
+  const projectPath = paths.project;
+  if (!hasGlobal && projectPath === undefined) {
+    throw new Error("no router config found; run `routekit config init` or set ROUTEKIT_CONFIG");
+  }
+  const target = projectPath ?? paths.global;
+  const draft = structuredClone(readYamlObject(target));
+  mutate(draft);
+  assertNoInlineCredentials(draft, target);
+  const globalConfig = hasGlobal ? readYamlObject(paths.global) : {};
+  const effective =
+    projectPath !== undefined ? mergeConfig(globalConfig, draft) : draft;
+  const config = parseRouterConfig(effective);
+  writeRouterConfigDocument(target, draft);
+  return {
+    config,
+    path: target,
+    sources: [
+      ...(projectPath !== undefined ? (["project"] as const) : []),
+      ...(hasGlobal ? (["global"] as const) : [])
+    ]
+  };
 }
 
 export function updateRouterConfig(

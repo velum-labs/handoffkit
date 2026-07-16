@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -8,6 +8,8 @@ import { fileURLToPath } from "node:url";
 
 import { loadFusionConfig } from "@fusionkit/config";
 import { loadRouterConfig } from "@routekit/config";
+
+import { configuredDefaultToolArgv } from "../commands/palette.js";
 
 const cli = fileURLToPath(new URL("../index.js", import.meta.url));
 
@@ -25,6 +27,7 @@ function run(args: readonly string[]): string {
 test("init, config, and ensemble commands persist only Fusion v4 endpoint ids", () => {
   const repo = mkdtempSync(join(tmpdir(), "fusionkit-v4-commands-"));
   try {
+    execFileSync("git", ["init", "-q"], { cwd: repo });
     run(["--no-input", "init", "--repo", repo]);
     const initial = loadFusionConfig(repo);
     assert.equal(initial?.version, "fusionkit.fusion.v4");
@@ -53,10 +56,25 @@ test("init, config, and ensemble commands persist only Fusion v4 endpoint ids", 
       repo
     ]);
     run(["config", "set", "defaultEnsemble", "review", "--repo", repo]);
+    run(["config", "set", "router.url", "http://127.0.0.1:9999", "--repo", repo]);
+    assert.deepEqual(loadFusionConfig(repo)?.router, {
+      url: "http://127.0.0.1:9999"
+    });
+    run([
+      "config",
+      "set",
+      "router.config",
+      ".routekit/router.yaml",
+      "--repo",
+      repo
+    ]);
+    run(["config", "set", "tool", "claude", "--repo", repo]);
 
     const updated = loadFusionConfig(repo);
     assert.equal(updated?.budgetUsd, 3);
     assert.equal(updated?.defaultEnsemble, "review");
+    assert.deepEqual(updated?.router, { config: ".routekit/router.yaml" });
+    assert.deepEqual(configuredDefaultToolArgv(repo), ["claude"]);
     assert.deepEqual(updated?.ensembles.review, {
       members: ["default"],
       judge: "default"
@@ -69,4 +87,29 @@ test("init, config, and ensemble commands persist only Fusion v4 endpoint ids", 
   } finally {
     rmSync(repo, { recursive: true, force: true });
   }
+});
+
+test("CLI rejects typo flags, gates passthrough behind --, and rejects interactive JSON", () => {
+  const beforeDelimiter = spawnSync(process.execPath, [cli, "serve", "--typo"], {
+    encoding: "utf8"
+  });
+  assert.notEqual(beforeDelimiter.status, 0);
+  assert.match(beforeDelimiter.stderr, /unknown option.*--typo/i);
+
+  const afterDelimiter = spawnSync(
+    process.execPath,
+    [cli, "serve", "--", "--typo"],
+    { encoding: "utf8" }
+  );
+  assert.notEqual(afterDelimiter.status, 0);
+  assert.match(afterDelimiter.stderr, /does not accept passthrough arguments/i);
+
+  const interactiveJson = spawnSync(
+    process.execPath,
+    [cli, "--json", "codex"],
+    { encoding: "utf8" }
+  );
+  assert.notEqual(interactiveJson.status, 0);
+  assert.match(interactiveJson.stdout, /does not support --json/);
+  assert.doesNotThrow(() => JSON.parse(interactiveJson.stdout));
 });

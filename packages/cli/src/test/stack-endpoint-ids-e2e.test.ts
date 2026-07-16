@@ -1,12 +1,13 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
 import {
   freePort,
+  judgeAnalysis,
   repoRoot,
   scriptFusedTurn,
   spawnCaptured,
@@ -114,6 +115,141 @@ test(
       rmSync(repo, { recursive: true, force: true });
     }
     await assert.rejects(fetch(`${routekitUrl}/v1/models`));
+  }
+);
+
+test(
+  "subscription-backed endpoint ids drive panel judge and synthesis without leaking credentials",
+  { skip: SKIP },
+  async () => {
+    const repo = initializeRepository();
+    const stateHome = join(repo, ".routekit-state");
+    const accountDirectory = join(stateHome, "subscriptions", "codex");
+    mkdirSync(accountDirectory, { recursive: true });
+    writeFileSync(
+      join(accountDirectory, "primary.json"),
+      JSON.stringify({
+        tokens: {
+          access_token: "eyJhbGciOiJub25lIn0.eyJleHAiOjk5OTk5OTk5OTl9.",
+          refresh_token: "refresh-secret",
+          account_id: "acct-private"
+        }
+      }),
+      { mode: 0o600 }
+    );
+    const previousHome = process.env.ROUTEKIT_HOME;
+    process.env.ROUTEKIT_HOME = stateHome;
+    const originalFetch = globalThis.fetch;
+    const calls: Array<{ model: string; authorization: string | null }> = [];
+    globalThis.fetch = async (input, init) => {
+      const url = String(input);
+      if (!url.startsWith("https://chatgpt.com/backend-api/codex/")) {
+        return await originalFetch(input, init);
+      }
+      const request = JSON.parse(String(init?.body)) as {
+        model?: string;
+        stream?: boolean;
+      };
+      const headers = new Headers(init?.headers);
+      calls.push({
+        model: request.model ?? "",
+        authorization: headers.get("authorization")
+      });
+      const text =
+        request.model === "gpt-panel"
+          ? "account candidate"
+          : request.model === "gpt-judge"
+            ? judgeAnalysis()
+            : "account-backed fused answer";
+      if (request.stream === true) {
+        return new Response(
+          [
+            "event: response.output_text.delta",
+            `data: ${JSON.stringify({ delta: text })}`,
+            "",
+            "event: response.completed",
+            `data: ${JSON.stringify({
+              response: {
+                usage: { input_tokens: 2, output_tokens: 1, total_tokens: 3 }
+              }
+            })}`,
+            "",
+            ""
+          ].join("\n"),
+          { headers: { "content-type": "text/event-stream" } }
+        );
+      }
+      return Response.json({
+        output: [
+          {
+            type: "message",
+            content: [{ type: "output_text", text }]
+          }
+        ],
+        usage: { input_tokens: 2, output_tokens: 1, total_tokens: 3 }
+      });
+    };
+
+    let stack: Awaited<ReturnType<typeof startFusionStack>> | undefined;
+    try {
+      const routerConfig = parseRouterConfig({
+        endpoints: [
+          { endpointId: "panel-account", model: "gpt-panel", account: "codex" },
+          { endpointId: "judge-account", model: "gpt-judge", account: "codex" },
+          { endpointId: "synth-account", model: "gpt-synth", account: "codex" }
+        ],
+        accounts: { codex: { enabled: true } },
+        defaultEndpointId: "panel-account"
+      });
+      stack = await startFusionStack({
+        repo,
+        outputRoot: join(repo, "runs"),
+        ensembles: [
+          {
+            name: "default",
+            members: ["panel-account"],
+            judge: "judge-account",
+            synthesizer: "synth-account",
+            k: 1
+          }
+        ],
+        router: { kind: "embedded", config: routerConfig },
+        fusionkitDir: process.cwd(),
+        log: () => {}
+      });
+      const response = await originalFetch(
+        `${stack.fusionUrl}/v1/chat/completions`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            model: "fusion-panel",
+            messages: [{ role: "user", content: "compose this" }]
+          })
+        }
+      );
+      const responseText = await response.text();
+      assert.equal(response.status, 200, responseText);
+      assert.match(responseText, /account-backed fused answer/);
+      assert.deepEqual(
+        calls.map((call) => call.model),
+        ["gpt-panel", "gpt-judge", "gpt-synth"]
+      );
+      assert.ok(
+        calls.every(
+          (call) =>
+            call.authorization ===
+            "Bearer eyJhbGciOiJub25lIn0.eyJleHAiOjk5OTk5OTk5OTl9."
+        )
+      );
+      assert.doesNotMatch(responseText, /acct-private|refresh-secret|eyJ/);
+    } finally {
+      await stack?.close();
+      globalThis.fetch = originalFetch;
+      if (previousHome === undefined) delete process.env.ROUTEKIT_HOME;
+      else process.env.ROUTEKIT_HOME = previousHome;
+      rmSync(repo, { recursive: true, force: true });
+    }
   }
 );
 

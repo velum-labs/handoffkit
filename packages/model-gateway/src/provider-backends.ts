@@ -29,19 +29,25 @@ export type ProviderBackendOptions = {
   apiKey: string;
   defaultModel?: string;
   headers?: Record<string, string>;
+  transport?: ProviderTransport;
 };
+
+export type ProviderTransport = (url: string, init: RequestInit) => Promise<Response>;
 
 abstract class HttpProviderBackend implements Backend {
   readonly defaultModel: string | undefined;
   readonly baseUrl: string;
   readonly apiKey: string;
   readonly extraHeaders: Record<string, string>;
+  readonly transport: ProviderTransport;
 
   constructor(options: ProviderBackendOptions) {
     this.baseUrl = options.baseUrl;
     this.apiKey = options.apiKey;
     this.defaultModel = options.defaultModel;
     this.extraHeaders = options.headers ?? {};
+    this.transport =
+      options.transport ?? (async (url, init) => await fetch(url, init));
   }
 
   listModelIds(): readonly string[] {
@@ -126,6 +132,24 @@ function chatCompletion(model: string, message: Record<string, unknown>, usage?:
     model,
     choices: [{ index: 0, message, finish_reason: "stop" }],
     ...(usage !== undefined ? { usage } : {})
+  };
+}
+
+function normalizedOpenAiUsage(usage: unknown): unknown {
+  if (typeof usage !== "object" || usage === null || Array.isArray(usage)) return usage;
+  const value = usage as Record<string, unknown>;
+  const promptTokens = value.prompt_tokens ?? value.input_tokens;
+  const completionTokens = value.completion_tokens ?? value.output_tokens;
+  const totalTokens =
+    value.total_tokens ??
+    (typeof promptTokens === "number" && typeof completionTokens === "number"
+      ? promptTokens + completionTokens
+      : undefined);
+  return {
+    ...value,
+    ...(promptTokens !== undefined ? { prompt_tokens: promptTokens } : {}),
+    ...(completionTokens !== undefined ? { completion_tokens: completionTokens } : {}),
+    ...(totalTokens !== undefined ? { total_tokens: totalTokens } : {})
   };
 }
 
@@ -246,7 +270,7 @@ export class AnthropicBackend extends HttpProviderBackend {
 
   async #chat(body: ChatBody, signal?: AbortSignal): Promise<Response> {
     const model = body.model ?? this.defaultModel ?? "";
-    const response = await fetch(joinPath(this.baseUrl, "/messages"), {
+    const response = await this.transport(joinPath(this.baseUrl, "/messages"), {
       method: "POST",
       headers: {
         "content-type": "application/json",
@@ -340,7 +364,9 @@ export class AnthropicBackend extends HttpProviderBackend {
                         : "stop"
                 }
               ],
-              ...(item.usage !== undefined ? { usage: item.usage } : {})
+              ...(item.usage !== undefined
+                ? { usage: normalizedOpenAiUsage(item.usage) }
+                : {})
             }
           ];
         }
@@ -375,7 +401,7 @@ export class AnthropicBackend extends HttpProviderBackend {
           content,
           ...(toolCalls.length > 0 ? { tool_calls: toolCalls } : {})
         },
-        payload.usage
+        normalizedOpenAiUsage(payload.usage)
       ),
       200,
       response.headers
@@ -495,7 +521,7 @@ export class GoogleGenAiBackend extends HttpProviderBackend {
   async #chat(body: ChatBody, signal?: AbortSignal): Promise<Response> {
     const model = body.model ?? this.defaultModel ?? "";
     const method = body.stream === true ? "streamGenerateContent" : "generateContent";
-    const response = await fetch(
+    const response = await this.transport(
       `${joinPath(this.baseUrl, `/models/${encodeURIComponent(model)}:${method}`)}${
         body.stream === true ? "?alt=sse" : ""
       }`,
@@ -670,7 +696,7 @@ export class CodexResponsesBackend extends HttpProviderBackend {
 
   async #chat(body: ChatBody, signal?: AbortSignal): Promise<Response> {
     const model = body.model ?? this.defaultModel ?? "";
-    const response = await fetch(joinPath(this.baseUrl, "/responses"), {
+    const response = await this.transport(joinPath(this.baseUrl, "/responses"), {
       method: "POST",
       headers: {
         "content-type": "application/json",
@@ -780,7 +806,9 @@ export class CodexResponsesBackend extends HttpProviderBackend {
                   finish_reason: hasToolCalls ? "tool_calls" : "stop"
                 }
               ],
-              ...(completed?.usage !== undefined ? { usage: completed.usage } : {})
+              ...(completed?.usage !== undefined
+                ? { usage: normalizedOpenAiUsage(completed.usage) }
+                : {})
             }
           ];
         }
@@ -788,6 +816,8 @@ export class CodexResponsesBackend extends HttpProviderBackend {
       });
     }
     const payload = (await response.json()) as Record<string, unknown>;
-    return jsonResponse(chatCompletion(model, responsesOutput(payload), payload.usage));
+    return jsonResponse(
+      chatCompletion(model, responsesOutput(payload), normalizedOpenAiUsage(payload.usage))
+    );
   }
 }

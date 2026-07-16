@@ -41,12 +41,13 @@ function dynamicValues(
     (subcommand === "add" || subcommand === "remove") &&
     argumentDepth === 0
   ) {
-    return ["claude", "codex"];
+    return ["claude-code", "codex"];
   }
   if (group === "accounts" && subcommand === "remove" && argumentDepth === 1) {
-    const provider = positional[0] === "claude" ? "claude-code" : positional[0];
+    const subscriptionKind =
+      positional[0] === "claude" ? "claude-code" : positional[0];
     return listAccounts()
-      .filter((entry) => entry.provider === provider)
+      .filter((entry) => entry.subscriptionKind === subscriptionKind)
       .map((entry) => entry.label);
   }
   if (group === "completion" && argumentDepth === 0) return ["bash", "zsh", "fish"];

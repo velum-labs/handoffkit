@@ -11,7 +11,7 @@
  */
 
 import { spawn, spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -231,13 +231,22 @@ export async function runOpenCode(input: {
 }): Promise<CliRunResult> {
   const configDir = mkdtempSync(join(tmpdir(), "fusionkit-testkit-opencode-"));
   const configPath = join(configDir, "opencode.json");
+  const dataDir = join(configDir, "data");
+  const cacheDir = join(configDir, "cache");
+  const stateDir = join(configDir, "state");
+  mkdirSync(dataDir);
+  mkdirSync(cacheDir);
+  mkdirSync(stateDir);
   const invocation = openCodeInvocation(input);
   writeFileSync(configPath, JSON.stringify(invocation.config, null, 2));
   try {
     // env-spread-allowed: the real CLI needs a normal PATH/HOME; its only model provider is the ephemeral local gateway config
     const env: NodeJS.ProcessEnv = {
       ...process.env,
-      OPENCODE_CONFIG: configPath
+      OPENCODE_CONFIG: configPath,
+      XDG_DATA_HOME: dataDir,
+      XDG_CACHE_HOME: cacheDir,
+      XDG_STATE_HOME: stateDir
     };
     return await run("opencode", invocation.args, {
       cwd: input.cwd,

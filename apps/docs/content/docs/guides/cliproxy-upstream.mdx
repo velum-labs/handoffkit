@@ -7,21 +7,21 @@ description: Put Gemini, Grok, and Kimi subscription models on a fusion panel th
 local proxy that fronts OAuth subscription accounts — ChatGPT/Codex, Claude
 Code, Gemini (Antigravity), Grok, Kimi — behind an OpenAI-compatible API with
 multi-account rotation. RouteKit owns its binary, config, and OAuth state;
-FusionKit consumes the resulting endpoint as the `cliproxy` provider, so
-subscription-backed models you already pay for can join any fusion panel.
+RouteKit exposes it as a URL-backed endpoint and FusionKit consumes only that
+endpoint's opaque ID.
 
-Use the built-in `routekit accounts serve` for Claude Code / Codex pooling (it is
-provider-native and quota-aware); use `cliproxy` for the providers FusionKit
-has no native OAuth adapter for — Gemini, Grok, Kimi — or when you already run
-CLIProxyAPI for other tools.
+Use native account-backed endpoints for Claude Code and Codex; they are
+provider-native and quota-aware without a separate proxy. `routekit accounts
+serve` is advanced external-proxy mode. Use `cliproxy` for Gemini, Grok, Kimi,
+or when you already run CLIProxyAPI for another tool.
 
 ## Install and sign in
 
 ```bash
+routekit config init
 routekit accounts cliproxy install
 routekit accounts cliproxy login gemini   # or claude / codex / grok / kimi
 routekit accounts cliproxy serve
-routekit accounts cliproxy status
 ```
 
 `install` downloads the pinned release, verifies its SHA-256 against the
@@ -35,30 +35,50 @@ Already running CLIProxyAPI yourself? Skip all of this: export
 `ROUTEKIT_CLIPROXY_API_KEY` (one of the proxy's `api-keys`) and, for a
 non-default host/port, `ROUTEKIT_CLIPROXY_BASE_URL`.
 
-## Add panel members
+In another shell, add an explicit URL-backed endpoint and verify it:
 
-`fusionkit init` offers **CLIProxyAPI (local proxy)** as a per-member auth
-choice, and with `ROUTEKIT_CLIPROXY_API_KEY` set the model picker lists the proxy's live
-model catalog. In `.fusionkit/fusion.json`:
+```bash
+routekit endpoints add gemini-subscription \
+  --model gemini-3.1-pro-preview \
+  --provider cliproxy \
+  --base-url http://127.0.0.1:8317/v1 \
+  --api-key-env ROUTEKIT_CLIPROXY_API_KEY
+routekit endpoints health gemini-subscription
+routekit accounts cliproxy status
+```
+
+Login does not add an endpoint. Keep CLIProxyAPI serving while RouteKit uses
+the configured URL. The resulting router entry is:
+
+```yaml
+endpoints:
+  - endpointId: gemini-subscription
+    model: gemini-3.1-pro-preview
+    provider: cliproxy
+    baseUrl: http://127.0.0.1:8317/v1
+    dialect: openai
+    apiKeyEnv: ROUTEKIT_CLIPROXY_API_KEY
+```
+
+## Add the endpoint to an ensemble
+
+Fusion config v4 contains opaque endpoint IDs only:
 
 ```json
 {
+  "version": "fusionkit.fusion.v4",
+  "router": { "config": ".routekit/router.yaml" },
   "ensembles": {
     "default": {
-      "panel": [
-        { "id": "gpt", "model": "gpt-5.5", "provider": "openai" },
-        { "id": "gemini", "model": "gemini-3.1-pro-preview", "provider": "cliproxy" },
-        { "id": "kimi", "model": "kimi-k2.5", "provider": "cliproxy" }
-      ]
+      "members": ["gemini-subscription", "api-key-peer"],
+      "judge": "api-key-peer"
     }
   }
 }
 ```
 
-Leave pricing unset for subscription-backed members: there is no per-token
-billing, so cost estimates stay "unknown" instead of reporting a wrong number.
-`fusionkit doctor` checks the proxy's reachability and key whenever cliproxy is
-in use.
+`fusionkit doctor` checks that all referenced endpoint IDs are advertised by
+RouteKit.
 
 ## Terms-of-service caveat
 

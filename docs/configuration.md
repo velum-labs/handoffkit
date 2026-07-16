@@ -68,6 +68,8 @@ subscription-account definitions are invalid in this file.
 
 ## RouteKit router
 
+URL-backed endpoints keep provider connection details in RouteKit:
+
 ```yaml
 endpoints:
   - endpointId: deep
@@ -79,6 +81,41 @@ endpoints:
 defaultEndpointId: deep
 ```
 
+Subscription-backed endpoints use the canonical `claude-code` or `codex`
+account kind and omit URL/provider/credential fields:
+
+```yaml
+endpoints:
+  - endpointId: private-review
+    model: claude-sonnet-4-5
+    account: claude-code
+  - endpointId: private-coder
+    model: gpt-5.5-codex
+    account: codex
+accounts:
+  claude-code:
+    enabled: true
+  codex:
+    enabled: true
+defaultEndpointId: private-review
+```
+
+The `endpointId` values are opaque; names such as `private-review` can be used
+unchanged in Fusion ensembles. Enroll an existing official CLI login with
+`routekit accounts add claude-code` or `routekit accounts add codex`. Adding an
+account automatically sets that account kind to `enabled: true` in the
+effective router config. Add the corresponding endpoint separately:
+
+```sh
+routekit endpoints add private-review \
+  --model claude-sonnet-4-5 --account claude-code
+routekit claude private-review
+```
+
+The tool command remains `routekit claude`; `claude-code` is the subscription
+kind. `routekit accounts serve` is only for exposing the pool as an advanced
+external proxy and is not required for normal account-backed endpoints.
+
 RouteKit rejects inline API keys, authorization headers, and tokens. Its SDK
 loads configuration with this precedence:
 
@@ -87,6 +124,9 @@ explicit config path > ROUTEKIT_CONFIG > project .routekit/router.yaml > global 
 ```
 
 Project and global files are layered when no explicit path is selected.
+Omitting an endpoint ID selects `defaultEndpointId` (or the first configured
+endpoint). Supplying an unknown ID is an error and never falls through to that
+default.
 
 ## Precedence and editing
 

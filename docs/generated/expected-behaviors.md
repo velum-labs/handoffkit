@@ -114,6 +114,7 @@ environment-gated rows name the reason and exact live command.
 | `robustness.no-leaked-internals` | No wire response ever carries JavaScript/Python internals (TypeError text, tracebacks), including for seeded random garbage. | required | `packages/cli/src/test/stack-fuzz-e2e.test.ts` — `seeded random bodies` |
 | `robustness.engine-malformed-rejected` | The internal Python sidecar rejects invalid endpoint ids as a stable 4xx without leaking tracebacks. | required | `python/fusionkit-server/tests/test_server.py` — `test_fuse_rejects_unknown_routekit_endpoint` |
 | `robustness.chunk-boundary-reassembly` | OpenAI-compatible streams split at arbitrary byte boundaries, including mid-UTF-8-rune, reassemble byte-exactly. | required | `packages/model-gateway/src/test/sse-codec.test.ts` — `handles events split at arbitrary byte boundaries` |
+| `routing.unknown-id-rejected` | An explicit unknown endpoint id is rejected instead of silently routing through the default endpoint. | required | `packages/model-gateway/src/test/router.test.ts` — `unknown endpoint ids fail instead of routing through the default endpoint` |
 
 ## concurrency
 
@@ -158,6 +159,7 @@ environment-gated rows name the reason and exact live command.
 |---|---|---|---|
 | `cli.management-surfaces` | The FusionKit CLI exposes fusion launchers and management surfaces while excluding proxy, account, install/uninstall, and direct-mode commands. | required | `packages/cli/src/test/composition.test.ts` — `Fusion CLI contains only fusion product launch surfaces` |
 | `cli.routekit-command-surfaces` | The real RouteKit CLI independently executes version, completion, config, endpoint, model, telemetry, doctor, and install surfaces while rejecting Fusion-only commands. | required | `packages/routekit-cli/src/test/cli-process-e2e.test.ts` — `real routekit command surfaces execute independently` |
+| `cli.strict-flags-json-and-passthrough` | CLI typo flags fail, launcher passthrough requires --, and unsupported interactive JSON is rejected with one machine document. | required | `packages/cli/src/test/v4-commands.test.ts` — `CLI rejects typo flags, gates passthrough behind --, and rejects interactive JSON` |
 
 ## composition
 
@@ -165,6 +167,7 @@ environment-gated rows name the reason and exact live command.
 |---|---|---|---|
 | `composition.routekit-endpoint-ids` | Opaque RouteKit endpoint IDs cross the real embedded-router, Python-sidecar, and Fusion-gateway stack without exposing provider model names. | required | `packages/cli/src/test/stack-endpoint-ids-e2e.test.ts` — `embedded RouteKit routes opaque endpoint ids` |
 | `composition.routekit-authenticated-cli-bridge` | Fusion bridges authenticated external RouteKit CLI traffic over loopback and closes only the bridge, leaving the independently owned RouteKit process alive. | required | `packages/cli/src/test/stack-endpoint-ids-e2e.test.ts` — `authenticated external routekit serve CLI uses a Fusion-owned loopback bridge` |
+| `composition.account-backed-fusion` | Subscription-backed opaque endpoint ids drive panel, judge, and synthesis while credentials remain absent from Fusion responses. | required | `packages/cli/src/test/stack-endpoint-ids-e2e.test.ts` — `subscription-backed endpoint ids drive panel judge and synthesis without leaking credentials` |
 
 ## observability
 

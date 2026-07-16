@@ -20,9 +20,16 @@ import {
   serveAccounts,
   stopAccounts
 } from "../accounts.js";
+import { updateEffectiveRouterConfig } from "../config.js";
 import { waitForShutdown } from "../serve.js";
 
-import { numberOption } from "./context.js";
+import { configOverride, loaded, numberOption } from "./context.js";
+
+function record(value: unknown): Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
 
 function registerCliproxy(accounts: Command): void {
   const cliproxy = accounts
@@ -59,10 +66,24 @@ function registerCliproxy(accounts: Command): void {
     .action(
       async (provider: string, options: { browser?: boolean }, command: Command) => {
         const ctx = contextFor(command);
+        if (ctx.json) {
+          throw new Error(
+            "`accounts cliproxy login` is interactive and does not support --json"
+          );
+        }
         const code = await runCliproxyLogin(provider, {
           noBrowser: options.browser === false
         });
-        if (code === 0) ctx.presenter.success(`${provider} account added`);
+        if (code === 0) {
+          ctx.presenter.success(`${provider} account added`);
+          ctx.presenter.note("Next: routekit accounts cliproxy serve");
+          ctx.presenter.note(
+            "Then add an endpoint with `routekit endpoints add <id> --model <model> " +
+              "--provider cliproxy --base-url http://127.0.0.1:8317/v1 " +
+              `--api-key-env ${CLIPROXY_API_KEY_ENV}` +
+              "`."
+          );
+        }
         process.exitCode = code;
       }
     );
@@ -125,26 +146,59 @@ export function registerAccounts(program: Command): void {
   const accounts = program.command("accounts").description("manage pooled provider subscriptions");
 
   accounts
-    .command("add <provider>")
+    .command("add <subscription-kind>")
     .description("enroll the current official CLI login")
     .option("--name <name>", "account label")
-    .action(async (provider: string, options: { name?: string }, command: Command) => {
+    .action(async (subscriptionKind: string, options: { name?: string }, command: Command) => {
       const ctx = contextFor(command);
-      const result = await addAccount(provider, options.name);
-      if (ctx.json) ctx.emit(result);
-      else ctx.presenter.success(`enrolled ${result.provider} account at ${result.path}`);
+      loaded(command);
+      const result = await addAccount(subscriptionKind, options.name);
+      const updated = updateEffectiveRouterConfig(
+        { configPath: configOverride(command) },
+        (draft) => {
+          const accounts = record(draft.accounts);
+          const policy = record(accounts[result.subscriptionKind]);
+          draft.accounts = {
+            ...accounts,
+            [result.subscriptionKind]: { ...policy, enabled: true }
+          };
+        }
+      );
+      const output = {
+        ...result,
+        activated: true,
+        configPath: updated.path
+      };
+      if (ctx.json) {
+        ctx.emit(output);
+      } else {
+        ctx.presenter.success(
+          `enrolled and enabled ${result.subscriptionKind} account at ${result.path}`
+        );
+        ctx.presenter.note(`config: ${updated.path}`);
+      }
     });
 
   accounts
-    .command("remove <provider> <name>")
+    .command("remove <subscription-kind> <name>")
     .description("remove an enrolled account from RouteKit-managed state")
     .action((provider: string, name: string, _options: unknown, command: Command) => {
       const ctx = contextFor(command);
       const result = removeAccount(provider, name);
       if (ctx.json) {
-        ctx.emit(result);
+        ctx.emit({ ...result, subscriptionKind: result.mode });
       } else if (result.removed) {
         ctx.presenter.success(`removed ${result.mode}/${result.label}`);
+        if (
+          listAccounts().every(
+            (entry) => entry.subscriptionKind !== result.mode
+          )
+        ) {
+          ctx.presenter.note(
+            `The official ${result.mode} login may be imported again on startup; ` +
+              `disable accounts["${result.mode}"] to stop subscription routing.`
+          );
+        }
       } else {
         ctx.presenter.note(`${result.mode}/${result.label} is not enrolled`);
       }
@@ -157,7 +211,11 @@ export function registerAccounts(program: Command): void {
       const ctx = contextFor(command);
       const entries = listAccounts();
       if (ctx.json) ctx.emit({ accounts: entries });
-      else ctx.presenter.table(entries.map((entry) => [entry.provider, entry.label, entry.path]));
+      else {
+        ctx.presenter.table(
+          entries.map((entry) => [entry.subscriptionKind, entry.label, entry.path])
+        );
+      }
     });
 
   accounts
@@ -165,7 +223,7 @@ export function registerAccounts(program: Command): void {
     .description("show account proxy and pooled account status")
     .action(async (_options: unknown, command: Command) => {
       const ctx = contextFor(command);
-      const status = await accountsStatus();
+      const status = await accountsStatus(loaded(command).config);
       if (ctx.json) {
         ctx.emit(status);
         return;
@@ -176,7 +234,16 @@ export function registerAccounts(program: Command): void {
         status.running ? status.url : "not running"
       );
       for (const entry of status.accounts) {
-        ctx.presenter.status("ok", `${entry.provider}/${entry.label}`, "enrolled");
+        const ok = entry.credentialValid && entry.configured;
+        ctx.presenter.status(
+          ok ? "ok" : "pending",
+          `${entry.subscriptionKind}/${entry.label}`,
+          !entry.credentialValid
+            ? "stored; credential invalid"
+            : !entry.configured
+              ? "stored; routing disabled"
+              : "stored; configured; relay ready"
+        );
       }
     });
 

@@ -82,7 +82,7 @@ test("project account overlays merge providers and individual policy fields", ()
   );
 
   const loaded = loadRouterConfig({ cwd: project, home, env: {} });
-  assert.equal(loaded.config.accounts?.claudeCode?.enabled, false);
+  assert.equal(loaded.config.accounts?.["claude-code"]?.enabled, false);
   assert.equal(loaded.config.accounts?.codex?.strategy, "round_robin");
   assert.equal(loaded.config.accounts?.codex?.switchThreshold, 0.75);
   assert.equal(loaded.config.accounts?.codex?.probeIntervalMs, 12_000);
@@ -148,4 +148,28 @@ test("migration is explicit, idempotent, and preserves private permissions", () 
   const second = migrateLegacyState({ home, stateHome });
   assert.equal(second.some((entry) => entry.action === "copied"), false);
   assert.equal(second.some((entry) => entry.action === "skipped"), true);
+});
+
+test("legacy subscription directory aliases migrate canonically and reject collisions", () => {
+  const root = mkdtempSync(join(tmpdir(), "routekit-migrate-alias-"));
+  const home = join(root, "home");
+  const stateHome = join(root, "routekit-home");
+  const sourceRoot = join(home, ".fusionkit", "subscriptions");
+  mkdirSync(join(sourceRoot, "claude"), { recursive: true });
+  writeFileSync(join(sourceRoot, "claude", "primary.json"), "{}\n");
+  const actions = migrateLegacyState({ home, stateHome });
+  assert.equal(
+    actions.some((entry) =>
+      entry.destination.endsWith(
+        join("subscriptions", "claude-code", "primary.json")
+      )
+    ),
+    true
+  );
+
+  mkdirSync(join(sourceRoot, "claudeCode"), { recursive: true });
+  assert.throws(
+    () => migrateLegacyState({ home, stateHome: join(root, "other-state") }),
+    /both map to "claude-code"/
+  );
 });

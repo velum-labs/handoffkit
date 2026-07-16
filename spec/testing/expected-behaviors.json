@@ -546,6 +546,54 @@
       "liveCommand": "pnpm mlx:stress"
     },
     {
+      "id": "accounts.canonical-identities-and-activation",
+      "category": "accounts",
+      "expectation": "Subscription kinds serialize as claude-code or codex, and enrollment atomically enables the selected effective RouteKit config.",
+      "status": "required",
+      "testFile": "packages/routekit-cli/src/test/accounts-command.test.ts",
+      "anchor": "accounts add canonically enrolls and activates the selected config"
+    },
+    {
+      "id": "accounts.native-backend-translation",
+      "category": "accounts",
+      "expectation": "Managed Claude and Codex subscriptions translate OpenAI Chat Completions, inject pool credentials only at egress, and normalize usage.",
+      "status": "required",
+      "testFile": "packages/accounts/src/test/subscription-backend.test.ts",
+      "anchor": "Claude account backend serves OpenAI chat with managed auth and normalized usage"
+    },
+    {
+      "id": "composition.account-backed-fusion",
+      "category": "composition",
+      "expectation": "Subscription-backed opaque endpoint ids drive panel, judge, and synthesis while credentials remain absent from Fusion responses.",
+      "status": "required",
+      "testFile": "packages/cli/src/test/stack-endpoint-ids-e2e.test.ts",
+      "anchor": "subscription-backed endpoint ids drive panel judge and synthesis without leaking credentials"
+    },
+    {
+      "id": "routing.unknown-id-rejected",
+      "category": "robustness",
+      "expectation": "An explicit unknown endpoint id is rejected instead of silently routing through the default endpoint.",
+      "status": "required",
+      "testFile": "packages/model-gateway/src/test/router.test.ts",
+      "anchor": "unknown endpoint ids fail instead of routing through the default endpoint"
+    },
+    {
+      "id": "config.sparse-layer-mutation",
+      "category": "config",
+      "expectation": "Legacy account aliases normalize canonically and project mutations preserve sparse overlays without inherited defaults.",
+      "status": "required",
+      "testFile": "packages/routekit-config/src/test/config.test.ts",
+      "anchor": "legacy account aliases normalize while sparse project mutations stay sparse"
+    },
+    {
+      "id": "cli.strict-flags-json-and-passthrough",
+      "category": "cli",
+      "expectation": "CLI typo flags fail, launcher passthrough requires --, and unsupported interactive JSON is rejected with one machine document.",
+      "status": "required",
+      "testFile": "packages/cli/src/test/v4-commands.test.ts",
+      "anchor": "CLI rejects typo flags, gates passthrough behind --, and rejects interactive JSON"
+    },
+    {
       "id": "providers.real-accounts",
       "category": "platform",
       "expectation": "RouteKit accounts accept the shipped request shapes and billed fusion completes.",

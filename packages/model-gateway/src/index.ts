@@ -20,21 +20,26 @@ export {
   CodexResponsesBackend,
   GoogleGenAiBackend
 } from "./provider-backends.js";
-export type { ProviderBackendOptions } from "./provider-backends.js";
+export type { ProviderBackendOptions, ProviderTransport } from "./provider-backends.js";
 
 export {
   CatalogBackend,
   EndpointPool,
+  isAccountEndpointConfig,
   modelEndpointSchema,
+  normalizeRouterConfigAliases,
   parseRouterConfig,
   providerBackend,
-  routerConfigSchema
+  routerConfigSchema,
+  UnknownEndpointError
 } from "./router.js";
 export type {
+  AccountEndpointConfig,
   CatalogBackendOptions,
   EndpointPoolOptions,
   ModelEndpointConfig,
-  RouterConfig
+  RouterConfig,
+  UrlEndpointConfig
 } from "./router.js";
 export {
   endpointHealthProbe,

@@ -1,7 +1,8 @@
 import { PROVIDERS, providerKeyProbe } from "@routekit/registry";
 import type { ProviderAuthStyle, ProviderKeyProbe } from "@routekit/registry";
 
-import type { ModelEndpointConfig } from "./router.js";
+import { isAccountEndpointConfig } from "./router.js";
+import type { ModelEndpointConfig, UrlEndpointConfig } from "./router.js";
 
 export type EndpointHealthProbe = {
   url: string;
@@ -21,7 +22,7 @@ export type EndpointHealthResult =
 type Fetcher = (input: string | URL, init?: RequestInit) => Promise<Response>;
 
 function nativeDialectProbe(
-  dialect: ModelEndpointConfig["dialect"]
+  dialect: UrlEndpointConfig["dialect"]
 ): ProviderKeyProbe | undefined {
   switch (dialect) {
     case "openai":
@@ -95,6 +96,12 @@ export function endpointHealthProbe(
   endpoint: ModelEndpointConfig,
   credential?: string
 ): EndpointHealthProbePlan {
+  if (isAccountEndpointConfig(endpoint)) {
+    return {
+      supported: false,
+      reason: "account-backed endpoint health is reported by the subscription pool"
+    };
+  }
   const registryProbe =
     endpoint.provider !== undefined ? providerKeyProbe(endpoint.provider) : undefined;
   const providerInfo =

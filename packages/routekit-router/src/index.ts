@@ -1,10 +1,17 @@
 import {
   CLIPROXY_API_KEY_ENV,
   cliproxyApiKey,
-  openSubscriptionRelays
+  openSubscriptionAccountSets,
+  SubscriptionAccountBackend,
+  subscriptionRelaysFromAccountSets
 } from "@routekit/accounts";
 import type { SubscriptionAccountConfigs } from "@routekit/accounts";
-import { CatalogBackend, startGateway } from "@routekit/gateway";
+import {
+  CatalogBackend,
+  isAccountEndpointConfig,
+  providerBackend,
+  startGateway
+} from "@routekit/gateway";
 import type { Gateway, RouterConfig } from "@routekit/gateway";
 import { assertAuthenticatedBind, registerCleanup } from "@routekit/runtime";
 
@@ -34,7 +41,7 @@ function gatewayEnvironment(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
 function accountConfigs(config: RouterConfig): SubscriptionAccountConfigs {
   const configured = config.accounts;
   const accounts: SubscriptionAccountConfigs = {};
-  const claude = configured?.claudeCode;
+  const claude = configured?.["claude-code"];
   if (claude?.enabled === true) {
     accounts["claude-code"] = {
       source: { kind: "auto" },
@@ -62,22 +69,56 @@ function accountConfigs(config: RouterConfig): SubscriptionAccountConfigs {
 export async function startRouter(options: StartRouterOptions): Promise<RunningRouter> {
   const host = options.host ?? "127.0.0.1";
   assertAuthenticatedBind(host, options.authToken);
+  const accounts = accountConfigs(options.config);
+  const accountSets = await openSubscriptionAccountSets(accounts);
+  const requiredKinds = new Set(
+    options.config.endpoints
+      .filter(isAccountEndpointConfig)
+      .map((endpoint) => endpoint.account)
+  );
+  for (const kind of requiredKinds) {
+    if ((accountSets[kind]?.size ?? 0) === 0) {
+      await Promise.all(
+        Object.values(accountSets).map(async (accountSet) => await accountSet.close())
+      );
+      throw new Error(
+        `account endpoint requires an enrolled ${kind} account; run \`routekit accounts add ${kind}\``
+      );
+    }
+  }
+  const relays = subscriptionRelaysFromAccountSets(accountSets);
+  for (const [kind, accountSet] of Object.entries(accountSets)) {
+    if (accountSet.size === 0 && !requiredKinds.has(kind as "claude-code" | "codex")) {
+      await accountSet.close();
+    }
+  }
   const backend = new CatalogBackend({
     config: options.config,
-    env: gatewayEnvironment(options.env ?? process.env)
+    env: gatewayEnvironment(options.env ?? process.env),
+    createBackend: (endpoint, apiKey) =>
+      isAccountEndpointConfig(endpoint)
+        ? new SubscriptionAccountBackend({
+            accountSet: accountSets[endpoint.account]!,
+            model: endpoint.model
+          })
+        : providerBackend(endpoint, apiKey)
   });
-  const accounts = accountConfigs(options.config);
-  const { relays } =
-    Object.keys(accounts).length > 0
-      ? await openSubscriptionRelays({ accounts })
-      : { relays: {} };
-  const gateway = await startGateway({
-    backend,
-    host,
-    ...(options.port !== undefined ? { port: options.port } : {}),
-    ...(options.authToken !== undefined ? { authToken: options.authToken } : {}),
-    ...(Object.keys(relays).length > 0 ? { providerRelays: relays } : {})
-  });
+  let gateway: Gateway;
+  try {
+    gateway = await startGateway({
+      backend,
+      host,
+      ...(options.port !== undefined ? { port: options.port } : {}),
+      ...(options.authToken !== undefined ? { authToken: options.authToken } : {}),
+      ...(Object.keys(relays).length > 0 ? { providerRelays: relays } : {})
+    });
+  } catch (error) {
+    await backend.close();
+    await Promise.all(
+      Object.values(accountSets).map(async (accountSet) => await accountSet.close())
+    );
+    throw error;
+  }
   let closed = false;
   const close = async (): Promise<void> => {
     if (closed) return;

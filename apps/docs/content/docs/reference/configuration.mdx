@@ -59,6 +59,8 @@ pricing, and subscription-account settings are rejected here.
 
 ## RouteKit router
 
+URL-backed endpoints retain their provider connection details in RouteKit:
+
 ```yaml
 endpoints:
   - endpointId: deep
@@ -70,7 +72,34 @@ endpoints:
 defaultEndpointId: deep
 ```
 
-Inline API keys and authorization tokens are rejected.
+Account-backed endpoints instead set only an opaque ID, upstream model, and
+canonical subscription kind:
+
+```yaml
+endpoints:
+  - endpointId: private-review
+    model: claude-sonnet-4-5
+    account: claude-code
+accounts:
+  claude-code:
+    enabled: true
+```
+
+```bash
+routekit accounts add claude-code
+routekit endpoints add private-review \
+  --model claude-sonnet-4-5 --account claude-code
+routekit claude private-review
+```
+
+`routekit accounts add` automatically enables that account kind in the
+effective router config. The tool command remains `routekit claude`;
+`claude-code` is the subscription kind. `routekit accounts serve` is advanced
+external-proxy mode, not a prerequisite for normal account-backed endpoints.
+
+Inline API keys and authorization tokens are rejected. Omitting an endpoint ID
+uses the configured default/first endpoint; an explicit unknown ID is rejected
+and never default-routed.
 
 ## Edit and inspect
 

@@ -10,8 +10,6 @@ By default, durable gateway sessions live under `~/.fusionkit/sessions/`:
 - `meta.json` stores session metadata such as tool, repo, model ids, timestamps, resume state, and panel information.
 - `costs.jsonl` stores per-turn token and USD estimates when pricing data is available.
 
-Cloud-panel cost consent is stored in `~/.fusionkit/consent.json` by default.
-
 ## Retention and deletion
 
 FusionKit keeps local session files until you remove them:
@@ -21,7 +19,9 @@ fusionkit sessions
 fusionkit sessions rm <id>
 ```
 
-Use `FUSIONKIT_SESSIONS_DIR` to move the durable session store, and `FUSIONKIT_CONSENT_PATH` to move the consent file.
+Use `FUSIONKIT_SESSIONS_DIR` to move the durable session store.
+FusionKit does not maintain a separate cloud-cost consent file; review the
+RouteKit endpoints before launch and use `--budget` for a spend cap.
 
 ## Telemetry
 
@@ -56,13 +56,21 @@ Fusion runs are instrumented with OpenTelemetry. By default nothing is exported:
 
 ## Provider egress
 
-Your code and prompts are sent to exactly the providers in the effective panel config for the command you run, plus any passthrough provider you explicitly select. Inspect that before a run with:
+Your code and prompts are sent to the providers behind the opaque RouteKit
+endpoint IDs selected by the active ensemble, plus any passthrough endpoint you
+explicitly select. Inspect both configuration layers before a run:
 
 ```bash
 fusionkit config show
+routekit config show
 ```
 
-The committed config in this repository routes through OpenRouter (`provider: "openrouter"`) and requires `OPENROUTER_API_KEY`. OpenRouter is an aggregator, so requests sent from this checkout go to OpenRouter and then to the selected upstream models. In your own repository, run `fusionkit init` or edit `.fusionkit/fusion.json` to choose a different panel.
+The committed `.fusionkit/fusion.json` contains endpoint IDs only. This
+repository's `.routekit/router.yaml` maps them to OpenRouter and requires
+`OPENROUTER_API_KEY`. OpenRouter is an aggregator, so requests sent from this
+checkout go to OpenRouter and then to the selected upstream models. In your own
+repository, run `fusionkit init`, edit `.routekit/router.yaml` to choose
+providers, and compose those endpoint IDs in `.fusionkit/fusion.json`.
 
 ## Rate-limit failover
 

@@ -65,13 +65,15 @@ exact commands. Companion docs go deeper:
 ## 3. Gotchas (learned the hard way)
 
 - `datasets>=4` removed script datasets - pin `datasets<4` or LiveCodeBench fails to load.
-- Model id spelling varies by artifact: `configs/benchmark-panel.example.yaml`
-  and the `gpt-opus-smoke` registry preset use `claude-opus-4-8` (hyphens),
-  while the `decorrelated-peers` registry preset uses `claude-opus-4.8` (dot).
-  Copy the id from the artifact you are actually using.
-- Raise endpoint `timeout_s` to ~600 in the panel config. The default 120s times out
-  on reasoning models generating long solutions to hard problems, and (before the
-  taxonomy fix) one timeout aborted the whole batch.
+- Model id spelling varies by artifact:
+  `configs/benchmark-router.example.yaml` and the `gpt-opus-smoke` registry
+  preset use `claude-opus-4-8` (hyphens), while the `decorrelated-peers`
+  registry preset uses `claude-opus-4.8` (dot). Copy the id from the artifact
+  you are actually using.
+- Raise the RouteKit endpoint timeout when a reasoning model needs more than
+  the default. A 120s timeout can expire while reasoning models generate long
+  solutions to hard problems, and (before the taxonomy fix) one timeout aborted
+  the whole batch.
 - Set `max_tokens` to ~6000-8000 for hard problems.
 - Decision tasks are scarce with strong 2-model panels. Use a larger `--subset` or
   add a diverse/weaker third model to create disagreement, or the tuner has nothing
@@ -90,13 +92,25 @@ exact commands. Companion docs go deeper:
 Bench commands live in the separately installed maintainer package under
 `fusionkit-bench ...`.
 
-Boot the Node-owned panel gateway for external runners:
+The public Fusion gateway reads `.fusionkit/fusion.json` v4 and does not accept
+a YAML `-c` flag. Scaffold it before booting an external-runner endpoint:
 
 ```bash
+fusionkit init
 fusionkit serve
 ```
 
-Public benchmark via an external runner adapter (subset-first):
+The in-process `fusionkit-evals` adapters consume the internal sidecar YAML in
+`configs/benchmark-panel.example.yaml`. Start its RouteKit gateway separately,
+then run a subset:
+
+```bash
+set -a && source .env && set +a
+routekit --config configs/benchmark-router.example.yaml \
+  serve --no-portless --port 8787
+```
+
+In another shell:
 
 ```bash
 set -a && source .env && set +a
@@ -133,7 +147,7 @@ Reuse a prebuilt bank by pointing `--bank` at an existing file (skips the panel 
 
 | Var | Default | Meaning |
 | --- | --- | --- |
-| `FUSIONKIT_BENCH_CONFIG` | (required) | panel FusionConfig YAML |
+| `FUSIONKIT_BENCH_CONFIG` | (required) | Internal sidecar/eval YAML: RouteKit URL plus opaque endpoint IDs; not a public Fusion v4 config. |
 | `BENCH_SANDBOX` | `local` | `local` or `docker` sandbox backend |
 | `LCB_VERSION` | `release_v6` | dataset version tag |
 | `LCB_MIN_DATE` | `2025-01-01` | contamination window floor (recent-N mode) |

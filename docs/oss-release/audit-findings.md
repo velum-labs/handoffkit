@@ -144,13 +144,13 @@ exception handlers with narrow intent; single-source registry generated from
 | 7.6 | 32 FusionKit test files at repo root `tests/` instead of per-package `python/*/tests/`; `python/fusionkit-cli/tests/` has only a version smoke test | `tests/`, `pyproject.toml` | P1 |
 | 7.7 | Version drift: FastAPI app metadata hardcodes `version="0.2.0"` while packages are 0.8.0; five pyprojects pin `==0.8.0` on each other requiring lockstep bumps (works, but document it) | `python/fusionkit-server/src/fusionkit_server/app.py:146` | P2 |
 | 7.8 | Pyright is standard mode (not strict) and excludes uniroute entirely; ~50 `type: ignore` concentrated at MLX/generated-registry edges — acceptable, document the policy | root `pyproject.toml:45-58` | P2 |
-| 7.9 | Python users of `fusionkit serve -c config.yaml` don't get `.fusionkit/prompts/*.md` auto-loading (Node-only concern today) — parity gap | `fusionkit_core/config.py` | P2 |
+| 7.9 | The former Python config-file serving path did not get `.fusionkit/prompts/*.md` auto-loading (Node-only concern at that snapshot) — parity gap | `fusionkit_core/config.py` | P2 |
 | 7.10 | Internal references: `HandoffKitExecutor*` naming in `fusion_bench.py`, `/opt/velum/repos/handoffkit/...` and `fusionkit@velum.local` in tests, hardcoded external baseline scores for `gpt-5.5`/`gpt-5.3-codex` in `public_bench.py` (fine if labeled) | files | P2 |
 
 ## 8. CLI UX/DX
 
-The product spine (`fusionkit codex` cold start → preflight with copy-paste
-install hints → adaptive key skipping → cost consent → boot checklist → session
+The historical product spine (`fusionkit codex` cold start → preflight with copy-paste
+install hints → adaptive key skipping → boot checklist → session
 receipt with resume hint) is genuinely good. What breaks the magic:
 
 | ID | Finding | Evidence | Sev |
