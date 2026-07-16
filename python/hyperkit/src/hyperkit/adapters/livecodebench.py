@@ -482,7 +482,7 @@ def run_tests(
         zip(tests, raw_results, strict=False)
     ):
         expected = test.get("output", "")
-        ok = result["returncode"] == 0 and _outputs_match(expected, result["stdout"])
+        ok = bool(result.get("passed"))
         results.append(
             {
                 "index": index,

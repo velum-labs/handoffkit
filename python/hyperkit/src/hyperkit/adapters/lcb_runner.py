@@ -259,8 +259,8 @@ def execute_suite(
         passed = error is None and _outputs_match(test["output"], stdout)
         results.append(
             {
-                "stdout": stdout,
-                "stderr": error or "",
+                "stdout": stdout[:2000],
+                "stderr": (error or "")[:2000],
                 "timed_out": timed_out,
                 "returncode": 0 if error is None else 1,
                 "duration_s": time.monotonic() - started,

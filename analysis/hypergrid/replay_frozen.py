@@ -17,7 +17,6 @@ from pathlib import Path
 from typing import Any
 
 import boto3
-
 from hyperkit.adapters.livecodebench import _Sandbox, decode_tests, run_tests
 
 DEFAULT_BUCKET = "hypergrid-batch-052777341990-us-east-1"
