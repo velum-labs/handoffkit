@@ -38,7 +38,7 @@ async function withStack(
   }
 }
 
-/** Queue a persistent 429 storm for one provider model (SDK x engine retries). */
+/** Queue enough 429s to cover every configured RouteKit endpoint attempt. */
 async function queueRateLimitStorm(stack: SimFusionStack, model: string): Promise<void> {
   await stack.sim.queue(
     model,
@@ -90,8 +90,11 @@ test("onRateLimit=passthrough: RouteKit's native endpoint failure surfaces verba
     };
     assert.equal(body.error?.code, "rate_limit_exceeded");
     assert.equal(body.error?.type, "rate_limit_error");
-    // RouteKit owns endpoint retry/cooldown behavior; Fusion does not run.
-    assert.ok((await stack.sim.calls({ model: "gpt-panel-a", status: 429 })).length >= 1);
+    assert.equal(
+      (await stack.sim.calls({ model: "gpt-panel-a", status: 429 })).length,
+      1,
+      "the single RouteKit endpoint instance is attempted once"
+    );
     assert.equal((await stack.sim.calls({ model: "gpt-judge" })).length, 0);
   });
 });

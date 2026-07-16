@@ -26,6 +26,7 @@ from __future__ import annotations
 import argparse
 import base64
 import contextlib
+import hashlib
 import json
 import os
 import subprocess
@@ -33,6 +34,7 @@ import time
 from pathlib import Path
 
 import boto3
+from botocore.exceptions import ClientError
 
 NAME = "hypergrid-batch"
 REPO_NAME = "hypergrid-runner"
@@ -42,6 +44,7 @@ LCB_LOCAL_STORE = Path(
         "HYPERKIT_LCB_DIR", str(Path.home() / ".cache" / "hyperkit" / "livecodebench")
     )
 )
+REPO_ROOT = Path(__file__).resolve().parents[2]
 
 ECS_TRUST = {
     "Version": "2012-10-17",
@@ -100,32 +103,86 @@ def _ensure_bucket(s3, bucket: str, region: str) -> None:
             )
     except s3.exceptions.BucketAlreadyOwnedByYou:
         pass
+    s3.put_bucket_versioning(
+        Bucket=bucket,
+        VersioningConfiguration={"Status": "Enabled"},
+    )
 
 
 def _upload_store(s3, bucket: str) -> int:
-    existing: set[str] = set()
-    paginator = s3.get_paginator("list_objects_v2")
-    for page in paginator.paginate(Bucket=bucket, Prefix="lcb-store/"):
-        existing.update(obj["Key"] for obj in page.get("Contents", []))
     uploaded = 0
     for path in sorted(LCB_LOCAL_STORE.glob("*.json")):
         key = f"lcb-store/{path.name}"
-        if key in existing:
+        digest = hashlib.sha256(path.read_bytes()).hexdigest()
+        try:
+            remote = s3.head_object(Bucket=bucket, Key=key)
+        except ClientError as exc:
+            if exc.response.get("Error", {}).get("Code") not in {
+                "404",
+                "NoSuchKey",
+                "NotFound",
+            }:
+                raise
+            remote = {}
+        if remote.get("Metadata", {}).get("sha256") == digest:
             continue
-        s3.upload_file(str(path), bucket, key)
+        s3.upload_file(
+            str(path),
+            bucket,
+            key,
+            ExtraArgs={"Metadata": {"sha256": digest}},
+        )
         uploaded += 1
     return uploaded
 
 
-def _ensure_image(region: str, account: str) -> str:
+def _source_sha() -> str:
+    status = subprocess.run(
+        ["git", "status", "--porcelain"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+    if status:
+        raise RuntimeError("refusing to deploy a runner from a dirty worktree")
+    return subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+
+
+def _image_digest_uri(ecr, registry: str, source_sha: str) -> str:
+    details = ecr.describe_images(
+        repositoryName=REPO_NAME,
+        imageIds=[{"imageTag": source_sha}],
+    )["imageDetails"]
+    if len(details) != 1 or not details[0].get("imageDigest"):
+        raise RuntimeError(f"ECR did not return one digest for {REPO_NAME}:{source_sha}")
+    return f"{registry}/{REPO_NAME}@{details[0]['imageDigest']}"
+
+
+def _ensure_image(region: str, account: str, source_sha: str) -> str:
     ecr = boto3.client("ecr")
     with contextlib.suppress(ecr.exceptions.RepositoryAlreadyExistsException):
         ecr.create_repository(
             repositoryName=REPO_NAME,
             imageScanningConfiguration={"scanOnPush": True},
+            imageTagMutability="IMMUTABLE",
         )
+    ecr.put_image_tag_mutability(
+        repositoryName=REPO_NAME,
+        imageTagMutability="IMMUTABLE",
+    )
     registry = f"{account}.dkr.ecr.{region}.amazonaws.com"
-    image = f"{registry}/{REPO_NAME}:latest"
+    image = f"{registry}/{REPO_NAME}:{source_sha}"
+    try:
+        return _image_digest_uri(ecr, registry, source_sha)
+    except ecr.exceptions.ImageNotFoundException:
+        pass
     auth = ecr.get_authorization_token()["authorizationData"][0]
     user_pass = base64.b64decode(auth["authorizationToken"]).decode()
     password = user_pass.split(":", 1)[1]
@@ -134,10 +191,25 @@ def _ensure_image(region: str, account: str) -> str:
         input=password, text=True, check=True, capture_output=True,
     )
     subprocess.run(
+        [
+            "sudo",
+            "docker",
+            "build",
+            "--build-arg",
+            f"HYPERKIT_SOURCE_SHA={source_sha}",
+            "--tag",
+            "hypergrid-runner:local",
+            "--file",
+            str(REPO_ROOT / "docker" / "hyperkit-runner" / "Dockerfile"),
+            str(REPO_ROOT),
+        ],
+        check=True,
+    )
+    subprocess.run(
         ["sudo", "docker", "tag", "hypergrid-runner:local", image], check=True
     )
     subprocess.run(["sudo", "docker", "push", image], check=True)
-    return image
+    return _image_digest_uri(ecr, registry, source_sha)
 
 
 def main() -> int:
@@ -153,6 +225,7 @@ def main() -> int:
     session = boto3.Session()
     region = session.region_name or "us-east-1"
     account = session.client("sts").get_caller_identity()["Account"]
+    source_sha = _source_sha()
     s3 = session.client("s3")
     iam = session.client("iam")
     sm = session.client("secretsmanager")
@@ -167,10 +240,11 @@ def main() -> int:
 
     secret_arn = _ensure_secret(sm, f"{NAME}/openrouter-api-key", "OPENROUTER_API_KEY")
 
+    registry = f"{account}.dkr.ecr.{region}.amazonaws.com"
     image = (
-        f"{account}.dkr.ecr.{region}.amazonaws.com/{REPO_NAME}:latest"
+        _image_digest_uri(session.client("ecr"), registry, source_sha)
         if args.skip_image
-        else _ensure_image(region, account)
+        else _ensure_image(region, account, source_sha)
     )
     print(f"runner image: {image}")
 
@@ -281,12 +355,14 @@ def main() -> int:
                 {"type": "VCPU", "value": "2"},
                 {"type": "MEMORY", "value": "4096"},
             ],
-            "fargatePlatformConfiguration": {"platformVersion": "LATEST"},
+            "fargatePlatformConfiguration": {"platformVersion": "1.4.0"},
             "networkConfiguration": {"assignPublicIp": "ENABLED"},
             "environment": [
                 {"name": "HYPERKIT_LCB_S3_URI", "value": f"s3://{bucket}/lcb-store"},
                 {"name": "HYPERKIT_LCB_DIR", "value": "/tmp/lcb-store"},
                 {"name": "HYPERKIT_WORK_ROOT", "value": "/tmp/hyperkit"},
+                {"name": "HYPERKIT_SOURCE_SHA", "value": source_sha},
+                {"name": "HYPERKIT_RUNNER_IMAGE_DIGEST", "value": image},
             ],
             "secrets": [
                 {"name": "OPENROUTER_API_KEY", "valueFrom": secret_arn},
@@ -300,6 +376,7 @@ def main() -> int:
     print(f"export HYPERKIT_AWS_BATCH_JOB_QUEUE={queue_name}")
     definition = f"{jobdef['jobDefinitionName']}:{jobdef['revision']}"
     print(f"export HYPERKIT_AWS_BATCH_JOB_DEFINITION={definition}")
+    print(f"export HYPERKIT_RUNNER_IMAGE_DIGEST={image}")
     return 0
 
 

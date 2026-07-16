@@ -732,15 +732,16 @@ def _handoffkit_cli_or_skip() -> Path:
         ]
     )
     for cli in candidates:
-        if cli.exists():
-            probe = subprocess.run(
-                ["node", str(cli), "ensemble", "--help"],
-                check=False,
-                capture_output=True,
-                text=True,
-            )
-            if "handoff" in f"{probe.stdout}\n{probe.stderr}":
-                return cli
+        if not cli.exists():
+            continue
+        probe = subprocess.run(
+            ["node", str(cli), "ensemble", "handoff", "--help"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if probe.returncode == 0 and "handoff" in probe.stdout:
+            return cli
     pytest.skip(
         "HandoffKit CLI with `ensemble handoff` not found; provide HANDOFFKIT_CLI"
     )

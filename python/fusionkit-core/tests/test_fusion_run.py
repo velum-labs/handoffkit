@@ -76,6 +76,67 @@ async def test_tracked_fusion_run_completes_and_is_inspectable(tmp_path) -> None
 
 
 @pytest.mark.asyncio
+async def test_tracked_run_records_the_candidate_actually_selected(tmp_path) -> None:
+    config = FusionConfig(
+        routekit_url="http://routekit.test",
+        endpoint_ids=["first", "second", "judge"],
+        default_model="first",
+        judge_model="judge",
+        default_mode="panel",
+        panel_models=["first", "second"],
+        synthesis_select_best=True,
+    )
+    clients = {
+        "first": FakeModelClient("first", ["first answer"]),
+        "second": FakeModelClient("second", ["second answer"]),
+        "judge": FakeModelClient(
+            "judge",
+            [
+                '{"consensus":[],"contradictions":[],"unique_insights":[],'
+                '"coverage_gaps":[],"likely_errors":[],"recommended_final_structure":[],'
+                '"best_trajectory":"second:1"}'
+            ],
+        ),
+    }
+    store = FileSystemRunStore(tmp_path / "runs")
+    manager = FusionRunManager(
+        FusionEngine(config=config, clients=clients),
+        store,
+        LocalArtifactStore(tmp_path / "runs"),
+    )
+
+    result = await manager.create_and_run(
+        FusionRunRequestV1.model_validate(
+            {
+                **contract_metadata("fusion-run-request.v1"),
+                "request_id": "fusion_req_selected_001",
+                "mode": "panel",
+                "messages": [
+                    ChatMessage(role="user", content="Pick the best answer").model_dump(
+                        mode="json", include={"role", "content"}
+                    )
+                ],
+                "sampling": {},
+                "requested_models": ["first", "second"],
+            }
+        )
+    )
+
+    assert isinstance(result, RunInspection)
+    selected = next(
+        trajectory
+        for trajectory in result.trajectories
+        if trajectory.source_trajectory_id == "second:1"
+    )
+    fusion_event = next(
+        event for event in store.list_events(result.run_id) if event.event_type == "fusion_recorded"
+    )
+    assert fusion_event.payload["fusion_record"]["selected_trajectory_id"] == (
+        selected.trajectory_id
+    )
+
+
+@pytest.mark.asyncio
 async def test_tracked_fusion_run_records_failure(tmp_path) -> None:
     config = FusionConfig(
         routekit_url="http://routekit.test",

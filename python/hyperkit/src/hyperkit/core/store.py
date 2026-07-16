@@ -27,7 +27,17 @@ class ResultStore:
     def put(self, sweep_id: str, result: ShardResult) -> None:
         d = self._dir(sweep_id)
         d.mkdir(parents=True, exist_ok=True)
-        (d / f"{result.shard_id}.json").write_text(result.model_dump_json(indent=2))
+        path = d / f"{result.shard_id}.json"
+        payload = result.model_dump_json(indent=2)
+        try:
+            with path.open("x") as stream:
+                stream.write(payload)
+        except FileExistsError:
+            existing = ShardResult.model_validate_json(path.read_text())
+            if existing != result:
+                raise ValueError(
+                    f"conflicting immutable result for shard {result.shard_id}"
+                ) from None
 
     def get_all(self, sweep_id: str) -> list[ShardResult]:
         d = self._dir(sweep_id)

@@ -58,7 +58,7 @@ class FusionKitGatewaySUT:
                 with urllib.request.urlopen(f"{url}/v1/models", timeout=1.0):
                     return SUTTarget(
                         base_url=f"{url}/v1",
-                        model=str(spec.params.get("model", "fusionkit/panel")),
+                        model=self._target_model(spec),
                     )
             except OSError:
                 time.sleep(1)
@@ -118,6 +118,12 @@ class FusionKitGatewaySUT:
             encoding="utf-8",
         )
         return workdir
+
+    def _target_model(self, spec: TopologySpec) -> str:
+        explicit = spec.params.get("model")
+        if explicit is not None:
+            return str(explicit)
+        return "fusion-panel"
 
 
 def factory() -> FusionKitGatewaySUT:

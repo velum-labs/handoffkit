@@ -7,7 +7,7 @@ import { test } from "node:test";
 import { driverContractSuite } from "@routekit/harness-core/testing";
 import type { HarnessEvent } from "@routekit/harness-core";
 
-import { createCodexDriver } from "../driver.js";
+import { codexOptionsFor, createCodexDriver } from "../driver.js";
 
 /**
  * A fake `codex` CLI: honors `--version`, and for `exec --experimental-json`
@@ -42,6 +42,43 @@ function fakeCodexRepo(): { command: string; cwd: string; cleanup: () => void } 
 }
 
 const repo = fakeCodexRepo();
+
+test("codex driver pins custom gateways to HTTP Responses", () => {
+  const driver = createCodexDriver();
+  const config = driver.configSchema.parse({
+    command: repo.command,
+    provider: {
+      baseUrl: "http://127.0.0.1:9000/v1",
+      apiKey: "test-key"
+    }
+  });
+
+  assert.deepEqual(codexOptionsFor(config, undefined).config, {
+    model_provider: "codex-sdk-http",
+    model_providers: {
+      "codex-sdk-http": {
+        name: "Codex SDK HTTP",
+        base_url: "http://127.0.0.1:9000/v1",
+        wire_api: "responses",
+        requires_openai_auth: false,
+        supports_websockets: false,
+        env_key: "CODEX_API_KEY"
+      }
+    }
+  });
+
+  const ambient = driver.configSchema.parse({
+    command: repo.command,
+    provider: { baseUrl: "http://127.0.0.1:9000/v1" }
+  });
+  const ambientConfig = codexOptionsFor(ambient, undefined).config as {
+    model_providers?: Record<string, { env_key?: string }>;
+  };
+  assert.equal(
+    ambientConfig.model_providers?.["codex-sdk-http"]?.env_key,
+    "OPENAI_API_KEY"
+  );
+});
 
 driverContractSuite({
   name: "codex driver",

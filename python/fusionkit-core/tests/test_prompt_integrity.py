@@ -64,6 +64,19 @@ def test_format_trajectories_fences_candidate_content_with_the_supplied_nonce() 
     assert label_at < formatted.index(open_marker)
 
 
+def test_format_trajectories_keeps_complete_candidate_output() -> None:
+    distinguishing_tail = "print('correct suffix')"
+    content = f"{'x' * 2_000}\n{distinguishing_tail}"
+
+    formatted = format_trajectories(
+        [Trajectory(id="traj_a", model_id="alpha", content=content)],
+        fence="complete-output",
+    )
+
+    assert distinguishing_tail in formatted
+    assert "...[truncated]" not in formatted
+
+
 def test_build_judge_prompt_uses_a_fresh_nonce_per_turn_and_explains_the_fence() -> None:
     trajectories = [Trajectory(id="traj_a", model_id="alpha", content="answer")]
     first = build_judge_prompt("request", trajectories)

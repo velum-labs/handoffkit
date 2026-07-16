@@ -100,7 +100,7 @@ function itemText(item: ThreadItem): string | undefined {
 }
 
 /** Build the codex-sdk options from the driver config and its allowlisted env. */
-function codexOptionsFor(
+export function codexOptionsFor(
   config: CodexDriverConfig,
   context: DriverContext | undefined
 ): CodexOptions {
@@ -120,9 +120,29 @@ function codexOptionsFor(
       "OPENAI_API_KEY"
     ]
   });
+  const providerEnvKey =
+    apiKey !== undefined
+      ? "CODEX_API_KEY"
+      : (config.provider.apiKeyEnvName ?? "OPENAI_API_KEY");
   return {
     codexPathOverride: config.command,
-    ...(config.provider.baseUrl !== undefined ? { baseUrl: config.provider.baseUrl } : {}),
+    ...(config.provider.baseUrl !== undefined
+      ? {
+          config: {
+            model_provider: "codex-sdk-http",
+            model_providers: {
+              "codex-sdk-http": {
+                name: "Codex SDK HTTP",
+                base_url: config.provider.baseUrl,
+                wire_api: "responses",
+                requires_openai_auth: false,
+                supports_websockets: false,
+                env_key: providerEnvKey
+              }
+            }
+          }
+        }
+      : {}),
     ...(apiKey !== undefined ? { apiKey } : {}),
     env: childEnv
   };

@@ -8,7 +8,7 @@ from collections.abc import AsyncIterator, Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from fusionkit_core.clients import ChatClient
 from fusionkit_core.config import ContextPolicy, FusionConfig, PromptOverrides, SamplingConfig
@@ -108,7 +108,9 @@ class FuseResult(BaseModel):
     panel_usage: Usage | None = None
     #: Number of candidate trajectories generated in the panel/self step.
     panel_trajectory_count: int = 0
-
+    #: Complete candidate evidence used by this step. The server's fusion
+    #: extension persists it so benchmark artifacts can explain selection.
+    input_trajectories: list[Trajectory] = Field(default_factory=list)
     def turn_usage(self) -> Usage:
         """Combined token usage of this fuse step (judge + synthesizer)."""
         responses = [self.response] + (
@@ -116,6 +118,13 @@ class FuseResult(BaseModel):
         )
         return sum_usages([response.usage for response in responses])
 
+    def compound_usage(self) -> Usage:
+        """Combined panel, judge, and synthesizer usage."""
+
+        usages = [self.turn_usage()]
+        if self.panel_usage is not None:
+            usages.insert(0, self.panel_usage)
+        return sum_usages(usages)
 # Rough token cost of the fixed prompt scaffolding (section headers, labels)
 # that the per-part estimates below do not count.
 _PROMPT_SCAFFOLD_TOKENS = 256
@@ -277,6 +286,7 @@ class JudgeSynthesizer:
         analysis: FusionAnalysis | None = None,
         trace: TraceContext | None = None,
         after_judge: Callable[[ModelResponse | None], None] | None = None,
+        request_extra: Mapping[str, object] | None = None,
     ) -> FuseResult:
         """One fusion step: produce the next step, or the final answer.
 
@@ -320,6 +330,7 @@ class JudgeSynthesizer:
                 tools=tools,
                 analysis=analysis,
                 trace=step_ctx,
+                request_extra=request_extra,
             )
             resolved_analysis = prepared.analysis
             if after_judge is not None:
@@ -341,6 +352,7 @@ class JudgeSynthesizer:
                     sampling,
                     tools=tools,
                     tool_choice=tool_choice,
+                    extra=request_extra,
                 )
                 synthesizer_called = True
             result = self._build_fuse_result(
@@ -376,6 +388,7 @@ class JudgeSynthesizer:
         tool_choice: str | Mapping[str, Any] | None = None,
         analysis: FusionAnalysis | None = None,
         trace: TraceContext | None = None,
+        request_extra: Mapping[str, object] | None = None,
     ) -> AsyncIterator[StreamChunk | FuseResult]:
         """Streaming counterpart of :meth:`fuse`: the synthesizer turn streams.
 
@@ -403,6 +416,7 @@ class JudgeSynthesizer:
                 tools=tools,
                 analysis=analysis,
                 trace=step_ctx,
+                request_extra=request_extra,
             )
         except Exception as exc:
             _end_fuse_span(fuse_span_handle, error=str(exc))
@@ -441,6 +455,7 @@ class JudgeSynthesizer:
             sampling,
             tools=tools,
             tool_choice=tool_choice,
+            extra=request_extra,
         ):
             accumulator.add(chunk)
             yield chunk
@@ -504,6 +519,7 @@ class JudgeSynthesizer:
         tools: Sequence[Mapping[str, Any]] | None,
         analysis: FusionAnalysis | None,
         trace: TraceContext | None,
+        request_extra: Mapping[str, object] | None,
     ) -> _PreparedTurn:
         """Build the synthesizer conversation (judge analysis + system + history).
 
@@ -525,6 +541,7 @@ class JudgeSynthesizer:
                 judge_sampling=sampling.model_copy(update={"temperature": 0.0}),
                 trace=trace,
                 diagnostics=diagnostics,
+                request_extra=request_extra,
             )
         if resolved_analysis is None:
             resolved_analysis = FusionAnalysis()
@@ -658,6 +675,7 @@ class JudgeSynthesizer:
             synthesizer_called=synthesizer_called,
             panel_usage=panel_usage_from_trajectories(trajectories),
             panel_trajectory_count=len(trajectories),
+            input_trajectories=list(trajectories),
         )
 
     async def analyze(
@@ -669,6 +687,7 @@ class JudgeSynthesizer:
         judge_sampling: SamplingConfig,
         trace: TraceContext | None = None,
         diagnostics: _TurnDiagnostics | None = None,
+        request_extra: Mapping[str, object] | None = None,
     ) -> FusionAnalysis:
         """The judge's gap analysis, packed to its budget and degrade-not-fail.
 
@@ -702,6 +721,7 @@ class JudgeSynthesizer:
                     ),
                 ],
                 judge_sampling,
+                extra=request_extra,
             )
 
         try:

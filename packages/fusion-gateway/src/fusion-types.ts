@@ -45,6 +45,17 @@ export type ChatMessageLike = {
 export type ChatBody = {
   model?: string;
   messages?: ChatMessageLike[];
+  temperature?: number;
+  top_p?: number;
+  max_tokens?: number;
+  max_completion_tokens?: number;
+  seed?: number;
+  reasoning?: Record<string, unknown>;
+  provider?: Record<string, unknown>;
+  usage?: Record<string, unknown>;
+  stream_options?: Record<string, unknown>;
+  parallel_tool_calls?: boolean;
+  fusion?: { include_evidence?: boolean };
   tools?: unknown;
   tool_choice?: unknown;
   stream?: boolean;
@@ -69,6 +80,15 @@ export type PanelRunInput = {
    */
   tools?: unknown;
   toolChoice?: unknown;
+  temperature?: number;
+  topP?: number;
+  maxTokens?: number;
+  maxCompletionTokens?: number;
+  seed?: number;
+  reasoning?: Record<string, unknown>;
+  provider?: Record<string, unknown>;
+  usage?: Record<string, unknown>;
+  parallelToolCalls?: boolean;
   /** Step boundaries per member (see {@link FusedModelRoute.k}). */
   k?: number;
   signal?: AbortSignal;

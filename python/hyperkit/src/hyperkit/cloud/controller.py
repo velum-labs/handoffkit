@@ -20,9 +20,9 @@ from typing import Any
 from urllib.parse import unquote_plus
 
 from hyperkit.backends.s3 import S3ResultStore
-from hyperkit.core.models import Cell, ShardResult
+from hyperkit.core.models import Cell, ShardResult, SubmittedShard
 from hyperkit.core.snapshots import CellSnapshot, build_cell_snapshots
-from hyperkit.telemetry import configure, record_snapshot_deltas, set_cell_snapshots
+from hyperkit.telemetry import configure, set_cell_snapshots
 
 _stop = False
 
@@ -77,6 +77,35 @@ class S3SweepRepository:
     def results(self, sweep_id: str) -> list[ShardResult]:
         return self.store.get_all(sweep_id)
 
+    def submitted_shards(
+        self,
+        sweep_id: str,
+    ) -> dict[str, dict[str, SubmittedShard]] | None:
+        prefix = self.store._key(f"runs/{sweep_id}/submissions/")
+        expected: dict[str, dict[str, SubmittedShard]] = {}
+        found_verified_receipt = False
+        for item in self.store._list_objects(prefix):
+            key = str(item.get("Key", ""))
+            if not key.endswith(".json"):
+                continue
+            response = self.store.client.get_object(Bucket=self.store.bucket, Key=key)
+            payload = json.loads(response["Body"].read())
+            raw_shards = payload.get("shards") if isinstance(payload, dict) else None
+            if not isinstance(raw_shards, list):
+                continue
+            found_verified_receipt = True
+            for raw_shard in raw_shards:
+                shard = SubmittedShard.model_validate(raw_shard)
+                by_instance = expected.setdefault(shard.cell_id, {})
+                previous = by_instance.get(shard.instance_id)
+                if previous is not None and previous.shard_id != shard.shard_id:
+                    raise ValueError(
+                        f"conflicting receipts for cell {shard.cell_id} "
+                        f"instance {shard.instance_id}"
+                    )
+                by_instance[shard.instance_id] = shard
+        return expected if found_verified_receipt else None
+
     def snapshots(self, sweep_id: str) -> list[CellSnapshot]:
         prefix = self.store._key(f"runs/{sweep_id}/snapshots/")
         out: list[CellSnapshot] = []
@@ -114,16 +143,14 @@ class HypergridController:
             sweep_id,
             cells,
             self.repository.results(sweep_id),
+            submitted_shards=self.repository.submitted_shards(sweep_id),
         )
-        previous = [
-            snapshot
-            for (stored_sweep_id, _), snapshot in self.snapshots.items()
-            if stored_sweep_id == sweep_id
-        ]
-        if not previous:
-            previous = self.repository.snapshots(sweep_id)
-        record_snapshot_deltas(previous, snapshots)
         self.repository.put_snapshots(sweep_id, snapshots)
+        self.snapshots = {
+            key: snapshot
+            for key, snapshot in self.snapshots.items()
+            if key[0] != sweep_id
+        }
         for snapshot in snapshots:
             self.snapshots[(sweep_id, snapshot.cell_id)] = snapshot
         set_cell_snapshots(list(self.snapshots.values()))
@@ -144,10 +171,12 @@ def _sweep_ids_from_message(body: str) -> set[str]:
     for record in message.get("Records", []):
         key = unquote_plus(record.get("s3", {}).get("object", {}).get("key", ""))
         parts = key.split("/")
-        if "runs" in parts:
-            index = parts.index("runs")
-            if len(parts) > index + 1:
-                ids.add(parts[index + 1])
+        if "runs" not in parts:
+            continue
+        index = parts.index("runs")
+        if len(parts) <= index + 3 or parts[index + 2] != "results":
+            continue
+        ids.add(parts[index + 1])
     return ids
 
 

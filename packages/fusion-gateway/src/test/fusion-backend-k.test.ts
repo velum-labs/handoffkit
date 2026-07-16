@@ -60,6 +60,15 @@ test("a k=1 route passes k + caller tools to the panel and step mode to the fuse
   const response = await backend.chat({
     model: "fusion-step",
     messages: [{ role: "user", content: "do the task" }],
+    temperature: 0.6,
+    top_p: 0.9,
+    max_completion_tokens: 4096,
+    seed: 7,
+    reasoning: { effort: "high" },
+    provider: { order: ["FirstParty"], allow_fallbacks: false },
+    usage: { include: true },
+    parallel_tool_calls: false,
+    fusion: { include_evidence: true },
     tools: TOOLS,
     tool_choice: "auto"
   });
@@ -70,8 +79,37 @@ test("a k=1 route passes k + caller tools to the panel and step mode to the fuse
   assert.equal(input?.k, 1);
   assert.deepEqual(input?.tools, TOOLS);
   assert.equal(input?.toolChoice, "auto");
+  assert.equal(input?.temperature, 0.6);
+  assert.equal(input?.topP, 0.9);
+  assert.equal(input?.maxCompletionTokens, 4096);
+  assert.equal(input?.seed, 7);
+  assert.deepEqual(input?.reasoning, { effort: "high" });
+  assert.deepEqual(input?.provider, {
+    order: ["FirstParty"],
+    allow_fallbacks: false
+  });
+  assert.deepEqual(input?.usage, { include: true });
+  assert.equal(input?.parallelToolCalls, false);
 
-  assert.equal(recorded.stepBodies[0]?.panel_mode, "step");
+  assert.deepEqual(recorded.stepBodies[0], {
+    model: "fusion-step",
+    messages: [{ role: "user", content: "do the task" }],
+    trajectories: [candidate("alpha"), candidate("beta")],
+    stream: false,
+    temperature: 0.6,
+    top_p: 0.9,
+    max_completion_tokens: 4096,
+    seed: 7,
+    reasoning: { effort: "high" },
+    provider: { order: ["FirstParty"], allow_fallbacks: false },
+    usage: { include: true },
+    parallel_tool_calls: false,
+    include_evidence: true,
+    tools: TOOLS,
+    tool_choice: "auto",
+    panel_mode: "step",
+    judge_model: "alpha"
+  });
 });
 
 test("an unset-k route projects losslessly (tools present) but carries no k or panel_mode", async () => {

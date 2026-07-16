@@ -35,6 +35,17 @@ from fusionkit_core.types import ChatMessage, ModelResponse, Trajectory, Traject
 # Cap on a single persisted reasoning item, mirroring the TS trajectory-capture
 # MAX_TEXT so evidence stays bounded regardless of how verbose a model thinks.
 _MAX_REASONING_TEXT = 4000
+_FAILED_FINISH_REASONS = {
+    "blocked",
+    "content_filter",
+    "error",
+    "incomplete",
+    "length",
+    "max_output_tokens",
+    "max_tokens",
+    "recitation",
+    "safety",
+}
 
 
 def _reasoning_item(reasoning: str, index: int) -> TrajectoryItem:
@@ -65,10 +76,30 @@ def trajectory_from_response(
         "latency_s": response.latency_s,
         "usage": response.usage.model_dump(),
         "finish_reason": response.finish_reason,
+        # Retain the provider-normalized response so a benchmark artifact can
+        # establish the effective model, finish state, and usage without
+        # reconstructing them from logs.
+        "raw_response": response.raw,
     }
     if sampling is not None:
         metadata["temperature"] = sampling.temperature
         metadata["seed"] = sampling.seed
+    normalized_finish = (
+        response.finish_reason.lower() if response.finish_reason is not None else None
+    )
+    has_usable_output = bool(response.content.strip() or response.tool_calls)
+    failed_reason = (
+        f"finish_reason:{normalized_finish}"
+        if normalized_finish in _FAILED_FINISH_REASONS
+        else "empty_output"
+        if not has_usable_output
+        else None
+    )
+    if failed_reason is not None:
+        metadata["generation_status"] = "failed"
+        metadata["error_code"] = failed_reason
+    else:
+        metadata["generation_status"] = "ok"
     items: list[TrajectoryItem] = []
     if response.reasoning:
         items.append(_reasoning_item(response.reasoning, 0))
@@ -90,7 +121,7 @@ def trajectory_from_response(
         model_id=model_id,
         content=response.content,
         items=items,
-        status="succeeded",
+        status="failed" if failed_reason is not None else "succeeded",
         metadata=metadata,
     )
 
@@ -221,10 +252,19 @@ class ChatTrajectoryProducer:
         messages: Sequence[ChatMessage],
         sampling: SamplingConfig,
         tools: Sequence[ToolDefinition] | None = None,
+        extra: Mapping[str, Any] | None = None,
     ) -> Trajectory:
         client = self._client(model_id)
-        response = await client.chat(messages, sampling, tools=tools)
-        return trajectory_from_response(model_id, response, ordinal=0)
+        response = await client.chat(messages, sampling, tools=tools, extra=extra)
+        trajectory = trajectory_from_response(
+            model_id, response, ordinal=0, sampling=sampling
+        )
+        if trajectory.status != "succeeded":
+            raise PanelExhaustedError(
+                f"{model_id} produced no usable output "
+                f"({trajectory.metadata.get('error_code', 'unknown')})"
+            )
+        return trajectory
 
     async def generate_self_fusion(
         self,
@@ -234,6 +274,7 @@ class ChatTrajectoryProducer:
         temperatures: Sequence[float],
         sample_count: int,
         tools: Sequence[ToolDefinition] | None = None,
+        extra: Mapping[str, Any] | None = None,
     ) -> list[Trajectory]:
         selected_temperatures = list(temperatures)[:sample_count]
         if len(selected_temperatures) < sample_count:
@@ -249,7 +290,7 @@ class ChatTrajectoryProducer:
                 }
             )
             specs.append((model_id, index, sampling))
-        return await self._settle(specs, messages, tools)
+        return await self._settle(specs, messages, tools, extra)
 
     async def generate_panel(
         self,
@@ -257,17 +298,19 @@ class ChatTrajectoryProducer:
         messages: Sequence[ChatMessage],
         sampling: SamplingConfig,
         tools: Sequence[ToolDefinition] | None = None,
+        extra: Mapping[str, Any] | None = None,
     ) -> list[Trajectory]:
         specs = [
             (model_id, index, sampling) for index, model_id in enumerate(model_ids)
         ]
-        return await self._settle(specs, messages, tools)
+        return await self._settle(specs, messages, tools, extra)
 
     async def _settle(
         self,
         specs: Sequence[tuple[str, int, SamplingConfig]],
         messages: Sequence[ChatMessage],
         tools: Sequence[ToolDefinition] | None = None,
+        extra: Mapping[str, Any] | None = None,
     ) -> list[Trajectory]:
         """Run every attempt, tolerating individual failures.
 
@@ -276,7 +319,7 @@ class ChatTrajectoryProducer:
         :class:`PanelExhaustedError`.
         """
         results = await asyncio.gather(
-            *(self._generate(model_id, index, messages, sampling, tools)
+            *(self._generate(model_id, index, messages, sampling, tools, extra)
               for model_id, index, sampling in specs),
             return_exceptions=True,
         )
@@ -304,9 +347,10 @@ class ChatTrajectoryProducer:
         messages: Sequence[ChatMessage],
         sampling: SamplingConfig,
         tools: Sequence[ToolDefinition] | None = None,
+        extra: Mapping[str, Any] | None = None,
     ) -> Trajectory:
         client = self._client(model_id)
-        response = await client.chat(messages, sampling, tools=tools)
+        response = await client.chat(messages, sampling, tools=tools, extra=extra)
         return trajectory_from_response(model_id, response, ordinal=index, sampling=sampling)
 
     def _client(self, model_id: str) -> ChatClient:

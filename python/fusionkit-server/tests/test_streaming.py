@@ -227,9 +227,9 @@ def test_internal_fuse_streams_reasoning_tools_and_exact_usage() -> None:
     }
     terminal = next(payload for payload in payloads if "usage" in payload)
     assert terminal["usage"] == {
-        "prompt_tokens": 18,
-        "completion_tokens": 8,
-        "total_tokens": 26,
+        "prompt_tokens": 16,
+        "completion_tokens": 7,
+        "total_tokens": 23,
     }
     assert terminal["choices"][0]["finish_reason"] == "tool_calls"
 

@@ -6,25 +6,27 @@ import os
 import time
 import traceback
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Mapping
 from contextlib import asynccontextmanager
 from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as distribution_version
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import FastAPI, Header, Query, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from fusionkit_core.artifacts import LocalArtifactStore
 from fusionkit_core.clients import ChatClient, build_clients
-from fusionkit_core.config import FusionConfig, PromptOverrides
+from fusionkit_core.config import FusionConfig, PromptOverrides, SamplingConfig
 from fusionkit_core.contracts import (
+    ContractUsage,
     FusionRunRequestV1,
+    Status,
     TrajectoryV1,
     contract_metadata,
 )
 from fusionkit_core.fusion import FusionEngine
-from fusionkit_core.judge import FuseResult, sum_usages
+from fusionkit_core.judge import FuseResult
 from fusionkit_core.kernel import FusionKernel
 from fusionkit_core.producers import trajectory_from_contract
 from fusionkit_core.registry import FUSION_DEFAULT_ALIAS
@@ -41,16 +43,29 @@ from fusionkit_core.types import (
     ModelResponse,
     PanelMode,
     StreamChunk,
+    Trajectory,
     Usage,
 )
-from pydantic import BaseModel, Field, model_validator
+from pydantic import (
+    AliasChoices,
+    BaseModel,
+    ConfigDict,
+    Field,
+    field_validator,
+    model_validator,
+)
 
 logger = logging.getLogger(__name__)
 
 
 class TrajectoryItemInput(BaseModel):
     index: int
-    type: str
+    type: Literal[
+        "message",
+        "reasoning",
+        "function_call",
+        "function_call_output",
+    ]
     text: str | None = None
     call_id: str | None = None
     name: str | None = None
@@ -58,39 +73,98 @@ class TrajectoryItemInput(BaseModel):
     is_error: bool | None = None
     output_hash: str | None = None
 
+    @field_validator("type", mode="before")
+    @classmethod
+    def _normalize_legacy_output_type(cls, value: object) -> object:
+        return "message" if value == "output" else value
+
 
 class TrajectoryInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     trajectory_id: str
     model_id: str
-    status: str
-    items: list[TrajectoryItemInput] = Field(default_factory=list)
+    status: Status
+    items: list[TrajectoryItemInput] = Field(
+        default_factory=list,
+        validation_alias=AliasChoices("items", "steps"),
+    )
     final_output: str
     candidate_id: str | None = None
     model: str | None = None
     harness_kind: str | None = None
     diff: str | None = None
+    usage: ContractUsage | None = None
+    patch_artifact: dict[str, Any] | None = None
+    synthesis: dict[str, Any] | None = None
+    error: dict[str, Any] | None = None
+    verification: dict[str, Any] | None = None
+    end_reason: dict[str, Any] | None = None
     metadata: dict[str, Any] | None = None
 
 
 class FuseTrajectoriesRequest(BaseModel):
     """One internal fusion step over externally produced trajectories."""
 
+    model_config = ConfigDict(extra="forbid")
+
     model: str = FUSION_DEFAULT_ALIAS
     messages: list[ChatMessage] = Field(min_length=1)
     trajectories: list[TrajectoryInput] = Field(default_factory=list)
+    temperature: float | None = Field(default=None, ge=0, le=2)
+    top_p: float | None = Field(default=None, gt=0, le=1)
+    max_tokens: int | None = Field(default=None, ge=1)
+    max_completion_tokens: int | None = Field(default=None, ge=1)
+    seed: int | None = None
     tools: list[dict[str, Any]] | None = None
     tool_choice: str | dict[str, Any] | None = None
+    parallel_tool_calls: bool | None = None
     judge_model: str | None = None
     synthesizer_model: str | None = None
     prompts: PromptOverrides | None = None
     panel_mode: PanelMode = "trajectory"
+    include_evidence: bool = False
+    reasoning: dict[str, Any] | None = None
+    provider: dict[str, Any] | None = None
+    usage: dict[str, Any] | None = None
     stream: bool = False
 
     @model_validator(mode="after")
     def _require_successful_trajectory(self) -> FuseTrajectoriesRequest:
+        if (
+            self.max_tokens is not None
+            and self.max_completion_tokens is not None
+            and self.max_tokens != self.max_completion_tokens
+        ):
+            raise ValueError(
+                "max_tokens and max_completion_tokens must match when both are supplied"
+            )
+        if self.max_tokens is None and self.max_completion_tokens is not None:
+            self.max_tokens = self.max_completion_tokens
         if not any(trajectory.status == "succeeded" for trajectory in self.trajectories):
             raise ValueError("at least one succeeded trajectory is required")
         return self
+
+
+def _trajectory_contract_payload(trajectory: TrajectoryInput) -> dict[str, Any]:
+    payload = trajectory.model_dump(
+        exclude={"verification", "end_reason"},
+        exclude_none=True,
+    )
+    compatibility = {
+        key: value
+        for key, value in {
+            "verification": trajectory.verification,
+            "end_reason": trajectory.end_reason,
+        }.items()
+        if value is not None
+    }
+    if compatibility:
+        payload["metadata"] = {
+            **(trajectory.metadata or {}),
+            **compatibility,
+        }
+    return payload
 
 
 def _package_version() -> str:
@@ -229,7 +303,7 @@ def create_app(
                 TrajectoryV1.model_validate(
                     {
                         **contract_metadata("trajectory.v1"),
-                        **trajectory.model_dump(exclude_none=True),
+                        **_trajectory_contract_payload(trajectory),
                     }
                 )
             )
@@ -237,6 +311,7 @@ def create_app(
         ]
         tools = _normalize_tools(request.tools)
         tool_choice = _normalize_tool_choice(request.tool_choice)
+        request_extra = _request_extra(request)
         trace = context_from_headers(dict(http_request.headers))
         if request.stream:
             stream = kernel.fuse_trajectories_stream(
@@ -244,15 +319,20 @@ def create_app(
                 trajectories,
                 judge_model=judge_model,
                 synthesizer_model=synthesizer_model,
-                sampling=config.sampling,
+                sampling=_request_sampling(config, request),
                 tools=tools,
                 tool_choice=tool_choice,
                 prompts=request.prompts,
                 panel_mode=request.panel_mode,
                 trace=trace,
+                request_extra=request_extra,
             )
             return StreamingResponse(
-                _fused_completion_sse(request.model, stream),
+                _fused_completion_sse(
+                    request.model,
+                    stream,
+                    include_evidence=request.include_evidence,
+                ),
                 media_type="text/event-stream",
             )
         try:
@@ -261,12 +341,13 @@ def create_app(
                 trajectories,
                 judge_model=judge_model,
                 synthesizer_model=synthesizer_model,
-                sampling=config.sampling,
+                sampling=_request_sampling(config, request),
                 tools=tools,
                 tool_choice=tool_choice,
                 prompts=request.prompts,
                 panel_mode=request.panel_mode,
                 trace=trace,
+                request_extra=request_extra,
             )
         except Exception:  # noqa: BLE001 - internal boundary returns a stable error
             traceback.print_exc()
@@ -278,11 +359,148 @@ def create_app(
         return _step_response(
             request.model,
             result.response,
-            _fusion_extension(result),
-            usage=_fuse_step_usage(result),
+            _fusion_extension(result, include_evidence=request.include_evidence),
+            usage=result.turn_usage(),
         )
 
     return app
+
+
+def _request_sampling(
+    config: FusionConfig,
+    request: FuseTrajectoriesRequest,
+) -> SamplingConfig:
+    return config.sampling.model_copy(
+        update={
+            key: value
+            for key, value in {
+                "temperature": request.temperature,
+                "top_p": request.top_p,
+                "max_tokens": request.max_tokens,
+                "seed": request.seed,
+            }.items()
+            if value is not None
+        }
+    )
+
+
+def _request_extra(
+    request: FuseTrajectoriesRequest,
+) -> dict[str, object] | None:
+    """Provider-specific controls that must survive every model-call stage."""
+
+    extra: dict[str, object] = {
+        key: value
+        for key, value in {
+            "provider": request.provider,
+            "reasoning": request.reasoning,
+            "usage": request.usage,
+            "parallel_tool_calls": request.parallel_tool_calls,
+        }.items()
+        if value is not None
+    }
+    return extra or None
+
+
+async def _fused_completion_sse(
+    model: str,
+    stream: AsyncIterator[StreamChunk | FuseResult],
+    *,
+    include_evidence: bool = False,
+) -> AsyncIterator[str]:
+    """Emit OpenAI ``chat.completion.chunk`` SSE from a fused/passthrough stream.
+
+    Consumes the engine's ``AsyncIterator[StreamChunk | FuseResult]``: each
+    :class:`StreamChunk` with text becomes a content delta as it arrives (true
+    streaming), and the terminal :class:`FuseResult` carries any ``tool_calls``,
+    the finish reason, and the fused trajectory metadata (the ``fusion``
+    extension) on the final chunk. A mid-stream provider failure is surfaced as
+    an OpenAI-style error event before ``[DONE]``.
+    """
+    completion_id = f"chatcmpl-{uuid.uuid4()}"
+    created = int(time.time())
+
+    def chunk(delta: dict[str, Any], finish: str | None, extra: dict[str, Any] | None) -> str:
+        payload: dict[str, Any] = {
+            "id": completion_id,
+            "object": "chat.completion.chunk",
+            "created": created,
+            "model": model,
+            "choices": [{"index": 0, "delta": delta, "finish_reason": finish}],
+        }
+        if extra is not None:
+            payload.update(extra)
+        return f"data: {json.dumps(payload)}\n\n"
+
+    yield chunk({"role": "assistant"}, None, None)
+    streamed_content = False
+    final_result: FuseResult | None = None
+    try:
+        async for item in stream:
+            if isinstance(item, FuseResult):
+                final_result = item
+                continue
+            if item.reasoning_delta:
+                # The judge's analysis rides the reasoning channel ahead of the
+                # answer; coding agents render it in their native thinking UI.
+                yield chunk({"reasoning_content": item.reasoning_delta}, None, None)
+            if item.model_reasoning_delta:
+                # The upstream model's own reasoning tokens (local MLX / vLLM
+                # style). Re-emitted on `reasoning` — the token-stream field —
+                # so downstream translators accumulate rather than treating
+                # every token as a narration beat.
+                yield chunk({"reasoning": item.model_reasoning_delta}, None, None)
+            if item.delta:
+                streamed_content = True
+                yield chunk({"content": item.delta}, None, None)
+    except Exception as exc:  # noqa: BLE001 - surface as an OpenAI-style error event
+        traceback.print_exc()
+        yield _sse_error_event(exc)
+        yield "data: [DONE]\n\n"
+        return
+
+    response = final_result.response if final_result is not None else None
+    tool_calls = _tool_calls_payload(response) if response is not None else []
+    # If nothing streamed (e.g. a reasoning model that produced its answer only
+    # via the post-stream fallback), emit the resolved content once before close.
+    if response is not None and not streamed_content and response.content and not tool_calls:
+        yield chunk({"content": response.content}, None, None)
+    if tool_calls:
+        yield chunk(
+            {"tool_calls": [{"index": index, **call} for index, call in enumerate(tool_calls)]},
+            None,
+            None,
+        )
+    finish = "tool_calls" if tool_calls else (
+        (response.finish_reason if response is not None else None) or "stop"
+    )
+    extra: dict[str, Any] = {}
+    if final_result is not None:
+        fusion_extension = _fusion_extension(
+            final_result,
+            include_evidence=include_evidence,
+        )
+        if fusion_extension is not None:
+            extra["fusion"] = fusion_extension
+    # Carry the fuse step's token usage (judge + synthesizer combined) on the
+    # terminal chunk so a streaming client (and the Node gateway's cost meter,
+    # which reads `usage` off the SSE tail) can account a fused stream's cost —
+    # mirroring the non-streaming `_openai_step_response` body.
+    if final_result is not None:
+        extra["usage"] = _usage_payload(final_result.turn_usage())
+    elif response is not None:
+        extra["usage"] = _usage_payload(response.usage)
+    yield chunk({}, finish, extra or None)
+    yield "data: [DONE]\n\n"
+
+
+def _sse_error_event(exc: BaseException) -> str:
+    del exc
+    body = {
+        "type": "sidecar_error",
+        "code": "fusion_failed",
+    }
+    return f"data: {json.dumps({'error': body})}\n\n"
 
 
 def _create_run_manager(
@@ -420,20 +638,76 @@ def _usage_payload(usage: Usage) -> dict[str, Any]:
     }
 
 
-def _fuse_step_usage(result: FuseResult) -> Usage:
-    usages = [result.turn_usage()]
-    if result.panel_usage is not None:
-        usages.insert(0, result.panel_usage)
-    return sum_usages(usages)
+def _trajectory_evidence_payload(trajectory: Trajectory) -> dict[str, Any]:
+    metadata_keys = (
+        "latency_s",
+        "usage",
+        "finish_reason",
+        "temperature",
+        "seed",
+        "generation_status",
+        "error_code",
+        "error_category",
+        "provider",
+        "status_code",
+        "verification",
+        "end_reason",
+    )
+    metadata = {
+        key: trajectory.metadata[key]
+        for key in metadata_keys
+        if key in trajectory.metadata
+    }
+    raw_cost = trajectory.metadata.get("provider_cost")
+    if isinstance(raw_cost, Mapping):
+        metadata["provider_cost"] = {
+            key: value
+            for key, value in raw_cost.items()
+            if key != "raw"
+        }
+    raw_response = trajectory.metadata.get("raw_response")
+    if isinstance(raw_response, Mapping):
+        response_identity = {
+            key: raw_response[key]
+            for key in ("id", "model", "provider")
+            if key in raw_response
+        }
+        if response_identity:
+            metadata["response"] = response_identity
+    return {
+        "trajectory_id": trajectory.id,
+        "model_id": trajectory.model_id,
+        "status": trajectory.status,
+        "items": [
+            item.model_dump(mode="json", exclude_none=True)
+            for item in trajectory.items
+        ],
+        "final_output": trajectory.content,
+        "metadata": metadata,
+    }
 
 
-def _fusion_extension(result: FuseResult) -> dict[str, Any] | None:
+def _fusion_extension(
+    result: FuseResult,
+    *,
+    include_evidence: bool = False,
+) -> dict[str, Any] | None:
+    """The ``fusion`` extension carried on a fuse response.
+
+    On the terminal step the fused output is a trajectory whose ``synthesis``
+    holds the fusion result (decision/selected/rationale/metrics). A
+    non-terminal step (the synthesizer committed a tool-call batch the caller
+    will execute) carries the judge's ``best_trajectory`` instead, so the
+    gateway can attribute the adopted proposal between rounds (narration's
+    "last round the judge picked X" opener)."""
+    extension: dict[str, Any] = {}
     trajectory = result.trajectory
     if not result.terminal or trajectory is None:
-        best = result.analysis.best_trajectory
-        return {"analysis": {"best_trajectory": best}} if best else None
-    return {
-        "trajectory": {
+        best = result.analysis.best_trajectory if result.analysis is not None else None
+        if best:
+            extension["analysis"] = {"best_trajectory": best}
+    else:
+        extension["trajectory"] = {
             "trajectory_id": trajectory.id,
             "model_id": trajectory.model_id,
             "status": trajectory.status,
@@ -444,7 +718,13 @@ def _fusion_extension(result: FuseResult) -> dict[str, Any] | None:
                 else None
             ),
         }
-    }
+    if include_evidence:
+        extension["evidence_schema"] = "fusionkit.input-trajectories.v1"
+        extension["input_trajectories"] = [
+            _trajectory_evidence_payload(candidate)
+            for candidate in result.input_trajectories
+        ]
+    return extension or None
 
 
 def _step_response(
@@ -479,79 +759,6 @@ def _step_response(
     if fusion is not None:
         payload["fusion"] = fusion
     return payload
-
-
-async def _fused_completion_sse(
-    model: str,
-    stream: AsyncIterator[StreamChunk | FuseResult],
-) -> AsyncIterator[str]:
-    completion_id = f"chatcmpl-{uuid.uuid4()}"
-    created = int(time.time())
-
-    def chunk(
-        delta: dict[str, Any],
-        finish: str | None,
-        extra: dict[str, Any] | None = None,
-    ) -> str:
-        payload: dict[str, Any] = {
-            "id": completion_id,
-            "object": "chat.completion.chunk",
-            "created": created,
-            "model": model,
-            "choices": [{"index": 0, "delta": delta, "finish_reason": finish}],
-        }
-        if extra:
-            payload.update(extra)
-        return f"data: {json.dumps(payload)}\n\n"
-
-    yield chunk({"role": "assistant"}, None)
-    final_result: FuseResult | None = None
-    streamed_content = False
-    try:
-        async for item in stream:
-            if isinstance(item, FuseResult):
-                final_result = item
-            else:
-                if item.reasoning_delta:
-                    yield chunk({"reasoning_content": item.reasoning_delta}, None)
-                if item.model_reasoning_delta:
-                    yield chunk({"reasoning": item.model_reasoning_delta}, None)
-                if item.delta:
-                    streamed_content = True
-                    yield chunk({"content": item.delta}, None)
-    except Exception:  # noqa: BLE001 - stream a stable internal error
-        traceback.print_exc()
-        error = {"error": {"type": "sidecar_error", "code": "fusion_failed"}}
-        yield f"data: {json.dumps(error)}\n\n"
-        yield "data: [DONE]\n\n"
-        return
-    response = final_result.response if final_result is not None else None
-    tool_calls = _tool_calls_payload(response) if response is not None else []
-    if response is not None and not streamed_content and response.content and not tool_calls:
-        yield chunk({"content": response.content}, None)
-    if tool_calls:
-        yield chunk(
-            {
-                "tool_calls": [
-                    {"index": index, **call}
-                    for index, call in enumerate(tool_calls)
-                ]
-            },
-            None,
-        )
-    finish = (
-        "tool_calls"
-        if tool_calls
-        else (response.finish_reason if response is not None else None) or "stop"
-    )
-    extra: dict[str, Any] = {}
-    if final_result is not None:
-        fusion = _fusion_extension(final_result)
-        if fusion is not None:
-            extra["fusion"] = fusion
-        extra["usage"] = _usage_payload(_fuse_step_usage(final_result))
-    yield chunk({}, finish, extra)
-    yield "data: [DONE]\n\n"
 
 
 __all__ = [

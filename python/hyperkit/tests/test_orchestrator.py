@@ -65,6 +65,8 @@ def test_orchestrator_is_idempotent_and_checkpoints(
     orchestrator = RunOrchestrator(
         sweep_id="sweep",
         generation=0,
+        source_sha="source",
+        image_digest="image",
         adapter=Adapter(),
         sut=sut,
         store=store,

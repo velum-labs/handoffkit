@@ -14,7 +14,7 @@ import json
 from collections.abc import Callable
 from importlib.metadata import entry_points
 from pathlib import Path
-from typing import Any, TypeVar
+from typing import Any, Literal, TypeVar
 
 import yaml
 from pydantic import BaseModel, Field
@@ -115,6 +115,14 @@ class EndpointRecord(BaseModel):
     lineage: list[str] = Field(default_factory=list)
     generation: str | None = None
     tags: list[str] = Field(default_factory=list)
+    weight_eligibility: Literal[
+        "verified_open_weight",
+        "restricted_weight",
+        "proprietary",
+        "unknown",
+    ] = "unknown"
+    weights_url: str | None = None
+    license_id: str | None = None
 
 
 class ModelRegistry(BaseModel):
@@ -157,6 +165,9 @@ def load_model_registry(path: Path) -> ModelRegistry:
             escalated_completion_tokens=raw.get("escalated_completion_tokens"),
             lineage=raw.get("lineage", []),
             generation=raw.get("generation"),
+            weight_eligibility=raw.get("weight_eligibility", "unknown"),
+            weights_url=raw.get("weights_url"),
+            license_id=raw.get("license_id"),
         )
     return ModelRegistry(cycle_id=data.get("cycle_id"), endpoints=records)
 
@@ -178,3 +189,23 @@ def endpoint_identity_hash(endpoint: EndpointRecord) -> str:
 
 def lineage_conflicts(a: EndpointRecord, b: EndpointRecord) -> bool:
     return bool(set(a.lineage).intersection(b.lineage))
+
+
+def require_verified_open_weight(
+    model_registry: ModelRegistry,
+    endpoint_ids: list[str],
+) -> list[EndpointRecord]:
+    """Resolve endpoints or fail if any lacks verified downloadable weights."""
+
+    endpoints = [model_registry.get(endpoint_id) for endpoint_id in endpoint_ids]
+    invalid = [
+        endpoint.id
+        for endpoint in endpoints
+        if endpoint.weight_eligibility != "verified_open_weight"
+    ]
+    if invalid:
+        raise ValueError(
+            "open-weight cells require verified downloadable weights: "
+            + ", ".join(invalid)
+        )
+    return endpoints

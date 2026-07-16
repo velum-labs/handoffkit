@@ -5,7 +5,12 @@ from typing import Any
 
 import pytest
 from fusionkit_core.clients import FakeModelClient
-from fusionkit_core.config import FusionConfig, FusionMode, SamplingConfig
+from fusionkit_core.config import (
+    FusionConfig,
+    FusionMode,
+    SamplingConfig,
+    merge_sampling,
+)
 from fusionkit_core.fusion import FusionEngine
 from fusionkit_core.producers import (
     ChatTrajectoryProducer,
@@ -14,6 +19,23 @@ from fusionkit_core.producers import (
 )
 from fusionkit_core.types import ChatMessage, ModelResponse
 from pydantic import ValidationError
+
+
+def test_merge_sampling_preserves_explicit_generic_default() -> None:
+    fallback = SamplingConfig(temperature=0.8, top_p=0.7, max_tokens=16_384)
+    override = SamplingConfig(temperature=0.2)
+
+    merged = merge_sampling(override, fallback)
+
+    assert merged.temperature == 0.2
+    assert merged.top_p == 0.7
+    assert merged.max_tokens == 16_384
+
+
+def test_merge_sampling_uses_fallback_for_unset_fields() -> None:
+    fallback = SamplingConfig(temperature=0.8, top_p=0.7, max_tokens=16_384)
+
+    assert merge_sampling(SamplingConfig(), fallback) == fallback
 
 
 class FailingChatClient:

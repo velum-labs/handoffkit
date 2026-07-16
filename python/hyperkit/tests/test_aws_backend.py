@@ -11,6 +11,7 @@ from hyperkit.backends.s3 import S3ResultStore
 from hyperkit.core.models import (
     Cell,
     ResourceProfile,
+    ShardPlan,
     ShardResult,
     ShardStatus,
     TopologySpec,
@@ -52,13 +53,21 @@ class FakeS3:
 class FakeBatch:
     def __init__(self) -> None:
         self.submissions: list[dict[str, Any]] = []
+        self.statuses: dict[str, str] = {}
 
     def submit_job(self, **kwargs: Any) -> dict[str, str]:
         self.submissions.append(kwargs)
-        return {"jobId": f"job-{len(self.submissions)}"}
+        job_id = f"job-{len(self.submissions)}"
+        self.statuses[job_id] = "SUBMITTED"
+        return {"jobId": job_id}
 
     def describe_jobs(self, *, jobs: list[str]) -> dict[str, Any]:
-        return {"jobs": [{"jobId": job_id, "status": "SUCCEEDED"} for job_id in jobs]}
+        return {
+            "jobs": [
+                {"jobId": job_id, "status": self.statuses.get(job_id, "UNKNOWN")}
+                for job_id in jobs
+            ]
+        }
 
 
 class FakeGrader:
@@ -120,6 +129,16 @@ def _result(cell: Cell, instance_id: str) -> ShardResult:
     )
 
 
+def _plan(cell: Cell, instance_id: str) -> ShardPlan:
+    return ShardPlan(
+        cell=cell,
+        instance_id=instance_id,
+        shard_id=_result(cell, instance_id).shard_id,
+        generation=3,
+        adapter_version="7",
+    )
+
+
 def test_s3_result_store_keys_round_trip_and_artifacts(tmp_path: Path) -> None:
     s3 = FakeS3()
     store = S3ResultStore("bucket", prefix="team", client=s3)
@@ -161,20 +180,26 @@ def test_aws_batch_groups_missing_shards_and_retries_idempotently() -> None:
         adapter_version_for=lambda _: "7",
     )
     shards = [
-        (first, "a"),
-        (first, "b"),
-        (first, "b"),
-        (second, "c"),
-        (second, "d"),
+        _plan(first, "a"),
+        _plan(first, "b"),
+        _plan(first, "b"),
+        _plan(second, "c"),
+        _plan(second, "d"),
     ]
 
-    backend.submit(shards, "run")
+    acknowledgement = backend.submit(shards, "run")
 
     assert sorted(call.get("arrayProperties", {}).get("size", 1) for call in batch.submissions) == [
         1,
         2,
     ]
     assert backend.last_submitted_job_ids == ["job-1", "job-2"]
+    assert set(acknowledgement.accepted_shard_ids) == {
+        _result(first, "a").shard_id,
+        _result(first, "b").shard_id,
+        _result(second, "c").shard_id,
+        _result(second, "d").shard_id,
+    }
     calls_by_memory = {
         call["containerOverrides"]["resourceRequirements"][1]["value"]: call
         for call in batch.submissions
@@ -201,16 +226,46 @@ def test_aws_batch_groups_missing_shards_and_retries_idempotently() -> None:
     assert manifest["0"]["instance_id"] == "b"
     assert manifest["0"]["generation"] == 3
     assert manifest["0"]["shard_id"] == _result(first, "b").shard_id
+    first_cell_key = f"prefix/runs/run/cells/{first.cell_id}.json"
+    first_cell_payload = json.loads(s3.objects[("bucket", first_cell_key)])
+    assert first_cell_payload["cell"]["instances"] == ["a", "b"]
+    second_cell_key = f"prefix/runs/run/cells/{second.cell_id}.json"
+    second_cell_payload = json.loads(s3.objects[("bucket", second_cell_key)])
+    assert second_cell_payload["cell"]["instances"] == ["c", "d"]
 
     backend.submit(shards, "run")
 
     assert len(batch.submissions) == 2
     assert backend.last_submitted_job_ids == []
+    batch.statuses = {"job-1": "SUCCEEDED", "job-2": "SUCCEEDED"}
     assert backend.status(["job-1", "job-2"]) == {
         "job-1": "SUCCEEDED",
         "job-2": "SUCCEEDED",
     }
     assert backend.poll(["job-1"], interval_s=0) == {"job-1": "SUCCEEDED"}
+
+
+def test_aws_batch_resubmits_terminal_job_without_checkpoint() -> None:
+    s3 = FakeS3()
+    batch = FakeBatch()
+    cell = _cell("retry", ["a"])
+    backend = AwsBatchComputeBackend(
+        bucket="bucket",
+        job_queue="queue",
+        job_definition="definition",
+        generation=3,
+        s3_client=s3,
+        batch_client=batch,
+        adapter_version_for=lambda _: "7",
+    )
+
+    backend.submit([_plan(cell, "a")], "run")
+    batch.statuses["job-1"] = "FAILED"
+    acknowledgement = backend.submit([_plan(cell, "a")], "run")
+
+    assert len(batch.submissions) == 2
+    assert acknowledgement.job_ids == ["job-2"]
+    assert acknowledgement.accepted_shard_ids == [_result(cell, "a").shard_id]
 
 
 def test_aws_batch_empty_submit_does_nothing() -> None:
@@ -245,7 +300,7 @@ def test_aws_batch_rejects_cells_over_array_limit() -> None:
     )
 
     try:
-        backend.submit([(cell, instance) for instance in instances], "run")
+        backend.submit([_plan(cell, instance) for instance in instances], "run")
     except ValueError as exc:
         assert "at most 10000" in str(exc)
     else:
@@ -272,6 +327,7 @@ def test_cloud_runner_executes_one_entry_and_uploads_artifacts(
                     "generation": 3,
                     "instance_id": "one",
                     "shard_id": shard_id,
+                    "adapter_version": "7",
                 }
             }
         ).encode(),

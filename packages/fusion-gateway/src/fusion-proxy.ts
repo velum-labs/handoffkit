@@ -284,6 +284,19 @@ export class FusionBackend implements Backend {
       // `runPanelRound`, not re-encoded here.
       ...(req.chat.tools !== undefined ? { tools: req.chat.tools } : {}),
       ...(req.chat.tool_choice !== undefined ? { toolChoice: req.chat.tool_choice } : {}),
+      ...(req.chat.temperature !== undefined ? { temperature: req.chat.temperature } : {}),
+      ...(req.chat.top_p !== undefined ? { topP: req.chat.top_p } : {}),
+      ...(req.chat.max_tokens !== undefined ? { maxTokens: req.chat.max_tokens } : {}),
+      ...(req.chat.max_completion_tokens !== undefined
+        ? { maxCompletionTokens: req.chat.max_completion_tokens }
+        : {}),
+      ...(req.chat.seed !== undefined ? { seed: req.chat.seed } : {}),
+      ...(req.chat.reasoning !== undefined ? { reasoning: req.chat.reasoning } : {}),
+      ...(req.chat.provider !== undefined ? { provider: req.chat.provider } : {}),
+      ...(req.chat.usage !== undefined ? { usage: req.chat.usage } : {}),
+      ...(req.chat.parallel_tool_calls !== undefined
+        ? { parallelToolCalls: req.chat.parallel_tool_calls }
+        : {}),
       ...(isFiniteK(route?.k) ? { k: route.k } : {}),
       ...(signal !== undefined ? { signal } : {})
     });

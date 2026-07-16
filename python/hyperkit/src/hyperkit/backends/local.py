@@ -14,7 +14,7 @@ import os
 from collections.abc import Callable, Sequence
 from concurrent.futures import ThreadPoolExecutor
 
-from hyperkit.core.models import Cell, ShardResult
+from hyperkit.core.models import BackendSubmission, Cell, ShardPlan, ShardResult
 from hyperkit.core.orchestrator import RunOrchestrator
 
 
@@ -31,19 +31,39 @@ class LocalComputeBackend:
         self._results: dict[str, list[ShardResult]] = {}
         self.max_workers = max(1, int(max_workers))
 
-    def submit(self, shards: Sequence[tuple[Cell, str]], sweep_id: str) -> None:
+    def submit(
+        self,
+        shards: Sequence[ShardPlan],
+        sweep_id: str,
+    ) -> BackendSubmission:
         out = self._results.setdefault(sweep_id, [])
         if self.max_workers == 1:
-            for cell, instance_id in shards:
-                out.append(self._orchestrator_for(cell).run(cell, instance_id))
-            return
+            for shard in shards:
+                out.append(
+                    self._orchestrator_for(shard.cell).run(
+                        shard.cell,
+                        shard.instance_id,
+                    )
+                )
+            return BackendSubmission(
+                accepted_shard_ids=[shard.shard_id for shard in shards],
+                image_digest="local",
+            )
         with ThreadPoolExecutor(max_workers=self.max_workers) as pool:
             futures = [
-                pool.submit(self._orchestrator_for(cell).run, cell, instance_id)
-                for cell, instance_id in shards
+                pool.submit(
+                    self._orchestrator_for(shard.cell).run,
+                    shard.cell,
+                    shard.instance_id,
+                )
+                for shard in shards
             ]
             for future in futures:
                 out.append(future.result())
+        return BackendSubmission(
+            accepted_shard_ids=[shard.shard_id for shard in shards],
+            image_digest="local",
+        )
 
     def results(self, sweep_id: str) -> list[ShardResult]:
         return list(self._results.get(sweep_id, []))

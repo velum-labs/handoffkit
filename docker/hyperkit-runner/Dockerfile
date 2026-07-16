@@ -9,6 +9,7 @@ RUN apt-get update \
         git \
         gnupg \
         python3 \
+        util-linux \
     && install -m 0755 -d /etc/apt/keyrings \
     && curl -fsSL https://download.docker.com/linux/debian/gpg \
         -o /etc/apt/keyrings/docker.asc \
@@ -23,6 +24,10 @@ RUN apt-get update \
 COPY --from=uv /uv /uvx /usr/local/bin/
 
 WORKDIR /opt/hyperkit
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.json .npmrc ./
+COPY packages packages
+COPY spec spec
+COPY pyproject.toml uv.lock ./
 COPY python/hyperkit python/hyperkit
 COPY python/fusionkit-core python/fusionkit-core
 COPY python/fusionkit-server python/fusionkit-server
@@ -30,19 +35,19 @@ COPY python/fusionkit-evals python/fusionkit-evals
 COPY python/fusionkit-mlx python/fusionkit-mlx
 COPY python/fusionkit-cli python/fusionkit-cli
 
-RUN uv venv /opt/venv \
-    && uv pip install --python /opt/venv/bin/python \
-        "./python/hyperkit[aws]" \
-        ./python/fusionkit-core \
-        ./python/fusionkit-server \
-        ./python/fusionkit-evals \
-        ./python/fusionkit-mlx \
-        ./python/fusionkit-cli \
-        mini-swe-agent \
-        swebench \
+RUN corepack enable \
+    && corepack prepare pnpm@10.33.4 --activate \
+    && pnpm install --frozen-lockfile \
+    && pnpm exec tsc -b packages/cli \
+    && chmod +x /opt/hyperkit/packages/cli/dist/index.js \
+    && ln -s /opt/hyperkit/packages/cli/dist/index.js /usr/local/bin/fusionkit \
+    && uv sync --frozen --all-packages --extra aws --no-dev \
     && rm -rf /root/.cache
 
-ENV PATH="/opt/venv/bin:$PATH"
+ARG HYPERKIT_SOURCE_SHA
+LABEL org.opencontainers.image.revision="${HYPERKIT_SOURCE_SHA}"
+ENV HYPERKIT_SOURCE_SHA="${HYPERKIT_SOURCE_SHA}"
+ENV PATH="/opt/hyperkit/.venv/bin:$PATH"
 ENV PYTHONUNBUFFERED=1
 
 ENTRYPOINT ["python", "-m", "hyperkit.cloud.runner"]

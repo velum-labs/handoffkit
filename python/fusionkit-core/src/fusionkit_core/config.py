@@ -57,18 +57,16 @@ def merge_sampling(
 ) -> SamplingConfig:
     """Overlay request sampling onto config defaults, field by field.
 
-    Only fields the caller explicitly set (differing from generic
-    :class:`SamplingConfig` defaults) replace the fallback; everything else
-    keeps the operator-configured value.
+    Only fields the caller explicitly set replace the fallback; everything
+    else keeps the operator-configured value. Explicit values remain overrides
+    even when they equal this model's generic defaults.
     """
     if override is None:
         return fallback
-    defaults = SamplingConfig()
-    updates: dict[str, object] = {}
-    for field_name in SamplingConfig.model_fields:
-        override_val = getattr(override, field_name)
-        if override_val != getattr(defaults, field_name):
-            updates[field_name] = override_val
+    updates = {
+        field_name: getattr(override, field_name)
+        for field_name in override.model_fields_set
+    }
     return fallback.model_copy(update=updates)
 
 

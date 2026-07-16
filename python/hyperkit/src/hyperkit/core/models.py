@@ -12,7 +12,7 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from hyperkit.core.ids import hash_obj, spec_hash
 
@@ -94,7 +94,15 @@ class Cell(BaseModel):
     def cell_id(self) -> str:
         return hash_obj(self.coord, length=12)
 
-    def shard_id(self, instance_id: str, *, adapter_version: str, dataset_hash: str) -> str:
+    def shard_id(
+        self,
+        instance_id: str,
+        *,
+        adapter_version: str,
+        dataset_hash: str,
+        source_sha: str = "",
+        image_digest: str = "",
+    ) -> str:
         """Content-addressed shard identity.
 
         Stable across reloads: derived only from the materialized coordinate, the
@@ -108,6 +116,8 @@ class Cell(BaseModel):
                 "instance": instance_id,
                 "adapter_version": adapter_version,
                 "dataset_hash": dataset_hash,
+                "source_sha": source_sha,
+                "image_digest": image_digest,
             },
             length=16,
         )
@@ -144,8 +154,19 @@ class ShardResult(BaseModel):
     failure_mode: str | None = None
     adapter_version: str = "0"
     dataset_hash: str = ""
+    source_sha: str = ""
+    image_digest: str = ""
     created_at: str = Field(default_factory=_utcnow)
     raw: dict[str, Any] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def _validate_resolved_status(self) -> ShardResult:
+        if self.resolved != (self.status == ShardStatus.RESOLVED):
+            raise ValueError(
+                f"resolved={self.resolved!r} is inconsistent with "
+                f"status={self.status.value!r}"
+            )
+        return self
 
 
 class Generation(BaseModel):
@@ -165,6 +186,84 @@ class Generation(BaseModel):
     repo_sha: str | None = None
 
 
+class SubmittedShard(BaseModel):
+    """Frozen identity of one shard declared to a compute backend."""
+
+    cell_id: str
+    instance_id: str
+    shard_id: str
+    generation: int
+    benchmark: str
+    sut_hash: str
+    adapter_version: str
+    dataset_hash: str
+    source_sha: str = ""
+    image_digest: str = ""
+
+
+class ShardPlan(BaseModel):
+    """Fully materialized shard passed to a backend without recomputation."""
+
+    cell: Cell
+    instance_id: str
+    shard_id: str
+    generation: int
+    adapter_version: str
+    source_sha: str = ""
+    image_digest: str = ""
+
+    def submitted_shard(self) -> SubmittedShard:
+        return SubmittedShard(
+            cell_id=self.cell.cell_id,
+            instance_id=self.instance_id,
+            shard_id=self.shard_id,
+            generation=self.generation,
+            benchmark=self.cell.benchmark,
+            sut_hash=self.cell.sut.hash,
+            adapter_version=self.adapter_version,
+            dataset_hash=self.cell.dataset_hash,
+            source_sha=self.source_sha,
+            image_digest=self.image_digest,
+        )
+
+
+class BackendSubmission(BaseModel):
+    """Backend acknowledgement for an exact set of requested shards."""
+
+    accepted_shard_ids: list[str] = Field(default_factory=list)
+    job_ids: list[str] = Field(default_factory=list)
+    manifest_uris: list[str] = Field(default_factory=list)
+    errors: list[str] = Field(default_factory=list)
+    image_digest: str = ""
+
+
+class SubmissionState(StrEnum):
+    PREPARED = "prepared"
+    ACCEPTED = "accepted"
+    PARTIAL = "partial"
+    FAILED = "failed"
+
+
+class SweepSubmission(BaseModel):
+    """One apply attempt and its declared/acknowledged scientific cohort."""
+
+    backend: str
+    shards: list[SubmittedShard]
+    rung: int | None = None
+    only: str | None = None
+    state: SubmissionState = SubmissionState.PREPARED
+    accepted_shard_ids: list[str] = Field(default_factory=list)
+    job_ids: list[str] = Field(default_factory=list)
+    manifest_uris: list[str] = Field(default_factory=list)
+    errors: list[str] = Field(default_factory=list)
+    image_digest: str = ""
+    created_at: str = Field(default_factory=_utcnow)
+
+    def accepted_shards(self) -> list[SubmittedShard]:
+        accepted = set(self.accepted_shard_ids)
+        return [shard for shard in self.shards if shard.shard_id in accepted]
+
+
 class SweepLock(BaseModel):
     """The frozen, append-only record of a sweep.
 
@@ -177,7 +276,9 @@ class SweepLock(BaseModel):
     created_at: str = Field(default_factory=_utcnow)
     max_vcpus: int = 64
     spend_ceiling_usd: float | None = None
+    image_digest: str = ""
     generations: list[Generation] = Field(default_factory=list)
+    submissions: list[SweepSubmission] = Field(default_factory=list)
 
     def all_cells(self) -> list[Cell]:
         return [cell for gen in self.generations for cell in gen.cells]
@@ -192,6 +293,38 @@ class SweepLock(BaseModel):
 
     def next_generation_index(self) -> int:
         return len(self.generations)
+
+    def submitted_shards(self) -> dict[str, dict[str, SubmittedShard]]:
+        """Return backend-acknowledged shards keyed by cell and instance."""
+
+        expected: dict[str, dict[str, SubmittedShard]] = {}
+        for submission in self.submissions:
+            for shard in submission.accepted_shards():
+                by_instance = expected.setdefault(shard.cell_id, {})
+                previous = by_instance.get(shard.instance_id)
+                if previous is not None and previous.shard_id != shard.shard_id:
+                    raise ValueError(
+                        f"conflicting submitted shards for cell {shard.cell_id} "
+                        f"instance {shard.instance_id}: "
+                        f"{previous.shard_id} != {shard.shard_id}"
+                    )
+                by_instance[shard.instance_id] = shard
+        return expected
+
+    def submitted_instances(self) -> dict[str, set[str]]:
+        return {
+            cell_id: set(by_instance)
+            for cell_id, by_instance in self.submitted_shards().items()
+        }
+
+    def declared_shard_ids(self) -> set[str]:
+        """All explicitly declared shards, including interrupted submissions."""
+
+        return {
+            shard.shard_id
+            for submission in self.submissions
+            for shard in submission.shards
+        }
 
 
 class RunResult(BaseModel):

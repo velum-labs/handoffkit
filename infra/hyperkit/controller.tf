@@ -1,3 +1,8 @@
+locals {
+  controller_namespace      = trim(var.controller_s3_prefix, "/")
+  controller_results_prefix = local.controller_namespace == "" ? "runs/" : "${local.controller_namespace}/runs/"
+}
+
 resource "aws_sqs_queue" "controller_results_dlq" {
   name                      = "${local.name}-controller-results-dlq"
   message_retention_seconds = 1209600
@@ -65,7 +70,7 @@ resource "aws_s3_bucket_notification" "controller_results" {
   queue {
     queue_arn     = aws_sqs_queue.controller_results.arn
     events        = ["s3:ObjectCreated:*"]
-    filter_prefix = var.controller_s3_prefix
+    filter_prefix = local.controller_results_prefix
     filter_suffix = ".json"
   }
 
@@ -85,7 +90,7 @@ module "controller" {
   poll_interval        = var.controller_poll_interval
   artifact_bucket_name = module.storage.bucket_name
   artifact_bucket_arn  = module.storage.bucket_arn
-  artifact_prefix      = var.controller_s3_prefix
+  artifact_prefix      = local.controller_namespace
   sweep_id             = var.controller_sweep_id
   queue_url            = aws_sqs_queue.controller_results.id
   queue_arn            = aws_sqs_queue.controller_results.arn

@@ -21,6 +21,7 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+from hyperkit.core.aggregate import validate_submitted_result
 from hyperkit.core.lock import load_lock
 from hyperkit.core.store import ResultStore
 from hyperkit.stats import wilson_interval
@@ -29,19 +30,13 @@ ANCHOR_PREFIX = "anchor-"
 
 
 def mcnemar(b: int, c: int) -> float:
-    """Two-sided exact-ish McNemar p-value (binomial, mid-continuity chi2 for large n)."""
+    """Two-sided exact McNemar p-value on discordant pairs."""
 
     n = b + c
     if n == 0:
         return 1.0
-    if n <= 25:
-        # exact binomial two-sided
-        total = sum(math.comb(n, k) for k in range(0, min(b, c) + 1)) * 2
-        p = total / (2**n)
-        return min(1.0, p)
-    chi2 = (abs(b - c) - 1) ** 2 / n
-    # survival of chi2 with 1 dof
-    return math.erfc(math.sqrt(chi2 / 2))
+    total = sum(math.comb(n, k) for k in range(0, min(b, c) + 1)) * 2
+    return min(1.0, total / (2**n))
 
 
 def load(workdir: Path) -> tuple[Any, list[Any], dict[str, dict[str, Any]]]:
@@ -58,24 +53,52 @@ def load(workdir: Path) -> tuple[Any, list[Any], dict[str, dict[str, Any]]]:
 
 def analyze(workdir: Path) -> dict[str, Any]:
     lock, results, cells = load(workdir)
+    submitted_shards = lock.submitted_shards()
     by_cell: dict[str, dict[str, Any]] = defaultdict(dict)  # cell -> instance -> result
     for result in results:
+        if result.cell_id not in cells:
+            raise ValueError(f"result references unknown active cell {result.cell_id}")
+        if result.instance_id in by_cell[result.cell_id]:
+            raise ValueError(
+                f"duplicate results for cell {result.cell_id} instance {result.instance_id}"
+            )
         by_cell[result.cell_id][result.instance_id] = result
 
     rows: list[dict[str, Any]] = []
     for cell_id, meta in cells.items():
         cell = meta["cell"]
         shard_map = by_cell.get(cell_id, {})
-        graded = {
-            inst: r for inst, r in shard_map.items() if r.status.value in ("resolved", "unresolved")
+        expected_shards = submitted_shards.get(cell_id)
+        cohort_verified = expected_shards is not None and bool(expected_shards)
+        expected = set(expected_shards or {})
+        unexpected = set(shard_map) - expected
+        if unexpected:
+            raise ValueError(
+                f"results outside the declared cohort for cell {cell_id}: "
+                f"{sorted(unexpected)}"
+            )
+        if expected_shards is not None:
+            for instance_id, result in shard_map.items():
+                validate_submitted_result(result, expected_shards[instance_id])
+        terminal = {
+            inst: result
+            for inst, result in shard_map.items()
+            if inst in expected
+            and result.status.value in ("resolved", "unresolved", "error")
         }
-        errors = sum(1 for r in shard_map.values() if r.status.value == "error")
-        n = len(graded)
-        resolved = sum(1 for r in graded.values() if r.resolved)
+        completed = {
+            inst: result
+            for inst, result in terminal.items()
+            if result.status.value in ("resolved", "unresolved")
+        }
+        errors = sum(1 for result in terminal.values() if result.status.value == "error")
+        missing = expected - set(terminal)
+        n = len(expected)
+        resolved = sum(1 for result in terminal.values() if result.resolved)
         ci = wilson_interval(resolved, n) if n else None
         cost = sum(r.cost_usd or 0.0 for r in shard_map.values())
         oracle = sum(
-            1 for r in graded.values() if (r.raw or {}).get("oracle_private")
+            1 for result in terminal.values() if (result.raw or {}).get("oracle_private")
         )
         rows.append(
             {
@@ -85,46 +108,89 @@ def analyze(workdir: Path) -> dict[str, Any]:
                 "sut": cell.sut.kind,
                 "params": cell.params,
                 "n": n,
+                "completed": len(completed),
                 "errors": errors,
+                "submitted": len(expected),
+                "missing": len(missing),
+                "complete": bool(expected) and not missing,
+                "cohort_verified": cohort_verified,
+                "decision_eligible": (
+                    cohort_verified
+                    and bool(expected)
+                    and not missing
+                    and errors == 0
+                    and len({result.adapter_version for result in terminal.values()}) == 1
+                ),
                 "resolved": resolved,
                 "rate": resolved / n if n else None,
+                "completed_rate": resolved / len(completed) if completed else None,
                 "lo": ci.low if ci else None,
                 "hi": ci.high if ci else None,
                 "cost": cost,
                 "oracle_private": oracle,
-                "pass_vector": {inst: bool(r.resolved) for inst, r in graded.items()},
+                "adapter_versions": sorted(
+                    {result.adapter_version for result in terminal.values()}
+                ),
+                "pass_vector": {
+                    inst: bool(terminal[inst].resolved) if inst in terminal else False
+                    for inst in expected
+                },
             }
         )
 
-    anchors = [r for r in rows if r["label"].startswith(ANCHOR_PREFIX) and r["n"]]
-    opens = [r for r in rows if not r["label"].startswith(ANCHOR_PREFIX) and r["n"]]
+    anchors = [
+        r
+        for r in rows
+        if r["label"].startswith(ANCHOR_PREFIX) and r["decision_eligible"]
+    ]
+    opens = [
+        r
+        for r in rows
+        if not r["label"].startswith(ANCHOR_PREFIX) and r["decision_eligible"]
+    ]
     best_anchor = max(anchors, key=lambda r: r["rate"], default=None)
-    solo_opens = [r for r in opens if r["sut"] == "solo-model" and not r["params"]]
+    solo_opens = [
+        r
+        for r in opens
+        if r["sut"] == "solo-model"
+        and int(r["params"].get("n_samples", 1)) == 1
+        and r["params"].get("selection", "first") == "first"
+    ]
     best_solo = max(solo_opens, key=lambda r: r["rate"], default=None)
 
     # Paired comparisons on shared instances.
     def paired(a: dict[str, Any], b: dict[str, Any]) -> dict[str, Any]:
+        if a["adapter_versions"] != b["adapter_versions"]:
+            raise ValueError(
+                f"cannot compare mixed adapter protocols: "
+                f"{a['adapter_versions']} != {b['adapter_versions']}"
+            )
         shared = set(a["pass_vector"]) & set(b["pass_vector"])
         b_only = sum(1 for i in shared if a["pass_vector"][i] and not b["pass_vector"][i])
         c_only = sum(1 for i in shared if b["pass_vector"][i] and not a["pass_vector"][i])
+        a_resolved = sum(1 for i in shared if a["pass_vector"][i])
+        b_resolved = sum(1 for i in shared if b["pass_vector"][i])
         return {
             "n_shared": len(shared),
             "a_only": b_only,
             "b_only": c_only,
+            "a_rate": a_resolved / len(shared) if shared else None,
+            "b_rate": b_resolved / len(shared) if shared else None,
+            "delta": (a_resolved - b_resolved) / len(shared) if shared else None,
             "p": mcnemar(b_only, c_only),
         }
 
     for row in rows:
-        if best_anchor and row is not best_anchor and row["n"]:
+        if best_anchor and row is not best_anchor and row["decision_eligible"]:
             cmp = paired(row, best_anchor)
             row["vs_anchor"] = {
-                "gap": (row["rate"] or 0) - (best_anchor["rate"] or 0),
+                "gap": cmp["delta"],
                 **cmp,
             }
-        if best_solo and row is not best_solo and row["n"]:
+        if best_solo and row is not best_solo and row["decision_eligible"]:
+            cmp = paired(row, best_solo)
             row["vs_best_solo"] = {
-                "delta": (row["rate"] or 0) - (best_solo["rate"] or 0),
-                **paired(row, best_solo),
+                **cmp,
             }
 
     # Prune flags: Wilson-dominated by best solo open.
@@ -132,7 +198,7 @@ def analyze(workdir: Path) -> dict[str, Any]:
         row["flags"] = []
         if (
             best_solo
-            and row["n"]
+            and row["decision_eligible"]
             and row is not best_solo
             and row["hi"] is not None
             and row["hi"] < (best_solo["lo"] or 0)
@@ -140,6 +206,14 @@ def analyze(workdir: Path) -> dict[str, Any]:
             row["flags"].append("PRUNE:wilson-dominated-by-best-solo")
         if row["errors"] > max(2, 0.1 * max(row["n"], 1)):
             row["flags"].append("FORENSICS:high-error-count")
+        if row["errors"]:
+            row["flags"].append("BLOCK:infrastructure-errors")
+        if not row["cohort_verified"]:
+            row["flags"].append("BLOCK:unverified-submission-cohort")
+        if row["missing"]:
+            row["flags"].append("BLOCK:missing-submitted-shards")
+        if len(row["adapter_versions"]) > 1:
+            row["flags"].append("FORENSICS:mixed-adapter-versions")
 
     # Complementarity: union coverage of top pairs among solo opens.
     pairs = []
@@ -151,13 +225,24 @@ def analyze(workdir: Path) -> dict[str, Any]:
             union = sum(
                 1 for inst in shared if a["pass_vector"][inst] or b["pass_vector"][inst]
             )
+            a_wins = sum(
+                1 for inst in shared if a["pass_vector"][inst] and not b["pass_vector"][inst]
+            )
+            b_wins = sum(
+                1 for inst in shared if b["pass_vector"][inst] and not a["pass_vector"][inst]
+            )
+            union_ci = wilson_interval(union, len(shared))
             pairs.append(
                 {
                     "pair": [a["label"], b["label"]],
                     "n": len(shared),
                     "union_rate": union / len(shared),
+                    "union_low": union_ci.low,
+                    "union_high": union_ci.high,
                     "a_rate": sum(1 for i2 in shared if a["pass_vector"][i2]) / len(shared),
                     "b_rate": sum(1 for i2 in shared if b["pass_vector"][i2]) / len(shared),
+                    "a_only": a_wins,
+                    "b_only": b_wins,
                 }
             )
     pairs.sort(key=lambda p: -p["union_rate"])
@@ -201,7 +286,9 @@ def print_report(report: dict[str, Any]) -> None:
     for pair in report["top_pairs"][:6]:
         print(
             f"  {pair['pair'][0]} + {pair['pair'][1]}: union {pair['union_rate']:.1%} "
-            f"(solo {pair['a_rate']:.1%} / {pair['b_rate']:.1%}, n={pair['n']})"
+            f"[{pair['union_low']:.1%}, {pair['union_high']:.1%}] "
+            f"(solo {pair['a_rate']:.1%} / {pair['b_rate']:.1%}, "
+            f"unique {pair['a_only']}/{pair['b_only']}, n={pair['n']})"
         )
 
 

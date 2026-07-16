@@ -9,26 +9,26 @@ materializes cells once.
 from __future__ import annotations
 
 import inspect
+import os
 from collections.abc import Sequence
-from dataclasses import dataclass
 from fnmatch import fnmatch
 from pathlib import Path
 
 from hyperkit.core import registry
 from hyperkit.core.aggregate import aggregate
-from hyperkit.core.contracts import Experiment, ExperimentContext
+from hyperkit.core.contracts import ComputeBackend, Experiment, ExperimentContext
 from hyperkit.core.ids import hash_obj
 from hyperkit.core.lock import extend_lock, load_lock, new_lock, save_lock
-from hyperkit.core.models import Cell, RunResult, ShardResult
+from hyperkit.core.models import (
+    Cell,
+    RunResult,
+    ShardPlan,
+    ShardResult,
+    SubmissionState,
+    SweepLock,
+    SweepSubmission,
+)
 from hyperkit.core.store import ResultStore
-
-
-@dataclass
-class Shard:
-    cell: Cell
-    instance_id: str
-    shard_id: str
-    generation: int
 
 
 class _Context(ExperimentContext):
@@ -57,6 +57,13 @@ def _experiment_source_hash(experiment: Experiment) -> str | None:
         return None
 
 
+def _materialize_adapter_resource(cell: Cell) -> Cell:
+    if "resource" in cell.model_fields_set:
+        return cell
+    resource = registry.get_benchmark(cell.benchmark).resource_profile()
+    return cell.model_copy(update={"resource": resource})
+
+
 class SweepEngine:
     """Orchestrates a sweep over a pluggable compute backend."""
 
@@ -82,7 +89,7 @@ class SweepEngine:
             )
         sweep_id = sweep_id or experiment.id
         ctx = _Context(self.store, sweep_id)
-        cells = list(experiment.cells(ctx))
+        cells = [_materialize_adapter_resource(cell) for cell in experiment.cells(ctx)]
         lock = new_lock(
             sweep_id,
             cells,
@@ -91,10 +98,18 @@ class SweepEngine:
             experiment_source_hash=_experiment_source_hash(experiment),
             max_vcpus=max_vcpus,
             spend_ceiling_usd=spend_ceiling_usd,
+            image_digest=os.environ.get("HYPERKIT_RUNNER_IMAGE_DIGEST", "local"),
             cwd=self.workdir,
         )
+        if not lock.generations[0].repo_sha:
+            raise RuntimeError("refusing to plan without a resolvable Git commit SHA")
         save_lock(lock, self.lock_path)
-        shards = self._shards(cells, generation=0)
+        shards = self._shards(
+            cells,
+            generation=0,
+            source_sha=lock.generations[0].repo_sha or "",
+            image_digest=lock.image_digest,
+        )
         return RunResult(
             sweep_id=sweep_id,
             cells=[{"cells": len(cells), "shards": len(shards)}],
@@ -103,11 +118,12 @@ class SweepEngine:
     def extend(self, experiment: Experiment, *, from_results: bool = False) -> list[Cell]:
         lock = load_lock(self.lock_path)
         ctx = _Context(self.store, lock.sweep_id)
-        proposed = (
+        materialized = (
             list(experiment.on_results(self.store.get_all(lock.sweep_id), ctx))
             if from_results
             else list(experiment.cells(ctx))
         )
+        proposed = [_materialize_adapter_resource(cell) for cell in materialized]
         before_generations = len(lock.generations)
         lock, added = extend_lock(
             lock,
@@ -124,8 +140,15 @@ class SweepEngine:
 
     # --- shard math ---------------------------------------------------------
 
-    def _shards(self, cells: Sequence[Cell], *, generation: int) -> list[Shard]:
-        shards: list[Shard] = []
+    def _shards(
+        self,
+        cells: Sequence[Cell],
+        *,
+        generation: int,
+        source_sha: str,
+        image_digest: str,
+    ) -> list[ShardPlan]:
+        shards: list[ShardPlan] = []
         for cell in cells:
             adapter = registry.get_benchmark(cell.benchmark)
             for instance_id in cell.instances:
@@ -133,24 +156,38 @@ class SweepEngine:
                     instance_id,
                     adapter_version=adapter.version,
                     dataset_hash=cell.dataset_hash,
+                    source_sha=source_sha,
+                    image_digest=image_digest,
                 )
-                shards.append(Shard(cell, instance_id, sid, generation))
+                shards.append(
+                    ShardPlan(
+                        cell=cell,
+                        instance_id=instance_id,
+                        shard_id=sid,
+                        generation=generation,
+                        adapter_version=adapter.version,
+                        source_sha=source_sha,
+                        image_digest=image_digest,
+                    )
+                )
         return shards
 
-    def all_shards(self) -> list[Shard]:
+    def all_shards(self) -> list[ShardPlan]:
         lock = load_lock(self.lock_path)
-        out: list[Shard] = []
+        out: list[ShardPlan] = []
         active = {cell.cell_id for cell in lock.active_cells()}
         for gen in lock.generations:
             out.extend(
                 self._shards(
                     [cell for cell in gen.cells if cell.cell_id in active],
                     generation=gen.index,
+                    source_sha=gen.repo_sha or "",
+                    image_digest=lock.image_digest,
                 )
             )
         return out
 
-    def pending_shards(self) -> list[Shard]:
+    def pending_shards(self) -> list[ShardPlan]:
         lock = load_lock(self.lock_path)
         present = self.store.present_ids(lock.sweep_id)
         return [s for s in self.all_shards() if s.shard_id not in present]
@@ -183,8 +220,134 @@ class SweepEngine:
             pending = [
                 s for s in pending if s.cell.instances.index(s.instance_id) < rung
             ]
-        backend.submit([(s.cell, s.instance_id) for s in pending], lock.sweep_id)
-        return len(pending)
+        spent = sum(
+            result.cost_usd or 0.0
+            for result in self.store.get_all(lock.sweep_id)
+        )
+        if (
+            pending
+            and lock.spend_ceiling_usd is not None
+            and spent >= lock.spend_ceiling_usd
+        ):
+            raise RuntimeError(
+                f"sweep has spent ${spent:.2f}, reaching its "
+                f"${lock.spend_ceiling_usd:.2f} ceiling"
+            )
+        return self._submit(
+            lock,
+            pending,
+            backend=backend,
+            backend_name=resolved_name,
+            rung=rung,
+            only=only,
+        )
+
+    def resume(self, backend_name: str | None = None) -> int:
+        """Retry only shards explicitly declared by earlier apply calls."""
+
+        lock = load_lock(self.lock_path)
+        declared = lock.declared_shard_ids()
+        if not declared:
+            raise RuntimeError(
+                "cannot resume a sweep without a verified submission cohort; "
+                "use apply with explicit --only/--rung filters"
+            )
+        resolved_name = backend_name or self.backend_name
+        backend = self._local_backend() if resolved_name == "local" else registry.get_backend(
+            resolved_name
+        )
+        present = self.store.present_ids(lock.sweep_id)
+        pending = [
+            shard
+            for shard in self.all_shards()
+            if shard.shard_id in declared and shard.shard_id not in present
+        ]
+        return self._submit(
+            lock,
+            pending,
+            backend=backend,
+            backend_name=resolved_name,
+            rung=None,
+            only=None,
+        )
+
+    def _submit(
+        self,
+        lock: SweepLock,
+        pending: Sequence[ShardPlan],
+        *,
+        backend: ComputeBackend,
+        backend_name: str,
+        rung: int | None,
+        only: str | None,
+    ) -> int:
+        if not pending:
+            return 0
+
+        prepared = SweepSubmission(
+            backend=backend_name,
+            rung=rung,
+            only=only,
+            shards=[shard.submitted_shard() for shard in pending],
+        )
+        submission_index = len(lock.submissions)
+        lock = lock.model_copy(update={"submissions": [*lock.submissions, prepared]})
+        # Persist intent before the external submission. An interruption can then
+        # retry this exact cohort without expanding a filtered rung.
+        save_lock(lock, self.lock_path)
+
+        try:
+            acknowledgement = backend.submit(pending, lock.sweep_id)
+        except Exception as exc:
+            failed = prepared.model_copy(
+                update={
+                    "state": SubmissionState.FAILED,
+                    "errors": [f"{type(exc).__name__}: {exc}"],
+                }
+            )
+            submissions = list(lock.submissions)
+            submissions[submission_index] = failed
+            save_lock(lock.model_copy(update={"submissions": submissions}), self.lock_path)
+            raise
+
+        requested_ids = {shard.shard_id for shard in pending}
+        accepted_ids = set(acknowledgement.accepted_shard_ids)
+        unexpected = accepted_ids - requested_ids
+        if unexpected:
+            raise ValueError(
+                f"backend acknowledged undeclared shards: {sorted(unexpected)}"
+            )
+        if acknowledgement.image_digest != lock.image_digest:
+            raise ValueError(
+                f"backend image {acknowledgement.image_digest!r} does not match "
+                f"locked image {lock.image_digest!r}"
+            )
+        unacknowledged = requested_ids - accepted_ids
+        errors = list(acknowledgement.errors)
+        if unacknowledged:
+            errors.append(f"backend did not acknowledge {len(unacknowledged)} shards")
+        if accepted_ids == requested_ids and not errors:
+            state = SubmissionState.ACCEPTED
+        elif accepted_ids:
+            state = SubmissionState.PARTIAL
+        else:
+            state = SubmissionState.FAILED
+        completed = prepared.model_copy(
+            update={
+                "state": state,
+                "accepted_shard_ids": sorted(accepted_ids),
+                "job_ids": acknowledgement.job_ids,
+                "manifest_uris": acknowledgement.manifest_uris,
+                "errors": errors,
+                "image_digest": acknowledgement.image_digest,
+            }
+        )
+        submissions = list(lock.submissions)
+        submissions[submission_index] = completed
+        save_lock(lock.model_copy(update={"submissions": submissions}), self.lock_path)
+        if errors:
+            raise RuntimeError("; ".join(errors))
+        return len(accepted_ids)
 
     def _local_backend(self):
         """In-process backend bound to this engine's store and lock state.
@@ -199,6 +362,11 @@ class SweepEngine:
         generation_of = {
             cell.cell_id: gen.index for gen in lock.generations for cell in gen.cells
         }
+        source_of = {
+            cell.cell_id: gen.repo_sha or ""
+            for gen in lock.generations
+            for cell in gen.cells
+        }
 
         def orchestrator_for(cell: Cell) -> RunOrchestrator:
             # Fresh SUT instance per shard: stateful SUTs (fusionkit-serve holds
@@ -207,6 +375,8 @@ class SweepEngine:
             return RunOrchestrator(
                 sweep_id=lock.sweep_id,
                 generation=generation_of.get(cell.cell_id, 0),
+                source_sha=source_of.get(cell.cell_id, ""),
+                image_digest="local",
                 adapter=registry.get_benchmark(cell.benchmark),
                 sut=sut,
                 store=self.store,
@@ -224,5 +394,16 @@ class SweepEngine:
 
     def collect(self) -> RunResult:
         lock = load_lock(self.lock_path)
+        submitted = lock.submitted_shards()
+        if not submitted:
+            raise RuntimeError(
+                "cannot collect decision metrics without a backend-acknowledged "
+                "submission cohort"
+            )
         results = self.store.get_all(lock.sweep_id)
-        return aggregate(lock.sweep_id, lock.active_cells(), results)
+        return aggregate(
+            lock.sweep_id,
+            lock.active_cells(),
+            results,
+            submitted_shards=submitted,
+        )

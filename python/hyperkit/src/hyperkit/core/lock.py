@@ -16,17 +16,25 @@ from hyperkit.core.models import Cell, Generation, SweepLock
 
 
 def repo_sha(cwd: Path | None = None) -> str | None:
-    try:
-        out = subprocess.run(
-            ["git", "rev-parse", "HEAD"],
-            cwd=str(cwd) if cwd else None,
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-        return out.stdout.strip()
-    except Exception:
-        return None
+    probe = (cwd or Path.cwd()).resolve()
+    while not probe.exists() and probe != probe.parent:
+        probe = probe.parent
+    candidates = [probe]
+    current = Path.cwd().resolve()
+    if current != probe:
+        candidates.append(current)
+    for candidate in candidates:
+        try:
+            out = subprocess.run(
+                ["git", "-C", str(candidate), "rev-parse", "HEAD"],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            return out.stdout.strip()
+        except Exception:
+            continue
+    return None
 
 
 def load_lock(path: Path) -> SweepLock:
@@ -35,7 +43,9 @@ def load_lock(path: Path) -> SweepLock:
 
 def save_lock(lock: SweepLock, path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(lock.model_dump_json(indent=2))
+    temporary = path.with_name(f".{path.name}.tmp")
+    temporary.write_text(lock.model_dump_json(indent=2))
+    temporary.replace(path)
 
 
 def new_lock(
@@ -47,6 +57,7 @@ def new_lock(
     experiment_source_hash: str | None,
     max_vcpus: int = 64,
     spend_ceiling_usd: float | None = None,
+    image_digest: str = "",
     cwd: Path | None = None,
 ) -> SweepLock:
     gen = Generation(
@@ -61,6 +72,7 @@ def new_lock(
         sweep_id=sweep_id,
         max_vcpus=max_vcpus,
         spend_ceiling_usd=spend_ceiling_usd,
+        image_digest=image_digest,
         generations=[gen],
     )
 

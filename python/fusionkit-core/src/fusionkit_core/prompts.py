@@ -188,7 +188,7 @@ def format_trajectories(trajectories: Sequence[Trajectory], *, fence: str | None
     sections = []
     for trajectory in trajectories:
         items = "\n".join(_format_item(item) for item in trajectory.items)
-        body = f"{items}\n  final_output:\n{_truncate(trajectory.content)}"
+        body = f"{items}\n  final_output:\n{trajectory.content or ''}"
         sections.append(
             f"Trajectory {trajectory.id} from model {trajectory.model_id} "
             f"(status={trajectory.status}):\n"

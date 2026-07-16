@@ -6,7 +6,7 @@ proposal between rounds."""
 from __future__ import annotations
 
 from fusionkit_core.judge import FuseResult
-from fusionkit_core.types import FusionAnalysis, ModelResponse, ToolCall
+from fusionkit_core.types import FusionAnalysis, ModelResponse, ToolCall, Trajectory
 from fusionkit_server.app import _fusion_extension
 
 
@@ -39,3 +39,48 @@ def test_non_terminal_step_without_best_trajectory_has_no_extension() -> None:
         trajectory=None,
     )
     assert _fusion_extension(result) is None
+
+
+def test_evidence_extension_retains_failed_and_successful_candidates() -> None:
+    result = FuseResult(
+        response=_step_response(),
+        terminal=False,
+        analysis=FusionAnalysis(),
+        trajectory=None,
+        input_trajectories=[
+            Trajectory(
+                id="ok",
+                model_id="member",
+                content="complete candidate",
+                status="succeeded",
+                metadata={
+                    "raw_response": {
+                        "id": "response-id",
+                        "model": "effective-model",
+                        "provider": "first-party",
+                        "secret": "not-on-wire",
+                    }
+                },
+            ),
+            Trajectory(
+                id="failed",
+                model_id="other",
+                content="",
+                status="failed",
+                metadata={"error_code": "timeout"},
+            ),
+        ],
+    )
+
+    extension = _fusion_extension(result, include_evidence=True)
+    assert extension is not None
+    assert extension["evidence_schema"] == "fusionkit.input-trajectories.v1"
+    assert [item["trajectory_id"] for item in extension["input_trajectories"]] == [
+        "ok",
+        "failed",
+    ]
+    assert extension["input_trajectories"][0]["metadata"]["response"] == {
+        "id": "response-id",
+        "model": "effective-model",
+        "provider": "first-party",
+    }

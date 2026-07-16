@@ -1,6 +1,15 @@
 # Experiment Journal
 
 ## 2026-07-15 — alen (via agent)
+Independent 16-agent forensic audit invalidated the “compound search is dead”
+decision. Self-MoA was routed as a one-member panel, judges saw only 1,200
+characters of each candidate, explicit sampling overrides could be lost, and
+errors/missing shards were omitted from scientific denominators. e003 did not
+validly test its named compound families; e004's union futility bound was not
+computed. Pause e005 and all reserve spend. Recovery starts with correctness
+fixes, retained candidate evidence, and a small plan-diverse/tie-aware canary.
+
+## 2026-07-15 — alen (via agent)
 e004 analyzed at $43.93: truncation-fair floors are dsv4pro 62.5%, kimi26
 60.4%, r1 52.7% (25-35pp above their invalid e002 rates) — yet all remain
 significantly below solo qwen3.7-max 76.0%, and union headroom is +0.0 to

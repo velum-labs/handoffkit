@@ -23,6 +23,8 @@ class RunOrchestrator:
         *,
         sweep_id: str,
         generation: int,
+        source_sha: str,
+        image_digest: str,
         adapter: BenchmarkAdapter,
         sut: SystemUnderTest,
         store: ResultStore,
@@ -30,6 +32,8 @@ class RunOrchestrator:
     ):
         self.sweep_id = sweep_id
         self.generation = generation
+        self.source_sha = source_sha
+        self.image_digest = image_digest
         self.adapter = adapter
         self.sut = sut
         self.store = store
@@ -41,6 +45,8 @@ class RunOrchestrator:
             instance_id,
             adapter_version=self.adapter.version,
             dataset_hash=cell.dataset_hash,
+            source_sha=self.source_sha,
+            image_digest=self.image_digest,
         )
         existing = {r.shard_id: r for r in self.store.get_all(self.sweep_id)}
         if shard_id in existing:
@@ -82,6 +88,8 @@ class RunOrchestrator:
                     latency_s=time.monotonic() - started,
                     adapter_version=self.adapter.version,
                     dataset_hash=cell.dataset_hash,
+                    source_sha=self.source_sha,
+                    image_digest=self.image_digest,
                     raw={**raw, **graded},
                 )
             except Exception as exc:
@@ -97,6 +105,8 @@ class RunOrchestrator:
                     latency_s=time.monotonic() - started,
                     adapter_version=self.adapter.version,
                     dataset_hash=cell.dataset_hash,
+                    source_sha=self.source_sha,
+                    image_digest=self.image_digest,
                     raw={"error": str(exc)},
                 )
             finally:

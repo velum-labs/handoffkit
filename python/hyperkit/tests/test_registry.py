@@ -2,10 +2,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 from hyperkit.core.registry import (
     endpoint_identity_hash,
     lineage_conflicts,
     load_model_registry,
+    require_verified_open_weight,
 )
 
 REPO = Path(__file__).resolve().parents[3]
@@ -29,6 +31,16 @@ def test_registry_contains_phase_a_shortlist() -> None:
     endpoint_ids = list(registry.endpoints)
     assert endpoint_ids[:3] == ["r1", "terminus", "qwen3t"]
     assert {"ds32", "nemotron3s", "dsv4pro", "glm52", "qwen37max"}.issubset(endpoint_ids)
+    assert registry.get("qwen37max").weight_eligibility == "proprietary"
+    assert [
+        endpoint.id
+        for endpoint in require_verified_open_weight(
+            registry,
+            ["dsv4pro", "qwen3t", "glm52"],
+        )
+    ] == ["dsv4pro", "qwen3t", "glm52"]
+    with pytest.raises(ValueError, match="qwen37max"):
+        require_verified_open_weight(registry, ["qwen37max"])
 
 
 def test_identity_hash_changes_when_model_changes() -> None:

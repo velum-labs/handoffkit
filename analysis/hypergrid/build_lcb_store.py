@@ -10,9 +10,12 @@ Usage: uv run python analysis/hypergrid/build_lcb_store.py --jsonl-dir /tmp/lcb
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 from pathlib import Path
+
+from hyperkit.adapters.livecodebench import _legacy_fixture_json
 
 HERE = Path(__file__).resolve().parent
 MANIFESTS = [HERE / "manifests" / name for name in ("dev.txt", "holdout.txt", "spare.txt")]
@@ -23,6 +26,9 @@ KEEP_FIELDS = (
     "difficulty",
     "contest_date",
     "platform",
+    "starter_code",
+    "metadata",
+    "version_tag",
     "public_test_cases",
     "private_test_cases",
 )
@@ -38,9 +44,41 @@ def wanted_ids() -> set[str]:
     return ids
 
 
+def _normalize_fixtures(value: object, *, private: bool) -> str:
+    if not isinstance(value, str):
+        raise ValueError("LiveCodeBench fixtures must be encoded as strings")
+    try:
+        decoded = json.loads(value)
+    except json.JSONDecodeError:
+        if not private:
+            raise
+        decoded = _legacy_fixture_json(value)
+    if not isinstance(decoded, list):
+        raise ValueError("LiveCodeBench fixtures must decode to a list")
+    return json.dumps(decoded, sort_keys=True, separators=(",", ":"))
+
+
+def _normalize_metadata(value: object) -> dict[str, object]:
+    if isinstance(value, str):
+        value = json.loads(value)
+    if not isinstance(value, dict):
+        raise ValueError("LiveCodeBench metadata must be an object")
+    return {str(key): item for key, item in value.items()}
+
+
+def _content_sha256(row: dict[str, object]) -> str:
+    canonical = json.dumps(row, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--jsonl-dir", type=Path, default=Path("/tmp/lcb"))
+    parser.add_argument(
+        "--source-revision",
+        required=True,
+        help="immutable Hugging Face dataset commit SHA",
+    )
     parser.add_argument(
         "--out",
         type=Path,
@@ -54,32 +92,53 @@ def main() -> int:
 
     ids = wanted_ids()
     args.out.mkdir(parents=True, exist_ok=True)
-    existing = {p.stem for p in args.out.glob("*.json")}
-    missing = ids - existing
-    print(f"manifest instances: {len(ids)}; already stored: {len(ids & existing)}")
-    if not missing:
-        print("store complete")
-        return 0
+    remaining = set(ids)
+    print(f"manifest instances: {len(ids)}")
 
     written = 0
+    unchanged = 0
     for name in JSONL_NAMES:
         path = args.jsonl_dir / name
         if not path.exists():
             continue
         with path.open(encoding="utf-8") as handle:
             for line in handle:
-                if not missing:
+                if not remaining:
                     break
                 row = json.loads(line)
                 qid = str(row.get("question_id"))
-                if qid not in missing:
+                if qid not in remaining:
                     continue
                 slim = {k: row.get(k) for k in KEEP_FIELDS}
-                (args.out / f"{qid}.json").write_text(json.dumps(slim), encoding="utf-8")
-                missing.discard(qid)
-                written += 1
-    print(f"wrote {written}; still missing: {sorted(missing)[:5] if missing else 'none'}")
-    return 0 if not missing else 1
+                slim["store_schema_version"] = 2
+                slim["source_revision"] = args.source_revision
+                slim["metadata"] = _normalize_metadata(slim["metadata"])
+                if slim["starter_code"] not in {"", None}:
+                    raise ValueError(f"{qid} is not a no-starter-code task")
+                if slim["metadata"].get("func_name") is not None:
+                    raise ValueError(f"{qid} is not a stdin task")
+                slim["public_test_cases"] = _normalize_fixtures(
+                    slim["public_test_cases"], private=False
+                )
+                slim["private_test_cases"] = _normalize_fixtures(
+                    slim["private_test_cases"], private=True
+                )
+                slim["content_sha256"] = _content_sha256(slim)
+                encoded = json.dumps(slim, sort_keys=True, separators=(",", ":"))
+                destination = args.out / f"{qid}.json"
+                if destination.exists() and destination.read_text(encoding="utf-8") == encoded:
+                    unchanged += 1
+                else:
+                    tmp = destination.with_suffix(".tmp")
+                    tmp.write_text(encoded, encoding="utf-8")
+                    tmp.replace(destination)
+                    written += 1
+                remaining.discard(qid)
+    print(
+        f"wrote {written}; unchanged: {unchanged}; "
+        f"still missing: {sorted(remaining)[:5] if remaining else 'none'}"
+    )
+    return 0 if not remaining else 1
 
 
 if __name__ == "__main__":
