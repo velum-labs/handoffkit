@@ -1,7 +1,5 @@
-"""OpenAI Chat Completions wire rendering for the simulator.
+"""RouteKit's neutral OpenAI-compatible wire rendering for the simulator.
 
-Faithful to the real wire so the ``openai`` SDK (and everything FusionKit
-builds on it) parses these responses exactly as it would a real provider's:
 JSON completions carry ``choices[].message`` with nested ``function`` tool
 calls; SSE streams open with a role frame, emit token-level content deltas,
 split tool-call arguments across index-keyed fragments, close the choice with
@@ -56,7 +54,7 @@ def completion_body(model: str, behavior: Behavior, response_id: str) -> dict[st
         ]
     if behavior.reasoning is not None:
         # vLLM/SGLang-style out-of-band reasoning field; rides as a pydantic
-        # extra on the SDK message model, which is how FusionKit reads it.
+        # optional extension field on the neutral gateway response.
         message["reasoning_content"] = behavior.reasoning
     return {
         "id": response_id,
@@ -120,7 +118,7 @@ def stream_frames(
         # keys every later fragment by index alone. With parallel calls a
         # single chunk's `tool_calls` array may carry fragments for SEVERAL
         # slots at once — emit the slot openings that way so consumers that
-        # only read `tool_calls[0]` lose calls, exactly like production.
+        # only read `tool_calls[0]` lose calls.
         yield chunk(
             {
                 "tool_calls": [

@@ -4,8 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 
-import { driverContractSuite } from "@fusionkit/harness-core/testing";
-import type { HarnessEvent } from "@fusionkit/harness-core";
+import { driverContractSuite } from "@routekit/harness-core/testing";
+import type { HarnessEvent } from "@routekit/harness-core";
 
 import { codexOptionsFor, createCodexDriver } from "../driver.js";
 
@@ -54,10 +54,10 @@ test("codex driver pins custom gateways to HTTP Responses", () => {
   });
 
   assert.deepEqual(codexOptionsFor(config, undefined).config, {
-    model_provider: "fusionkit-sdk-http",
+    model_provider: "codex-sdk-http",
     model_providers: {
-      "fusionkit-sdk-http": {
-        name: "FusionKit SDK HTTP",
+      "codex-sdk-http": {
+        name: "Codex SDK HTTP",
         base_url: "http://127.0.0.1:9000/v1",
         wire_api: "responses",
         requires_openai_auth: false,
@@ -75,7 +75,7 @@ test("codex driver pins custom gateways to HTTP Responses", () => {
     model_providers?: Record<string, { env_key?: string }>;
   };
   assert.equal(
-    ambientConfig.model_providers?.["fusionkit-sdk-http"]?.env_key,
+    ambientConfig.model_providers?.["codex-sdk-http"]?.env_key,
     "OPENAI_API_KEY"
   );
 });

@@ -1,6 +1,6 @@
 /**
  * Cross-process depth suite: the product behaviors beyond single happy-path
- * turns, through the REAL gateway + REAL Python engine + scripted provider.
+ * turns, through the Node RouteKit/Fusion gateways + Python sidecar + simulator.
  *
  *  - multi-ensemble routing with per-ensemble judges and prompt overrides
  *    (asserted on the judge's actual wire request);
@@ -12,7 +12,7 @@ import assert from "node:assert/strict";
 import { setTimeout as delay } from "node:timers/promises";
 import { after, before, test } from "node:test";
 
-import { InMemorySessionStore } from "@fusionkit/model-gateway";
+import { InMemorySessionStore } from "@fusionkit/gateway";
 import { judgeAnalysis, parseSse, sseReasoning, sseText, stackToolingSkip } from "@fusionkit/testkit";
 
 import { startSimFusionStack } from "./sim-stack.js";
@@ -38,7 +38,6 @@ before(async function () {
     members: [...MEMBERS],
     judgeId: "judge",
     sessionStore: store,
-    pricing: { "gpt-deep-judge": { inputPer1mTokens: 10, outputPer1mTokens: 30 } },
     ensembles: [
       {
         name: "default",
@@ -68,7 +67,7 @@ type ChatChoice = {
 
 // --- multi-ensemble routing + per-ensemble prompts -------------------------------------
 
-test("multi-ensemble routing fans out only the requested ensemble's members and judge", { skip: SKIP }, async () => {
+test("multi-ensemble routing fans out only the requested ensemble's members and judge and forwards its prompt override", { skip: SKIP }, async () => {
   await stack.sim.reset();
   await stack.sim.queue("gpt-deep-a", ["mini candidate"]);
   await stack.sim.queue("gpt-mini-judge", [{ reply: judgeAnalysis() }, { reply: "mini fused answer" }]);
@@ -110,7 +109,7 @@ test("the default ensemble's prompt override reaches its judge wire", { skip: SK
 
 // --- durable session accounting ----------------------------------------------------------
 
-test("fused turns land in the session store with usage and priced cost", { skip: SKIP }, async () => {
+test("fused turns persist usage without resolving opaque endpoint ids to provider pricing", { skip: SKIP }, async () => {
   await stack.scriptFusedTurn({
     candidates: { "gpt-deep-a": "a", "claude-deep-b": "b" },
     answer: { reply: "accounted answer", prompt_tokens: 1000, completion_tokens: 500 },
@@ -128,11 +127,11 @@ test("fused turns land in the session store with usage and priced cost", { skip:
   const detail = store.load(sessions[0]?.id ?? "");
   assert.ok(detail, "session detail must load");
   assert.ok(detail.turns.length >= 1, "the turn must be persisted");
-  // WS7: the fused turn is priced against the judge model's pricing override
-  // (10/1M in, 30/1M out) applied to the fuse step's scripted usage.
   const cost = detail.meta.cost;
   assert.ok(cost !== undefined, "session cost accounting must be persisted");
-  assert.ok(cost.totalUsd > 0, `expected a priced session cost, got ${JSON.stringify(cost)}`);
+  assert.ok(cost.totalTokens > 0, `expected persisted usage, got ${JSON.stringify(cost)}`);
+  assert.equal(cost.totalUsd, 0, "FusionKit must not infer provider pricing from opaque endpoint ids");
+  assert.ok((cost.unknownCostEntries ?? 0) > 0);
 });
 
 // --- narration on the reasoning channel ---------------------------------------------------

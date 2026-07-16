@@ -5,7 +5,7 @@
  * a single turn: content and reasoning text, tool calls (fragmented arguments
  * merged by `index`, falling back to `id`, with id/index-less fragments
  * appended to the last open call), the finish reason, and the top-level `usage`
- * / `fusion` metadata. It replaces several ad-hoc assemblers that variously
+ * and opaque top-level extensions. It replaces several ad-hoc assemblers that
  * dropped parallel tool calls, mis-attributed argument fragments, or silently
  * swallowed malformed JSON.
  */
@@ -19,7 +19,7 @@ export type AssembledTurn = {
   toolCalls: AssembledToolCall[];
   finishReason?: string;
   usage?: unknown;
-  fusion?: unknown;
+  extensions: Readonly<Record<string, unknown>>;
 };
 
 const DONE_SENTINEL = "[DONE]";
@@ -34,7 +34,7 @@ type RawToolCall = {
 type RawChunk = {
   choices?: Array<{ delta?: Record<string, unknown>; finish_reason?: unknown }>;
   usage?: unknown;
-  fusion?: unknown;
+  [key: string]: unknown;
 };
 
 type OpenCall = { id?: string; name?: string; arguments: string };
@@ -48,7 +48,7 @@ export class ChatStreamAssembler {
   #lastOpen: OpenCall | undefined;
   #finishReason: string | undefined;
   #usage: unknown;
-  #fusion: unknown;
+  readonly #extensions: Record<string, unknown> = {};
   #truncated = true;
 
   /**
@@ -90,7 +90,7 @@ export class ChatStreamAssembler {
       })),
       ...(this.#finishReason !== undefined ? { finishReason: this.#finishReason } : {}),
       ...(this.#usage !== undefined ? { usage: this.#usage } : {}),
-      ...(this.#fusion !== undefined ? { fusion: this.#fusion } : {})
+      extensions: { ...this.#extensions }
     };
   }
 
@@ -101,7 +101,11 @@ export class ChatStreamAssembler {
 
   #merge(chunk: RawChunk): void {
     if (chunk.usage !== undefined && chunk.usage !== null) this.#usage = chunk.usage;
-    if (chunk.fusion !== undefined && chunk.fusion !== null) this.#fusion = chunk.fusion;
+    for (const [key, value] of Object.entries(chunk)) {
+      if (key !== "choices" && key !== "usage" && value !== undefined && value !== null) {
+        this.#extensions[key] = value;
+      }
+    }
     const choice = chunk.choices?.[0];
     if (choice === undefined) return;
     const delta = choice.delta ?? {};

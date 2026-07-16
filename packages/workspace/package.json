@@ -27,6 +27,7 @@
   },
   "dependencies": {
     "@fusionkit/protocol": "workspace:*",
+    "@routekit/contracts": "workspace:*",
     "minimatch": "10.2.5"
   },
   "keywords": [

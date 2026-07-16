@@ -1,4 +1,4 @@
-import { artifactHash } from "@fusionkit/protocol";
+import { artifactHash } from "@routekit/contracts";
 
 import type {
   HarnessAdapter,

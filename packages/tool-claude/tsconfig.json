@@ -9,25 +9,13 @@
   ],
   "references": [
     {
-      "path": "../ensemble"
-    },
-    {
       "path": "../harness-core"
-    },
-    {
-      "path": "../model-gateway"
-    },
-    {
-      "path": "../protocol"
-    },
-    {
-      "path": "../registry"
     },
     {
       "path": "../tools"
     },
     {
-      "path": "../workspace"
+      "path": "../runtime-utils"
     }
   ]
 }

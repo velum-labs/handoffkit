@@ -22,7 +22,7 @@ environment-gated rows name the reason and exact live command.
 |---|---|---|---|
 | `models.default-fused-advertised` | Every discovery surface advertises fusion-panel. | required | `packages/cli/src/test/stack-e2e.test.ts` — `model discovery doors advertise the fused model` |
 | `models.named-ensembles-advertised` | Every configured named ensemble is addressable as its own fused model. | required | `packages/cli/src/test/stack-cli-e2e.test.ts` — `selects injected fusion-mini` |
-| `models.native-members-advertised` | Panel provider models remain available as native passthrough choices. | required | `packages/cli/src/test/stack-e2e.test.ts` — `must be advertised as a passthrough` |
+| `models.native-members-advertised` | Opaque RouteKit endpoint ids remain available as native passthrough choices. | required | `packages/cli/src/test/stack-e2e.test.ts` — `must be advertised as a passthrough` |
 | `models.anthropic-discovery-shape` | Claude model discovery uses the Anthropic model-list and single-model shapes. | required | `packages/cli/src/test/stack-e2e.test.ts` — `Claude Code's discovery probe` |
 | `models.cursor-discovery-mirror` | Cursor-relative model discovery mirrors the canonical gateway catalog. | required | `packages/cli/src/test/stack-e2e.test.ts` — `Cursor probes the models list` |
 | `models.real-claude-selection` | The real Claude CLI can select a named injected fused model and only its configured members run. | required | `packages/cli/src/test/stack-cli-e2e.test.ts` — `id: "claude"` |
@@ -36,28 +36,28 @@ environment-gated rows name the reason and exact live command.
 |---|---|---|---|
 | `request.k1-messages-verbatim` | k=1 panel members receive the caller's exact message history. | required | `packages/cli/src/test/stack-e2e.test.ts` — `members saw the caller's message verbatim` |
 | `request.k1-tools-verbatim` | k=1 panel members receive the caller's tool definitions on every front-door dialect. | required | `packages/cli/src/test/stack-e2e.test.ts` — `must be offered the caller's tools via` |
-| `request.provider-wire-shapes` | Sampling, system prompts, auth, tools, and token limits are transformed according to each provider wire. | required | `python/fusionkit-testkit/tests/test_engine_depth.py` — `test_wire_request_shape_matrix` |
-| `request.cursor-hybrid-translation` | Cursor Responses-hybrid input is translated into a valid chat conversation without dropping tool history. | required | `python/fusionkit-testkit/tests/test_engine_surfaces.py` — `test_cursor_door_translates_the_responses_hybrid_body` |
+| `request.provider-wire-shapes` | Sampling, system prompts, auth, tools, and token limits are transformed according to each provider wire. | required | `packages/model-gateway/src/test/provider-backends.test.ts` — `Anthropic egress preserves tools and normalizes the response` |
+| `request.cursor-hybrid-translation` | Cursor Responses-hybrid input is translated into a valid chat conversation without dropping tool history. | required | `packages/model-gateway/src/test/cursor.test.ts` — `Cursor hybrid requests translate to chat messages and tools` |
 
 ## fusion
 
 | ID | Expected behavior | Status | Evidence |
 |---|---|---|---|
 | `fusion.all-members-called` | A fused panel turn fans out once to every healthy configured member. | required | `packages/cli/src/test/stack-e2e.test.ts` — `assertFullPanelOnTheWire` |
-| `fusion.judge-then-synth` | Candidates are judged before synthesis, using the configured judge and synthesizer endpoints. | required | `python/fusionkit-testkit/tests/test_engine_e2e.py` — `ordered_models.index` |
+| `fusion.judge-then-synth` | Candidates are judged before synthesis, using the configured judge and synthesizer endpoints. | required | `packages/cli/src/test/stack-endpoint-ids-e2e.test.ts` — `embedded RouteKit routes opaque endpoint ids` |
 | `fusion.named-ensemble-isolation` | Selecting a named ensemble runs only its members and its judge. | required | `packages/cli/src/test/stack-depth-e2e.test.ts` — `multi-ensemble routing fans out only` |
-| `fusion.passthrough-bypasses-fusion` | Selecting a native provider model performs exactly one provider call and never invokes the judge. | required | `packages/cli/src/test/stack-e2e.test.ts` — `vendor passthrough routes each member` |
-| `fusion.extension-metadata` | Terminal fused responses carry synthesis decision, input trajectory ids, contribution diagnostics, and usage. | required | `python/fusionkit-testkit/tests/test_engine_e2e.py` — `test_trajectories_fuse_step_over_the_real_wire` |
-| `fusion.mode-panel` | fusionkit/panel performs panel fanout, judge, and synthesis. | required | `python/fusionkit-testkit/tests/test_engine_surfaces.py` — `test_panel_fans_out_across_all_four_provider_dialects` |
-| `fusion.mode-single` | fusionkit/single calls only the default model. | required | `python/fusionkit-testkit/tests/test_engine_surfaces.py` — `test_single_mode_calls_only_the_default_model` |
-| `fusion.mode-self` | fusionkit/self generates the configured number of samples and fuses them. | required | `python/fusionkit-testkit/tests/test_engine_surfaces.py` — `test_self_mode_samples_the_default_model_then_fuses` |
-| `fusion.mode-heuristic` | fusionkit/heuristic deterministically routes simple and hard requests to the documented modes. | required | `python/fusionkit-testkit/tests/test_engine_surfaces.py` — `test_heuristic_mode_routes_hard_keywords_to_panel` |
+| `fusion.passthrough-bypasses-fusion` | Selecting an opaque RouteKit endpoint performs exactly one endpoint call and never invokes the judge. | required | `packages/cli/src/test/stack-e2e.test.ts` — `RouteKit endpoint passthrough routes each opaque id` |
+| `fusion.extension-metadata` | Terminal fused responses carry synthesis decision, input trajectory ids, contribution diagnostics, and usage. | required | `python/fusionkit-server/tests/test_trajectory_step.py` — `test_internal_trajectory_fuse_returns_synthesis_extension` |
+| `fusion.mode-panel` | The internal panel fusion mode performs panel fanout, judge, and synthesis. | required | `python/fusionkit-core/tests/test_core.py` — `test_fusion_engine_final_output_is_synthesized_not_top_trajectory` |
+| `fusion.mode-single` | The internal single fusion mode calls only the default endpoint. | required | `python/fusionkit-core/tests/test_fusion_run.py` — `test_tracked_fusion_run_records_failure` |
+| `fusion.mode-self` | fusionkit/self generates the configured number of samples and fuses them. | required | `python/fusionkit-core/tests/test_core.py` — `test_panel_runner_generates_self_fusion_candidates` |
+| `fusion.mode-heuristic` | fusionkit/heuristic deterministically routes simple and hard requests to the documented modes. | required | `python/fusionkit-core/tests/test_core_units.py` — `test_router_routes_hard_keywords_to_panel` |
 
 ## reasoning
 
 | ID | Expected behavior | Status | Evidence |
 |---|---|---|---|
-| `reasoning.provider-captured` | Every provider client's out-of-band reasoning is parsed separately from answer text. | required | `python/fusionkit-testkit/tests/test_matrix_wire_clients.py` — `assert response.reasoning == "matrix thinking"` |
+| `reasoning.provider-captured` | RouteKit out-of-band reasoning is parsed separately from answer text. | required | `python/fusionkit-core/tests/test_routekit_client.py` — `test_routekit_client_parses_streamed_text_reasoning_usage_and_tools` |
 | `reasoning.candidates-reach-judge` | Each panel candidate's reasoning is preserved as trajectory evidence and reaches the judge prompt. | required | `packages/cli/src/test/stack-e2e.test.ts` — `candidate, judge, narration, and synthesizer reasoning survive fusion` |
 | `reasoning.judge-visible` | Structured judge analysis is visible on every door's supported reasoning channel. | required | `packages/cli/src/test/stack-e2e.test.ts` — `judge analysis must be visible` |
 | `reasoning.synth-visible` | The synthesizer model's own reasoning survives every gateway dialect. | required | `packages/cli/src/test/stack-e2e.test.ts` — `must carry the synthesizer model's own reasoning` |
@@ -68,9 +68,9 @@ environment-gated rows name the reason and exact live command.
 | ID | Expected behavior | Status | Evidence |
 |---|---|---|---|
 | `stream.native-close-markers` | Every door closes with its native terminal event or sentinel. | required | `packages/cli/src/test/stack-e2e.test.ts` — `fused streaming closes with the door's native marker` |
-| `stream.usage-terminal` | The fused stream's terminal frame carries exact panel plus judge plus synthesizer usage. | required | `python/fusionkit-testkit/tests/test_engine_depth.py` — `test_fused_stream_terminal_usage_is_the_exact_judge_plus_synth_sum` |
-| `stream.parallel-tools` | Parallel tool calls packed into multi-slot chunks survive reassembly. | required | `python/fusionkit-testkit/tests/test_adversarial.py` — `test_parallel_tool_calls_survive_multi_slot_stream_chunks` |
-| `stream.failure-terminates` | Truncated or garbage provider streams emit a safe error event and terminate rather than hanging. | required | `python/fusionkit-testkit/tests/test_adversarial.py` — `test_truncated_provider_stream_surfaces_error_event_and_terminates` |
+| `stream.usage-terminal` | The fused stream's terminal frame carries exact panel plus judge plus synthesizer usage. | required | `python/fusionkit-server/tests/test_streaming.py` — `test_internal_fuse_streams_openai_neutral_wire` |
+| `stream.parallel-tools` | Parallel tool calls packed into multi-slot chunks survive reassembly. | required | `python/fusionkit-server/tests/test_tool_call_reassembly.py` — `test_interleaved_parallel_calls_fold_by_index_not_arrival_order` |
+| `stream.failure-terminates` | Truncated or garbage provider streams emit a safe error event and terminate rather than hanging. | required | `packages/model-gateway/src/test/provider-backends.test.ts` — `provider streaming surfaces malformed and truncated SSE` |
 | `stream.buffered-equivalence` | For every gateway dialect, buffered JSON and streaming SSE reassemble to the same answer. | required | `packages/cli/src/test/stack-differential-e2e.test.ts` — `buffered JSON and SSE reassemble to the same answer` |
 
 ## tools
@@ -88,16 +88,16 @@ environment-gated rows name the reason and exact live command.
 |---|---|---|---|
 | `harness.finite-k-boundary` | Finite k executes generations 1..k-1 and captures the k-th tool batch unexecuted. | required | `packages/cli/src/test/stack-harness-k-e2e.test.ts` — `execute boundary 1 and capture boundary 2 unexecuted` |
 | `harness.unbounded-completes` | Unbounded managed worktree agents execute tools until a terminal model answer. | required | `packages/cli/src/test/stack-harness-k-e2e.test.ts` — `unbounded managed rollouts execute tools` |
-| `harness.driver-cutover` | Claude Agent SDK and Codex SDK drivers use per-member native dialect gateways on multiple turns. | required | `packages/cli/src/test/stack-drivers-e2e.test.ts` — `real driver runs two fused turns` |
+| `harness.driver-cutover` | Canonical tool drivers use the single RouteKit gateway on multiple turns. | required | `packages/cli/src/test/stack-drivers-e2e.test.ts` — `real driver runs two fused turns` |
 
 ## policy
 
 | ID | Expected behavior | Status | Evidence |
 |---|---|---|---|
 | `policy.failover-fusion` | A throttled native model fails over to fusion with the failed member excluded. | required | `packages/cli/src/test/stack-policies-e2e.test.ts` — `onRateLimit=fusion` |
-| `policy.failover-passthrough` | Passthrough policy surfaces the engine's classified provider failure verbatim. | required | `packages/cli/src/test/stack-policies-e2e.test.ts` — `onRateLimit=passthrough` |
+| `policy.failover-passthrough` | Passthrough policy surfaces RouteKit's native endpoint failure verbatim. | required | `packages/cli/src/test/stack-policies-e2e.test.ts` — `onRateLimit=passthrough` |
 | `policy.failover-fail` | Fail policy returns an explicit failure and never invokes fusion. | required | `packages/cli/src/test/stack-policies-e2e.test.ts` — `onRateLimit=fail` |
-| `policy.budget-before-spend` | An over-budget session is refused with 402 before any provider call. | required | `packages/cli/src/test/stack-policies-e2e.test.ts` — `over-budget session is refused before any model call` |
+| `policy.budget-before-spend` | An exhausted budget is refused with 402 before any RouteKit endpoint call. | required | `packages/cli/src/test/stack-policies-e2e.test.ts` — `exhausted budget is refused before any RouteKit endpoint call` |
 
 ## security
 
@@ -106,13 +106,30 @@ environment-gated rows name the reason and exact live command.
 | `harness.path-confinement` | Managed file tools reject worktree path traversal and record the failure as trajectory evidence. | required | `packages/cli/src/test/stack-harness-k-e2e.test.ts` — `reject path traversal` |
 | `security.gateway-auth` | Missing or incorrect gateway bearer credentials fail every door before provider spend. | required | `packages/cli/src/test/stack-auth-e2e.test.ts` — `rejects every door before provider spend` |
 
+## robustness
+
+| ID | Expected behavior | Status | Evidence |
+|---|---|---|---|
+| `robustness.malformed-rejected-without-fanout` | A structurally malformed body on any door is a 400 in the door's native error envelope with zero provider fanout. | required | `packages/cli/src/test/stack-fuzz-e2e.test.ts` — `400 in the native envelope, zero provider fanout` |
+| `robustness.no-leaked-internals` | No wire response ever carries JavaScript/Python internals (TypeError text, tracebacks), including for seeded random garbage. | required | `packages/cli/src/test/stack-fuzz-e2e.test.ts` — `seeded random bodies` |
+| `robustness.engine-malformed-rejected` | The internal Python sidecar rejects invalid endpoint ids as a stable 4xx without leaking tracebacks. | required | `python/fusionkit-server/tests/test_server.py` — `test_fuse_rejects_unknown_routekit_endpoint` |
+| `robustness.chunk-boundary-reassembly` | OpenAI-compatible streams split at arbitrary byte boundaries, including mid-UTF-8-rune, reassemble byte-exactly. | required | `packages/model-gateway/src/test/sse-codec.test.ts` — `handles events split at arbitrary byte boundaries` |
+
+## concurrency
+
+| ID | Expected behavior | Status | Evidence |
+|---|---|---|---|
+| `concurrency.no-cross-talk` | Concurrent streaming turns each carry exactly their own request's content, with per-request provider accounting. | required | `packages/cli/src/test/stack-concurrency-e2e.test.ts` — `without cross-talk` |
+| `concurrency.cross-door-isolation` | Concurrent fused streams across every gateway dialect preserve per-request content and accounting. | required | `packages/cli/src/test/stack-differential-e2e.test.ts` — `cross-door concurrent fused streams preserve request isolation` |
+| `concurrency.abort-isolation` | A client abort mid-stream leaves concurrent sibling streams and the gateway intact. | required | `packages/cli/src/test/stack-concurrency-e2e.test.ts` — `leaves concurrent siblings and the gateway intact` |
+
 ## sessions
 
 | ID | Expected behavior | Status | Evidence |
 |---|---|---|---|
 | `session.finite-k-memoryless` | Finite-k rounds re-run the panel over updated messages. | required | `packages/cli/src/test/stack-policies-e2e.test.ts` — `finite-k rounds are memoryless` |
 | `session.unbounded-resume` | Completed unbounded candidates persist across gateway restart and resume with zero re-fanout. | required | `packages/cli/src/test/stack-resume-e2e.test.ts` — `survive gateway restart` |
-| `session.cost-persisted` | Fused usage and priced cost are persisted in the durable session ledger. | required | `packages/cli/src/test/stack-depth-e2e.test.ts` — `priced cost` |
+| `session.cost-persisted` | Fused usage is persisted without inferring provider pricing from opaque endpoint ids. | required | `packages/cli/src/test/stack-depth-e2e.test.ts` — `without resolving opaque endpoint ids to provider pricing` |
 
 ## lifecycle
 
@@ -126,31 +143,39 @@ environment-gated rows name the reason and exact live command.
 
 | ID | Expected behavior | Status | Evidence |
 |---|---|---|---|
-| `runs.event-sourced-lifecycle` | Native runs create, complete, inspect, page events, and idempotently replay without extra provider calls. | required | `python/fusionkit-testkit/tests/test_engine_runs_and_processes.py` — `test_native_run_idempotency_key_replays_the_same_run` |
+| `runs.event-sourced-lifecycle` | Native runs create, complete, inspect, page events, and idempotently replay without extra provider calls. | required | `python/fusionkit-server/tests/test_fusion_runs_api.py` — `test_native_fusion_run_idempotency_replay` |
 
 ## process
 
 | ID | Expected behavior | Status | Evidence |
 |---|---|---|---|
-| `process.product-cli-boot` | The real FusionKit CLI loads config, preflights providers, spawns the Python engine, starts the gateway, and serves fusion. | required | `packages/cli/src/test/stack-npm-cli-e2e.test.ts` — `boots its production stack` |
-| `process.serve-endpoint` | The real serve-endpoint child process advertises and fronts its single configured model. | required | `python/fusionkit-testkit/tests/test_engine_runs_and_processes.py` — `test_serve_endpoint_process_fronts_one_model` |
+| `process.product-cli-boot` | The real FusionKit CLI loads config, starts RouteKit and the internal Python sidecar, then serves fusion. | required | `packages/cli/src/test/stack-npm-cli-e2e.test.ts` — `boots its production stack` |
+| `process.routekit-cli-serve` | The real RouteKit CLI process reports machine-readable readiness and serves model discovery plus every supported gateway dialect against a local upstream. | required | `packages/routekit-cli/src/test/serve-process-e2e.test.ts` — `reports JSON readiness and serves every supported door` |
 
 ## cli
 
 | ID | Expected behavior | Status | Evidence |
 |---|---|---|---|
-| `cli.management-surfaces` | The real CLI covers config, prompts, install/uninstall, telemetry, setup, doctor, completions, and versions. | required | `packages/cli/src/test/cli-command-surfaces-e2e.test.ts` — `config path/show/get/set/unset/export-yaml` |
+| `cli.management-surfaces` | The FusionKit CLI exposes fusion launchers and management surfaces while excluding proxy, account, install/uninstall, and direct-mode commands. | required | `packages/cli/src/test/composition.test.ts` — `Fusion CLI contains only fusion product launch surfaces` |
+| `cli.routekit-command-surfaces` | The real RouteKit CLI independently executes version, completion, config, endpoint, model, telemetry, doctor, and install surfaces while rejecting Fusion-only commands. | required | `packages/routekit-cli/src/test/cli-process-e2e.test.ts` — `real routekit command surfaces execute independently` |
+
+## composition
+
+| ID | Expected behavior | Status | Evidence |
+|---|---|---|---|
+| `composition.routekit-endpoint-ids` | Opaque RouteKit endpoint IDs cross the real embedded-router, Python-sidecar, and Fusion-gateway stack without exposing provider model names. | required | `packages/cli/src/test/stack-endpoint-ids-e2e.test.ts` — `embedded RouteKit routes opaque endpoint ids` |
+| `composition.routekit-authenticated-cli-bridge` | Fusion bridges authenticated external RouteKit CLI traffic over loopback and closes only the bridge, leaving the independently owned RouteKit process alive. | required | `packages/cli/src/test/stack-endpoint-ids-e2e.test.ts` — `authenticated external routekit serve CLI uses a Fusion-owned loopback bridge` |
 
 ## observability
 
 | ID | Expected behavior | Status | Evidence |
 |---|---|---|---|
-| `observability.trace-semantics` | Fusion candidate, panel, judge, and provider spans use the registered semantic conventions and preserve trace context. | required | `packages/model-gateway/src/test/fusion-backend-trace.test.ts` — `trace` |
+| `observability.trace-semantics` | Fusion candidate, panel, judge, and provider spans use the registered semantic conventions and preserve trace context. | required | `packages/fusion-gateway/src/test/fusion-backend-trace.test.ts` — `trace` |
 
 ## platform
 
 | ID | Expected behavior | Status | Evidence |
 |---|---|---|---|
 | `platform.local-mlx` | Local MLX model lifecycle, scale-to-zero, memory pressure, and OOM guidance work on Apple Silicon. | environment-gated | Requires Apple Silicon and downloaded MLX model weights. Run: `pnpm mlx:stress` |
-| `providers.real-accounts` | Real provider accounts accept the shipped request shapes and billed fusion completes. | environment-gated | Requires explicit provider credentials and incurs spend. Run: `uv run --package fusionkit fusionkit bench public-bench --help` |
+| `providers.real-accounts` | RouteKit accounts accept the shipped request shapes and billed fusion completes. | environment-gated | Requires RouteKit account credentials and incurs spend. Run: `uv run --package fusionkit-evals fusionkit-bench public-bench --help` |
 

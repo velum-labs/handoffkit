@@ -1,182 +1,70 @@
-import type {
-  EnsembleModel,
-  HarnessAdapter,
-  HarnessCapabilities,
-  ToolHarnessResolveOptions,
-  UnifiedHarnessKind
-} from "@fusionkit/ensemble";
-import type { ModelFusionHarnessKind, ModelFusionSideEffects } from "@fusionkit/protocol";
+import type { AnyHarnessDriver, HarnessKind } from "@routekit/harness-core";
 
-type ToolEnv = Record<string, string | undefined>;
+export type ToolModelFeature = "streaming" | "tools" | "images" | "reasoning_controls";
+export type ToolCapabilityGrade = "full" | "degraded" | "unsupported";
+export type ToolModelFeatureStatus = ToolCapabilityGrade | "unknown";
 
-export type ToolDashboardHarnessInput = {
-  env: ToolEnv;
-  repo?: string;
-  timeoutMs?: number;
+/** An opaque gateway model entry. Launchers never interpret the id. */
+export type ToolModel = {
+  id: string;
+  label?: string;
+  aliases?: readonly string[];
+  features?: Partial<Record<ToolModelFeature, ToolModelFeatureStatus>>;
 };
 
-/**
- * How a tool is being launched: behind the real fusion panel (`fusion`) or
- * backed by a single local model (`local`). The same `ToolIntegration.launch`
- * handles both; the context's `mode` lets a tool branch where the two differ
- * (e.g. Cursor spawns a bridge in fusion mode but prints tunnel setup locally).
- */
-export type ToolLaunchMode = "fusion" | "local";
-
-/**
- * One registered fused ensemble, as launchers need it to auto-provision the
- * tool's native sub-agent for it: the ensemble name, the gateway model id it
- * answers to, its panel member ids (for human-facing descriptions), and its
- * judge model name.
- */
-export type FusedEnsembleInfo = {
-  name: string;
-  /** Advertised gateway model id (`fusion-panel` / `fusion-<name>`). */
-  modelId: string;
-  /** Panel member ids (e.g. `kimi`, `qwen3`) for role/agent descriptions. */
-  memberIds: readonly string[];
-  /** The judge model name, when configured. */
-  judgeModel?: string;
+/** A host-authored generic agent definition serialized by each launcher. */
+export type AgentProfile = {
+  id: string;
+  model: string;
+  description: string;
+  instructions: string;
 };
 
-/**
- * Everything a tool needs from the host to launch its real binary, injected so
- * tool packages never import the CLI (which would be a dependency cycle). The
- * host wires these to its process/portless/teardown machinery.
- */
-export type ToolLaunchContext = {
-  mode: ToolLaunchMode;
-  /** Gateway base URL the tool should point its model provider at. */
+/** Portable launch data shared by RouteKit launch commands and product hosts. */
+export type ToolLaunchSpec = {
   gatewayUrl: string;
-  /** The model name/label the launched tool advertises in its own UI. */
-  modelLabel: string;
-  /**
-   * Every fused ensemble model id the gateway registers (session default —
-   * {@link modelLabel} — first, then each other `fusion-<name>` ensemble). A
-   * tool that enumerates models in its config lists them all so a sub-agent (or
-   * the user's picker) can target any ensemble. Absent/single in
-   * single-ensemble launches.
-   */
-  fusedModels?: readonly string[];
-  /**
-   * Every registered ensemble with the detail sub-agent auto-provisioning
-   * needs (session default first). Launchers use it to define one native
-   * sub-agent per ensemble (Codex `[agents.*]` roles, Claude `--agents`,
-   * Cursor `.cursor/agents/*.md`, opencode agent map). Absent in
-   * single-model/local launches.
-   */
-  fusedEnsembles?: readonly FusedEnsembleInfo[];
-  /**
-   * Auto-provision one native sub-agent per ensemble in the launched tool.
-   * Default true; `--no-subagents` (or `subagents: false` in .fusionkit)
-   * disables every launcher's sub-agent provisioning, including repo file
-   * scaffolds.
-   */
-  subagents?: boolean;
-  /**
-   * Native panel model ids exposed alongside the fused model, so a tool that
-   * must enumerate models in its config (e.g. opencode) can list them in its
-   * picker. The gateway routes each to its real provider; the fused
-   * {@link modelLabel} stays the default. Empty in single-model/local launches.
-   */
-  nativeModels?: readonly string[];
-  /** Arguments forwarded verbatim to the tool binary. */
-  toolArgs: string[];
-  /** The repository the tool runs in (defaults to the process cwd). */
-  repo?: string;
-  /** Bearer token the gateway requires, when set. */
-  authToken?: string;
-  /** Portless CA path so spawned children trust the proxy's HTTPS routes. */
-  caCertPath?: string;
-  /** Directory for per-tool log files (e.g. the Cursor bridge log). */
+  defaultModel: string;
+  models: readonly ToolModel[];
+  agentProfiles?: readonly AgentProfile[];
+  args: readonly string[];
+  cwd?: string;
+  auth?: { token?: string };
+  tls?: { caCertPath?: string };
   logsDir?: string;
-  /** Public tunnel URL for tools that cannot reach loopback (local Cursor). */
   publicUrl?: string;
-  /**
-   * Wire the desktop IDE (not just the agent CLI) to the gateway. Cursor honors
-   * this by launching an isolated Cursor app through its bundled desktop proxy
-   * (local-only, no public tunnel); other tools ignore it.
-   */
   ide?: boolean;
-  /** Line logger. */
+};
+
+/** Host lifecycle services paired with one neutral launch specification. */
+export type ToolLaunchContext = {
+  spec: ToolLaunchSpec;
   log: (line: string) => void;
-  /**
-   * Quiesce host UI (live checklist, cursor) before the tool inherits the
-   * terminal. A no-op in non-interactive/local flows.
-   */
   prepareForPassthrough: () => void;
-  /** Register a named port with the host (e.g. portless) and return its URL. */
   registerPort: (name: string, port: number) => string;
-  /** Release a previously registered named port. */
   unregisterPort: (name: string) => void;
-  /** Register a teardown callback run on shutdown (reverse order). */
   registerDisposer: (dispose: () => void | Promise<void>) => void;
 };
 
-/**
- * Harness-level metadata for a tool, used by the ensemble harness gateway/e2e
- * matrix so it never has to `switch` over tool names. Applies to every
- * `harnessKind` the tool answers for.
- */
-export type ToolHarnessMetadata = {
-  /** Protocol harness kind stamped on records. */
-  harnessKind: ModelFusionHarnessKind;
-  /** Policy side-effects the harness needs. */
-  sideEffects: ModelFusionSideEffects;
-  /** Judge response-shape hint for synthesis. */
-  responseShape: string;
+export type ToolDriverRoute = {
+  gatewayUrl: string;
+  model: string;
+  authToken?: string;
 };
 
-/** The credential-skip-style smoke run for the dashboard's `credential-skip` task. */
-export type ToolDashboardSmoke = {
-  taskId: string;
-  model: EnsembleModel;
-  sideEffects: ModelFusionSideEffects;
-  allowedTools: string[];
-  /** Build the harness used for the (empty-env) credential-skip smoke. */
-  makeHarness: () => HarnessAdapter;
+export type ToolDriverMetadata = {
+  kind: HarnessKind;
+  driver: AnyHarnessDriver;
+  configForRoute(route: ToolDriverRoute): unknown;
 };
 
-/** The optional env-gated live smoke for the dashboard's `live` task. */
-export type ToolDashboardLiveSmoke = {
-  taskId: string;
-  /** Per-tool env flag that enables this live smoke. */
-  envName: string;
-  prompt: string;
-  /** Env var holding a model override, and the default when unset. */
-  modelEnvName: string;
-  defaultModel: string;
-  /** Build the live harness (real credentials) for the given env. */
-  makeHarness: (env: ToolEnv) => HarnessAdapter;
+export type ToolCapabilityMetadata = {
+  streaming: ToolCapabilityGrade;
+  tools: ToolCapabilityGrade;
+  images: ToolCapabilityGrade;
+  reasoning_controls: ToolCapabilityGrade;
 };
 
-/**
- * Dashboard metadata used by the internal harness matrix to build capability,
- * smoke, and readiness rows from the registry instead of a hardcoded table.
- */
-export type ToolDashboardMetadata = {
-  /** Dashboard target id (e.g. "claude-code"), may differ from the tool id. */
-  id: string;
-  harnessKind: ModelFusionHarnessKind;
-  displayName: string;
-  availability: "available" | "credential_gated" | "missing";
-  /** Capability overlay merged onto the adapter's own capabilities. */
-  capabilities: HarnessCapabilities;
-  notes: string[];
-  /** Build the harness whose capabilities seed the matrix row and handoff smoke runs. */
-  makeMatrixHarness: (input: ToolDashboardHarnessInput) => HarnessAdapter;
-  /** Why the tool would skip for lack of credentials (undefined = ready). */
-  credentialSkipReason: (env: ToolEnv) => string | undefined;
-  smoke: ToolDashboardSmoke;
-  liveSmoke?: ToolDashboardLiveSmoke;
-};
-
-/**
- * A single tool integration: its launcher (used by `fusionkit <tool>` and
- * `fusionkit <tool> --direct`) plus, optionally, its ensemble harness factory
-   * (used by internal harness tests). One package implements one of these and
-   * the CLI registers it.
- */
+/** One neutral launcher plus the canonical driver and static metadata. */
 export type ToolIntegration = {
   /** Stable id (e.g. "codex"). */
   id: string;
@@ -188,34 +76,24 @@ export type ToolIntegration = {
   pickerHint: string;
   /** The PATH binary launched, when the tool spawns one. */
   binary?: string;
-  /** The npm package implementing this integration (for version reporting). */
-  packageName?: string;
+  /** The npm package implementing this integration. */
+  packageName: string;
   /** How to install the tool binary (doctor/preflight guidance). */
   installHint?: string;
-  /** One-line auth summary shown when this tool is launched behind the panel. */
+  /** One-line authentication summary. */
   authSummary?: string;
   /**
    * Front-door setup block for pointing this tool at a running gateway
    * (rendered by `gatewaySetupSnippets`). `note` carries tool-specific extra
    * context (e.g. the Cursorkit endpoint placeholder).
    */
-  setupSnippet?: (input: { gatewayUrl: string; note?: string }) => string;
-  /** Launch modes this tool supports. */
-  modes: readonly ToolLaunchMode[];
-  /** The unified harness kinds this tool's adapter answers for. */
-  harnessKinds: readonly UnifiedHarnessKind[];
-  /**
-   * The harness kind to use when this tool is the launched fusion harness and
-   * drives every panel model. Tools that expose more than one kind (e.g. Cursor)
-   * pick the panel-appropriate one here. Unset for tools with no panel harness.
-   */
-  panelHarnessKind?: UnifiedHarnessKind;
+  setupSnippet?: (input: {
+    gatewayUrl: string;
+    model?: string;
+    note?: string;
+  }) => string;
   /** Boot the tool against the host context; resolves with its exit code. */
   launch(ctx: ToolLaunchContext): Promise<number>;
-  /** Build the ensemble harness adapter for one of this tool's kinds. */
-  createHarness?(kind: UnifiedHarnessKind, options: ToolHarnessResolveOptions): HarnessAdapter;
-  /** Harness metadata for internal gateway/matrix tests (set when `createHarness` is). */
-  harness?: ToolHarnessMetadata;
-  /** Dashboard metadata for internal harness-matrix tests. */
-  dashboard?: ToolDashboardMetadata;
+  driver: ToolDriverMetadata;
+  capabilities: ToolCapabilityMetadata;
 };

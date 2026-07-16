@@ -11,7 +11,7 @@ import {
 } from "@fusionkit/handoff";
 import type { CommandHarnessConfig, GovernedRunRecord } from "@fusionkit/handoff";
 import type { RunStatus, SessionIsolation } from "@fusionkit/protocol";
-import { RUNTIME_TIMEOUT_MS } from "@fusionkit/runtime-utils";
+import { DEFAULT_RUNTIME_TIMEOUTS } from "@routekit/runtime";
 import { gitText, resolveInsideWorkspace } from "@fusionkit/workspace";
 
 /**
@@ -45,7 +45,7 @@ function git(cwd: string, args: string[]): string {
 }
 
 /** Default per-command wait ceiling for sandbox commands. */
-const DEFAULT_SANDBOX_TIMEOUT_MS = RUNTIME_TIMEOUT_MS.sandboxCommand;
+const DEFAULT_SANDBOX_TIMEOUT_MS = DEFAULT_RUNTIME_TIMEOUTS.sandboxCommand;
 /** Identity used for the sandbox's staging commits. */
 const SANDBOX_COMMITTER = {
   name: "warrant-sandbox",

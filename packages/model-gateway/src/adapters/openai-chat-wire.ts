@@ -5,7 +5,7 @@ export type OpenAiToolCall = {
 };
 
 // Reasoning rides two distinct wire fields: `reasoning_content` carries
-// FusionKit narration beats, while `reasoning` carries upstream model thinking.
+// Gateway narration beats, while `reasoning` carries upstream model thinking.
 export type OpenAiDelta = {
   content?: string | null;
   reasoning?: string | null;

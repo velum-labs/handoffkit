@@ -5,6 +5,20 @@ description: Install the CLI and the tools it orchestrates.
 
 ## Install the CLI
 
+For standalone routing without the ensemble runtime, install RouteKit:
+
+```bash
+npm install -g @routekit/cli
+routekit config init
+routekit doctor
+```
+
+This provides `routekit` and requires neither the FusionKit package nor its
+Python executable. RouteKit uses configured remote endpoints and does not
+download or start local models.
+
+For model ensembles, install FusionKit:
+
 ```bash
 npm install -g @fusionkit/cli
 ```
@@ -41,29 +55,24 @@ At least one of:
 - [`claude`](https://docs.anthropic.com/en/docs/claude-code/overview): Claude Code. See [Claude Code](/docs/tools/claude-code).
 - [`cursor-agent`](https://cursor.com/cli): Cursor CLI. Cursorkit ships bundled
   with the npm package, so no separate checkout is needed. See [Cursor](/docs/tools/cursor).
+- [`opencode`](https://opencode.ai): OpenCode CLI through the generic driver.
 
 You only need the agent you plan to launch. For example, `fusionkit codex` does
 not require Claude Code or Cursor to be installed.
 
-### Provider API keys (for the cloud panel)
+### RouteKit endpoints and provider keys
 
-The default panel uses cloud models, so export the relevant keys:
+Run `fusionkit init`, then edit `.routekit/router.yaml`. Each endpoint references
+its provider key by environment-variable name:
 
 ```bash
-export OPENAI_API_KEY=...
-export ANTHROPIC_API_KEY=...
-export GEMINI_API_KEY=...
+export PROVIDER_API_KEY=...
 ```
 
-You can also put them in a project `.env`. fusionkit loads it automatically
-(already-exported values always win). The local MLX panel (`--local`, Apple
-Silicon) needs no keys.
-
-If one cloud key is missing, the default panel skips that provider and continues
-with the available members. `fusionkit doctor` reports which keys are present
-before you launch.
-
-The FusionKit repository itself commits an OpenRouter panel for development; in this checkout, set `OPENROUTER_API_KEY` or run `fusionkit init` in another repo to choose your own panel.
+FusionKit v4 stores only RouteKit endpoint IDs and never reads provider
+credentials. This repository's committed router uses `OPENROUTER_API_KEY`.
+`fusionkit doctor` reports missing endpoint IDs; `routekit doctor` owns provider
+credential checks.
 
 ### A git repository (required)
 

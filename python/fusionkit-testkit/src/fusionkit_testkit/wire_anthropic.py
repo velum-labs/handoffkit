@@ -1,13 +1,4 @@
-"""Anthropic Messages wire rendering for the simulator.
-
-Faithful to the real wire so the ``anthropic`` SDK parses these exactly as it
-would the real API: JSON messages carry typed content blocks (``text`` /
-``thinking`` / ``tool_use``); SSE streams emit the full named-event sequence
-(``message_start`` with input-token usage, per-block ``content_block_start`` /
-``content_block_delta`` / ``content_block_stop`` — including
-``input_json_delta`` tool-argument fragments — then ``message_delta`` with
-output-token usage and ``message_stop``).
-"""
+"""Anthropic Messages wire rendering for the provider simulator."""
 
 from __future__ import annotations
 
@@ -74,7 +65,7 @@ def _argument_fragments(arguments: str) -> list[str]:
 
 
 def stream_events(model: str, behavior: Behavior, message_id: str) -> Iterator[tuple[str, str]]:
-    """Yield ``(event_name, json_payload)`` pairs for an SSE stream."""
+    """Yield ``(event_name, json_payload)`` pairs for a Messages SSE stream."""
 
     def event(name: str, payload: dict[str, Any]) -> tuple[str, str]:
         return name, json.dumps(payload)

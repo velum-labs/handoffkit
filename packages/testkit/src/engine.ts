@@ -1,9 +1,7 @@
 /**
- * Spawn the REAL Python fusion engine (`fusionkit serve`) from Node — the same
- * entrypoint the production CLI spawns (`packages/cli/src/fusion/stack.ts`),
- * run from the repo checkout via `uv run --package fusionkit`, against a
- * caller-provided router config (usually built by `simRouterConfigYaml` so
- * every endpoint points at the provider simulator).
+ * Spawn the internal Python synthesis sidecar from Node — the same
+ * `fusionkit-sidecar` entrypoint the production CLI spawns — against a
+ * caller-provided sidecar config.
  */
 
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -15,7 +13,7 @@ import { uvRunArgv } from "./python.js";
 import { CODEX_TEST_TOKEN_ENV } from "./router-config.js";
 
 export type EngineHandle = {
-  /** Base URL of the engine's OpenAI-compatible surface (`/v1/...`). */
+  /** Base URL of the internal sidecar surface. */
   url: string;
   port: number;
   /** The engine process's own output (uvicorn, tracebacks, ...). */
@@ -24,7 +22,7 @@ export type EngineHandle = {
 };
 
 export async function startEngine(options: {
-  /** The `fusionkit serve` router YAML (see `simRouterConfigYaml`). */
+  /** The sidecar YAML (see `simSidecarConfigYaml`). */
   configYaml: string;
   env?: NodeJS.ProcessEnv;
   startupTimeoutMs?: number;
@@ -34,7 +32,7 @@ export async function startEngine(options: {
   writeFileSync(configPath, options.configYaml);
   const reservation = await reservePort();
   const port = reservation.port;
-  const runner = uvRunArgv("fusionkit", "fusionkit", [
+  const runner = uvRunArgv("fusionkit", "fusionkit-sidecar", [
     "serve",
     "--config",
     configPath,
@@ -55,9 +53,9 @@ export async function startEngine(options: {
   const proc = spawnCaptured({ ...runner, env });
   const url = `http://127.0.0.1:${port}`;
   try {
-    await waitForHttpReady(`${url}/v1/models`, proc, {
+    await waitForHttpReady(`${url}/health`, proc, {
       timeoutMs: options.startupTimeoutMs ?? 120_000,
-      label: "fusionkit serve (real engine)"
+      label: "fusionkit-sidecar"
     });
   } catch (error) {
     await proc.close();

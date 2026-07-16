@@ -26,9 +26,9 @@ importers:
       '@fusionkit/adapter-ai-sdk':
         specifier: workspace:*
         version: link:../../packages/adapter-ai-sdk
-      '@fusionkit/registry':
+      '@routekit/registry':
         specifier: workspace:*
-        version: link:../../packages/registry
+        version: link:../../packages/routekit-registry
       ai:
         specifier: 6.0.200
         version: 6.0.200(zod@4.4.3)
@@ -42,6 +42,27 @@ importers:
         specifier: workspace:*
         version: link:../../packages/example-utils
 
+  packages/accounts:
+    dependencies:
+      '@routekit/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@routekit/gateway':
+        specifier: workspace:*
+        version: link:../model-gateway
+      '@routekit/registry':
+        specifier: workspace:*
+        version: link:../routekit-registry
+      '@routekit/runtime':
+        specifier: workspace:*
+        version: link:../runtime-utils
+      yaml:
+        specifier: 2.9.0
+        version: 2.9.0
+      zod:
+        specifier: 4.4.3
+        version: 4.4.3
+
   packages/adapter-ai-sdk:
     dependencies:
       '@ai-sdk/openai-compatible':
@@ -53,12 +74,12 @@ importers:
       '@fusionkit/protocol':
         specifier: workspace:*
         version: link:../protocol
-      '@fusionkit/runtime-utils':
-        specifier: workspace:*
-        version: link:../runtime-utils
       '@fusionkit/tracing':
         specifier: workspace:*
         version: link:../tracing
+      '@routekit/runtime':
+        specifier: workspace:*
+        version: link:../runtime-utils
       ai:
         specifier: 6.0.200
         version: 6.0.200(zod@4.4.3)
@@ -68,63 +89,75 @@ importers:
       '@fusionkit/adapter-ai-sdk':
         specifier: workspace:*
         version: link:../adapter-ai-sdk
-      '@fusionkit/cli-ui':
+      '@fusionkit/config':
         specifier: workspace:*
-        version: link:../cli-ui
+        version: link:../fusion-config
       '@fusionkit/ensemble':
         specifier: workspace:*
         version: link:../ensemble
-      '@fusionkit/harness-core':
+      '@fusionkit/gateway':
         specifier: workspace:*
-        version: link:../harness-core
-      '@fusionkit/model-gateway':
-        specifier: workspace:*
-        version: link:../model-gateway
+        version: link:../fusion-gateway
       '@fusionkit/protocol':
         specifier: workspace:*
         version: link:../protocol
       '@fusionkit/registry':
         specifier: workspace:*
         version: link:../registry
-      '@fusionkit/runtime-utils':
-        specifier: workspace:*
-        version: link:../runtime-utils
-      '@fusionkit/tool-claude':
-        specifier: workspace:*
-        version: link:../tool-claude
-      '@fusionkit/tool-codex':
-        specifier: workspace:*
-        version: link:../tool-codex
-      '@fusionkit/tool-cursor':
-        specifier: workspace:*
-        version: link:../tool-cursor
-      '@fusionkit/tool-opencode':
-        specifier: workspace:*
-        version: link:../tool-opencode
-      '@fusionkit/tools':
-        specifier: workspace:*
-        version: link:../tools
       '@fusionkit/tracing':
         specifier: workspace:*
         version: link:../tracing
       '@fusionkit/workspace':
         specifier: workspace:*
         version: link:../workspace
+      '@routekit/cli-core':
+        specifier: workspace:*
+        version: link:../cli-core
+      '@routekit/cli-ui':
+        specifier: workspace:*
+        version: link:../cli-ui
+      '@routekit/config':
+        specifier: workspace:*
+        version: link:../routekit-config
+      '@routekit/config-core':
+        specifier: workspace:*
+        version: link:../config-core
+      '@routekit/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@routekit/gateway':
+        specifier: workspace:*
+        version: link:../model-gateway
+      '@routekit/harness-core':
+        specifier: workspace:*
+        version: link:../harness-core
+      '@routekit/registry':
+        specifier: workspace:*
+        version: link:../routekit-registry
+      '@routekit/router':
+        specifier: workspace:*
+        version: link:../routekit-router
+      '@routekit/runtime':
+        specifier: workspace:*
+        version: link:../runtime-utils
+      '@routekit/telemetry-core':
+        specifier: workspace:*
+        version: link:../telemetry-core
+      '@routekit/tool-registry':
+        specifier: workspace:*
+        version: link:../tool-registry
+      '@routekit/tools':
+        specifier: workspace:*
+        version: link:../tools
       commander:
         specifier: 14.0.3
         version: 14.0.3
       figlet:
         specifier: 1.11.0
         version: 1.11.0
-      openai:
-        specifier: 6.46.0
-        version: 6.46.0(ws@8.21.0)(zod@4.4.3)
       posthog-node:
         specifier: 5.39.4
         version: 5.39.4
-      untun:
-        specifier: 0.1.3
-        version: 0.1.3
       yaml:
         specifier: 2.9.0
         version: 2.9.0
@@ -135,10 +168,15 @@ importers:
       '@types/figlet':
         specifier: 1.7.0
         version: 1.7.0
-    optionalDependencies:
-      portless:
-        specifier: 0.15.1
-        version: 0.15.1
+
+  packages/cli-core:
+    dependencies:
+      '@routekit/cli-ui':
+        specifier: workspace:*
+        version: link:../cli-ui
+      commander:
+        specifier: 14.0.3
+        version: 14.0.3
 
   packages/cli-ui:
     dependencies:
@@ -165,32 +203,49 @@ importers:
         specifier: 4.0.0
         version: 4.0.0(@types/react@19.2.17)
 
+  packages/config-core:
+    dependencies:
+      '@routekit/runtime':
+        specifier: workspace:*
+        version: link:../runtime-utils
+
+  packages/contracts: {}
+
   packages/ensemble:
     dependencies:
       '@fusionkit/adapter-ai-sdk':
         specifier: workspace:*
         version: link:../adapter-ai-sdk
-      '@fusionkit/harness-core':
+      '@fusionkit/gateway':
         specifier: workspace:*
-        version: link:../harness-core
+        version: link:../fusion-gateway
       '@fusionkit/kernel':
         specifier: workspace:*
         version: link:../kernel
-      '@fusionkit/model-gateway':
-        specifier: workspace:*
-        version: link:../model-gateway
       '@fusionkit/protocol':
         specifier: workspace:*
         version: link:../protocol
-      '@fusionkit/runtime-utils':
-        specifier: workspace:*
-        version: link:../runtime-utils
       '@fusionkit/tracing':
         specifier: workspace:*
         version: link:../tracing
       '@fusionkit/workspace':
         specifier: workspace:*
         version: link:../workspace
+      '@routekit/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@routekit/gateway':
+        specifier: workspace:*
+        version: link:../model-gateway
+      '@routekit/harness-core':
+        specifier: workspace:*
+        version: link:../harness-core
+      '@routekit/runtime':
+        specifier: workspace:*
+        version: link:../runtime-utils
+      '@routekit/tools':
+        specifier: workspace:*
+        version: link:../tools
       '@velum-labs/cursorkit':
         specifier: 0.2.0
         version: 0.2.0
@@ -203,31 +258,23 @@ importers:
       '@ai-sdk/provider':
         specifier: 4.0.2
         version: 4.0.2
-      '@fusionkit/protocol':
+      '@routekit/registry':
         specifier: workspace:*
-        version: link:../protocol
-      '@fusionkit/registry':
-        specifier: workspace:*
-        version: link:../registry
+        version: link:../routekit-registry
       ai:
         specifier: 6.0.200
         version: 6.0.200(zod@4.4.3)
 
-  packages/harness-core:
+  packages/fusion-config:
     dependencies:
-      '@fusionkit/protocol':
+      '@routekit/config-core':
         specifier: workspace:*
-        version: link:../protocol
-      '@fusionkit/runtime-utils':
+        version: link:../config-core
+      '@routekit/runtime':
         specifier: workspace:*
         version: link:../runtime-utils
-      zod:
-        specifier: 4.4.3
-        version: 4.4.3
 
-  packages/kernel: {}
-
-  packages/model-gateway:
+  packages/fusion-gateway:
     dependencies:
       '@fusionkit/adapter-ai-sdk':
         specifier: workspace:*
@@ -241,151 +288,138 @@ importers:
       '@fusionkit/registry':
         specifier: workspace:*
         version: link:../registry
-      '@fusionkit/runtime-utils':
-        specifier: workspace:*
-        version: link:../runtime-utils
       '@fusionkit/tracing':
         specifier: workspace:*
         version: link:../tracing
+      '@routekit/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@routekit/gateway':
+        specifier: workspace:*
+        version: link:../model-gateway
+      '@routekit/registry':
+        specifier: workspace:*
+        version: link:../routekit-registry
+      '@routekit/runtime':
+        specifier: workspace:*
+        version: link:../runtime-utils
+      '@routekit/tracing':
+        specifier: workspace:*
+        version: link:../routekit-tracing
+
+  packages/harness-core:
+    dependencies:
+      '@routekit/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@routekit/runtime':
+        specifier: workspace:*
+        version: link:../runtime-utils
       zod:
         specifier: 4.4.3
         version: 4.4.3
 
-  packages/protocol: {}
+  packages/kernel: {}
+
+  packages/model-gateway:
+    dependencies:
+      '@routekit/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@routekit/registry':
+        specifier: workspace:*
+        version: link:../routekit-registry
+      '@routekit/runtime':
+        specifier: workspace:*
+        version: link:../runtime-utils
+      '@routekit/tracing':
+        specifier: workspace:*
+        version: link:../routekit-tracing
+      zod:
+        specifier: 4.4.3
+        version: 4.4.3
+
+  packages/protocol:
+    dependencies:
+      '@routekit/contracts':
+        specifier: workspace:*
+        version: link:../contracts
 
   packages/registry: {}
 
-  packages/runtime-utils: {}
-
-  packages/testkit:
+  packages/routekit-cli:
     dependencies:
+      '@routekit/accounts':
+        specifier: workspace:*
+        version: link:../accounts
+      '@routekit/cli-core':
+        specifier: workspace:*
+        version: link:../cli-core
+      '@routekit/cli-ui':
+        specifier: workspace:*
+        version: link:../cli-ui
+      '@routekit/config':
+        specifier: workspace:*
+        version: link:../routekit-config
+      '@routekit/gateway':
+        specifier: workspace:*
+        version: link:../model-gateway
+      '@routekit/registry':
+        specifier: workspace:*
+        version: link:../routekit-registry
+      '@routekit/router':
+        specifier: workspace:*
+        version: link:../routekit-router
+      '@routekit/runtime':
+        specifier: workspace:*
+        version: link:../runtime-utils
+      '@routekit/telemetry-core':
+        specifier: workspace:*
+        version: link:../telemetry-core
+      '@routekit/tool-registry':
+        specifier: workspace:*
+        version: link:../tool-registry
+      '@routekit/tools':
+        specifier: workspace:*
+        version: link:../tools
+      commander:
+        specifier: 14.0.3
+        version: 14.0.3
       yaml:
         specifier: 2.9.0
         version: 2.9.0
 
-  packages/tool-claude:
+  packages/routekit-config:
     dependencies:
-      '@anthropic-ai/claude-agent-sdk':
-        specifier: 0.3.198
-        version: 0.3.198(zod@4.4.3)
-      '@fusionkit/ensemble':
+      '@routekit/config-core':
         specifier: workspace:*
-        version: link:../ensemble
-      '@fusionkit/harness-core':
-        specifier: workspace:*
-        version: link:../harness-core
-      '@fusionkit/model-gateway':
+        version: link:../config-core
+      '@routekit/gateway':
         specifier: workspace:*
         version: link:../model-gateway
-      '@fusionkit/protocol':
+      '@routekit/runtime':
         specifier: workspace:*
-        version: link:../protocol
-      '@fusionkit/registry':
-        specifier: workspace:*
-        version: link:../registry
-      '@fusionkit/tools':
-        specifier: workspace:*
-        version: link:../tools
-      zod:
-        specifier: 4.4.3
-        version: 4.4.3
-    devDependencies:
-      '@fusionkit/workspace':
-        specifier: workspace:*
-        version: link:../workspace
+        version: link:../runtime-utils
+      yaml:
+        specifier: 2.9.0
+        version: 2.9.0
 
-  packages/tool-codex:
+  packages/routekit-registry: {}
+
+  packages/routekit-router:
     dependencies:
-      '@fusionkit/ensemble':
+      '@routekit/accounts':
         specifier: workspace:*
-        version: link:../ensemble
-      '@fusionkit/harness-core':
-        specifier: workspace:*
-        version: link:../harness-core
-      '@fusionkit/model-gateway':
+        version: link:../accounts
+      '@routekit/gateway':
         specifier: workspace:*
         version: link:../model-gateway
-      '@fusionkit/protocol':
-        specifier: workspace:*
-        version: link:../protocol
-      '@fusionkit/registry':
-        specifier: workspace:*
-        version: link:../registry
-      '@fusionkit/tools':
-        specifier: workspace:*
-        version: link:../tools
-      '@fusionkit/tracing':
-        specifier: workspace:*
-        version: link:../tracing
-      '@openai/codex-sdk':
-        specifier: 0.142.5
-        version: 0.142.5
-      smol-toml:
-        specifier: 1.7.0
-        version: 1.7.0
-      zod:
-        specifier: 4.4.3
-        version: 4.4.3
-
-  packages/tool-cursor:
-    dependencies:
-      '@fusionkit/ensemble':
-        specifier: workspace:*
-        version: link:../ensemble
-      '@fusionkit/harness-core':
-        specifier: workspace:*
-        version: link:../harness-core
-      '@fusionkit/protocol':
-        specifier: workspace:*
-        version: link:../protocol
-      '@fusionkit/registry':
-        specifier: workspace:*
-        version: link:../registry
-      '@fusionkit/tools':
-        specifier: workspace:*
-        version: link:../tools
-      '@zed-industries/agent-client-protocol':
-        specifier: 0.4.5
-        version: 0.4.5
-      zod:
-        specifier: 4.4.3
-        version: 4.4.3
-
-  packages/tool-opencode:
-    dependencies:
-      '@fusionkit/harness-core':
-        specifier: workspace:*
-        version: link:../harness-core
-      '@fusionkit/tools':
-        specifier: workspace:*
-        version: link:../tools
-      '@opencode-ai/sdk':
-        specifier: 1.17.13
-        version: 1.17.13
-      zod:
-        specifier: 4.4.3
-        version: 4.4.3
-
-  packages/tools:
-    dependencies:
-      '@fusionkit/ensemble':
-        specifier: workspace:*
-        version: link:../ensemble
-      '@fusionkit/protocol':
-        specifier: workspace:*
-        version: link:../protocol
-      '@fusionkit/registry':
-        specifier: workspace:*
-        version: link:../registry
-      '@fusionkit/runtime-utils':
+      '@routekit/runtime':
         specifier: workspace:*
         version: link:../runtime-utils
 
-  packages/tracing:
+  packages/routekit-tracing:
     dependencies:
-      '@fusionkit/protocol':
-        specifier: workspace:*
-        version: link:../protocol
       '@opentelemetry/api':
         specifier: 1.9.1
         version: 1.9.1
@@ -411,11 +445,161 @@ importers:
         specifier: 2.9.0
         version: 2.9.0(@opentelemetry/api@1.9.1)
 
+  packages/runtime-utils:
+    optionalDependencies:
+      portless:
+        specifier: 0.15.1
+        version: 0.15.1
+
+  packages/telemetry-core:
+    dependencies:
+      '@routekit/runtime':
+        specifier: workspace:*
+        version: link:../runtime-utils
+
+  packages/testkit:
+    dependencies:
+      '@routekit/runtime':
+        specifier: workspace:*
+        version: link:../runtime-utils
+      yaml:
+        specifier: 2.9.0
+        version: 2.9.0
+
+  packages/tool-claude:
+    dependencies:
+      '@anthropic-ai/claude-agent-sdk':
+        specifier: 0.3.198
+        version: 0.3.198(zod@4.4.3)
+      '@routekit/harness-core':
+        specifier: workspace:*
+        version: link:../harness-core
+      '@routekit/runtime':
+        specifier: workspace:*
+        version: link:../runtime-utils
+      '@routekit/tools':
+        specifier: workspace:*
+        version: link:../tools
+      zod:
+        specifier: 4.4.3
+        version: 4.4.3
+
+  packages/tool-codex:
+    dependencies:
+      '@openai/codex-sdk':
+        specifier: 0.142.5
+        version: 0.142.5
+      '@routekit/harness-core':
+        specifier: workspace:*
+        version: link:../harness-core
+      '@routekit/registry':
+        specifier: workspace:*
+        version: link:../routekit-registry
+      '@routekit/runtime':
+        specifier: workspace:*
+        version: link:../runtime-utils
+      '@routekit/tools':
+        specifier: workspace:*
+        version: link:../tools
+      smol-toml:
+        specifier: 1.7.0
+        version: 1.7.0
+      zod:
+        specifier: 4.4.3
+        version: 4.4.3
+
+  packages/tool-cursor:
+    dependencies:
+      '@routekit/harness-core':
+        specifier: workspace:*
+        version: link:../harness-core
+      '@routekit/runtime':
+        specifier: workspace:*
+        version: link:../runtime-utils
+      '@routekit/tools':
+        specifier: workspace:*
+        version: link:../tools
+      '@velum-labs/cursorkit':
+        specifier: 0.2.0
+        version: 0.2.0
+      '@zed-industries/agent-client-protocol':
+        specifier: 0.4.5
+        version: 0.4.5
+      zod:
+        specifier: 4.4.3
+        version: 4.4.3
+
+  packages/tool-opencode:
+    dependencies:
+      '@opencode-ai/sdk':
+        specifier: 1.17.13
+        version: 1.17.13
+      '@routekit/harness-core':
+        specifier: workspace:*
+        version: link:../harness-core
+      '@routekit/runtime':
+        specifier: workspace:*
+        version: link:../runtime-utils
+      '@routekit/tools':
+        specifier: workspace:*
+        version: link:../tools
+      zod:
+        specifier: 4.4.3
+        version: 4.4.3
+
+  packages/tool-registry:
+    dependencies:
+      '@routekit/tool-claude':
+        specifier: workspace:*
+        version: link:../tool-claude
+      '@routekit/tool-codex':
+        specifier: workspace:*
+        version: link:../tool-codex
+      '@routekit/tool-cursor':
+        specifier: workspace:*
+        version: link:../tool-cursor
+      '@routekit/tool-opencode':
+        specifier: workspace:*
+        version: link:../tool-opencode
+      '@routekit/tools':
+        specifier: workspace:*
+        version: link:../tools
+
+  packages/tools:
+    dependencies:
+      '@routekit/harness-core':
+        specifier: workspace:*
+        version: link:../harness-core
+
+  packages/tracing:
+    dependencies:
+      '@fusionkit/protocol':
+        specifier: workspace:*
+        version: link:../protocol
+      '@opentelemetry/api':
+        specifier: 1.9.1
+        version: 1.9.1
+      '@opentelemetry/api-logs':
+        specifier: 0.220.0
+        version: 0.220.0
+      '@opentelemetry/sdk-logs':
+        specifier: 0.220.0
+        version: 0.220.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/sdk-trace-base':
+        specifier: 2.9.0
+        version: 2.9.0(@opentelemetry/api@1.9.1)
+      '@routekit/tracing':
+        specifier: workspace:*
+        version: link:../routekit-tracing
+
   packages/workspace:
     dependencies:
       '@fusionkit/protocol':
         specifier: workspace:*
         version: link:../protocol
+      '@routekit/contracts':
+        specifier: workspace:*
+        version: link:../contracts
       minimatch:
         specifier: 10.2.5
         version: 10.2.5
@@ -768,9 +952,6 @@ packages:
     resolution: {integrity: sha512-7NzBL0rN6fMUW+f7A6Io4h40qQlG+xGmtMxfbnH/K7TAtt8JQWVQK+6g0UXKMeVJoyV5EkkNsErQ8pVD3bLHbA==}
     engines: {node: ^12.17.0 || ^14.13 || >=16.0.0}
 
-  citty@0.1.6:
-    resolution: {integrity: sha512-tskPPKEs8D2KPafUypv2gxwJP8h/OaJmC82QQGGDQcHvXX43xF2VDACcJVmZ0EuSxkpO9Kc4MlrA3q0+FG58AQ==}
-
   cli-boxes@4.0.1:
     resolution: {integrity: sha512-5IOn+jcCEHEraYolBPs/sT4BxYCe2nHg374OPiItB1O96KZFseS2gthU4twyYzeDcFew4DaUM/xwc5BQf08JJw==}
     engines: {node: '>=18.20 <19 || >=20.10'}
@@ -790,10 +971,6 @@ packages:
   commander@14.0.3:
     resolution: {integrity: sha512-H+y0Jo/T1RZ9qPP4Eh1pkcQcLRglraJaSLoyOtHxu6AapkjWVCy2Sit1QQ4x3Dng8qDlSsZEet7g5Pq06MvTgw==}
     engines: {node: '>=20'}
-
-  consola@3.4.2:
-    resolution: {integrity: sha512-5IKcdX0nnYavi6G7TtOhwkYzyjfJlatbjMjuLSfE2kYT5pMDOilZ4OvMhi637CcDICTmz3wARPoyhqyX1Y+XvA==}
-    engines: {node: ^14.18.0 || >=16.10.0}
 
   convert-to-spaces@2.0.1:
     resolution: {integrity: sha512-rcQ1bsQO9799wq24uE5AM2tAILy4gXGIK/njFWcVQkGNZ96edlpY+A7bjwvzjYvLDyzmG1MmMLZhpcsb+klNMQ==}
@@ -886,26 +1063,6 @@ packages:
     resolution: {integrity: sha512-kbpaSSGJTWdAY5KPVeMOKXSrPtr8C8C7wodJbcsd51jRnmD+GZu8Y0VoU6Dm5Z4vWr0Ig/1NKuWRKf7j5aaYSg==}
     engines: {node: '>=6'}
 
-  openai@6.46.0:
-    resolution: {integrity: sha512-DFg6jEPT2RO+oAyXtddeUJU8zkGy1OQ1AjGzNIJUMQG03TTqvCpy9tBpQ+2VVVnvrl3E56F8GEin2JYtWpITtA==}
-    peerDependencies:
-      '@aws-sdk/credential-provider-node': '>=3.972.0 <4'
-      '@smithy/hash-node': '>=4.3.0 <5'
-      '@smithy/signature-v4': '>=5.4.0 <6'
-      ws: ^8.18.0
-      zod: ^3.25 || ^4.0
-    peerDependenciesMeta:
-      '@aws-sdk/credential-provider-node':
-        optional: true
-      '@smithy/hash-node':
-        optional: true
-      '@smithy/signature-v4':
-        optional: true
-      ws:
-        optional: true
-      zod:
-        optional: true
-
   patch-console@2.0.0:
     resolution: {integrity: sha512-0YNdUceMdaQwoKce1gatDScmMo5pu/tfABfnzEqeG0gtTmd7mh/WcwgUjtAeOU7N8nFFlbQBnFK2gXW5fGvmMA==}
     engines: {node: ^12.20.0 || ^14.13.1 || >=16.0.0}
@@ -913,9 +1070,6 @@ packages:
   path-key@3.1.1:
     resolution: {integrity: sha512-ojmeN0qd+y0jszEtoY48r0Peq5dwMEkIlCOu6Q5f41lfkswXuKtYrhgoTpLnyIcHm24Uhqx+5Tqm2InSwLhE6Q==}
     engines: {node: '>=8'}
-
-  pathe@1.1.2:
-    resolution: {integrity: sha512-whLdWMYL2TwI08hn8/ZqAbrVemu0LNaNNJZX73O6qaIdCTfXutsLhMkjdENX0qhsQ9uIimo4/aQOmXkoon2nDQ==}
 
   pkijs@3.4.0:
     resolution: {integrity: sha512-emEcLuomt2j03vxD54giVB4SxTjnsqkU692xZOZXHDVoYyypEm+b3jpiTcc+Cf+myooc+/Ly0z01jqeNHVgJGw==}
@@ -1035,10 +1189,6 @@ packages:
   undici@8.5.0:
     resolution: {integrity: sha512-xamtWoB1EshgjpmlXd7GGm2VfdDtw1+rD8uhry8pSNW3If6S8E0m2T2+orSKeZXEn/aPJMviCpDBA65WJt8zhg==}
     engines: {node: '>=22.19.0'}
-
-  untun@0.1.3:
-    resolution: {integrity: sha512-4luGP9LMYszMRZwsvyUd9MrxgEGZdZuZgpVQHEEX0lCYFESasVRvZd0EYpCkOIbJKHMuv0LskpXc/8Un+MJzEQ==}
-    hasBin: true
 
   which@2.0.2:
     resolution: {integrity: sha512-BLI3Tl1TW3Pvl70l3yq3Y64i+awpwXqsGBYWkkqMtnbXgrMD+yj7rhW0kuEDxzJaYXGjEW5ogapKNMEKNMjibA==}
@@ -1456,10 +1606,6 @@ snapshots:
 
   chalk@5.6.2: {}
 
-  citty@0.1.6:
-    dependencies:
-      consola: 3.4.2
-
   cli-boxes@4.0.1: {}
 
   cli-cursor@4.0.0:
@@ -1476,8 +1622,6 @@ snapshots:
       convert-to-spaces: 2.0.1
 
   commander@14.0.3: {}
-
-  consola@3.4.2: {}
 
   convert-to-spaces@2.0.1: {}
 
@@ -1565,16 +1709,9 @@ snapshots:
     dependencies:
       mimic-fn: 2.1.0
 
-  openai@6.46.0(ws@8.21.0)(zod@4.4.3):
-    optionalDependencies:
-      ws: 8.21.0
-      zod: 4.4.3
-
   patch-console@2.0.0: {}
 
   path-key@3.1.1: {}
-
-  pathe@1.1.2: {}
 
   pkijs@3.4.0:
     dependencies:
@@ -1672,12 +1809,6 @@ snapshots:
   undici-types@6.21.0: {}
 
   undici@8.5.0: {}
-
-  untun@0.1.3:
-    dependencies:
-      citty: 0.1.6
-      consola: 3.4.2
-      pathe: 1.1.2
 
   which@2.0.2:
     dependencies:

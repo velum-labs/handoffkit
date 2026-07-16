@@ -1,8 +1,8 @@
 """LiveCodeBench dataset loading and test decoding (importable).
 
 Factored out of the runner adapter so both the adapter and the tuning
-candidate-bank builder load problems and decode tests identically. The
-``datasets`` dependency is imported lazily (install with ``datasets<4``).
+candidate-bank builder load problems and decode tests identically. Install the
+``livecodebench`` extra to enable dataset loading.
 """
 
 from __future__ import annotations
@@ -16,6 +16,11 @@ import zlib
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
+
+try:
+    from datasets import load_dataset  # pyright: ignore[reportMissingImports]
+except ImportError:  # pragma: no cover - optional maintainer dependency
+    load_dataset = None
 
 LCB_PROMPT_SUFFIX = (
     "\n\nWrite a complete Python 3 program that reads from standard input and writes the "
@@ -41,8 +46,8 @@ def load_problems(
     difficulties: set[str] | None = None,
     manifest: Mapping[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
-    # Imported lazily (runtime-only optional dep); install with `datasets<4`.
-    from datasets import load_dataset  # pyright: ignore[reportMissingImports]
+    if load_dataset is None:
+        raise RuntimeError("LiveCodeBench requires the fusionkit-evals[livecodebench] extra")
 
     resolved_version = (manifest or {}).get("version") or version
     _log(f"loading livecodebench/code_generation_lite {resolved_version} (datasets<4) ...")

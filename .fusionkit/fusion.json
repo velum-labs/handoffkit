@@ -1,54 +1,27 @@
 {
-  "version": "fusionkit.fusion.v3",
-  "_comment": "This repository panel routes through OpenRouter and requires OPENROUTER_API_KEY; run fusionkit init in your own repo to choose a different panel.",
+  "version": "fusionkit.fusion.v4",
+  "router": {
+    "config": ".routekit/router.yaml"
+  },
   "tool": "codex",
   "defaultEnsemble": "default",
   "ensembles": {
     "default": {
-      "panel": [
-        {
-          "id": "kimi",
-          "model": "moonshotai/kimi-k2-thinking",
-          "provider": "openrouter",
-          "keyEnv": "OPENROUTER_API_KEY"
-        },
-        {
-          "id": "qwen3",
-          "model": "qwen/qwen3-coder",
-          "provider": "openrouter",
-          "keyEnv": "OPENROUTER_API_KEY"
-        }
-      ],
-      "judgeModel": "moonshotai/kimi-k2-thinking",
-      "synthesizerModel": "moonshotai/kimi-k2-thinking"
+      "members": ["kimi", "qwen3"],
+      "judge": "kimi",
+      "synthesizer": "kimi"
     },
     "kimi": {
-      "panel": [
-        {
-          "id": "kimi",
-          "model": "moonshotai/kimi-k2-thinking",
-          "provider": "openrouter",
-          "keyEnv": "OPENROUTER_API_KEY"
-        }
-      ],
-      "judgeModel": "moonshotai/kimi-k2-thinking",
-      "synthesizerModel": "moonshotai/kimi-k2-thinking"
+      "members": ["kimi"],
+      "judge": "kimi",
+      "synthesizer": "kimi"
     },
     "qwen3": {
-      "panel": [
-        {
-          "id": "qwen3",
-          "model": "qwen/qwen3-coder",
-          "provider": "openrouter",
-          "keyEnv": "OPENROUTER_API_KEY"
-        }
-      ],
-      "judgeModel": "qwen/qwen3-coder",
-      "synthesizerModel": "qwen/qwen3-coder"
+      "members": ["qwen3"],
+      "judge": "qwen3",
+      "synthesizer": "qwen3"
     }
   },
-  "local": false,
   "observe": true,
-  "reasoning": true,
-  "reasoningModel": "kimi"
+  "reasoning": true
 }

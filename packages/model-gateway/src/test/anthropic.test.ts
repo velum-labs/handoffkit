@@ -22,8 +22,8 @@ import { startGateway } from "../server.js";
  */
 
 test("anthropicModelsResponse aliases every model past Claude Code's claude/anthropic filter", async () => {
-  const res = anthropicModelsResponse("fusion-panel", [
-    "fusion-panel",
+  const res = anthropicModelsResponse("route-primary", [
+    "route-primary",
     "claude-opus-4-8",
     "gpt-5.5",
     "mlx-community/Qwen3-1.7B-4bit"
@@ -33,7 +33,7 @@ test("anthropicModelsResponse aliases every model past Claude Code's claude/anth
   assert.ok(body.data.every((model) => model.id.startsWith("claude") || model.id.startsWith("anthropic")));
   // ...non-Anthropic ids are aliased, Anthropic-family ids pass through as-is.
   assert.deepEqual(body.data.map((model) => model.id), [
-    "claude-fusion-panel",
+    "claude-route-primary",
     "claude-opus-4-8",
     "claude-gpt-5.5",
     "claude-mlx-community/Qwen3-1.7B-4bit"
@@ -235,9 +235,8 @@ test("anthropicToChat groups parallel tool_use into one assistant message", () =
   );
 });
 
-test("anthropic streaming starts eagerly and pings during the panel phase", async () => {
-  // A never-ending upstream simulates the silent fusion panel phase before the
-  // judge's first token.
+test("anthropic streaming starts eagerly and pings while the upstream is silent", async () => {
+  // A never-ending upstream simulates a slow provider before its first token.
   let upstreamController!: ReadableStreamDefaultController<Uint8Array>;
   const upstream = new ReadableStream<Uint8Array>({
     start(controller) {
@@ -275,7 +274,7 @@ test("anthropic streaming starts eagerly and pings during the panel phase", asyn
   }
 });
 
-test("streams a fused tool call end to end as Anthropic tool_use blocks", async () => {
+test("streams a routed tool call end to end as Anthropic tool_use blocks", async () => {
   // OpenAI-chat SSE with a tool call whose arguments arrive fragmented across
   // chunks, then a tool_calls finish. The adapter must reconstruct one tool_use
   // block with the fully-merged JSON input.

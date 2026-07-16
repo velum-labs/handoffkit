@@ -4,15 +4,13 @@ import type {
   HarnessRunRequestV1,
   HarnessRunResultV1,
   JudgeSynthesisRecordV1,
-  JsonValue,
   ModelFusionHarnessKind,
   ModelCallRecordV1,
-  ModelFusionCapabilityStatus,
-  ModelFusionUsage,
   ModelFusionSideEffects,
   ModelFusionStatus,
   ToolExecutionRecordV1
 } from "@fusionkit/protocol";
+import type { CapabilityStatus, JsonValue, ModelUsage } from "@routekit/contracts";
 
 import type { CandidateWorktree } from "./worktree.js";
 import type { JudgeSynthesizer, SynthesisFailureSummary } from "./judge.js";
@@ -52,7 +50,7 @@ export type HarnessTrajectory = {
   status: ModelFusionStatus;
   steps: TrajectoryStep[];
   finalOutput: string;
-  usage?: ModelFusionUsage;
+  usage?: ModelUsage;
   latencyMs?: number;
   providerMetadata?: Record<string, JsonValue>;
   diff?: string;
@@ -336,7 +334,7 @@ export type VerificationProfile = {
   requiredEvidence: string[];
 };
 
-export type HarnessCapabilities = Record<string, ModelFusionCapabilityStatus>;
+export type HarnessCapabilities = Record<string, CapabilityStatus>;
 
 export type HarnessArtifact = ArtifactRef;
 

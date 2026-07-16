@@ -4,8 +4,9 @@
 
 This repo is a dual-stack monorepo: a **pnpm/TypeScript** workspace
 (`packages/*`, `examples/*`) and a **uv/Python** workspace (`python/*`). The
-shipped product is **FusionKit** (the `@fusionkit/cli` Node front door + the
-Python `fusionkit serve` fusion/synthesis engine). The `warrant` governance
+shipped products are **RouteKit** (the independent `@routekit/cli` Node router)
+and **FusionKit** (the `@fusionkit/cli` Node front door + internal Python
+`fusionkit-sidecar` synthesis process). The `warrant` governance
 stack in `docker-compose.yml` / `Dockerfile` is **legacy / out of product
 scope** (see `docs/scope.md`) and needs Docker, which is **not installed** here —
 skip it unless explicitly asked.
@@ -74,19 +75,22 @@ Then `sudo docker compose build` + `sudo docker compose up -d --wait plane runne
 work; the Dockerfile's `node:22-bookworm-slim` base already satisfies the Node
 engine floor, so the host Node caveat above does not apply inside the image.
 
-### Running the fusion endpoint (dev)
+### Running FusionKit (dev)
 
-The core product loop is easiest to exercise via the raw Python router rather
-than the full Node orchestration (which pulls in `uvx`/portless):
+The public OpenAI-compatible gateway belongs to the Node CLI:
 
 ```
-uv run --package fusionkit fusionkit serve -c <config.yaml> --host 127.0.0.1 --port 8080
+fusionkit serve --no-portless --port 8080
 ```
 
-Then POST to `/v1/chat/completions` with model `fusionkit/panel` to trigger
-panel fanout + synthesis (per-endpoint ids also work for passthrough). Notes:
-- Real provider keys are required. `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, and
-  `OPENROUTER_API_KEY` are configured on `velum-mini`; `GEMINI_API_KEY` is not.
+The Node process starts the internal Python sidecar and sends it completed
+trajectories. To debug only that internal process, use
+`uv run --package fusionkit fusionkit-sidecar serve -c <sidecar.yaml>` and
+probe `/health`; it intentionally has no public chat or model routes. Notes:
+- The RouteKit gateway needs the provider keys referenced by its router config;
+  the sidecar itself receives no provider credentials. `OPENAI_API_KEY`,
+  `ANTHROPIC_API_KEY`, and `OPENROUTER_API_KEY` are configured on `velum-mini`;
+  `GEMINI_API_KEY` is not.
 - `gpt-5.5` is a real model on the provided OpenAI account.
 - The committed `.fusionkit/fusion.json` panel currently uses OpenRouter
   (`moonshotai/kimi-k2-thinking`, `qwen/qwen3-coder`) and requires

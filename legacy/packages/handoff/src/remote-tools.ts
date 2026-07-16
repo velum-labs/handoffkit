@@ -6,7 +6,7 @@ import { createCommandContext, executeGovernedCommand, toGovernedRunRecord } fro
 import type { CommandHarnessConfig, GovernedRunRecord } from "./run-executor.js";
 import { targets } from "./targets.js";
 import type { RunStatus } from "@fusionkit/protocol";
-import { RUNTIME_TIMEOUT_MS } from "@fusionkit/runtime-utils";
+import { DEFAULT_RUNTIME_TIMEOUTS } from "@routekit/runtime";
 
 export type RemoteToolsConfig = CommandHarnessConfig & {
   /** Pull workspace changes back after each call. Defaults to true. */
@@ -49,7 +49,7 @@ export type RemoteToolSet = {
 };
 
 /** Default per-call wait ceiling for governed tool runs. */
-const DEFAULT_REMOTE_TOOL_TIMEOUT_MS = RUNTIME_TIMEOUT_MS.remoteTool;
+const DEFAULT_REMOTE_TOOL_TIMEOUT_MS = DEFAULT_RUNTIME_TIMEOUTS.remoteTool;
 
 export type RemoteTools = {
   /** AI SDK-compatible tools; pass directly to generateText/streamText. */

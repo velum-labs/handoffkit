@@ -9,8 +9,8 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
-import { sha256Hex } from "@fusionkit/protocol";
 import type { ManifestFile, WorkspaceManifest } from "@fusionkit/protocol";
+import { sha256Hex } from "@routekit/contracts";
 import { minimatch } from "minimatch";
 
 import { gitBinary, gitText } from "./git.js";
@@ -132,7 +132,7 @@ export async function materializeWorkspace(
   writeFileSync(bundlePath, await fetchBlob(manifest.bundleHash));
 
   const repoDir = join(sessionDir, "repo");
-  git(sessionDir, ["clone", "--quiet", bundlePath, repoDir]);
+  git(sessionDir, ["clone", "--quiet", "--", bundlePath, repoDir]);
   git(repoDir, ["checkout", "--quiet", manifest.baseRef]);
 
   if (manifest.dirtyDiffHash) {

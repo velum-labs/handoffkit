@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { driverContractSuite } from "@fusionkit/harness-core/testing";
-import type { HarnessEvent } from "@fusionkit/harness-core";
+import { driverContractSuite } from "@routekit/harness-core/testing";
+import type { HarnessEvent } from "@routekit/harness-core";
 
 import { createOpencodeDriver } from "../driver.js";
 import type { OpencodeBackend, OpencodeBackendFactory } from "../driver.js";
@@ -30,17 +30,18 @@ function fakeBackend(): OpencodeBackend {
 
 const backendFactory: OpencodeBackendFactory = async () => fakeBackend();
 const driver = createOpencodeDriver({ backendFactory });
+const config = (): unknown => ({ gatewayUrl: "http://127.0.0.1:9999" });
 
 driverContractSuite({
   name: "opencode driver",
-  createInstance: async () => driver.createInstance(driver.configSchema.parse({})),
+  createInstance: async () => driver.createInstance(driver.configSchema.parse(config())),
   startOptions: () => ({ cwd: process.cwd() }),
   supportsResume: true,
   turnTimeoutMs: 10_000
 });
 
 test("opencode driver maps buffered parts into canonical events", async () => {
-  const instance = await driver.createInstance(driver.configSchema.parse({}));
+  const instance = await driver.createInstance(driver.configSchema.parse(config()));
   try {
     const session = await instance.startSession({ cwd: process.cwd() });
     const events: HarnessEvent[] = [];

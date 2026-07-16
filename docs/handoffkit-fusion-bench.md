@@ -7,7 +7,7 @@ This path is for coding tasks where FusionKit owns the benchmark/run aggregation
 ## What landed
 
 - `harness-run-request.v1` is registered in the FusionKit contract bindings.
-- `fusionkit_evals.fusion_bench` can invoke a HandoffKit command executor for `harness_coding` tasks. Wire it up with `fusionkit fusion-bench --handoff-command "<cmd>"` (plus `--handoff-timeout-s`); the command receives task JSON on stdin and emits model-fusion contract records on stdout.
+- `fusionkit_evals.fusion_bench` can invoke a HandoffKit command executor for `harness_coding` tasks. Wire it up with `fusionkit-bench fusion --handoff-command "<cmd>"` (plus `--handoff-timeout-s`); the command receives task JSON on stdin and emits model-fusion contract records on stdout.
 - The real HandoffKit e2e test covers stdin task handoff, stdout record parsing, candidate ingestion, synthesis verification, and unavailable-harness taxonomy.
 - The executor supports deterministic environment overrides and removals so credential-gated harness behavior can be tested without leaking local credentials.
 

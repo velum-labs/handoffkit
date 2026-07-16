@@ -6,7 +6,7 @@ from typing import Any
 
 import pytest
 from fusionkit_core.config import FusionConfig, PromptOverrides, SamplingConfig, load_config
-from fusionkit_core.judge import JudgeSynthesizer
+from fusionkit_core.judge import JudgeSynthesizer, judge_synthesizer_for
 from fusionkit_core.prompts import (
     AGENT_STEP_CONTRACT,
     AGENT_WORKSPACE_GROUNDING,
@@ -91,7 +91,11 @@ _ANALYSIS_JSON = (
 
 def test_prompt_overrides_default_to_none() -> None:
     config = FusionConfig.model_validate(
-        {"endpoints": [{"id": "a", "model": "m", "base_url": "http://x"}], "default_model": "a"}
+        {
+            "routekit_url": "http://routekit.test",
+            "endpoint_ids": ["a"],
+            "default_model": "a",
+        }
     )
     assert config.prompts == PromptOverrides()
     assert config.prompts.judge_system is None
@@ -100,7 +104,8 @@ def test_prompt_overrides_default_to_none() -> None:
 def test_prompt_overrides_parsed_from_config_mapping() -> None:
     config = FusionConfig.model_validate(
         {
-            "endpoints": [{"id": "a", "model": "m", "base_url": "http://x"}],
+            "routekit_url": "http://routekit.test",
+            "endpoint_ids": ["a"],
             "default_model": "a",
             "prompts": {
                 "judge_system": "CUSTOM JUDGE",
@@ -112,13 +117,32 @@ def test_prompt_overrides_parsed_from_config_mapping() -> None:
     assert config.prompts.synthesizer_system == "CUSTOM SYNTH"
 
 
+def test_request_prompt_overrides_win_fieldwise_over_config() -> None:
+    config = FusionConfig(
+        routekit_url="http://routekit.test",
+        endpoint_ids=["a"],
+        default_model="a",
+        prompts=PromptOverrides(
+            judge_system="CONFIG JUDGE",
+            synthesizer_system="CONFIG SYNTH",
+        ),
+    )
+
+    synthesizer = judge_synthesizer_for(
+        config,
+        prompts=PromptOverrides(judge_system="REQUEST JUDGE"),
+    )
+
+    assert synthesizer._judge_system == "REQUEST JUDGE"
+    assert synthesizer._synthesizer_system == "CONFIG SYNTH"
+
+
 def test_load_config_uses_prompt_files_when_yaml_unset(tmp_path: Path) -> None:
     config_path = tmp_path / "fusionkit.yaml"
     config_path.write_text(
-        "endpoints:\n"
-        "  - id: a\n"
-        "    model: m\n"
-        "    base_url: http://x\n"
+        "routekit_url: http://routekit.test\n"
+        "endpoint_ids:\n"
+        "  - a\n"
         "default_model: a\n",
         encoding="utf-8",
     )
@@ -136,10 +160,9 @@ def test_load_config_uses_prompt_files_when_yaml_unset(tmp_path: Path) -> None:
 def test_yaml_prompt_overrides_win_over_prompt_files(tmp_path: Path) -> None:
     config_path = tmp_path / "fusionkit.yaml"
     config_path.write_text(
-        "endpoints:\n"
-        "  - id: a\n"
-        "    model: m\n"
-        "    base_url: http://x\n"
+        "routekit_url: http://routekit.test\n"
+        "endpoint_ids:\n"
+        "  - a\n"
         "default_model: a\n"
         "prompts:\n"
         "  judge_system: YAML JUDGE\n",

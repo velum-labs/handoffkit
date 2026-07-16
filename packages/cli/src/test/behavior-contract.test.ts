@@ -66,11 +66,14 @@ test("expected behavior ids are unique and every product category is represented
     "harness",
     "policy",
     "security",
+    "robustness",
+    "concurrency",
     "sessions",
     "lifecycle",
     "runs",
     "process",
     "cli",
+    "composition",
     "observability",
     "platform"
   ]) {
@@ -82,7 +85,7 @@ test("every required behavior maps to a real anchored test", () => {
   const required = contract().behaviors.filter(
     (behavior): behavior is RequiredBehavior => behavior.status === "required"
   );
-  assert.ok(required.length >= 45, "the contract must remain comprehensive");
+  assert.ok(required.length >= 48, "the contract must remain comprehensive");
   for (const behavior of required) {
     assert.ok(behavior.expectation.length >= 20, `${behavior.id} expectation is underspecified`);
     const path = join(repoRoot(), behavior.testFile);
@@ -92,6 +95,18 @@ test("every required behavior maps to a real anchored test", () => {
       source.includes(behavior.anchor),
       `${behavior.id} anchor ${JSON.stringify(behavior.anchor)} is absent from ${behavior.testFile}`
     );
+  }
+});
+
+test("RouteKit process and authenticated bridge behaviors remain required", () => {
+  const byId = new Map(contract().behaviors.map((behavior) => [behavior.id, behavior]));
+  for (const id of [
+    "process.routekit-cli-serve",
+    "cli.routekit-command-surfaces",
+    "composition.routekit-endpoint-ids",
+    "composition.routekit-authenticated-cli-bridge"
+  ]) {
+    assert.equal(byId.get(id)?.status, "required", `${id} must remain required`);
   }
 });
 

@@ -2,6 +2,8 @@ import { once } from "node:events";
 import { createServer } from "node:http";
 import type { IncomingMessage, ServerResponse } from "node:http";
 
+import { ProviderFailureError } from "@routekit/contracts";
+
 import {
   anthropicModelsResponse,
   handleAnthropicMessages,
@@ -10,21 +12,9 @@ import {
 import type { AnthropicRequest } from "./adapters/anthropic.js";
 import { effectiveModel, isStream, withDefaultModel } from "./adapters/chat.js";
 import { authorizedRequest } from "./auth.js";
-import { CodexBackendRelay } from "./subscriptions/codex-relay.js";
-import { SubscriptionAccountSetExhaustedError } from "./subscriptions/account-set.js";
-import type {
-  SubscriptionRelay,
-  SubscriptionRelayDialect
-} from "./subscriptions/relay.js";
-import type {
-  RateLimitWindow,
-  SubscriptionAccountSetSnapshot
-} from "./subscriptions/types.js";
-import { snapshotsToUsage } from "./subscriptions/wire.js";
 import { isCursorChatBody, translateCursorRequest } from "./adapters/cursor.js";
 import { handleResponses } from "./adapters/responses.js";
 import type { ResponsesRequest } from "./adapters/responses.js";
-import { PANEL_DEPTH_HEADER, parsePanelDepth } from "./backend.js";
 import type { Backend } from "./backend.js";
 import {
   validateAnthropicRequest,
@@ -61,20 +51,50 @@ export type GatewayOptions = {
   authToken?: string;
   /** Optional observation sink for model calls. */
   provenance?: ProvenanceSink;
-  /**
-   * Codex backend relay: merges the client's live stock model catalog into
-   * `/v1/models` and forwards Responses requests for models the backend does
-   * not serve locally to the ChatGPT Codex backend, using the auth material
-   * the Codex client itself attached. Inert for clients without that auth.
-   * Incompatible with `authToken` (the client's Authorization header is the
-   * relayed ChatGPT token), so it is ignored when a gateway token is set.
-   */
-  codexRelay?: CodexBackendRelay;
-  /**
-   * Provider-native subscription relays. They share the gateway HTTP door,
-   * streaming/backpressure, ingress auth, and backend `servesModel` gate.
-   */
-  subscriptionRelays?: Partial<Record<SubscriptionRelayDialect, SubscriptionRelay>>;
+  /** Optional client-authenticated Responses relay. */
+  codexRelay?: ProviderRelay;
+  /** Provider-native relays sharing this HTTP boundary. */
+  providerRelays?: Partial<Record<ProviderRelayDialect, ProviderRelay>>;
+  /** Optional provider usage payload for `GET /usage`. */
+  usage?: () => unknown;
+};
+
+export type ProviderRelayDialect = "anthropic" | "codex";
+
+export type ProviderRelay = {
+  readonly dialect: ProviderRelayDialect;
+  shouldRelay(
+    headers: IncomingMessage["headers"],
+    model: string | undefined,
+    servesLocally: (model: string) => boolean
+  ): boolean;
+  relay(
+    headers: IncomingMessage["headers"],
+    body: AnthropicRequest | ResponsesRequest,
+    signal?: AbortSignal
+  ): Promise<Response>;
+  models?(
+    headers: IncomingMessage["headers"],
+    search: string,
+    signal?: AbortSignal
+  ): Promise<Response>;
+  countTokens?(
+    headers: IncomingMessage["headers"],
+    body: AnthropicRequest,
+    signal?: AbortSignal
+  ): Promise<Response>;
+  mergedCatalog?(
+    headers: IncomingMessage["headers"],
+    search: string
+  ): Promise<{
+    models: Array<Record<string, unknown>>;
+    etag?: string;
+  } | undefined>;
+  mergeDataIds?(
+    data: Array<{ id: string } & Record<string, unknown>>,
+    models: readonly Record<string, unknown>[]
+  ): Array<{ id: string } & Record<string, unknown>>;
+  close?(): Promise<void> | void;
 };
 
 export type Gateway = {
@@ -84,47 +104,6 @@ export type Gateway = {
   close(): Promise<void>;
 };
 
-function codexWindow(snapshot: SubscriptionAccountSetSnapshot, name: string): RateLimitWindow | undefined {
-  const member = snapshot.members.find((candidate) => candidate.active) ?? snapshot.members[0];
-  if (member?.limits === undefined) return undefined;
-  return Object.entries(member.limits.windows).find(([key]) => key.endsWith(`:${name}`) || key === name)?.[1];
-}
-
-function codexUsagePayload(snapshot: SubscriptionAccountSetSnapshot): Record<string, unknown> {
-  const member = snapshot.members.find((candidate) => candidate.active) ?? snapshot.members[0];
-  const primary = codexWindow(snapshot, "primary");
-  const secondary = codexWindow(snapshot, "secondary");
-  const now = Date.now() / 1000;
-  const wireWindow = (window: RateLimitWindow | undefined): Record<string, unknown> | null =>
-    window === undefined
-      ? null
-      : {
-          used_percent: window.utilization * 100,
-          ...(window.windowSeconds !== undefined
-            ? { limit_window_seconds: window.windowSeconds }
-            : {}),
-          ...(window.resetsAt !== undefined
-            ? {
-                reset_at: window.resetsAt,
-                reset_after_seconds: Math.max(0, window.resetsAt - now)
-              }
-            : {})
-        };
-  const reached = [primary, secondary].some(
-    (window) => window !== undefined && window.utilization >= 1
-  );
-  return {
-    plan_type: member?.limits?.planType ?? "unknown",
-    rate_limit: {
-      allowed: !reached,
-      limit_reached: reached,
-      primary_window: wireWindow(primary),
-      secondary_window: wireWindow(secondary)
-    },
-    ...(member?.limits?.credits !== undefined ? { credits: member.limits.credits } : {})
-  };
-}
-
 export async function startGateway(options: GatewayOptions): Promise<Gateway> {
   const host = options.host ?? "127.0.0.1";
   const { backend, authToken, provenance } = options;
@@ -132,19 +111,18 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
   // distinct trust models. Gateway auth disables only the client-forwarded
   // relay; a server-owned account set remains available behind the proxy key.
   const codexClientRelay = authToken === undefined ? options.codexRelay : undefined;
-  const anthropicRelay = options.subscriptionRelays?.anthropic;
-  const codexSubscriptionRelay = options.subscriptionRelays?.codex;
+  const anthropicRelay = options.providerRelays?.anthropic;
+  const codexProviderRelay = options.providerRelays?.codex;
   const codexCatalogRelay =
-    codexSubscriptionRelay instanceof CodexBackendRelay
-      ? codexSubscriptionRelay
+    codexProviderRelay?.mergedCatalog !== undefined
+      ? codexProviderRelay
       : codexClientRelay;
-  const codexRequestRelay = codexSubscriptionRelay ?? codexClientRelay;
+  const codexRequestRelay = codexProviderRelay ?? codexClientRelay;
 
   const server = createServer((req, res) => {
     void handle(req, res).catch((error: unknown) => {
       // This catch must never throw: a throw here becomes an unhandled
-      // rejection that kills the process hosting the gateway (and, for the
-      // in-process fusion gateway, the whole CLI).
+      // rejection that kills the process hosting the gateway.
       writeGatewayError(res, error);
     });
   });
@@ -165,22 +143,9 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
     }
 
     if (method === "GET" && path === "/usage") {
-      writeJson(
-        res,
-        200,
-        snapshotsToUsage([anthropicRelay?.snapshot?.(), codexSubscriptionRelay?.snapshot?.()])
-      );
-      return;
-    }
-
-    if (
-      method === "GET" &&
-      (path === "/backend-api/wham/usage" || path === "/api/codex/usage")
-    ) {
-      const snapshot = codexSubscriptionRelay?.snapshot?.();
-      writeJson(res, snapshot === undefined ? 404 : 200, snapshot === undefined ? {
-        error: { message: "Codex subscription pool is not configured", type: "not_found" }
-      } : codexUsagePayload(snapshot));
+      writeJson(res, options.usage === undefined ? 404 : 200, options.usage?.() ?? {
+        error: { message: "provider usage is not configured", type: "not_found" }
+      });
       return;
     }
 
@@ -202,7 +167,7 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
         // Codex parses the `models` key (its ModelInfo catalog — this is what
         // drives its /model picker); OpenAI-shape clients read `data`. Serving
         // both keys on one response keeps every client working.
-        const merged = await codexCatalogRelay.mergedCatalog(req.headers, url.search);
+          const merged = await codexCatalogRelay.mergedCatalog?.(req.headers, url.search);
         if (merged !== undefined) {
           const base = (await (await backend.models()).json()) as {
             data?: Array<{ id: string } & Record<string, unknown>>;
@@ -210,7 +175,7 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
           if (merged.etag !== undefined) res.setHeader("etag", merged.etag);
           writeJson(res, 200, {
             object: "list",
-            data: codexCatalogRelay.mergeDataIds(base.data ?? [], merged.models),
+            data: codexCatalogRelay.mergeDataIds?.(base.data ?? [], merged.models) ?? base.data ?? [],
             models: merged.models
           });
           return;
@@ -241,10 +206,7 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
       return;
     }
 
-    // Depth of the caller inside the fusion panel tree (0 = a user request).
-    // Carried by panel-member capture gateways so a member's fused sub-agent
-    // turn never re-provisions fused access one level further down.
-    const panelDepth = parsePanelDepth(req.headers[PANEL_DEPTH_HEADER]);
+    const requestContext = { headers: req.headers };
 
     if (method === "POST" && (path === "/v1/chat/completions" || path === "/chat/completions")) {
       const raw = await readJson(req, res);
@@ -255,7 +217,8 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
         dialect: "openai-chat",
         body,
         defaultModel: backend.defaultModel,
-        invoke: (callId, signal) => backend.chat(body, signal, { modelCallId: callId, panelDepth })
+        invoke: (callId, signal) =>
+          backend.chat(body, signal, { modelCallId: callId, requestContext })
       });
       return;
     }
@@ -278,9 +241,7 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
         return;
       }
       if ("input" in raw && rejectInvalid(res, validateResponsesRequest(raw))) return;
-      // Validate the *translated* body: the hybrid's `input` items become chat
-      // `messages`, so an input list that translates to nothing (e.g. only
-      // unknown item types) is rejected here instead of failing deep in fusion.
+      // Validate the translated body before invoking the backend.
       const translated = translateCursorRequest(raw);
       if (rejectInvalid(res, validateChatRequest(translated))) return;
       const body = withDefaultModel(translated, backend.defaultModel);
@@ -288,7 +249,8 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
         dialect: "openai-chat",
         body,
         defaultModel: backend.defaultModel,
-        invoke: (callId, signal) => backend.chat(body, signal, { modelCallId: callId, panelDepth })
+        invoke: (callId, signal) =>
+          backend.chat(body, signal, { modelCallId: callId, requestContext })
       });
       return;
     }
@@ -341,7 +303,8 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
         dialect: "anthropic-messages",
         body,
         defaultModel: backend.defaultModel,
-        invoke: (callId, signal) => handleAnthropicMessages(backend, body, callId, signal, panelDepth)
+        invoke: (callId, signal) =>
+          handleAnthropicMessages(backend, body, callId, signal, { requestContext })
       });
       return;
     }
@@ -357,7 +320,7 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
       // A stock-model pick from a Codex client: the gateway does not serve
       // this model itself, and the request carries the client's own ChatGPT
       // auth — forward it verbatim to the Codex backend instead of silently
-      // folding it into the fused default.
+      // folding it into the default.
       const requestedModel = typeof body.model === "string" ? body.model : undefined;
       if (
         codexRequestRelay !== undefined &&
@@ -378,7 +341,8 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
         dialect: "openai-responses",
         body,
         defaultModel: backend.defaultModel,
-        invoke: (callId, signal) => handleResponses(backend, body, callId, signal, panelDepth)
+        invoke: (callId, signal) =>
+          handleResponses(backend, body, callId, signal, { requestContext })
       });
       return;
     }
@@ -405,12 +369,10 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
       await new Promise<void>((resolve, reject) => {
         server.close((error) => (error ? reject(error) : resolve()));
       });
-      // Release a backend that owns a process (e.g. the MLX server) instead of
-      // leaking it when the gateway shuts down.
       await backend.close?.();
       const relays = new Set(
-        [codexClientRelay, anthropicRelay, codexSubscriptionRelay].filter(
-          (relay): relay is SubscriptionRelay => relay !== undefined
+        [codexClientRelay, anthropicRelay, codexProviderRelay].filter(
+          (relay): relay is ProviderRelay => relay !== undefined
         )
       );
       await Promise.all([...relays].map(async (relay) => relay.close?.()));
@@ -508,29 +470,30 @@ function writeErrorSafely(res: ServerResponse, status: number, value: unknown): 
 }
 
 /**
- * Map a gateway request failure to an HTTP response. Subscription account-set
- * exhaustion becomes a real `429` with the soonest reset (so clients back off
- * instead of seeing a generic `502`); everything else is an upstream `502`.
+ * Map a normalized provider failure to HTTP, preserving retry timing.
  */
 function writeGatewayError(
   res: ServerResponse,
   error: unknown
 ): { statusCode: number; payload: Buffer } {
-  if (error instanceof SubscriptionAccountSetExhaustedError) {
-    if (error.resetAt !== undefined && !res.headersSent) {
-      res.setHeader("retry-after", Math.max(0, Math.ceil(error.resetAt - Date.now() / 1000)));
+  if (error instanceof ProviderFailureError) {
+    const { failure } = error;
+    const resetAt = failure.resetsAt;
+    if (resetAt !== undefined && !res.headersSent) {
+      res.setHeader("retry-after", Math.max(0, Math.ceil(resetAt - Date.now() / 1000)));
     }
     const payload = writeErrorSafely(res, 429, {
       error: {
-        message: error.message,
+        message: failure.message,
         type: "rate_limit_error",
-        ...(error.resetAt !== undefined ? { resets_at: error.resetAt } : {})
+        ...(resetAt !== undefined ? { resets_at: resetAt } : {})
       }
     });
     return { statusCode: 429, payload };
   }
+  process.stderr.write(`routekit gateway upstream error: type=${safeErrorType(error)}\n`);
   const payload = writeErrorSafely(res, 502, {
-    error: { message: errorMessage(error), type: "upstream_error" }
+    error: { message: "upstream request failed", type: "upstream_error" }
   });
   return { statusCode: 502, payload };
 }
@@ -598,7 +561,7 @@ async function handleModelCall(
  * client regardless; this only bounds the in-memory copy kept for the
  * provenance sink (request/response hashing + usage extraction), so a runaway
  * upstream cannot grow gateway memory without bound. 2 MiB comfortably covers a
- * fused chat completion (JSON or SSE); past it, provenance sees a truncated body.
+ * routed chat completion (JSON or SSE); past it, provenance sees a truncated body.
  */
 const PROVENANCE_BODY_CAP_BYTES = 2 * 1024 * 1024;
 
@@ -657,6 +620,13 @@ async function pipeUpstream(
   return Buffer.concat(chunks);
 }
 
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
+function safeErrorType(error: unknown): string {
+  if (error instanceof AggregateError) return "AggregateError";
+  if (error instanceof TypeError) return "TypeError";
+  if (error instanceof RangeError) return "RangeError";
+  if (error instanceof ReferenceError) return "ReferenceError";
+  if (error instanceof SyntaxError) return "SyntaxError";
+  if (error instanceof URIError) return "URIError";
+  if (error instanceof Error) return "Error";
+  return "NonError";
 }

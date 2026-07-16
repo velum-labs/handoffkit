@@ -6,10 +6,8 @@
   },
   "include": ["src/**/*.ts"],
   "references": [
-    { "path": "../ensemble" },
     { "path": "../harness-core" },
-    { "path": "../protocol" },
-    { "path": "../registry" },
-    { "path": "../tools" }
+    { "path": "../tools" },
+    { "path": "../runtime-utils" }
   ]
 }

@@ -11,7 +11,7 @@ import {
 /**
  * Structural door validation: hostile-input fuzzing found malformed bodies
  * reaching deep code and surfacing as 502s carrying raw TypeError text or
- * internal fusion jargon. These tests pin the contract: caller errors are
+ * internal implementation details. These tests pin the contract: caller errors are
  * 400s in the door's native envelope, and well-formed-but-unusual bodies
  * (that a real provider would accept) still pass.
  */
@@ -66,7 +66,7 @@ test("chat door accepts every shape a real provider accepts", () => {
     ["stream null", { ...chatOk, stream: null }],
     ["stream true", { ...chatOk, stream: true }],
     ["tools array", { ...chatOk, tools: [] }],
-    ["extra unknown fields", { ...chatOk, fusion: { mode: "panel" }, metadata: { a: 1 } }]
+    ["extra unknown fields", { ...chatOk, extension: { mode: "custom" }, metadata: { a: 1 } }]
   ];
   for (const [name, body] of fine) {
     assert.equal(validateChatRequest(body), undefined, `${name} must pass`);

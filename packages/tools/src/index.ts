@@ -1,85 +1,25 @@
-/**
- * Tool integration entry point. It exposes the launcher and harness integration contract, registry helpers, process helpers, constants, environment compatibility helpers, and skipped-candidate utilities.
- */
-export {
-  captureWorktreeDiff,
-  commandOnPath,
-  distillLog,
-  formatDurationMs,
-  freePort,
-  registerCleanup,
-  reservePort,
-  runCleanups,
-  runCliCapture,
-  sleep,
-  spawnLogged,
-  spawnTool,
-  superviseSpawn,
-  terminate,
-  terminateGroup,
-  waitForHttp,
-  waitForOutput,
-  withDeadline,
-  withTimeout
-} from "./proc.js";
 export type {
-  CliCaptureOptions,
-  CliCaptureResult,
-  ExitInfo,
-  LoggedChild,
-  LoggedSpawnOptions,
-  ReservedPort,
-  Spawned,
-  SuperviseSpawnOptions
-} from "./proc.js";
-export {
-  CANDIDATE_ISOLATION_DEFAULTS,
-  escapeMarkdownCell,
-  markdownTable,
-  RUNTIME_TIMEOUT_MS,
-  trimTrailingSlashes
-} from "@fusionkit/runtime-utils";
-export type {
-  FusedEnsembleInfo,
-  ToolDashboardLiveSmoke,
-  ToolDashboardMetadata,
-  ToolDashboardSmoke,
-  ToolHarnessMetadata,
+  AgentProfile,
+  ToolCapabilityGrade,
+  ToolCapabilityMetadata,
+  ToolDriverMetadata,
+  ToolDriverRoute,
   ToolIntegration,
   ToolLaunchContext,
-  ToolLaunchMode
+  ToolLaunchSpec,
+  ToolModel,
+  ToolModelFeature,
+  ToolModelFeatureStatus
 } from "./types.js";
-export { createToolRegistry } from "./registry.js";
-export type { ToolRegistry } from "./registry.js";
+export { createToolCapabilityMatrix, createToolRegistry } from "./registry.js";
+export type { ToolCapabilityCell, ToolRegistry } from "./registry.js";
 export {
-  CURSOR_BRIDGE_MODEL_NAME,
-  DEFAULT_ENSEMBLE_NAME,
-  FUSION_PANEL_MODEL,
-  fusionModelId,
-  LOCAL_MODEL_LABEL
-} from "./constants.js";
-export {
-  envFlagEnabled,
-  HARNESS_DRIVERS_FLAG,
-  harnessDriversEnabled,
-  readEnv
-} from "./env-compat.js";
-export {
-  buildChildEnv,
-  DEFAULT_BRIDGE_SCRUB_PREFIXES,
-  definedEnv,
-  normalizeApiBaseUrl,
-  scrubBridgeEnv
-} from "./env.js";
-export type { BuildChildEnvInput } from "./env.js";
-export { buildSkippedCandidate } from "./candidate.js";
-export {
-  deriveFusedSubagents,
-  fusedSubagentDescription,
-  fusedSubagentDeveloperInstructions,
-  fusedSubagentMembers
-} from "./fused-subagents.js";
+  createDisposerRunner,
+  createToolLaunchContext
+} from "./launch-context.js";
 export type {
-  FusedSubagentDefinition,
-  FusedSubagentDescriptionStyle
-} from "./fused-subagents.js";
+  CreateToolLaunchContextInput,
+  DisposerRunner,
+  ToolDisposer,
+  ToolLaunchContextHandle
+} from "./launch-context.js";

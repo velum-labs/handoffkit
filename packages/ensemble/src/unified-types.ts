@@ -1,7 +1,9 @@
-import type { JsonValue, ModelFusionStatus } from "@fusionkit/protocol";
-import type { ResumeCursor } from "@fusionkit/harness-core";
+import type { ModelFusionStatus } from "@fusionkit/protocol";
+import type { JsonValue } from "@routekit/contracts";
+import type { ResumeCursor } from "@routekit/harness-core";
+import type { ToolRegistry } from "@routekit/tools";
 import type { FusionTraceCarrier } from "@fusionkit/tracing";
-import type { EnsembleDescriptor, EnsembleModel, EnsembleRunResult, HarnessAdapter } from "./harness.js";
+import type { EnsembleModel, EnsembleRunResult } from "./harness.js";
 
 export type UnifiedHarnessKind =
   | "mock"
@@ -10,7 +12,8 @@ export type UnifiedHarnessKind =
   | "codex"
   | "claude-code"
   | "cursor-acp"
-  | "cursor-desktop";
+  | "cursor-desktop"
+  | "opencode";
 
 /**
  * Trust level for unattended panel candidates. `full` (the default) gives each
@@ -102,15 +105,11 @@ export type ToolHarnessResolveOptions = {
 /**
  * Provides everything ensemble needs about a tool-backed harness kind (codex,
  * claude-code, cursor-*) without ensemble depending on any per-tool package. The
- * fusionkit CLI registers one (built from its tool registry) via
- * {@link setToolHarnessProvider}; without it, requesting a tool harness kind
+ * host registers one (built from its neutral tool registry) via
+ * `setToolDriverRegistry`; without it, requesting a tool harness kind
  * throws a clear error.
  */
-export type ToolHarnessProvider = {
-  adapter(kind: UnifiedHarnessKind, options: ToolHarnessResolveOptions): HarnessAdapter;
-  sideEffects(kind: UnifiedHarnessKind): EnsembleDescriptor["policy"]["sideEffects"];
-  responseShape(kind: UnifiedHarnessKind): string;
-};
+export type ToolDriverRegistry = Pick<ToolRegistry, "driverForKind">;
 
 export type UnifiedHarnessMatrixResult = {
   harness: UnifiedHarnessKind;

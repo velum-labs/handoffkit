@@ -2,7 +2,7 @@
  * The prompt facade. On a raw-capable interactive TTY prompts render as Ink
  * components (arrow-key select, checkbox multi-select, live confirm/text);
  * otherwise they fall back to numbered/line prompts read from buffered stdin,
- * so piped answers (`printf "2\n" | fusionkit init`) and CI keep working
+ * so piped answers and CI keep working
  * exactly as before. Every prompt settles into a persistent one-line answer.
  */
 import { createInterface } from "node:readline";
@@ -33,7 +33,7 @@ const out = uiStream();
 
 // For non-interactive input (piped/redirected/empty stdin) we read all of stdin
 // exactly once and serve answers line by line. This supports scripted input
-// (`printf "2\n3\n" | fusionkit init`) and falls back to "" (the prompt
+// and falls back to "" (the prompt
 // default) once exhausted — without the fragile behavior of attaching multiple
 // readline interfaces to an already-ended stdin.
 let bufferedLines: string[] | undefined;

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 from fusionkit_core.clients import FakeModelClient
-from fusionkit_core.config import FusionConfig, ModelEndpoint
+from fusionkit_core.config import FusionConfig
 from fusionkit_core.contracts import FusionRunRequestV1, contract_metadata
 from fusionkit_core.types import ChatMessage
 from fusionkit_server import create_app
@@ -100,10 +100,8 @@ def test_native_fusion_run_missing_run_returns_native_error(tmp_path) -> None:
 
 def _client(tmp_path) -> TestClient:
     config = FusionConfig(
-        endpoints=[
-            ModelEndpoint(id="fast", model="fake-fast", base_url="http://localhost:8101"),
-            ModelEndpoint(id="judge", model="fake-judge", base_url="http://localhost:8102"),
-        ],
+        routekit_url="http://routekit.test",
+        endpoint_ids=["fast", "judge"],
         default_model="fast",
         judge_model="judge",
         default_mode="panel",

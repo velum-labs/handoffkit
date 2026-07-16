@@ -108,21 +108,6 @@ class Usage(BaseModel):
         return self
 
 
-class ProviderCost(BaseModel):
-    source: Literal["provider", "estimate"] = "provider"
-    cost_usd: float | None = None
-    generation_id: str | None = None
-    provider_name: str | None = None
-    upstream_inference_cost: float | None = None
-    cache_discount: float | None = None
-    lookup_status: str = "unavailable"
-    tokens_prompt: int | None = None
-    tokens_completion: int | None = None
-    native_tokens_prompt: int | None = None
-    native_tokens_completion: int | None = None
-    raw: dict[str, Any] = Field(default_factory=dict)
-
-
 class CallMetrics(BaseModel):
     model_id: str
     latency_s: float
@@ -138,11 +123,9 @@ class ModelResponse(BaseModel):
     latency_s: float = 0.0
     tool_calls: list[ToolCall] = Field(default_factory=list)
     raw: dict[str, Any] = Field(default_factory=dict)
-    provider_cost: ProviderCost | None = None
     # Out-of-band reasoning text (never part of the answer). Populated from
-    # upstream ``message.reasoning`` / ``message.reasoning_content`` fields
-    # (local MLX and vLLM/SGLang-style servers); the server surfaces it as
-    # ``reasoning_content`` so coding agents render it on their thinking channel.
+    # RouteKit's optional ``message.reasoning`` / ``message.reasoning_content``
+    # extension fields; the caller can surface it on a thinking channel.
     reasoning: str | None = None
 
 
@@ -151,7 +134,6 @@ class StreamChunk(BaseModel):
     tool_call_delta: ToolCall | None = None
     finish_reason: str | None = None
     usage: Usage | None = None
-    provider_cost: ProviderCost | None = None
     # Out-of-band reasoning text (never part of the answer). The fused stream
     # uses it to surface the judge's analysis before content tokens; the server
     # maps it to the OpenAI ``delta.reasoning_content`` field, which coding

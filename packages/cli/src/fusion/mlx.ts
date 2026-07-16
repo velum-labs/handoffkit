@@ -9,7 +9,7 @@
  */
 import { mlxServer } from "@fusionkit/adapter-ai-sdk";
 import type { MlxEnv } from "@fusionkit/adapter-ai-sdk";
-import { LOCAL_PROBE_MODEL } from "@fusionkit/registry";
+import { LOCAL_PROBE_MODEL } from "@routekit/registry";
 
 /**
  * A throwaway model id used only to construct the env (model-agnostic ops),

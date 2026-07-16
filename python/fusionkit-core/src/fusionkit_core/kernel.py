@@ -11,7 +11,6 @@ from fusionkit_core.judge import (
     JudgeSynthesizer,
     judge_synthesizer_for,
     panel_usage_from_trajectories,
-    provider_costs_from_trajectories,
 )
 from fusionkit_core.run import CreateRunResult, FusionRunManager, NativeRunError
 from fusionkit_core.run_models import (
@@ -21,7 +20,7 @@ from fusionkit_core.run_models import (
     ToolResultSubmission,
 )
 from fusionkit_core.trace import TraceContext
-from fusionkit_core.types import ChatMessage, ModelResponse, PanelMode, StreamChunk, Trajectory
+from fusionkit_core.types import ChatMessage, PanelMode, StreamChunk, Trajectory
 
 
 class FusionKernel:
@@ -143,43 +142,6 @@ class FusionKernel:
             request_extra=request_extra,
         )
 
-    def stream_passthrough(
-        self,
-        model_id: str,
-        messages: Sequence[ChatMessage],
-        sampling: SamplingConfig,
-        *,
-        tools: Sequence[ToolDefinition] | None = None,
-        tool_choice: ToolChoice | None = None,
-        request_extra: Mapping[str, object] | None = None,
-    ) -> AsyncIterator[StreamChunk | FuseResult]:
-        return self._engine.stream_passthrough(
-            model_id,
-            messages,
-            sampling,
-            tools=tools,
-            tool_choice=tool_choice,
-            request_extra=request_extra,
-        )
-
-    async def passthrough_chat(
-        self,
-        model_id: str,
-        messages: Sequence[ChatMessage],
-        sampling: SamplingConfig,
-        *,
-        tools: Sequence[ToolDefinition] | None = None,
-        tool_choice: ToolChoice | None = None,
-        request_extra: Mapping[str, object] | None = None,
-    ) -> ModelResponse:
-        return await self.client(model_id).chat(
-            messages,
-            sampling,
-            tools=tools,
-            tool_choice=tool_choice,
-            extra=request_extra,
-        )
-
     def _judge_synthesizer_for(
         self,
         prompts: PromptOverrides | None,
@@ -279,7 +241,6 @@ class FusionKernel:
         result.input_trajectories = list(trajectories)
         result.panel_usage = panel_usage_from_trajectories(trajectories)
         result.panel_trajectory_count = len(trajectories)
-        result.panel_provider_costs = provider_costs_from_trajectories(trajectories)
         return result
 
     @classmethod

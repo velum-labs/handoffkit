@@ -1,11 +1,4 @@
-"""OpenAI Responses API wire rendering for the simulator (the codex dialect).
-
-FusionKit's ``codex`` provider speaks the stream-only Responses API through
-the ``openai`` SDK, which validates every SSE event against its typed models —
-so these frames carry the full required field sets: sequence numbers, item /
-output / content indices, and a complete terminal ``Response`` snapshot with
-typed output items and usage.
-"""
+"""OpenAI Responses API wire rendering for the provider simulator."""
 
 from __future__ import annotations
 
@@ -42,6 +35,15 @@ def _usage_json(behavior: Behavior) -> dict[str, Any]:
 
 def _output_items(behavior: Behavior, response_id: str) -> list[dict[str, Any]]:
     items: list[dict[str, Any]] = []
+    if behavior.reasoning is not None:
+        items.append(
+            {
+                "id": f"{response_id}_rs0",
+                "type": "reasoning",
+                "status": "completed",
+                "summary": [{"type": "summary_text", "text": behavior.reasoning}],
+            }
+        )
     if behavior.reply is not None:
         items.append(
             {
@@ -98,12 +100,12 @@ def _argument_fragments(arguments: str) -> list[str]:
 
 def stream_events(model: str, behavior: Behavior, response_id: str) -> Iterator[tuple[str, str]]:
     """Yield ``(event_name, json_payload)`` pairs for a Responses SSE stream."""
-    seq = 0
+    sequence_number = 0
 
     def event(payload: dict[str, Any]) -> tuple[str, str]:
-        nonlocal seq
-        seq += 1
-        payload["sequence_number"] = seq
+        nonlocal sequence_number
+        sequence_number += 1
+        payload["sequence_number"] = sequence_number
         return str(payload["type"]), json.dumps(payload)
 
     yield event(
@@ -112,6 +114,7 @@ def stream_events(model: str, behavior: Behavior, response_id: str) -> Iterator[
             "response": response_snapshot(model, behavior, response_id, status="in_progress"),
         }
     )
+    output_index = 0
     if behavior.reasoning is not None:
         for token in _tokenize(behavior.reasoning):
             yield event(
@@ -119,30 +122,31 @@ def stream_events(model: str, behavior: Behavior, response_id: str) -> Iterator[
                     "type": "response.reasoning_summary_text.delta",
                     "delta": token,
                     "item_id": f"{response_id}_rs0",
-                    "output_index": 0,
+                    "output_index": output_index,
                     "summary_index": 0,
                 }
             )
+        output_index += 1
     if behavior.reply is not None:
         for token in _tokenize(behavior.reply):
-            if not token:
-                continue
-            yield event(
-                {
-                    "type": "response.output_text.delta",
-                    "delta": token,
-                    "item_id": f"{response_id}_msg0",
-                    "content_index": 0,
-                    "output_index": 0,
-                    "logprobs": [],
-                }
-            )
+            if token:
+                yield event(
+                    {
+                        "type": "response.output_text.delta",
+                        "delta": token,
+                        "item_id": f"{response_id}_msg0",
+                        "content_index": 0,
+                        "output_index": output_index,
+                        "logprobs": [],
+                    }
+                )
+        output_index += 1
     for index, call in enumerate(behavior.tool_calls):
         item_id = f"{response_id}_fc{index}"
         yield event(
             {
                 "type": "response.output_item.added",
-                "output_index": index,
+                "output_index": output_index,
                 "item": {
                     "id": item_id,
                     "type": "function_call",
@@ -159,9 +163,10 @@ def stream_events(model: str, behavior: Behavior, response_id: str) -> Iterator[
                     "type": "response.function_call_arguments.delta",
                     "delta": fragment,
                     "item_id": item_id,
-                    "output_index": index,
+                    "output_index": output_index,
                 }
             )
+        output_index += 1
     yield event(
         {
             "type": "response.completed",
@@ -171,7 +176,7 @@ def stream_events(model: str, behavior: Behavior, response_id: str) -> Iterator[
 
 
 def last_user_text(body: dict[str, Any]) -> str:
-    """Last user text from a Responses `input` items array (or plain string)."""
+    """Return the last user text from Responses input items or a plain string."""
     input_items = body.get("input")
     if isinstance(input_items, str):
         return input_items

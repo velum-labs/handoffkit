@@ -10,7 +10,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from fusionkit_core.clients import ChatClient, ProviderCallError
+from fusionkit_core.clients import ChatClient
 from fusionkit_core.config import ContextPolicy, FusionConfig, PromptOverrides, SamplingConfig
 from fusionkit_core.context import (
     ContextBudget,
@@ -44,7 +44,6 @@ from fusionkit_core.types import (
     FusionAnalysis,
     ModelResponse,
     PanelMode,
-    ProviderCost,
     StreamChunk,
     ToolCall,
     Trajectory,
@@ -53,7 +52,6 @@ from fusionkit_core.types import (
 )
 
 _TOOL_CALL_LOGGER = logging.getLogger("fusionkit.tool_calls")
-_COST_LOGGER = logging.getLogger("fusionkit.provider_cost")
 
 
 def warn_malformed_tool_calls(tool_calls: Sequence[ToolCall], *, source: str) -> None:
@@ -80,64 +78,6 @@ def warn_malformed_tool_calls(tool_calls: Sequence[ToolCall], *, source: str) ->
             )
 
 
-def _sum_provider_costs(costs: Sequence[ProviderCost]) -> ProviderCost | None:
-    if not costs:
-        return None
-    if len(costs) == 1:
-        # Preserve provider attribution (generation id, route, native token
-        # counts, lookup status) when there is nothing to aggregate.
-        return costs[0].model_copy(deep=True)
-    known_costs = [cost.cost_usd for cost in costs if cost.cost_usd is not None]
-    known_prompt_tokens = [
-        cost.tokens_prompt for cost in costs if cost.tokens_prompt is not None
-    ]
-    known_completion_tokens = [
-        cost.tokens_completion for cost in costs if cost.tokens_completion is not None
-    ]
-    return ProviderCost(
-        source=(
-            "provider"
-            if all(cost.source == "provider" for cost in costs)
-            else "estimate"
-        ),
-        cost_usd=sum(known_costs) if known_costs else None,
-        lookup_status=(
-            "complete"
-            if len(known_costs) == len(costs)
-            else "partial"
-        ),
-        tokens_prompt=sum(known_prompt_tokens) if known_prompt_tokens else None,
-        tokens_completion=(
-            sum(known_completion_tokens) if known_completion_tokens else None
-        ),
-        raw={
-            "components": [
-                cost.model_dump(mode="json", exclude_none=True) for cost in costs
-            ]
-        },
-    )
-
-
-def provider_costs_from_trajectories(
-    trajectories: Sequence[Trajectory],
-) -> list[ProviderCost]:
-    """Recover provider costs retained on generated trajectory metadata."""
-
-    costs: list[ProviderCost] = []
-    for trajectory in trajectories:
-        raw_cost = trajectory.metadata.get("provider_cost")
-        if not isinstance(raw_cost, Mapping):
-            continue
-        try:
-            costs.append(ProviderCost.model_validate(raw_cost))
-        except ValueError:
-            _COST_LOGGER.warning(
-                "ignoring malformed provider cost on trajectory %s",
-                trajectory.id,
-            )
-    return costs
-
-
 class FuseResult(BaseModel):
     """The result of one :meth:`JudgeSynthesizer.fuse` step.
 
@@ -156,14 +96,12 @@ class FuseResult(BaseModel):
     #: True when the synthesizer returned empty content and the final output
     #: fell back to the best candidate's own answer (see _build_fuse_result).
     synthesis_empty: bool = False
-    #: The judge's own model turn (usage/cost/latency), when a judge call ran
-    #: this step. Exposed so run accounting can ledger the judge's spend
-    #: alongside the panel and synthesizer calls.
+    #: The judge's own model turn, when a judge call ran this step. Exposed so
+    #: run accounting can include its usage alongside panel and synthesis.
     judge_response: ModelResponse | None = None
     #: False when ``response`` was fabricated without a synthesizer model call
     #: (verbatim best-of-N selection, or the context-overflow fallback to a
-    #: candidate answer) — run accounting must not ledger a call that never
-    #: spent anything.
+    #: candidate answer) — run accounting must not record a call that never ran.
     synthesizer_called: bool = True
     #: Combined token usage of panel candidate trajectories when a panel/self
     #: step ran; absent for single-mode or passthrough steps.
@@ -173,9 +111,6 @@ class FuseResult(BaseModel):
     #: Complete candidate evidence used by this step. The server's fusion
     #: extension persists it so benchmark artifacts can explain selection.
     input_trajectories: list[Trajectory] = Field(default_factory=list)
-    #: Provider costs attached to panel members, separate from judge/synth.
-    panel_provider_costs: list[ProviderCost] = Field(default_factory=list)
-
     def turn_usage(self) -> Usage:
         """Combined token usage of this fuse step (judge + synthesizer)."""
         responses = [self.response] + (
@@ -190,27 +125,6 @@ class FuseResult(BaseModel):
         if self.panel_usage is not None:
             usages.insert(0, self.panel_usage)
         return sum_usages(usages)
-
-    def turn_provider_cost(self) -> ProviderCost | None:
-        """Combined judge and synthesizer cost for the fuse stage."""
-
-        costs: list[ProviderCost] = []
-        if self.judge_response is not None and self.judge_response.provider_cost is not None:
-            costs.append(self.judge_response.provider_cost)
-        if self.synthesizer_called and self.response.provider_cost is not None:
-            costs.append(self.response.provider_cost)
-        return _sum_provider_costs(costs)
-
-    def compound_provider_cost(self) -> ProviderCost | None:
-        """Combined panel, judge, and synthesizer provider cost."""
-
-        costs = [*self.panel_provider_costs]
-        turn_cost = self.turn_provider_cost()
-        if turn_cost is not None:
-            costs.append(turn_cost)
-        return _sum_provider_costs(costs)
-
-
 # Rough token cost of the fixed prompt scaffolding (section headers, labels)
 # that the per-part estimates below do not count.
 _PROMPT_SCAFFOLD_TOKENS = 256
@@ -433,40 +347,14 @@ class JudgeSynthesizer:
             if selected is not None:
                 response, selected_trajectory_id = selected
             else:
-                try:
-                    response = await synth_client.chat(
-                        prepared.conversation,
-                        sampling,
-                        tools=tools,
-                        tool_choice=tool_choice,
-                        extra=request_extra,
-                    )
-                    synthesizer_called = True
-                except ProviderCallError as exc:
-                    if exc.category != "context_overflow":
-                        raise
-                    # Overflow ladder step 1: retry once with the evidence
-                    # reduced to final outputs only.
-                    reduced = self._rebuild_reduced_conversation(prepared)
-                    try:
-                        response = await synth_client.chat(
-                            reduced,
-                            sampling,
-                            tools=tools,
-                            tool_choice=tool_choice,
-                            extra=request_extra,
-                        )
-                        synthesizer_called = True
-                        prepared.diagnostics.synth_fallback = "reduced_evidence_retry"
-                    except ProviderCallError as retry_exc:
-                        if retry_exc.category != "context_overflow":
-                            raise
-                        # Step 2: no synthesizer call fits; fall back to a
-                        # candidate answer so the turn still produces a fused
-                        # response.
-                        response, selected_trajectory_id = self._overflow_fallback_response(
-                            trajectories, resolved_analysis, synth_client, prepared.diagnostics
-                        )
+                response = await synth_client.chat(
+                    prepared.conversation,
+                    sampling,
+                    tools=tools,
+                    tool_choice=tool_choice,
+                    extra=request_extra,
+                )
+                synthesizer_called = True
             result = self._build_fuse_result(
                 response,
                 trajectories,
@@ -562,47 +450,22 @@ class JudgeSynthesizer:
             yield result
             return
         accumulator = _StreamAccumulator()
-        response: ModelResponse | None = None
-        # Overflow ladder, streaming shape: an overflow surfaces before the
-        # first token by construction (the request is rejected wholesale), so a
-        # pre-yield failure can be retried with reduced evidence and, failing
-        # that, replaced by a candidate answer emitted as one chunk. A failure
-        # after content has streamed is not recoverable and propagates.
-        for attempt, conversation in enumerate(
-            (prepared.conversation, self._rebuild_reduced_conversation(prepared))
+        async for chunk in synth_client.stream_chat(
+            prepared.conversation,
+            sampling,
+            tools=tools,
+            tool_choice=tool_choice,
+            extra=request_extra,
         ):
-            try:
-                async for chunk in synth_client.stream_chat(
-                    conversation,
-                    sampling,
-                    tools=tools,
-                    tool_choice=tool_choice,
-                    extra=request_extra,
-                ):
-                    accumulator.add(chunk)
-                    yield chunk
-                response = accumulator.response(synth_client.model_id)
-                if attempt == 1:
-                    prepared.diagnostics.synth_fallback = "reduced_evidence_retry"
-                break
-            except ProviderCallError as exc:
-                if exc.category != "context_overflow" or accumulator.yielded:
-                    _end_fuse_span(fuse_span_handle, error=str(exc))
-                    raise
-        synthesizer_called = response is not None
-        fallback_trajectory_id: str | None = None
-        if response is None:
-            response, fallback_trajectory_id = self._overflow_fallback_response(
-                trajectories, resolved_analysis, synth_client, prepared.diagnostics
-            )
-            yield StreamChunk(delta=response.content)
+            accumulator.add(chunk)
+            yield chunk
+        response = accumulator.response(synth_client.model_id)
         result = self._build_fuse_result(
             response,
             trajectories,
             resolved_analysis,
             prepared.diagnostics,
-            synthesizer_called=synthesizer_called,
-            selected_trajectory_id=fallback_trajectory_id,
+            synthesizer_called=True,
         )
         self._emit_step(step_ctx, fuse_span_handle, result, trajectories)
         _end_fuse_span(fuse_span_handle)
@@ -730,27 +593,6 @@ class JudgeSynthesizer:
             diagnostics=diagnostics,
         )
 
-    def _rebuild_reduced_conversation(self, prepared: _PreparedTurn) -> list[ChatMessage]:
-        """The prepared conversation with evidence reduced to final outputs only.
-
-        The overflow ladder's step-1 retry: the packing estimate was too
-        optimistic, so drop every trajectory's items and keep just the answers.
-        """
-        reduced = [
-            trajectory.model_copy(update={"items": []}) if trajectory.items else trajectory
-            for trajectory in prepared.packed
-        ]
-        system = build_fuse_system(
-            reduced,
-            synthesizer_system=self._synthesizer_system,
-            harness_system=prepared.harness_system,
-            synthesizer_overridden=self._synthesizer_overridden,
-            identity=prepared.identity if reduced else None,
-            analysis=prepared.analysis if reduced else None,
-            tools_present=prepared.tools_present,
-        )
-        return [ChatMessage(role="system", content=system), *prepared.body]
-
     def _overflow_fallback_response(
         self,
         trajectories: Sequence[Trajectory],
@@ -834,7 +676,6 @@ class JudgeSynthesizer:
             panel_usage=panel_usage_from_trajectories(trajectories),
             panel_trajectory_count=len(trajectories),
             input_trajectories=list(trajectories),
-            panel_provider_costs=provider_costs_from_trajectories(trajectories),
         )
 
     async def analyze(
@@ -850,11 +691,8 @@ class JudgeSynthesizer:
     ) -> FusionAnalysis:
         """The judge's gap analysis, packed to its budget and degrade-not-fail.
 
-        The analysis is advisory input to synthesis, so a judge provider
-        failure must never fail the fusion turn: a ``context_overflow`` is
-        retried once at half the evidence budget, and any remaining
-        :class:`ProviderCallError` degrades to an empty analysis with a
-        sentinel consensus (mirroring the JSON parse-failure path).
+        The analysis is advisory input to synthesis, so a failed RouteKit call
+        degrades to an empty analysis rather than failing the fusion turn.
         """
         harness_system, _ = self._split_harness_system(messages)
         system_content = build_judge_system(self._judge_system, harness_system=harness_system)
@@ -868,9 +706,6 @@ class JudgeSynthesizer:
             + _PROMPT_SCAFFOLD_TOKENS
         )
         evidence_budget = budget.evidence_tokens(overhead)
-        response_format = _judge_response_format(judge_client)
-        judge_extra = {**(request_extra or {}), **(response_format or {})}
-
         async def call(budget_tokens: int) -> ModelResponse:
             packed, report = pack_trajectories(
                 trajectories, budget_tokens, policy=self._context_policy
@@ -886,19 +721,13 @@ class JudgeSynthesizer:
                     ),
                 ],
                 judge_sampling,
-                extra=judge_extra or None,
+                extra=request_extra,
             )
 
         try:
             response = await call(evidence_budget)
-        except ProviderCallError as exc:
-            if exc.category == "context_overflow":
-                try:
-                    response = await call(evidence_budget // 2)
-                except ProviderCallError as retry_exc:
-                    return _degraded_analysis(retry_exc, trace, diagnostics)
-            else:
-                return _degraded_analysis(exc, trace, diagnostics)
+        except Exception as exc:  # noqa: BLE001 - judge analysis is advisory
+            return _degraded_analysis(exc, trace, diagnostics)
         _emit_judge(
             trace,
             "judge.thinking",
@@ -1010,31 +839,31 @@ class JudgeSynthesizer:
 # so the two cannot silently drift apart.
 _PARSE_FAILURE_CONSENSUS = "Judge did not return valid structured JSON."
 
-# Sentinel consensus written when the judge provider call itself failed and the
+# Sentinel consensus written when the judge RouteKit call itself failed and the
 # turn proceeded without an analysis (degrade-not-fail; see analyze()).
 _JUDGE_DEGRADED_CONSENSUS = "Judge analysis unavailable: the judge model call failed."
 
 
 def _degraded_analysis(
-    exc: ProviderCallError,
+    exc: BaseException,
     trace: TraceContext | None,
     diagnostics: _TurnDiagnostics | None,
 ) -> FusionAnalysis:
     """An empty analysis carrying the judge failure, so synthesis proceeds."""
     if diagnostics is not None:
-        diagnostics.judge_degraded = exc.category
+        diagnostics.judge_degraded = "routekit_error"
     _emit_judge(
         trace,
         "judge.thinking",
         payload={
             "fusion_unit": "trajectory",
-            "judge_degraded": exc.category,
+            "judge_degraded": "routekit_error",
             "error": str(exc)[:500],
         },
     )
     return FusionAnalysis(
         consensus=[_JUDGE_DEGRADED_CONSENSUS],
-        likely_errors=[f"judge {exc.category}: {str(exc)[:200]}"],
+        likely_errors=[f"judge RouteKit call failed: {str(exc)[:200]}"],
     )
 
 
@@ -1049,7 +878,6 @@ class _StreamAccumulator:
         self._seen_tool_ids: set[str] = set()
         self._finish_reason: str | None = None
         self._usage = Usage()
-        self._provider_cost = None
 
     def add(self, chunk: StreamChunk) -> None:
         self.yielded = True
@@ -1065,8 +893,6 @@ class _StreamAccumulator:
             self._finish_reason = chunk.finish_reason
         if chunk.usage is not None:
             self._usage = chunk.usage
-        if chunk.provider_cost is not None:
-            self._provider_cost = chunk.provider_cost
 
     def response(self, model_id: str) -> ModelResponse:
         tool_calls = [
@@ -1080,7 +906,6 @@ class _StreamAccumulator:
             finish_reason=self._finish_reason or ("tool_calls" if tool_calls else "stop"),
             usage=self._usage,
             tool_calls=tool_calls,
-            provider_cost=self._provider_cost,
             reasoning="".join(self._reasoning_parts) or None,
         )
 
@@ -1097,7 +922,7 @@ def accumulate_tool_call(
     parallel calls interleave, so the index — not the id, and not arrival
     order — identifies which call a fragment belongs to. Folding by
     ``accumulator[-1]`` here is exactly what corrupts large multi-fragment
-    arguments when a provider interleaves slots or batches several entries
+    arguments when a gateway interleaves slots or batches several entries
     into one chunk.
 
     Index-less fragments keep the id-based behavior: OpenAI Chat's opening
@@ -1134,29 +959,6 @@ def accumulate_tool_call(
     if delta.name:
         current["name"] = delta.name
     current["arguments"] += delta.arguments
-
-
-def _judge_response_format(judge_client: ChatClient) -> Mapping[str, Any] | None:
-    """A ``response_format`` JSON schema for endpoints declaring structured output.
-
-    When the judge endpoint's ``capabilities.structured_output`` is true, the
-    judge call carries the :class:`FusionAnalysis` schema so the provider
-    enforces the JSON contract at generation time. The regex ``_extract_json``
-    path in :func:`parse_analysis` stays as the fallback parser, not the
-    primary.
-    """
-    endpoint = getattr(judge_client, "endpoint", None)
-    capabilities = getattr(endpoint, "capabilities", None)
-    if getattr(capabilities, "structured_output", None) is not True:
-        return None
-    schema = FusionAnalysis.model_json_schema()
-    schema["additionalProperties"] = False
-    return {
-        "response_format": {
-            "type": "json_schema",
-            "json_schema": {"name": "fusion_judge_analysis", "schema": schema},
-        }
-    }
 
 
 def parse_analysis(content: str) -> FusionAnalysis:
@@ -1481,7 +1283,6 @@ __all__ = [
     "accumulate_tool_call",
     "parse_analysis",
     "panel_usage_from_trajectories",
-    "provider_costs_from_trajectories",
     "sum_usages",
     "warn_malformed_tool_calls",
 ]

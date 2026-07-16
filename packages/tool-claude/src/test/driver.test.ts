@@ -3,8 +3,8 @@ import { test } from "node:test";
 
 import type { Options, Query, SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 
-import { driverContractSuite } from "@fusionkit/harness-core/testing";
-import type { HarnessEvent } from "@fusionkit/harness-core";
+import { driverContractSuite } from "@routekit/harness-core/testing";
+import type { HarnessEvent } from "@routekit/harness-core";
 
 import { createClaudeDriver } from "../driver.js";
 import type { ClaudeQueryFn } from "../driver.js";
@@ -97,7 +97,7 @@ test("claude driver maps SDK messages into canonical events", async () => {
   }
 });
 
-test("claude driver auto-approves tools under the panel policy", async () => {
+test("claude driver auto-approves tools under the automation policy", async () => {
   const instance = await driver.createInstance(driver.configSchema.parse({ command: "claude" }));
   try {
     const session = await instance.startSession({ cwd: process.cwd() });

@@ -1,6 +1,6 @@
 /**
  * Hostile-input fuzzing of every gateway front door on the full stack (real
- * gateway -> real Python engine -> provider simulator).
+ * Fusion/RouteKit gateways -> internal Python sidecar -> provider simulator).
  *
  * These tests exist because "every suite passes" was itself a red flag: the
  * scripted suites explore only well-formed request space. This suite explores

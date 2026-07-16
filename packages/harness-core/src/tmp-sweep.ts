@@ -9,7 +9,7 @@ import { dirname, join } from "node:path";
  * crash between creation and cleanup cannot leak dirs (or credentials) in
  * /tmp forever.
  */
-export const DEFAULT_TMP_MANIFEST = join(homedir(), ".fusionkit", "tmp-manifest.json");
+export const DEFAULT_TMP_MANIFEST = join(homedir(), ".routekit", "tmp-manifest.json");
 
 type ManifestEntry = { path: string; createdAt: string };
 

@@ -1,0 +1,39 @@
+{
+  "name": "@routekit/tracing",
+  "private": false,
+  "version": "0.8.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/velum-labs/handoffkit.git",
+    "directory": "packages/routekit-tracing"
+  },
+  "description": "Brand-neutral OpenTelemetry runtime, propagation, listeners, and export redaction.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": ["dist", "LICENSE"],
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org",
+    "access": "public",
+    "provenance": true
+  },
+  "dependencies": {
+    "@opentelemetry/api": "1.9.1",
+    "@opentelemetry/api-logs": "0.220.0",
+    "@opentelemetry/exporter-logs-otlp-http": "0.220.0",
+    "@opentelemetry/exporter-trace-otlp-http": "0.220.0",
+    "@opentelemetry/resources": "2.9.0",
+    "@opentelemetry/sdk-logs": "0.220.0",
+    "@opentelemetry/sdk-trace-base": "2.9.0",
+    "@opentelemetry/sdk-trace-node": "2.9.0"
+  },
+  "keywords": ["routekit", "opentelemetry", "tracing", "observability"],
+  "scripts": {
+    "test": "node --test \"dist/test/*.test.js\""
+  }
+}

@@ -1,5 +1,9 @@
 # OSS Release Remediation Workstreams
 
+> **Historical remediation record:** These briefs describe the July 2026
+> pre-split repository. Names and command surfaces are preserved as evidence,
+> not current product guidance.
+
 Each workstream below is written as a self-contained brief for a dedicated agent.
 Finding IDs (e.g. `2.1`) refer to [`audit-findings.md`](audit-findings.md).
 Decision IDs (`D1`–`D7`) refer to the decisions table in [`README.md`](README.md).
@@ -136,20 +140,19 @@ Scope:
 3. Split `ensemble/src/unified.ts` (949 ln) into kind registry, panel
    orchestration, and harness factories.
 4. Retire the dual harness path: make `harness-core` drivers the only
-   implementation (remove `FUSIONKIT_HARNESS_DRIVERS` flag and legacy
-   `harness.ts` bodies in tool-codex/claude/cursor once driver parity is
-   test-verified).
+   implementation and delete the legacy per-tool harness bodies after parity
+   is test-verified.
 5. Extract shared modules: stream-json trajectory parser (tool-claude +
    tool-cursor → `harness-core`), OpenAI chat wire types
-   (`adapters/openai-chat-wire.ts`), fused sub-agent builders
-   (`tools/src/fused-subagents.ts` with per-tool serializers).
+   (`adapters/openai-chat-wire.ts`), and host-authored generic agent profiles
+   with one serializer per tool.
 6. Add unit tests for `tools` (registry contract) and `sdk`-replacement surfaces
    that remain after WS-B.
 7. Burn down the 9 TODOs: resolve or convert each to a tracked issue reference.
 
 Acceptance: no non-test source file > ~800 lines in product packages; kernel test
-suite exists and passes; `rg 'FUSIONKIT_HARNESS_DRIVERS'` empty; duplicate
-helpers gone (single definition each).
+suite exists and passes; duplicate harness helpers are gone (single definition
+each).
 
 ## WS-E — Python deep clean: packaging correctness + module splits
 

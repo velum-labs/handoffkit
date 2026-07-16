@@ -87,15 +87,13 @@ exact commands. Companion docs go deeper:
 
 ## 4. Command reference
 
-Bench commands live under `fusionkit bench ...` (registered in
-`python/fusionkit-cli/src/fusionkit_cli/commands/bench.py`); the old top-level
-names (`public-bench`, `tune-prompts`, `fusion-bench`, ...) remain as hidden
-legacy aliases. Prefer the nested form shown below.
+Bench commands live in the separately installed maintainer package under
+`fusionkit-bench ...`.
 
-Boot a panel gateway (for external runners; this is the Python CLI):
+Boot the Node-owned panel gateway for external runners:
 
 ```bash
-uv run --package fusionkit fusionkit serve -c configs/benchmark-panel.example.yaml
+fusionkit serve
 ```
 
 Public benchmark via an external runner adapter (subset-first):
@@ -104,7 +102,7 @@ Public benchmark via an external runner adapter (subset-first):
 set -a && source .env && set +a
 export FUSIONKIT_BENCH_CONFIG=configs/benchmark-panel.example.yaml
 export LCB_MIN_DATE=2025-01-01 BENCH_SANDBOX=docker LCB_CONCURRENCY=4
-uv run --with 'datasets<4' fusionkit bench public \
+uv run --package fusionkit-evals --with 'datasets<4' fusionkit-bench public \
   --suite livecodebench --panel decorrelated-peers --subset 15 \
   --runner-command "python python/fusionkit-evals/src/fusionkit_evals/adapters/livecodebench_adapter.py" \
   --output out/lcb.jsonl --report out/lcb.md --ledger out/ledger.jsonl
@@ -113,7 +111,7 @@ uv run --with 'datasets<4' fusionkit bench public \
 Show cited leaderboard baselines:
 
 ```bash
-fusionkit bench public-baselines --suite livecodebench
+uv run --package fusionkit-evals fusionkit-bench public-baselines --suite livecodebench
 ```
 
 Automated prompt tuning (builds a candidate bank once, then optimizes):
@@ -121,7 +119,7 @@ Automated prompt tuning (builds a candidate bank once, then optimizes):
 ```bash
 set -a && source .env && set +a
 export LCB_MIN_DATE=2025-01-01 BENCH_SANDBOX=local
-uv run --with 'datasets<4' fusionkit bench tune-prompts \
+uv run --package fusionkit-evals --with 'datasets<4' fusionkit-bench tune-prompts \
   --config configs/benchmark-panel.example.yaml \
   --role synthesizer_system --subset 24 --bank-max-tests 8 \
   --max-iterations 6 --patience 3 --optimizer-model gpt \

@@ -6,9 +6,8 @@
  * the JSON body is shaped like the OpenAI *Responses* API (`input` item list,
  * flat tool definitions, `reasoning`/`text` objects), while the response it
  * renders is standard Chat Completions SSE. This module is the pure
- * translation layer behind the `/v1/cursor/*` routes (the FusionKit analogue
- * of OpenRouter's `/api/v1/cursor`, and the TS port of the Python
- * `fusionkit_server.cursor_endpoint`): it maps the Responses-hybrid body onto
+ * translation layer behind the `/v1/cursor/*` routes. It maps the
+ * Responses-hybrid body onto
  * the Chat Completions shape the rest of the gateway already handles.
  *
  * No I/O happens here. The translation is total: weird-but-parseable input is
@@ -24,7 +23,7 @@ type JsonObject = Record<string, unknown>;
 const PASSTHROUGH_FIELDS = ["model", "temperature", "top_p", "top_k", "tool_choice", "stream", "parallel_tool_calls"] as const;
 
 /**
- * Permissive schema synthesized for grammar-based ("custom") tools that
+ * Permissive schema built for grammar-based ("custom") tools that
  * declare no JSON schema of their own; the model's call output flows back as
  * a normal function tool call with the raw text under `input`.
  */
@@ -188,7 +187,7 @@ function appendFunctionCall(messages: JsonObject[], item: JsonObject): void {
  * Cursor sends flat function tools (`{type: "function", name, ...}`) and
  * grammar-based custom tools (`{type: "custom", name, format}`). Flat tools
  * are nested under `function`; custom tools become plain function tools with
- * their declared schema or a permissive synthesized one. Already-nested
+ * their declared schema or a permissive generated one. Already-nested
  * tools pass through unchanged; other typed entries are forwarded as-is for
  * the gateway's downstream tool normalization.
  */

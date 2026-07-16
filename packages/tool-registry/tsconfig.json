@@ -1,0 +1,27 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist"
+  },
+  "include": [
+    "src/**/*.ts"
+  ],
+  "references": [
+    {
+      "path": "../tools"
+    },
+    {
+      "path": "../tool-claude"
+    },
+    {
+      "path": "../tool-codex"
+    },
+    {
+      "path": "../tool-cursor"
+    },
+    {
+      "path": "../tool-opencode"
+    }
+  ]
+}

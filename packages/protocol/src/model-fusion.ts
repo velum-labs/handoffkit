@@ -1,4 +1,15 @@
-import type { JsonValue } from "./jcs.js";
+import type {
+  CapabilityStatus,
+  JsonValue,
+  ModelCallContract,
+  ModelCallSideEffects,
+  ModelCallStatus,
+  ModelChatMessage,
+  ModelChatRole,
+  ModelUsage,
+  ProviderError,
+  ProviderErrorKind
+} from "@routekit/contracts";
 
 export const MODEL_FUSION_SCHEMA_NAMES = [
   "model-call-record.v1",
@@ -16,33 +27,15 @@ export const MODEL_FUSION_SCHEMA_BUNDLE_HASH =
   "sha256:e55314e30d77e8e7db902194ff87a4e739cc66e6db2aa0e5edbef037b02f6f6e";
 
 export type ModelFusionSchemaName = (typeof MODEL_FUSION_SCHEMA_NAMES)[number];
-export type ModelFusionStatus =
-  | "pending"
-  | "running"
-  | "succeeded"
-  | "failed"
-  | "canceled"
-  | "requires_action"
-  | "skipped"
-  | "unsupported";
-export type ModelFusionSideEffects =
-  | "none"
-  | "read_only"
-  | "writes_workspace"
-  | "network"
-  | "tool_execution"
-  | "unknown";
+export type ModelFusionStatus = ModelCallStatus;
+export type ModelFusionSideEffects = ModelCallSideEffects;
 export type ModelFusionHarnessKind =
   | "generic"
   | "cursor"
   | "claude_code"
   | "codex"
   | "openai_responses";
-export type ModelFusionCapabilityStatus =
-  | "supported"
-  | "unsupported"
-  | "degraded"
-  | "unknown";
+export type ModelFusionCapabilityStatus = CapabilityStatus;
 export type ModelFusionArtifactKind =
   | "patch"
   | "log"
@@ -54,16 +47,10 @@ export type ModelFusionArtifactKind =
   | "other";
 export type ModelFusionRedactionStatus = "synthetic" | "redacted" | "raw";
 export type ModelFusionErrorKind =
-  | "none"
-  | "provider_error"
-  | "validation_error"
-  | "timeout"
-  | "rate_limited"
+  | ProviderErrorKind
   | "tool_denied"
-  | "secret_denied"
-  | "capability_missing"
-  | "internal_error";
-export type ModelFusionChatRole = "system" | "user" | "assistant" | "tool";
+  | "secret_denied";
+export type ModelFusionChatRole = ModelChatRole;
 export type BenchmarkTaskKind = "model_fusion" | "harness_coding";
 export type BenchmarkSourceRepo = "fusionkit" | "handoffkit" | "cursorkit" | "mlx-lm";
 export type BenchmarkScorerKind = "exact" | "contains" | "record_join" | "custom";
@@ -83,21 +70,12 @@ export type ContractMetadataV1<S extends ModelFusionSchemaName> = {
   created_at: string;
 };
 
-export type ModelFusionChatMessage = {
-  role: ModelFusionChatRole;
-  content: string;
-};
+export type ModelFusionChatMessage = ModelChatMessage;
 
-export type ModelFusionUsage = {
-  prompt_tokens?: number;
-  completion_tokens?: number;
-  total_tokens?: number;
-};
+export type ModelFusionUsage = ModelUsage;
 
-export type ModelFusionError = {
+export type ModelFusionError = Omit<ProviderError, "kind"> & {
   kind: ModelFusionErrorKind;
-  message?: string;
-  retryable?: boolean;
 };
 
 export type ArtifactRef = {
@@ -110,24 +88,8 @@ export type ArtifactRef = {
 
 export type ArtifactRefV1 = ContractMetadataV1<"artifact-ref.v1"> & ArtifactRef;
 
-export type ModelCallRecordV1 = ContractMetadataV1<"model-call-record.v1"> & {
-  call_id: string;
-  endpoint_id: string;
-  provider_request_id?: string;
-  model: string;
-  request_hash: string;
-  response_hash?: string;
-  messages: ModelFusionChatMessage[];
-  status: ModelFusionStatus;
-  side_effects: ModelFusionSideEffects;
-  started_at: string;
-  finished_at?: string;
-  latency_ms?: number;
-  usage?: ModelFusionUsage;
-  output_text?: string;
-  error?: ModelFusionError;
-  metadata?: Record<string, JsonValue>;
-};
+export type ModelCallRecordV1 = ContractMetadataV1<"model-call-record.v1"> &
+  ModelCallContract<ModelFusionError>;
 
 export type HarnessRunRequestV1 = ContractMetadataV1<"harness-run-request.v1"> & {
   request_id: string;

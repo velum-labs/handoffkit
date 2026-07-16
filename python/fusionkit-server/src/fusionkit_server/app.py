@@ -11,25 +11,13 @@ from contextlib import asynccontextmanager
 from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as distribution_version
 from pathlib import Path
-from typing import Any, Literal, assert_never, cast, get_args
+from typing import Any, Literal
 
 from fastapi import FastAPI, Header, Query, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from fusionkit_core.artifacts import LocalArtifactStore
-from fusionkit_core.clients import (
-    ChatClient,
-    ProviderCallError,
-    ProviderErrorCategory,
-    build_clients,
-)
-from fusionkit_core.config import (
-    FusionConfig,
-    FusionMode,
-    PromptOverrides,
-    ProviderKind,
-    SamplingConfig,
-    model_sampling_defaults,
-)
+from fusionkit_core.clients import ChatClient, build_clients
+from fusionkit_core.config import FusionConfig, PromptOverrides, SamplingConfig
 from fusionkit_core.contracts import (
     ContractUsage,
     FusionRunRequestV1,
@@ -40,35 +28,20 @@ from fusionkit_core.contracts import (
 from fusionkit_core.fusion import FusionEngine
 from fusionkit_core.judge import FuseResult
 from fusionkit_core.kernel import FusionKernel
-from fusionkit_core.producers import PanelExhaustedError, trajectory_from_contract
-from fusionkit_core.registry import (
-    FUSION_DEFAULT_ALIAS,
-    FUSION_MODEL_ALIASES,
-    fusion_mode_for_model,
-)
+from fusionkit_core.producers import trajectory_from_contract
+from fusionkit_core.registry import FUSION_DEFAULT_ALIAS
 from fusionkit_core.run import (
     CreateRunResult,
     FusionRunManager,
     NativeRunError,
-    RunInspection,
-    ToolExecutionMode,
-    ToolExecutionPolicy,
     ToolResultSubmission,
-    hash_json,
-    make_id,
 )
 from fusionkit_core.run_store import FileSystemRunStore
-from fusionkit_core.trace import (
-    TraceContext,
-    context_from_headers,
-    context_of_span,
-    fusion_span,
-)
+from fusionkit_core.trace import context_from_headers
 from fusionkit_core.types import (
     ChatMessage,
     ModelResponse,
     PanelMode,
-    ProviderCost,
     StreamChunk,
     Trajectory,
     Usage,
@@ -78,85 +51,11 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
-    ValidationError,
     field_validator,
     model_validator,
 )
 
-from fusionkit_server.cursor_endpoint import translate_cursor_request
-
 logger = logging.getLogger(__name__)
-
-
-class FusionToolExecutionOptions(BaseModel):
-    mode: ToolExecutionMode = "disabled"
-    allowed_side_effects: list[str] = Field(default_factory=lambda: ["read_only"])
-    environment: str | None = None
-    policy_id: str | None = None
-    dedupe_read_only: bool = True
-
-
-class FusionOptions(BaseModel):
-    mode: FusionMode | None = None
-    panel_models: list[str] | None = Field(default=None, min_length=1)
-    sample_count: int | None = Field(default=None, ge=1)
-    include_evidence: bool = False
-    tool_execution: FusionToolExecutionOptions = Field(
-        default_factory=FusionToolExecutionOptions
-    )
-
-    @model_validator(mode="after")
-    def _reject_duplicate_panel_members(self) -> FusionOptions:
-        if self.panel_models is not None and len(set(self.panel_models)) != len(
-            self.panel_models
-        ):
-            raise ValueError("panel_models must not contain duplicates")
-        return self
-
-
-class FusionRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    model: str = FUSION_DEFAULT_ALIAS
-    messages: list[ChatMessage] = Field(min_length=1)
-    temperature: float | None = Field(default=None, ge=0, le=2)
-    top_p: float | None = Field(default=None, gt=0, le=1)
-    max_tokens: int | None = Field(default=None, ge=1)
-    # OpenAI's modern spelling of `max_tokens` (required by reasoning models);
-    # the Node gateway adapters emit it. Folded into `max_tokens` below.
-    max_completion_tokens: int | None = Field(default=None, ge=1)
-    seed: int | None = None
-    # OpenRouter request extensions used by scientific runs. They are
-    # forwarded to every configured OpenRouter stage and rejected by clients
-    # that cannot honor them.
-    reasoning: dict[str, Any] | None = None
-    provider: dict[str, Any] | None = None
-    usage: dict[str, Any] | None = None
-    # OpenAI-compatible gateways request usage on the terminal SSE chunk.
-    # FusionKit always emits terminal usage, so this is accepted for wire
-    # compatibility but does not alter provider request semantics.
-    stream_options: dict[str, Any] | None = None
-    stream: bool = False
-    # Forwarded only on the per-model passthrough path (when `model` names a
-    # configured endpoint); the fusion path ignores them.
-    tools: list[dict[str, Any]] | None = None
-    tool_choice: str | dict[str, Any] | None = None
-    parallel_tool_calls: bool | None = None
-    fusion: FusionOptions = Field(default_factory=FusionOptions)
-
-    @model_validator(mode="after")
-    def _fold_max_completion_tokens(self) -> FusionRequest:
-        if (
-            self.max_tokens is not None
-            and self.max_completion_tokens is not None
-            and self.max_tokens != self.max_completion_tokens
-        ):
-            raise ValueError(
-                "max_tokens and max_completion_tokens must match when both are supplied"
-            )
-        if self.max_tokens is None and self.max_completion_tokens is not None:
-            self.max_tokens = self.max_completion_tokens
-        return self
 
 
 class TrajectoryItemInput(BaseModel):
@@ -205,21 +104,11 @@ class TrajectoryInput(BaseModel):
 
 
 class FuseTrajectoriesRequest(BaseModel):
-    """A single fusion step.
-
-    The one fusion operation: the synthesizer produces the next step (a tool call
-    for the harness to run) or the final answer, from the candidate trajectories
-    plus the live conversation. With no ``tools`` it is terminal on turn 1 (the
-    old one-shot text fusion); with tools the harness drives the loop. The
-    terminal response carries the fused trajectory (with its ``synthesis``) under
-    the ``fusion`` extension.
-    """
+    """One internal fusion step over externally produced trajectories."""
 
     model_config = ConfigDict(extra="forbid")
 
     model: str = FUSION_DEFAULT_ALIAS
-    # ChatMessage accepts OpenAI's nested assistant tool calls, null content,
-    # and content-part arrays while still requiring a valid role.
     messages: list[ChatMessage] = Field(min_length=1)
     trajectories: list[TrajectoryInput] = Field(default_factory=list)
     temperature: float | None = Field(default=None, ge=0, le=2)
@@ -232,13 +121,7 @@ class FuseTrajectoriesRequest(BaseModel):
     parallel_tool_calls: bool | None = None
     judge_model: str | None = None
     synthesizer_model: str | None = None
-    # Per-request system-prompt overrides (a named ensemble's committed
-    # prompts). Fields win per key; unset falls back to the config overrides.
     prompts: PromptOverrides | None = None
-    # "step" = candidates are receding-horizon next-step proposals (finite-k
-    # panels): the judge selects and the synthesizer adopts one candidate's
-    # tool-call batch verbatim or answers in text. Absent = "trajectory"
-    # (today's behavior), so older gateways keep working unchanged.
     panel_mode: PanelMode = "trajectory"
     include_evidence: bool = False
     reasoning: dict[str, Any] | None = None
@@ -306,24 +189,26 @@ def create_app(
         finally:
             seen: set[int] = set()
             for client in model_clients.values():
-                identity = id(client)
-                if identity in seen:
+                if id(client) in seen:
                     continue
-                seen.add(identity)
+                seen.add(id(client))
                 try:
                     await client.aclose()
-                except Exception:  # noqa: BLE001 - close every remaining client
-                    logger.exception("failed to close model client %s", client.model_id)
+                except Exception:  # noqa: BLE001 - close all remaining clients
+                    logger.exception("failed to close RouteKit client %s", client.model_id)
 
-    app = FastAPI(title="fusionkit", version=_package_version(), lifespan=lifespan)
+    app = FastAPI(
+        title="fusionkit-sidecar",
+        version=_package_version(),
+        lifespan=lifespan,
+        docs_url=None,
+        redoc_url=None,
+        openapi_url=None,
+    )
     engine = FusionEngine(config=config, clients=model_clients)
     native_runs = run_manager or _create_run_manager(engine, run_store_path)
     kernel = FusionKernel(engine, native_runs)
-
-    # An opaque token the spawning CLI passes down so its discover-or-spawn
-    # health probe can tell "the exact router I would start" apart from a
-    # sibling with the same endpoint ids but different prompts/keys/sampling.
-    identity = os.environ.get("FUSIONKIT_ROUTER_IDENTITY", "")
+    identity = os.environ.get("FUSIONKIT_SIDECAR_IDENTITY", "")
 
     @app.get("/health")
     async def health() -> dict[str, str]:
@@ -331,26 +216,6 @@ def create_app(
         if identity:
             payload["identity"] = identity
         return payload
-
-    def _models_payload() -> dict[str, Any]:
-        data: list[dict[str, Any]] = [
-            {"id": alias, "object": "model"} for alias in FUSION_MODEL_ALIASES
-        ]
-        data.extend(
-            {"id": endpoint.id, "object": "model", "owned_by": endpoint.provider}
-            for endpoint in config.endpoints
-        )
-        return {"object": "list", "data": data}
-
-    @app.get("/v1/models")
-    async def models() -> dict[str, Any]:
-        return _models_payload()
-
-    @app.get("/v1/cursor/models")
-    async def cursor_models() -> dict[str, Any]:
-        # Cursor may probe the models list relative to its BYOK base URL
-        # (`.../v1/cursor`); mirror /v1/models there.
-        return _models_payload()
 
     @app.post("/v1/fusion/runs")
     async def create_fusion_run(
@@ -413,162 +278,24 @@ def create_app(
             return _native_error_response(result, status_code=409)
         return _json_response(result.model_dump(mode="json"))
 
-    async def _handle_chat_completions(
-        request: FusionRequest,
-        trace: TraceContext | None = None,
-        *,
-        record_run: bool = False,
-    ) -> dict[str, Any] | JSONResponse | StreamingResponse:
-        # Per-model passthrough: when `model` names a configured endpoint, call
-        # that model directly (no fusion run) so a single `fusionkit serve` can
-        # front every panel model by id for an external coding harness. The
-        # reserved `fusionkit/{heuristic,panel,single,self}` names keep the fusion
-        # path below.
-        if _is_endpoint_model(config, request.model):
-            return await _passthrough_chat(kernel, config, request)
-        if request.model not in FUSION_MODEL_ALIASES:
-            return _openai_error_response(
-                "unknown_model",
-                f"Unknown model {request.model!r}.",
-                status_code=400,
-            )
-        for panel_model in request.fusion.panel_models or []:
-            if not _is_endpoint_model(config, panel_model):
-                return _openai_error_response(
-                    "unknown_model",
-                    f"Unknown panel model endpoint {panel_model!r}.",
-                    status_code=400,
-                )
-        # Real SSE streaming on the fused path: the candidate trajectories are
-        # generated, then the synthesizer turn streams tokens straight through
-        # (no buffer-then-rechunk).
-        if request.stream:
-            stream = kernel.run_stream(
-                request.messages,
-                mode=_mode_from_request(request),
-                sampling=_request_sampling(config, request),
-                panel_models=request.fusion.panel_models,
-                sample_count=request.fusion.sample_count,
-                tools=_normalize_tools(request.tools),
-                tool_choice=_normalize_tool_choice(request.tool_choice),
-                trace=trace,
-                request_extra=_request_extra(request),
-            )
-            return StreamingResponse(
-                _fused_completion_sse(
-                    request.model,
-                    stream,
-                    include_evidence=request.fusion.include_evidence,
-                ),
-                media_type="text/event-stream",
-            )
-        # Tool calling through the ensemble: when the caller passes `tools`, the
-        # fused step is allowed to emit `tool_calls`. We return them to the caller
-        # (OpenAI Chat Completions semantics) rather than executing in-process;
-        # the caller posts `tool` results back on the next request.
-        if request.tools:
-            return await _fusion_tool_step(kernel, config, request, trace=trace)
-        if record_run:
-            if _request_extra(request) is not None:
-                return _openai_error_response(
-                    "unsupported_recorded_request_controls",
-                    "Recorded runs do not yet support provider-specific request controls.",
-                    status_code=400,
-                )
-            resolved = await _resolve_native_chat(kernel, request, config)
-            if isinstance(resolved, JSONResponse):
-                return resolved
-            inspection, metadata = resolved
-            return _openai_chat_response(request.model, inspection, metadata)
-        return await _lightweight_fusion_chat(kernel, config, request, trace=trace)
-
-    @app.post("/v1/chat/completions", response_model=None)
-    async def chat_completions(
-        request: FusionRequest,
-        http_request: Request,
-    ) -> dict[str, Any] | JSONResponse | StreamingResponse:
-        record_run = http_request.headers.get("x-fusionkit-record") == "1"
-        parent = context_from_headers(dict(http_request.headers))
-        with fusion_span(
-            "server",
-            "fusion.chat",
-            parent,
-            {"gen_ai.request.model": request.model},
-        ) as request_span:
-            trace = context_of_span(request_span, parent)
-            return await _handle_chat_completions(request, trace, record_run=record_run)
-
-    @app.post("/v1/cursor/chat/completions", response_model=None)
-    async def cursor_chat_completions(
-        raw_request: Request,
-    ) -> dict[str, Any] | JSONResponse | StreamingResponse:
-        # Cursor's BYOK base-URL override POSTs a Responses-API-shaped body to
-        # `{base_url}/chat/completions` while expecting Chat Completions back
-        # (a known Cursor hybrid). The body is parsed raw — FastAPI validating
-        # it as a FusionRequest would 422 on the hybrid shape — translated via
-        # `translate_cursor_request`, then delegated to the exact code path
-        # the plain /v1/chat/completions route uses. Plain Chat Completions
-        # bodies (Cursor Ask mode) pass through untranslated.
-        try:
-            body = await raw_request.json()
-        except (json.JSONDecodeError, UnicodeDecodeError):
-            return _openai_error_response(
-                "invalid_json", "request body must be a JSON object", status_code=400
-            )
-        if not isinstance(body, dict) or ("messages" not in body and "input" not in body):
-            return _openai_error_response(
-                "invalid_request",
-                "request body must include either 'messages' or 'input'",
-                status_code=400,
-            )
-        try:
-            request = FusionRequest.model_validate(translate_cursor_request(body))
-        except ValidationError:
-            # The pydantic error detail can echo request fragments; keep the
-            # response body generic and log the specifics server-side.
-            logger.warning("cursor request failed validation", exc_info=True)
-            return _openai_error_response(
-                "invalid_request",
-                "request body could not be validated as a chat completion request",
-                status_code=400,
-            )
-        record_run = raw_request.headers.get("x-fusionkit-record") == "1"
-        parent = context_from_headers(dict(raw_request.headers))
-        with fusion_span(
-            "server",
-            "fusion.chat.cursor",
-            parent,
-            {"gen_ai.request.model": request.model},
-        ) as request_span:
-            trace = context_of_span(request_span, parent)
-            return await _handle_chat_completions(request, trace, record_run=record_run)
-
     @app.post("/v1/fusion/trajectories:fuse", response_model=None)
     async def fuse_trajectories(
         request: FuseTrajectoriesRequest,
         http_request: Request,
     ) -> dict[str, Any] | JSONResponse | StreamingResponse:
         judge_model = request.judge_model or config.resolved_judge_model
-        # Request-level precedence mirrors config-level resolution
-        # (FusionConfig.resolved_synthesizer_model): a request that pins a
-        # judge without a synthesizer means "this judge doubles as the
-        # synthesizer" — falling back to the *config* synthesizer instead
-        # would silently synthesize a named ensemble's turn on the default
-        # ensemble's judge model.
         synthesizer_model = (
             request.synthesizer_model
             or request.judge_model
             or config.resolved_synthesizer_model
         )
-        for required_model in (judge_model, synthesizer_model):
+        for endpoint_id in (judge_model, synthesizer_model):
             try:
-                kernel.client(required_model)
+                config.require_endpoint(endpoint_id)
             except KeyError:
-                # Name the model from request/config data rather than echoing
-                # the exception text into the response body.
-                return _openai_error_response(
-                    "unknown_model",
-                    f"Unknown model endpoint {required_model!r}.",
+                return _error_response(
+                    "unknown_endpoint",
+                    f"Unknown RouteKit endpoint {endpoint_id!r}.",
                     status_code=400,
                 )
         trajectories = [
@@ -582,16 +309,13 @@ def create_app(
             )
             for trajectory in request.trajectories
         ]
-        messages = request.messages
         tools = _normalize_tools(request.tools)
         tool_choice = _normalize_tool_choice(request.tool_choice)
         request_extra = _request_extra(request)
         trace = context_from_headers(dict(http_request.headers))
-        # Real streaming: the synthesizer turn streams tokens; the fused
-        # trajectory metadata rides on the terminal SSE chunk.
         if request.stream:
             stream = kernel.fuse_trajectories_stream(
-                messages,
+                request.messages,
                 trajectories,
                 judge_model=judge_model,
                 synthesizer_model=synthesizer_model,
@@ -608,13 +332,12 @@ def create_app(
                     request.model,
                     stream,
                     include_evidence=request.include_evidence,
-                    include_panel_accounting=False,
                 ),
                 media_type="text/event-stream",
             )
         try:
             result = await kernel.fuse_trajectories(
-                messages,
+                request.messages,
                 trajectories,
                 judge_model=judge_model,
                 synthesizer_model=synthesizer_model,
@@ -626,181 +349,26 @@ def create_app(
                 trace=trace,
                 request_extra=request_extra,
             )
-        except ProviderCallError as exc:
-            return _provider_error_response(exc)
-        except Exception:  # noqa: BLE001 - surface as an OpenAI-style error body
+        except Exception:  # noqa: BLE001 - internal boundary returns a stable error
             traceback.print_exc()
-            return _openai_error_response(
-                "internal_error",
-                "fusion step failed; see the server logs for details",
+            return _error_response(
+                "fusion_failed",
+                "fusion step failed; see the sidecar logs for details",
                 status_code=502,
             )
-        return _openai_step_response(
+        return _step_response(
             request.model,
             result.response,
             _fusion_extension(result, include_evidence=request.include_evidence),
             usage=result.turn_usage(),
-            provider_cost=result.turn_provider_cost(),
         )
 
     return app
 
 
-def _is_endpoint_model(config: FusionConfig, model: str) -> bool:
-    try:
-        config.endpoint_for(model)
-        return True
-    except KeyError:
-        return False
-
-
-async def _passthrough_chat(
-    kernel: FusionKernel,
-    config: FusionConfig,
-    request: FusionRequest,
-) -> dict[str, Any] | JSONResponse | StreamingResponse:
-    """Call a single configured endpoint directly, bypassing fusion.
-
-    This is the multi-model analogue of `serve-endpoint`: one server fronts every
-    endpoint in the config, routed by the request's `model` (the endpoint id), so
-    an OpenAI-compatible caller (e.g. a per-candidate coding harness) can drive any
-    panel model — including its tool-call loop — through the same base URL.
-    """
-    sampling = _passthrough_sampling(config, request)
-    tools = _normalize_tools(request.tools)
-    tool_choice = _normalize_tool_choice(request.tool_choice)
-    if request.stream:
-        # Real passthrough streaming straight from the provider's stream_chat.
-        stream = kernel.stream_passthrough(
-            request.model,
-            request.messages,
-            sampling,
-            tools=tools,
-            tool_choice=tool_choice,
-            request_extra=_request_extra(request),
-        )
-        return StreamingResponse(
-            _fused_completion_sse(request.model, stream),
-            media_type="text/event-stream",
-        )
-    try:
-        response = await kernel.passthrough_chat(
-            request.model,
-            request.messages,
-            sampling,
-            tools=tools,
-            tool_choice=tool_choice,
-            request_extra=_request_extra(request),
-        )
-    except ProviderCallError as exc:
-        return _provider_error_response(exc)
-    except Exception:  # noqa: BLE001 - surface as an OpenAI-style error body
-        traceback.print_exc()
-        return _openai_error_response(
-            "internal_error",
-            "passthrough chat failed; see the server logs for details",
-            status_code=502,
-        )
-    return _openai_step_response(request.model, response)
-
-
-async def _lightweight_fusion_chat(
-    kernel: FusionKernel,
-    config: FusionConfig,
-    request: FusionRequest,
-    *,
-    trace: TraceContext | None = None,
-) -> dict[str, Any] | JSONResponse:
-    """Non-streaming fused chat without event-sourced run recording."""
-    try:
-        result = await kernel.run_step(
-            request.messages,
-            mode=_mode_from_request(request),
-            sampling=_request_sampling(config, request),
-            panel_models=request.fusion.panel_models,
-            sample_count=request.fusion.sample_count,
-            trace=trace,
-            request_extra=_request_extra(request),
-        )
-    except ProviderCallError as exc:
-        return _provider_error_response(exc)
-    except PanelExhaustedError:
-        traceback.print_exc()
-        return _openai_error_response(
-            "all_models_failed",
-            "fusion step failed: every panel model failed; see the server logs for details",
-            status_code=502,
-        )
-    except Exception:  # noqa: BLE001 - surface as an OpenAI-style error body
-        traceback.print_exc()
-        return _openai_error_response(
-            "internal_error", "fusion step failed; see the server logs for details", status_code=502
-        )
-    return _openai_step_response(
-        request.model,
-        result.response,
-        _fusion_extension(result, include_evidence=request.fusion.include_evidence),
-        usage=_fuse_step_usage(result),
-        provider_cost=result.compound_provider_cost(),
-        fusionkit=_lightweight_fusion_metadata(result),
-    )
-
-
-async def _fusion_tool_step(
-    kernel: FusionKernel,
-    config: FusionConfig,
-    request: FusionRequest,
-    *,
-    trace: TraceContext | None = None,
-) -> dict[str, Any] | JSONResponse:
-    """Non-streaming fused step that may return ``tool_calls`` to the caller.
-
-    The ensemble generates tool-aware candidate trajectories, and the synthesizer
-    step is allowed to emit ``tool_calls``. Following OpenAI Chat Completions tool
-    semantics, those calls are returned to the caller (finish_reason
-    ``tool_calls``); the caller executes them and posts ``tool`` result messages
-    back on the next request, which re-enter the panel + synthesizer.
-    """
-    try:
-        result = await kernel.run_step(
-            request.messages,
-            mode=_mode_from_request(request),
-            sampling=_request_sampling(config, request),
-            panel_models=request.fusion.panel_models,
-            sample_count=request.fusion.sample_count,
-            tools=_normalize_tools(request.tools),
-            tool_choice=_normalize_tool_choice(request.tool_choice),
-            trace=trace,
-            request_extra=_request_extra(request),
-        )
-    except ProviderCallError as exc:
-        return _provider_error_response(exc)
-    except PanelExhaustedError:
-        # The aggregated per-model error text embeds upstream provider
-        # messages; log it server-side and keep the response body generic.
-        traceback.print_exc()
-        return _openai_error_response(
-            "all_models_failed",
-            "fusion step failed: every panel model failed; see the server logs for details",
-            status_code=502,
-        )
-    except Exception:  # noqa: BLE001 - surface as an OpenAI-style error body
-        traceback.print_exc()
-        return _openai_error_response(
-            "internal_error", "fusion step failed; see the server logs for details", status_code=502
-        )
-    return _openai_step_response(
-        request.model,
-        result.response,
-        _fusion_extension(result, include_evidence=request.fusion.include_evidence),
-        usage=_fuse_step_usage(result),
-        provider_cost=result.compound_provider_cost(),
-    )
-
-
 def _request_sampling(
     config: FusionConfig,
-    request: FusionRequest | FuseTrajectoriesRequest,
+    request: FuseTrajectoriesRequest,
 ) -> SamplingConfig:
     return config.sampling.model_copy(
         update={
@@ -817,7 +385,7 @@ def _request_sampling(
 
 
 def _request_extra(
-    request: FusionRequest | FuseTrajectoriesRequest,
+    request: FuseTrajectoriesRequest,
 ) -> dict[str, object] | None:
     """Provider-specific controls that must survive every model-call stage."""
 
@@ -834,55 +402,11 @@ def _request_extra(
     return extra or None
 
 
-def _passthrough_sampling(config: FusionConfig, request: FusionRequest) -> SamplingConfig:
-    """Request sampling for a passthrough call, with per-model defaults.
-
-    Precedence: an explicit request value wins, then an operator-pinned value in
-    the config's ``sampling`` section, then the model-family default (qwen /
-    kimi-k2 anti-repetition tuning), then the generic default.
-    """
-    sampling = _request_sampling(config, request)
-    try:
-        endpoint = config.endpoint_for(request.model)
-    except KeyError:
-        return sampling
-    request_values = {"temperature": request.temperature, "top_p": request.top_p}
-    update = {
-        key: value
-        for key, value in model_sampling_defaults(endpoint.model).items()
-        if request_values.get(key) is None and key not in config.sampling.model_fields_set
-    }
-    return sampling.model_copy(update=update) if update else sampling
-
-
-async def _resolve_native_chat(
-    kernel: FusionKernel,
-    request: FusionRequest,
-    config: FusionConfig,
-) -> tuple[RunInspection, dict[str, Any]] | JSONResponse:
-    run_request = _fusion_request_to_run_request(request, config)
-    result = await kernel.create_and_run(run_request)
-    if isinstance(result, CreateRunResult):
-        if result.idempotency_outcome == "conflict":
-            return _openai_native_error_response(result.terminal_error, status_code=409)
-        if result.run_id is None:
-            return _openai_error_response(
-                "run_not_available",
-                "Native run did not return a run id.",
-                status_code=500,
-            )
-        result = kernel.inspect_run(result.run_id)
-    if result.state != "completed" or result.final_output is None:
-        return _openai_native_error_response(result.terminal_error, status_code=500)
-    return result, _chat_fusion_metadata(result)
-
-
 async def _fused_completion_sse(
     model: str,
     stream: AsyncIterator[StreamChunk | FuseResult],
     *,
     include_evidence: bool = False,
-    include_panel_accounting: bool = True,
 ) -> AsyncIterator[str]:
     """Emit OpenAI ``chat.completion.chunk`` SSE from a fused/passthrough stream.
 
@@ -963,43 +487,19 @@ async def _fused_completion_sse(
     # which reads `usage` off the SSE tail) can account a fused stream's cost —
     # mirroring the non-streaming `_openai_step_response` body.
     if final_result is not None:
-        response_usage = (
-            final_result.compound_usage()
-            if include_panel_accounting
-            else final_result.turn_usage()
-        )
-        extra["usage"] = _usage_payload(response_usage)
-        step_cost = (
-            final_result.compound_provider_cost()
-            if include_panel_accounting
-            else final_result.turn_provider_cost()
-        )
-        if step_cost is not None:
-            extra["provider_cost"] = step_cost.model_dump(mode="json", exclude_none=True)
+        extra["usage"] = _usage_payload(final_result.turn_usage())
     elif response is not None:
         extra["usage"] = _usage_payload(response.usage)
-        if response.provider_cost is not None:
-            extra["provider_cost"] = response.provider_cost.model_dump(
-                mode="json", exclude_none=True
-            )
     yield chunk({}, finish, extra or None)
     yield "data: [DONE]\n\n"
 
 
 def _sse_error_event(exc: BaseException) -> str:
-    if isinstance(exc, ProviderCallError):
-        # Mirror the non-streaming error body so a mid-stream failure carries
-        # the same canonical ``error_category`` failover signal (WS5).
-        body: dict[str, Any] = _provider_error_body(exc)
-    else:
-        # Unclassified exceptions must not leak internals (messages can embed
-        # paths, config, or stack fragments); the full traceback is logged
-        # server-side where the stream is caught.
-        body = {
-            "message": "internal error during streaming; see the server logs for details",
-            "type": "internal_error",
-            "code": "internal_error",
-        }
+    del exc
+    body = {
+        "type": "sidecar_error",
+        "code": "fusion_failed",
+    }
     return f"data: {json.dumps({'error': body})}\n\n"
 
 
@@ -1027,126 +527,18 @@ def _create_run_payload(result: CreateRunResult) -> dict[str, Any]:
     }
 
 
-def _fusion_request_to_run_request(
-    request: FusionRequest,
-    config: FusionConfig,
-) -> FusionRunRequestV1:
-    sampling = config.sampling.model_copy(
-        update={
-            key: value
-            for key, value in {
-                "temperature": request.temperature,
-                "top_p": request.top_p,
-                "max_tokens": request.max_tokens,
-            }.items()
-            if value is not None
-        }
-    )
-    payload = {
-        **contract_metadata("fusion-run-request.v1"),
-        "request_id": make_id("chat_request"),
-        "mode": _mode_from_request(request),
-        "messages": [
-            message.model_dump(mode="json", include={"role", "content"})
-            for message in request.messages
-        ],
-        "sampling": sampling.model_dump(mode="json"),
-        "sample_count": request.fusion.sample_count,
-        "requested_models": request.fusion.panel_models,
-        "tool_policy": _tool_policy_from_options(request.fusion.tool_execution),
-    }
-    payload["request_hash"] = hash_json(
-        {
-            "model": request.model,
-            "messages": payload["messages"],
-            "sampling": payload["sampling"],
-            "fusion": request.fusion.model_dump(mode="json"),
-        }
-    )
-    return FusionRunRequestV1.model_validate(payload)
-
-
-def _tool_policy_from_options(options: FusionToolExecutionOptions) -> str:
-    if options.mode == "external":
-        return "external_pause"
-    if options.mode == "executor":
-        return "allowed"
-    return "disabled"
-
-
-def _tool_execution_policy_from_options(options: FusionToolExecutionOptions) -> ToolExecutionPolicy:
-    return ToolExecutionPolicy.model_validate(
-        {
-            "mode": options.mode,
-            "allowed_side_effects": options.allowed_side_effects,
-            "environment": options.environment,
-            "policy_id": options.policy_id,
-            "dedupe_read_only": options.dedupe_read_only,
-        }
-    )
-
-
-def _lightweight_fusion_metadata(result: FuseResult) -> dict[str, Any]:
-    return {"trajectory_count": result.panel_trajectory_count}
-
-
-def _chat_fusion_metadata(inspection: RunInspection) -> dict[str, Any]:
-    return {
-        "run_id": inspection.run_id,
-        "trace_id": inspection.trace_id,
-        "state": inspection.state,
-        "status": inspection.status,
-        "event_cursor": inspection.event_cursor,
-        "trajectory_count": len(inspection.trajectories),
-        "trajectory_model_ids": [
-            trajectory.model_id for trajectory in inspection.trajectories
-        ],
-    }
-
-
 def _native_error_response(
     error: NativeRunError | None,
     status_code: int,
 ) -> JSONResponse:
-    resolved_error = error or NativeRunError(
+    resolved = error or NativeRunError(
         error_kind="internal_error",
         error_code="unknown_native_run_error",
         retryable=False,
         owner="fusionkit",
         terminal_reason="unknown_native_run_error",
     )
-    return _json_response({"error": resolved_error.model_dump(mode="json")}, status_code)
-
-
-def _openai_native_error_response(
-    error: NativeRunError | None,
-    status_code: int,
-) -> JSONResponse:
-    resolved_error = error or NativeRunError(
-        error_kind="internal_error",
-        error_code="native_run_failed",
-        retryable=False,
-        owner="fusionkit",
-        terminal_reason="native_run_failed",
-    )
-    return _openai_error_response(
-        resolved_error.error_code,
-        resolved_error.message or resolved_error.terminal_reason,
-        status_code=status_code,
-    )
-
-
-def _openai_error_response(error_code: str, message: str, status_code: int) -> JSONResponse:
-    return _json_response(
-        {
-            "error": {
-                "message": message,
-                "type": "invalid_request_error",
-                "code": error_code,
-            }
-        },
-        status_code=status_code,
-    )
+    return _json_response({"error": resolved.model_dump(mode="json")}, status_code)
 
 
 def _run_not_found_response() -> JSONResponse:
@@ -1170,74 +562,61 @@ def _dump_optional(model: BaseModel | None) -> dict[str, Any] | None:
     return None if model is None else model.model_dump(mode="json")
 
 
-def _mode_from_request(request: FusionRequest) -> FusionMode:
-    if request.fusion.mode is not None:
-        return request.fusion.mode
-    return cast(FusionMode, fusion_mode_for_model(request.model))
+def _error_response(code: str, message: str, status_code: int) -> JSONResponse:
+    return _json_response(
+        {"error": {"message": message, "type": "sidecar_error", "code": code}},
+        status_code,
+    )
 
 
-# `type` values that mark a wire shape or a choice mode, never a tool identity.
-_NON_TOOL_TYPES = frozenset({"function", "custom", "auto", "none", "required", "any", "tool"})
+_NON_TOOL_TYPES = frozenset(
+    {"function", "custom", "auto", "none", "required", "any", "tool"}
+)
 
 
 def _resolved_tool_name(entry: dict[str, Any], function: dict[str, Any]) -> str:
-    """The provider-facing name for a tool definition.
-
-    Named tools keep their name. A *typed* nameless tool (e.g. an OpenAI
-    Responses `{type: "tool_search", ...}` / `{type: "web_search", ...}` entry)
-    is projected under its ``type``: the caller executes those tools client-side
-    and dispatches the returned tool call by that same name, so the projection
-    round-trips losslessly. Shape/mode markers (``function``, ``auto``, ...)
-    are never treated as tool identities.
-    """
     name = function.get("name", "")
     if isinstance(name, str) and name:
         return name
-    kind = entry.get("type", "") if isinstance(entry, dict) else ""
+    kind = entry.get("type", "")
     if isinstance(kind, str) and kind and kind not in _NON_TOOL_TYPES:
         return kind
     return ""
 
 
-def _normalize_tools(tools: list[dict[str, Any]] | None) -> list[dict[str, Any]] | None:
-    """Accept OpenAI-nested ({type:function, function:{...}}), flat, or typed
-    nameless tool defs and return the flat {name, description, parameters}
-    shape FusionKit's clients expect (typed tools projected under their type)."""
+def _normalize_tools(
+    tools: list[dict[str, Any]] | None,
+) -> list[dict[str, Any]] | None:
     if not tools:
         return None
     normalized: list[dict[str, Any]] = []
     for entry in tools:
-        function = (
-            entry.get("function") if isinstance(entry, dict) and "function" in entry else entry
-        )
+        function = entry.get("function") if "function" in entry else entry
         if not isinstance(function, dict):
             continue
         name = _resolved_tool_name(entry, function)
-        # Skip only tools with no resolvable identity at all: nothing for the
-        # model to call and nothing the caller could dispatch back.
         if not name:
             continue
         normalized.append(
             {
                 "name": name,
                 "description": function.get("description", ""),
-                "parameters": function.get("parameters", {"type": "object", "properties": {}}),
+                "parameters": function.get(
+                    "parameters", {"type": "object", "properties": {}}
+                ),
             }
         )
     return normalized or None
 
 
-def _normalize_tool_choice(choice: str | dict[str, Any] | None) -> str | dict[str, Any] | None:
+def _normalize_tool_choice(
+    choice: str | dict[str, Any] | None,
+) -> str | dict[str, Any] | None:
     if choice is None or isinstance(choice, str):
         return choice
-    if isinstance(choice, dict):
-        function = choice.get("function") if "function" in choice else choice
-        name = (
-            _resolved_tool_name(choice, function) if isinstance(function, dict) else ""
-        )
-        if name:
-            return {"name": name}
-    return None
+    function = choice.get("function") if "function" in choice else choice
+    name = _resolved_tool_name(choice, function) if isinstance(function, dict) else ""
+    return {"name": name} if name else None
 
 
 def _tool_calls_payload(response: ModelResponse) -> list[dict[str, Any]]:
@@ -1249,10 +628,6 @@ def _tool_calls_payload(response: ModelResponse) -> list[dict[str, Any]]:
         }
         for index, call in enumerate(response.tool_calls)
     ]
-
-
-def _fuse_step_usage(result: FuseResult) -> Usage:
-    return result.compound_usage()
 
 
 def _usage_payload(usage: Usage) -> dict[str, Any]:
@@ -1275,6 +650,8 @@ def _trajectory_evidence_payload(trajectory: Trajectory) -> dict[str, Any]:
         "error_category",
         "provider",
         "status_code",
+        "verification",
+        "end_reason",
     )
     metadata = {
         key: trajectory.metadata[key]
@@ -1350,119 +727,20 @@ def _fusion_extension(
     return extension or None
 
 
-def _openai_step_response(
+def _step_response(
     model: str,
     response: ModelResponse,
     fusion: dict[str, Any] | None = None,
     *,
     usage: Usage | None = None,
-    provider_cost: ProviderCost | None = None,
-    fusionkit: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     message: dict[str, Any] = {"role": "assistant", "content": response.content or ""}
     if response.reasoning:
-        # Out-of-band reasoning (local MLX / vLLM-style upstreams) surfaces on
-        # the de-facto ``reasoning_content`` field coding agents understand.
         message["reasoning_content"] = response.reasoning
     tool_calls = _tool_calls_payload(response)
     if tool_calls:
         message["tool_calls"] = tool_calls
-    finish_reason = "tool_calls" if tool_calls else (response.finish_reason or "stop")
-    resolved_cost = provider_cost if provider_cost is not None else response.provider_cost
     payload: dict[str, Any] = {
-        "id": f"chatcmpl-{uuid.uuid4()}",
-        "object": "chat.completion",
-        "created": int(time.time()),
-        "model": model,
-        "choices": [{"index": 0, "message": message, "finish_reason": finish_reason}],
-        "usage": _usage_payload(usage if usage is not None else response.usage),
-    }
-    if resolved_cost is not None:
-        payload["provider_cost"] = resolved_cost.model_dump(mode="json", exclude_none=True)
-    if fusion is not None:
-        payload["fusion"] = fusion
-    if fusionkit is not None:
-        payload["fusionkit"] = fusionkit
-    return payload
-
-
-# Closed vocabularies for laundering classified-error fields into response
-# bodies: values come from these literal maps, never from the exception object,
-# so upstream exception text cannot ride along into a client-visible payload.
-_SAFE_CATEGORIES: dict[str, ProviderErrorCategory] = {
-    name: name for name in get_args(ProviderErrorCategory)
-}
-_SAFE_PROVIDERS: dict[str, str] = {name: name for name in get_args(ProviderKind)}
-
-
-def _safe_category(category: object) -> ProviderErrorCategory:
-    return _SAFE_CATEGORIES.get(str(category), "unknown")
-
-
-def _provider_error_body(exc: ProviderCallError) -> dict[str, Any]:
-    """Build the OpenAI-style error body for a classified egress failure.
-
-    The taxonomy ``category`` (and ``retry_after``) is surfaced so a client -
-    or the WS5 failover layer reading this response - can branch on it without
-    re-parsing the upstream provider error. The upstream provider's message is
-    logged server-side rather than echoed to the client: provider error bodies
-    can embed request excerpts and infrastructure details.
-    """
-    category = _safe_category(exc.category)
-    provider = _SAFE_PROVIDERS.get(str(exc.provider), "custom")
-    logger.warning("provider call failed (%s/%s): %s", provider, category, exc)
-    body: dict[str, Any] = {
-        "message": (
-            f"{provider} call failed ({category}); see the server logs for the provider's message"
-        ),
-        "type": "provider_error",
-        "code": category,
-        # ``error_category`` is the canonical machine-readable failover signal
-        # the Node gateway (WS5) branches on without re-parsing provider text;
-        # ``category``/``code`` are kept as aliases for existing readers.
-        "error_category": category,
-        "category": category,
-        "provider": provider,
-    }
-    retry_after = exc.retry_after
-    if isinstance(retry_after, int | float):
-        body["retry_after"] = float(retry_after)
-    return body
-
-
-def _provider_error_response(exc: ProviderCallError) -> JSONResponse:
-    """Map a classified egress failure onto an OpenAI-style error body."""
-    body = _provider_error_body(exc)
-    return _json_response(
-        {"error": body}, status_code=_status_for_category(_safe_category(exc.category))
-    )
-
-
-def _status_for_category(category: ProviderErrorCategory) -> int:
-    match category:
-        case "transient":
-            return 503
-        case "quota_exhausted":
-            return 429
-        case "auth_permanent":
-            return 401
-        case "context_overflow":
-            # The payload as-is can never succeed; mirror the upstream 400.
-            return 400
-        case "unknown":
-            return 502
-        case _ as unreachable:
-            assert_never(unreachable)
-
-
-def _openai_chat_response(
-    model: str, inspection: RunInspection, metadata: dict[str, Any]
-) -> dict[str, Any]:
-    # Real metering on the plain non-streaming path: the run ledger already
-    # records every model call (panel + judge + synthesizer), so the response
-    # carries their summed usage rather than a fabricated null block.
-    usage = inspection.usage
-    return {
         "id": f"chatcmpl-{uuid.uuid4()}",
         "object": "chat.completion",
         "created": int(time.time()),
@@ -1470,17 +748,22 @@ def _openai_chat_response(
         "choices": [
             {
                 "index": 0,
-                "finish_reason": "stop",
-                "message": {
-                    "role": "assistant",
-                    "content": inspection.final_output or "",
-                },
+                "message": message,
+                "finish_reason": (
+                    "tool_calls" if tool_calls else response.finish_reason or "stop"
+                ),
             }
         ],
-        "usage": {
-            "prompt_tokens": usage.prompt_tokens if usage is not None else None,
-            "completion_tokens": usage.completion_tokens if usage is not None else None,
-            "total_tokens": usage.total_tokens if usage is not None else None,
-        },
-        "fusionkit": metadata,
+        "usage": _usage_payload(usage or response.usage),
     }
+    if fusion is not None:
+        payload["fusion"] = fusion
+    return payload
+
+
+__all__ = [
+    "FuseTrajectoriesRequest",
+    "TrajectoryInput",
+    "TrajectoryItemInput",
+    "create_app",
+]

@@ -4,13 +4,12 @@
  * Implements the minimal Agent Client Protocol (ACP) local-agent lifecycle over
  * newline-delimited JSON-RPC on stdio: `initialize`, `authenticate`,
  * `session/new`, and `session/prompt`. A `session/prompt` runs the unified
- * harness ensemble through an injected runner and streams the synthesized final
- * answer back as `session/update` notifications before returning the prompt
+ * injected runner and streams the final answer back as `session/update`
+ * notifications before returning the prompt
  * turn's stop reason.
  *
- * The runner is injected so this package stays free of a dependency on
- * `@fusionkit/ensemble` (which depends on this package). The input/output streams
- * are injectable for deterministic testing.
+ * The runner and input/output streams are injectable for deterministic
+ * testing.
  */
 
 import { createInterface } from "node:readline";

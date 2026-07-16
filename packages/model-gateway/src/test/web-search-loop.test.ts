@@ -75,7 +75,7 @@ test("resolveWebSearchExecutor prefers the dialect's own provider and falls back
   assert.equal(resolveWebSearchExecutor("anthropic", { OPENAI_API_KEY: "sk-a" })?.provider, "openai");
   assert.equal(resolveWebSearchExecutor("responses", { ANTHROPIC_API_KEY: "sk-b" })?.provider, "anthropic");
   assert.equal(resolveWebSearchExecutor("responses", {}), undefined);
-  assert.equal(resolveWebSearchExecutor("responses", { ...both, FUSIONKIT_WEB_SEARCH: "0" }), undefined);
+  assert.equal(resolveWebSearchExecutor("responses", { ...both, ROUTEKIT_WEB_SEARCH: "0" }), undefined);
 });
 
 // ---- Responses ingress ----
@@ -149,7 +149,7 @@ test("runBufferedServerToolLoop executes searches and loops to the final answer"
   // The final Responses payload renders the native item before the message.
   const rendered = chatToResponses(
     outcome.openai as never,
-    "fusion-panel",
+    "route-primary",
     responsesToolRegistry({ tools: [WEB_SEARCH_DECL] }, { serverTools: true }),
     outcome.searches
   );
@@ -265,7 +265,7 @@ test("composeServerToolStream renders native web_search_call items and one compl
     executor
   });
   const registry = responsesToolRegistry({ tools: [WEB_SEARCH_DECL] }, { serverTools: true });
-  const text = await new Response(openAiSseToResponses(composed, "fusion-panel", registry)).text();
+  const text = await new Response(openAiSseToResponses(composed, "route-primary", registry)).text();
   assert.ok(text.includes('"type":"web_search_call"'), "native search item emitted");
   assert.ok(text.includes("response.web_search_call.searching"), "search lifecycle events emitted");
   assert.ok(!text.includes('"type":"function_call"'), "the server tool never surfaces as a function_call");
@@ -279,7 +279,7 @@ test("composeServerToolStream renders native web_search_call items and one compl
     payload.response.output.map((item) => item.type).sort(),
     ["message", "web_search_call"]
   );
-  // Usage sums both fused steps.
+  // Usage sums both model steps.
   assert.equal(payload.response.usage.input_tokens, 30);
   assert.equal(payload.response.usage.output_tokens, 10);
   // The full text of both steps reached the message item.
@@ -337,7 +337,7 @@ test("chatToAnthropicMessage renders executed searches as native blocks", () => 
   const openai = {
     choices: [{ index: 0, message: { role: "assistant", content: "Node 24." }, finish_reason: "stop" }]
   };
-  const rendered = chatToAnthropicMessage(openai as never, "fusion-panel", [
+  const rendered = chatToAnthropicMessage(openai as never, "route-primary", [
     {
       itemId: "srv_1",
       query: "node lts",
@@ -385,7 +385,7 @@ test("openAiSseToAnthropic renders loop markers as native search blocks", async 
     serverToolNames: new Set(["web_search"]),
     executor
   });
-  const text = await new Response(openAiSseToAnthropic(composed, "fusion-panel")).text();
+  const text = await new Response(openAiSseToAnthropic(composed, "route-primary")).text();
   assert.ok(text.includes('"type":"server_tool_use"'));
   assert.ok(text.includes('"type":"web_search_tool_result"'));
   assert.ok(text.includes('"url":"https://nodejs.org"'));

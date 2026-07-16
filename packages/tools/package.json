@@ -1,5 +1,5 @@
 {
-  "name": "@fusionkit/tools",
+  "name": "@routekit/tools",
   "private": false,
   "version": "0.8.0",
   "repository": {
@@ -7,7 +7,7 @@
     "url": "git+https://github.com/velum-labs/handoffkit.git",
     "directory": "packages/tools"
   },
-  "description": "Tool integration contract (launcher + harness adapter) and registry that the fusionkit CLI wires per-tool packages into.",
+  "description": "Product-neutral coding tool launcher, driver, and capability registry.",
   "license": "Apache-2.0",
   "type": "module",
   "exports": {
@@ -26,16 +26,10 @@
     "provenance": true
   },
   "dependencies": {
-    "@fusionkit/ensemble": "workspace:*",
-    "@fusionkit/protocol": "workspace:*",
-    "@fusionkit/registry": "workspace:*",
-    "@fusionkit/runtime-utils": "workspace:*"
+    "@routekit/harness-core": "workspace:*"
   },
   "keywords": [
-    "fusionkit",
-    "model-fusion",
     "llm",
-    "ensemble",
     "coding-agent",
     "tooling",
     "harness",

@@ -9,8 +9,8 @@ import { startGateway } from "../server.js";
  * local model server being OOM-killed during a turn) must fail only that one
  * request. Historically the error path wrote JSON onto a response whose
  * headers were already sent, which threw inside the catch handler and killed
- * the whole process hosting the gateway (for `fusionkit codex`, the CLI
- * itself) — leaving the tool with a bare "stream disconnected" error.
+ * the whole process hosting the gateway, leaving the client with a bare
+ * "stream disconnected" error.
  */
 
 /** A backend whose chat stream emits one SSE chunk, then errors mid-stream. */
@@ -90,7 +90,7 @@ test("an error before headers are sent still yields a 502 JSON body", async () =
     assert.equal(response.status, 502);
     const body = (await response.json()) as { error?: { message?: string; type?: string } };
     assert.equal(body.error?.type, "upstream_error");
-    assert.match(body.error?.message ?? "", /exploded/);
+    assert.equal(body.error?.message, "upstream request failed");
   } finally {
     await gateway.close();
   }

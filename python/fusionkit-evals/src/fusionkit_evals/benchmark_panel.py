@@ -23,62 +23,22 @@ from typing import Any, cast
 
 from fusionkit_core.config import (
     FusionConfig,
-    ModelEndpoint,
-    ProviderKind,
     SamplingConfig,
 )
-from fusionkit_core.registry import (
-    BENCHMARK_PANEL_PRESETS,
-    PROVIDER_DEFAULT_BASE_URL,
-    PROVIDER_KEY_ENV,
-)
 from pydantic import BaseModel, Field, model_validator
+
+from fusionkit_evals.registry import BENCHMARK_PANEL_PRESETS
 
 # Lopsided panels make fusion look pointless: when the best member beats the
 # next-best by more than this margin, the oracle ceiling is dominated by a single
 # model and there is little for the judge to gain.
 LOPSIDED_SCORE_GAP = 0.2
 
-DEFAULT_PROVIDER_BASE_URLS: dict[ProviderKind, str] = {
-    cast(ProviderKind, provider): PROVIDER_DEFAULT_BASE_URL[provider]
-    for provider in ("openai", "anthropic", "google", "openrouter", "codex")
-}
-
-DEFAULT_PROVIDER_KEY_ENVS: dict[ProviderKind, str] = {
-    cast(ProviderKind, provider): key_env
-    for provider, key_env in PROVIDER_KEY_ENV.items()
-    if provider in DEFAULT_PROVIDER_BASE_URLS
-}
-
-DEFAULT_BENCHMARK_PROVIDER: ProviderKind = cast(
-    ProviderKind,
-    next(iter(BENCHMARK_PANEL_PRESETS.values()))["members"][0]["provider"],
-)
-
-
 class BenchmarkPanelMember(BaseModel):
     """A single solver model in a benchmark panel."""
 
     id: str
     model: str
-    provider: ProviderKind = DEFAULT_BENCHMARK_PROVIDER
-    base_url: str | None = None
-    api_key_env: str | None = None
-
-    def resolved_base_url(self) -> str:
-        if self.base_url is not None:
-            return self.base_url
-        base_url = DEFAULT_PROVIDER_BASE_URLS.get(self.provider)
-        if base_url is None:
-            raise ValueError(
-                f"panel member {self.id!r} (provider {self.provider!r}) needs an explicit base_url"
-            )
-        return base_url
-
-    def resolved_api_key_env(self) -> str | None:
-        if self.api_key_env is not None:
-            return self.api_key_env
-        return DEFAULT_PROVIDER_KEY_ENVS.get(self.provider)
 
 
 class BenchmarkPanel(BaseModel):
@@ -126,22 +86,14 @@ class BenchmarkPanel(BaseModel):
     def to_fusion_config(
         self,
         *,
+        routekit_url: str = "http://127.0.0.1:8787",
         sampling: SamplingConfig | None = None,
     ) -> FusionConfig:
-        """Render this panel as a :class:`FusionConfig` for ``fusionkit serve``."""
+        """Render this panel as an opaque-id sidecar :class:`FusionConfig`."""
 
-        endpoints = [
-            ModelEndpoint(
-                id=member.id,
-                model=member.model,
-                base_url=member.resolved_base_url(),
-                api_key_env=member.resolved_api_key_env(),
-                provider=member.provider,
-            )
-            for member in self.members
-        ]
         return FusionConfig(
-            endpoints=endpoints,
+            routekit_url=routekit_url,
+            endpoint_ids=self.member_ids,
             default_model=self.members[0].id,
             judge_model=self.judge_id,
             synthesizer_model=self.resolved_synthesizer_id,
@@ -232,7 +184,6 @@ def _panel_from_registry(preset: Mapping[str, Any]) -> BenchmarkPanel:
             BenchmarkPanelMember(
                 id=str(member["id"]),
                 model=str(member["model"]),
-                provider=cast(ProviderKind, member["provider"]),
             )
             for member in cast(list[Mapping[str, Any]], preset["members"])
         ],
@@ -262,8 +213,6 @@ def get_benchmark_panel(panel_id: str) -> BenchmarkPanel:
 __all__ = [
     "BENCHMARK_PANELS",
     "DECORRELATED_PEER_PANEL",
-    "DEFAULT_PROVIDER_BASE_URLS",
-    "DEFAULT_PROVIDER_KEY_ENVS",
     "LOPSIDED_DEFAULT_PANEL",
     "LOPSIDED_SCORE_GAP",
     "BenchmarkPanel",

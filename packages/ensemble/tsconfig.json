@@ -12,13 +12,22 @@
       "path": "../harness-core"
     },
     {
+      "path": "../tools"
+    },
+    {
       "path": "../kernel"
     },
     {
       "path": "../model-gateway"
     },
     {
+      "path": "../fusion-gateway"
+    },
+    {
       "path": "../protocol"
+    },
+    {
+      "path": "../contracts"
     },
     {
       "path": "../runtime-utils"

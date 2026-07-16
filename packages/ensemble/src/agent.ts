@@ -1,6 +1,7 @@
 import { runWorktreeAgent } from "@fusionkit/adapter-ai-sdk";
-import { artifactHash, ATTR } from "@fusionkit/protocol";
-import { RUNTIME_TIMEOUT_MS } from "@fusionkit/runtime-utils";
+import { ATTR } from "@fusionkit/protocol";
+import { artifactHash } from "@routekit/contracts";
+import { defineTimeouts } from "@routekit/runtime";
 import { emitFusionEvent } from "@fusionkit/tracing";
 import type { FusionTraceCarrier } from "@fusionkit/tracing";
 
@@ -21,7 +22,7 @@ import {
  */
 
 /** Wall-clock budget for a single panel model's agent run (model + tools). */
-const DEFAULT_MODEL_TIMEOUT_MS = RUNTIME_TIMEOUT_MS.panelModel;
+const DEFAULT_MODEL_TIMEOUT_MS = defineTimeouts({ panelModel: 10 * 60 * 1000 }).panelModel;
 
 export type AgentHarnessOptions = {
   id?: string;
@@ -87,9 +88,9 @@ export function terminalProposalFromSteps(
 
 export function createAgentHarness(options: AgentHarnessOptions): HarnessAdapter {
   const id = options.id ?? "agent";
-  // The base URL is shared across panel models (one `fusionkit serve` router),
-  // which routes by the request `model` field. So the request model is the panel
-  // *endpoint id* (what the router's passthrough matches), not the provider model
+  // The base URL is shared across panel models (one RouteKit gateway), which
+  // routes by the request `model` field. So the request model is the panel
+  // *endpoint id* (what RouteKit matches), not the provider model
   // name. With a dedicated per-model endpoint the id is ignored, so this is safe
   // either way.
   return {

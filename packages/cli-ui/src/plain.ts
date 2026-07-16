@@ -1,6 +1,6 @@
 /**
  * The plain-text presenter: ordered, deterministic line logs for CI, pipes,
- * `FUSIONKIT_NO_TUI=1`, and the `node --test` subprocess suites. Live surfaces
+ * `ROUTEKIT_NO_TUI=1`, and the `node --test` subprocess suites. Live surfaces
  * print one line per state transition instead of animating in place.
  */
 import { contentWidth, formatBytes, wrapText } from "./format.js";

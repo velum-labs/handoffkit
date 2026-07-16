@@ -15,7 +15,8 @@ class RouterDecision:
     reasons: tuple[str, ...]
 
 
-class HeuristicRouter:
+class FusionModeRouter:
+    """Select an internal fusion mode; it never routes model endpoints."""
     hard_keywords = frozenset(
         {
             "architecture",
