@@ -38,7 +38,7 @@ async function withStack(
   }
 }
 
-/** Queue a persistent 429 storm for one provider model (SDK x engine retries). */
+/** Queue a persistent 429 storm for FusionKit's explicit retry budget. */
 async function queueRateLimitStorm(stack: SimFusionStack, model: string): Promise<void> {
   await stack.sim.queue(
     model,
@@ -89,9 +89,8 @@ test("onRateLimit=passthrough: the engine's classified vendor failure surfaces v
     assert.equal(response.status, 503, await stack.sim.describeJournal());
     const body = (await response.json()) as { error?: { error_category?: string } };
     assert.equal(body.error?.error_category, "transient");
-    // The full retry storm hit the wire (SDK budget x engine retries), and no
-    // fusion ran: the judge was never called.
-    assert.ok((await stack.sim.calls({ model: "gpt-panel-a", status: 429 })).length >= 9);
+    // SDK retries are disabled; FusionKit owns exactly three attempts.
+    assert.equal((await stack.sim.calls({ model: "gpt-panel-a", status: 429 })).length, 3);
     assert.equal((await stack.sim.calls({ model: "gpt-judge" })).length, 0);
   });
 });

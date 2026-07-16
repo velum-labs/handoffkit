@@ -294,6 +294,8 @@ class _Sandbox:
         return set_limits
 
     def _command(self, script: str = "sol.py") -> tuple[list[str], bool]:
+        if not self.require_isolation:
+            return ([sys.executable, "-I", "-S", script], False)
         unshare = shutil.which("unshare")
         system_python = Path("/usr/bin/python3")
         if sys.platform == "linux" and unshare and system_python.exists():
@@ -313,12 +315,10 @@ class _Sandbox:
                 ],
                 True,
             )
-        if self.require_isolation:
-            raise RuntimeError(
-                "LiveCodeBench requires Linux user/network/PID namespaces; "
-                "set require_isolation=false only for trusted local fixtures"
-            )
-        return ([sys.executable, "-I", "-S", script], False)
+        raise RuntimeError(
+            "LiveCodeBench requires Linux user/network/PID namespaces; "
+            "set require_isolation=false only for trusted local fixtures"
+        )
 
     def run(self, code: str, stdin: str, *, timeout_s: float) -> dict[str, Any]:
         with tempfile.TemporaryDirectory() as tmp:

@@ -127,7 +127,7 @@ def test_decode_tests_rejects_executable_pickle(tmp_path: Path) -> None:
 
 
 def test_run_tests_executes_and_normalizes() -> None:
-    sandbox = _Sandbox()
+    sandbox = _Sandbox(require_isolation=False)
     code = "import sys\nprint(int(sys.stdin.read()) * 2)"
     tests = [
         {"input": "2\n", "output": "4\n"},
@@ -139,7 +139,7 @@ def test_run_tests_executes_and_normalizes() -> None:
 
 def test_run_tests_accepts_equivalent_numeric_output() -> None:
     result = run_tests(
-        _Sandbox(),
+        _Sandbox(require_isolation=False),
         "print('1.0   2e0')",
         [{"input": "", "output": "1 2\n"}],
         timeout_s=10.0,
@@ -156,7 +156,7 @@ def test_output_matching_preserves_line_boundaries() -> None:
 
 def test_run_tests_matches_official_import_and_system_exit_semantics() -> None:
     result = run_tests(
-        _Sandbox(),
+        _Sandbox(require_isolation=False),
         "print(gcd(6, 9))\nraise SystemExit(1)",
         [{"input": "", "output": "3\n"}],
         timeout_s=10.0,
@@ -167,7 +167,7 @@ def test_run_tests_matches_official_import_and_system_exit_semantics() -> None:
 
 def test_run_tests_matches_official_buffer_readline_mock() -> None:
     result = run_tests(
-        _Sandbox(),
+        _Sandbox(require_isolation=False),
         (
             "import sys\n"
             "first = int(sys.stdin.buffer.readline())\n"
@@ -182,7 +182,7 @@ def test_run_tests_matches_official_buffer_readline_mock() -> None:
 
 
 def test_run_tests_reports_first_failure() -> None:
-    sandbox = _Sandbox()
+    sandbox = _Sandbox(require_isolation=False)
     result = run_tests(
         sandbox,
         "print('wrong')",
@@ -383,6 +383,7 @@ PROBLEM["content_sha256"] = _problem_content_sha256(PROBLEM)
 def _params(**values: Any) -> dict[str, Any]:
     return {
         "dataset_content_sha256": {"q1": PROBLEM["content_sha256"]},
+        "require_isolation": False,
         **values,
     }
 
