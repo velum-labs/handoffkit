@@ -24,6 +24,9 @@ RUN apt-get update \
 COPY --from=uv /uv /uvx /usr/local/bin/
 
 WORKDIR /opt/hyperkit
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.json .npmrc ./
+COPY packages packages
+COPY spec spec
 COPY pyproject.toml uv.lock ./
 COPY python/hyperkit python/hyperkit
 COPY python/fusionkit-core python/fusionkit-core
@@ -32,7 +35,13 @@ COPY python/fusionkit-evals python/fusionkit-evals
 COPY python/fusionkit-mlx python/fusionkit-mlx
 COPY python/fusionkit-cli python/fusionkit-cli
 
-RUN uv sync --frozen --all-packages --extra aws --no-dev \
+RUN corepack enable \
+    && corepack prepare pnpm@10.33.4 --activate \
+    && pnpm install --frozen-lockfile \
+    && pnpm exec tsc -b packages/cli \
+    && chmod +x /opt/hyperkit/packages/cli/dist/index.js \
+    && ln -s /opt/hyperkit/packages/cli/dist/index.js /usr/local/bin/fusionkit \
+    && uv sync --frozen --all-packages --extra aws --no-dev \
     && rm -rf /root/.cache
 
 ARG HYPERKIT_SOURCE_SHA
