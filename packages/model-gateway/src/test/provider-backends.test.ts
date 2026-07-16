@@ -145,6 +145,8 @@ test("Codex Responses egress preserves subscription auth and tool output", async
     assert.equal(request?.url, "https://chatgpt.test/backend-api/codex/responses");
     assert.equal(request?.headers.get("authorization"), "Bearer oauth");
     assert.equal(request?.headers.get("chatgpt-account-id"), "account");
+    const upstreamBody = (await request?.json()) as Record<string, unknown> | undefined;
+    assert.equal(upstreamBody?.store, false);
     const body = (await response.json()) as {
       choices: Array<{
         message: { content: string; reasoning: string; tool_calls: unknown[] };

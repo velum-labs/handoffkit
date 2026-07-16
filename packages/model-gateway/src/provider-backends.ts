@@ -623,6 +623,7 @@ function responsesRequest(body: ChatBody, model: string): Record<string, unknown
     model,
     input,
     stream: body.stream === true,
+    store: false,
     ...(body.max_tokens !== undefined ? { max_output_tokens: body.max_tokens } : {}),
     ...(body.temperature !== undefined ? { temperature: body.temperature } : {}),
     ...(body.tool_choice !== undefined ? { tool_choice: body.tool_choice } : {}),
