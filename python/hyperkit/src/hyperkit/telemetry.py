@@ -187,9 +187,13 @@ def record_snapshot_deltas(
 def _create_cell_gauges(meter: Any) -> list[Any]:
     fields = {
         "hyperkit.cell.planned_shards": "planned_shards",
+        "hyperkit.cell.submitted_shards": "submitted_shards",
         "hyperkit.cell.completed_shards": "completed_shards",
+        "hyperkit.cell.missing_shards": "missing_shards",
         "hyperkit.cell.resolved_shards": "resolved_shards",
+        "hyperkit.cell.unresolved_shards": "unresolved_shards",
         "hyperkit.cell.errors": "errors",
+        "hyperkit.cell.complete": "complete",
         "hyperkit.cell.resolution_rate": "resolution_rate",
         "hyperkit.cell.wilson_low": "wilson_low",
         "hyperkit.cell.wilson_high": "wilson_high",

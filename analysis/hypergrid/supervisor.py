@@ -29,19 +29,13 @@ ANCHOR_PREFIX = "anchor-"
 
 
 def mcnemar(b: int, c: int) -> float:
-    """Two-sided exact-ish McNemar p-value (binomial, mid-continuity chi2 for large n)."""
+    """Two-sided exact McNemar p-value on discordant pairs."""
 
     n = b + c
     if n == 0:
         return 1.0
-    if n <= 25:
-        # exact binomial two-sided
-        total = sum(math.comb(n, k) for k in range(0, min(b, c) + 1)) * 2
-        p = total / (2**n)
-        return min(1.0, p)
-    chi2 = (abs(b - c) - 1) ** 2 / n
-    # survival of chi2 with 1 dof
-    return math.erfc(math.sqrt(chi2 / 2))
+    total = sum(math.comb(n, k) for k in range(0, min(b, c) + 1)) * 2
+    return min(1.0, total / (2**n))
 
 
 def load(workdir: Path) -> tuple[Any, list[Any], dict[str, dict[str, Any]]]:
@@ -59,6 +53,7 @@ def load(workdir: Path) -> tuple[Any, list[Any], dict[str, dict[str, Any]]]:
 def analyze(workdir: Path) -> dict[str, Any]:
     lock, results, cells = load(workdir)
     submitted_instances = lock.submitted_instances()
+    cohort_verified = bool(lock.submissions)
     by_cell: dict[str, dict[str, Any]] = defaultdict(dict)  # cell -> instance -> result
     for result in results:
         if result.instance_id in by_cell[result.cell_id]:
@@ -73,13 +68,20 @@ def analyze(workdir: Path) -> dict[str, Any]:
         shard_map = by_cell.get(cell_id, {})
         expected = (
             submitted_instances.get(cell_id, set())
-            if submitted_instances
+            if cohort_verified
             else set(cell.instances)
         )
+        unexpected = set(shard_map) - expected
+        if unexpected:
+            raise ValueError(
+                f"results outside the declared cohort for cell {cell_id}: "
+                f"{sorted(unexpected)}"
+            )
         terminal = {
             inst: result
             for inst, result in shard_map.items()
-            if result.status.value in ("resolved", "unresolved", "error")
+            if inst in expected
+            and result.status.value in ("resolved", "unresolved", "error")
         }
         completed = {
             inst: result
@@ -87,7 +89,8 @@ def analyze(workdir: Path) -> dict[str, Any]:
             if result.status.value in ("resolved", "unresolved")
         }
         errors = sum(1 for result in terminal.values() if result.status.value == "error")
-        n = len(terminal)
+        missing = expected - set(terminal)
+        n = len(expected)
         resolved = sum(1 for result in terminal.values() if result.resolved)
         ci = wilson_interval(resolved, n) if n else None
         cost = sum(r.cost_usd or 0.0 for r in shard_map.values())
@@ -105,7 +108,15 @@ def analyze(workdir: Path) -> dict[str, Any]:
                 "completed": len(completed),
                 "errors": errors,
                 "submitted": len(expected),
-                "missing": len(expected - set(terminal)),
+                "missing": len(missing),
+                "complete": bool(expected) and not missing,
+                "cohort_verified": cohort_verified,
+                "decision_eligible": (
+                    cohort_verified
+                    and bool(expected)
+                    and not missing
+                    and len({result.adapter_version for result in terminal.values()}) == 1
+                ),
                 "resolved": resolved,
                 "rate": resolved / n if n else None,
                 "completed_rate": resolved / len(completed) if completed else None,
@@ -117,13 +128,22 @@ def analyze(workdir: Path) -> dict[str, Any]:
                     {result.adapter_version for result in terminal.values()}
                 ),
                 "pass_vector": {
-                    inst: bool(result.resolved) for inst, result in terminal.items()
+                    inst: bool(terminal[inst].resolved) if inst in terminal else False
+                    for inst in expected
                 },
             }
         )
 
-    anchors = [r for r in rows if r["label"].startswith(ANCHOR_PREFIX) and r["n"]]
-    opens = [r for r in rows if not r["label"].startswith(ANCHOR_PREFIX) and r["n"]]
+    anchors = [
+        r
+        for r in rows
+        if r["label"].startswith(ANCHOR_PREFIX) and r["decision_eligible"]
+    ]
+    opens = [
+        r
+        for r in rows
+        if not r["label"].startswith(ANCHOR_PREFIX) and r["decision_eligible"]
+    ]
     best_anchor = max(anchors, key=lambda r: r["rate"], default=None)
     solo_opens = [r for r in opens if r["sut"] == "solo-model"]
     best_solo = max(solo_opens, key=lambda r: r["rate"], default=None)
@@ -146,13 +166,13 @@ def analyze(workdir: Path) -> dict[str, Any]:
         }
 
     for row in rows:
-        if best_anchor and row is not best_anchor and row["n"]:
+        if best_anchor and row is not best_anchor and row["decision_eligible"]:
             cmp = paired(row, best_anchor)
             row["vs_anchor"] = {
                 "gap": cmp["delta"],
                 **cmp,
             }
-        if best_solo and row is not best_solo and row["n"]:
+        if best_solo and row is not best_solo and row["decision_eligible"]:
             cmp = paired(row, best_solo)
             row["vs_best_solo"] = {
                 **cmp,
@@ -163,7 +183,7 @@ def analyze(workdir: Path) -> dict[str, Any]:
         row["flags"] = []
         if (
             best_solo
-            and row["n"]
+            and row["decision_eligible"]
             and row is not best_solo
             and row["hi"] is not None
             and row["hi"] < (best_solo["lo"] or 0)
@@ -171,6 +191,10 @@ def analyze(workdir: Path) -> dict[str, Any]:
             row["flags"].append("PRUNE:wilson-dominated-by-best-solo")
         if row["errors"] > max(2, 0.1 * max(row["n"], 1)):
             row["flags"].append("FORENSICS:high-error-count")
+        if not row["cohort_verified"]:
+            row["flags"].append("BLOCK:unverified-submission-cohort")
+        if row["missing"]:
+            row["flags"].append("BLOCK:missing-submitted-shards")
         if len(row["adapter_versions"]) > 1:
             row["flags"].append("FORENSICS:mixed-adapter-versions")
 

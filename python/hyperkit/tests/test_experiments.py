@@ -107,6 +107,8 @@ axes:
     (row,) = engine.collect().cells
     assert row["n_submitted"] == 1
     assert row["n_missing"] == 1
+    assert row["rate"] == 0.0
+    assert row["complete"] is False
 
 
 def test_matrix_as_code_loads_and_materializes_once(tmp_path: Path) -> None:

@@ -50,11 +50,22 @@ def test_snapshots_rank_delta_pareto_and_progress() -> None:
         _result(fused, "i1", True, 1.0, 5.0),
         _result(fused, "i2", True, 1.0, 7.0),
     ]
-    snapshots = build_cell_snapshots("run", [(solo, 0), (fused, 1)], results)
+    snapshots = build_cell_snapshots(
+        "run",
+        [(solo, 0), (fused, 1)],
+        results,
+        submitted_instances={
+            solo.cell_id: {"i1", "i2"},
+            fused.cell_id: {"i1", "i2"},
+        },
+    )
     by_label = {snapshot.label: snapshot for snapshot in snapshots}
 
     assert by_label["solo"].resolution_rate == 0.5
-    assert by_label["solo"].pending_shards == 1
+    assert by_label["solo"].planned_shards == 3
+    assert by_label["solo"].submitted_shards == 2
+    assert by_label["solo"].pending_shards == 0
+    assert by_label["solo"].complete is True
     assert by_label["fused"].resolution_rate == 1.0
     assert by_label["fused"].delta_vs_best_single == 0.5
     assert by_label["fused"].rank == 1
@@ -85,8 +96,11 @@ def test_snapshot_resolution_rate_counts_errors_as_failures() -> None:
 
     (snapshot,) = build_cell_snapshots("run", [(solo, 0)], [resolved, error])
 
-    assert snapshot.resolution_rate == 0.5
+    assert snapshot.resolution_rate == pytest.approx(1 / 3)
     assert snapshot.errors == 1
+    assert snapshot.missing_shards == 1
+    assert snapshot.complete is False
+    assert snapshot.rank == 0
 
 
 class _Recorder:

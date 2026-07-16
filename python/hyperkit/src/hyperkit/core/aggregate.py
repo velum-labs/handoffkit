@@ -54,6 +54,12 @@ def aggregate(
             if submitted_instances is not None
             else set(cell.instances)
         )
+        unexpected = {shard.instance_id for shard in shards} - expected
+        if unexpected:
+            raise ValueError(
+                f"results outside the declared cohort for cell {cell.cell_id}: "
+                f"{sorted(unexpected)}"
+            )
         completed = [
             shard
             for shard in shards
@@ -64,11 +70,13 @@ def aggregate(
             for shard in completed
             if shard.status.value in {"resolved", "unresolved"}
         ]
-        n = len(completed)
+        n = len(expected)
         resolved = sum(1 for shard in completed if shard.resolved)
         errors = sum(1 for shard in completed if shard.status.value == "error")
         ci = wilson_interval(resolved, n) if n else None
         completed_rate = resolved / len(graded) if graded else None
+        terminal_instances = {shard.instance_id for shard in completed}
+        missing = expected - terminal_instances
         row: dict[str, Any] = {
             "cell_id": cell.cell_id,
             "label": cell.label,
@@ -76,26 +84,33 @@ def aggregate(
             "sut": cell.sut.kind,
             "sut_hash": cell.sut.hash,
             "params": cell.params,
-            # Benchmark rates are intent-to-treat over every durable terminal
-            # attempt. Provider/infrastructure errors are failures, never
+            # The primary rate is intent-to-treat over the declared submitted
+            # cohort. Errors and missing checkpoints are failures, never
             # silently removed from the denominator.
             "n_graded": n,
+            "n_terminal": len(completed),
             "n_completed": len(graded),
             "n_errors": errors,
             "n_present": len(shards),
             "n_submitted": len(expected),
-            "n_missing": len(expected - {shard.instance_id for shard in shards}),
+            "n_missing": len(missing),
             "n_instances": len(cell.instances),
             "resolved": resolved,
             "rate": (resolved / n) if n else None,
             "completed_rate": completed_rate,
+            "complete": bool(expected) and not missing,
+            "cohort_source": (
+                "submission_ledger"
+                if submitted_instances is not None
+                else "planned_fallback"
+            ),
             "wilson_low": ci.low if ci else None,
             "wilson_high": ci.high if ci else None,
         }
         if not _is_solo(cell):
             oracle = solo_solved.get(cell.benchmark)
             if oracle is not None and n:
-                best = len(oracle & {s.instance_id for s in completed})
+                best = len(oracle & expected)
                 row["oracle"] = best
                 row["headroom"] = best - resolved
         rows.append(row)

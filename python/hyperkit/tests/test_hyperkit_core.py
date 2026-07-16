@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 import hyperkit.adapters  # noqa: F401
+import pytest
 from hyperkit.core.aggregate import aggregate
 from hyperkit.core.ids import canonical_json, hash_ids, hash_obj
 from hyperkit.core.lock import extend_lock, load_lock, new_lock, repo_sha, save_lock
@@ -144,10 +145,12 @@ def test_aggregate_counts_terminal_errors_as_failures() -> None:
     (row,) = aggregate("sweep", [c], [resolved, error]).cells
 
     assert row["resolved"] == 1
-    assert row["n_graded"] == 2
+    assert row["n_graded"] == 3
+    assert row["n_terminal"] == 2
     assert row["n_completed"] == 1
     assert row["n_errors"] == 1
     assert row["n_missing"] == 1
-    assert row["rate"] == 0.5
+    assert row["rate"] == pytest.approx(1 / 3)
     assert row["completed_rate"] == 1.0
+    assert row["complete"] is False
 

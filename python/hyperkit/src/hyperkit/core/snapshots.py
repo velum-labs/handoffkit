@@ -9,7 +9,7 @@ restart.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from statistics import median
 from typing import Any
 
@@ -40,11 +40,15 @@ class CellSnapshot(BaseModel):
     running_shards: int = 0
     resolved_shards: int
     errors: int
+    submitted_shards: int = 0
+    missing_shards: int = 0
+    unresolved_shards: int = 0
+    complete: bool = False
     resolution_rate: float
     wilson_low: float
     wilson_high: float
     cost_usd: float
-    cost_per_resolve: float
+    cost_per_resolve: float | None
     latency_p50_seconds: float
     latency_p95_seconds: float
     delta_vs_best_single: float = 0.0
@@ -94,6 +98,8 @@ def build_cell_snapshots(
     sweep_id: str,
     cells: Sequence[tuple[Cell, int]],
     results: Sequence[ShardResult],
+    *,
+    submitted_instances: Mapping[str, set[str]] | None = None,
 ) -> list[CellSnapshot]:
     """Recompute all cell snapshots from materialized cells + durable results."""
 
@@ -102,26 +108,38 @@ def build_cell_snapshots(
         by_cell.setdefault(result.cell_id, []).append(result)
 
     snapshots = [
-        _snapshot(sweep_id, cell, generation, by_cell.get(cell.cell_id, []))
+        _snapshot(
+            sweep_id,
+            cell,
+            generation,
+            by_cell.get(cell.cell_id, []),
+            expected_instances=(
+                submitted_instances.get(cell.cell_id, set())
+                if submitted_instances is not None
+                else set(cell.instances)
+            ),
+        )
         for cell, generation in cells
     ]
 
     best_solo: dict[str, float] = {}
     for snapshot in snapshots:
-        if snapshot.sut_kind == "solo-model":
+        if snapshot.sut_kind == "solo-model" and snapshot.complete:
             best_solo[snapshot.benchmark] = max(
                 best_solo.get(snapshot.benchmark, 0.0),
                 snapshot.resolution_rate,
             )
 
     for snapshot in snapshots:
-        snapshot.delta_vs_best_single = (
-            snapshot.resolution_rate - best_solo.get(snapshot.benchmark, 0.0)
-        )
+        if snapshot.complete and snapshot.benchmark in best_solo:
+            snapshot.delta_vs_best_single = (
+                snapshot.resolution_rate - best_solo[snapshot.benchmark]
+            )
 
     by_benchmark: dict[str, list[CellSnapshot]] = {}
     for snapshot in snapshots:
-        by_benchmark.setdefault(snapshot.benchmark, []).append(snapshot)
+        if snapshot.complete:
+            by_benchmark.setdefault(snapshot.benchmark, []).append(snapshot)
     for group in by_benchmark.values():
         ordered = sorted(
             group,
@@ -138,15 +156,33 @@ def _snapshot(
     cell: Cell,
     generation: int,
     results: Sequence[ShardResult],
+    *,
+    expected_instances: set[str],
 ) -> CellSnapshot:
+    seen: set[str] = set()
+    for result in results:
+        if result.instance_id in seen:
+            raise ValueError(
+                f"duplicate results for cell {cell.cell_id} instance {result.instance_id}"
+            )
+        seen.add(result.instance_id)
+    unexpected = seen - expected_instances
+    if unexpected:
+        raise ValueError(
+            f"results outside the declared cohort for cell {cell.cell_id}: "
+            f"{sorted(unexpected)}"
+        )
     completed = [
         result
         for result in results
         if result.status in {ShardStatus.RESOLVED, ShardStatus.UNRESOLVED, ShardStatus.ERROR}
     ]
+    terminal_instances = {result.instance_id for result in completed}
+    missing = expected_instances - terminal_instances
     resolved = sum(result.resolved for result in completed)
     errors = sum(result.status == ShardStatus.ERROR for result in completed)
-    ci = wilson_interval(resolved, len(completed))
+    unresolved = sum(result.status == ShardStatus.UNRESOLVED for result in completed)
+    ci = wilson_interval(resolved, len(expected_instances))
     cost = sum(result.cost_usd or 0.0 for result in completed)
     latencies = sorted(
         result.latency_s for result in completed if result.latency_s is not None
@@ -174,15 +210,19 @@ def _snapshot(
         judge=_axis(params, "judge"),
         commit=_axis(params, "commit"),
         planned_shards=len(cell.instances),
+        submitted_shards=len(expected_instances),
         completed_shards=len(completed),
-        pending_shards=max(0, len(cell.instances) - len(completed)),
+        pending_shards=len(missing),
+        missing_shards=len(missing),
         resolved_shards=resolved,
+        unresolved_shards=unresolved,
         errors=errors,
+        complete=bool(expected_instances) and not missing,
         resolution_rate=ci.estimate,
         wilson_low=ci.low,
         wilson_high=ci.high,
         cost_usd=cost,
-        cost_per_resolve=cost / resolved if resolved else 0.0,
+        cost_per_resolve=cost / resolved if resolved else None,
         latency_p50_seconds=median(latencies) if latencies else 0.0,
         latency_p95_seconds=_percentile(latencies, 0.95),
         params=params,
