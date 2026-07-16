@@ -1,5 +1,5 @@
 {
-  "name": "@fusionkit/model-gateway",
+  "name": "@routekit/gateway",
   "private": false,
   "version": "0.8.0",
   "repository": {
@@ -7,17 +7,13 @@
     "url": "git+https://github.com/velum-labs/handoffkit.git",
     "directory": "packages/model-gateway"
   },
-  "description": "FusionKit harness gateway: wire dialect translation, streaming, durable sessions, cost metering, rate-limit handoff, and model-fusion backend routing.",
+  "description": "Product-neutral model router, provider egress, wire dialect translation, streaming, catalog, and call provenance.",
   "license": "Apache-2.0",
   "type": "module",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
-    },
-    "./subscriptions": {
-      "types": "./dist/subscriptions/index.d.ts",
-      "default": "./dist/subscriptions/index.js"
     }
   },
   "files": [
@@ -30,19 +26,15 @@
     "provenance": true
   },
   "dependencies": {
-    "@fusionkit/adapter-ai-sdk": "workspace:*",
-    "@fusionkit/kernel": "workspace:*",
-    "@fusionkit/protocol": "workspace:*",
-    "@fusionkit/registry": "workspace:*",
-    "@fusionkit/runtime-utils": "workspace:*",
-    "@fusionkit/tracing": "workspace:*",
+    "@routekit/contracts": "workspace:*",
+    "@routekit/registry": "workspace:*",
+    "@routekit/runtime": "workspace:*",
+    "@routekit/tracing": "workspace:*",
     "zod": "4.4.3"
   },
   "keywords": [
-    "fusionkit",
-    "model-fusion",
+    "routekit",
     "llm",
-    "ensemble",
     "coding-agent",
     "gateway",
     "openai-compatible",

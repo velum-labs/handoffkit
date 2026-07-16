@@ -11,7 +11,7 @@
  * commands that actually exist. Palette order follows the registration order
  * in `cli.ts`.
  */
-import { brandBanner, canPromptInteractively, fuzzySelect, isInteractive, uiStream } from "@fusionkit/cli-ui";
+import { brandBanner, canPromptInteractively, fuzzySelect, isInteractive, uiStream } from "@routekit/cli-ui";
 
 export type PaletteAction = {
   /** The human phrasing of the action, e.g. "Check my environment". */

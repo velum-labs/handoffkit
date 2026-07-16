@@ -145,7 +145,7 @@ class FileSystemRunStore:
         final_output_artifact = None
         judge_synthesis_record = None
         pending_tool_actions: dict[str, ToolPausePlaceholder] = {}
-        provider_metadata = []
+        model_call_metadata = []
         call_usages: list[dict[str, Any]] = []
 
         for event in events:
@@ -172,7 +172,7 @@ class FileSystemRunStore:
                 model_call_payload = event.payload.get("model_call_record")
                 if isinstance(model_call_payload, dict):
                     if isinstance(model_call_payload.get("metadata"), dict):
-                        provider_metadata.append(model_call_payload["metadata"])
+                        model_call_metadata.append(model_call_payload["metadata"])
                     if isinstance(model_call_payload.get("usage"), dict):
                         call_usages.append(model_call_payload["usage"])
             elif event.event_type == "artifact_recorded":
@@ -216,7 +216,7 @@ class FileSystemRunStore:
             judge_synthesis_record=judge_synthesis_record,
             requires_action=_latest_pending_action(pending_tool_actions),
             terminal_error=summary.terminal_error,
-            provider_metadata=provider_metadata,
+            model_call_metadata=model_call_metadata,
             usage=_sum_call_usages(call_usages),
         )
 
@@ -266,7 +266,10 @@ class FileSystemRunStore:
         seq_path.write_text(str(value), encoding="utf-8")
 
     def _run_dir(self, run_id: str) -> Path:
-        return self.root / run_id
+        # Run ids arrive through HTTP path parameters. Persist under a
+        # fixed-width digest so no caller-controlled path component reaches the
+        # filesystem, while the original id remains in every stored record.
+        return self.root / "_runs" / hash_text(run_id)
 
     def _event_path(self, run_id: str) -> Path:
         return self._run_dir(run_id) / "events.jsonl"

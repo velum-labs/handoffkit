@@ -12,7 +12,6 @@ from typing import Annotated, Any, ClassVar, Literal, TypeAlias
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 SchemaName: TypeAlias = Literal[
-    "model_endpoint.v1",
     "model-call-record.v1",
     "fusion-run-request.v1",
     "fusion-record.v1",
@@ -79,12 +78,6 @@ ArtifactKind: TypeAlias = Literal[
 CapabilityStatus: TypeAlias = Literal["supported", "unsupported", "degraded", "unknown"]
 FusionMode: TypeAlias = Literal["single", "self", "panel", "heuristic"]
 ChatRole: TypeAlias = Literal["system", "user", "assistant", "tool"]
-ApiCompatibility: TypeAlias = Literal[
-    "openai-chat-completions",
-    "openai-responses",
-    "mlx-lm-server",
-    "custom",
-]
 ToolPolicy: TypeAlias = Literal["disabled", "external_pause", "allowed"]
 HarnessKind: TypeAlias = Literal[
     "generic",
@@ -202,21 +195,6 @@ class ContractArtifactRef(ContractBaseModel):
     hash: Sha256
     uri: str | None = None
     redaction_status: RedactionStatus | None = None
-
-
-class ModelEndpointV1(ContractRecord):
-    expected_schema: ClassVar[str] = "model_endpoint.v1"
-    endpoint_id: str = Field(min_length=1)
-    owner: Owner
-    provider: str = Field(min_length=1)
-    model: str = Field(min_length=1)
-    api_compatibility: ApiCompatibility
-    capabilities: dict[str, CapabilityStatus]
-    status: Status
-    base_url: str | None = None
-    max_context_tokens: int | None = Field(default=None, ge=1)
-    estimated_memory_gb: float | None = Field(default=None, ge=0)
-    tags: list[str] | None = None
 
 
 class ModelCallRecordV1(ContractRecord):
@@ -415,7 +393,6 @@ class EnsembleReceiptV1(ContractRecord):
 
 
 CONTRACT_MODEL_REGISTRY: dict[SchemaName, type[ContractRecord]] = {
-    "model_endpoint.v1": ModelEndpointV1,
     "model-call-record.v1": ModelCallRecordV1,
     "fusion-run-request.v1": FusionRunRequestV1,
     "fusion-record.v1": FusionRecordV1,
@@ -445,7 +422,7 @@ FUSION_RUN_STATE_TO_STATUS: dict[FusionRunState, Status] = {
 
 # Precomputed hash of the frozen model-fusion-contract schema bundle. The
 # canonical schema (spec/model-fusion-contract/schema) lives outside the packaged
-# wheel, so an installed package (e.g. `uvx fusionkit`) cannot locate it on disk.
+# wheel, so an installed `fusionkit-sidecar` package cannot locate it on disk.
 # We fall back to this constant there; a source checkout still recomputes from the
 # files. tests/ assert the two agree, so this can never silently drift from the
 # schema source. (Mirrors handoffkit's pinned MODEL_FUSION_SCHEMA_BUNDLE_HASH.)
@@ -602,7 +579,6 @@ __all__ = [
     "HarnessRunRequestV1",
     "HarnessRunResultV1",
     "ModelCallRecordV1",
-    "ModelEndpointV1",
     "Owner",
     "PRODUCER",
     "ProducerGitSha",

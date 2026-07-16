@@ -12,7 +12,7 @@ Contract: reads an ExternalBenchmarkRequest JSON on stdin, writes a normalized r
 envelope JSON on stdout (everything else to stderr). Requires:
   - a cloned polyglot-benchmark at POLYGLOT_ROOT (default ~/.cache/fusionkit-bench/polyglot),
   - FUSIONKIT_BENCH_CONFIG pointing at a FusionConfig YAML (the panel),
-  - provider API keys, plus the toolchains for the selected languages.
+  - a reachable RouteKit gateway, plus the toolchains for the selected languages.
 
 Env overrides: POLYGLOT_ROOT, POLYGLOT_LANGUAGES (default python,go,rust),
 POLYGLOT_TIMEOUT_S (default 120), POLYGLOT_CONCURRENCY (default 3),
@@ -34,7 +34,6 @@ from typing import Any
 from fusionkit_core.clients import build_clients
 from fusionkit_core.config import load_config
 from fusionkit_core.fusion import FusionEngine
-from fusionkit_core.providers import estimate_cost
 from fusionkit_core.registry import FUSION_PANEL_ALIAS
 from fusionkit_core.types import ChatMessage
 
@@ -79,7 +78,7 @@ def cache_dir() -> Path:
 def panel_signature(engine: FusionEngine, languages: list[str]) -> str:
     config = engine.config
     payload = {
-        "endpoints": sorted((e.id, e.model, e.provider) for e in config.endpoints),
+        "endpoint_ids": sorted(config.endpoint_ids),
         "judge": config.resolved_judge_model,
         "synthesizer": config.resolved_synthesizer_model,
         "panel_models": sorted(config.panel_models),
@@ -110,14 +109,6 @@ def save_cached_row(signature: str, row: dict[str, Any]) -> None:
     tmp = path.with_suffix(".json.tmp")
     tmp.write_text(json.dumps(row), encoding="utf-8")
     tmp.replace(path)
-
-
-def _candidate_cost(engine: FusionEngine, model_id: str, usage: object) -> float | None:
-    try:
-        endpoint = engine.config.endpoint_for(model_id)
-    except KeyError:
-        return None
-    return estimate_cost(endpoint, usage if isinstance(usage, dict) else None)
 
 
 async def evaluate_exercise(
@@ -157,18 +148,12 @@ async def evaluate_exercise(
         run = await asyncio.to_thread(run_polyglot, exercise, code, timeout_s=timeout_s)
         candidate_scores[trajectory.model_id] = 1.0 if run.passed else 0.0
 
-    cost = 0.0
-    for trajectory in result.trajectories:
-        est = _candidate_cost(engine, trajectory.model_id, trajectory.metadata.get("usage"))
-        if est is not None:
-            cost += est
-
     row = {
         "task_id": exercise.task_id,
         "outcome": "scored",
         "passed": fused_run.passed,
         "score": 1.0 if fused_run.passed else 0.0,
-        "cost_usd": round(cost, 6),
+        "cost_usd": None,
         "latency_s": round(latency, 2),
         "candidate_scores": candidate_scores,
     }
@@ -231,11 +216,11 @@ async def main() -> None:
         "resolved_tasks": len(scored),
         "total_tasks": len(rows),
         "passed_tasks": sum(1 for r in scored if r["passed"]),
-        "cost_total_usd": round(sum(r.get("cost_usd") or 0.0 for r in rows), 6),
+        "cost_total_usd": None,
         "tasks": rows,
         "provenance": build_provenance(
             prompt_template="polyglot full-file single-shot",
-            model_versions={e.id: e.model for e in config.endpoints},
+            model_versions={endpoint_id: endpoint_id for endpoint_id in config.endpoint_ids},
             dataset_revision="polyglot-benchmark@main",
             extra={
                 "languages": languages,
@@ -243,7 +228,7 @@ async def main() -> None:
                 "methodology": (
                     "within-run single-shot full-file adaptation; not the official aider harness"
                 ),
-                "cost_scope": "solver_candidates_only",
+                "cost_scope": "owned_by_routekit",
             },
         ),
         "metadata": {"languages": ",".join(languages), "concurrency": concurrency},

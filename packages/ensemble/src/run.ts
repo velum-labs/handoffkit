@@ -2,18 +2,18 @@ import {
   assertHarnessCandidateRecordV1,
   assertHarnessRunRequestV1,
   assertHarnessRunResultV1,
-  MODEL_FUSION_SCHEMA_BUNDLE_HASH,
-  requestHash
+  MODEL_FUSION_SCHEMA_BUNDLE_HASH
 } from "@fusionkit/protocol";
-import { CANDIDATE_ISOLATION_DEFAULTS, registerCleanup } from "@fusionkit/runtime-utils";
+import { CANDIDATE_ISOLATION_DEFAULTS, registerCleanup } from "@routekit/runtime";
 import type {
   HarnessCandidateRecordV1,
   HarnessRunRequestV1,
   HarnessRunResultV1,
-  JsonValue,
   ModelCallRecordV1,
   ModelFusionStatus
 } from "@fusionkit/protocol";
+import { requestHash } from "@routekit/contracts";
+import type { JsonValue } from "@routekit/contracts";
 
 import { createArtifactStore } from "./artifacts.js";
 import { hardeningToJson } from "./harness.js";

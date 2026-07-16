@@ -1,141 +1,66 @@
-/**
- * @fusionkit/model-gateway is the Fusion Harness Gateway entry point.
- *
- * It fronts OpenAI-compatible Chat Completions backends, local MLX servers, and
- * fused panel routes, then exposes the wire dialects each agent harness needs.
- * A local or fused model can back opencode, Claude Code, Codex, Cursor, and raw
- * HTTP callers without changing their workflow.
- *
- * Public exports include server startup, backend implementations, frontdoor
- * workflows, session stores, cost metering, rate-limit failover, dialect
- * adapters, ACP helpers, provenance records, and trajectory capture.
- */
+/** Product-neutral RouteKit gateway and router. */
 export { startGateway } from "./server.js";
-export type { Gateway, GatewayOptions } from "./server.js";
-// The subscription-pooling SDK is published under the `./subscriptions` subpath
-// (`@fusionkit/model-gateway/subscriptions`), not this core entrypoint.
-export {
-  joinPath,
-  ModelRoutedBackend,
-  OpenAiBackend,
-  PANEL_DEPTH_HEADER,
-  parsePanelDepth
-} from "./backend.js";
+export type {
+  Gateway,
+  GatewayOptions,
+  ProviderRelay,
+  ProviderRelayDialect
+} from "./server.js";
+
+export { joinPath, ModelRoutedBackend, OpenAiBackend } from "./backend.js";
 export type {
   Backend,
   BackendRequestOptions,
   ModelRoutedBackendOptions,
   OpenAiBackendOptions
 } from "./backend.js";
-export { FusionBackend } from "./fusion-backend.js";
-export { InMemoryFusionBackendKernelStateStore, PendingSessionWrites } from "./fusion-backend.js";
+
 export {
-  FrontdoorArtifactTypes,
-  FrontdoorFuseError,
-  FrontdoorOperatorKinds,
-  FrontdoorPanelError,
-  frontdoorBudgetGateOperator,
-  frontdoorBudgetStopOperator,
-  frontdoorFinalizeOperator,
-  frontdoorFuseOperator,
-  frontdoorPanelOperator,
-  frontdoorResolveModelOperator,
-  frontdoorStreamingFuseOperator,
-  frontdoorVendorProxyOperator
-} from "./frontdoor/operators.js";
-export type {
-  BudgetValue,
-  CandidateSetValue,
-  FailoverValue,
-  RouteValue
-} from "./frontdoor/operators.js";
+  AnthropicBackend,
+  CodexResponsesBackend,
+  GoogleGenAiBackend
+} from "./provider-backends.js";
+export type { ProviderBackendOptions } from "./provider-backends.js";
+
 export {
-  FUSION_FRONTDOOR_TURN_WORKFLOW,
-  frontdoorRequestArtifact,
-  runFusionFrontdoorTurn,
-  streamFusionFrontdoorTurn
-} from "./frontdoor/workflow.js";
-export type { FrontdoorTurnOutcome } from "./frontdoor/workflow.js";
+  CatalogBackend,
+  EndpointPool,
+  modelEndpointSchema,
+  parseRouterConfig,
+  providerBackend,
+  routerConfigSchema
+} from "./router.js";
+export type {
+  CatalogBackendOptions,
+  EndpointPoolOptions,
+  ModelEndpointConfig,
+  RouterConfig
+} from "./router.js";
 export {
-  FUSION_FRONTDOOR_REQUEST_WORKFLOW,
-  FrontdoorRequestScheduler,
-  runFrontdoorRequest
-} from "./frontdoor/request.js";
-export { eventsToSseResponse } from "./frontdoor/sse.js";
-export type { EventsToSseOptions } from "./frontdoor/sse.js";
-export { createTurnNarrator, mergeEventsWithNarration } from "./frontdoor/narration.js";
-export type { NarrationWriter, ReasoningDeltaEvent, TurnNarration, TurnNarratorInput } from "./frontdoor/narration.js";
-export { createChatNarrationWriter } from "./frontdoor/narration-writer.js";
-export type { ChatFn, ChatNarrationWriterOptions } from "./frontdoor/narration-writer.js";
-export { FRONTDOOR_SIGNAL } from "./frontdoor/types.js";
+  endpointHealthProbe,
+  probeEndpointHealth,
+  providerAuthHeaders
+} from "./endpoint-health.js";
 export type {
-  FrontdoorChatBody,
-  FrontdoorRequestValue,
-  FrontdoorRoute,
-  FrontdoorServices,
-  VendorProxyOutcome
-} from "./frontdoor/types.js";
+  EndpointHealthProbe,
+  EndpointHealthProbePlan,
+  EndpointHealthResult
+} from "./endpoint-health.js";
+
+export { CapacityPool } from "./capacity-pool.js";
 export type {
-  ChatMessageLike,
-  FusedModelRoute,
-  FuseStepRunInput,
-  FuseStepRunner,
-  FusionBackendKernelSessionState,
-  FusionBackendKernelStateStore,
-  FusionBackendOptions,
-  OnRateLimitPolicy,
-  PanelRunInput,
-  PanelRunner,
-  PassthroughModel,
-  SessionMetaInput
-} from "./fusion-backend.js";
-export type { WireTrajectory } from "@fusionkit/protocol";
-export {
-  defaultSessionsDir,
-  FileSystemSessionStore,
-  InMemorySessionStore
-} from "./session-store.js";
-export type {
-  PersistedSession,
-  SessionMeta,
-  SessionStore,
-  SessionSummary,
-  SessionTurnRecord
-} from "./session-store.js";
-export {
-  addTurnCost,
-  DEFAULT_MODEL_PRICING,
-  emptySessionCost,
-  estimateCost,
-  formatUsd,
-  lookupPricing,
-  meterTurn,
-  parseUsage,
-  parseUsageFromSse,
-  turnCostLine
-} from "./cost.js";
-export type {
-  CostLedgerEntry,
-  CostStage,
-  LocalComputePricing,
-  LocalComputeUsage,
-  ModelPricing,
-  ProviderCostMetadata,
-  SessionCost,
-  TokenUsage,
-  TurnCost
-} from "./cost.js";
-export { defaultFusionGatewayLogger } from "./logger.js";
-export type { FusionGatewayLogger } from "./logger.js";
-export { MlxBackend } from "./mlx-backend.js";
-export type { MlxBackendOptions } from "./mlx-backend.js";
-export { createBackend, DEFAULT_MLX_MODEL, resolveBackendConfig } from "./config.js";
-export type { BackendConfig } from "./config.js";
+  CapacityLease,
+  CapacityPoolMember,
+  CapacityPoolOptions,
+  CapacityPoolStrategy
+} from "./capacity-pool.js";
+
 export { effectiveModel, isStream, withDefaultModel } from "./adapters/chat.js";
 export { isCursorChatBody, translateCursorRequest } from "./adapters/cursor.js";
 export {
   anthropicModelsResponse,
   anthropicToChat,
+  CLAUDE_ALIAS_PREFIX,
   chatToAnthropicMessage,
   claudeModelAlias,
   countTokensEstimate,
@@ -159,29 +84,19 @@ export type {
   ResponsesToolRegistry
 } from "./adapters/responses.js";
 export { MAX_WEB_SEARCHES_PER_TURN, resolveWebSearchExecutor } from "./adapters/web-search.js";
-export type { WebSearchDialect, WebSearchExecutor, WebSearchOutcome } from "./adapters/web-search.js";
-export {
-  FUSION_EVIDENCE_HEADER,
-  FUSION_REPORT_HEADER,
-  FUSION_RUN_ID_HEADER,
-  FUSION_STATUS_HEADER,
-  formatAnthropic,
-  formatChat,
-  formatResponses,
-  promptFromAnthropic,
-  promptFromChat,
-  promptFromResponses,
-  startFusionGateway
-} from "./fusion-gateway.js";
 export type {
-  ChatRequest,
-  FrontDoorDialect,
-  FrontDoorRunner,
-  FrontDoorRunnerInput,
-  FrontDoorRunnerResult,
-  FusionGateway,
-  FusionGatewayOptions
-} from "./fusion-gateway.js";
+  WebSearchDialect,
+  WebSearchExecutor,
+  WebSearchOutcome
+} from "./adapters/web-search.js";
+export {
+  DIALECT_DROPPED_ATTRIBUTE,
+  droppedField,
+  resetDroppedFieldWarnings,
+  withDroppedFieldSpan
+} from "./adapters/dropped.js";
+export type { DialectName, DroppedFieldSpan } from "./adapters/dropped.js";
+
 export { ACP_PROTOCOL_VERSION, runAcpAgent } from "./acp-agent.js";
 export type {
   AcpAgentOptions,
@@ -189,14 +104,6 @@ export type {
   AcpRunnerInput,
   AcpRunnerResult
 } from "./acp-agent.js";
-export { runFrontDoorAcceptance } from "./front-door-acceptance.js";
-export type {
-  FrontDoorAcceptanceOptions,
-  FrontDoorAcceptanceReport,
-  FrontDoorOutcome,
-  FrontDoorOutcomeProducer,
-  FrontDoorStatus
-} from "./front-door-acceptance.js";
 export {
   ACP_REGISTRY_URL,
   fetchAcpRegistry,
@@ -209,6 +116,23 @@ export type {
   InstallAcpAdaptersOptions,
   InstalledAcpAdapter
 } from "./acp-registry.js";
+
+export {
+  DEFAULT_MODEL_PRICING,
+  estimateCost,
+  formatUsd,
+  lookupPricing,
+  meterCall,
+  parseUsage,
+  parseUsageFromSse
+} from "./cost.js";
+export type {
+  CallCostRecord,
+  ModelPricing,
+  ProviderCostMetadata,
+  TokenUsage
+} from "./cost.js";
+
 export {
   buildModelCallRecord,
   MODEL_CALL_ID_HEADER,
@@ -225,5 +149,15 @@ export type {
   ModelGatewayCallResult,
   ProvenanceSink
 } from "./provenance.js";
-export { createTrajectoryCapture, reconstructTrajectory } from "./trajectory-capture.js";
-export type { CapturedStep, CapturedTrajectory, TrajectoryCapture } from "./trajectory-capture.js";
+
+export { authorizedRequest } from "./auth.js";
+export {
+  errorEvent,
+  finishChunk,
+  noticeChunk,
+  reasoningChunk,
+  sseResponse
+} from "./sse-wire.js";
+export { ChatStreamAssembler } from "./sse/chat-assembler.js";
+export type { AssembledToolCall } from "./sse/chat-assembler.js";
+export { decodeBufferedSse, SseDecoder, SseParseError } from "./sse/parse.js";

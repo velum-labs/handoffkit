@@ -5,7 +5,7 @@ text-only fusion keeps the trajectory prompts."""
 from __future__ import annotations
 
 from fusionkit_core.clients import FakeModelClient
-from fusionkit_core.config import FusionConfig, ModelEndpoint
+from fusionkit_core.config import FusionConfig
 from fusionkit_core.fusion import FusionEngine
 from fusionkit_core.prompts import (
     JUDGE_STEP_SYSTEM_PROMPT,
@@ -15,7 +15,8 @@ from fusionkit_core.prompts import (
 
 def _engine() -> FusionEngine:
     config = FusionConfig(
-        endpoints=[ModelEndpoint(id="m1", model="m1", base_url="http://localhost:1")],
+        routekit_url="http://routekit.test",
+        endpoint_ids=["m1"],
         default_model="m1",
         default_mode="panel",
     )

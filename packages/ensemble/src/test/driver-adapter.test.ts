@@ -5,10 +5,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 
-import { createMockDriver } from "@fusionkit/harness-core/testing";
-import type { ResumeCursor } from "@fusionkit/harness-core";
+import { createMockDriver } from "@routekit/harness-core/testing";
+import type { HarnessDriver, ResumeCursor, SessionHandle } from "@routekit/harness-core";
+import type { MockDriverConfig } from "@routekit/harness-core/testing";
 
 import { createDriverHarness } from "../driver-adapter.js";
+import type { DriverModelRoute } from "../driver-adapter.js";
 import { ensemble } from "../run.js";
 import type { EnsembleDescriptor } from "../harness.js";
 
@@ -79,7 +81,7 @@ test("driver bridge runs a panel candidate with a reconstructed trajectory", asy
   const driver = createMockDriver();
   const harness = createDriverHarness({
     driver,
-    fusionBackendUrl: "http://127.0.0.1:9999",
+    gatewayUrl: "http://127.0.0.1:9999",
     configForModel: () => driver.configSchema.parse({ replies: ["fused answer"] })
   });
   try {
@@ -100,7 +102,7 @@ test("driver bridge reconstructs trajectory steps from canonical events", async 
   const driver = createMockDriver();
   const harness = createDriverHarness({
     driver,
-    fusionBackendUrl: "http://127.0.0.1:9999",
+    gatewayUrl: "http://127.0.0.1:9999",
     configForModel: () =>
       driver.configSchema.parse({ replies: ["the fused answer"], approvalDetail: "npm test" })
   });
@@ -135,6 +137,34 @@ test("driver bridge reconstructs trajectory steps from canonical events", async 
   }
 });
 
+test("driver bridge routes a model-specific endpoint into its native driver config", async () => {
+  const { outputRoot, workspace, sha, cleanup } = tempOutputRoot();
+  const driver = createMockDriver();
+  const routes: DriverModelRoute[] = [];
+  const harness = createDriverHarness({
+    driver,
+    gatewayUrl: "http://127.0.0.1:9999",
+    modelEndpoints: { m1: "http://127.0.0.1:8765" },
+    configForModel: (route) => {
+      routes.push(route);
+      return driver.configSchema.parse({ replies: ["routed answer"] });
+    }
+  });
+  try {
+    const result = await ensemble.run(descriptor(outputRoot, workspace, sha, harness));
+    assert.equal(result.candidates[0]?.status, "succeeded");
+    assert.deepEqual(routes, [
+      {
+        modelId: "m1",
+        model: "m1",
+        endpointUrl: "http://127.0.0.1:8765"
+      }
+    ]);
+  } finally {
+    cleanup();
+  }
+});
+
 test("driver bridge resumes each member's native session across turns", async () => {
   const { outputRoot, workspace, sha, cleanup } = tempOutputRoot();
   const driver = createMockDriver();
@@ -143,7 +173,7 @@ test("driver bridge resumes each member's native session across turns", async ()
   const makeHarness = () =>
     createDriverHarness({
       driver,
-      fusionBackendUrl: "http://127.0.0.1:9999",
+      gatewayUrl: "http://127.0.0.1:9999",
       // The mock driver replies replies[min(turnCount, len-1)]: a resumed
       // session advances turnCount, so turn two only says "turn two" if the
       // native session was resumed rather than started fresh.
@@ -167,6 +197,74 @@ test("driver bridge resumes each member's native session across turns", async ()
     const afterTurnTwo = resumeCursors.get("m1")?.data as { sessionId?: string; turnCount?: number };
     assert.equal(afterTurnTwo.sessionId, afterTurnOne.sessionId);
     assert.equal(afterTurnTwo.turnCount, 2);
+  } finally {
+    cleanup();
+  }
+});
+
+test("driver bridge retries without a stale native resume cursor", async () => {
+  const { outputRoot, workspace, sha, cleanup } = tempOutputRoot();
+  const baseDriver = createMockDriver();
+  const starts: boolean[] = [];
+  const staleDriver: HarnessDriver<MockDriverConfig> = {
+    kind: baseDriver.kind,
+    configSchema: baseDriver.configSchema,
+    probe: (context) => baseDriver.probe(context),
+    createInstance: async (config, context) => {
+      const instance = await baseDriver.createInstance(config, context);
+      return {
+        kind: instance.kind,
+        status: () => instance.status(),
+        startSession: async (options): Promise<SessionHandle> => {
+          starts.push(options.resume !== undefined);
+          if (options.resume === undefined) return instance.startSession(options);
+          const resume = options.resume;
+          return {
+            sessionId: "stale-session",
+            sendTurn: async function* () {
+              yield {
+                kind: "generic",
+                sessionId: "stale-session",
+                at: "2026-07-16T00:00:00.000Z",
+                type: "turn.failed",
+                errorCode: "provider_error",
+                message: "No session found for stale-session"
+              };
+            },
+            respondToRequest: async () => undefined,
+            interrupt: async () => undefined,
+            resumeCursor: () => resume,
+            stop: async () => undefined
+          };
+        },
+        dispose: () => instance.dispose()
+      };
+    }
+  };
+  const resumeCursors = new Map<string, ResumeCursor>([
+    [
+      "m1",
+      {
+        version: 1,
+        kind: "generic",
+        data: { sessionId: "stale-session", turnCount: 1 }
+      }
+    ]
+  ]);
+  const harness = createDriverHarness({
+    driver: staleDriver,
+    gatewayUrl: "http://127.0.0.1:9999",
+    configForModel: () => baseDriver.configSchema.parse({ replies: ["fresh fallback"] }),
+    resumeCursors
+  });
+  try {
+    const result = await ensemble.run(descriptor(outputRoot, workspace, sha, harness));
+    assert.equal(result.candidates[0]?.status, "succeeded");
+    assert.deepEqual(starts, [true, false]);
+    assert.notEqual(
+      (resumeCursors.get("m1")?.data as { sessionId?: string }).sessionId,
+      "stale-session"
+    );
   } finally {
     cleanup();
   }

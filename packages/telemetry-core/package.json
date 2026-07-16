@@ -1,0 +1,32 @@
+{
+  "name": "@routekit/telemetry-core",
+  "private": false,
+  "version": "0.8.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/velum-labs/handoffkit.git",
+    "directory": "packages/telemetry-core"
+  },
+  "description": "Parameterized telemetry consent, redaction, and anonymous event plumbing.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": ["dist", "LICENSE"],
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org",
+    "access": "public",
+    "provenance": true
+  },
+  "dependencies": {
+    "@routekit/runtime": "workspace:*"
+  },
+  "keywords": ["routekit", "telemetry", "privacy", "consent"],
+  "scripts": {
+    "test": "node --test \"dist/test/*.test.js\""
+  }
+}

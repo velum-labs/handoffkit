@@ -120,6 +120,7 @@ pnpm docs:check-code
 | Script | Purpose |
 | --- | --- |
 | `scripts/check-ootb-cli.mjs` | Out-of-the-box shape smoke for the published `fusionkit` CLI: bin name, top-level command surface, packaged files, and loud preflight failures. Run after `pnpm build`. |
+| `scripts/check-fusionkit-cli-pack.mjs` | Packs and clean-installs the FusionKit dependency closure. If a Scope bundle is staged, it verifies `scope/server.js` survives packing; release validation passes `--require-scope` to fail when staging was skipped. |
 | `scripts/check-model-fusion-protocol.mjs` | Validates the model-fusion protocol package state. |
 | `scripts/check-generated-model-fusion-sdk.mjs` | Checks the generated OpenAPI SDK outputs (TypeScript and Python) for drift. |
 | `scripts/check-release-publish.mjs` | Validates release publishing assumptions. |
@@ -156,7 +157,7 @@ pnpm docs:check-code
 | `scripts/fusionkit-dev.mjs` | Rebuild-then-run wrapper for this checkout's CLI (`pnpm dev:run-cli`). |
 | `scripts/publish-npm-workspaces.mjs` | Publishes the npm workspace packages during release workflows. |
 | `scripts/sync-docs-changelog.mjs` | Regenerates the docs-site changelog page from the root `CHANGELOG.md` (`--check` for drift). |
-| `scripts/stage-scope.mjs` | Stages the `apps/scope` standalone build into `@fusionkit/cli` so `fusionkit --observe` works for npm installs. |
+| `scripts/stage-scope.mjs` | Copies the `apps/scope/.next/standalone` server plus static/public assets into `packages/cli/scope`, removes build-time state, and asserts the staged `server.js` exists. Run it only after building `apps/scope`. |
 
 ### Fusion end-to-end scripts
 
@@ -178,11 +179,16 @@ This script backs the `pnpm mono` helper: internal dependency graph inspection (
 
 ### Benchmark and infra tooling
 
-Benchmark execution lives in `python/fusionkit-evals` behind the Python CLI's `bench` group: `fusionkit bench public`, `fusionkit bench tune-prompts`, and `fusionkit bench fusion` (with hidden legacy aliases such as `fusion-bench`); [Benchmarking runbook](benchmarking-runbook.md) is the workflow doc. Hyperkit infra deploy scripts live at `infra/hypergrid-batch/deploy.py` and `infra/hypergrid-obs/deploy.py`; see [Hyperkit](hyperkit.md).
+Benchmark execution lives in `python/fusionkit-evals` behind the maintainer-only
+`fusionkit-bench` entrypoint: `fusionkit-bench public`,
+`fusionkit-bench tune-prompts`, and `fusionkit-bench fusion`;
+[Benchmarking runbook](benchmarking-runbook.md) is the workflow doc. Hyperkit
+infra deploy scripts live at `infra/hypergrid-batch/deploy.py` and
+`infra/hypergrid-obs/deploy.py`; see [Hyperkit](hyperkit.md).
 
 ## Release files
 
-The `release/` directory stores desired release state, observed state, package lists, and release graph metadata. It is operational state, not product runtime code.
+The `release/` directory stores desired release state, observed state, package lists, and release graph metadata. It is operational state, not product runtime code. `apps/scope` is tracked as source but its standalone output is staged into the published `@fusionkit/cli` tarball; `apps/docs` is deployed separately and is not a package release unit.
 
 Important files include:
 
@@ -211,7 +217,7 @@ Workflows live under `.github/workflows/`. `ci.yml` defines five jobs:
 | --- | --- |
 | `check` | `pnpm check`, `pnpm build`, the OOTB CLI shape smoke, `pnpm test`, `pnpm demo all`, and a dependency audit. |
 | `scope` | Build and tests for the `apps/scope` observability app from its own workspace. |
-| `stack-e2e` | The cross-stack suites: Node gateway + real Python engine + provider simulator, plus the real `claude`/`codex`/`opencode` binaries. |
+| `stack-e2e` | The cross-stack suites: Node gateway + real Python sidecar + simulated RouteKit/provider upstreams, plus the real `claude`/`codex`/`opencode` binaries. |
 | `python` | uv lockfile check, sync, Ruff, Pyright, uniroute and FusionKit pytest suites, contract fixture validation, and PyPI metadata smoke. |
 | `observability` | Hyperkit Grafana dashboard validation: boots seeded Prometheus and Grafana and executes every panel query via `scripts/validate_hyperkit_dashboards.py`. |
 

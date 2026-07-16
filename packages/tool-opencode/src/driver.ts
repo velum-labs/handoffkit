@@ -1,14 +1,16 @@
 import { z } from "zod";
+import { createOpencodeClient } from "@opencode-ai/sdk/client";
+import { createOpencodeServer } from "@opencode-ai/sdk/server";
 
 import {
   HarnessError,
-  PANEL_APPROVAL_POLICY,
+  DEFAULT_AUTOMATION_APPROVAL_POLICY,
   asHarnessError,
   buildChildEnv,
-  readCachedStatus,
-  runCliCapture,
-  writeCachedStatus
-} from "@fusionkit/harness-core";
+  createCachedHarnessDriver,
+  probeCliVersion,
+  resolveDriverEnv
+} from "@routekit/harness-core";
 import type {
   ApprovalDecision,
   ApprovalPolicy,
@@ -22,17 +24,22 @@ import type {
   SessionHandle,
   SessionTurnInput,
   StartSessionOptions
-} from "@fusionkit/harness-core";
+} from "@routekit/harness-core";
+
+import { opencodeProviderConfig } from "./launch.js";
 
 const RESUME_CURSOR_VERSION = 1;
 const DEFAULT_COMMAND = "opencode";
-const VERSION_PROBE_TIMEOUT_MS = 10_000;
 
 export const opencodeDriverConfigSchema = z.object({
   command: z.string().default(DEFAULT_COMMAND),
   /** Reuse an already-running opencode server instead of starting one. */
   serverUrl: z.string().optional(),
-  /** `providerID/modelID` the panel member should run. */
+  /** OpenAI-compatible gateway root used by the routed provider. */
+  gatewayUrl: z.string().url(),
+  /** Optional bearer token forwarded as the provider API key. */
+  authToken: z.string().optional(),
+  /** Opaque `providerID/modelID` route the session should run. */
   model: z.string().optional(),
   providerId: z.string().optional()
 });
@@ -84,10 +91,6 @@ export type OpencodeDriverOptions = {
 
 function nowIso(): string {
   return new Date().toISOString();
-}
-
-function resolveEnv(context: DriverContext | undefined): Record<string, string | undefined> {
-  return context?.env ?? process.env;
 }
 
 function itemTypeForTool(tool: string): HarnessItemType {
@@ -212,7 +215,7 @@ class OpencodeSession implements SessionHandle {
   }
 
   async respondToRequest(): Promise<void> {
-    // The panel runs opencode with an autoApprove policy applied at session
+    // Unattended runs use an auto-approve policy applied at session
     // creation, so no interactive permission requests are surfaced.
     throw new HarnessError(
       "protocol_parse",
@@ -290,7 +293,7 @@ class OpencodeInstance implements HarnessInstance {
       backend,
       sessionId: created.sessionId,
       cwd: options.cwd,
-      approvalPolicy: options.approvalPolicy ?? PANEL_APPROVAL_POLICY,
+      approvalPolicy: options.approvalPolicy ?? DEFAULT_AUTOMATION_APPROVAL_POLICY,
       ...(options.model ?? this.#config.model !== undefined
         ? { model: options.model ?? this.#config.model }
         : {}),
@@ -310,15 +313,18 @@ class OpencodeInstance implements HarnessInstance {
 
 /** The default SDK-backed backend: an in-process opencode server + client. */
 const defaultBackendFactory: OpencodeBackendFactory = async (config, context) => {
-  // Imported lazily so the driver contract (and tests using an injected
-  // backend) never pull in the opencode server runtime.
-  const { createOpencodeServer } = await import("@opencode-ai/sdk/server");
-  const { createOpencodeClient } = await import("@opencode-ai/sdk/client");
-
   let close: (() => void) | undefined;
   let baseUrl = config.serverUrl;
   if (baseUrl === undefined) {
-    const server = await createOpencodeServer({ hostname: "127.0.0.1", port: 0 });
+    const server = await createOpencodeServer({
+      hostname: "127.0.0.1",
+      port: 0,
+      config: opencodeProviderConfig({
+        gatewayUrl: config.gatewayUrl,
+        models: config.model !== undefined ? [{ id: config.model }] : [],
+        ...(config.authToken !== undefined ? { auth: { token: config.authToken } } : {})
+      })
+    });
     baseUrl = server.url;
     close = server.close;
   }
@@ -385,64 +391,29 @@ async function probeOpencode(
   config: OpencodeDriverConfig,
   context: DriverContext | undefined
 ): Promise<HarnessStatus> {
-  const env = buildChildEnv({ base: resolveEnv(context) });
-  try {
-    const result = await runCliCapture(config.command, ["--version"], {
-      env,
-      timeoutMs: VERSION_PROBE_TIMEOUT_MS
-    });
-    if (result.exitCode !== 0) {
-      return {
-        kind: "opencode",
-        installed: false,
-        auth: { status: "unknown" },
-        checkedAt: nowIso(),
-        probeError: result.stderr.trim() || `opencode --version exited ${result.exitCode}`
-      };
-    }
-    return {
-      kind: "opencode",
-      installed: true,
-      command: config.command,
-      version: result.stdout.trim().split(/\s+/).at(-1),
-      // Auth is per-provider inside opencode; the server inventory reports it.
-      auth: { status: "unknown" },
-      checkedAt: nowIso()
-    };
-  } catch (error) {
-    const harnessError = asHarnessError(error);
-    return {
-      kind: "opencode",
-      installed: false,
-      auth: { status: "unknown" },
-      checkedAt: nowIso(),
-      probeError:
-        harnessError.code === "not_installed"
-          ? `opencode CLI "${config.command}" was not found on PATH.`
-          : harnessError.message
-    };
-  }
+  const env = buildChildEnv({ base: resolveDriverEnv(context) });
+  return probeCliVersion({
+    kind: "opencode",
+    command: config.command,
+    cliName: "opencode",
+    env,
+    // Auth is per-provider inside opencode; the server inventory reports it.
+    auth: { status: "unknown" },
+    notInstalledMessage: `opencode CLI "${config.command}" was not found on PATH.`
+  });
 }
 
 export function createOpencodeDriver(
   options: OpencodeDriverOptions = {}
 ): HarnessDriver<OpencodeDriverConfig> {
   const backendFactory = options.backendFactory ?? defaultBackendFactory;
-  return {
+  return createCachedHarnessDriver({
     kind: "opencode",
     configSchema: opencodeDriverConfigSchema,
-    probe: async (context?: DriverContext) => {
-      const status = await probeOpencode(opencodeDriverConfigSchema.parse({}), context);
-      if (context?.statusCacheDir !== undefined) writeCachedStatus(status, context.statusCacheDir);
-      return status;
-    },
-    createInstance: async (config, context?: DriverContext) => {
-      const cached =
-        context?.statusCacheDir !== undefined
-          ? readCachedStatus("opencode", context.statusCacheDir)
-          : undefined;
-      const status = cached ?? (await probeOpencode(config, context));
-      return new OpencodeInstance({ config, context, status, backendFactory });
-    }
-  };
+    probeConfig: () =>
+      opencodeDriverConfigSchema.parse({ gatewayUrl: "http://127.0.0.1" }),
+    probeStatus: probeOpencode,
+    createInstance: (config, context, status) =>
+      new OpencodeInstance({ config, context, status, backendFactory })
+  });
 }

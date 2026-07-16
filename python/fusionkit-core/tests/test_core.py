@@ -5,7 +5,7 @@ from typing import Any
 
 import pytest
 from fusionkit_core.clients import FakeModelClient
-from fusionkit_core.config import FusionConfig, FusionMode, ModelEndpoint, SamplingConfig
+from fusionkit_core.config import FusionConfig, FusionMode, SamplingConfig
 from fusionkit_core.fusion import FusionEngine
 from fusionkit_core.producers import (
     ChatTrajectoryProducer,
@@ -19,7 +19,7 @@ from pydantic import ValidationError
 class FailingChatClient:
     """Chat client whose every call raises, to simulate a dead model."""
 
-    def __init__(self, model_id: str, message: str = "provider exploded") -> None:
+    def __init__(self, model_id: str, message: str = "RouteKit call failed") -> None:
         self.model_id = model_id
         self.max_context: int | None = None
         self._message = message
@@ -44,9 +44,21 @@ class FailingChatClient:
 def test_config_resolves_default_models() -> None:
     config = _config()
 
-    assert config.endpoint_for("fast").model == "fake-fast"
+    assert config.require_endpoint("fast") == "fast"
     assert config.resolved_judge_model == "judge"
     assert config.resolved_synthesizer_model == "judge"
+
+
+def test_config_rejects_removed_provider_and_pricing_fields() -> None:
+    payload = _config().model_dump()
+    payload["endpoints"] = [{"id": "fast", "provider": "openai"}]
+    with pytest.raises(ValidationError):
+        FusionConfig.model_validate(payload)
+
+    payload = _config().model_dump()
+    payload["budget"]["max_cost"] = 1.0
+    with pytest.raises(ValidationError):
+        FusionConfig.model_validate(payload)
 
 
 @pytest.mark.asyncio
@@ -184,7 +196,7 @@ async def test_panel_tolerates_single_model_failure() -> None:
     assert failed.model_id == "broken"
     assert failed.content == ""
     assert failed.metadata["error_code"] == "RuntimeError"
-    assert failed.metadata["error_message"] == "provider exploded"
+    assert failed.metadata["error_message"] == "RouteKit call failed"
 
 
 @pytest.mark.asyncio
@@ -312,7 +324,8 @@ def test_default_mode_is_named_heuristic() -> None:
     # Honesty rename (WS8.5): the default mode is keyword-matching routing, so
     # it is called "heuristic" — "router" oversold 63 lines of substring rules.
     config = FusionConfig(
-        endpoints=[ModelEndpoint(id="m", model="x", base_url="http://localhost:1")],
+        routekit_url="http://routekit.test",
+        endpoint_ids=["m"],
         default_model="m",
     )
     assert config.default_mode == "heuristic"
@@ -333,7 +346,8 @@ def test_config_rejects_invalid_model_references_and_counts(
     overrides: dict[str, object],
 ) -> None:
     payload: dict[str, object] = {
-        "endpoints": [ModelEndpoint(id="m", model="model-m")],
+        "routekit_url": "http://routekit.test",
+        "endpoint_ids": ["m"],
         "default_model": "m",
         **overrides,
     }
@@ -344,20 +358,16 @@ def test_config_rejects_invalid_model_references_and_counts(
 def test_config_rejects_duplicate_endpoint_ids() -> None:
     with pytest.raises(ValidationError):
         FusionConfig(
-            endpoints=[
-                ModelEndpoint(id="same", model="model-a"),
-                ModelEndpoint(id="same", model="model-b"),
-            ],
+            routekit_url="http://routekit.test",
+            endpoint_ids=["same", "same"],
             default_model="same",
         )
 
 
 def _config(default_mode: FusionMode = "single") -> FusionConfig:
     return FusionConfig(
-        endpoints=[
-            ModelEndpoint(id="fast", model="fake-fast", base_url="http://localhost:8101"),
-            ModelEndpoint(id="judge", model="fake-judge", base_url="http://localhost:8102"),
-        ],
+        routekit_url="http://routekit.test",
+        endpoint_ids=["fast", "judge", "writer", "broken", "synth"],
         default_model="fast",
         judge_model="judge",
         default_mode=default_mode,

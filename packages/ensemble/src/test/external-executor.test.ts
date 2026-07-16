@@ -11,11 +11,11 @@ import {
   toolArgumentsHash
 } from "@fusionkit/protocol";
 import type {
-  JsonValue,
   ModelFusionSideEffects,
   ToolCallPlanV1,
   ToolExecutorContract
 } from "@fusionkit/protocol";
+import type { JsonValue } from "@routekit/contracts";
 
 import {
   executeFusionKitToolBatch,

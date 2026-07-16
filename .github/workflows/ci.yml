@@ -50,7 +50,16 @@ jobs:
       - name: Build
         run: pnpm build
 
-      - name: OOTB CLI shape smoke
+      - name: RouteKit clean-install smoke
+        run: node scripts/check-routekit-cli-pack.mjs
+
+      - name: FusionKit clean-install smoke
+        run: node scripts/check-fusionkit-cli-pack.mjs
+
+      - name: RouteKit and FusionKit co-install smoke
+        run: node scripts/check-dual-cli-pack.mjs
+
+      - name: OOTB CLI shape smoke (RouteKit + FusionKit)
         run: node scripts/check-ootb-cli.mjs
 
       - name: Test
@@ -104,7 +113,7 @@ jobs:
         run: pnpm test
 
   stack-e2e:
-    name: cross-stack e2e (Node gateway + real Python engine + provider simulator)
+    name: cross-stack e2e (Node RouteKit/Fusion gateways + internal Python sidecar)
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -152,15 +161,18 @@ jobs:
         run: pnpm build
 
       # The cross-process suites: the Node testkit spawns the provider
-      # simulator + the real `fusionkit serve` engine, and the CLI's stack
-      # suites drive the real Node gateway front doors — and the real
-      # coding-agent binaries — through both. These self-skip where uv or the
+      # simulator and internal `fusionkit-sidecar`; the CLI stack composes the
+      # Node RouteKit gateway with the Node Fusion front door, then drives both
+      # through real coding-agent binaries. These self-skip where uv or the
       # binaries are missing; this job exists to run them for real.
       - name: Testkit harness suite
         run: PORTLESS=0 node --test "packages/testkit/dist/test/*.test.js"
 
       - name: Full-stack front-door matrix suite
         run: PORTLESS=0 node --test packages/cli/dist/test/stack-e2e.test.js
+
+      - name: Endpoint IDs and external RouteKit CLI bridge suite
+        run: PORTLESS=0 node --test packages/cli/dist/test/stack-endpoint-ids-e2e.test.js
 
       - name: Full-stack depth suite
         run: PORTLESS=0 node --test packages/cli/dist/test/stack-depth-e2e.test.js
@@ -192,7 +204,7 @@ jobs:
       - name: Gateway authentication boundary suite
         run: PORTLESS=0 node --test packages/cli/dist/test/stack-auth-e2e.test.js
 
-      - name: Real product CLI suite (fusionkit serve boots its own stack)
+      - name: Real product CLI suite (Node front door boots internal sidecar)
         run: PORTLESS=0 node --test packages/cli/dist/test/stack-npm-cli-e2e.test.js
 
       - name: Real coding-agent CLI suite (claude + codex + opencode binaries)

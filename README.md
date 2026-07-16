@@ -1,24 +1,47 @@
 # FusionKit
 
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
+[![npm: @routekit/cli](https://img.shields.io/npm/v/@routekit/cli.svg)](https://www.npmjs.com/package/@routekit/cli)
 [![npm: @fusionkit/cli](https://img.shields.io/npm/v/@fusionkit/cli.svg)](https://www.npmjs.com/package/@fusionkit/cli)
 [![PyPI: fusionkit](https://img.shields.io/pypi/v/fusionkit.svg)](https://pypi.org/project/fusionkit/)
 
 FusionKit fuses a panel of models - including open-weight models at a fraction of frontier prices - behind your unmodified coding agent. A single turn fans out to the panel, captures candidate trajectories, runs judge + synthesis, and returns one native Codex / Claude Code / Cursor response; the harness never knows fusion happened.
 
+The npm packages provide the user-facing `routekit` and `fusionkit` CLIs. The
+PyPI `fusionkit` distribution is an internal sidecar runtime used by the Node
+CLI; maintainer benchmarks use the separate `fusionkit-evals` distribution. It
+does not install a user-facing Python `fusionkit` command.
+
 > **Canonical docs:** user-facing docs live at [fusionkit.velum-labs.com/docs](https://fusionkit.velum-labs.com/docs). Maintainer docs live in [`docs/`](docs), and the docs site source is [`apps/docs`](apps/docs).
 
 ## Install + quickstart
 
+For independent routing to configured remote endpoints:
+
+```bash
+npm install -g @routekit/cli
+routekit config init
+routekit serve                      # or: routekit codex | claude | cursor | opencode
+```
+
+RouteKit has no FusionKit runtime dependency and does not download local models.
+
+For model ensembles:
+
 ```bash
 npm install -g @fusionkit/cli
-fusionkit setup                      # one-time: warm the Python fusion engine
+fusionkit setup                      # one-time: warm the internal synthesis sidecar
 cd your-git-repo                     # FusionKit runs over the current git repo
-fusionkit doctor                     # verifies uv, agent CLIs, keys, PATH, and platform
+fusionkit doctor                     # verifies configs, endpoint IDs, uv, and agent CLIs
 fusionkit codex                      # or: fusionkit claude | fusionkit cursor | fusionkit serve
 ```
 
-For the built-in cloud trio, export any subset of `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, and `GEMINI_API_KEY`; missing members are skipped with a clear note. This repo's committed `.fusionkit/fusion.json` is different: it routes the panel through OpenRouter (`moonshotai/kimi-k2-thinking` + `qwen/qwen3-coder`), so set `OPENROUTER_API_KEY` here or run `fusionkit init` in your own repo to choose your panel.
+Run `fusionkit init`, then define models, URLs, and `apiKeyEnv` references in
+`.routekit/router.yaml`; `.fusionkit/fusion.json` composes those opaque endpoint
+IDs into ensembles. Every selected endpoint must be configured and available.
+This checkout's committed router uses OpenRouter
+(`moonshotai/kimi-k2-thinking` + `qwen/qwen3-coder`) and therefore requires
+`OPENROUTER_API_KEY`.
 
 Start here:
 
@@ -36,39 +59,40 @@ The thesis is economic as much as architectural: several cheaper or open-weight 
 
 | Feature | What it gives you | Docs |
 | --- | --- | --- |
-| Fused coding harnesses | `fusionkit codex`, `claude`, and `cursor` launch normal agents against a local fusion gateway. | [quickstart](https://fusionkit.velum-labs.com/docs/getting-started/quickstart) |
+| Fused coding harnesses | `fusionkit codex`, `claude`, `cursor`, and `opencode` launch normal agents against a local fusion gateway. | [quickstart](https://fusionkit.velum-labs.com/docs/getting-started/quickstart) |
 | Raw inference endpoint | `fusionkit serve` exposes OpenAI-compatible chat completions backed by the same panel + synthesis engine. | [endpoint](https://fusionkit.velum-labs.com/docs/getting-started/inference-endpoint) |
 | Streaming + tool calling | OpenAI Responses, Anthropic Messages, and OpenAI Chat dialects stay native at the harness edge. | [model fusion](https://fusionkit.velum-labs.com/docs/concepts/model-fusion) |
-| Named ensembles | `.fusionkit/fusion.json` can define multiple panels; each becomes its own `fusion-<name>` model id. | [configuration](https://fusionkit.velum-labs.com/docs/getting-started/configuration) |
+| Named ensembles | `.fusionkit/fusion.json` v4 composes opaque RouteKit endpoint IDs; each ensemble becomes its own `fusion-<name>` model id. | [configuration](https://fusionkit.velum-labs.com/docs/getting-started/configuration) |
 | Rate-limit handoff | Default `onRateLimit: fusion` re-runs a failed passthrough turn on the panel instead of returning a raw 429. | [handoff](https://fusionkit.velum-labs.com/docs/getting-started/rate-limit-handoff) |
 | Durable sessions | Full turns, metadata, and costs persist locally for `sessions`, `--resume`, and `--continue`. | [privacy](https://fusionkit.velum-labs.com/docs/privacy) |
 | Cost controls | Per-turn token/USD estimates, receipts, and `--budget <usd>` keep spend visible. | [costs](https://fusionkit.velum-labs.com/docs/cli/cost-and-models) |
-| Local MLX path | `--local` runs an Apple-Silicon MLX panel with no provider API spend. | [models](https://fusionkit.velum-labs.com/docs/cli/models-and-panels) |
+| RouteKit composition | Embedded or external RouteKit owns model routing and credentials; FusionKit owns ensembles and synthesis. | [configuration](https://fusionkit.velum-labs.com/docs/getting-started/configuration) |
 
 ## CLI surface
 
 | Command | Purpose |
 | --- | --- |
-| `codex` / `claude` / `cursor` / `serve` | Main journey: run a fused panel behind a coding harness, or run just the gateway. |
+| `codex` / `claude` / `cursor` / `opencode` / `serve` | Main journey: run configured fusion ensembles behind a coding harness, or run just the gateway. |
 | `setup` | Pre-provision the pinned PyPI `fusionkit` engine into the `uvx` cache. |
-| `doctor` | Preflight readiness; exits nonzero only when not ready (no `uv`/`uvx`, or no credentials and no downloaded local MLX model). |
-| `init` | Scaffold `.fusionkit/fusion.json` and editable prompt files for a repo. |
-| `config` | `show` (effective config + run preview), `path`, `get`, `set`, `unset`, `edit`, and `export-yaml`. |
+| `doctor` | Validate Fusion/RouteKit config, endpoint IDs, `uv`/`uvx`, git, and coding tools. |
+| `init` | Scaffold `.fusionkit/fusion.json` v4 and a safe `.routekit/router.yaml` when absent. |
+| `config` | `show`, `path`, `get`, `set`, `unset`, and `edit` Fusion-only settings. |
 | `prompts` | `list`, `edit`, and `reset` judge/synthesizer prompt overrides. |
 | `ensemble` | `list`, `add`, `edit`, `remove`, and `rename` named ensembles. |
-| `sessions`, `models` | Manage durable sessions and the local MLX model cache; launcher `--direct` mode handles single-local-model runs. |
-| `stop` | Stop all background fusion services (router, dashboard, subscription proxy, ...). |
-| `install <tool>` / `uninstall <tool>` | Register FusionKit inside a tool's own config (currently `codex`: extra provider + one profile per ensemble). |
-| `proxy` | `serve`, `add`, `status`, and `stop` for the Claude Code / Codex subscription pooling relay. |
+| `sessions`, `models` | Manage durable Fusion sessions and the Fusion-owned local MLX cache. |
+| `stop` | Stop only Fusion-owned processes and portless routes; external RouteKit daemons are untouched. |
 | `telemetry` | `status`, `on`, `off`, and `inspect` for opt-in, anonymous product telemetry. |
 | `completion <shell>`, `version` | Shell completions and version reporting. |
 
 ## Architecture
 
-Two processes cooperate:
+Three layers cooperate:
 
-1. **Node `@fusionkit/cli`** owns the user journey: config, preflight, harness launchers, the local gateway, sessions, cost controls, and local model management.
-2. **Python `fusionkit`** owns the router and fusion engine: `/v1/chat/completions`, panel calls, judge synthesis, native run records, and benchmark tooling.
+1. **RouteKit SDKs** own RouterConfig loading, model routing, provider credentials, accounts, and the embedded router lifecycle.
+2. **Node `@fusionkit/cli`** owns Fusion v4 config, ensembles, harness launchers, the Fusion gateway, sessions, and observability.
+3. **Python `fusionkit-sidecar`** is internal. It receives completed trajectories
+   and performs judge/synthesis calls through opaque RouteKit endpoint IDs; it
+   does not implement providers or expose the public chat/model gateway.
 
 Panel members run in lightweight git worktrees so parallel candidates can inspect or edit the same repo without trampling each other. The gateway reshapes the fused result back into the dialect your harness already expects. Maintainer architecture details live in [`docs/fusion-harness-gateway.md`](docs/fusion-harness-gateway.md) and [`docs/fusion-judge-trajectory.md`](docs/fusion-judge-trajectory.md).
 
@@ -76,13 +100,15 @@ Panel members run in lightweight git worktrees so parallel candidates can inspec
 
 | Area | What it is |
 | --- | --- |
+| [`packages/routekit-cli`](packages/routekit-cli) | The independent npm `@routekit/cli` router front door. |
 | [`packages/cli`](packages/cli) | The npm `@fusionkit/cli` front door. |
-| [`packages/model-gateway`](packages/model-gateway) | Dialect translation, fused/passthrough routing, streaming, sessions, and cost metering. |
+| [`packages/model-gateway`](packages/model-gateway) | RouteKit's neutral dialect translation, endpoint routing, provider egress, streaming, and per-call provenance/metering. |
+| [`packages/fusion-gateway`](packages/fusion-gateway) | Fusion front door, panel/synthesis orchestration, durable sessions, and aggregate budgets. |
 | [`packages/ensemble`](packages/ensemble) | Panel orchestration, worktrees, runtime-kernel workflows, judge adapters, and advanced harness tooling. |
 | [`packages/tool-*`](packages) + [`packages/tools`](packages/tools) | Per-harness launchers and the shared tool integration registry. |
 | [`packages/protocol`](packages/protocol) | Model-fusion contracts, schemas, traces, and generated bindings. |
 | [`packages/adapter-ai-sdk`](packages/adapter-ai-sdk) | Managed MLX server and AI SDK model adapters used by local-model paths. |
-| [`python/fusionkit-*`](python) | Python router, core fusion engine, CLI, MLX helpers, and eval tooling. |
+| [`python/fusionkit-*`](python) | Internal synthesis sidecar and core, optional MLX helpers, testkit, and separately installed evaluation tooling. |
 | [`apps/docs`](apps/docs) | Canonical Fumadocs user site. |
 | [`legacy/`](legacy) | Quarantined Warrant governance / VM-isolation stack; see [`legacy/README.md`](legacy/README.md) and [`docs/scope.md`](docs/scope.md). |
 

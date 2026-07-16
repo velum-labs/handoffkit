@@ -3,7 +3,9 @@ import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 
 const RELEASE_MANIFEST = "release/npm-packages.json";
+const RELEASE_TOPOLOGY = "release/workspace.release.json";
 const WORKFLOW = ".github/workflows/release-packages.yml";
+const PYPI_WORKFLOW = ".github/workflows/pypi-release.yml";
 const OPENAPI_SNAPSHOT = "packages/protocol/openapi/model-fusion-harness-executor.openapi.json";
 const BINDINGS = "packages/protocol/model-fusion-bindings.json";
 
@@ -16,7 +18,14 @@ function readJson(path) {
   return JSON.parse(readFileSync(path, "utf8"));
 }
 
-for (const path of [RELEASE_MANIFEST, WORKFLOW, OPENAPI_SNAPSHOT, BINDINGS]) {
+for (const path of [
+  RELEASE_MANIFEST,
+  RELEASE_TOPOLOGY,
+  WORKFLOW,
+  PYPI_WORKFLOW,
+  OPENAPI_SNAPSHOT,
+  BINDINGS
+]) {
   if (!existsSync(path)) fail(`missing ${path}`);
 }
 
@@ -56,10 +65,19 @@ for (const required of [
   "id-token: write",
   "corepack pnpm check",
   "corepack pnpm build",
+  "scripts/check-routekit-cli-pack.mjs",
+  "scripts/stage-scope.mjs",
+  "scripts/check-fusionkit-cli-pack.mjs --require-scope",
   "corepack pnpm test",
   "scripts/publish-npm-workspaces.mjs"
 ]) {
   if (!workflow.includes(required)) fail(`release workflow missing: ${required}`);
+}
+if (
+  workflow.indexOf("scripts/stage-scope.mjs") >
+  workflow.indexOf("scripts/check-fusionkit-cli-pack.mjs --require-scope")
+) {
+  fail("release workflow must stage Scope before validating the FusionKit tarball");
 }
 
 const openApiHash = `sha256:${createHash("sha256")
@@ -88,6 +106,9 @@ if (manifest.protocol?.version !== root.version) {
 }
 
 const publishable = new Set();
+const packageOrder = new Map(
+  (manifest.packages ?? []).map((entry, index) => [entry.name, index])
+);
 for (const entry of manifest.packages ?? []) {
   if (!entry.path || !entry.name) fail("release manifest packages require path and name");
   publishable.add(entry.path);
@@ -118,6 +139,151 @@ for (const entry of manifest.packages ?? []) {
   if (pkg.license !== "Apache-2.0") {
     fail(`${packagePath} license must be Apache-2.0`);
   }
+  if (!existsSync(`${entry.path}/LICENSE`)) {
+    fail(`${entry.path} must contain the LICENSE declared in package files`);
+  }
+  for (const dependency of Object.keys(pkg.dependencies ?? {})) {
+    const dependencyIndex = packageOrder.get(dependency);
+    if (dependencyIndex === undefined) continue;
+    const packageIndex = packageOrder.get(pkg.name);
+    if (packageIndex !== undefined && dependencyIndex > packageIndex) {
+      fail(`${pkg.name} must be listed after dependency ${dependency}`);
+    }
+  }
+}
+
+for (const [packageName, binary] of [
+  ["@routekit/cli", "routekit"],
+  ["@fusionkit/cli", "fusionkit"]
+]) {
+  const entry = (manifest.packages ?? []).find((candidate) => candidate.name === packageName);
+  if (entry === undefined) {
+    fail(`release manifest is missing CLI package ${packageName}`);
+    continue;
+  }
+  const pkg = readJson(`${entry.path}/package.json`);
+  if (typeof pkg.bin?.[binary] !== "string") {
+    fail(`${packageName} must publish the ${binary} executable`);
+  }
+}
+const fusionCliEntry = (manifest.packages ?? []).find(
+  (candidate) => candidate.name === "@fusionkit/cli"
+);
+if (fusionCliEntry !== undefined) {
+  const fusionCli = readJson(`${fusionCliEntry.path}/package.json`);
+  if (!fusionCli.files?.includes("scope")) {
+    fail("@fusionkit/cli must publish the staged Scope dashboard directory");
+  }
+}
+
+const topology = readJson(RELEASE_TOPOLOGY);
+const npmUnit = topology.units?.find((unit) => unit.key === "handoffkit");
+if (npmUnit?.packageManifest !== RELEASE_MANIFEST) {
+  fail(`handoffkit release unit must use ${RELEASE_MANIFEST}`);
+}
+if (
+  JSON.stringify(npmUnit?.binaries) !==
+  JSON.stringify([
+    { name: "routekit", package: "@routekit/cli" },
+    { name: "fusionkit", package: "@fusionkit/cli" }
+  ])
+) {
+  fail("handoffkit binary metadata must include routekit and fusionkit");
+}
+const pypiUnit = topology.units?.find((unit) => unit.key === "fusionkit-pypi");
+const expectedPythonPackages = [
+  "fusionkit-core",
+  "fusionkit-server",
+  "fusionkit",
+  "fusionkit-mlx",
+  "fusionkit-evals"
+];
+if (JSON.stringify(pypiUnit?.packages) !== JSON.stringify(expectedPythonPackages)) {
+  fail(`fusionkit-pypi packages must use dependency order: ${expectedPythonPackages.join(" -> ")}`);
+}
+if (
+  JSON.stringify(pypiUnit?.binaries) !==
+  JSON.stringify([
+    { name: "fusionkit-sidecar", package: "fusionkit" },
+    { name: "fusionkit-bench", package: "fusionkit-evals" }
+  ])
+) {
+  fail("fusionkit-pypi binary metadata must include fusionkit-sidecar and fusionkit-bench");
+}
+if (!pypiUnit?.forbiddenBinaries?.includes("fusionkit")) {
+  fail("fusionkit-pypi must forbid the user-facing fusionkit executable");
+}
+const pypiRegistryPackages = (pypiUnit?.registries ?? [])
+  .filter((registry) => registry.kind === "pypi")
+  .map((registry) => registry.package);
+if (JSON.stringify(pypiRegistryPackages) !== JSON.stringify(expectedPythonPackages)) {
+  fail("fusionkit-pypi registries must list every released Python package in dependency order");
+}
+const expectedPythonPreflight = ["node", "scripts/build-fusionkit-python-packages.mjs"];
+if (JSON.stringify(pypiUnit?.preflight) !== JSON.stringify(expectedPythonPreflight)) {
+  fail("fusionkit-pypi preflight must build every release package in dependency order");
+}
+
+const pythonReleasePackages = new Map([
+  ["fusionkit-core", "python/fusionkit-core"],
+  ["fusionkit-server", "python/fusionkit-server"],
+  ["fusionkit", "python/fusionkit-cli"],
+  ["fusionkit-mlx", "python/fusionkit-mlx"],
+  ["fusionkit-evals", "python/fusionkit-evals"]
+]);
+for (const packageName of expectedPythonPackages) {
+  const packagePath = pythonReleasePackages.get(packageName);
+  if (packagePath === undefined) {
+    fail(`missing Python release path metadata for ${packageName}`);
+    continue;
+  }
+  const pyprojectPath = `${packagePath}/pyproject.toml`;
+  if (!existsSync(pyprojectPath)) {
+    fail(`Python release package is missing pyproject.toml: ${packagePath}`);
+    continue;
+  }
+  const pyproject = readFileSync(pyprojectPath, "utf8");
+  if (!pyproject.includes(`name = "${packageName}"`)) {
+    fail(`${pyprojectPath} project name must be ${packageName}`);
+  }
+  if (!pyproject.includes(`version = "${root.version}"`)) {
+    fail(`${pyprojectPath} version must match root version ${root.version}`);
+  }
+  if (!pyproject.includes('license = "Apache-2.0"')) {
+    fail(`${pyprojectPath} license must be Apache-2.0`);
+  }
+  if (!pyproject.includes('license-files = ["LICENSE"]')) {
+    fail(`${pyprojectPath} must include LICENSE in built distributions`);
+  }
+  if (!existsSync(`${packagePath}/LICENSE`)) {
+    fail(`${packagePath} must contain LICENSE`);
+  }
+}
+
+const sidecarPyproject = readFileSync("python/fusionkit-cli/pyproject.toml", "utf8");
+if (!sidecarPyproject.includes('fusionkit-sidecar = "fusionkit_cli.main:app"')) {
+  fail("fusionkit Python distribution must install fusionkit-sidecar");
+}
+if (/^fusionkit\s*=/m.test(sidecarPyproject)) {
+  fail("fusionkit Python distribution must not install a fusionkit executable");
+}
+const evalsPyproject = readFileSync("python/fusionkit-evals/pyproject.toml", "utf8");
+if (!evalsPyproject.includes('fusionkit-bench = "fusionkit_evals.cli:bench_app"')) {
+  fail("fusionkit-evals must install fusionkit-bench");
+}
+const fusionEnv = readFileSync("packages/cli/src/fusion/env.ts", "utf8");
+if (!fusionEnv.includes(`FUSIONKIT_PYPI_VERSION = "${root.version}"`)) {
+  fail("Node CLI sidecar version pin must match the release version");
+}
+
+const pypiWorkflow = readFileSync(PYPI_WORKFLOW, "utf8");
+for (const required of [
+  "scripts/build-fusionkit-python-packages.mjs",
+  ".release-venv/bin/fusionkit-sidecar",
+  ".release-venv/bin/fusionkit-bench",
+  ".release-venv/bin/fusionkit"
+]) {
+  if (!pypiWorkflow.includes(required)) fail(`PyPI workflow missing: ${required}`);
 }
 
 for (const path of ["packages/example-utils"]) {

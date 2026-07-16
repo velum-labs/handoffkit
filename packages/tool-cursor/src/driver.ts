@@ -19,16 +19,16 @@ import type {
 import {
   AsyncChannel,
   HarnessError,
-  PANEL_APPROVAL_POLICY,
+  DEFAULT_AUTOMATION_APPROVAL_POLICY,
   PendingRequests,
   asHarnessError,
   buildChildEnv,
+  createCachedHarnessDriver,
   decideApproval,
-  readCachedStatus,
-  runCliCapture,
-  terminate,
-  writeCachedStatus
-} from "@fusionkit/harness-core";
+  probeCliVersion,
+  resolveDriverEnv,
+  terminate
+} from "@routekit/harness-core";
 import type {
   ApprovalDecision,
   ApprovalPolicy,
@@ -43,12 +43,11 @@ import type {
   SessionHandle,
   SessionTurnInput,
   StartSessionOptions
-} from "@fusionkit/harness-core";
+} from "@routekit/harness-core";
 
 const RESUME_CURSOR_VERSION = 1;
 const DEFAULT_COMMAND = "cursor-agent";
 const AUTH_METHOD_ID = "cursor_login";
-const VERSION_PROBE_TIMEOUT_MS = 10_000;
 
 export const cursorDriverConfigSchema = z.object({
   command: z.string().default(DEFAULT_COMMAND),
@@ -61,10 +60,6 @@ export type CursorDriverConfig = z.infer<typeof cursorDriverConfigSchema>;
 
 function nowIso(): string {
   return new Date().toISOString();
-}
-
-function resolveEnv(context: DriverContext | undefined): Record<string, string | undefined> {
-  return context?.env ?? process.env;
 }
 
 /** Map an ACP tool kind onto the canonical item type. */
@@ -394,7 +389,7 @@ class CursorInstance implements HarnessInstance {
     const args = this.#config.endpoint !== undefined ? ["-e", this.#config.endpoint, "acp"] : ["acp"];
     const child = spawn(this.#config.command, args, {
       cwd: options.cwd,
-      env: buildChildEnv({ base: resolveEnv(this.#context), allow: [/^CURSOR_/] }),
+      env: buildChildEnv({ base: resolveDriverEnv(this.#context), allow: [/^CURSOR_/] }),
       detached: true,
       stdio: ["pipe", "pipe", "pipe"]
     });
@@ -443,7 +438,7 @@ class CursorInstance implements HarnessInstance {
         child,
         connection,
         sessionId,
-        approvalPolicy: options.approvalPolicy ?? PANEL_APPROVAL_POLICY
+        approvalPolicy: options.approvalPolicy ?? DEFAULT_AUTOMATION_APPROVAL_POLICY
       });
       this.#sessions.add(session);
       return session;
@@ -464,62 +459,26 @@ async function probeCursor(
   config: CursorDriverConfig,
   context: DriverContext | undefined
 ): Promise<HarnessStatus> {
-  const env = buildChildEnv({ base: resolveEnv(context), allow: [/^CURSOR_/] });
-  try {
-    const result = await runCliCapture(config.command, ["--version"], {
-      env,
-      timeoutMs: VERSION_PROBE_TIMEOUT_MS
-    });
-    if (result.exitCode !== 0) {
-      return {
-        kind: "cursor",
-        installed: false,
-        auth: { status: "unknown" },
-        checkedAt: nowIso(),
-        probeError: result.stderr.trim() || `cursor-agent --version exited ${result.exitCode}`
-      };
-    }
-    return {
-      kind: "cursor",
-      installed: true,
-      command: config.command,
-      version: result.stdout.trim().split(/\s+/).at(-1),
-      // Auth is verified by the ACP handshake at session start; the version
-      // probe cannot see login state cheaply.
-      auth: { status: "unknown" },
-      checkedAt: nowIso()
-    };
-  } catch (error) {
-    const harnessError = asHarnessError(error);
-    return {
-      kind: "cursor",
-      installed: false,
-      auth: { status: "unknown" },
-      checkedAt: nowIso(),
-      probeError:
-        harnessError.code === "not_installed"
-          ? `Cursor CLI "${config.command}" was not found on PATH.`
-          : harnessError.message
-    };
-  }
+  const env = buildChildEnv({ base: resolveDriverEnv(context), allow: [/^CURSOR_/] });
+  return probeCliVersion({
+    kind: "cursor",
+    command: config.command,
+    cliName: "cursor-agent",
+    env,
+    // Auth is verified by the ACP handshake at session start; the version
+    // probe cannot see login state cheaply.
+    auth: { status: "unknown" },
+    notInstalledMessage: `Cursor CLI "${config.command}" was not found on PATH.`
+  });
 }
 
 export function createCursorDriver(): HarnessDriver<CursorDriverConfig> {
-  return {
+  return createCachedHarnessDriver({
     kind: "cursor",
     configSchema: cursorDriverConfigSchema,
-    probe: async (context?: DriverContext) => {
-      const status = await probeCursor(cursorDriverConfigSchema.parse({}), context);
-      if (context?.statusCacheDir !== undefined) writeCachedStatus(status, context.statusCacheDir);
-      return status;
-    },
-    createInstance: async (config, context?: DriverContext) => {
-      const cached =
-        context?.statusCacheDir !== undefined
-          ? readCachedStatus("cursor", context.statusCacheDir)
-          : undefined;
-      const status = cached ?? (await probeCursor(config, context));
-      return new CursorInstance(config, context, status);
-    }
-  };
+    probeConfig: () => cursorDriverConfigSchema.parse({}),
+    probeStatus: probeCursor,
+    createInstance: (config, context, status) =>
+      new CursorInstance(config, context, status)
+  });
 }

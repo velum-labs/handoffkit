@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 from fusionkit_core.clients import FakeModelClient
-from fusionkit_core.config import FusionConfig, ModelEndpoint
+from fusionkit_core.config import FusionConfig
 from fusionkit_core.contracts import BenchmarkTaskRecordV1
 from fusionkit_core.fusion import FusionEngine
 from fusionkit_evals.pareto import ParetoPoint, find_pareto_front, write_pareto_report
@@ -103,7 +103,8 @@ async def test_tiny_benchmark_runner_writes_required_jsonl_fields(tmp_path) -> N
     tasks = load_tiny_tasks()[:2]
     engine = FusionEngine(
         config=FusionConfig(
-            endpoints=[ModelEndpoint(id="fast", model="fake-fast", base_url="http://localhost:8101")],
+            routekit_url="http://routekit.test",
+            endpoint_ids=["fast"],
             default_model="fast",
             default_mode="single",
         ),

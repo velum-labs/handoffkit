@@ -9,6 +9,28 @@ functions and classes, examples, and change guidance, read
 [Python reference](python-reference.md). For schemas, generated bindings, and
 HTTP contracts, read [Specs and APIs](specs-and-apis.md).
 
+## Non-obvious directory to package mappings
+
+Workspace directory names are implementation names, not always npm package
+names. Use the manifest name when importing or installing:
+
+| Directory | Published package |
+| --- | --- |
+| `packages/cli` | `@fusionkit/cli` |
+| `packages/routekit-cli` | `@routekit/cli` |
+| `packages/runtime-utils` | `@routekit/runtime` |
+| `packages/routekit-config` | `@routekit/config` |
+| `packages/routekit-router` | `@routekit/router` |
+| `packages/model-gateway` | `@routekit/gateway` |
+| `packages/fusion-gateway` | `@fusionkit/gateway` |
+| `packages/harness-core` | `@routekit/harness-core` (plus `@routekit/harness-core/testing`) |
+| `packages/tools` | `@routekit/tools` |
+| `packages/registry` | `@fusionkit/registry` |
+| `packages/routekit-registry` | `@routekit/registry` |
+| `packages/tracing` | `@fusionkit/tracing` |
+| `packages/routekit-tracing` | `@routekit/tracing` |
+| `packages/cli-ui` | `@routekit/cli-ui` |
+
 ## Core packages
 
 | Package | Responsibility | Start with |
@@ -23,12 +45,19 @@ HTTP contracts, read [Specs and APIs](specs-and-apis.md).
 
 | Package | Responsibility | Start with |
 | --- | --- | --- |
-| `@fusionkit/cli` | `fusionkit` command line workflows for init, local models, harness launchers, sessions, config, prompts, and fusion. | `packages/cli/src/cli.ts`, `packages/cli/src/commands` |
-| `@fusionkit/cli-ui` | Terminal presentation layer: Ink and plain presenters, prompts, wizards, and formatting. | `packages/cli-ui/src/index.ts` |
+| `@routekit/cli` | Independent `routekit` configuration, gateway serving, endpoint/account management, and coding-tool launchers. | `packages/routekit-cli/src/cli.ts`, `packages/routekit-cli/src/commands/index.ts` |
+| `@routekit/config` | Reusable RouterConfig discovery, layered loading, validation, atomic writes, and endpoint-ID selection/assertion helpers. | `packages/routekit-config/src/index.ts` |
+| `@routekit/router` | Reusable embedded RouteKit router composition, including account relays and gateway ownership. | `packages/routekit-router/src/index.ts` |
+| `@fusionkit/config` | Fusion-only v4 config, opaque endpoint-ID ensembles, prompt loading, validation, and atomic writes. | `packages/fusion-config/src/index.ts` |
+| `@fusionkit/cli` | Fusion-only init, local-panel lifecycle, generic harness launchers, sessions, config, prompts, and observability. It composes RouteKit SDKs but never `@routekit/cli`. | `packages/cli/src/cli.ts`, `packages/cli/src/commands` |
+| `@routekit/cli-ui` | Brand-configurable Ink/plain presenters, prompts, wizards, and formatting. | `packages/cli-ui/src/index.ts` |
+| `@routekit/cli-core` | CLI context, errors, shared option parsing, completion, package versions, and test helpers. | `packages/cli-core/src/index.ts` |
 | `@fusionkit/handoff` | Continuation SDK: checkpoints, `continueIn`, parallel fan-out, review, pull, tools, model routing, and trace logs. | `legacy/packages/handoff/src/handoff.ts` |
 | `@fusionkit/adapter-ai-sdk` | Product-local AI SDK utilities, worktree agents, local model adapters, and managed MLX helpers. | `packages/adapter-ai-sdk/src/index.ts` |
 | `@fusionkit/adapter-compute` | ComputeSDK-shaped sandbox surface backed by governed runner sessions. | `legacy/packages/adapter-compute/src/sandbox.ts` |
-| `@fusionkit/model-gateway` | Local-model gateway exposing harness wire dialects over OpenAI-compatible local models. | `packages/model-gateway/src/index.ts` |
+| `@routekit/gateway` | Neutral HTTP gateway, dialect adapters, runtime router/catalog, pooled endpoints, provider egress, and single-call provenance. | `packages/model-gateway/src/index.ts` |
+| `@routekit/accounts` | Subscription credentials, reusable account pooling, provider relays, proxy clients, and managed CLIProxyAPI lifecycle. | `packages/accounts/src/index.ts` |
+| `@fusionkit/gateway` | Fusion frontdoor, panel/synthesis orchestration, sessions, aggregate budgets, trajectory conversion, and local lifecycle. | `packages/fusion-gateway/src/index.ts` |
 
 ## Session and harness packages
 
@@ -39,17 +68,22 @@ HTTP contracts, read [Specs and APIs](specs-and-apis.md).
 | `@fusionkit/session-harness` | AI SDK harness bindings for vendor coding agents in governed sessions. | `legacy/packages/session-harness/src/index.ts` |
 | `@fusionkit/ensemble` | FusionKit runtime kernel, typed operator graphs, schedulers, workflow recipes, harness-agnostic model-fusion runner, artifacts, worktrees, dashboards, judge synthesis, and protocol records. | `packages/ensemble/src/index.ts`, `packages/ensemble/src/kernel.ts`, `packages/ensemble/src/workflows.ts` |
 | `@fusionkit/kernel` | Dependency-free runtime kernel substrate: artifacts, operators, graphs, validation, wire artifacts, and replay records. | `packages/kernel/src/index.ts` |
-| `@fusionkit/harness-core` | Coding-agent harness contract: drivers, events, error taxonomy, approvals, status probes, and the driver registry. | `packages/harness-core/src/index.ts` |
-| `@fusionkit/tools` | Tool integration contract and registry consumed by the CLI and per-harness packages. | `packages/tools/src/index.ts` |
-| `@fusionkit/tool-codex`, `tool-claude`, `tool-cursor`, `tool-opencode` | Per-harness adapters implementing the tool and harness contracts. | `packages/tool-<name>/src/index.ts` |
+| `@routekit/harness-core` | Product-neutral coding-agent driver, event, error, approval, and status contracts; shared cached-driver/version-probe factories; published `./testing` contract helpers. | `packages/harness-core/src/index.ts` |
+| `@routekit/tools` | Neutral launcher, canonical-driver, capability registry, launch-context, and disposer lifecycle. | `packages/tools/src/index.ts` |
+| `@routekit/tool-registry` | Canonical registry composition for every shipped coding-tool integration; both CLIs consume this one registry. | `packages/tool-registry/src/index.ts` |
+| `@routekit/tool-codex`, `@routekit/tool-claude`, `@routekit/tool-cursor`, `@routekit/tool-opencode` | One launcher/serializer and one canonical driver per coding tool. | `packages/tool-<name>/src/index.ts` |
 
 ## Support packages
 
 | Package | Responsibility | Start with |
 | --- | --- | --- |
-| `@fusionkit/registry` | Typed accessors over the generated `spec/registry/*.json` data: providers, catalogs, capabilities, and pricing. | `packages/registry/src/index.ts` |
-| `@fusionkit/runtime-utils` | Shared runtime primitives: supervised spawn, cleanup, timeouts, ids, and token estimates. | `packages/runtime-utils/src/index.ts` |
-| `@fusionkit/tracing` | OpenTelemetry-backed fusion span/event helpers, trace carriers, and in-process listeners. | `packages/tracing/src/index.ts` |
+| `@fusionkit/registry` | Fusion-only aliases and panel presets generated from `spec/registry/fusion.json`. | `packages/registry/src/index.ts` |
+| `@routekit/registry` | Provider catalogs, capabilities, discovery, and pricing used by the TypeScript routing stack. | `packages/routekit-registry/src/index.ts` |
+| `@routekit/runtime` | Shared process supervision, allowlisted child environments, URL/bind safety, cleanup, atomic files, locks, ports, and identity-aware portless registration. | `packages/runtime-utils/src/index.ts` |
+| `@routekit/config-core` | Layered config resolution, validated JSON IO, migration, and edit primitives. | `packages/config-core/src/index.ts` |
+| `@routekit/telemetry-core` | Parameterized consent, redaction, anonymous events, and bounded shutdown. | `packages/telemetry-core/src/index.ts` |
+| `@routekit/tracing` | Generic OpenTelemetry providers, propagation, listeners, and export redaction. | `packages/routekit-tracing/src/index.ts` |
+| `@fusionkit/tracing` | Fusion semantic-convention facade over `@routekit/tracing`. | `packages/tracing/src/index.ts` |
 | `@fusionkit/testkit` | Cross-stack E2E tooling (never published): provider simulator handle, real engine process, sim-backed router configs, and SSE observation. Legacy plane/runner fixtures live in `legacy/packages/testkit`. | `packages/testkit/src/index.ts`, `docs/testing.md` |
 | `@fusionkit/example-utils` | Shared demo manifest parsing, narration, and live-model helpers. | `packages/example-utils/src/index.ts` |
 
@@ -57,12 +91,12 @@ HTTP contracts, read [Specs and APIs](specs-and-apis.md).
 
 | Package | Responsibility | Start with |
 | --- | --- | --- |
-| `fusionkit-core` | Core fusion engine: config, provider clients, judge, run manager, contracts, tracing, and artifacts. | `python/fusionkit-core` |
-| `fusionkit-server` | FastAPI app and OpenAI-compatible HTTP routes for the fusion engine. | `python/fusionkit-server` |
-| `fusionkit` | The PyPI CLI (`fusionkit serve`, init, auth, prompts, benchmarks, tuning, hill climbing). | `python/fusionkit-cli` |
-| `fusionkit-evals` | Benchmarks, public reports, prompt tuning, Pareto analysis, hill climbing, scoring, and sandbox execution. | `python/fusionkit-evals` |
+| `fusionkit-core` | Fusion engine, neutral RouteKit client, sidecar config, judge, run manager, contracts, tracing, and artifacts. | `python/fusionkit-core` |
+| `fusionkit-server` | Internal FastAPI sidecar for trajectory fusion, native runs, tool resume, and health. | `python/fusionkit-server` |
+| `fusionkit` | Internal PyPI runtime exposing only the `fusionkit-sidecar` script. | `python/fusionkit-cli` |
+| `fusionkit-evals` | Maintainer-only `fusionkit-bench` app, benchmarks, public reports, prompt tuning, Pareto analysis, hill climbing, scoring, and HyperKit plugin. Independent of the sidecar distribution. | `python/fusionkit-evals` |
 | `fusionkit-mlx` | Optional MLX launcher utilities for Apple Silicon local serving. | `python/fusionkit-mlx` |
-| `fusionkit-testkit` | Scriptable provider simulator (`fusionkit-sim`), config builders, engine process harness, and pytest fixtures. | `python/fusionkit-testkit`, `docs/testing.md` |
+| `fusionkit-testkit` | Scriptable RouteKit-upstream simulator (`fusionkit-sim`), sidecar config builders, process harness, and pytest fixtures. | `python/fusionkit-testkit`, `docs/testing.md` |
 | `hyperkit` | SUT-agnostic experiment platform: `hyperkit` CLI, benchmark adapters, and AWS Batch/local backends. | `python/hyperkit`, `docs/hyperkit.md` |
 | `uniroute` | NumPy implementation of dynamic-pool UniRoute model routing. | `python/uniroute/README.md` |
 | `uniroute-mlx` | OpenAI-compatible and MLX-serving bridge for evaluating and serving routed local models. | `python/uniroute-mlx/README.md` |

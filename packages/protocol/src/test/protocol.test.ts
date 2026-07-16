@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
+import { canonicalize, hashCanonical } from "@routekit/contracts";
+
 import { appendEvent, verifyChain } from "../chain.js";
 import { contractHash, signContract } from "../contract.js";
-import { canonicalize } from "../jcs.js";
-import { hashCanonical } from "../hash.js";
 import {
   generateEd25519KeyPair,
   keyIdFromPublicPem,

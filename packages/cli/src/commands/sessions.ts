@@ -12,14 +12,13 @@
  */
 import type { Command } from "commander";
 
-import { defaultSessionsDir, FileSystemSessionStore, formatUsd } from "@fusionkit/model-gateway";
-import type { SessionCost, SessionStore, SessionSummary } from "@fusionkit/model-gateway";
+import { defaultSessionsDir, FileSystemSessionStore, formatUsd } from "@fusionkit/gateway";
+import type { SessionCost, SessionStore, SessionSummary } from "@fusionkit/gateway";
 
-import { bold, cyan, dim, gray, green, relativeTime } from "@fusionkit/cli-ui";
+import { bold, cyan, dim, gray, green, relativeTime } from "@routekit/cli-ui";
+import { argOrPick, contextFor } from "@routekit/cli-core";
+import type { CommandContext } from "@routekit/cli-core";
 
-import { contextFor } from "../shared/context.js";
-import type { CommandContext } from "../shared/context.js";
-import { argOrPick } from "../shared/pickers.js";
 
 import { registerPaletteAction } from "./palette.js";
 

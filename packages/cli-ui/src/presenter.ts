@@ -1,9 +1,9 @@
 /**
- * The presenter contract every fusionkit command renders through. Two
+ * The presenter contract every command renders through. Two
  * implementations exist:
  *
  * - `InkPresenter` — rich Ink (React) rendering on an interactive TTY.
- * - `PlainPresenter` — ordered line logs for CI, pipes, and `FUSIONKIT_NO_TUI`.
+ * - `PlainPresenter` — ordered line logs for CI, pipes, and `ROUTEKIT_NO_TUI`.
  *
  * Both write exclusively to stderr (`uiStream()`); stdout stays reserved for
  * machine payloads (`--json`, `config path`, `export-yaml`) and tool output.

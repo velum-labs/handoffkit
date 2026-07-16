@@ -1,9 +1,9 @@
 /**
- * @fusionkit/cli-ui — the fusionkit terminal UX layer.
+ * @routekit/cli-ui — a brand-configurable terminal UX layer.
  *
  * One presenter contract, two implementations: rich Ink (React) rendering on
  * interactive TTYs, ordered plain-text lines everywhere else (CI, pipes,
- * `FUSIONKIT_NO_TUI=1`). All UI goes to stderr; stdout stays reserved for
+ * `ROUTEKIT_NO_TUI=1`). All UI goes to stderr; stdout stays reserved for
  * machine payloads and the launched tool's output.
  */
 import { InkPresenter } from "./ink/presenter.js";

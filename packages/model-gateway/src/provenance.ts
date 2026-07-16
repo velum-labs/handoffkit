@@ -4,77 +4,53 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import {
-  artifactHash,
-  assertModelCallRecordV1,
-  MODEL_FUSION_SCHEMA_BUNDLE_HASH,
-  requestHash,
-  responseHash
-} from "@fusionkit/protocol";
-
-import { decodeBufferedSse } from "./sse/parse.js";
+import { artifactHash, requestHash, responseHash } from "@routekit/contracts";
 import type {
-  ModelCallRecordV1,
-  ModelFusionChatMessage,
-  ModelFusionError,
-  ModelFusionStatus,
   JsonValue,
-  ModelFusionUsage
-} from "@fusionkit/protocol";
+  ModelCallContract,
+  ModelChatMessage,
+  ModelUsage,
+  ProviderError
+} from "@routekit/contracts";
 
-/** The wire dialect a request arrived on. */
-export type GatewayDialect = "openai-chat" | "anthropic-messages" | "openai-responses";
+import { meterCall, parseUsage, parseUsageFromSse } from "./cost.js";
 
-export const MODEL_CALL_ID_HEADER = "x-velum-model-call-id";
+export type GatewayDialect =
+  | "openai-chat"
+  | "anthropic-messages"
+  | "openai-responses";
 
-// --- WS7: real-lite producer provenance -----------------------------------
-
-/**
- * The sentinel emitted for `producer_git_sha` when no real SHA is resolvable.
- * Deliberately NOT 40 zeros: an all-zero SHA reads as a valid (null) git object
- * and was the old "faked provenance" placeholder. The protocol's
- * `producer_git_sha` validator accepts this literal as a clearly-marked unknown.
- */
+export const MODEL_CALL_ID_HEADER = "x-routekit-model-call-id";
 export const UNKNOWN_GIT_SHA = "unknown";
 
 const GIT_SHA_PATTERN = /^[a-f0-9]{40}$/;
 
-/** This module's own directory (works in dev `src` and built `dist`). */
 function moduleDir(): string {
   return dirname(fileURLToPath(import.meta.url));
 }
 
-/**
- * Resolve a producer's real git SHA, real-lite (WS7). Resolution order:
- *   1. a build/publish-time stamp (`FUSIONKIT_BUILD_GIT_SHA`) — baked in when the
- *      package is built so an installed artifact still carries real provenance;
- *   2. a runtime `git rev-parse HEAD` — only when running from a source checkout
- *      (the module path is NOT under `node_modules`), so an installed copy never
- *      mis-reports the *consuming project's* repo SHA as the producer's;
- *   3. the {@link UNKNOWN_GIT_SHA} sentinel — never 40 zeros.
- */
 export function resolveProducerGitSha(fromDir: string = moduleDir()): string {
-  const stamped = process.env.FUSIONKIT_BUILD_GIT_SHA?.trim();
+  const stamped = process.env.ROUTEKIT_BUILD_GIT_SHA?.trim();
   if (stamped !== undefined && GIT_SHA_PATTERN.test(stamped)) return stamped;
   if (!fromDir.includes("node_modules")) {
     const result = spawnSync("git", ["rev-parse", "HEAD"], { cwd: fromDir, encoding: "utf8" });
-    if (result.status === 0) {
-      const sha = result.stdout.trim();
-      if (GIT_SHA_PATTERN.test(sha)) return sha;
+    if (result.status === 0 && GIT_SHA_PATTERN.test(result.stdout.trim())) {
+      return result.stdout.trim();
     }
   }
   return UNKNOWN_GIT_SHA;
 }
 
-/** Read a producer's real version from the nearest ancestor `package.json`. */
 export function readProducerVersion(fromDir: string = moduleDir(), fallback = "0.0.0"): string {
   let dir = fromDir;
   for (let depth = 0; depth < 8; depth += 1) {
     try {
-      const pkg = JSON.parse(readFileSync(join(dir, "package.json"), "utf8")) as { version?: unknown };
-      if (typeof pkg.version === "string" && pkg.version.length > 0) return pkg.version;
+      const parsed = JSON.parse(readFileSync(join(dir, "package.json"), "utf8")) as {
+        version?: unknown;
+      };
+      if (typeof parsed.version === "string" && parsed.version.length > 0) return parsed.version;
     } catch {
-      // No package.json here (or unreadable); keep walking up.
+      // Continue toward the filesystem root.
     }
     const parent = dirname(dir);
     if (parent === dir) break;
@@ -82,10 +58,6 @@ export function readProducerVersion(fromDir: string = moduleDir(), fallback = "0
   }
   return fallback;
 }
-
-const PRODUCER = "handoffkit-model-gateway";
-const PRODUCER_VERSION = readProducerVersion();
-const PRODUCER_GIT_SHA = resolveProducerGitSha();
 
 export type ModelGatewayCallContext = {
   callId: string;
@@ -105,58 +77,17 @@ export type ModelGatewayCallResult = {
   error?: unknown;
 };
 
-/** One recorded model call observed at the gateway boundary. */
-export type ModelCallRecord = ModelCallRecordV1;
+export type ModelCallRecord = ModelCallContract;
 
-/** Sink for gateway observations. All methods are optional. */
 export type ProvenanceSink = {
   onModelCall?(record: ModelCallRecord): void;
-  /**
-   * Unredacted, in-process observation of one model call: the raw request body
-   * (full message array incl. tool calls + tool results) and raw response body.
-   * Used to reconstruct a native agent trajectory from the wire traffic without
-   * per-CLI stdout parsing. Never persisted by the gateway; the caller decides.
-   */
   onModelCallRaw?(context: ModelGatewayCallContext, result: ModelGatewayCallResult): void;
 };
 
-function asObject(value: unknown): Record<string, unknown> | undefined {
-  if (typeof value === "object" && value !== null && !Array.isArray(value)) {
-    return value as Record<string, unknown>;
-  }
-  return undefined;
-}
-
-function stringValue(value: unknown): string | undefined {
-  return typeof value === "string" && value.length > 0 ? value : undefined;
-}
-
-function requestMessages(body: unknown): ModelFusionChatMessage[] {
-  const obj = asObject(body);
-  const messages = obj?.messages;
-  if (Array.isArray(messages)) {
-    const projected = messages
-      .map((message): ModelFusionChatMessage | undefined => {
-        const item = asObject(message);
-        if (item === undefined) return undefined;
-        const role = item?.role;
-        if (
-          role !== "system" &&
-          role !== "user" &&
-          role !== "assistant" &&
-          role !== "tool"
-        ) {
-          return undefined;
-        }
-        return {
-          role,
-          content: requestHash(item.content ?? "")
-        };
-      })
-      .filter((message): message is ModelFusionChatMessage => message !== undefined);
-    if (projected.length > 0) return projected;
-  }
-  return [{ role: "user", content: requestHash(body) }];
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
 }
 
 function parseJson(buffer: Buffer | undefined): unknown {
@@ -172,182 +103,89 @@ function responseText(buffer: Buffer | undefined): string {
   return buffer?.toString("utf8") ?? "";
 }
 
-function usageFromObject(value: unknown): ModelFusionUsage | undefined {
-  const obj = asObject(value);
-  const usage = asObject(obj?.usage);
+function requestMessages(body: unknown): ModelChatMessage[] {
+  const messages = asRecord(body)?.messages;
+  if (!Array.isArray(messages)) return [{ role: "user", content: requestHash(body) }];
+  const projected = messages.flatMap((message): ModelChatMessage[] => {
+    const item = asRecord(message);
+    const role = item?.role;
+    if (role !== "system" && role !== "user" && role !== "assistant" && role !== "tool") return [];
+    return [{ role, content: requestHash(item?.content ?? "") }];
+  });
+  return projected.length > 0 ? projected : [{ role: "user", content: requestHash(body) }];
+}
+
+function usageFromResponse(body: Buffer | undefined): ModelUsage | undefined {
+  const parsed = asRecord(parseJson(body));
+  const usage = parseUsage(parsed?.usage) ?? parseUsageFromSse(responseText(body));
   if (usage === undefined) return undefined;
-  const prompt =
-    typeof usage.prompt_tokens === "number"
-      ? usage.prompt_tokens
-      : typeof usage.input_tokens === "number"
-        ? usage.input_tokens
-        : undefined;
-  const completion =
-    typeof usage.completion_tokens === "number"
-      ? usage.completion_tokens
-      : typeof usage.output_tokens === "number"
-        ? usage.output_tokens
-        : undefined;
-  const total =
-    typeof usage.total_tokens === "number"
-      ? usage.total_tokens
-      : prompt !== undefined && completion !== undefined
-        ? prompt + completion
-        : undefined;
-  if (prompt === undefined && completion === undefined && total === undefined) {
-    return undefined;
-  }
   return {
-    ...(prompt !== undefined ? { prompt_tokens: prompt } : {}),
-    ...(completion !== undefined ? { completion_tokens: completion } : {}),
-    ...(total !== undefined ? { total_tokens: total } : {})
+    ...(usage.promptTokens !== undefined ? { prompt_tokens: usage.promptTokens } : {}),
+    ...(usage.completionTokens !== undefined ? { completion_tokens: usage.completionTokens } : {}),
+    ...(usage.totalTokens !== undefined ? { total_tokens: usage.totalTokens } : {})
   };
-}
-
-function usageFromSse(text: string): ModelFusionUsage | undefined {
-  let usage: ModelFusionUsage | undefined;
-  // Best-effort provenance capture over a buffered response body: a non-JSON or
-  // truncated payload is skipped (parseJson returns undefined) rather than
-  // failing the record — provenance is an observation, never authoritative.
-  for (const event of decodeBufferedSse(text)) {
-    if (event.data === "[DONE]") continue;
-    const parsed = parseJson(Buffer.from(event.data));
-    const candidate = usageFromObject(parsed);
-    if (candidate !== undefined) usage = candidate;
-  }
-  return usage;
-}
-
-function providerCostFromObject(value: unknown): JsonValue | undefined {
-  const obj = asObject(value);
-  const cost = asObject(obj?.provider_cost) ?? asObject(obj?.providerCost);
-  if (cost === undefined) return undefined;
-  return cost as JsonValue;
-}
-
-function providerCostFromSse(text: string): JsonValue | undefined {
-  let providerCost: JsonValue | undefined;
-  // Best-effort provenance capture (see usageFromSse): unparseable payloads are
-  // skipped rather than treated as fatal.
-  for (const event of decodeBufferedSse(text)) {
-    if (event.data === "[DONE]") continue;
-    const candidate = providerCostFromObject(parseJson(Buffer.from(event.data)));
-    if (candidate !== undefined) providerCost = candidate;
-  }
-  return providerCost;
-}
-
-function providerCostFromResponse(body: Buffer | undefined): JsonValue | undefined {
-  const parsed = parseJson(body);
-  return providerCostFromObject(parsed) ?? providerCostFromSse(responseText(body));
-}
-
-function exactProviderCostUsd(providerCost: JsonValue | undefined): number | undefined {
-  const record = asObject(providerCost);
-  if (typeof record?.cost_usd === "number") return record.cost_usd;
-  if (typeof record?.costUsd === "number") return record.costUsd;
-  return undefined;
-}
-
-function usageWithProviderCost(
-  usage: ModelFusionUsage | undefined,
-  providerCost: JsonValue | undefined
-): ModelFusionUsage | undefined {
-  const record = asObject(providerCost);
-  if (record === undefined) return usage;
-  const prompt =
-    typeof record.tokens_prompt === "number"
-      ? record.tokens_prompt
-      : typeof record.tokensPrompt === "number"
-        ? record.tokensPrompt
-        : usage?.prompt_tokens;
-  const completion =
-    typeof record.tokens_completion === "number"
-      ? record.tokens_completion
-      : typeof record.tokensCompletion === "number"
-        ? record.tokensCompletion
-        : usage?.completion_tokens;
-  const total =
-    prompt !== undefined && completion !== undefined
-      ? prompt + completion
-      : usage?.total_tokens;
-  if (prompt === undefined && completion === undefined && total === undefined) return usage;
-  return {
-    ...(prompt !== undefined ? { prompt_tokens: prompt } : {}),
-    ...(completion !== undefined ? { completion_tokens: completion } : {}),
-    ...(total !== undefined ? { total_tokens: total } : {})
-  };
-}
-
-function usageFromResponse(body: Buffer | undefined): ModelFusionUsage | undefined {
-  const parsed = parseJson(body);
-  return usageFromObject(parsed) ?? usageFromSse(responseText(body));
-}
-
-function observedModel(body: Buffer | undefined): string | undefined {
-  return stringValue(asObject(parseJson(body))?.model);
 }
 
 function providerRequestId(body: Buffer | undefined): string | undefined {
-  return stringValue(asObject(parseJson(body))?.id);
+  const id = asRecord(parseJson(body))?.id;
+  return typeof id === "string" && id.length > 0 ? id : undefined;
 }
 
-function errorKind(statusCode: number, error: unknown): ModelFusionError["kind"] {
-  if (statusCode === 408) return "timeout";
-  if (statusCode === 429) return "rate_limited";
-  if (error !== undefined) return "provider_error";
-  if (statusCode >= 400) return "provider_error";
-  return "none";
-}
-
-function statusFor(statusCode: number, error: unknown): ModelFusionStatus {
-  return statusCode >= 200 && statusCode < 400 && error === undefined ? "succeeded" : "failed";
+function providerError(result: ModelGatewayCallResult): ProviderError | undefined {
+  if (result.error === undefined && result.statusCode >= 200 && result.statusCode < 400) {
+    return undefined;
+  }
+  const kind =
+    result.statusCode === 408
+      ? "timeout"
+      : result.statusCode === 429
+        ? "rate_limited"
+        : result.statusCode === 400 || result.statusCode === 422
+          ? "validation_error"
+          : "provider_error";
+  return {
+    kind,
+    message:
+      result.error instanceof Error
+        ? result.error.message
+        : result.error !== undefined
+          ? String(result.error)
+          : responseText(result.responseBody).slice(0, 500),
+    retryable: result.statusCode === 408 || result.statusCode === 429 || result.statusCode >= 500
+  };
 }
 
 export function buildModelCallRecord(
   context: ModelGatewayCallContext,
   result: ModelGatewayCallResult
 ): ModelCallRecord {
-  const providerCost = providerCostFromResponse(result.responseBody);
-  const exactCostUsd = exactProviderCostUsd(providerCost);
-  const usage = usageWithProviderCost(usageFromResponse(result.responseBody), providerCost);
-  const status = statusFor(result.statusCode, result.error);
+  const usage = usageFromResponse(result.responseBody);
+  const callCost = meterCall({
+    model: context.model ?? context.requestedModel ?? "unknown",
+    usage:
+      usage === undefined
+        ? undefined
+        : {
+            promptTokens: usage.prompt_tokens,
+            completionTokens: usage.completion_tokens,
+            totalTokens: usage.total_tokens
+          }
+  });
+  const error = providerError(result);
   const metadata: Record<string, JsonValue> = {
     dialect: context.dialect,
     stream: context.stream,
     http_status: result.statusCode,
     duration_ms: result.durationMs,
     requested_model: context.requestedModel ?? null,
-    observed_model: observedModel(result.responseBody) ?? null,
-    unknown_usage: usage === undefined,
-    unknown_cost: exactCostUsd === undefined,
-    ...(providerCost !== undefined ? { provider_cost: providerCost } : {}),
-    ...(exactCostUsd !== undefined ? { cost_estimate: exactCostUsd } : {})
+    unknown_usage: callCost.unknownUsage,
+    unknown_cost: callCost.unknownCost,
+    ...(callCost.costUsd !== undefined ? { cost_estimate_usd: callCost.costUsd } : {})
   };
-  const error: ModelFusionError | undefined =
-    status === "failed"
-      ? {
-          kind: errorKind(result.statusCode, result.error),
-          message:
-            result.error instanceof Error
-              ? result.error.message
-              : result.error !== undefined
-                ? String(result.error)
-                : responseText(result.responseBody).slice(0, 500),
-          retryable: result.statusCode >= 500
-        }
-      : undefined;
-  const record: ModelCallRecord = {
-    schema: "model-call-record.v1",
-    schema_version: "v1",
-    schema_bundle_hash: MODEL_FUSION_SCHEMA_BUNDLE_HASH,
-    producer: PRODUCER,
-    producer_version: PRODUCER_VERSION,
-    producer_git_sha: PRODUCER_GIT_SHA,
-    created_at: context.startedAt,
+  return {
     call_id: context.callId,
     endpoint_id: context.endpointId ?? context.dialect,
-    ...(providerRequestId(result.responseBody)
+    ...(providerRequestId(result.responseBody) !== undefined
       ? { provider_request_id: providerRequestId(result.responseBody) }
       : {}),
     model: context.model ?? context.requestedModel ?? "unknown",
@@ -356,7 +194,7 @@ export function buildModelCallRecord(
       ? { response_hash: responseHash(responseText(result.responseBody)) }
       : {}),
     messages: requestMessages(context.requestBody),
-    status,
+    status: error === undefined ? "succeeded" : "failed",
     side_effects: "none",
     started_at: context.startedAt,
     finished_at: new Date(new Date(context.startedAt).getTime() + result.durationMs).toISOString(),
@@ -365,8 +203,6 @@ export function buildModelCallRecord(
     ...(error !== undefined ? { error } : {}),
     metadata
   };
-  assertModelCallRecordV1(record);
-  return record;
 }
 
 export function modelCallId(): string {

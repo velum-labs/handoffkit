@@ -1,16 +1,16 @@
 /**
  * The server-tool inner loop (gateway-executed web search).
  *
- * When the fused model calls a *server-executed* tool (today: `web_search`),
+ * When the upstream model calls a *server-executed* tool (today: `web_search`),
  * nobody on the caller's side can answer it — the caller declared the tool
  * expecting the "server" to run it. This loop makes the gateway that server:
- * it intercepts server-tool calls from a fused step, executes them via a
+ * it intercepts server-tool calls from a model step, executes them via a
  * {@link WebSearchExecutor}, appends the exchange to the chat transcript, and
- * runs another fused step — repeating until a step commits to something the
+ * runs another model step — repeating until a step commits to something the
  * caller can actually handle (text, client tool calls, or a clean stop).
  *
  * The loop operates at the chat-completions layer, around `backend.chat`:
- * each inner step is an ordinary fused turn (panel fanout + fuse), exactly as
+ * each inner step is an ordinary backend turn, exactly as
  * if the caller had executed a client tool and come back. The dialect egress
  * translators stay single-stream: in streaming mode the loop composes the
  * steps' chat SSE into one continuous stream, suppressing the server-tool
@@ -20,11 +20,11 @@
  *
  * Mixed batches (server + client calls in one step) terminate the turn: the
  * client calls surface and the server calls are dropped un-executed — results
- * could not be fed back into a turn that just ended, and the fused model can
+ * could not be fed back into a turn that just ended, and the upstream model can
  * simply re-issue the search next turn.
  */
 
-import { randomId } from "@fusionkit/runtime-utils";
+import { randomId } from "@routekit/runtime";
 
 import { SseDecoder } from "../sse/parse.js";
 import { ChatStreamAssembler } from "../sse/chat-assembler.js";
@@ -34,12 +34,12 @@ import type { WebSearchExecutor, WebSearchOutcome } from "./web-search.js";
 
 const ENCODER = new TextEncoder();
 
-/** Absolute bound on fused steps per caller turn (defense against a model that
+/** Absolute bound on model steps per caller turn (defense against a model that
  *  keeps searching after being told the search budget is exhausted). */
 const MAX_LOOP_STEPS = 16;
 
 /** In-process marker chunk field the loop injects between composed steps. */
-export const SERVER_TOOL_MARKER_FIELD = "fusionkit_server_tool";
+export const SERVER_TOOL_MARKER_FIELD = "routekit_server_tool";
 
 export type ServerToolMarker = {
   kind: "web_search";
@@ -178,8 +178,8 @@ export type BufferedLoopOutcome =
   | { kind: "upstream_error"; response: Response };
 
 /**
- * Run the loop over buffered (non-streaming) fused steps. `firstStep` is the
- * already-awaited first fused step (the handler surfaces its HTTP errors
+ * Run the loop over buffered (non-streaming) model steps. `firstStep` is the
+ * already-awaited first model step (the handler surfaces its HTTP errors
  * before entering the loop). Returns the terminal step's OpenAI payload (with
  * any un-executable mixed-batch server calls stripped) plus the searches
  * executed along the way, for the dialect egress to render as native items.
@@ -281,9 +281,9 @@ function accumulateUsage(totals: UsageTotals, usage: unknown): void {
 }
 
 /**
- * Compose the loop's fused steps into one continuous chat SSE stream.
+ * Compose the loop's model steps into one continuous chat SSE stream.
  *
- * `firstStep` is the already-awaited first fused step (the handler surfaces
+ * `firstStep` is the already-awaited first model step (the handler surfaces
  * its HTTP errors exactly as the single-step path does). Server-tool call
  * fragments are suppressed from the forwarded stream; each executed search is
  * injected as a pair of {@link ServerToolMarker} chunks for the dialect
@@ -306,12 +306,12 @@ export function composeServerToolStream(
               upstream = await options.runStep(options.chat);
               if (!upstream.ok) {
                 throw new Error(
-                  `fused step failed mid web-search loop (${upstream.status}): ${(await upstream.text()).slice(0, 500)}`
+                  `model step failed mid web-search loop (${upstream.status}): ${(await upstream.text()).slice(0, 500)}`
                 );
               }
             }
             const source = upstream.body;
-            if (source === null) throw new Error("fused step produced no stream mid web-search loop");
+            if (source === null) throw new Error("model step produced no stream mid web-search loop");
             const terminal = await forwardStep(controller, source);
             if (terminal) {
               controller.close();
@@ -356,7 +356,7 @@ export function composeServerToolStream(
   /**
    * Forward one step's SSE into the composed stream. Returns true when the
    * step was terminal (stream finished); false when the loop must run another
-   * fused step (a pure server-tool step whose searches were executed).
+   * model step (a pure server-tool step whose searches were executed).
    */
   async function forwardStep(
     controller: ReadableStreamDefaultController<Uint8Array>,

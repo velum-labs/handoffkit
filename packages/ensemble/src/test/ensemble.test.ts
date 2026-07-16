@@ -16,12 +16,11 @@ import {
   assertHarnessCandidateRecordV1,
   assertHarnessRunRequestV1,
   assertHarnessRunResultV1,
-  MODEL_FUSION_SCHEMA_BUNDLE_HASH,
-  requestHash,
-  responseHash
+  MODEL_FUSION_SCHEMA_BUNDLE_HASH
 } from "@fusionkit/protocol";
 import type { ModelCallRecordV1 } from "@fusionkit/protocol";
 import { gitText } from "@fusionkit/workspace";
+import { requestHash, responseHash } from "@routekit/contracts";
 
 import { createCommandHarness } from "../command.js";
 import { createMockJudgeSynthesizer } from "../judge.js";

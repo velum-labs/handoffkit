@@ -46,8 +46,8 @@ jobs:
 
       # The publish step performs the npm OIDC exchange via the npm CLI, which
       # must be >= 11.5.1 for trusted publishing. Trusted Publishers for the
-      # @fusionkit/* packages are configured on npmjs.com, so publishing is
-      # token-free via OIDC (provenance is emitted automatically).
+      # @routekit/* and @fusionkit/* packages are configured on npmjs.com, so
+      # publishing is token-free via OIDC (provenance is emitted automatically).
       - name: Update npm for OIDC trusted publishing
         run: npm install -g npm@latest
 
@@ -71,13 +71,12 @@ jobs:
       - name: Build
         run: corepack pnpm build
 
-      - name: Test
-        run: corepack pnpm test
+      - name: Validate RouteKit clean install
+        run: node scripts/check-routekit-cli-pack.mjs
 
       # The observability dashboard (apps/scope) is an isolated workspace with
       # its own lockfile; install + build it, then stage the Next standalone
-      # output into packages/cli/scope/ so the published @fusionkit/cli ships a
-      # working `--observe` out of the box (cli files: ["dist", "scope"]).
+      # output into packages/cli/scope/ before validating the FusionKit tarball.
       - name: Build observability dashboard (apps/scope)
         working-directory: apps/scope
         run: |
@@ -86,6 +85,12 @@ jobs:
 
       - name: Stage dashboard into CLI package
         run: node scripts/stage-scope.mjs
+
+      - name: Validate FusionKit clean install
+        run: node scripts/check-fusionkit-cli-pack.mjs --require-scope
+
+      - name: Test
+        run: corepack pnpm test
 
       - name: Dry-run package tarballs
         if: github.event_name == 'workflow_dispatch'

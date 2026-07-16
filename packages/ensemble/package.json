@@ -119,13 +119,16 @@
   },
   "dependencies": {
     "@fusionkit/adapter-ai-sdk": "workspace:*",
-    "@fusionkit/harness-core": "workspace:*",
+    "@routekit/harness-core": "workspace:*",
+    "@routekit/tools": "workspace:*",
     "@fusionkit/kernel": "workspace:*",
-    "@fusionkit/model-gateway": "workspace:*",
+    "@fusionkit/gateway": "workspace:*",
     "@fusionkit/protocol": "workspace:*",
-    "@fusionkit/runtime-utils": "workspace:*",
+    "@routekit/runtime": "workspace:*",
     "@fusionkit/tracing": "workspace:*",
     "@fusionkit/workspace": "workspace:*",
+    "@routekit/contracts": "workspace:*",
+    "@routekit/gateway": "workspace:*",
     "@velum-labs/cursorkit": "0.2.0"
   },
   "keywords": [

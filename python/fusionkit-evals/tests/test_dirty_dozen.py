@@ -5,7 +5,7 @@ from typing import cast
 
 import pytest
 from fusionkit_core.clients import FakeModelClient
-from fusionkit_core.config import FusionConfig, ModelEndpoint
+from fusionkit_core.config import FusionConfig
 from fusionkit_core.contracts import BenchmarkTaskRecordV1
 from fusionkit_core.fusion import FusionEngine
 from fusionkit_evals.dirty_dozen import (
@@ -148,13 +148,8 @@ def test_dirty_dozen_readme_documents_setup_scoring_and_contamination() -> None:
 
 def _engine() -> FusionEngine:
     config = FusionConfig(
-        endpoints=[
-            ModelEndpoint(
-                id="fast",
-                model="fake-fast",
-                base_url="http://localhost:8101",
-            ),
-        ],
+        routekit_url="http://routekit.test",
+        endpoint_ids=["fast"],
         default_model="fast",
         default_mode="single",
     )

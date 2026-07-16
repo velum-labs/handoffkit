@@ -7,7 +7,7 @@
   "type": "module",
   "dependencies": {
     "@fusionkit/adapter-ai-sdk": "workspace:*",
-    "@fusionkit/registry": "workspace:*",
+    "@routekit/registry": "workspace:*",
     "ai": "6.0.200"
   },
   "scripts": {

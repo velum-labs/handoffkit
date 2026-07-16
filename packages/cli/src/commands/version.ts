@@ -1,10 +1,10 @@
 import type { Command } from "commander";
 
-import { dim } from "@fusionkit/cli-ui";
+import { dim } from "@routekit/cli-ui";
+import { contextFor, formatPackageVersion } from "@routekit/cli-core";
+import type { CommandContext } from "@routekit/cli-core";
 
-import { contextFor } from "../shared/context.js";
-import type { CommandContext } from "../shared/context.js";
-import { collectVersionMatrix } from "../shared/package-version.js";
+import { collectVersionMatrix } from "../package-version.js";
 
 import { registerPaletteAction } from "./palette.js";
 
@@ -22,7 +22,10 @@ async function runVersion(ctx: CommandContext): Promise<number> {
   presenter.blank();
   presenter.keyValue([
     { label: "@fusionkit/cli", value: matrix.cli },
-    { label: "synthesizer (pinned)", value: `fusionkit@${matrix.synthesizerPinned}` },
+    {
+      label: "synthesizer (pinned)",
+      value: formatPackageVersion("fusionkit", matrix.synthesizerPinned)
+    },
     { label: "synthesizer (cached)", value: matrix.synthesizerCached ?? dim("not provisioned") }
   ]);
 
@@ -48,7 +51,7 @@ async function runVersion(ctx: CommandContext): Promise<number> {
   presenter.line(dim("tool integrations"));
   presenter.keyValue(
     Object.entries(matrix.tools).map(([name, version]) => ({
-      label: `@fusionkit/tool-${name}`,
+      label: `@routekit/tool-${name}`,
       value: version ?? dim("unknown")
     }))
   );

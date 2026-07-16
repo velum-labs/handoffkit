@@ -1,163 +1,107 @@
 ---
 title: Configuration
-description: The committed .fusionkit/ per-repo config reference.
+description: FusionKit v4 ensembles composed from opaque RouteKit endpoint IDs.
 ---
 
-## The `.fusionkit/` folder
+## Two configuration owners
 
-Fusion settings live in a committed `.fusionkit/` folder at your repo root. It is **safe to commit**. It stores only the env-var *names* that hold API keys (`keyEnv`), never the secret values.
+FusionKit v4 separates fusion policy from model routing:
 
-```
-.fusionkit/
-  fusion.json
-  prompts/
-    judge.md
-    synthesizer.md
-```
+- `.fusionkit/fusion.json` defines ensembles, prompts, and Fusion behavior.
+- `.routekit/router.yaml` defines provider models, URLs, credentials, accounts,
+  and opaque endpoint IDs.
 
-Scaffold it interactively:
+FusionKit sees endpoint IDs. RouteKit never sees ensembles.
 
 ```bash
 fusionkit init
 ```
 
-Inspect the effective configuration and a dry-run preview any time:
+This creates Fusion config and, when absent, a safe RouteKit placeholder with an
+`apiKeyEnv` reference. Install `@routekit/cli` separately if you want its
+endpoint/account commands; FusionKit does not depend on that executable.
 
-```bash
-fusionkit config show
-```
-
-## Precedence
-
-```
-explicit CLI flags  >  .fusionkit/fusion.json  >  built-in defaults
-```
-
-The file is a default layer, not a lock. Any flag overrides it for one run.
-
-## Settings (`fusion.json`)
+## FusionKit v4 schema
 
 ```json
 {
-  "version": "fusionkit.fusion.v3",
+  "version": "fusionkit.fusion.v4",
+  "router": { "config": ".routekit/router.yaml" },
   "tool": "codex",
   "defaultEnsemble": "default",
   "ensembles": {
     "default": {
-      "panel": [
-        { "id": "gpt", "model": "gpt-5.5", "provider": "openai", "keyEnv": "OPENAI_API_KEY" },
-        { "id": "sonnet", "model": "claude-sonnet-4-6", "provider": "anthropic", "keyEnv": "ANTHROPIC_API_KEY" },
-        { "id": "gemini", "model": "gemini-2.5-pro", "provider": "google", "keyEnv": "GEMINI_API_KEY" }
-      ],
-      "judgeModel": "gpt-5.5",
-      "synthesizerModel": "gpt-5.5"
+      "members": ["fast", "deep"],
+      "judge": "deep",
+      "synthesizer": "deep",
+      "k": 1
     }
   },
-  "local": false,
   "observe": false,
   "onRateLimit": "fusion",
   "budgetUsd": 5,
-  "portless": true,
-  "port": null
+  "panelTrust": "full",
+  "reasoning": true,
+  "subagents": true,
+  "portless": true
 }
 ```
 
-### Fields
+`router` sets exactly one of:
 
-| Field | Type | Notes |
-| --- | --- | --- |
-| `version` | string | Must be `"fusionkit.fusion.v3"`. v1/v2 files are accepted and upgraded in memory. |
-| `tool` | `codex` \| `claude` \| `cursor` \| `serve` | Default agent when none is passed. |
-| `ensembles` | object | Named panels. The `default` ensemble advertises `fusion-panel`; other names advertise `fusion-<name>`. |
-| `defaultEnsemble` | string | Which ensemble new sessions use by default. |
-| `local` | boolean | Use the local MLX trio by default. |
-| `observe` | boolean | Boot the observability dashboard by default. |
-| `onRateLimit` | `fusion` \| `passthrough` \| `fail` | Vendor rate-limit behavior. Defaults to `fusion`. |
-| `budgetUsd` | number | Optional session spend cap in gateway-observed USD. |
-| `panelTrust` | `full` \| `guarded` | Panel model sandbox. `full` (the default when unset) lets models run any command and edit any file; `guarded` restricts each model to its own draft worktree. |
-| `k` | integer | Default step boundaries per panel member before aggregation (per-ensemble `k` overrides). See the ensemble field below. |
-| `reasoning` | boolean | Narrate panel/judge progress in the launched tool's thinking UI. Default `true`; `false` keeps the stream silent until the judge's first token. |
-| `reasoningModel` | string | Model that writes the narration prose: a panel member, a `provider/model` token, or a local MLX model path (Apple Silicon only). |
-| `subagents` | boolean | Auto-provision one native sub-agent per ensemble in the launched tool. Default on; `false` disables it. |
-| `subscriptionAccounts` | object | Provider-native subscription account sets consumed by the gateway, keyed by `claude-code` or `codex`, each with optional `source`, `strategy`, `switchThreshold`, and `probeIntervalMs`. See the [Subscription pooling guide](/docs/guides/subscription-pooling). |
-| `portless` | boolean | Use stable portless URLs when available. Defaults to `true`. |
-| `port` | number \| null | Fixed gateway port, otherwise ephemeral. |
+- `config`: start an embedded RouteKit router owned by the Fusion process.
+- `url` plus optional `authEnv`: connect to an external RouteKit gateway.
+  FusionKit validates its `/v1/models` list and never stops it.
 
-### Ensemble fields
+Ensemble `members`, `judge`, and optional `synthesizer` values are opaque
+RouteKit endpoint IDs. Provider names, model IDs, `baseUrl`, `apiKeyEnv`,
+pricing, and subscription-account settings are rejected here.
 
-| Field | Type | Notes |
-| --- | --- | --- |
-| `panel` | array | Panel members. Omit it on `default` to use the built-in panel. |
-| `judgeModel` | string | Model used for judge synthesis. Defaults to the first panel model. |
-| `synthesizerModel` | string | Optional final-output model. Defaults to the judge on the Python side. |
-| `k` | integer | Step boundaries per member before aggregation. `1`: members are single completions over the caller's exact messages and tools, and their tool calls are proposals the judge adopts or rejects (the caller's harness executes the committed step). `n > 1`: members run bounded lookahead in managed worktree harnesses (agent-harness panels only). Unset: full rollouts, aggregated at final answers (the default). |
+## RouteKit router
 
-### Panel entries
-
-| Field | Type | Notes |
-| --- | --- | --- |
-| `id` | string | Stable identifier for the panel member. |
-| `model` | string | The model name. |
-| `provider` | `mlx` \| `openai` \| `anthropic` \| `google` \| `openrouter` \| `openai-compatible` | Defaults to `mlx`. |
-| `keyEnv` | string | Env var holding this model's API key. |
-| `baseUrl` | string | Optional custom base URL. |
-
-An `openrouter` member uses OpenRouter's `vendor/model` id and defaults to `OPENROUTER_API_KEY`:
-
-```json
-{ "id": "kimi", "model": "moonshotai/kimi-k2-thinking", "provider": "openrouter", "keyEnv": "OPENROUTER_API_KEY" }
+```yaml
+endpoints:
+  - endpointId: deep
+    model: provider-model-id
+    provider: openai-compatible
+    baseUrl: https://provider.example/v1
+    dialect: openai
+    apiKeyEnv: PROVIDER_API_KEY
+defaultEndpointId: deep
 ```
 
-## Edit from the CLI
+Inline API keys and authorization tokens are rejected.
+
+## Edit and inspect
 
 ```bash
+fusionkit config show
 fusionkit config get budgetUsd
 fusionkit config set budgetUsd 5
+fusionkit config set ensembles.default.judge deep
 fusionkit config unset budgetUsd
 fusionkit config edit
-fusionkit ensemble list
-fusionkit ensemble add fast --model kimi=openrouter:moonshotai/kimi-k2-thinking
-fusionkit config set defaultEnsemble fast
+
+fusionkit ensemble add review \
+  --member fast --member deep --judge deep --synthesizer deep
 ```
 
-## Export router YAML
+Precedence is CLI flag, then `.fusionkit/fusion.json`, then built-in default.
+All writes are validated and atomic.
 
-The Node CLI derives the Python router YAML from `.fusionkit/fusion.json`:
+## Prompt files
 
-```bash
-fusionkit config export-yaml
-fusionkit config export-yaml -o router.yaml
-fusionkit serve --config router.yaml
-```
+Use `.fusionkit/prompts/judge.md` and `synthesizer.md`. A
+`.fusionkit/prompts/<ensemble>/` file overrides the flat prompt for that
+ensemble. Manage them with `fusionkit prompts list|edit|reset`.
 
-## Web search (gateway-executed)
+## Migrating from v3
 
-Codex and Claude Code both declare a server-executed web search tool (`web_search` on the Responses API, `web_search_20250305` on the Anthropic API). Behind FusionKit the gateway plays the server's role: it projects the tool to the fused panel, executes the search by delegating to a real provider's native web search when the fused model calls it, and feeds the results back in the caller's own dialect.
-
-Each dialect prefers its own provider — Codex searches via OpenAI, Claude Code via Anthropic — and falls back to the other when only one key is set. With neither key, the tool is dropped with a warning. Searches are capped at 8 per caller turn and 90 seconds each.
-
-Web search is configured through environment variables, not `fusion.json`:
-
-| Variable | Default | Meaning |
-| --- | --- | --- |
-| `FUSIONKIT_WEB_SEARCH` | on | Set to `0` to disable gateway web search entirely. |
-| `FUSIONKIT_WEB_SEARCH_OPENAI_MODEL` | `gpt-5.5` | Model used for OpenAI-delegated searches. |
-| `FUSIONKIT_WEB_SEARCH_ANTHROPIC_MODEL` | `claude-haiku-4-5` | Model used for Anthropic-delegated searches. |
-| `FUSIONKIT_WEB_SEARCH_OPENAI_URL` | `https://api.openai.com/v1` | Base URL for the OpenAI search side call. |
-| `FUSIONKIT_WEB_SEARCH_ANTHROPIC_URL` | `https://api.anthropic.com/v1` | Base URL for the Anthropic search side call. |
-
-## Prompt overrides (`prompts/`)
-
-Each `.fusionkit/prompts/<id>.md` file overrides one built-in system prompt used by the synthesizer. A file that exists and is non-empty replaces the default; an empty or missing file falls back to the built-in.
-
-```bash
-uvx fusionkit prompts dump --dir .fusionkit/prompts
-fusionkit prompts list
-fusionkit prompts edit synthesizer
-fusionkit prompts reset synthesizer
-```
+v1-v3 files are not silently dual-read. Move provider/model/key/account fields
+to `.routekit/router.yaml`, assign endpoint IDs, replace panels with
+`members`/`judge`/`synthesizer`, and set `fusionkit.fusion.v4`.
 
 <Callout type="warn">
-  Never put API key values in `.fusionkit/`. Store only the env-var name in
-  `keyEnv` and export the secret or put it in `.env`.
+  Keep provider credentials out of `.fusionkit/`. The generated Python sidecar
+  receives endpoint IDs and the RouteKit gateway URL, not provider credentials.
 </Callout>

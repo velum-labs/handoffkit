@@ -6,20 +6,12 @@
 import assert from "node:assert/strict";
 import { beforeEach, test } from "node:test";
 
-import { initFusionTracing, InMemorySpanExporter, SimpleSpanProcessor, startFusionSpan } from "@fusionkit/tracing";
-import type { ReadableSpan } from "@fusionkit/tracing";
-
 import {
   DIALECT_DROPPED_ATTRIBUTE,
   droppedField,
   resetDroppedFieldWarnings,
   withDroppedFieldSpan
 } from "../adapters/dropped.js";
-
-// node:test isolates each file in its own process, so installing the tracer
-// provider here does not affect other suites.
-const exporter = new InMemorySpanExporter();
-initFusionTracing({ serviceName: "dropped-test", spanProcessors: [new SimpleSpanProcessor(exporter)] });
 
 function captureStderr(run: () => void): string {
   const original = process.stderr.write.bind(process.stderr);
@@ -36,10 +28,21 @@ function captureStderr(run: () => void): string {
   return captured;
 }
 
-function finishedSpan(name: string): ReadableSpan {
-  const span = (exporter.getFinishedSpans() as ReadableSpan[]).find((candidate) => candidate.name === name);
-  assert.ok(span, `span ${name} was exported`);
-  return span;
+function recordingSpan(): {
+  target: { span: { setAttribute(name: string, value: string[]): void } };
+  attributes: Record<string, string[]>;
+} {
+  const attributes: Record<string, string[]> = {};
+  return {
+    target: {
+      span: {
+        setAttribute(name, value): void {
+          attributes[name] = value;
+        }
+      }
+    },
+    attributes
+  };
 }
 
 beforeEach(() => {
@@ -61,16 +64,15 @@ test("ctx narrows the warning and the span entry", () => {
 });
 
 test("appends every occurrence to the ambient span's dropped-list attribute", () => {
-  const span = startFusionSpan("gateway", "test.dialect", undefined);
+  const span = recordingSpan();
   captureStderr(() => {
-    withDroppedFieldSpan(span, () => {
+    withDroppedFieldSpan(span.target, () => {
       droppedField("anthropic", "top_k");
       droppedField("anthropic", "metadata");
       droppedField("anthropic", "top_k");
     });
   });
-  span.end({ status: "succeeded" });
-  assert.deepEqual(finishedSpan("test.dialect").attributes[DIALECT_DROPPED_ATTRIBUTE], [
+  assert.deepEqual(span.attributes[DIALECT_DROPPED_ATTRIBUTE], [
     "anthropic.top_k",
     "anthropic.metadata",
     "anthropic.top_k"
@@ -78,13 +80,12 @@ test("appends every occurrence to the ambient span's dropped-list attribute", ()
 });
 
 test("survives async boundaries within the wrapped scope", async () => {
-  const span = startFusionSpan("gateway", "test.dialect.async", undefined);
-  await withDroppedFieldSpan(span, async () => {
+  const span = recordingSpan();
+  await withDroppedFieldSpan(span.target, async () => {
     await Promise.resolve();
     captureStderr(() => droppedField("responses", "include"));
   });
-  span.end({ status: "succeeded" });
-  assert.deepEqual(finishedSpan("test.dialect.async").attributes[DIALECT_DROPPED_ATTRIBUTE], [
+  assert.deepEqual(span.attributes[DIALECT_DROPPED_ATTRIBUTE], [
     "responses.include"
   ]);
 });

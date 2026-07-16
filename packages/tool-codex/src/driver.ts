@@ -13,10 +13,10 @@ import {
   HarnessError,
   asHarnessError,
   buildChildEnv,
-  readCachedStatus,
-  runCliCapture,
-  writeCachedStatus
-} from "@fusionkit/harness-core";
+  createCachedHarnessDriver,
+  probeCliVersion,
+  resolveDriverEnv
+} from "@routekit/harness-core";
 import type {
   DriverContext,
   HarnessDriver,
@@ -28,11 +28,10 @@ import type {
   SessionHandle,
   SessionTurnInput,
   StartSessionOptions
-} from "@fusionkit/harness-core";
+} from "@routekit/harness-core";
 
 const RESUME_CURSOR_VERSION = 1;
 const DEFAULT_COMMAND = "codex";
-const VERSION_PROBE_TIMEOUT_MS = 10_000;
 
 const providerSchema = z.object({
   /** OpenAI-compatible base URL the codex model calls go to (e.g. the gateway). */
@@ -61,10 +60,6 @@ export type CodexDriverConfig = z.infer<typeof codexDriverConfigSchema>;
 
 function nowIso(): string {
   return new Date().toISOString();
-}
-
-function resolveEnv(context: DriverContext | undefined): Record<string, string | undefined> {
-  return context?.env ?? process.env;
 }
 
 function itemTypeFor(item: ThreadItem): HarnessItemType {
@@ -109,7 +104,7 @@ function codexOptionsFor(
   config: CodexDriverConfig,
   context: DriverContext | undefined
 ): CodexOptions {
-  const sourceEnv = resolveEnv(context);
+  const sourceEnv = resolveDriverEnv(context);
   const apiKey =
     config.provider.apiKey ??
     (config.provider.apiKeyEnvName !== undefined
@@ -397,77 +392,40 @@ class CodexInstance implements HarnessInstance {
  * Probe the codex CLI: version via `codex --version`, and treat a present
  * `CODEX_HOME/auth.json` or a configured provider credential as authenticated.
  * Full account detail requires the app-server protocol; this is the cheap,
- * offline-friendly signal the launcher and panel pre-flight need.
+ * offline-friendly signal launchers and readiness checks need.
  */
 async function probeCodex(
   config: CodexDriverConfig,
   context: DriverContext | undefined
 ): Promise<HarnessStatus> {
-  const env = buildChildEnv({ base: resolveEnv(context) });
-  let version: string | undefined;
-  let installed = false;
-  let probeError: string | undefined;
-  try {
-    const result = await runCliCapture(config.command, ["--version"], {
-      env,
-      timeoutMs: VERSION_PROBE_TIMEOUT_MS
-    });
-    if (result.exitCode === 0) {
-      installed = true;
-      version = result.stdout.trim().split(/\s+/).at(-1);
-    } else {
-      probeError = result.stderr.trim() || `codex --version exited ${result.exitCode}`;
-    }
-  } catch (error) {
-    const harnessError = asHarnessError(error);
-    if (harnessError.code === "not_installed") {
-      return {
-        kind: "codex",
-        installed: false,
-        auth: { status: "unknown" },
-        checkedAt: nowIso(),
-        probeError: `Codex CLI "${config.command}" was not found on PATH.`
-      };
-    }
-    probeError = harnessError.message;
-  }
-  const sourceEnv = resolveEnv(context);
+  const sourceEnv = resolveDriverEnv(context);
+  const env = buildChildEnv({ base: sourceEnv });
   const hasCredential =
     config.provider.apiKey !== undefined ||
     (config.provider.apiKeyEnvName !== undefined &&
       (sourceEnv[config.provider.apiKeyEnvName]?.length ?? 0) > 0) ||
     config.credentialEnvNames.some((name) => (sourceEnv[name]?.length ?? 0) > 0);
-  return {
+  return probeCliVersion({
     kind: "codex",
-    installed,
-    ...(installed ? { command: config.command } : {}),
-    ...(version !== undefined ? { version } : {}),
+    command: config.command,
+    cliName: "codex",
+    env,
     auth: {
       status: hasCredential ? "authenticated" : "unknown",
       ...(hasCredential ? {} : { detail: "No API key configured; codex may use its own login." })
     },
-    checkedAt: nowIso(),
-    ...(probeError !== undefined ? { probeError } : {})
-  };
+    notInstalledAuth: { status: "unknown" },
+    notInstalledMessage: `Codex CLI "${config.command}" was not found on PATH.`
+  });
 }
 
 export function createCodexDriver(): HarnessDriver<CodexDriverConfig> {
-  return {
+  return createCachedHarnessDriver({
     kind: "codex",
     configSchema: codexDriverConfigSchema,
-    probe: async (context?: DriverContext) => {
-      const config = codexDriverConfigSchema.parse({});
-      const status = await probeCodex(config, context);
-      if (context?.statusCacheDir !== undefined) writeCachedStatus(status, context.statusCacheDir);
-      return status;
-    },
-    createInstance: async (config, context?: DriverContext) => {
-      const cached =
-        context?.statusCacheDir !== undefined
-          ? readCachedStatus("codex", context.statusCacheDir)
-          : undefined;
-      const status = cached ?? (await probeCodex(config, context));
-      return new CodexInstance(config, context, status);
-    }
-  };
+    probeConfig: () => codexDriverConfigSchema.parse({}),
+    probeStatus: probeCodex,
+    createInstance: (config, context, status) =>
+      new CodexInstance(config, context, status)
+  });
 }

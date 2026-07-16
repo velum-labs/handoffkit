@@ -1,0 +1,58 @@
+{
+  "name": "@routekit/cli",
+  "private": false,
+  "version": "0.8.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/velum-labs/handoffkit.git",
+    "directory": "packages/routekit-cli"
+  },
+  "description": "RouteKit CLI for configuring, serving, and using model gateways.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "bin": {
+    "routekit": "./dist/index.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/cli.d.ts",
+      "default": "./dist/cli.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org",
+    "access": "public",
+    "provenance": true
+  },
+  "dependencies": {
+    "@routekit/accounts": "workspace:*",
+    "@routekit/cli-core": "workspace:*",
+    "@routekit/cli-ui": "workspace:*",
+    "@routekit/config": "workspace:*",
+    "@routekit/gateway": "workspace:*",
+    "@routekit/registry": "workspace:*",
+    "@routekit/router": "workspace:*",
+    "@routekit/runtime": "workspace:*",
+    "@routekit/telemetry-core": "workspace:*",
+    "@routekit/tool-registry": "workspace:*",
+    "@routekit/tools": "workspace:*",
+    "commander": "14.0.3",
+    "yaml": "2.9.0"
+  },
+  "keywords": [
+    "routekit",
+    "llm",
+    "gateway",
+    "router",
+    "coding-agent",
+    "cli"
+  ],
+  "scripts": {
+    "test": "node --test \"dist/test/*.test.js\""
+  }
+}

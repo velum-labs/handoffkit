@@ -10,7 +10,7 @@ Code, Codex, opencode, and Cursor in plan mode) — without changing how people
 already use those tools. It builds on the existing local-serving and routing
 core (`mlxServer`/`ManagedModelServer`, `routedModel`/uniroute, the owned
 `velum-labs/mlx-lm` fork) and is delivered as a new package,
-`@fusionkit/model-gateway`, plus a `fusionkit local` CLI surface.
+`@fusionkit/gateway`, plus a `fusionkit local` CLI surface.
 
 ## 1. Goal
 
@@ -87,7 +87,7 @@ needed dialect; thin launchers wire each tool to it.
 
 ```
  claude   ─Anthropic /v1/messages──▶┐
- codex    ─Responses /v1/responses─▶┤  @fusionkit/model-gateway (native TS)        backend (LanguageModelV3)
+ codex    ─Responses /v1/responses─▶┤  @fusionkit/gateway (native TS)        backend (LanguageModelV3)
  opencode ─OpenAI /v1/chat─────────▶┤   • dialect adapters ⇄ chat-completions  ┌─ mlxServer (velum-labs fork, owned)
  cursor   ─OpenAI /v1/chat (tunnel)─┤   • routedModel / uniroute selection  ───┼─ routedModel / uniroute
                                     │   • provenance hooks (model.called/cost) └─ any OpenAI-compatible (Ollama/vLLM)
@@ -111,7 +111,7 @@ emission that the Anthropic/Responses adapters depend on.
 
 ## 4. Components
 
-New package `@fusionkit/model-gateway`:
+New package `@fusionkit/gateway`:
 
 - `server.ts` — HTTP server (Node `node:http`), route table, bearer-token auth
   (deny-by-default), lifecycle reusing `ManagedModelServer` (lazy start,
@@ -237,7 +237,7 @@ connectivity milestones.
 
 ## 10. Milestones
 
-- M0 — Empirical verification matrix + `@fusionkit/model-gateway` skeleton
+- M0 — Empirical verification matrix + `@fusionkit/gateway` skeleton
   (lifecycle, auth, backend binding).
 - M1 — opencode: chat passthrough + launcher, end-to-end on the mlx fork.
 - M2 — Claude Code: Anthropic adapter + launcher + discovery.

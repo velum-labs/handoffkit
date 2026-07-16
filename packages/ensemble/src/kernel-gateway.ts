@@ -13,7 +13,7 @@
 import { createArtifact, FusionRuntime, StaticDAGScheduler } from "./runtime.js";
 import type { Artifact, Operator } from "./runtime.js";
 import { captureWireResponse, WireArtifactTypes } from "./wire-artifacts.js";
-import type { FuseStepRunInput, FuseStepRunner } from "@fusionkit/model-gateway";
+import type { FuseStepRunInput, FuseStepRunner } from "@fusionkit/gateway";
 
 export const KERNEL_FUSE_STEP_WORKFLOW = "legacy-trajectory-fuse-step" as const;
 

@@ -1,10 +1,7 @@
-import type { ModelFusionErrorKind } from "@fusionkit/protocol";
-
 /**
  * The one harness failure taxonomy. Every driver classifies failures into
- * these codes at the boundary where they occur; `retryable`, the gateway's
- * failover `error_category`, and the protocol's wire `ModelFusionErrorKind`
- * are all *derived* from the code — never hand-picked per call site.
+ * these codes at the boundary where they occur; retryability and failover
+ * category are derived from the code, never hand-picked per call site.
  */
 export const HARNESS_ERROR_CODES = [
   /** The CLI binary is not installed / not on PATH. */
@@ -29,10 +26,7 @@ export const HARNESS_ERROR_CODES = [
 
 export type HarnessErrorCode = (typeof HARNESS_ERROR_CODES)[number];
 
-/**
- * The gateway's failover taxonomy (mirrors FusionKit's `error_category` in
- * `clients.py` / `fusion-backend.ts`).
- */
+/** The gateway's provider-failover taxonomy. */
 export type HarnessErrorCategory =
   | "transient"
   | "quota_exhausted"
@@ -96,29 +90,6 @@ export function isRetryable(error: HarnessError): boolean {
     default: {
       const exhausted: never = error.category;
       throw new Error(`unsupported harness error category: ${String(exhausted)}`);
-    }
-  }
-}
-
-/** Map onto the protocol's wire error kind for candidate/tool records. */
-export function toModelFusionErrorKind(error: HarnessError): ModelFusionErrorKind {
-  switch (error.code) {
-    case "not_installed":
-    case "not_authenticated":
-    case "version_unsupported":
-      return "capability_missing";
-    case "invalid_config":
-    case "protocol_parse":
-      return "validation_error";
-    case "timeout":
-      return "timeout";
-    case "aborted":
-    case "session_closed":
-    case "provider_error":
-      return error.category === "quota_exhausted" ? "rate_limited" : "provider_error";
-    default: {
-      const exhausted: never = error.code;
-      throw new Error(`unsupported harness error code: ${String(exhausted)}`);
     }
   }
 }

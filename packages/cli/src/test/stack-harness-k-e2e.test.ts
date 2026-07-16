@@ -1,5 +1,5 @@
 /**
- * Managed agent-harness depth against the REAL Python engine + provider
+ * Managed agent-harness depth against the RouteKit gateway + provider
  * simulator: finite-k receding-horizon rollouts and unbounded worktree
  * rollouts. This is the production `runPanelRound -> runFusionPanels ->
  * runWorktreeAgent` path (real git worktrees, real AI SDK tool execution),
@@ -16,12 +16,13 @@ import { after, before, test } from "node:test";
 import { runPanelRound } from "@fusionkit/ensemble";
 import type { WireTrajectory } from "@fusionkit/protocol";
 import {
-  simRouterConfigYaml,
   stackToolingSkip,
-  startEngine,
   startProviderSim
 } from "@fusionkit/testkit";
-import type { EngineHandle, ProviderSimHandle } from "@fusionkit/testkit";
+import type { ProviderSimHandle } from "@fusionkit/testkit";
+import { parseRouterConfig } from "@routekit/gateway";
+import { startRouter } from "@routekit/router";
+import type { RunningRouter } from "@routekit/router";
 
 const SKIP = stackToolingSkip();
 
@@ -31,23 +32,35 @@ const MODELS = [
 ] as const;
 
 let sim: ProviderSimHandle;
-let engine: EngineHandle;
+let router: RunningRouter;
 let root: string;
 let repo: string;
 
 before(async function () {
   if (SKIP !== false) return;
   sim = await startProviderSim();
-  engine = await startEngine({
-    configYaml: simRouterConfigYaml({
-      simUrl: sim.url,
-      members: [
-        { id: "alpha", model: "managed-alpha", provider: "openai" },
-        { id: "beta", model: "managed-beta", provider: "openai" },
-        { id: "judge", model: "managed-judge", provider: "openai" }
+  router = await startRouter({
+    config: parseRouterConfig({
+      endpoints: [
+        {
+          endpointId: "alpha",
+          model: "managed-alpha",
+          provider: "simulator",
+          baseUrl: `${sim.url}/v1`,
+          dialect: "openai"
+        },
+        {
+          endpointId: "beta",
+          model: "managed-beta",
+          provider: "simulator",
+          baseUrl: `${sim.url}/v1`,
+          dialect: "openai"
+        }
       ],
-      judgeId: "judge"
-    })
+      defaultEndpointId: "alpha"
+    }),
+    host: "127.0.0.1",
+    port: 0
   });
   root = mkdtempSync(join(tmpdir(), "fusionkit-managed-k-"));
   repo = join(root, "repo");
@@ -72,7 +85,7 @@ before(async function () {
 
 after(async () => {
   if (SKIP !== false) return;
-  await engine.close();
+  await router.close();
   await sim.close();
   rmSync(root, { recursive: true, force: true });
 });
@@ -128,8 +141,8 @@ test(
       prompt: "make one edit, then propose the next edit",
       models: [...MODELS],
       harness: "agent",
-      fusionBackendUrl: engine.url,
-      modelEndpoints: { alpha: engine.url, beta: engine.url },
+      fusionBackendUrl: router.url,
+      modelEndpoints: { alpha: router.url, beta: router.url },
       k: 2
     });
 
@@ -204,8 +217,8 @@ test(
       prompt: "make and verify the requested edit",
       models: [...MODELS],
       harness: "agent",
-      fusionBackendUrl: engine.url,
-      modelEndpoints: { alpha: engine.url, beta: engine.url }
+      fusionBackendUrl: router.url,
+      modelEndpoints: { alpha: router.url, beta: router.url }
       // k intentionally omitted: the managed agent rolls out until completion.
     });
 
@@ -250,8 +263,8 @@ test(
       prompt: "try the supplied edit and report the result",
       models: [...MODELS],
       harness: "agent",
-      fusionBackendUrl: engine.url,
-      modelEndpoints: { alpha: engine.url, beta: engine.url },
+      fusionBackendUrl: router.url,
+      modelEndpoints: { alpha: router.url, beta: router.url },
       k: 2
     });
 

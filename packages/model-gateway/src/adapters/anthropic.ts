@@ -8,9 +8,8 @@
  * server pipes straight to the client (JSON or SSE).
  */
 
-import type { Backend } from "../backend.js";
-import { defaultFusionGatewayLogger } from "../logger.js";
-import { estimateTokens, randomId } from "@fusionkit/runtime-utils";
+import type { Backend, BackendRequestOptions } from "../backend.js";
+import { estimateTokens, randomId } from "@routekit/runtime";
 import { SseDecoder, SseParseError } from "../sse/parse.js";
 import type { OpenAiChoice } from "./openai-chat-wire.js";
 import { droppedField } from "./dropped.js";
@@ -74,7 +73,7 @@ export type AnthropicRequest = {
 /**
  * Whether an Anthropic tool is *server-executed* (run by Anthropic's backend,
  * e.g. `web_search_20250305` / `code_execution_*`). Nothing behind this gateway
- * can execute those, so advertising them to the fused model would only produce
+ * can execute those, so advertising them to the upstream model would only produce
  * calls nobody answers. Everything else — plain client tools (no `type` /
  * `custom`) and Anthropic-defined client tools (`bash_*`, `text_editor_*`,
  * `computer_*`), all of which the caller executes via ordinary `tool_use`
@@ -112,7 +111,7 @@ const WEB_SEARCH_TOOL_PARAMETERS = {
 export type AnthropicTranslationOptions = { serverTools?: boolean };
 
 /** Render an echoed `web_search_tool_result`'s content as a chat tool message.
- *  Bulky opaque fields (`encrypted_content`) are stripped; the fused model
+ *  Bulky opaque fields (`encrypted_content`) are stripped; the upstream model
  *  only needs the urls/titles to remember what the search found. */
 function webSearchResultText(content: unknown): string {
   if (!Array.isArray(content)) return JSON.stringify(content ?? null);
@@ -284,7 +283,7 @@ export function anthropicToChat(
         droppedField("anthropic", "image", "assistant_message");
       }
       // Replay echoed server web searches as a chat tool exchange preceding
-      // the assistant's answer, so the fused model remembers what was
+      // the assistant's answer, so the upstream model remembers what was
       // searched and found rather than blindly repeating it.
       if (serverToolUses.length > 0) {
         messages.push({ role: "assistant", content: null, tool_calls: serverToolUses });
@@ -355,10 +354,10 @@ export function anthropicToChat(
       for (const tool of excluded) {
         droppedField("anthropic", tool.name ?? tool.type ?? "server_tool", "tools");
       }
-      if (process.env.FUSION_DEBUG) {
-        defaultFusionGatewayLogger.error(
-          `[fusion-debug] anthropic: excluding ${excluded.length} server-executed tool(s) ` +
-            `from the fused turn: ${excluded.map((tool) => tool.name).join(", ")}`
+      if (process.env.ROUTEKIT_DEBUG) {
+        process.stderr.write(
+          `[routekit-debug] anthropic: excluding ${excluded.length} server-executed tool(s) ` +
+            `from the request: ${excluded.map((tool) => tool.name).join(", ")}\n`
         );
       }
     }
@@ -417,7 +416,7 @@ export function mapStopReason(finishReason: string | null | undefined): string {
 
 /** The native Anthropic blocks for one gateway-executed web search: the
  *  `server_tool_use` and its `web_search_tool_result`. Anthropic-executor
- *  results pass through verbatim; other executors synthesize result blocks
+ *  results pass through verbatim; other executors build result blocks
  *  from their citations. */
 function executedSearchBlocks(search: ExecutedSearch): Record<string, unknown>[] {
   const resultContent: unknown =
@@ -570,7 +569,7 @@ export function openAiSseToAnthropic(
     );
   };
 
-  // Thinking block lifecycle (the fusion narration channel). Opened on the
+  // Thinking block lifecycle (the reasoning narration channel). Opened on the
   // first `reasoning_content` delta, closed as soon as the first real output
   // (text or tool_use) begins — thinking always precedes the answer. No
   // signature is emitted: the gateway never verifies round-tripped thinking
@@ -879,7 +878,7 @@ export function openAiSseToAnthropic(
     start(controller) {
       // Start the message immediately and keep the connection alive with `ping`
       // events while the upstream is still producing its first token. Claude
-      // Code times out if it sees nothing during the fusion panel phase (the
+      // Code times out if it sees nothing during a slow upstream phase (the
       // chat-layer keepalive comments are dropped by this translator, so this
       // ping is the single keepalive that reaches the client).
       ensureStarted(controller);
@@ -930,7 +929,7 @@ export async function handleAnthropicMessages(
   body: AnthropicRequest,
   modelCallId?: string,
   signal?: AbortSignal,
-  panelDepth?: number
+  backendOptions: BackendRequestOptions = {}
 ): Promise<Response> {
   const requestedModel = body.model ?? backend.defaultModel ?? "";
   const upstreamModel = backend.resolveModel?.(body.model) ?? backend.defaultModel;
@@ -945,8 +944,8 @@ export async function handleAnthropicMessages(
   const serverTools = executor !== undefined;
   const chat = anthropicToChat(body, upstreamModel, { serverTools });
   const requestOptions = {
+    ...backendOptions,
     modelCallId,
-    ...(panelDepth !== undefined ? { panelDepth } : {}),
     // The streamed response is translated to Anthropic SSE by
     // openAiSseToAnthropic, which emits its own `ping` keepalive.
     ...(body.stream === true ? { translated: true } : {})
@@ -1027,7 +1026,7 @@ export function claudeModelAlias(id: string): string {
  * Anthropic-shaped `/v1/models` discovery response. Every advertised model is
  * listed so it appears in Claude Code's `/model` picker: Anthropic-family ids
  * as-is, others under a `claude-`prefixed alias with the real id as
- * `display_name`. `modelIds` is the full advertised set (fused model first);
+ * `display_name`. `modelIds` is the full advertised set (default model first);
  * when absent we fall back to the single backend default.
  */
 export function anthropicModelsResponse(

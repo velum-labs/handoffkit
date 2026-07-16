@@ -4,6 +4,12 @@ Status: product cutover for the runtime kernel introduced in PR #37. The fusion
 front-door turn is now native (this doc records the plan and its completed
 state).
 
+> **Historical cutover record:** Command and API inventories below capture the
+> pre-RouteKit-split migration and are not current product guidance. See
+> [`docs/cli.md`](../cli.md), [`docs/fusion-harness-gateway.md`](../fusion-harness-gateway.md),
+> and [`docs/python-reference.md`](../python-reference.md) for the shipped
+> surfaces.
+
 The fusion front-door surfaces (`fusionkit codex / claude / cursor / serve`) now
 execute every turn as a named kernel graph. `FusionBackend` is a kernel-native
 surface adapter: it maps the gateway wire contract onto `FusionRuntime`
@@ -55,7 +61,7 @@ request; `frontdoor.vendor-proxy` emits a classified outcome; and
 the fusion turn, or (on a vendor pre-stream failover) back into the fusion turn
 with the throttled vendor excluded. The operators capture no per-turn closures.
 
-## Current surface inventory
+## Cutover-time surface inventory (historical)
 
 | Surface | Current execution path | Kernel-backed today? | Cutover target |
 | --- | --- | ---: | --- |

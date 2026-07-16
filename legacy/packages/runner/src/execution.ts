@@ -6,7 +6,7 @@ import {
   type ExecutionSpec,
   type RunContract
 } from "@fusionkit/protocol";
-import { RUNTIME_TIMEOUT_MS } from "@fusionkit/runtime-utils";
+import { DEFAULT_RUNTIME_TIMEOUTS } from "@routekit/runtime";
 
 import { buildAgentCommand, type AgentContext } from "./agents.js";
 
@@ -50,7 +50,7 @@ export type PrepareExecutionInput = {
 };
 
 /** Session wall-clock ceiling when neither execution nor contract sets a timeout. */
-export const DEFAULT_TIMEOUT_MS = RUNTIME_TIMEOUT_MS.session;
+export const DEFAULT_TIMEOUT_MS = DEFAULT_RUNTIME_TIMEOUTS.session;
 
 /**
  * Marker the runner writes into the prepared env for `env.secrets` mappings;

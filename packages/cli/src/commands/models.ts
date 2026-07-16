@@ -12,16 +12,15 @@ import type { Command } from "commander";
 import { MlxCapabilityError } from "@fusionkit/adapter-ai-sdk";
 import type { MlxEnv } from "@fusionkit/adapter-ai-sdk";
 
-import { bold, cyan, dim, formatBytes, gray, red } from "@fusionkit/cli-ui";
-import type { Presenter } from "@fusionkit/cli-ui";
+import { bold, cyan, dim, formatBytes, gray, red } from "@routekit/cli-ui";
+import { argOrPick, contextFor } from "@routekit/cli-core";
+import type { CommandContext } from "@routekit/cli-core";
+import type { Presenter } from "@routekit/cli-ui";
 
 import { catalogFor } from "../fusion/catalog.js";
 import { catalogEntry, detectHost, recommendFor, usableRamGB } from "../fusion/local-catalog.js";
 import { ownedMlxEnv } from "../fusion/mlx.js";
 import { estimateModelSizing } from "../fusion/model-sizing.js";
-import { contextFor } from "../shared/context.js";
-import type { CommandContext } from "../shared/context.js";
-import { argOrPick } from "../shared/pickers.js";
 
 import { registerPaletteAction } from "./palette.js";
 

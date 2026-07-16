@@ -15,7 +15,7 @@ from fusionkit_core.run_models import (
     ToolResultSubmission,
 )
 from fusionkit_core.trace import TraceContext
-from fusionkit_core.types import ChatMessage, ModelResponse, PanelMode, StreamChunk, Trajectory
+from fusionkit_core.types import ChatMessage, PanelMode, StreamChunk, Trajectory
 
 
 class FusionKernel:
@@ -129,32 +129,6 @@ class FusionKernel:
             tools=tools,
             tool_choice=tool_choice,
             trace=trace,
-        )
-
-    def stream_passthrough(
-        self,
-        model_id: str,
-        messages: Sequence[ChatMessage],
-        sampling: SamplingConfig,
-        *,
-        tools: Sequence[ToolDefinition] | None = None,
-        tool_choice: ToolChoice | None = None,
-    ) -> AsyncIterator[StreamChunk | FuseResult]:
-        return self._engine.stream_passthrough(
-            model_id, messages, sampling, tools=tools, tool_choice=tool_choice
-        )
-
-    async def passthrough_chat(
-        self,
-        model_id: str,
-        messages: Sequence[ChatMessage],
-        sampling: SamplingConfig,
-        *,
-        tools: Sequence[ToolDefinition] | None = None,
-        tool_choice: ToolChoice | None = None,
-    ) -> ModelResponse:
-        return await self.client(model_id).chat(
-            messages, sampling, tools=tools, tool_choice=tool_choice
         )
 
     def _judge_synthesizer_for(
