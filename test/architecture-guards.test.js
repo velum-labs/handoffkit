@@ -7,6 +7,7 @@ import {
   fusionkitCompositionViolations,
   routekitDependencyViolations,
   routekitSourceViolations,
+  toolRegistryCliSourceViolations,
   toolRegistryCompositionViolations,
   toolRegistryConstructionViolations,
   toolRegistryConsumerSourceViolations
@@ -114,6 +115,12 @@ test("tool registry guard enforces one neutral composition point for both CLIs",
   ];
   assert.deepEqual(toolRegistryCompositionViolations(clean), []);
 
+  clean.at(-2).manifest.dependencies["@routekit/tool-codex"] = "workspace:*";
+  assert.deepEqual(toolRegistryCompositionViolations(clean), [
+    "@routekit/cli must compose tools through @routekit/tool-registry, not @routekit/tool-codex"
+  ]);
+  delete clean.at(-2).manifest.dependencies["@routekit/tool-codex"];
+
   clean.at(-1).manifest.dependencies["@routekit/tool-cursor"] = "workspace:*";
   assert.deepEqual(toolRegistryCompositionViolations(clean), [
     "@fusionkit/cli must compose tools through @routekit/tool-registry, not @routekit/tool-cursor"
@@ -142,10 +149,48 @@ test("tool registry source guard rejects parallel imports and construction", () 
       ].join("\n")
     ),
     [
-      "packages/routekit-cli/src/launch.ts must import @routekit/tool-registry",
       "packages/routekit-cli/src/launch.ts must not import individual tool integrations",
       "packages/routekit-cli/src/launch.ts must not construct a parallel tool registry"
     ]
+  );
+});
+
+test("tool registry CLI source guard scans every production source", () => {
+  const routekitSources = [
+    {
+      file: "packages/routekit-cli/src/launch.ts",
+      source: 'import { toolRegistry } from "@routekit/tool-registry";'
+    },
+    {
+      file: "packages/routekit-cli/src/commands/install.ts",
+      source: 'export { installCodexIntegration } from "@routekit/tool-codex";'
+    }
+  ];
+  assert.deepEqual(toolRegistryCliSourceViolations("@routekit/cli", routekitSources), [
+    "packages/routekit-cli/src/commands/install.ts must not import individual tool integrations"
+  ]);
+
+  const fusionkitSources = [
+    {
+      file: "packages/cli/src/tools.ts",
+      source: [
+        'import { toolRegistry } from "@routekit/tool-registry";',
+        "setToolDriverRegistry(toolRegistry);"
+      ].join("\n")
+    },
+    {
+      file: "packages/cli/src/commands/setup.ts",
+      source: 'const loadTool = () => import("@routekit/tool-cursor");'
+    }
+  ];
+  assert.deepEqual(toolRegistryCliSourceViolations("@fusionkit/cli", fusionkitSources), [
+    "packages/cli/src/commands/setup.ts must not import individual tool integrations"
+  ]);
+  assert.deepEqual(
+    toolRegistryCliSourceViolations("@routekit/cli", [
+      { file: "packages/routekit-cli/src/commands.ts", source: "export const commands = [];" }
+    ]),
+    ["@routekit/cli production sources must import @routekit/tool-registry"]
   );
 });
 

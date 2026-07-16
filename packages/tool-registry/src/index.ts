@@ -11,6 +11,18 @@ import { opencodeTool } from "@routekit/tool-opencode";
 import { createToolRegistry } from "@routekit/tools";
 import type { ToolIntegration, ToolRegistry } from "@routekit/tools";
 
+export {
+  codexIntegrationBlock,
+  installCodexIntegration,
+  uninstallCodexIntegration
+} from "@routekit/tool-codex";
+export type {
+  CodexInstallInput,
+  CodexInstallOwner,
+  CodexInstallProfile,
+  CodexInstallResult
+} from "@routekit/tool-codex";
+
 export const toolIntegrations: readonly ToolIntegration[] = [
   codexTool,
   claudeTool,

@@ -376,9 +376,6 @@ importers:
       '@routekit/telemetry-core':
         specifier: workspace:*
         version: link:../telemetry-core
-      '@routekit/tool-codex':
-        specifier: workspace:*
-        version: link:../tool-codex
       '@routekit/tool-registry':
         specifier: workspace:*
         version: link:../tool-registry

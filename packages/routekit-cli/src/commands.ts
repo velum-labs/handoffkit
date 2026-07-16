@@ -33,8 +33,8 @@ import { commandOnPath, trimTrailingSlashes } from "@routekit/runtime";
 import {
   installCodexIntegration,
   uninstallCodexIntegration
-} from "@routekit/tool-codex";
-import type { CodexInstallOwner } from "@routekit/tool-codex";
+} from "@routekit/tool-registry";
+import type { CodexInstallOwner } from "@routekit/tool-registry";
 import { Command } from "commander";
 import { stringify as stringifyYaml } from "yaml";
 

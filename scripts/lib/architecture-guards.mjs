@@ -138,16 +138,17 @@ export function toolRegistryCompositionViolations(manifests) {
     const consumer = byName.get(consumerName);
     if (consumer === undefined) {
       violations.push(`${consumerName} is missing from the workspace`);
-    } else if (!manifestDependencies(consumer.manifest).has("@routekit/tool-registry")) {
+      continue;
+    }
+    const dependencies = manifestDependencies(consumer.manifest);
+    if (!dependencies.has("@routekit/tool-registry")) {
       violations.push(`${consumerName} must depend on @routekit/tool-registry`);
     }
-  }
-
-  const fusionCli = byName.get("@fusionkit/cli");
-  if (fusionCli !== undefined) {
-    for (const dependency of manifestDependencies(fusionCli.manifest)) {
+    for (const dependency of dependencies) {
       if (integrationPackages.includes(dependency)) {
-        violations.push(`@fusionkit/cli must compose tools through @routekit/tool-registry, not ${dependency}`);
+        violations.push(
+          `${consumerName} must compose tools through @routekit/tool-registry, not ${dependency}`
+        );
       }
     }
   }
@@ -156,10 +157,11 @@ export function toolRegistryCompositionViolations(manifests) {
 
 export function toolRegistryConsumerSourceViolations(file, source) {
   const violations = [];
-  if (!/(?:from\s+|import\s*\()["']@routekit\/tool-registry["']/.test(source)) {
-    violations.push(`${file} must import @routekit/tool-registry`);
-  }
-  if (/(?:from\s+|import\s*\()["']@routekit\/tool-(?!registry["'])[^"']+["']/.test(source)) {
+  if (
+    /(?:\bfrom\s*|\bimport\s*(?:\(\s*)?|\brequire\s*\(\s*)["']@routekit\/tool-(?!registry(?:["'/]))[^"']+["']/.test(
+      source
+    )
+  ) {
     violations.push(`${file} must not import individual tool integrations`);
   }
   if (/\bcreateToolRegistry\s*\(/.test(source)) {
@@ -170,6 +172,23 @@ export function toolRegistryConsumerSourceViolations(file, source) {
     !/\bsetToolDriverRegistry\s*\(\s*toolRegistry\s*\)/.test(source)
   ) {
     violations.push(`${file} must compose the canonical registry with setToolDriverRegistry`);
+  }
+  return violations;
+}
+
+export function toolRegistryCliSourceViolations(consumerName, sources) {
+  const violations = [];
+  if (
+    !sources.some(({ source }) =>
+      /(?:\bfrom\s*|\bimport\s*(?:\(\s*)?|\brequire\s*\(\s*)["']@routekit\/tool-registry["']/.test(
+        source
+      )
+    )
+  ) {
+    violations.push(`${consumerName} production sources must import @routekit/tool-registry`);
+  }
+  for (const { file, source } of sources) {
+    violations.push(...toolRegistryConsumerSourceViolations(file, source));
   }
   return violations;
 }

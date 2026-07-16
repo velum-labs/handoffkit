@@ -663,6 +663,8 @@ Canonical registry of the coding-tool integrations shipped by RouteKit.
 Add a new integration to `toolIntegrations`; consumers receive it through
 `toolRegistry` without maintaining their own package imports or lists.
 
+- `export { codexIntegrationBlock, installCodexIntegration, uninstallCodexIntegration } from "@routekit/tool-codex";`
+- `export type { CodexInstallInput, CodexInstallOwner, CodexInstallProfile, CodexInstallResult } from "@routekit/tool-codex";`
 - `export const toolIntegrations: readonly ToolIntegration[] ...`
 - `export const toolRegistry: ToolRegistry ...`
 

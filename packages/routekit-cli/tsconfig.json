@@ -37,9 +37,6 @@
       "path": "../telemetry-core"
     },
     {
-      "path": "../tool-codex"
-    },
-    {
       "path": "../tool-registry"
     },
     {

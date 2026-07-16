@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
 import {
@@ -15,6 +16,11 @@ test("neutral generated registry excludes product and panel data", () => {
   assert.equal("fusion" in REGISTRY, false);
   assert.equal("defaultCloudPanel" in REGISTRY.modelCatalog, false);
   assert.equal("benchmarkPanels" in REGISTRY.modelCatalog, false);
+  const generatedSource = readFileSync(
+    new URL("../../src/generated/data.ts", import.meta.url),
+    "utf8"
+  );
+  assert.doesNotMatch(generatedSource, /fusionkit/i);
 });
 
 test("local catalog defaults reference valid catalog metadata", () => {
@@ -34,4 +40,7 @@ test("neutral pricing and provider metadata remain available", () => {
   const discovery = providerDiscovery("openrouter");
   assert.equal(discovery?.path, "/v1/models");
   assert.equal(discovery?.pickerDefaultSource, "curated");
+  assert.equal(REGISTRY.providers.openrouter.attributionHeaders["X-Title"], "RouteKit");
+  assert.equal(REGISTRY.providers.openrouter.discovery.extraHeaders["X-Title"], "RouteKit");
+  assert.equal(REGISTRY.subscriptions.codex.defaultHeaders.originator, "routekit");
 });

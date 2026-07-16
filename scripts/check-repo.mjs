@@ -9,9 +9,9 @@ import {
   routekitDependencyViolations,
   routekitProductionSources,
   routekitSourceViolations,
+  toolRegistryCliSourceViolations,
   toolRegistryCompositionViolations,
-  toolRegistryConstructionViolations,
-  toolRegistryConsumerSourceViolations
+  toolRegistryConstructionViolations
 } from "./lib/architecture-guards.mjs";
 
 // A deliberately curated manifest of files that must exist for the repo to
@@ -663,9 +663,13 @@ for (const violation of fusionkitCompositionViolations(workspaceManifests)) {
 for (const violation of toolRegistryCompositionViolations(workspaceManifests)) {
   fail(`tool registry composition violation: ${violation}`);
 }
-for (const file of ["packages/routekit-cli/src/launch.ts", "packages/cli/src/tools.ts"]) {
-  const source = readFileSync(file, "utf8");
-  for (const violation of toolRegistryConsumerSourceViolations(file, source)) {
+for (const consumerName of ["@routekit/cli", "@fusionkit/cli"]) {
+  const consumer = workspaceManifests.find(({ manifest }) => manifest.name === consumerName);
+  const sources =
+    consumer !== undefined && existsSync(join(consumer.dir, "src"))
+      ? routekitProductionSources(consumer.dir)
+      : [];
+  for (const violation of toolRegistryCliSourceViolations(consumerName, sources)) {
     fail(`tool registry consumer violation: ${violation}`);
   }
 }

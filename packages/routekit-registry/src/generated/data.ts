@@ -72,7 +72,7 @@ export const REGISTRY = {
       "apiCompatibility": "openai-chat-completions",
       "attributionHeaders": {
         "HTTP-Referer": "https://github.com/velum-labs/handoffkit",
-        "X-Title": "FusionKit"
+        "X-Title": "RouteKit"
       },
       "keyProbe": {
         "path": "/v1/key",
@@ -87,7 +87,7 @@ export const REGISTRY = {
         "auth": "bearer",
         "extraHeaders": {
           "HTTP-Referer": "https://github.com/velum-labs/handoffkit",
-          "X-Title": "FusionKit"
+          "X-Title": "RouteKit"
         },
         "responseShape": "openai",
         "pickerDefaultSource": "curated"
@@ -174,7 +174,7 @@ export const REGISTRY = {
       "defaultInstructions": "You are a helpful assistant.",
       "defaultHeaders": {
         "OpenAI-Beta": "responses=v1",
-        "originator": "fusionkit"
+        "originator": "routekit"
       },
       "requestDefaults": {
         "stream": true,
@@ -199,20 +199,16 @@ export const REGISTRY = {
       },
       "overrideEnv": {
         "responsesBaseUrl": [
-          "FUSIONKIT_CODEX_RESPONSES_BASE_URL",
           "CODEX_RESPONSES_BASE_URL"
         ],
         "responsesApiKey": [
-          "FUSIONKIT_CODEX_API_KEY",
           "CODEX_API_KEY",
           "OPENAI_API_KEY"
         ],
         "openaiCompatibleBaseUrl": [
-          "FUSIONKIT_CODEX_OPENAI_BASE_URL",
           "OPENAI_BASE_URL"
         ],
         "openaiCompatibleApiKey": [
-          "FUSIONKIT_CODEX_OPENAI_API_KEY",
           "OPENAI_API_KEY"
         ]
       }

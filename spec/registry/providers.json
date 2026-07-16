@@ -1,5 +1,5 @@
 {
-  "$comment": "Provider metadata: single source of truth for provider base URLs, API key env vars, wire compatibility, key-validation probes, and live model-discovery capabilities. Consumed via generated bindings (packages/registry + fusionkit_core._generated.registry_data); regenerate with `node scripts/generate-registry.mjs`.",
+  "$comment": "Provider metadata: single source of truth for provider base URLs, API key env vars, wire compatibility, key-validation probes, and live model-discovery capabilities. Consumed via the generated @routekit/registry binding; regenerate with `node scripts/generate-registry.mjs`.",
   "providers": {
     "openai": {
       "baseUrl": "https://api.openai.com",
@@ -57,7 +57,7 @@
       "apiCompatibility": "openai-chat-completions",
       "attributionHeaders": {
         "HTTP-Referer": "https://github.com/velum-labs/handoffkit",
-        "X-Title": "FusionKit"
+        "X-Title": "RouteKit"
       },
       "keyProbe": {
         "path": "/v1/key",
@@ -69,7 +69,7 @@
         "auth": "bearer",
         "extraHeaders": {
           "HTTP-Referer": "https://github.com/velum-labs/handoffkit",
-          "X-Title": "FusionKit"
+          "X-Title": "RouteKit"
         },
         "responseShape": "openai",
         "pickerDefaultSource": "curated"
