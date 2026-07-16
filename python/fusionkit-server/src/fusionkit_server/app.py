@@ -191,6 +191,11 @@ class TrajectoryInput(BaseModel):
     harness_kind: str | None = None
     diff: str | None = None
     usage: ContractUsage | None = None
+    patch_artifact: dict[str, Any] | None = None
+    synthesis: dict[str, Any] | None = None
+    error: dict[str, Any] | None = None
+    verification: dict[str, Any] | None = None
+    end_reason: dict[str, Any] | None = None
     metadata: dict[str, Any] | None = None
 
 
@@ -250,6 +255,27 @@ class FuseTrajectoriesRequest(BaseModel):
         if not any(trajectory.status == "succeeded" for trajectory in self.trajectories):
             raise ValueError("at least one succeeded trajectory is required")
         return self
+
+
+def _trajectory_contract_payload(trajectory: TrajectoryInput) -> dict[str, Any]:
+    payload = trajectory.model_dump(
+        exclude={"verification", "end_reason"},
+        exclude_none=True,
+    )
+    compatibility = {
+        key: value
+        for key, value in {
+            "verification": trajectory.verification,
+            "end_reason": trajectory.end_reason,
+        }.items()
+        if value is not None
+    }
+    if compatibility:
+        payload["metadata"] = {
+            **(trajectory.metadata or {}),
+            **compatibility,
+        }
+    return payload
 
 
 def _package_version() -> str:
@@ -544,7 +570,7 @@ def create_app(
                 TrajectoryV1.model_validate(
                     {
                         **contract_metadata("trajectory.v1"),
-                        **trajectory.model_dump(exclude_none=True),
+                        **_trajectory_contract_payload(trajectory),
                     }
                 )
             )

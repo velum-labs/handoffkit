@@ -729,7 +729,15 @@ def _handoffkit_cli_or_skip() -> Path:
         ]
     )
     for cli in candidates:
-        if cli.exists():
+        if not cli.exists():
+            continue
+        probe = subprocess.run(
+            ["node", str(cli), "ensemble", "handoff", "--help"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if probe.returncode == 0 and "handoff" in probe.stdout:
             return cli
     pytest.skip(
         "HandoffKit CLI build not found; run `pnpm build` in the sibling handoffkit repo"
