@@ -15,10 +15,10 @@ import {
   PendingRequests,
   asHarnessError,
   buildChildEnv,
+  createCachedHarnessDriver,
   decideApproval,
-  readCachedStatus,
-  runCliCapture,
-  writeCachedStatus
+  probeCliVersion,
+  resolveDriverEnv
 } from "@routekit/harness-core";
 import type {
   ApprovalDecision,
@@ -37,7 +37,6 @@ import type {
 
 const RESUME_CURSOR_VERSION = 1;
 const DEFAULT_COMMAND = "claude";
-const VERSION_PROBE_TIMEOUT_MS = 10_000;
 
 const AUTH_ENV_NAMES = [
   "ANTHROPIC_API_KEY",
@@ -71,10 +70,6 @@ export type ClaudeDriverOptions = {
 
 function nowIso(): string {
   return new Date().toISOString();
-}
-
-function resolveEnv(context: DriverContext | undefined): Record<string, string | undefined> {
-  return context?.env ?? process.env;
 }
 
 /**
@@ -337,7 +332,7 @@ class ClaudeSession implements SessionHandle {
 
   #childEnv(): Record<string, string> {
     return buildChildEnv({
-      base: resolveEnv(this.#context),
+      base: resolveDriverEnv(this.#context),
       allow: [...AUTH_ENV_NAMES, ...this.#config.credentialEnvNames, /^CLAUDE_/],
       ...(this.#config.baseUrl !== undefined ? { extra: { ANTHROPIC_BASE_URL: this.#config.baseUrl } } : {})
     });
@@ -418,66 +413,31 @@ async function probeClaude(
   config: ClaudeDriverConfig,
   context: DriverContext | undefined
 ): Promise<HarnessStatus> {
-  const env = buildChildEnv({ base: resolveEnv(context), allow: [...AUTH_ENV_NAMES, /^CLAUDE_/] });
-  try {
-    const result = await runCliCapture(config.command, ["--version"], {
-      env,
-      timeoutMs: VERSION_PROBE_TIMEOUT_MS
-    });
-    if (result.exitCode !== 0) {
-      return {
-        kind: "claude_code",
-        installed: false,
-        auth: { status: "unknown" },
-        checkedAt: nowIso(),
-        probeError: result.stderr.trim() || `claude --version exited ${result.exitCode}`
-      };
-    }
-    const sourceEnv = resolveEnv(context);
-    const hasCredential = AUTH_ENV_NAMES.some((name) => (sourceEnv[name]?.length ?? 0) > 0);
-    return {
-      kind: "claude_code",
-      installed: true,
-      command: config.command,
-      version: result.stdout.trim().split(/\s+/).at(-1),
-      auth: {
-        status: hasCredential ? "authenticated" : "unknown",
-        ...(hasCredential ? {} : { detail: "No API key in env; claude may use its own login." })
-      },
-      checkedAt: nowIso()
-    };
-  } catch (error) {
-    const harnessError = asHarnessError(error);
-    return {
-      kind: "claude_code",
-      installed: false,
-      auth: { status: "unknown" },
-      checkedAt: nowIso(),
-      probeError:
-        harnessError.code === "not_installed"
-          ? `Claude CLI "${config.command}" was not found on PATH.`
-          : harnessError.message
-    };
-  }
+  const sourceEnv = resolveDriverEnv(context);
+  const env = buildChildEnv({ base: sourceEnv, allow: [...AUTH_ENV_NAMES, /^CLAUDE_/] });
+  const hasCredential = AUTH_ENV_NAMES.some((name) => (sourceEnv[name]?.length ?? 0) > 0);
+  return probeCliVersion({
+    kind: "claude_code",
+    command: config.command,
+    cliName: "claude",
+    env,
+    auth: {
+      status: hasCredential ? "authenticated" : "unknown",
+      ...(hasCredential ? {} : { detail: "No API key in env; claude may use its own login." })
+    },
+    failureAuth: { status: "unknown" },
+    notInstalledMessage: `Claude CLI "${config.command}" was not found on PATH.`
+  });
 }
 
 export function createClaudeDriver(options: ClaudeDriverOptions = {}): HarnessDriver<ClaudeDriverConfig> {
   const queryFn = options.queryFn ?? (query as ClaudeQueryFn);
-  return {
+  return createCachedHarnessDriver({
     kind: "claude_code",
     configSchema: claudeDriverConfigSchema,
-    probe: async (context?: DriverContext) => {
-      const status = await probeClaude(claudeDriverConfigSchema.parse({}), context);
-      if (context?.statusCacheDir !== undefined) writeCachedStatus(status, context.statusCacheDir);
-      return status;
-    },
-    createInstance: async (config, context?: DriverContext) => {
-      const cached =
-        context?.statusCacheDir !== undefined
-          ? readCachedStatus("claude_code", context.statusCacheDir)
-          : undefined;
-      const status = cached ?? (await probeClaude(config, context));
-      return new ClaudeInstance({ config, context, status, queryFn });
-    }
-  };
+    probeConfig: () => claudeDriverConfigSchema.parse({}),
+    probeStatus: probeClaude,
+    createInstance: (config, context, status) =>
+      new ClaudeInstance({ config, context, status, queryFn })
+  });
 }

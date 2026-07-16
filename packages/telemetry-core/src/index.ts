@@ -22,6 +22,41 @@ export type ConsentOptions = {
   randomId?: () => string;
 };
 
+/** Fields shared by every CLI's anonymous command event. */
+export const CLI_COMMAND_TELEMETRY_FIELDS = [
+  "command",
+  "cli_version",
+  "os",
+  "arch",
+  "node_major",
+  "duration_bucket",
+  "exit_kind",
+  "is_ci"
+] as const;
+
+export type TelemetryFieldMap = Readonly<Record<string, readonly string[]>>;
+
+/**
+ * Shared machine-readable consent status. Products may add operational fields
+ * and render this metadata differently, but consent semantics stay identical.
+ */
+export function telemetryStatusMetadata(
+  decision: ConsentDecision,
+  fields: TelemetryFieldMap
+): {
+  enabled: boolean;
+  source: ConsentDecision["source"];
+  installId: string | null;
+  fields: TelemetryFieldMap;
+} {
+  return {
+    enabled: decision.enabled,
+    source: decision.source,
+    installId: decision.installId ?? null,
+    fields
+  };
+}
+
 const truthy = (value: string | undefined): boolean =>
   value !== undefined && ["1", "true", "on", "yes"].includes(value.toLowerCase());
 const falsy = (value: string | undefined): boolean =>

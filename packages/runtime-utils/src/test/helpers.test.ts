@@ -6,8 +6,11 @@ import { join } from "node:path";
 
 import {
   assertAuthenticatedBind,
+  buildChildEnv,
+  commandOnPath,
   estimateTokens,
   isLoopbackHost,
+  normalizeApiBaseUrl,
   randomId,
   spawnTool,
   trimSurroundingSlashes,
@@ -41,6 +44,8 @@ test("slash trimming is linear and preserves interior separators", () => {
   assert.equal(trimTrailingSlashes("https://route.test////"), "https://route.test");
   assert.equal(trimSurroundingSlashes("////route/path////"), "route/path");
   assert.equal(trimSurroundingSlashes("////"), "");
+  assert.equal(normalizeApiBaseUrl("https://route.test///"), "https://route.test/v1");
+  assert.equal(normalizeApiBaseUrl("https://route.test/v1/"), "https://route.test/v1");
 });
 
 test("authenticated bind validation recognizes only explicit loopback hosts", () => {
@@ -57,6 +62,18 @@ test("authenticated bind validation recognizes only explicit loopback hosts", ()
     assert.doesNotThrow(() => assertAuthenticatedBind(host, "secret"));
   }
   assert.throws(() => assertAuthenticatedBind("0.0.0.0", "  "), /requires an auth token/);
+});
+
+test("environment helpers preserve root exports after internal split", () => {
+  assert.equal(commandOnPath(process.execPath, { PATH: "" }), true);
+  assert.deepEqual(
+    buildChildEnv({
+      base: { PATH: "/bin", PRIVATE_TOKEN: "secret", LC_ALL: "C" },
+      allow: ["EXPLICIT"],
+      extra: { EXPLICIT: "yes" }
+    }),
+    { PATH: "/bin", LC_ALL: "C", EXPLICIT: "yes" }
+  );
 });
 
 test("spawnTool forwards explicit tool env without leaking unrelated secrets", async () => {

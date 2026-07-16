@@ -15,6 +15,10 @@
 import { Command } from "commander";
 
 import { defaultSessionsDir, FileSystemSessionStore } from "@fusionkit/gateway";
+import {
+  COMPLETION_SHELLS,
+  completionCandidates as coreCompletionCandidates
+} from "@routekit/cli-core";
 
 import { loadFusionConfig, PROMPT_IDS } from "../fusion-config.js";
 import { cachedCatalog } from "../fusion/catalog.js";
@@ -22,8 +26,6 @@ import { persistedShape, repoRootFor, shapeEnsembles } from "../fusion/config-st
 import { detectHost, recommendFor } from "../fusion/local-catalog.js";
 
 import { settableConfigPaths } from "./config.js";
-
-const COMPLETION_SHELLS = ["bash", "zsh", "fish"] as const;
 
 function attempt<T>(produce: () => T, fallback: T): T {
   try {
@@ -92,68 +94,12 @@ function dynamicArgumentValues(path: readonly string[], depth: number): string[]
   return undefined;
 }
 
-/** The visible (non-hidden, non-help) subcommand names + aliases of `command`. */
-function subcommandNames(command: Command): string[] {
-  const names: string[] = [];
-  for (const sub of command.commands) {
-    const name = sub.name();
-    if (name === "help" || name.startsWith("__")) continue;
-    names.push(name);
-    for (const alias of sub.aliases()) names.push(alias);
-  }
-  return names;
-}
-
-/** The long flags of `command` plus its ancestors' global flags. */
-function longFlags(command: Command): string[] {
-  const flags = new Set<string>();
-  let current: Command | null = command;
-  while (current !== null) {
-    for (const option of current.options) {
-      if (option.long !== undefined && option.long !== null && !option.hidden) flags.add(option.long);
-    }
-    current = current.parent;
-  }
-  return [...flags];
-}
-
 /**
  * Compute completion candidates for the typed words (last word partial).
  * Exported for tests.
  */
 export function completionCandidates(program: Command, words: readonly string[]): string[] {
-  const typed = [...words];
-  const current = typed.pop() ?? "";
-
-  // Walk the command tree along the fully-typed words, tracking the resolved
-  // command node, the command-name path, and how many non-flag argument words
-  // follow the deepest command.
-  let node: Command = program;
-  const path: string[] = [];
-  let argumentDepth = 0;
-  for (const word of typed) {
-    if (word.startsWith("-")) continue;
-    const next = node.commands.find((sub) => sub.name() === word || sub.aliases().includes(word));
-    if (next !== undefined) {
-      node = next;
-      path.push(next.name());
-      argumentDepth = 0;
-    } else {
-      argumentDepth += 1;
-    }
-  }
-
-  let candidates: string[];
-  if (current.startsWith("-")) {
-    candidates = longFlags(node);
-  } else {
-    const dynamic = dynamicArgumentValues(path, argumentDepth);
-    candidates = [...subcommandNames(node), ...(dynamic ?? [])];
-    // Anywhere in a `fusion`/launcher context with no subcommands and no
-    // dynamic values there is nothing useful to offer (tool args pass through).
-  }
-  const unique = [...new Set(candidates)];
-  return unique.filter((candidate) => candidate.startsWith(current)).sort((a, b) => a.localeCompare(b));
+  return coreCompletionCandidates(program, words, dynamicArgumentValues);
 }
 
 /** Register the hidden `__complete` command (the shell shims' data source). */

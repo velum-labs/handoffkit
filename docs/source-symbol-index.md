@@ -30,7 +30,7 @@ Use it with the narrative references when you need to find the module that owns 
 
 ### `packages/cli-core`
 
-- `packages/cli-core/src/completion.ts`: COMPLETION_SHELLS (const), CompletionShell (type), isCompletionShell (function), completionScript (function), registerCompletion (function)
+- `packages/cli-core/src/completion.ts`: COMPLETION_SHELLS (const), CompletionShell (type), CompletionWalk (type), CompletionValueProvider (type), isCompletionShell (function), visibleCommandNames (function), visibleLongFlags (function), filterCompletionCandidates (function), walkCompletionTree (function), completionCandidates (function), completionScript (function), registerCompletion (function)
 - `packages/cli-core/src/context.ts`: GlobalFlags (type), CommandContext (type), isJsonMode (function), resetContextForTest (function), emitJson (function), contextFor (function), attachGlobalFlags (function)
 - `packages/cli-core/src/errors.ts`: CliErrorInput (type), CliError (class), cliErrorPayload (function), renderCliError (function), fail (function)
 - `packages/cli-core/src/flags.ts`: levenshtein (function), knownLongFlags (function), findFlagTypos (function), warnPassthroughTypos (function)
@@ -184,6 +184,7 @@ Use it with the narrative references when you need to find the module that owns 
 - `packages/harness-core/src/approvals.ts`: ApprovalDecision (type), HarnessRequestType (type), ApprovalPolicy (type), DEFAULT_AUTOMATION_APPROVAL_POLICY (const), decideApproval (function), Deferred (type), createDeferred (function), PendingRequest (type), PendingRequests (class)
 - `packages/harness-core/src/channel.ts`: AsyncChannel (class)
 - `packages/harness-core/src/contract.ts`: ResumeCursor (type), SessionTurnInput (type), SessionHandle (interface), StartSessionOptions (type), HarnessInstance (interface), DriverContext (type), HarnessDriver (interface), AnyHarnessDriver (type)
+- `packages/harness-core/src/driver-factory.ts`: resolveDriverEnv (function), CliVersionProbeInput (type), probeCliVersion (function), CachedHarnessDriverInput (type), createCachedHarnessDriver (function)
 - `packages/harness-core/src/errors.ts`: HARNESS_ERROR_CODES (const), HarnessErrorCode (type), HarnessErrorCategory (type), HarnessError (class), isRetryable (function), asHarnessError (function)
 - `packages/harness-core/src/events.ts`: HarnessEvent (type)
 - `packages/harness-core/src/kinds.ts`: HARNESS_KINDS (const), HarnessKind (type), isHarnessKind (function)
@@ -267,7 +268,18 @@ Use it with the narrative references when you need to find the module that owns 
 
 - `packages/routekit-cli/src/accounts.ts`: parseAccountMode (function), AccountListEntry (type), listAccounts (function), addAccount (function), removeAccount (function), AccountsStatus (type), accountsStatus (function), serveAccounts (function), stopAccounts (function)
 - `packages/routekit-cli/src/cli.ts`: routekitVersion (function), buildProgram (function)
-- `packages/routekit-cli/src/commands.ts`: registerCommands (function)
+- `packages/routekit-cli/src/commands/accounts.ts`: registerAccounts (function)
+- `packages/routekit-cli/src/commands/config.ts`: registerConfig (function)
+- `packages/routekit-cli/src/commands/context.ts`: configOverride (function), editableConfigPath (function), loaded (function), numberOption (function)
+- `packages/routekit-cli/src/commands/doctor.ts`: registerDoctor (function)
+- `packages/routekit-cli/src/commands/endpoints.ts`: registerEndpoints (function)
+- `packages/routekit-cli/src/commands/index.ts`: registerCommands (function)
+- `packages/routekit-cli/src/commands/install.ts`: registerInstall (function)
+- `packages/routekit-cli/src/commands/launchers.ts`: registerLaunchers (function)
+- `packages/routekit-cli/src/commands/models.ts`: registerModels (function)
+- `packages/routekit-cli/src/commands/serve.ts`: registerServe (function)
+- `packages/routekit-cli/src/commands/stop.ts`: registerStop (function)
+- `packages/routekit-cli/src/commands/telemetry.ts`: registerTelemetry (function)
 - `packages/routekit-cli/src/completion.ts`: completionCandidates (function), registerDynamicCompletion (function)
 - `packages/routekit-cli/src/config.ts`: MigrationAction (type), migrateLegacyState (function)
 - `packages/routekit-cli/src/launch.ts`: buildToolLaunchSpec (function), launchToolWithIntegration (function), launchTool (function)
@@ -277,7 +289,7 @@ Use it with the narrative references when you need to find the module that owns 
 
 ### `packages/routekit-config`
 
-- `packages/routekit-config/src/index.ts`: RouterConfigSource (type), LoadedRouterConfig (type), RouterConfigPaths (type), routekitHome (function), globalRouterConfigPath (function), projectRouterConfigPath (function), findProjectRouterConfig (function), routerConfigPaths (function), loadRouterConfig (function), writeRouterConfig (function), updateRouterConfig (function), DEFAULT_ROUTER_CONFIG (const)
+- `packages/routekit-config/src/index.ts`: RouterConfigSource (type), LoadedRouterConfig (type), RouterConfigPaths (type), configuredEndpointIds (function), missingEndpointIds (function), assertEndpointIdsConfigured (function), resolveEndpointId (function), selectEndpointId (const), routekitHome (function), globalRouterConfigPath (function), projectRouterConfigPath (function), findProjectRouterConfig (function), routerConfigPaths (function), loadRouterConfig (function), writeRouterConfig (function), updateRouterConfig (function), DEFAULT_ROUTER_CONFIG (const)
 
 ### `packages/routekit-registry`
 
@@ -299,13 +311,15 @@ Use it with the narrative references when you need to find the module that owns 
 ### `packages/runtime-utils`
 
 - `packages/runtime-utils/src/cleanup.ts`: registerCleanup (function), runCleanups (function)
-- `packages/runtime-utils/src/index.ts`: DEFAULT_RUNTIME_TIMEOUTS (const), defineTimeouts (function), MANAGED_SERVER_DEFAULTS (const), CANDIDATE_ISOLATION_DEFAULTS (const), sleep (function), randomId (function), estimateTokens (function), withDeadline (function), formatDurationMs (function), withTimeout (function), commandOnPath (function), captureWorktreeDiff (function), ensureRunOutputDir (function), writeFileAtomic (function), FileLock (type), tryAcquireFileLock (function), definedEnv (function), trimTrailingSlashes (function), trimSurroundingSlashes (function), normalizeApiBaseUrl (function), isLoopbackHost (function), assertAuthenticatedBind (function), BuildChildEnvInput (type), buildChildEnv (function), DEFAULT_BRIDGE_SCRUB_PREFIXES (const), scrubBridgeEnv (function), ReservedPort (type), reservePort (function), freePort (function), CliCaptureOptions (type), CliCaptureResult (type), runCliCapture (function), spawnTool (function), LoggedSpawnOptions (type), LoggedChild (type), spawnLogged (function), distillLog (function), waitForHttp (function), waitForOutput (function), terminate (function), escapeMarkdownCell (function), markdownTable (function)
+- `packages/runtime-utils/src/environment.ts`: commandOnPath (function), definedEnv (function), BuildChildEnvInput (type), buildChildEnv (function), DEFAULT_BRIDGE_SCRUB_PREFIXES (const), scrubBridgeEnv (function)
+- `packages/runtime-utils/src/index.ts`: DEFAULT_RUNTIME_TIMEOUTS (const), defineTimeouts (function), MANAGED_SERVER_DEFAULTS (const), CANDIDATE_ISOLATION_DEFAULTS (const), sleep (function), randomId (function), estimateTokens (function), withDeadline (function), formatDurationMs (function), withTimeout (function), captureWorktreeDiff (function), ensureRunOutputDir (function), writeFileAtomic (function), FileLock (type), tryAcquireFileLock (function), ReservedPort (type), reservePort (function), freePort (function), CliCaptureOptions (type), CliCaptureResult (type), runCliCapture (function), spawnTool (function), LoggedSpawnOptions (type), LoggedChild (type), spawnLogged (function), distillLog (function), waitForHttp (function), waitForOutput (function), terminate (function), escapeMarkdownCell (function), markdownTable (function)
 - `packages/runtime-utils/src/portless.ts`: RouteMapping (type), RouteStoreLike (type), PortlessModule (type), PortlessOptions (type), DetectedProxy (type), SpawnedService (type), DiscoverOrSpawnInput (type), DiscoverOrSpawnResult (type), PortlessSession (type), detectPortlessProxy (function), createActivePortlessSession (function), createPortlessSession (function), reapPortlessService (function), reapPortlessProject (function)
 - `packages/runtime-utils/src/process.ts`: ExitInfo (type), Spawned (interface), SuperviseSpawnOptions (type), terminateGroup (function), superviseSpawn (function)
+- `packages/runtime-utils/src/url.ts`: trimTrailingSlashes (function), trimSurroundingSlashes (function), normalizeApiBaseUrl (function), isLoopbackHost (function), assertAuthenticatedBind (function)
 
 ### `packages/telemetry-core`
 
-- `packages/telemetry-core/src/index.ts`: ConsentFile (type), ConsentDecision (type), ConsentOptions (type), createConsentManager (function), durationBucket (function), allowlistedProperties (function), anonymousEventProperties (function), boundedShutdown (function)
+- `packages/telemetry-core/src/index.ts`: ConsentFile (type), ConsentDecision (type), ConsentOptions (type), CLI_COMMAND_TELEMETRY_FIELDS (const), TelemetryFieldMap (type), telemetryStatusMetadata (function), createConsentManager (function), durationBucket (function), allowlistedProperties (function), anonymousEventProperties (function), boundedShutdown (function)
 
 ### `packages/testkit`
 
@@ -356,6 +370,7 @@ Use it with the narrative references when you need to find the module that owns 
 
 ### `packages/tools`
 
+- `packages/tools/src/launch-context.ts`: ToolDisposer (type), DisposerRunner (type), createDisposerRunner (function), CreateToolLaunchContextInput (type), ToolLaunchContextHandle (type), createToolLaunchContext (function)
 - `packages/tools/src/registry.ts`: ToolRegistry (type), createToolRegistry (function), ToolCapabilityCell (type), createToolCapabilityMatrix (function)
 - `packages/tools/src/types.ts`: ToolModelFeature (type), ToolCapabilityGrade (type), ToolModelFeatureStatus (type), ToolModel (type), AgentProfile (type), ToolLaunchSpec (type), ToolLaunchContext (type), ToolDriverRoute (type), ToolDriverMetadata (type), ToolCapabilityMetadata (type), ToolIntegration (type)
 

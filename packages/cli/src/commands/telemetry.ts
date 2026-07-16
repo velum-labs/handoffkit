@@ -17,6 +17,10 @@ import type { Command } from "commander";
 import { bold, dim, green, yellow } from "@routekit/cli-ui";
 import { contextFor } from "@routekit/cli-core";
 import type { CommandContext } from "@routekit/cli-core";
+import {
+  CLI_COMMAND_TELEMETRY_FIELDS,
+  telemetryStatusMetadata
+} from "@routekit/telemetry-core";
 
 import {
   disableTelemetry,
@@ -32,16 +36,13 @@ import {
 
 import { registerPaletteAction } from "./palette.js";
 
-/** The complete list of fields telemetry may send (the published contract). */
-const FIELDS: Record<string, string[]> = {
+/**
+ * The command envelope is shared with RouteKit. Fusion-only feature flags and
+ * session events remain local because RouteKit has no equivalent semantics.
+ */
+const FIELDS = {
   "cli.command": [
-    "command",
-    "cli_version",
-    "os",
-    "arch",
-    "node_major",
-    "duration_bucket",
-    "exit_kind",
+    ...CLI_COMMAND_TELEMETRY_FIELDS.slice(0, -1),
     "observe",
     "local",
     "is_ci"
@@ -58,7 +59,7 @@ const FIELDS: Record<string, string[]> = {
     "candidate_failures",
     "error_kind"
   ]
-};
+} as const;
 
 function sourceLabel(source: string): string {
   switch (source) {
@@ -77,13 +78,14 @@ function runStatus(ctx: CommandContext): number {
   const decision = resolveTelemetry();
   const key = telemetryProjectKey();
   if (ctx.json) {
+    const status = telemetryStatusMetadata(decision, FIELDS);
     ctx.emit({
-      enabled: decision.enabled,
-      source: decision.source,
-      installId: decision.installId ?? null,
+      enabled: status.enabled,
+      source: status.source,
+      installId: status.installId,
       endpointConfigured: key !== undefined,
       host: telemetryHost(),
-      fields: FIELDS
+      fields: status.fields
     });
     return 0;
   }

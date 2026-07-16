@@ -68,8 +68,8 @@ No module JSDoc was found.
 - `export { findFlagTypos, knownLongFlags, levenshtein, warnPassthroughTypos } from "./flags.js";`
 - `export { argOrPick, canPickInteractively } from "./pickers.js";`
 - `export { collect, parseIdValue, parsePort, parsePositiveInteger, parsePositiveNumber } from "./options.js";`
-- `export { COMPLETION_SHELLS, completionScript, isCompletionShell, registerCompletion } from "./completion.js";`
-- `export type { CompletionShell } from "./completion.js";`
+- `export { COMPLETION_SHELLS, completionCandidates, completionScript, filterCompletionCandidates, isCompletionShell, registerCompletion, visibleCommandNames, visibleLongFlags, walkCompletionTree } from "./completion.js";`
+- `export type { CompletionShell, CompletionValueProvider, CompletionWalk } from "./completion.js";`
 - `export { formatPackageVersion, probeBinaryVersion, readPackageVersion } from "./version.js";`
 
 ### `packages/cli-ui/src/index.ts`
@@ -287,6 +287,8 @@ implement this contract; orchestrators and launchers consume it.
 - `export type { HarnessAuthStatus, HarnessModelDescriptor, HarnessStatus } from "./status.js";`
 - `export type { AnyHarnessDriver, DriverContext, HarnessDriver, HarnessInstance, ResumeCursor, SessionHandle, SessionTurnInput, StartSessionOptions } from "./contract.js";`
 - `export { DriverRegistry } from "./registry.js";`
+- `export { createCachedHarnessDriver, probeCliVersion, resolveDriverEnv } from "./driver-factory.js";`
+- `export type { CachedHarnessDriverInput, CliVersionProbeInput } from "./driver-factory.js";`
 - `export { AsyncChannel } from "./channel.js";`
 - `export { EventLog } from "./logging.js";`
 - `export type { EventLogOptions } from "./logging.js";`
@@ -424,6 +426,16 @@ No module JSDoc was found.
 - `export type RouterConfigSource ...`
 - `export type LoadedRouterConfig ...`
 - `export type RouterConfigPaths ...`
+- `export function configuredEndpointIds(config: RouterConfig): string[] ...`
+  Unique configured endpoint ids in declaration order.
+- `export function missingEndpointIds(`
+  Required endpoint ids absent from the configured/advertised set.
+- `export function assertEndpointIdsConfigured(`
+  Reject when any required endpoint id is absent.
+- `export function resolveEndpointId(config: RouterConfig, requested?: string): string ...`
+  Resolve an explicit endpoint, or the configured default/first endpoint.
+- `export const selectEndpointId ...`
+  Alias retained for callers that describe endpoint resolution as selection.
 - `export function routekitHome(env: NodeJS.ProcessEnv ...`
 - `export function globalRouterConfigPath(home: string ...`
 - `export function projectRouterConfigPath(cwd: string ...`
@@ -507,10 +519,13 @@ No module JSDoc was found.
 No module JSDoc was found.
 
 - `export { registerCleanup, runCleanups } from "./cleanup.js";`
+- `export { buildChildEnv, commandOnPath, DEFAULT_BRIDGE_SCRUB_PREFIXES, definedEnv, scrubBridgeEnv } from "./environment.js";`
+- `export type { BuildChildEnvInput } from "./environment.js";`
 - `export { superviseSpawn, terminateGroup } from "./process.js";`
 - `export type { ExitInfo, Spawned, SuperviseSpawnOptions } from "./process.js";`
 - `export { createActivePortlessSession, createPortlessSession, detectPortlessProxy, reapPortlessProject, reapPortlessService } from "./portless.js";`
 - `export type { DetectedProxy, DiscoverOrSpawnInput, DiscoverOrSpawnResult, PortlessModule, PortlessOptions, PortlessSession, RouteMapping, RouteStoreLike, SpawnedService } from "./portless.js";`
+- `export { assertAuthenticatedBind, isLoopbackHost, normalizeApiBaseUrl, trimSurroundingSlashes, trimTrailingSlashes } from "./url.js";`
 - `export const DEFAULT_RUNTIME_TIMEOUTS ...`
 - `export function defineTimeouts<const T extends Record<string, number>>(timeouts: T): Readonly<T> ...`
   Build a named timeout map in the product package that owns those names.
@@ -523,8 +538,6 @@ No module JSDoc was found.
   Rough token estimate from text (and optional tool/JSON payload strings): minimum 1 token, ceil(chars / 4).
 - `export function withDeadline(signal: AbortSignal | undefined, timeoutMs: number): AbortSignal ...`
 - `export function formatDurationMs(ms: number): string ...`
-- `export function commandOnPath(`
-  True when `command` resolves to an executable: an existing path when it contains a separator, else a match on any `PATH` entry (with Windows `PATHEXT` extensions appended). One implementation shared by every harness and launcher instead of three subtly-different copies.
 - `export function captureWorktreeDiff(cwd: string): string | undefined ...`
   The `git diff` of a working tree, or undefined when clean or not a repo.
 - `export function ensureRunOutputDir(`
@@ -534,18 +547,6 @@ No module JSDoc was found.
 - `export type FileLock ...`
 - `export function tryAcquireFileLock(path: string): FileLock | undefined ...`
   Acquire an exclusive lock file. Creation is atomic; callers own retry policy and must release the returned handle.
-- `export function definedEnv(env: EnvInput): Record<string, string> ...`
-- `export function trimTrailingSlashes(value: string): string ...`
-  Strip trailing "/" characters in linear time. A quantified end-anchored regular expression can backtrack polynomially on adversarial input.
-- `export function trimSurroundingSlashes(value: string): string ...`
-- `export function normalizeApiBaseUrl(baseUrl: string): string ...`
-- `export function isLoopbackHost(host: string): boolean ...`
-- `export function assertAuthenticatedBind(host: string, authToken: string | undefined): void ...`
-- `export type BuildChildEnvInput ...`
-- `export function buildChildEnv(input: BuildChildEnvInput ...`
-  Build a child environment from an explicit allowlist instead of spreading the entire parent environment: a harness CLI driven headlessly must not inherit every credential the parent process happens to hold. The baseline covers system plumbing (PATH/HOME/locale/TLS/proxy); everything else must be named by the caller.
-- `export const DEFAULT_BRIDGE_SCRUB_PREFIXES ...`
-- `export function scrubBridgeEnv(`
 - `export type ReservedPort ...`
   A held ephemeral port: the loopback listener stays open (so nothing else can grab the port) until the caller `release()`s it — ideally immediately before spawning the process that will bind it, which closes the classic probe-then-close race where a returned port is stolen in the gap. The `server` is exposed so a Node-side caller can adopt the already-bound listener instead of releasing and re-binding.
 - `export type CliCaptureOptions ...`
@@ -570,6 +571,11 @@ No module JSDoc was found.
 - `export type ConsentFile ...`
 - `export type ConsentDecision ...`
 - `export type ConsentOptions ...`
+- `export const CLI_COMMAND_TELEMETRY_FIELDS ...`
+  Fields shared by every CLI's anonymous command event.
+- `export type TelemetryFieldMap ...`
+- `export function telemetryStatusMetadata(`
+  Shared machine-readable consent status. Products may add operational fields and render this metadata differently, but consent semantics stay identical.
 - `export function createConsentManager(options: ConsentOptions) ...`
 - `export function durationBucket(ms: number): string ...`
 - `export function allowlistedProperties(`
@@ -677,6 +683,8 @@ No module JSDoc was found.
 - `export type { AgentProfile, ToolCapabilityGrade, ToolCapabilityMetadata, ToolDriverMetadata, ToolDriverRoute, ToolIntegration, ToolLaunchContext, ToolLaunchSpec, ToolModel, ToolModelFeature, ToolModelFeatureStatus } from "./types.js";`
 - `export { createToolCapabilityMatrix, createToolRegistry } from "./registry.js";`
 - `export type { ToolCapabilityCell, ToolRegistry } from "./registry.js";`
+- `export { createDisposerRunner, createToolLaunchContext } from "./launch-context.js";`
+- `export type { CreateToolLaunchContextInput, DisposerRunner, ToolDisposer, ToolLaunchContextHandle } from "./launch-context.js";`
 
 ### `packages/tracing/src/index.ts`
 

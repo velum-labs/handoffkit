@@ -58,6 +58,16 @@ export type {
 
 export { DriverRegistry } from "./registry.js";
 
+export {
+  createCachedHarnessDriver,
+  probeCliVersion,
+  resolveDriverEnv
+} from "./driver-factory.js";
+export type {
+  CachedHarnessDriverInput,
+  CliVersionProbeInput
+} from "./driver-factory.js";
+
 export { AsyncChannel } from "./channel.js";
 
 export { EventLog } from "./logging.js";

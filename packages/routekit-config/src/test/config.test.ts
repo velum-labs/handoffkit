@@ -4,9 +4,15 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
+import { parseRouterConfig } from "@routekit/gateway";
+
 import {
+  assertEndpointIdsConfigured,
+  configuredEndpointIds,
   loadRouterConfig,
+  missingEndpointIds,
   projectRouterConfigPath,
+  resolveEndpointId,
   writeRouterConfig
 } from "../index.js";
 
@@ -58,4 +64,69 @@ test("router config rejects inline credentials", () => {
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
+});
+
+const endpointConfig = parseRouterConfig({
+  endpoints: [
+    {
+      endpointId: "alpha",
+      instanceId: "alpha-primary",
+      model: "upstream-a",
+      baseUrl: "https://example.test/a",
+      dialect: "openai"
+    },
+    {
+      endpointId: "beta",
+      model: "upstream-b",
+      baseUrl: "https://example.test/b",
+      dialect: "openai"
+    },
+    {
+      endpointId: "alpha",
+      instanceId: "alpha-secondary",
+      model: "upstream-a",
+      baseUrl: "https://example.test/a-secondary",
+      dialect: "openai"
+    }
+  ],
+  defaultEndpointId: "beta"
+});
+
+test("configuredEndpointIds returns unique ids in declaration order", () => {
+  assert.deepEqual(configuredEndpointIds(endpointConfig), ["alpha", "beta"]);
+});
+
+test("resolveEndpointId accepts explicit ids and resolves configured defaults", () => {
+  assert.equal(resolveEndpointId(endpointConfig), "beta");
+  assert.equal(resolveEndpointId(endpointConfig, "alpha"), "alpha");
+
+  const withoutDefault = parseRouterConfig({ endpoints: endpointConfig.endpoints });
+  assert.equal(resolveEndpointId(withoutDefault), "alpha");
+
+  assert.throws(
+    () => resolveEndpointId(endpointConfig, "gamma"),
+    /unknown endpoint "gamma" \(configured: alpha, beta\)/
+  );
+});
+
+test("missingEndpointIds returns unique missing ids in required order", () => {
+  assert.deepEqual(
+    missingEndpointIds(["beta", "gamma", "gamma", "alpha", "delta"], ["alpha", "beta"]),
+    ["gamma", "delta"]
+  );
+});
+
+test("assertEndpointIdsConfigured rejects missing required ids", () => {
+  assert.doesNotThrow(() =>
+    assertEndpointIdsConfigured(["alpha", "beta"], configuredEndpointIds(endpointConfig))
+  );
+  assert.throws(
+    () =>
+      assertEndpointIdsConfigured(
+        ["gamma", "delta"],
+        configuredEndpointIds(endpointConfig),
+        "bad routes"
+      ),
+    /bad routes: gamma, delta/
+  );
 });

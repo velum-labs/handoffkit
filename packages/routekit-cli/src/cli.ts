@@ -1,7 +1,7 @@
 import { contextFor, readPackageVersion } from "@routekit/cli-core";
 import { Command } from "commander";
 
-import { registerCommands } from "./commands.js";
+import { registerCommands } from "./commands/index.js";
 
 export function routekitVersion(): string {
   return readPackageVersion(import.meta.url);

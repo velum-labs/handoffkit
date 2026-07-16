@@ -23,7 +23,7 @@ HTTP contracts, read [Specs and APIs](specs-and-apis.md).
 
 | Package | Responsibility | Start with |
 | --- | --- | --- |
-| `@routekit/cli` | Independent `routekit` configuration, gateway serving, endpoint/account management, and coding-tool launchers. | `packages/routekit-cli/src/cli.ts`, `packages/routekit-cli/src/commands.ts` |
+| `@routekit/cli` | Independent `routekit` configuration, gateway serving, endpoint/account management, and coding-tool launchers. | `packages/routekit-cli/src/cli.ts`, `packages/routekit-cli/src/commands/index.ts` |
 | `@routekit/config` | Reusable RouterConfig discovery, layered loading, validation, and atomic writes. | `packages/routekit-config/src/index.ts` |
 | `@routekit/router` | Reusable embedded RouteKit router composition, including account relays and gateway ownership. | `packages/routekit-router/src/index.ts` |
 | `@fusionkit/config` | Fusion-only v4 config, opaque endpoint-ID ensembles, prompt loading, validation, and atomic writes. | `packages/fusion-config/src/index.ts` |

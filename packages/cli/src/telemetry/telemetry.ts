@@ -23,6 +23,7 @@ import {
   anonymousEventProperties,
   allowlistedProperties,
   boundedShutdown,
+  CLI_COMMAND_TELEMETRY_FIELDS,
   durationBucket
 } from "@routekit/telemetry-core";
 import {
@@ -90,18 +91,11 @@ export type FusionSessionEvent = {
   error_kind?: string;
 };
 
-const CLI_COMMAND_FIELDS: readonly (keyof CliCommandEvent)[] = [
-  "command",
-  "cli_version",
-  "os",
-  "arch",
-  "node_major",
-  "duration_bucket",
-  "exit_kind",
+const CLI_COMMAND_FIELDS = [
+  ...CLI_COMMAND_TELEMETRY_FIELDS,
   "observe",
-  "local",
-  "is_ci"
-];
+  "local"
+] as const satisfies readonly (keyof CliCommandEvent)[];
 const FUSION_SESSION_FIELDS: readonly (keyof FusionSessionEvent)[] = [
   "panel_size",
   "providers",

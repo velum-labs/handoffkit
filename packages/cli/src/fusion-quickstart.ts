@@ -11,13 +11,14 @@ import {
 import { fusionModelId } from "@fusionkit/registry";
 import { shutdownFusionTracing } from "@fusionkit/tracing";
 import type { HarnessKind } from "@routekit/harness-core";
-import { loadRouterConfig } from "@routekit/config";
+import {
+  assertEndpointIdsConfigured,
+  configuredEndpointIds,
+  loadRouterConfig
+} from "@routekit/config";
 import { registerCleanup, trimTrailingSlashes } from "@routekit/runtime";
-import type {
-  AgentProfile,
-  ToolLaunchContext,
-  ToolLaunchSpec
-} from "@routekit/tools";
+import { createToolLaunchContext } from "@routekit/tools";
+import type { AgentProfile, ToolLaunchSpec } from "@routekit/tools";
 
 import { resolveSessionId } from "./commands/sessions.js";
 import { gatewaySetupSnippets } from "./gateway.js";
@@ -146,15 +147,11 @@ async function resolveRouter(
   if (typeof router.config === "string") {
     const path = resolveRouterConfigPath(repo, router.config);
     const loaded = loadRouterConfig({ configPath: path });
-    const available = new Set(
-      loaded.config.endpoints.map((endpoint) => endpoint.endpointId)
+    assertEndpointIdsConfigured(
+      required,
+      configuredEndpointIds(loaded.config),
+      `Fusion ensemble references RouteKit endpoint ids not present in ${path}`
     );
-    const missing = required.filter((id) => !available.has(id));
-    if (missing.length > 0) {
-      throw new Error(
-        `Fusion ensemble references RouteKit endpoint ids not present in ${path}: ${missing.join(", ")}`
-      );
-    }
     return { kind: "embedded", config: loaded.config };
   }
   const authToken =
@@ -165,12 +162,11 @@ async function resolveRouter(
     );
   }
   const available = await externalEndpointIds(router.url, authToken);
-  const missing = required.filter((id) => !available.has(id));
-  if (missing.length > 0) {
-    throw new Error(
-      `Fusion ensemble references endpoint ids not advertised by external RouteKit: ${missing.join(", ")}`
-    );
-  }
+  assertEndpointIdsConfigured(
+    required,
+    available,
+    "Fusion ensemble references endpoint ids not advertised by external RouteKit"
+  );
   return {
     kind: "external",
     url: trimTrailingSlashes(router.url.replace(/\/v1\/?$/, "")),
@@ -353,8 +349,7 @@ export async function runFusion(
       await new Promise<void>(() => undefined);
       return 0;
     }
-    const disposers: Array<() => void | Promise<void>> = [];
-    const context: ToolLaunchContext = {
+    const launch = createToolLaunchContext({
       spec: fusionToolLaunchSpec({
         gatewayUrl: stack.fusionUrl,
         defaultEnsemble: ensembles[0]!.name,
@@ -373,13 +368,12 @@ export async function runFusion(
       log,
       prepareForPassthrough: () => {},
       registerPort: (name, port) => portless.register(name, port),
-      unregisterPort: (name) => portless.unregister(name),
-      registerDisposer: (dispose) => disposers.push(dispose)
-    };
+      unregisterPort: (name) => portless.unregister(name)
+    });
     try {
-      return await integration!.launch(context);
+      return await integration!.launch(launch.context);
     } finally {
-      for (const dispose of disposers.reverse()) await dispose();
+      await launch.dispose();
     }
   } finally {
     unregister();

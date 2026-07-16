@@ -4,7 +4,11 @@ import type { Command } from "commander";
 
 import { loadFusionConfig } from "@fusionkit/config";
 import type { EnsembleConfig } from "@fusionkit/config";
-import { loadRouterConfig } from "@routekit/config";
+import {
+  configuredEndpointIds,
+  loadRouterConfig,
+  missingEndpointIds
+} from "@routekit/config";
 import { contextFor, probeBinaryVersion } from "@routekit/cli-core";
 import { trimTrailingSlashes } from "@routekit/runtime";
 
@@ -63,11 +67,11 @@ async function runDoctor(command: Command): Promise<number> {
         selectedTool = config.tool ?? selectedTool;
         const path = resolve(repo, config.router.config);
         const routekit = loadRouterConfig({ configPath: path });
-        const available = new Set(
-          routekit.config.endpoints.map((endpoint) => endpoint.endpointId)
-        );
         const required = requiredEndpointIds(config.ensembles);
-        const missing = [...required].filter((id) => !available.has(id));
+        const missing = missingEndpointIds(
+          required,
+          configuredEndpointIds(routekit.config)
+        );
         checks.push({
           label: "embedded RouteKit config",
           ok: missing.length === 0,
@@ -111,8 +115,9 @@ async function runDoctor(command: Command): Promise<number> {
             typeof entry.id === "string" ? [entry.id] : []
           )
         );
-        const missing = [...requiredEndpointIds(config.ensembles)].filter(
-          (id) => !available.has(id)
+        const missing = missingEndpointIds(
+          requiredEndpointIds(config.ensembles),
+          available
         );
         checks.push({
           label: "external RouteKit gateway",

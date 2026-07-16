@@ -7,9 +7,9 @@ import {
   DEFAULT_AUTOMATION_APPROVAL_POLICY,
   asHarnessError,
   buildChildEnv,
-  readCachedStatus,
-  runCliCapture,
-  writeCachedStatus
+  createCachedHarnessDriver,
+  probeCliVersion,
+  resolveDriverEnv
 } from "@routekit/harness-core";
 import type {
   ApprovalDecision,
@@ -30,7 +30,6 @@ import { opencodeProviderConfig } from "./launch.js";
 
 const RESUME_CURSOR_VERSION = 1;
 const DEFAULT_COMMAND = "opencode";
-const VERSION_PROBE_TIMEOUT_MS = 10_000;
 
 export const opencodeDriverConfigSchema = z.object({
   command: z.string().default(DEFAULT_COMMAND),
@@ -92,10 +91,6 @@ export type OpencodeDriverOptions = {
 
 function nowIso(): string {
   return new Date().toISOString();
-}
-
-function resolveEnv(context: DriverContext | undefined): Record<string, string | undefined> {
-  return context?.env ?? process.env;
 }
 
 function itemTypeForTool(tool: string): HarnessItemType {
@@ -396,64 +391,29 @@ async function probeOpencode(
   config: OpencodeDriverConfig,
   context: DriverContext | undefined
 ): Promise<HarnessStatus> {
-  const env = buildChildEnv({ base: resolveEnv(context) });
-  try {
-    const result = await runCliCapture(config.command, ["--version"], {
-      env,
-      timeoutMs: VERSION_PROBE_TIMEOUT_MS
-    });
-    if (result.exitCode !== 0) {
-      return {
-        kind: "opencode",
-        installed: false,
-        auth: { status: "unknown" },
-        checkedAt: nowIso(),
-        probeError: result.stderr.trim() || `opencode --version exited ${result.exitCode}`
-      };
-    }
-    return {
-      kind: "opencode",
-      installed: true,
-      command: config.command,
-      version: result.stdout.trim().split(/\s+/).at(-1),
-      // Auth is per-provider inside opencode; the server inventory reports it.
-      auth: { status: "unknown" },
-      checkedAt: nowIso()
-    };
-  } catch (error) {
-    const harnessError = asHarnessError(error);
-    return {
-      kind: "opencode",
-      installed: false,
-      auth: { status: "unknown" },
-      checkedAt: nowIso(),
-      probeError:
-        harnessError.code === "not_installed"
-          ? `opencode CLI "${config.command}" was not found on PATH.`
-          : harnessError.message
-    };
-  }
+  const env = buildChildEnv({ base: resolveDriverEnv(context) });
+  return probeCliVersion({
+    kind: "opencode",
+    command: config.command,
+    cliName: "opencode",
+    env,
+    // Auth is per-provider inside opencode; the server inventory reports it.
+    auth: { status: "unknown" },
+    notInstalledMessage: `opencode CLI "${config.command}" was not found on PATH.`
+  });
 }
 
 export function createOpencodeDriver(
   options: OpencodeDriverOptions = {}
 ): HarnessDriver<OpencodeDriverConfig> {
   const backendFactory = options.backendFactory ?? defaultBackendFactory;
-  return {
+  return createCachedHarnessDriver({
     kind: "opencode",
     configSchema: opencodeDriverConfigSchema,
-    probe: async (context?: DriverContext) => {
-      const status = await probeOpencode(opencodeDriverConfigSchema.parse({}), context);
-      if (context?.statusCacheDir !== undefined) writeCachedStatus(status, context.statusCacheDir);
-      return status;
-    },
-    createInstance: async (config, context?: DriverContext) => {
-      const cached =
-        context?.statusCacheDir !== undefined
-          ? readCachedStatus("opencode", context.statusCacheDir)
-          : undefined;
-      const status = cached ?? (await probeOpencode(config, context));
-      return new OpencodeInstance({ config, context, status, backendFactory });
-    }
-  };
+    probeConfig: () =>
+      opencodeDriverConfigSchema.parse({ gatewayUrl: "http://127.0.0.1" }),
+    probeStatus: probeOpencode,
+    createInstance: (config, context, status) =>
+      new OpencodeInstance({ config, context, status, backendFactory })
+  });
 }

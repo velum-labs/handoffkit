@@ -2,7 +2,19 @@ import type { Command } from "commander";
 
 export const COMPLETION_SHELLS = ["bash", "zsh", "fish"] as const;
 export type CompletionShell = (typeof COMPLETION_SHELLS)[number];
-type CommandNode = { name: string; subcommands: string[] };
+type CommandNode = { names: string[]; subcommands: string[] };
+export type CompletionWalk = {
+  command: Command;
+  path: string[];
+  positional: string[];
+  argumentDepth: number;
+  currentWord: string;
+};
+export type CompletionValueProvider = (
+  path: readonly string[],
+  argumentDepth: number,
+  positional: readonly string[]
+) => readonly string[] | undefined;
 
 export function isCompletionShell(value: string): value is CompletionShell {
   return (COMPLETION_SHELLS as readonly string[]).includes(value);
@@ -12,14 +24,85 @@ function visible(commands: readonly Command[]): Command[] {
   return commands.filter((command) => command.name() !== "help" && !command.name().startsWith("__"));
 }
 
+/** Visible canonical command names and aliases, in Commander registration order. */
+export function visibleCommandNames(command: Command): string[] {
+  return visible(command.commands).flatMap((entry) => [entry.name(), ...entry.aliases()]);
+}
+
+/** Long options on a command plus inherited global options. */
+export function visibleLongFlags(command: Command): string[] {
+  const flags = new Set<string>();
+  let current: Command | null = command;
+  while (current !== null) {
+    for (const option of current.options) {
+      if (option.long !== undefined && !option.hidden) flags.add(option.long);
+    }
+    current = current.parent;
+  }
+  return [...flags];
+}
+
+/** De-duplicate, prefix-filter, and sort completion candidates. */
+export function filterCompletionCandidates(
+  candidates: readonly string[],
+  currentWord: string
+): string[] {
+  return [...new Set(candidates)]
+    .filter((candidate) => candidate.startsWith(currentWord))
+    .sort((left, right) => left.localeCompare(right));
+}
+
+/** Resolve fully typed words against a Commander tree, including aliases. */
+export function walkCompletionTree(program: Command, words: readonly string[]): CompletionWalk {
+  const typed = [...words];
+  const currentWord = typed.pop() ?? "";
+  let command = program;
+  const path: string[] = [];
+  const positional: string[] = [];
+  let argumentDepth = 0;
+  for (const word of typed) {
+    if (word.startsWith("-")) continue;
+    const next = command.commands.find(
+      (entry) => entry.name() === word || entry.aliases().includes(word)
+    );
+    if (next !== undefined) {
+      command = next;
+      path.push(next.name());
+      argumentDepth = 0;
+    } else {
+      positional.push(word);
+      argumentDepth += 1;
+    }
+  }
+  return { command, path, positional, argumentDepth, currentWord };
+}
+
+/** Filter static and caller-provided dynamic candidates for the current word. */
+export function completionCandidates(
+  program: Command,
+  words: readonly string[],
+  dynamicValues?: CompletionValueProvider
+): string[] {
+  const state = walkCompletionTree(program, words);
+  const candidates = state.currentWord.startsWith("-")
+    ? visibleLongFlags(state.command)
+    : [
+        ...visibleCommandNames(state.command),
+        ...(dynamicValues?.(state.path, state.argumentDepth, state.positional) ?? [])
+      ];
+  return filterCompletionCandidates(candidates, state.currentWord);
+}
+
 function commandNodes(program: Command): CommandNode[] {
   return visible(program.commands).map((command) => ({
-    name: command.name(),
-    subcommands: visible(command.commands).map((subcommand) => subcommand.name())
+    names: [command.name(), ...command.aliases()],
+    subcommands: visibleCommandNames(command)
   }));
 }
 
 const words = (values: readonly string[]): string => values.join(" ");
+const topLevelNames = (nodes: readonly CommandNode[]): string[] =>
+  nodes.flatMap((node) => node.names);
 
 function bashCompletion(binary: string, nodes: readonly CommandNode[]): string {
   const dynamic = `${binary} __complete -- "\${COMP_WORDS[@]:1:COMP_CWORD}" 2>/dev/null`;
@@ -27,7 +110,7 @@ function bashCompletion(binary: string, nodes: readonly CommandNode[]): string {
     .filter((node) => node.subcommands.length > 0)
     .map(
       (node) =>
-        `    ${node.name}) COMPREPLY=( $(compgen -W "${words(node.subcommands)}" -- "$cur") ); return ;;`
+        `    ${node.names.join("|")}) COMPREPLY=( $(compgen -W "${words(node.subcommands)}" -- "$cur") ); return ;;`
     )
     .join("\n");
   return [
@@ -37,7 +120,7 @@ function bashCompletion(binary: string, nodes: readonly CommandNode[]): string {
     '  cur="${COMP_WORDS[COMP_CWORD]}"',
     `  dynamic="$(${dynamic})"`,
     '  if [[ -n "${dynamic}" ]]; then COMPREPLY=( $(compgen -W "${dynamic}" -- "$cur") ); return; fi',
-    `  if [[ \${COMP_CWORD} -eq 1 ]]; then COMPREPLY=( $(compgen -W "${words(nodes.map((node) => node.name))}" -- "$cur") ); return; fi`,
+    `  if [[ \${COMP_CWORD} -eq 1 ]]; then COMPREPLY=( $(compgen -W "${words(topLevelNames(nodes))}" -- "$cur") ); return; fi`,
     '  case "${COMP_WORDS[1]}" in',
     cases,
     "  esac",
@@ -50,7 +133,10 @@ function bashCompletion(binary: string, nodes: readonly CommandNode[]): string {
 function zshCompletion(binary: string, nodes: readonly CommandNode[]): string {
   const cases = nodes
     .filter((node) => node.subcommands.length > 0)
-    .map((node) => `    ${node.name}) _values '${node.name} command' ${words(node.subcommands)} ;;`)
+    .map(
+      (node) =>
+        `    ${node.names.join("|")}) _values '${node.names[0]} command' ${words(node.subcommands)} ;;`
+    )
     .join("\n");
   return [
     `#compdef ${binary}`,
@@ -58,7 +144,7 @@ function zshCompletion(binary: string, nodes: readonly CommandNode[]): string {
     "  local -a dynamic",
     `  dynamic=(\${(f)"$(${binary} __complete -- \${words[@]:1:$((CURRENT-1))} 2>/dev/null)"})`,
     '  if (( ${#dynamic} )); then compadd -- "${dynamic[@]}"; return; fi',
-    `  if (( CURRENT == 2 )); then _values '${binary} command' ${words(nodes.map((node) => node.name))}; return; fi`,
+    `  if (( CURRENT == 2 )); then _values '${binary} command' ${words(topLevelNames(nodes))}; return; fi`,
     '  case "$words[2]" in',
     cases,
     "  esac",
@@ -77,12 +163,12 @@ function fishCompletion(binary: string, nodes: readonly CommandNode[]): string {
     `    ${binary} __complete -- $tokens[2..-1] 2>/dev/null`,
     "end",
     `complete -c ${binary} -f -a "(${helper})"`,
-    `complete -c ${binary} -f -n "__fish_use_subcommand" -a "${words(nodes.map((node) => node.name))}"`
+    `complete -c ${binary} -f -n "__fish_use_subcommand" -a "${words(topLevelNames(nodes))}"`
   ];
   for (const node of nodes) {
     if (node.subcommands.length > 0) {
       lines.push(
-        `complete -c ${binary} -f -n "__fish_seen_subcommand_from ${node.name}" -a "${words(node.subcommands)}"`
+        `complete -c ${binary} -f -n "__fish_seen_subcommand_from ${words(node.names)}" -a "${words(node.subcommands)}"`
       );
     }
   }

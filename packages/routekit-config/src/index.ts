@@ -22,6 +22,54 @@ export type RouterConfigPaths = {
   override?: string;
 };
 
+/** Unique configured endpoint ids in declaration order. */
+export function configuredEndpointIds(config: RouterConfig): string[] {
+  return [...new Set(config.endpoints.map((endpoint) => endpoint.endpointId))];
+}
+
+/** Required endpoint ids absent from the configured/advertised set. */
+export function missingEndpointIds(
+  required: Iterable<string>,
+  configured: Iterable<string>
+): string[] {
+  const available = new Set(configured);
+  return [...new Set(required)].filter((endpointId) => !available.has(endpointId));
+}
+
+/** Reject when any required endpoint id is absent. */
+export function assertEndpointIdsConfigured(
+  required: Iterable<string>,
+  configured: Iterable<string>,
+  message = "missing endpoint ids"
+): void {
+  const missing = missingEndpointIds(required, configured);
+  if (missing.length > 0) throw new Error(`${message}: ${missing.join(", ")}`);
+}
+
+/** Resolve an explicit endpoint, or the configured default/first endpoint. */
+export function resolveEndpointId(config: RouterConfig, requested?: string): string {
+  const configured = configuredEndpointIds(config);
+  if (requested !== undefined) {
+    if (!configured.includes(requested)) {
+      throw new Error(
+        `unknown endpoint "${requested}" (configured: ${configured.join(", ")})`
+      );
+    }
+    return requested;
+  }
+  const selected = config.defaultEndpointId ?? configured[0];
+  if (selected === undefined) throw new Error("router config has no endpoints");
+  assertEndpointIdsConfigured(
+    [selected],
+    configured,
+    "router config default endpoint is not configured"
+  );
+  return selected;
+}
+
+/** Alias retained for callers that describe endpoint resolution as selection. */
+export const selectEndpointId = resolveEndpointId;
+
 export function routekitHome(env: NodeJS.ProcessEnv = process.env): string {
   const override = env.ROUTEKIT_HOME;
   return override !== undefined && override.length > 0

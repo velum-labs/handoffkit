@@ -44,14 +44,15 @@ test("every canonical launcher receives the same neutral launch specification", 
   }
 });
 
-test("an explicitly requested generic opaque model is advertised", () => {
-  const spec = buildToolLaunchSpec({
-    config,
-    gatewayUrl: "https://gateway.example",
-    model: "caller-provided",
-    authToken: "private"
-  });
-  assert.equal(spec.defaultModel, "caller-provided");
-  assert.ok(spec.models.some((entry) => entry.id === "caller-provided"));
-  assert.equal(spec.auth?.token, "private");
+test("an explicitly requested unknown endpoint is rejected", () => {
+  assert.throws(
+    () =>
+      buildToolLaunchSpec({
+        config,
+        gatewayUrl: "https://gateway.example",
+        model: "caller-provided",
+        authToken: "private"
+      }),
+    /unknown endpoint "caller-provided"/
+  );
 });

@@ -24,11 +24,20 @@ export {
 } from "./options.js";
 export {
   COMPLETION_SHELLS,
+  completionCandidates,
   completionScript,
+  filterCompletionCandidates,
   isCompletionShell,
-  registerCompletion
+  registerCompletion,
+  visibleCommandNames,
+  visibleLongFlags,
+  walkCompletionTree
 } from "./completion.js";
-export type { CompletionShell } from "./completion.js";
+export type {
+  CompletionShell,
+  CompletionValueProvider,
+  CompletionWalk
+} from "./completion.js";
 export {
   formatPackageVersion,
   probeBinaryVersion,

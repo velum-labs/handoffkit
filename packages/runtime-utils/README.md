@@ -4,7 +4,10 @@ Brand-neutral runtime utilities shared by RouteKit and product packages.
 
 ## Architecture
 
-This package contains leaf helpers for process control, timeouts, formatting, markdown reports, and runtime defaults.
+This package contains leaf helpers for process control, timeouts, formatting,
+markdown reports, and runtime defaults. URL/bind normalization and child
+environment policy live in focused internal modules while the package keeps one
+stable `@routekit/runtime` root export.
 
 ## Usage
 

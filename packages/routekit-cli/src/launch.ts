@@ -1,7 +1,11 @@
 import { toolRegistry as routekitToolRegistry } from "@routekit/tool-registry";
+import {
+  configuredEndpointIds,
+  resolveEndpointId
+} from "@routekit/config";
+import { createToolLaunchContext } from "@routekit/tools";
 import type {
   ToolIntegration,
-  ToolLaunchContext,
   ToolLaunchSpec,
   ToolModel,
   ToolModelFeatureStatus
@@ -38,10 +42,9 @@ function featureStatus(
 }
 
 function configuredModels(config: RouterConfig): ToolModel[] {
-  const byId = new Map<string, ToolModel>();
-  for (const endpoint of config.endpoints) {
-    if (byId.has(endpoint.endpointId)) continue;
-    byId.set(endpoint.endpointId, {
+  return configuredEndpointIds(config).map((endpointId) => {
+    const endpoint = config.endpoints.find((entry) => entry.endpointId === endpointId)!;
+    return {
       id: endpoint.endpointId,
       label: endpoint.endpointId,
       features: {
@@ -50,9 +53,8 @@ function configuredModels(config: RouterConfig): ToolModel[] {
         images: featureStatus(endpoint.capabilities?.images),
         reasoning_controls: featureStatus(endpoint.capabilities?.reasoning_controls)
       }
-    });
-  }
-  return [...byId.values()];
+    };
+  });
 }
 
 export function buildToolLaunchSpec(input: {
@@ -65,12 +67,7 @@ export function buildToolLaunchSpec(input: {
   ide?: boolean;
 }): ToolLaunchSpec {
   const models = configuredModels(input.config);
-  const requested = input.model;
-  const defaultModel =
-    requested ?? input.config.defaultEndpointId ?? input.config.endpoints[0]!.endpointId;
-  if (!models.some((model) => model.id === defaultModel)) {
-    models.push({ id: defaultModel, label: defaultModel });
-  }
+  const defaultModel = resolveEndpointId(input.config, input.model);
   return {
     gatewayUrl: input.gatewayUrl,
     defaultModel,
@@ -86,19 +83,17 @@ export async function launchToolWithIntegration(
   integration: ToolIntegration,
   spec: ToolLaunchSpec
 ): Promise<number> {
-  const disposers: Array<() => void | Promise<void>> = [];
-  const context: ToolLaunchContext = {
+  const launch = createToolLaunchContext({
     spec,
     log: (line) => process.stderr.write(`${line}\n`),
     prepareForPassthrough: () => {},
     registerPort: (_name, port) => `http://127.0.0.1:${port}`,
-    unregisterPort: () => {},
-    registerDisposer: (dispose) => disposers.push(dispose)
-  };
+    unregisterPort: () => {}
+  });
   try {
-    return await integration.launch(context);
+    return await integration.launch(launch.context);
   } finally {
-    for (const dispose of disposers.reverse()) await dispose();
+    await launch.dispose();
   }
 }
 

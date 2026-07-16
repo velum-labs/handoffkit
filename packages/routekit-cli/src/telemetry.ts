@@ -1,6 +1,9 @@
 import { join } from "node:path";
 
-import { createConsentManager } from "@routekit/telemetry-core";
+import {
+  CLI_COMMAND_TELEMETRY_FIELDS,
+  createConsentManager
+} from "@routekit/telemetry-core";
 
 import { routekitHome } from "./config.js";
 
@@ -21,14 +24,5 @@ export const enableTelemetry = consent.enable;
 export const disableTelemetry = consent.disable;
 
 export const TELEMETRY_FIELDS = {
-  "cli.command": [
-    "command",
-    "cli_version",
-    "os",
-    "arch",
-    "node_major",
-    "duration_bucket",
-    "exit_kind",
-    "is_ci"
-  ]
+  "cli.command": CLI_COMMAND_TELEMETRY_FIELDS
 } as const;

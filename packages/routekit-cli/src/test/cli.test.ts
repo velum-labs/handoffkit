@@ -5,6 +5,7 @@ import {
   readFileSync,
   readdirSync,
   rmSync,
+  statSync,
   writeFileSync
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -19,6 +20,20 @@ function command(program: ReturnType<typeof buildProgram>, name: string) {
   const found = program.commands.find((entry) => entry.name() === name);
   assert.ok(found, `missing command ${name}`);
   return found;
+}
+
+function productionSources(directory: string): string[] {
+  const sources: string[] = [];
+  for (const name of readdirSync(directory)) {
+    const path = join(directory, name);
+    const stat = statSync(path);
+    if (stat.isDirectory()) {
+      if (name !== "test") sources.push(...productionSources(path));
+    } else if (name.endsWith(".ts")) {
+      sources.push(readFileSync(path, "utf8"));
+    }
+  }
+  return sources;
 }
 
 test("independent command surface is complete and has no compatibility aliases", () => {
@@ -155,9 +170,6 @@ test("production graph and sources contain no other-product dependency or vocabu
     false
   );
   const sourceRoot = join(packageRoot, "src");
-  const production = readdirSync(sourceRoot)
-    .filter((name) => name.endsWith(".ts") && name !== "index.ts")
-    .map((name) => readFileSync(join(sourceRoot, name), "utf8"))
-    .join("\n");
+  const production = productionSources(sourceRoot).join("\n");
   assert.equal(/@fusionkit\/|fusionkit|FUSIONKIT/i.test(production), false);
 });

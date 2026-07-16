@@ -4,7 +4,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
-import { anonymousEventProperties, createConsentManager } from "../index.js";
+import {
+  anonymousEventProperties,
+  CLI_COMMAND_TELEMETRY_FIELDS,
+  createConsentManager,
+  telemetryStatusMetadata
+} from "../index.js";
 
 test("consent is parameterized and anonymous events redact network identity", () => {
   const root = mkdtempSync(join(tmpdir(), "routekit-telemetry-"));
@@ -26,4 +31,33 @@ test("consent is parameterized and anonymous events redact network identity", ()
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+test("shared CLI telemetry metadata supports product-specific fields and presentation", () => {
+  const fields = {
+    "cli.command": [...CLI_COMMAND_TELEMETRY_FIELDS, "product_mode"]
+  };
+  assert.deepEqual(fields["cli.command"], [
+    "command",
+    "cli_version",
+    "os",
+    "arch",
+    "node_major",
+    "duration_bucket",
+    "exit_kind",
+    "is_ci",
+    "product_mode"
+  ]);
+  assert.deepEqual(
+    telemetryStatusMetadata(
+      { enabled: false, source: "do-not-track" },
+      fields
+    ),
+    {
+      enabled: false,
+      source: "do-not-track",
+      installId: null,
+      fields
+    }
+  );
 });

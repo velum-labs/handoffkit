@@ -1,29 +1,14 @@
 import { Command } from "commander";
 
+import { completionCandidates as coreCompletionCandidates } from "@routekit/cli-core";
+import { configuredEndpointIds } from "@routekit/config";
+
 import { listAccounts } from "./accounts.js";
 import { loadRouterConfig } from "./config.js";
 
-function visibleSubcommands(command: Command): string[] {
-  return command.commands
-    .filter((entry) => entry.name() !== "help" && !entry.name().startsWith("__"))
-    .map((entry) => entry.name());
-}
-
-function longFlags(command: Command): string[] {
-  const flags = new Set<string>();
-  let current: Command | null = command;
-  while (current !== null) {
-    for (const option of current.options) {
-      if (option.long !== undefined && !option.hidden) flags.add(option.long);
-    }
-    current = current.parent;
-  }
-  return [...flags];
-}
-
 function endpointIds(): string[] {
   try {
-    return [...new Set(loadRouterConfig().config.endpoints.map((entry) => entry.endpointId))];
+    return configuredEndpointIds(loadRouterConfig().config);
   } catch {
     return [];
   }
@@ -69,30 +54,7 @@ function dynamicValues(
 }
 
 export function completionCandidates(program: Command, words: readonly string[]): string[] {
-  const typed = [...words];
-  const currentWord = typed.pop() ?? "";
-  let node = program;
-  const path: string[] = [];
-  const positional: string[] = [];
-  let argumentDepth = 0;
-  for (const word of typed) {
-    if (word.startsWith("-")) continue;
-    const next = node.commands.find((entry) => entry.name() === word);
-    if (next !== undefined) {
-      node = next;
-      path.push(next.name());
-      argumentDepth = 0;
-    } else {
-      positional.push(word);
-      argumentDepth += 1;
-    }
-  }
-  const candidates = currentWord.startsWith("-")
-    ? longFlags(node)
-    : [...visibleSubcommands(node), ...dynamicValues(path, argumentDepth, positional)];
-  return [...new Set(candidates)]
-    .filter((candidate) => candidate.startsWith(currentWord))
-    .sort((left, right) => left.localeCompare(right));
+  return coreCompletionCandidates(program, words, dynamicValues);
 }
 
 export function registerDynamicCompletion(program: Command): void {
