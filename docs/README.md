@@ -101,7 +101,10 @@ Documentation stays in sync with the code through three mechanisms:
   verification evidence. Detection is scoped by the freshness ledger
   (`.cursor/skills/docs-audit/ledger.json`), which records what each page
   documents and the source state it was last verified against; ledger state
-  is maintained only through the skill's helper scripts.
+  is maintained only through the skill's helper scripts. A provenance guard
+  skips merges from `docs/heal-*` branches and refuses duplicate healer PRs,
+  so repairs cannot recursively trigger repairs; deferred batches resume on
+  later source changes or the weekly sweep.
 - **On-demand audits:** trigger the workflow manually (`workflow_dispatch`),
   or ask an agent to follow the docs-audit skill.
 

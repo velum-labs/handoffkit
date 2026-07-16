@@ -847,11 +847,18 @@
       "verifiedAt": "2026-07-13"
     },
     "docs/README.md": {
-      "dependsOn": [],
+      "dependsOn": [
+        ".github/workflows/docs-heal.yml",
+        ".cursor/skills/docs-audit/SKILL.md",
+        "scripts/check-repo.mjs"
+      ],
       "verified": {
-        "docs/README.md": "a8533fa220f05fca6f413447a140281f8488d9c9"
+        "docs/README.md": "4a5375cb7afebd70d778b4b46c4a1c78d77e6c92",
+        ".github/workflows/docs-heal.yml": "14bef8a9e35918292a9cdeb0afadd471899c216d",
+        ".cursor/skills/docs-audit/SKILL.md": "78048512a958f5cff84cff371519cb2bc243bc6b",
+        "scripts/check-repo.mjs": "13714660085877caf895e4c09c348d18aa86cadd"
       },
-      "verifiedAt": "2026-07-15"
+      "verifiedAt": "2026-07-16T08:29:55.242Z"
     },
     "docs/release-publishing.md": {
       "dependsOn": [

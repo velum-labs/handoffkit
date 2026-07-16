@@ -6,25 +6,27 @@
 # docs/README.md ("Keeping docs honest").
 #
 # One-time setup (repository settings -> Secrets and variables -> Actions):
-#   CURSOR_API_KEY        Cursor API key (dashboard -> API Keys). Billed to the
-#                         owning account; the model is pinned below.
-#   DOCS_HEAL_PR_TOKEN    Fine-grained PAT or GitHub App token with contents:
-#                         write + pull-requests: write on this repo. Required
-#                         because PRs created with the default GITHUB_TOKEN do
-#                         not trigger CI, and repair PRs must pass the same
-#                         checks as everyone else. Publication fails closed
-#                         when this secret is missing.
+#   CURSOR_API_KEY                  Cursor API key (dashboard -> API Keys).
+#                                   Billed to the owning account; the model is
+#                                   pinned below.
+#   DOCS_HEAL_APP_CLIENT_ID         GitHub App client ID (repository variable).
+#   DOCS_HEAL_APP_PRIVATE_KEY       GitHub App private key (repository secret).
+# The App must be installed on this repository with Contents: write and Pull
+# requests: write. The publish job mints a repository-scoped installation
+# token that expires after one hour. A separate token is necessary because PR
+# CI created with GITHUB_TOKEN otherwise waits for manual approval.
 #
 # Trust boundary: generation, validation, and publication are separate jobs.
 # The agent job has contents:read, no GitHub token, no persisted credentials,
 # explicit denials, and an OS sandbox with network disabled. It exports only a
 # scoped binary patch + evidence report. Validation applies that patch on a
 # fresh runner with no secrets. Publication applies the already-validated patch
-# on a third fresh runner; only that job receives DOCS_HEAL_PR_TOKEN.
+# on a third fresh runner; only that job mints a short-lived App token.
 #
-# Convergence guard: healer merges trigger the next bounded backlog batch via
-# the ledger path. Push runs disable rotation, so once no changed/unledgered
-# pages remain, the follow-up produces no patch and the chain stops.
+# Recursion guard: a preflight resolves the PR associated with each main push.
+# Merges from docs/heal-* are skipped before checkout or agent invocation.
+# Only one automated healer PR may be open. Deferred batches resume on a later
+# source push or the weekly sweep rather than recursively after their own merge.
 
 name: docs-heal
 
@@ -83,8 +85,63 @@ env:
   CURSOR_MODEL: composer-2.5
 
 jobs:
+  guard:
+    name: prevent recursive or duplicate healer runs
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      should_run: ${{ steps.guard.outputs.should_run }}
+    if: >-
+      github.repository == 'velum-labs/handoffkit' &&
+      github.ref == 'refs/heads/main'
+    steps:
+      - name: Check run provenance and open healer PRs
+        id: guard
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT_NAME: ${{ github.event_name }}
+          DELETED: ${{ github.event.deleted }}
+          HEAD_COMMIT_ID: ${{ github.event.head_commit.id }}
+          TRIGGER_SHA: ${{ github.sha }}
+        run: |
+          echo "should_run=false" >> "$GITHUB_OUTPUT"
+
+          if [ "$EVENT_NAME" = "push" ]; then
+            if [ "$DELETED" = "true" ] || [ -z "$HEAD_COMMIT_ID" ]; then
+              echo "::notice::Skipping deleted or commitless push"
+              exit 0
+            fi
+            HEALER_ORIGIN="$(
+              gh api "repos/${GITHUB_REPOSITORY}/commits/${TRIGGER_SHA}/pulls" \
+                --jq 'any(.[]; .head.ref | startswith("docs/heal-"))'
+            )"
+            if [ "$HEALER_ORIGIN" = "true" ]; then
+              echo "::notice::Skipping merge from an automated docs/heal-* PR"
+              exit 0
+            fi
+          fi
+
+          OPEN_HEALER="$(
+            gh pr list \
+              --repo "$GITHUB_REPOSITORY" \
+              --state open \
+              --limit 1000 \
+              --json headRefName \
+              --jq 'any(.[]; .headRefName | startswith("docs/heal-"))'
+          )"
+          if [ "$OPEN_HEALER" = "true" ]; then
+            echo "::notice::Skipping because an automated healer PR is already open"
+            exit 0
+          fi
+
+          echo "should_run=true" >> "$GITHUB_OUTPUT"
+
   generate:
     name: audit and heal docs
+    needs: guard
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:
@@ -92,13 +149,7 @@ jobs:
     outputs:
       has_changes: ${{ steps.capture.outputs.has_changes }}
       base_sha: ${{ steps.capture.outputs.base_sha }}
-    # Canonical repo and main only; workflow_dispatch on another ref cannot
-    # expose secrets or audit branch-controlled code.
-    if: >-
-      github.repository == 'velum-labs/handoffkit' &&
-      github.ref == 'refs/heads/main' &&
-      (github.event_name != 'push' ||
-        (github.event.deleted == false && github.event.head_commit != null))
+    if: needs.guard.outputs.should_run == 'true'
     steps:
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -310,8 +361,9 @@ jobs:
           - Write the report (all required sections from the skill) to:
             ${REPORT_PATH}
           - If plan.json contains any changed, rotation, warning, or unledgered
-            work, process it even when this push is a previous healer merge;
-            the docs-worthiness gate must not stall a deferred backlog.
+            work, process it even if the current trigger itself is not
+            docs-worthy; the docs-worthiness gate must not stall a deferred
+            backlog from an earlier run.
           - If the docs-worthiness gate exits before verification only because
             the trusted plan is empty, write the report saying so.
           - Do not edit ledger.json or run shell commands. Instead write
@@ -461,8 +513,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
-      contents: write
-      pull-requests: write
+      contents: read
     steps:
       - name: Checkout pristine base
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -479,15 +530,35 @@ jobs:
         with:
           name: docs-heal-report-${{ github.run_id }}-${{ github.run_attempt }}
           path: /tmp
+      - name: Mint repository-scoped GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3
+        with:
+          client-id: ${{ vars.DOCS_HEAL_APP_CLIENT_ID }}
+          private-key: ${{ secrets.DOCS_HEAL_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
       - name: Commit and open draft PR
         env:
-          GH_TOKEN: ${{ secrets.DOCS_HEAL_PR_TOKEN }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
           RUN_ID: ${{ github.run_id }}
           RUN_ATTEMPT: ${{ github.run_attempt }}
         run: |
           if [ -z "$GH_TOKEN" ]; then
-            echo "DOCS_HEAL_PR_TOKEN secret is not configured" >&2
+            echo "GitHub App installation token was not created" >&2
             exit 1
+          fi
+          OPEN_HEALER="$(
+            gh pr list \
+              --repo "$GITHUB_REPOSITORY" \
+              --state open \
+              --limit 1000 \
+              --json headRefName \
+              --jq 'any(.[]; .headRefName | startswith("docs/heal-"))'
+          )"
+          if [ "$OPEN_HEALER" = "true" ]; then
+            echo "::notice::Publication skipped because a healer PR is already open"
+            exit 0
           fi
           git apply --index /tmp/docs-heal.patch
           BRANCH="docs/heal-${RUN_ID}-${RUN_ATTEMPT}"

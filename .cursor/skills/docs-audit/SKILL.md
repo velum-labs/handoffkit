@@ -88,8 +88,8 @@ manufacture doc changes to justify the run. This gate happens before
 verification, so it creates no ledger stamps. Conversely, once you verify an
 in-scope page, stamp it even when it was already accurate; that ledger-only
 change records real work and prevents the same page being queued again.
-Never take this early exit when the trusted plan contains work: a healer merge
-may be carrying a deferred backlog even if its trigger diff is docs-only.
+Never take this early exit when the trusted plan contains work: a later source
+push or weekly sweep may be carrying a deferred backlog from an earlier batch.
 
 ### 2. Verify
 
