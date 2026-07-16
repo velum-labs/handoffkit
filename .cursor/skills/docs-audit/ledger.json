@@ -853,12 +853,12 @@
         "scripts/check-repo.mjs"
       ],
       "verified": {
-        "docs/README.md": "4a5375cb7afebd70d778b4b46c4a1c78d77e6c92",
-        ".github/workflows/docs-heal.yml": "14bef8a9e35918292a9cdeb0afadd471899c216d",
+        "docs/README.md": "3eda23094042b0083f02631ae8fa244236812f6c",
+        ".github/workflows/docs-heal.yml": "a8e1334d95d5f06e2d62a89fdf8704f6c552f991",
         ".cursor/skills/docs-audit/SKILL.md": "78048512a958f5cff84cff371519cb2bc243bc6b",
         "scripts/check-repo.mjs": "13714660085877caf895e4c09c348d18aa86cadd"
       },
-      "verifiedAt": "2026-07-16T08:29:55.242Z"
+      "verifiedAt": "2026-07-16T08:36:50.414Z"
     },
     "docs/release-publishing.md": {
       "dependsOn": [

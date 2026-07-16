@@ -24,9 +24,10 @@
 # on a third fresh runner; only that job mints a short-lived App token.
 #
 # Recursion guard: a preflight resolves the PR associated with each main push.
-# Merges from docs/heal-* are skipped before checkout or agent invocation.
-# Only one automated healer PR may be open. Deferred batches resume on a later
-# source push or the weekly sweep rather than recursively after their own merge.
+# Merges from same-repository docs/heal-* branches are skipped before checkout
+# or agent invocation. Only one same-repository automated healer PR may be
+# open; fork branch names cannot suppress runs. Deferred batches resume on a
+# later source push or weekly sweep rather than after their own merge.
 
 name: docs-heal
 
@@ -116,7 +117,10 @@ jobs:
             fi
             HEALER_ORIGIN="$(
               gh api "repos/${GITHUB_REPOSITORY}/commits/${TRIGGER_SHA}/pulls" \
-                --jq 'any(.[]; .head.ref | startswith("docs/heal-"))'
+                --jq 'any(.[];
+                  .head.repo.full_name == "velum-labs/handoffkit" and
+                  (.head.ref | startswith("docs/heal-"))
+                )'
             )"
             if [ "$HEALER_ORIGIN" = "true" ]; then
               echo "::notice::Skipping merge from an automated docs/heal-* PR"
@@ -129,8 +133,11 @@ jobs:
               --repo "$GITHUB_REPOSITORY" \
               --state open \
               --limit 1000 \
-              --json headRefName \
-              --jq 'any(.[]; .headRefName | startswith("docs/heal-"))'
+              --json headRefName,isCrossRepository \
+              --jq 'any(.[];
+                (.isCrossRepository | not) and
+                (.headRefName | startswith("docs/heal-"))
+              )'
           )"
           if [ "$OPEN_HEALER" = "true" ]; then
             echo "::notice::Skipping because an automated healer PR is already open"
@@ -553,8 +560,11 @@ jobs:
               --repo "$GITHUB_REPOSITORY" \
               --state open \
               --limit 1000 \
-              --json headRefName \
-              --jq 'any(.[]; .headRefName | startswith("docs/heal-"))'
+              --json headRefName,isCrossRepository \
+              --jq 'any(.[];
+                (.isCrossRepository | not) and
+                (.headRefName | startswith("docs/heal-"))
+              )'
           )"
           if [ "$OPEN_HEALER" = "true" ]; then
             echo "::notice::Publication skipped because a healer PR is already open"
