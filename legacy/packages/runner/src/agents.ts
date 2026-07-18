@@ -29,9 +29,24 @@ export function buildAgentCommand(
         args: ["-p", prompt, "--permission-mode", "acceptEdits"]
       };
     case "codex":
+      // Explicit governed argv for local codex-cli 0.144.2. Do not add
+      // -a/--ask-for-approval (not in this install's `codex exec --help`).
+      // Do not add --ignore-user-config until a session-scoped CODEX_HOME
+      // with config.toml + auth is generated and verified; ProcessSessionBackend
+      // still seeds HOME from the host, so ambient ~/.codex remains the
+      // auth/config boundary today. Process-tier egress stays proxy-only.
       return {
         cmd: "codex",
-        args: ["exec", "--skip-git-repo-check", prompt]
+        args: [
+          "exec",
+          "--sandbox",
+          "workspace-write",
+          "--json",
+          "--ephemeral",
+          "--ignore-rules",
+          "--skip-git-repo-check",
+          prompt
+        ]
       };
     case "cursor":
       // The Cursor CLI in non-interactive print mode, wrapped as-is. --force
