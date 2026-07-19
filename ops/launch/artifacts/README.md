@@ -27,6 +27,7 @@
 Done for RouteKit Public Launch (2026-07-19):
 
 - L01–L11 created and linked to the RouteKit launch dossier.
-- A01–A22 marked **Superseded** with pointers to the matching L page.
-- Hub views filter out Superseded.
+- A01–A22 removed from the Launch Artifacts database (moved under a disposable
+  folder for one-click Delete — Notion MCP cannot trash pages).
 - Gate 0 Linear issues (OPS-66, OPS-64, OPS-68, ENG-638, ENG-641) link to L01–L05.
+- Do not keep superseded artifact rows; delete obsolete pages instead.
