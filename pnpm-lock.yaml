@@ -156,8 +156,8 @@ importers:
         specifier: 1.11.0
         version: 1.11.0
       posthog-node:
-        specifier: 5.39.4
-        version: 5.39.4
+        specifier: 5.45.2
+        version: 5.45.2
       yaml:
         specifier: 2.9.0
         version: 2.9.0
@@ -876,11 +876,11 @@ packages:
     resolution: {integrity: sha512-C2Xj8FZ0uHWeCXXqX5B4/gVFQmtSkiuOolzAgutjTfseNOHT3pUjljDZsTSxXFGgio54bCzVFqmEOUrIVk8RDA==}
     engines: {node: '>=20.0.0'}
 
-  '@posthog/core@1.39.6':
-    resolution: {integrity: sha512-o6ajIwN5zXoNP0D4H/QPmOyibNTUkSyOR6ya7AG5U2ywXx4awo72L2KnCoiZPQM5x/bXv6jPBdimH8M18Ax0aw==}
+  '@posthog/core@1.43.1':
+    resolution: {integrity: sha512-hGM8f5sp3we6Em/RQHXbmyYm554hUx9+9jhf92ZQgDS4/xW72KHyZiO9wcFye+qAx2cJAOhOCDIznmO1FV8IbA==}
 
-  '@posthog/types@1.392.1':
-    resolution: {integrity: sha512-Qg6Gl7/1vlr8+gPtBi5gwnLgAgiyFoKOVmTvTtDcvya9cpTwZfna7rQmkGQ4B63CunUYNNbOlqcwiUwUDyTK6w==}
+  '@posthog/types@1.397.0':
+    resolution: {integrity: sha512-Pa7FtsBo3V0XrhY4y8Xquwp8U07syuZ2IGQdlsRyxhz0yejQLceFjI58UssCXE5zDCDj3km5l7H3ufD6rHChCg==}
 
   '@standard-schema/spec@1.1.0':
     resolution: {integrity: sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w==}
@@ -1081,8 +1081,8 @@ packages:
     os: [darwin, linux, win32]
     hasBin: true
 
-  posthog-node@5.39.4:
-    resolution: {integrity: sha512-+fCQ7htBFRQQFbIzl1T0TA7bDwYyaB9XP308ZFMCUoB5LzTzOFxBa6TYVrxdH/VQl43WXTp6sf0QsG2Z4XlNBg==}
+  posthog-node@5.45.2:
+    resolution: {integrity: sha512-QhHw/xL0ntMG/DzqA/qdiKu8JY8ChK5Obm8m1nMJor5sjJ7+pfVJSx1yAynC7iUAJfJ9V+OhBNhDCyi5IFWC0Q==}
     engines: {node: ^20.20.0 || >=22.22.0}
     peerDependencies:
       rxjs: ^7.0.0
@@ -1536,11 +1536,11 @@ snapshots:
       tslib: 2.8.1
       tsyringe: 4.10.0
 
-  '@posthog/core@1.39.6':
+  '@posthog/core@1.43.1':
     dependencies:
-      '@posthog/types': 1.392.1
+      '@posthog/types': 1.397.0
 
-  '@posthog/types@1.392.1': {}
+  '@posthog/types@1.397.0': {}
 
   '@standard-schema/spec@1.1.0': {}
 
@@ -1725,9 +1725,9 @@ snapshots:
   portless@0.15.1:
     optional: true
 
-  posthog-node@5.39.4:
+  posthog-node@5.45.2:
     dependencies:
-      '@posthog/core': 1.39.6
+      '@posthog/core': 1.43.1
 
   protobufjs@8.6.3:
     dependencies:
