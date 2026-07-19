@@ -48,6 +48,12 @@ Notion page. Workflow:
 | L10 | OPS-72 | GTM & Customer |
 | L11 | OPS-69 | GTM & Customer |
 
+## CTO ENG gap pass
+
+When the CTO (or CTO’s agent) needs to redefine Product & Engineering work
+through launch, use `ops/launch/CTO_ENG_GAP_AGENT_BRIEF.md`. That brief is
+scoped to L04 / L05 / L06 / L08 and authorizes replacing ENG Linear children.
+
 ## Artifact model (v2)
 
 **11 artifacts** (down from 22). Each is one Notion page. Templates live in
