@@ -19,6 +19,9 @@ package, and the PyPI FusionKit sidecar package set. Release tags are named
 - Added `routekit accounts login` for isolated, provider-supported Claude Code
   and Codex authentication that enrolls directly into RouteKit's native pool
   without replacing the user's normal official-CLI login.
+- Simplified native model pickers: Claude Code presents `claude-code/*` and
+  Codex presents `codex/*` under bare provider-native names, while both resolve
+  through RouteKit's canonical catalog and managed account pool.
 - Made `@fusionkit/cli` a Fusion-only front door over live namespaced RouteKit
   model IDs. Removed Fusion forwarding surfaces for account/proxy management,
   install/uninstall, provider/model/key flags, and direct/single-model mode.

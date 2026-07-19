@@ -40,6 +40,15 @@ that model. Each member keeps independent credential refresh, quota windows,
 rate-limit cooldowns, and reset times. `accounts status` reports all members
 without exposing credentials.
 
+Claude Code and Codex present their own subscription models under bare native
+names in their `/model` pickers. This is only a client-facing alias:
+`claude-sonnet-4-6` still resolves to
+`claude-code/claude-sonnet-4-6`, and `gpt-5.5` in Codex still resolves to
+`codex/gpt-5.5`. RouteKit then selects an eligible managed account and forwards
+the unchanged provider-native request. The native relay is part of the
+RouteKit-owned pooling path, not a bypass around it. Other clients and
+configuration continue to use namespaced IDs.
+
 Reference the advertised namespaced ID from `.fusionkit/fusion.json`. Do not
 put account enrollment, provider policy, URLs, or keys in Fusion config.
 

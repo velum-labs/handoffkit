@@ -313,7 +313,7 @@ Product-neutral RouteKit gateway and router.
 - `export { startGateway } from "./server.js";`
 - `export type { Gateway, GatewayOptions, ProviderRelay, ProviderRelayDialect } from "./server.js";`
 - `export { joinPath, ModelRoutedBackend, OpenAiBackend } from "./backend.js";`
-- `export type { Backend, BackendRequestOptions, ModelRoutedBackendOptions, OpenAiBackendOptions } from "./backend.js";`
+- `export type { Backend, BackendModelRoute, BackendRequestOptions, ModelRoutedBackendOptions, OpenAiBackendOptions } from "./backend.js";`
 - `export { AnthropicBackend, CodexResponsesBackend, GoogleGenAiBackend } from "./provider-backends.js";`
 - `export type { ProviderBackendOptions, ProviderTransport } from "./provider-backends.js";`
 - `export { CatalogBackend, isSubscriptionProvider, normalizeRouterConfigAliases, parseRouterConfig, routerConfigSchema, splitNamespacedModel, UnknownModelError } from "./router.js";`

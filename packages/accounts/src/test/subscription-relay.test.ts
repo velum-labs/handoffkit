@@ -123,6 +123,7 @@ test("Anthropic relay strips ingress auth and transparently rotates pooled crede
       method: "POST",
       headers: {
         authorization: "Bearer proxy-secret",
+        "anthropic-beta": "prompt-caching-2024-07-31",
         "content-type": "application/json",
         "anthropic-version": "2023-06-01"
       },
@@ -139,11 +140,18 @@ test("Anthropic relay strips ingress auth and transparently rotates pooled crede
       seen.map((request) => request.authorization),
       ["Bearer oauth-a", "Bearer oauth-b"]
     );
-    assert.ok(seen.every((request) => request.beta === "oauth-2025-04-20"));
+    assert.ok(
+      seen.every(
+        (request) =>
+          request.beta ===
+          "prompt-caching-2024-07-31,oauth-2025-04-20"
+      )
+    );
 
     const models = await fetch(`${gateway.url()}/v1/models`, {
       headers: {
         authorization: "Bearer proxy-secret",
+        "anthropic-beta": "prompt-caching-2024-07-31",
         "anthropic-version": "2023-06-01"
       }
     });

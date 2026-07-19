@@ -69,6 +69,11 @@ direct mode or provider/model/key launch flags.
 An explicit unknown or unnamespaced model fails instead of using the router
 default.
 
+Claude Code and Codex are the one presentation exception: each native picker
+shows its matching subscription models under bare provider-native names. Those
+aliases are accepted only on that native protocol boundary and resolve to the
+same namespaced RouteKit model and managed account pool.
+
 `fusionkit models` remains the lifecycle command for the Fusion-owned local MLX
 cache. It is separate from `routekit models list`, which performs live provider
 discovery.

@@ -1,6 +1,10 @@
 import { z } from "zod";
 
-import type { Backend, BackendRequestOptions } from "./backend.js";
+import type {
+  Backend,
+  BackendModelRoute,
+  BackendRequestOptions
+} from "./backend.js";
 import {
   API_PROVIDER_IDS,
   ApiProviderSource,
@@ -242,6 +246,22 @@ export class CatalogBackend implements Backend {
     return this.#entries.has(requested) ? requested : undefined;
   }
 
+  resolveModelRoute(
+    requested: string | undefined,
+    nativeProvider?: string
+  ): BackendModelRoute | undefined {
+    const publicId = requested ?? this.defaultModel;
+    const exact = this.#entries.get(publicId);
+    if (exact !== undefined) return this.#modelRoute(exact);
+    if (nativeProvider === undefined || requested === undefined) return undefined;
+    for (const entry of this.#entries.values()) {
+      if (entry.provider === nativeProvider && entry.nativeId === requested) {
+        return this.#modelRoute(entry);
+      }
+    }
+    return undefined;
+  }
+
   capabilities(model: string): Readonly<Record<string, string>> {
     return this.#entries.get(model)?.capabilities ?? {};
   }
@@ -301,6 +321,14 @@ export class CatalogBackend implements Backend {
     return typeof body === "object" && body !== null && !Array.isArray(body)
       ? { ...(body as Record<string, unknown>), model: nativeModel }
       : body;
+  }
+
+  #modelRoute(entry: CatalogEntry): BackendModelRoute {
+    return {
+      publicId: entry.publicId,
+      nativeId: entry.nativeId,
+      provider: entry.provider
+    };
   }
 }
 

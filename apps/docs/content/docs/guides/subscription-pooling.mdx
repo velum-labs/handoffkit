@@ -52,6 +52,14 @@ in `.fusionkit/fusion.json`:
 }
 ```
 
+Inside the matching native picker, RouteKit shortens only that provider's
+subscription models: Claude Code shows
+`claude-code/claude-sonnet-4-6` as `claude-sonnet-4-6`, while Codex shows
+`codex/gpt-5.5` as `gpt-5.5`. The alias resolves back to the namespaced catalog
+entry and uses the same managed account pool over the provider-native protocol.
+Models from other providers stay source-qualified, and Fusion/configuration
+surfaces remain strictly namespaced.
+
 Normal embedded provider routing does not require a separate account proxy.
 `routekit accounts serve` is advanced mode for exposing the subscription pool
 to an external consumer.

@@ -54,6 +54,21 @@ Subscription providers use the same catalog. RouteKit unions discovery results
 from all enrolled accounts, records per-model eligibility, and selects only
 among healthy accounts that advertise the requested model.
 
+## Native client pickers
+
+Canonical RouteKit IDs remain namespaced everywhere. A matching native client
+gets a door-local display alias so its own subscription models look normal:
+
+- Claude Code lists `claude-code/claude-sonnet-4-6` as
+  `claude-sonnet-4-6`.
+- Codex lists `codex/gpt-5.5` as `gpt-5.5`.
+
+Models owned by other providers stay source-qualified in either picker. Both a
+bare picker alias and the corresponding namespaced ID resolve to the same
+canonical catalog entry. The request then uses RouteKit's server-owned account
+pool over the provider-native protocol. Bare IDs are not accepted by the
+global OpenAI, Cursor, FusionKit, or configuration surfaces.
+
 ## Local MLX cache
 
 FusionKit retains local-panel cache lifecycle commands:

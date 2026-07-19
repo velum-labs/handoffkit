@@ -142,7 +142,7 @@ test(
       if (!url.startsWith("https://chatgpt.com/backend-api/codex/")) {
         return await originalFetch(input, init);
       }
-      if (url.endsWith("/models")) {
+      if (new URL(url).pathname.endsWith("/models")) {
         return Response.json({
           models: [{ slug: "gpt-panel" }, { slug: "gpt-judge" }, { slug: "gpt-synth" }]
         });
@@ -171,6 +171,12 @@ test(
             "event: response.completed",
             `data: ${JSON.stringify({
               response: {
+                output: [
+                  {
+                    type: "message",
+                    content: [{ type: "output_text", text }]
+                  }
+                ],
                 usage: { input_tokens: 2, output_tokens: 1, total_tokens: 3 }
               }
             })}`,

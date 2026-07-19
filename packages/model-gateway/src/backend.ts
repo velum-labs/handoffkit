@@ -7,6 +7,15 @@
  * same core without a second abstraction.
  */
 
+export type BackendModelRoute = {
+  /** Stable RouteKit catalog id (`provider/model`). */
+  publicId: string;
+  /** Model id understood by the provider's native API. */
+  nativeId: string;
+  /** Configured provider that owns the model. */
+  provider: string;
+};
+
 export type Backend = {
   /** Model id sent to the backend when a request omits one. */
   readonly defaultModel: string | undefined;
@@ -25,6 +34,16 @@ export type Backend = {
    * to its provider.
    */
   resolveModel?(requested: string | undefined): string | undefined;
+  /**
+   * Resolve a model together with its provider/native identity. An exact
+   * public id always wins. When `nativeProvider` is supplied, a bare native id
+   * may resolve only inside that provider; this powers provider-native client
+   * aliases without making bare ids valid on RouteKit's global API surface.
+   */
+  resolveModelRoute?(
+    requested: string | undefined,
+    nativeProvider?: string
+  ): BackendModelRoute | undefined;
   /**
    * Whether the backend serves this exact model id itself. Unlike
    * {@link resolveModel} — which folds unknown

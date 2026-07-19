@@ -53,6 +53,9 @@ function accountConfigs(config: RouterConfig): SubscriptionAccountConfigs {
       switchThreshold: claude.switchThreshold,
       ...(claude.probeIntervalMs !== undefined
         ? { probeIntervalMs: claude.probeIntervalMs }
+        : {}),
+      ...(claude.fallbackCooldownSeconds !== undefined
+        ? { fallbackCooldownSeconds: claude.fallbackCooldownSeconds }
         : {})
     };
   }
@@ -64,6 +67,9 @@ function accountConfigs(config: RouterConfig): SubscriptionAccountConfigs {
       switchThreshold: codex.switchThreshold,
       ...(codex.probeIntervalMs !== undefined
         ? { probeIntervalMs: codex.probeIntervalMs }
+        : {}),
+      ...(codex.fallbackCooldownSeconds !== undefined
+        ? { fallbackCooldownSeconds: codex.fallbackCooldownSeconds }
         : {})
     };
   }

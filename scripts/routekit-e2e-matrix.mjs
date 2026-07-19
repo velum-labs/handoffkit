@@ -349,7 +349,7 @@ async function startDeterministicStack(tempRoot) {
   const nativeModels = {
     openrouter: "matrix-openrouter",
     codex: "matrix-codex",
-    "claude-code": "matrix-claude"
+    "claude-code": "claude-matrix"
   };
   const defaultNativeModel = "matrix-default";
   const defaultPublicModel = `codex/${defaultNativeModel}`;
@@ -426,6 +426,35 @@ async function callApiDoor(gatewayUrl, door, model, prompt, stream = false) {
   return door.textOf(body);
 }
 
+async function nativePickerAliases(gatewayUrl, nativeModels, publicModels) {
+  let claudeIds = [];
+  if (publicModels["claude-code"] !== undefined) {
+    const claudeResponse = await fetch(`${gatewayUrl}/v1/models`, {
+      headers: { "anthropic-version": "2023-06-01" }
+    });
+    assert.equal(claudeResponse.status, 200);
+    const claudePayload = await claudeResponse.json();
+    claudeIds = claudePayload.data.map((model) => model.id);
+    assert.ok(claudeIds.includes(nativeModels["claude-code"]));
+    assert.ok(!claudeIds.includes(publicModels["claude-code"]));
+  }
+
+  let codexIds = [];
+  if (publicModels.codex !== undefined) {
+    const codexResponse = await fetch(`${gatewayUrl}/v1/models`);
+    assert.equal(codexResponse.status, 200);
+    const codexPayload = await codexResponse.json();
+    codexIds = codexPayload.models.map((model) => model.slug);
+    assert.ok(codexIds.includes(nativeModels.codex));
+    assert.ok(!codexIds.includes(publicModels.codex));
+    assert.ok(
+      codexPayload.data.every((model) => model.id.includes("/")),
+      "the global OpenAI catalog remains strictly namespaced"
+    );
+  }
+  return { claude: claudeIds, codex: codexIds };
+}
+
 function tmux(...args) {
   return spawnSync("tmux", args, {
     cwd: ROOT,
@@ -481,9 +510,21 @@ function cliArgs(door) {
   }
 }
 
+function nativeDoorModel(door, model) {
+  if (door === "codex" && model.startsWith("codex/")) {
+    return model.slice("codex/".length);
+  }
+  if (door !== "claude") return model;
+  const pickerId = model.startsWith("claude-code/")
+    ? model.slice("claude-code/".length)
+    : model;
+  return pickerId.startsWith("claude") || pickerId.startsWith("anthropic")
+    ? pickerId
+    : `claude-${pickerId}`;
+}
+
 function modelVisible(transcript, door, model) {
-  const candidates =
-    door === "claude" ? [model, `claude-${model}`] : [model];
+  const candidates = [model, nativeDoorModel(door, model)];
   if (
     candidates.some(
     (candidate) =>
@@ -503,8 +544,7 @@ function modelVisible(transcript, door, model) {
 }
 
 function modelMatchesRequest(requested, door, expected) {
-  if (requested === expected) return true;
-  return door === "claude" && requested === `claude-${expected}`;
+  return requested === expected || requested === nativeDoorModel(door, expected);
 }
 
 function toolBehavior(door, proofPath) {
@@ -1015,6 +1055,22 @@ function skipCase(results, input, reason) {
 async function runDeterministic(options, results, artifactDir, tempRoot) {
   const stack = await startDeterministicStack(tempRoot);
   try {
+    await recordCase(
+      results,
+      { phase: "deterministic", door: "native-pickers" },
+      async () => {
+        const aliases = await nativePickerAliases(
+          stack.proxy.url,
+          stack.nativeModels,
+          stack.publicModels
+        );
+        writeFileSync(
+          join(artifactDir, "deterministic-native-pickers.json"),
+          `${JSON.stringify(aliases, null, 2)}\n`
+        );
+        return { artifact: "deterministic-native-pickers.json" };
+      }
+    );
     for (const provider of PROVIDERS) {
       if (!selected(provider, options.providers)) continue;
       for (const door of API_DOORS) {
@@ -1144,6 +1200,35 @@ async function runLive(options, results, artifactDir, tempRoot) {
       selected(provider, options.providers)
     );
     const chosen = chooseLiveModels(models, options.models, activeProviders);
+    const pickerPublicModels = Object.fromEntries(
+      ["codex", "claude-code"].flatMap((provider) =>
+        chosen[provider] === undefined ? [] : [[provider, chosen[provider]]]
+      )
+    );
+    if (Object.keys(pickerPublicModels).length > 0) {
+      await recordCase(
+        results,
+        { phase: "live", door: "native-pickers" },
+        async () => {
+          const pickerNativeModels = Object.fromEntries(
+            Object.entries(pickerPublicModels).map(([provider, model]) => [
+              provider,
+              model.slice(provider.length + 1)
+            ])
+          );
+          const aliases = await nativePickerAliases(
+            proxy.url,
+            pickerNativeModels,
+            pickerPublicModels
+          );
+          writeFileSync(
+            join(artifactDir, "live-native-pickers.json"),
+            `${JSON.stringify(aliases, null, 2)}\n`
+          );
+          return { billedCalls: 0, artifact: "live-native-pickers.json" };
+        }
+      );
+    }
     const estimatedMinimum =
       activeProviders.length *
       (API_DOORS.filter((door) => selected(door.id, options.doors)).length +

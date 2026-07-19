@@ -42,6 +42,14 @@
       "anchor": "Claude Code's discovery probe"
     },
     {
+      "id": "models.native-picker-aliases",
+      "category": "model-exposure",
+      "expectation": "Claude Code and Codex show their matching subscription models under bare native ids while requests resolve through the canonical namespaced RouteKit pool.",
+      "status": "required",
+      "testFile": "packages/model-gateway/src/test/anthropic.test.ts",
+      "anchor": "Claude picker aliases use the canonical catalog and pooled native relay"
+    },
+    {
       "id": "models.cursor-discovery-mirror",
       "category": "model-exposure",
       "expectation": "Cursor-relative model discovery mirrors the canonical gateway catalog.",

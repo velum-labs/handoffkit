@@ -15,6 +15,10 @@ checks the model that reached the gateway. Claude Code and Codex additionally
 execute a simulator-scripted safe shell tool call. The existing subscription
 pool suite covers eligible-account selection, proactive quota switching,
 quota failover, transient throttling, and all-members-unavailable exhaustion.
+The `native-pickers` case also verifies that Claude Code sees `claude-code/*`
+as bare Claude names, Codex sees `codex/*` as bare Codex names, duplicate
+namespaced entries are absent from those pickers, and the global OpenAI catalog
+remains namespaced.
 
 ## Live, billed mode
 
@@ -30,6 +34,10 @@ failure. An installed CLI that cannot complete is also a failure; a missing
 optional CLI is an explicit skip. Prompts and HTTP output limits are kept
 small. The default hard budget is 32 provider requests, including extra agent
 turns such as a tool result or OpenCode title generation.
+
+Live mode repeats the native-picker assertions for configured Claude Code and
+Codex providers. Catalog checks do not issue model-generation requests and
+therefore add zero billed calls.
 
 When `claude-code` and the `pool` door are selected, live mode also loads the
 real enrolled account set, injects a quota response for the first selected

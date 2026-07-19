@@ -16,7 +16,7 @@ import { authorizedRequest } from "./auth.js";
 import { isCursorChatBody, translateCursorRequest } from "./adapters/cursor.js";
 import { handleResponses } from "./adapters/responses.js";
 import type { ResponsesRequest } from "./adapters/responses.js";
-import type { Backend } from "./backend.js";
+import type { Backend, BackendModelRoute } from "./backend.js";
 import {
   validateAnthropicRequest,
   validateChatRequest,
@@ -149,6 +149,63 @@ function codexModelInfo(id: string, priority: number): Record<string, unknown> {
   };
 }
 
+function catalogModelRoutes(backend: Backend): BackendModelRoute[] {
+  if (backend.resolveModelRoute === undefined) return [];
+  return (backend.listModelIds?.() ?? []).flatMap((model) => {
+    const route = backend.resolveModelRoute?.(model);
+    return route === undefined ? [] : [route];
+  });
+}
+
+function resolveNativeModelRoute(
+  backend: Backend,
+  provider: "claude-code" | "codex",
+  requested: string | undefined
+): BackendModelRoute | undefined {
+  if (backend.resolveModelRoute === undefined) return undefined;
+  const route = backend.resolveModelRoute(requested, provider);
+  if (route === undefined && requested !== undefined) {
+    throw new UnknownModelError(requested);
+  }
+  return route;
+}
+
+function withModel<T extends Record<string, unknown>>(body: T, model: string): T {
+  return { ...body, model };
+}
+
+function codexPickerModels(
+  backend: Backend,
+  configured: Array<{ id: string } & Record<string, unknown>>,
+  native: readonly Record<string, unknown>[],
+  includeUnroutedNative: boolean
+): Record<string, unknown>[] {
+  const nativeBySlug = new Map(
+    native.flatMap((entry) =>
+      typeof entry.slug === "string" ? [[entry.slug, entry] as const] : []
+    )
+  );
+  const seen = new Set<string>();
+  const models = configured.map((entry, priority) => {
+    const route = backend.resolveModelRoute?.(entry.id);
+    const slug =
+      route?.provider === "codex" ? route.nativeId : entry.id;
+    seen.add(slug);
+    const upstream = nativeBySlug.get(slug);
+    return upstream === undefined
+      ? codexModelInfo(slug, priority)
+      : { ...upstream, slug, priority };
+  });
+  if (!includeUnroutedNative) return models;
+  for (const entry of native) {
+    const slug = typeof entry.slug === "string" ? entry.slug : undefined;
+    if (slug === undefined || seen.has(slug)) continue;
+    seen.add(slug);
+    models.push(entry);
+  }
+  return models;
+}
+
 async function mergeAnthropicCatalogs(
   configured: Response,
   native: Response
@@ -236,9 +293,13 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
       if (req.headers["anthropic-version"] !== undefined) {
         const configured = anthropicModelsResponse(
           backend.defaultModel,
-          backend.listModelIds?.()
+          backend.listModelIds?.(),
+          catalogModelRoutes(backend)
         );
-        if (anthropicRelay?.models !== undefined) {
+        if (
+          anthropicRelay?.models !== undefined &&
+          backend.resolveModelRoute === undefined
+        ) {
           await pipeUpstream(
             res,
             await mergeAnthropicCatalogs(
@@ -260,26 +321,28 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
           const base = (await (await backend.models()).json()) as {
             data?: Array<{ id: string } & Record<string, unknown>>;
           };
-          if (merged.etag !== undefined) res.setHeader("etag", merged.etag);
-          const configuredModels = (base.data ?? []).map((entry, priority) =>
-            codexModelInfo(entry.id, priority)
-          );
-          const seenModels = new Set(configuredModels.map((entry) => entry.slug));
-          const nativeModels = merged.models.filter((entry) => {
-            const slug =
-              typeof entry.slug === "string"
-                ? entry.slug
-                : typeof entry.id === "string"
-                  ? entry.id
-                  : undefined;
-            if (slug === undefined || seenModels.has(slug)) return false;
-            seenModels.add(slug);
-            return true;
-          });
+          if (
+            merged.etag !== undefined &&
+            codexProviderRelay === undefined
+          ) {
+            res.setHeader("etag", merged.etag);
+          }
+          const data =
+            codexProviderRelay === undefined
+              ? codexCatalogRelay.mergeDataIds?.(
+                  base.data ?? [],
+                  merged.models
+                ) ?? base.data ?? []
+              : base.data ?? [];
           writeJson(res, 200, {
             object: "list",
-            data: codexCatalogRelay.mergeDataIds?.(base.data ?? [], merged.models) ?? base.data ?? [],
-            models: [...configuredModels, ...nativeModels]
+            data,
+            models: codexPickerModels(
+              backend,
+              base.data ?? [],
+              merged.models,
+              codexProviderRelay === undefined
+            )
           });
           return;
         }
@@ -298,10 +361,15 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
         ...modelPayload,
         object: typeof modelPayload.object === "string" ? modelPayload.object : "list",
         data,
-        models: data.flatMap((entry, priority) =>
-          typeof entry.id === "string"
-            ? [codexModelInfo(entry.id, priority)]
-            : []
+        models: codexPickerModels(
+          backend,
+          data.flatMap((entry) =>
+            typeof entry.id === "string"
+              ? [{ ...entry, id: entry.id }]
+              : []
+          ),
+          [],
+          false
         )
       });
       return;
@@ -319,10 +387,15 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
     // so any advertised/aliased id validates; routing is decided at chat time.
     if (method === "GET" && path.startsWith("/v1/models/")) {
       const id = decodeURIComponent(path.slice("/v1/models/".length));
-      const resolved = resolveClaudeModelAlias(id, backend.listModelIds?.());
+      const alias = resolveClaudeModelAlias(id, backend.listModelIds?.());
+      const route = backend.resolveModelRoute?.(alias, "claude-code");
+      const resolved = route?.publicId ?? alias;
       if (
         resolved === undefined ||
-        (!(backend.servesModel?.(resolved) ?? false) && anthropicRelay === undefined)
+        (backend.resolveModelRoute !== undefined && route === undefined) ||
+        (backend.resolveModelRoute === undefined &&
+          !(backend.servesModel?.(resolved) ?? false) &&
+          anthropicRelay === undefined)
       ) {
         writeJson(res, 404, {
           error: { message: `unknown model: ${id}`, type: "not_found" }
@@ -332,7 +405,7 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
       writeJson(res, 200, {
         type: "model",
         id,
-        display_name: resolved,
+        display_name: route?.nativeId ?? resolved,
         created_at: new Date(0).toISOString()
       });
       return;
@@ -398,14 +471,32 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
       const raw = await readJson(req, res);
       if (raw === NO_BODY) return;
       if (rejectInvalid(res, validateCountTokensRequest(raw))) return;
-      if (anthropicRelay?.countTokens !== undefined) {
+      const rawBody = raw as AnthropicRequest;
+      const alias = resolveClaudeModelAlias(
+        rawBody.model,
+        backend.listModelIds?.()
+      );
+      const route = resolveNativeModelRoute(
+        backend,
+        "claude-code",
+        alias
+      );
+      if (
+        anthropicRelay?.countTokens !== undefined &&
+        (route?.provider === "claude-code" ||
+          backend.resolveModelRoute === undefined)
+      ) {
+        const relayBody =
+          route?.provider === "claude-code"
+            ? withModel(rawBody, route.nativeId)
+            : rawBody;
         await pipeUpstream(
           res,
-          await anthropicRelay.countTokens(req.headers, raw as AnthropicRequest)
+          await anthropicRelay.countTokens(req.headers, relayBody)
         );
         return;
       }
-      await pipeUpstream(res, handleCountTokens(raw as AnthropicRequest));
+      await pipeUpstream(res, handleCountTokens(rawBody));
       return;
     }
 
@@ -418,13 +509,34 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
         rawBody.model,
         backend.listModelIds?.()
       );
+      const route = resolveNativeModelRoute(
+        backend,
+        "claude-code",
+        resolvedModel
+      );
+      const canonicalModel = route?.publicId ?? resolvedModel;
       const body =
-        resolvedModel === rawBody.model
+        canonicalModel === rawBody.model || canonicalModel === undefined
           ? rawBody
-          : { ...rawBody, model: resolvedModel };
+          : withModel(rawBody, canonicalModel);
       const requestedModel = typeof body.model === "string" ? body.model : undefined;
       if (
         anthropicRelay !== undefined &&
+        route?.provider === "claude-code"
+      ) {
+        const relayBody = withModel(rawBody, route.nativeId);
+        await handleModelCall(res, provenance, {
+          dialect: "anthropic-messages",
+          body,
+          defaultModel: backend.defaultModel,
+          invoke: (_callId, signal) =>
+            anthropicRelay.relay(req.headers, relayBody, signal)
+        });
+        return;
+      }
+      if (
+        anthropicRelay !== undefined &&
+        backend.resolveModelRoute === undefined &&
         anthropicRelay.shouldRelay(
           req.headers,
           requestedModel,
@@ -462,8 +574,32 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
       // auth — forward it verbatim to the Codex backend instead of silently
       // folding it into the default.
       const requestedModel = typeof body.model === "string" ? body.model : undefined;
+      const route =
+        codexProviderRelay === undefined
+          ? backend.resolveModelRoute?.(requestedModel)
+          : resolveNativeModelRoute(backend, "codex", requestedModel);
+      const canonicalBody =
+        route === undefined || route.publicId === requestedModel
+          ? body
+          : withModel(body, route.publicId);
+      if (
+        codexProviderRelay !== undefined &&
+        route?.provider === "codex"
+      ) {
+        const relayBody = withModel(body, route.nativeId);
+        await handleModelCall(res, provenance, {
+          dialect: "openai-responses",
+          body: canonicalBody,
+          defaultModel: backend.defaultModel,
+          invoke: (_callId, signal) =>
+            codexProviderRelay.relay(req.headers, relayBody, signal)
+        });
+        return;
+      }
       if (
         codexRequestRelay !== undefined &&
+        (codexProviderRelay === undefined ||
+          backend.resolveModelRoute === undefined) &&
         codexRequestRelay.shouldRelay(req.headers, requestedModel, (model) =>
           backend.servesModel?.(model) ?? false
         )
@@ -479,10 +615,12 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
       }
       await handleModelCall(res, provenance, {
         dialect: "openai-responses",
-        body,
+        body: canonicalBody,
         defaultModel: backend.defaultModel,
         invoke: (callId, signal) =>
-          handleResponses(backend, body, callId, signal, { requestContext })
+          handleResponses(backend, canonicalBody, callId, signal, {
+            requestContext
+          })
       });
       return;
     }

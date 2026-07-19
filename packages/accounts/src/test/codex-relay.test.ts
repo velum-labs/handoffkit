@@ -1,11 +1,20 @@
 import assert from "node:assert/strict";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import type { IncomingMessage, Server } from "node:http";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { test } from "node:test";
 
 import { startGateway } from "@routekit/gateway";
 import type { Backend, Gateway } from "@routekit/gateway";
-import { CodexBackendRelay, codexRelayAuth } from "../index.js";
+import {
+  CodexBackendRelay,
+  codexRelayAuth,
+  RelayOnlyBackend,
+  SubscriptionAccountSet,
+  subscriptionProvider
+} from "../index.js";
 import type { CodexCatalogEntry } from "../index.js";
 
 /**
@@ -341,5 +350,94 @@ test("a gateway auth token disables the relay entirely", async () => {
   } finally {
     await gateway.close();
     await upstream.close();
+  }
+});
+
+test("server-owned Codex relay rotates pooled accounts on a usage limit", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "routekit-codex-relay-pool-"));
+  const token = "eyJhbGciOiJub25lIn0.eyJleHAiOjk5OTk5OTk5OTl9.";
+  for (const [name, accountId] of [
+    ["a", "acct-a"],
+    ["b", "acct-b"]
+  ] as const) {
+    writeFileSync(
+      join(directory, `${name}.json`),
+      JSON.stringify({
+        tokens: {
+          access_token: token,
+          refresh_token: `refresh-${name}`,
+          account_id: accountId
+        }
+      })
+    );
+  }
+  const seenAccounts: string[] = [];
+  const server = createServer((req, res) => {
+    void (async () => {
+      const accountId = String(req.headers["chatgpt-account-id"]);
+      seenAccounts.push(accountId);
+      const body = JSON.parse(await readBody(req)) as { model?: string };
+      assert.equal(body.model, "gpt-5.5");
+      if (accountId === "acct-a") {
+        res.writeHead(429, {
+          "content-type": "application/json",
+          "retry-after": "300"
+        });
+        res.end(
+          JSON.stringify({
+            error: {
+              type: "usage_limit_reached",
+              resets_at: Math.floor(Date.now() / 1000) + 300
+            }
+          })
+        );
+        return;
+      }
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ id: "resp_pooled", model: body.model }));
+    })().catch((error: unknown) => res.writeHead(500).end(String(error)));
+  });
+  await new Promise<void>((resolve) =>
+    server.listen(0, "127.0.0.1", resolve)
+  );
+  const address = server.address();
+  assert.ok(typeof address === "object" && address !== null);
+  const accounts = await SubscriptionAccountSet.open(
+    subscriptionProvider("codex"),
+    {
+      mode: "codex",
+      source: { kind: "directory", path: directory },
+      strategy: "sticky"
+    }
+  );
+  const relay = new CodexBackendRelay({
+    backendUrl: `http://127.0.0.1:${address.port}`,
+    catalog,
+    auth: { kind: "accounts", accounts }
+  });
+  const gateway = await startGateway({
+    backend: new RelayOnlyBackend(),
+    providerRelays: { codex: relay }
+  });
+  try {
+    const response = await fetch(`${gateway.url()}/v1/responses`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ model: "gpt-5.5", input: "hello" })
+    });
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), {
+      id: "resp_pooled",
+      model: "gpt-5.5"
+    });
+    assert.deepEqual(seenAccounts, ["acct-a", "acct-b"]);
+    assert.equal(
+      accounts.snapshot().members.find((member) => member.active)?.id,
+      "b"
+    );
+  } finally {
+    await gateway.close();
+    await closeServer(server);
+    rmSync(directory, { recursive: true, force: true });
   }
 });

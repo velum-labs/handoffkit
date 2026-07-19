@@ -123,6 +123,28 @@ test("catalog namespaces live models and strips the source before dispatch", asy
     "openai/gpt-5.5",
     "openrouter/moonshotai/kimi-k2-thinking"
   ]);
+  assert.deepEqual(backend.resolveModelRoute("gpt-5.5", "openai"), {
+    publicId: "openai/gpt-5.5",
+    nativeId: "gpt-5.5",
+    provider: "openai"
+  });
+  assert.equal(
+    backend.resolveModelRoute("gpt-5.5"),
+    undefined,
+    "bare ids remain invalid without a native-provider scope"
+  );
+  assert.deepEqual(
+    backend.resolveModelRoute(
+      "openrouter/moonshotai/kimi-k2-thinking",
+      "openai"
+    ),
+    {
+      publicId: "openrouter/moonshotai/kimi-k2-thinking",
+      nativeId: "moonshotai/kimi-k2-thinking",
+      provider: "openrouter"
+    },
+    "an exact canonical id wins even on a native client door"
+  );
   await backend.chat({ messages: [] });
   await backend.chat({ model: "openai/gpt-5.5", messages: [] });
   assert.deepEqual(calls, [

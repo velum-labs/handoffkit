@@ -13,8 +13,10 @@ import {
   resolveClaudeModelAlias
 } from "../adapters/anthropic.js";
 import { OpenAiBackend } from "../backend.js";
+import { CatalogBackend } from "../router.js";
 import { MODEL_CALL_ID_HEADER } from "../provenance.js";
 import { startGateway } from "../server.js";
+import type { ProviderRelay } from "../server.js";
 
 /**
  * M2 coverage: the Anthropic Messages adapter against a mock OpenAI backend.
@@ -54,6 +56,57 @@ test("anthropicModelsResponse aliases every model past Claude Code's claude/anth
     resolveClaudeModelAlias("claude-opus-4-8", ["gpt-5.5"]),
     "claude-opus-4-8"
   );
+});
+
+test("anthropicModelsResponse exposes Claude subscription models as bare native ids", async () => {
+  const response = anthropicModelsResponse(
+    "claude-code/claude-sonnet-4-6",
+    [
+      "claude-code/claude-sonnet-4-6",
+      "codex/gpt-5.5",
+      "anthropic/claude-opus-4-8"
+    ],
+    [
+      {
+        publicId: "claude-code/claude-sonnet-4-6",
+        nativeId: "claude-sonnet-4-6",
+        provider: "claude-code"
+      },
+      {
+        publicId: "codex/gpt-5.5",
+        nativeId: "gpt-5.5",
+        provider: "codex"
+      },
+      {
+        publicId: "anthropic/claude-opus-4-8",
+        nativeId: "claude-opus-4-8",
+        provider: "anthropic"
+      }
+    ]
+  );
+  const body = (await response.json()) as {
+    data: Array<{ id: string; display_name: string }>;
+  };
+  assert.deepEqual(body.data, [
+    {
+      id: "claude-sonnet-4-6",
+      display_name: "claude-sonnet-4-6",
+      created_at: new Date(0).toISOString(),
+      type: "model"
+    },
+    {
+      id: "claude-codex/gpt-5.5",
+      display_name: "codex/gpt-5.5",
+      created_at: new Date(0).toISOString(),
+      type: "model"
+    },
+    {
+      id: "anthropic/claude-opus-4-8",
+      display_name: "anthropic/claude-opus-4-8",
+      created_at: new Date(0).toISOString(),
+      type: "model"
+    }
+  ]);
 });
 
 test("anthropicToChat tolerates thinking: null (same failure class as Responses reasoning: null)", () => {
@@ -458,5 +511,139 @@ test("estimates tokens and serves Anthropic discovery", async () => {
   } finally {
     await gateway.close();
     await mock.close();
+  }
+});
+
+test("Claude picker aliases use the canonical catalog and pooled native relay", async () => {
+  const sourceCalls: string[] = [];
+  const source = (sourceId: "claude-code" | "codex") => ({
+    sourceId,
+    discoverModels: async () => [
+      {
+        id:
+          sourceId === "claude-code"
+            ? "claude-sonnet-4-6"
+            : "gpt-5.5"
+      }
+    ],
+    chat: async (body: unknown) => {
+      sourceCalls.push((body as { model: string }).model);
+      return Response.json({
+        id: "chatcmpl_cross_provider",
+        choices: [
+          {
+            index: 0,
+            message: { role: "assistant", content: "CROSS_PROVIDER_OK" },
+            finish_reason: "stop"
+          }
+        ],
+        usage: { prompt_tokens: 1, completion_tokens: 1 }
+      });
+    },
+    embeddings: async () => Response.json({})
+  });
+  const backend = await CatalogBackend.create({
+    config: {
+      providers: { "claude-code": {}, codex: {} },
+      defaultModel: "claude-code/claude-sonnet-4-6"
+    },
+    sources: {
+      "claude-code": source("claude-code"),
+      codex: source("codex")
+    }
+  });
+  const relayedBodies: Array<Record<string, unknown>> = [];
+  const relay: ProviderRelay = {
+    dialect: "anthropic",
+    shouldRelay: () => false,
+    relay: async (_headers, body) => {
+      relayedBodies.push(body as unknown as Record<string, unknown>);
+      return Response.json({
+        id: "msg_native",
+        type: "message",
+        role: "assistant",
+        model: (body as { model: string }).model,
+        content: [{ type: "text", text: "NATIVE_OK" }],
+        stop_reason: "end_turn",
+        stop_sequence: null,
+        usage: { input_tokens: 1, output_tokens: 1 }
+      });
+    }
+  };
+  const gateway = await startGateway({
+    backend,
+    providerRelays: { anthropic: relay }
+  });
+  try {
+    const catalog = (await (
+      await fetch(`${gateway.url()}/v1/models`, {
+        headers: { "anthropic-version": "2023-06-01" }
+      })
+    ).json()) as {
+      data: Array<{ id: string; display_name: string }>;
+    };
+    assert.deepEqual(
+      catalog.data.map(({ id, display_name }) => [id, display_name]),
+      [
+        ["claude-codex/gpt-5.5", "codex/gpt-5.5"],
+        ["claude-sonnet-4-6", "claude-sonnet-4-6"]
+      ]
+    );
+
+    for (const model of [
+      "claude-sonnet-4-6",
+      "claude-code/claude-sonnet-4-6"
+    ]) {
+      const response = await fetch(`${gateway.url()}/v1/messages`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "anthropic-version": "2023-06-01"
+        },
+        body: JSON.stringify({
+          model,
+          max_tokens: 32,
+          system: "Preserve native Anthropic fields.",
+          messages: [{ role: "user", content: "hi" }]
+        })
+      });
+      assert.equal(response.status, 200);
+      assert.equal(
+        ((await response.json()) as { content: Array<{ text: string }> })
+          .content[0]?.text,
+        "NATIVE_OK"
+      );
+    }
+    assert.deepEqual(relayedBodies.map((body) => body.model), [
+      "claude-sonnet-4-6",
+      "claude-sonnet-4-6"
+    ]);
+    assert.ok(
+      relayedBodies.every(
+        (body) => body.system === "Preserve native Anthropic fields."
+      )
+    );
+    assert.deepEqual(sourceCalls, []);
+
+    const unknown = await fetch(`${gateway.url()}/v1/messages`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "anthropic-version": "2023-06-01"
+      },
+      body: JSON.stringify({
+        model: "claude-not-real",
+        max_tokens: 32,
+        messages: [{ role: "user", content: "hi" }]
+      })
+    });
+    assert.equal(unknown.status, 400);
+    assert.match(await unknown.text(), /unknown model/);
+    assert.deepEqual(relayedBodies.map((body) => body.model), [
+      "claude-sonnet-4-6",
+      "claude-sonnet-4-6"
+    ]);
+  } finally {
+    await gateway.close();
   }
 });

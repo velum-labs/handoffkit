@@ -83,8 +83,21 @@ export function codexListedStockSlugs(home: string = homedir()): string[] {
   });
 }
 
+function codexModelId(modelId: string): string {
+  return modelId.startsWith("codex/")
+    ? modelId.slice("codex/".length)
+    : modelId;
+}
+
 function catalogIds(spec: ToolLaunchSpec): string[] {
-  return [...new Set([spec.defaultModel, ...spec.models.flatMap((model) => [model.id, ...(model.aliases ?? [])])])];
+  return [
+    ...new Set(
+      [spec.defaultModel, ...spec.models.flatMap((model) => [
+        model.id,
+        ...(model.aliases ?? [])
+      ])].map(codexModelId)
+    )
+  ];
 }
 
 export function codexCatalogEntries(
@@ -98,7 +111,8 @@ export function codexCatalogEntries(
     ...template,
     prefer_websockets: false,
     slug: id,
-    display_name: spec.models.find((model) => model.id === id)?.label ?? id,
+    display_name:
+      spec.models.find((model) => codexModelId(model.id) === id)?.label ?? id,
     description: "Gateway-routed model.",
     visibility: "list",
     priority,
@@ -160,7 +174,7 @@ export function codexAgentRoles(home: string, profiles: readonly AgentProfile[])
 export function codexAgentRoleToml(profile: AgentProfile): string {
   return [
     `name = ${JSON.stringify(profile.id)}`,
-    `model = ${JSON.stringify(profile.model)}`,
+    `model = ${JSON.stringify(codexModelId(profile.model))}`,
     `model_provider = ${JSON.stringify(PROVIDER_ID)}`,
     `developer_instructions = ${JSON.stringify(profile.instructions)}`,
     ""
@@ -173,7 +187,7 @@ export function codexLaunchConfigToml(
   roles: readonly CodexAgentRole[] = []
 ): string {
   const lines = [
-    `model = ${JSON.stringify(spec.defaultModel)}`,
+    `model = ${JSON.stringify(codexModelId(spec.defaultModel))}`,
     `model_provider = ${JSON.stringify(PROVIDER_ID)}`
   ];
   if (modelCatalogPath !== undefined) {

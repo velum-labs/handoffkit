@@ -1010,6 +1010,12 @@ function isAnthropicFamilyId(id: string): boolean {
 /** The `claude-` prefix used to alias non-Anthropic models past Claude's filter. */
 export const CLAUDE_ALIAS_PREFIX = "claude-";
 
+export type ClaudePickerModelRoute = {
+  publicId: string;
+  nativeId: string;
+  provider: string;
+};
+
 /**
  * The id a model is advertised under in Claude Code's `/model` picker. Claude
  * only lists ids beginning with `claude`/`anthropic`, so non-Anthropic models
@@ -1043,7 +1049,8 @@ export function resolveClaudeModelAlias(
  */
 export function anthropicModelsResponse(
   backendModel: string | undefined,
-  modelIds?: readonly string[]
+  modelIds?: readonly string[],
+  modelRoutes: readonly ClaudePickerModelRoute[] = []
 ): Response {
   const source =
     modelIds !== undefined && modelIds.length > 0
@@ -1052,12 +1059,21 @@ export function anthropicModelsResponse(
         ? [backendModel]
         : [];
   const seen = new Set<string>();
+  const routes = new Map(modelRoutes.map((route) => [route.publicId, route]));
   const models: Array<{ type: "model"; id: string; display_name: string; created_at: string }> = [];
   for (const realId of source) {
-    const id = claudeModelAlias(realId);
+    const route = routes.get(realId);
+    const displayName =
+      route?.provider === "claude-code" ? route.nativeId : realId;
+    const id = claudeModelAlias(displayName);
     if (seen.has(id)) continue;
     seen.add(id);
-    models.push({ type: "model", id, display_name: realId, created_at: new Date(0).toISOString() });
+    models.push({
+      type: "model",
+      id,
+      display_name: displayName,
+      created_at: new Date(0).toISOString()
+    });
   }
   const ids = models.map((model) => model.id);
   return new Response(

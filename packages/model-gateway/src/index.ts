@@ -10,6 +10,7 @@ export type {
 export { joinPath, ModelRoutedBackend, OpenAiBackend } from "./backend.js";
 export type {
   Backend,
+  BackendModelRoute,
   BackendRequestOptions,
   ModelRoutedBackendOptions,
   OpenAiBackendOptions

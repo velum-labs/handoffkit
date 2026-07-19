@@ -52,3 +52,41 @@ test("Codex launcher serializes one gateway provider and generic agent profiles"
   assert.match(profile, /model = "opaque-secondary"/);
   assert.match(profile, /developer_instructions = "Return concise findings\."/);
 });
+
+test("Codex launcher projects codex models to native picker ids", () => {
+  const spec: ToolLaunchSpec = {
+    gatewayUrl: "http://127.0.0.1:9999",
+    defaultModel: "codex/gpt-5.5",
+    models: [
+      { id: "codex/gpt-5.5", label: "GPT-5.5 subscription" },
+      { id: "claude-code/claude-sonnet-4-6" }
+    ],
+    args: []
+  };
+  const template = {
+    slug: "stock",
+    display_name: "Stock",
+    visibility: "list"
+  };
+  assert.deepEqual(
+    codexCatalogEntries(spec, template).map((entry) => [
+      entry.slug,
+      entry.display_name
+    ]),
+    [
+      ["gpt-5.5", "GPT-5.5 subscription"],
+      [
+        "claude-code/claude-sonnet-4-6",
+        "claude-code/claude-sonnet-4-6"
+      ]
+    ]
+  );
+  assert.match(codexLaunchConfigToml(spec), /model = "gpt-5\.5"/);
+  assert.match(
+    codexAgentRoleToml({
+      ...PROFILE,
+      model: "codex/gpt-5.5"
+    }),
+    /model = "gpt-5\.5"/
+  );
+});
