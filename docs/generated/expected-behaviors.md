@@ -59,6 +59,7 @@ environment-gated rows name the reason and exact live command.
 | ID | Expected behavior | Status | Evidence |
 |---|---|---|---|
 | `reasoning.provider-captured` | RouteKit out-of-band reasoning is parsed separately from answer text. | required | `python/fusionkit-core/tests/test_routekit_client.py` — `test_routekit_client_parses_streamed_text_reasoning_usage_and_tools` |
+| `reasoning.anthropic-lossless` | Anthropic thinking controls, signed thinking, signature deltas, and redacted thinking survive native provider translation and tool-loop replay. | required | `packages/model-gateway/src/test/provider-backends.test.ts` — `Anthropic egress preserves native thinking controls, signed history, and buffered blocks` |
 | `reasoning.candidates-reach-judge` | Each panel candidate's reasoning is preserved as trajectory evidence and reaches the judge prompt. | required | `packages/cli/src/test/stack-e2e.test.ts` — `candidate, judge, narration, and synthesizer reasoning survive fusion` |
 | `reasoning.judge-visible` | Structured judge analysis is visible on every door's supported reasoning channel. | required | `packages/cli/src/test/stack-e2e.test.ts` — `judge analysis must be visible` |
 | `reasoning.synth-visible` | The synthesizer model's own reasoning survives every gateway dialect. | required | `packages/cli/src/test/stack-e2e.test.ts` — `must carry the synthesizer model's own reasoning` |

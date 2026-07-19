@@ -455,6 +455,135 @@ async function nativePickerAliases(gatewayUrl, nativeModels, publicModels) {
   return { claude: claudeIds, codex: codexIds };
 }
 
+async function verifyLosslessAnthropicThinking(stack) {
+  const behavior = {
+    reply: "THINKING_OK",
+    reasoning: "native matrix thought",
+    reasoning_signature: "sig-matrix",
+    redacted_thinking: "opaque-matrix",
+    chunk_bytes: 2
+  };
+  await stack.simulator.reset();
+  await stack.simulator.queue(stack.nativeModels["claude-code"], [
+    behavior,
+    behavior
+  ]);
+  const request = {
+    model: stack.publicModels["claude-code"],
+    max_tokens: 4096,
+    thinking: { type: "adaptive", display: "omitted" },
+    output_config: { effort: "high" },
+    messages: [
+      { role: "user", content: "first" },
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "thinking",
+            thinking: "prior matrix thought",
+            signature: "sig-prior-matrix"
+          },
+          { type: "redacted_thinking", data: "opaque-prior-matrix" },
+          {
+            type: "tool_use",
+            id: "tool_matrix",
+            name: "read_file",
+            input: { path: "README.md" }
+          }
+        ]
+      },
+      {
+        role: "user",
+        content: [
+          {
+            type: "tool_result",
+            tool_use_id: "tool_matrix",
+            content: "source"
+          }
+        ]
+      }
+    ],
+    tools: [
+      {
+        name: "read_file",
+        input_schema: { type: "object", properties: { path: { type: "string" } } }
+      }
+    ]
+  };
+  const buffered = await fetch(`${stack.proxy.url}/v1/messages`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "anthropic-version": "2023-06-01"
+    },
+    body: JSON.stringify(request)
+  });
+  assert.equal(buffered.status, 200);
+  const payload = await buffered.json();
+  assert.deepEqual(
+    payload.content.map((block) => block.type),
+    ["thinking", "redacted_thinking", "text"]
+  );
+  assert.equal(payload.content[0].signature, "sig-matrix");
+  assert.equal(payload.content[1].data, "opaque-matrix");
+
+  const streamed = await fetch(`${stack.proxy.url}/v1/messages`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "anthropic-version": "2023-06-01"
+    },
+    body: JSON.stringify({ ...request, stream: true })
+  });
+  assert.equal(streamed.status, 200);
+  const parsed = await doorFrames(streamed);
+  assert.ok(
+    parsed.frames.some(
+      (frame) => {
+        const data =
+          typeof frame.data === "object" && frame.data !== null
+            ? frame.data
+            : {};
+        return (
+          data.type === "content_block_delta" &&
+          data.delta?.type === "signature_delta" &&
+          data.delta.signature === "sig-matrix"
+        );
+      }
+    )
+  );
+  assert.ok(
+    parsed.frames.some(
+      (frame) => {
+        const data =
+          typeof frame.data === "object" && frame.data !== null
+            ? frame.data
+            : {};
+        return (
+          data.type === "content_block_start" &&
+          data.content_block?.type === "redacted_thinking" &&
+          data.content_block.data === "opaque-matrix"
+        );
+      }
+    )
+  );
+  const calls = await stack.simulator.calls({
+    model: stack.nativeModels["claude-code"]
+  });
+  assert.equal(calls.length, 2, await stack.simulator.describeJournal());
+  for (const call of calls) {
+    assert.deepEqual(call.request.thinking, {
+      type: "adaptive",
+      display: "omitted"
+    });
+    assert.deepEqual(call.request.output_config, { effort: "high" });
+    assert.equal(
+      call.request.messages[1].content[0].signature,
+      "sig-prior-matrix"
+    );
+  }
+}
+
 function tmux(...args) {
   return spawnSync("tmux", args, {
     cwd: ROOT,
@@ -1071,6 +1200,23 @@ async function runDeterministic(options, results, artifactDir, tempRoot) {
         return { artifact: "deterministic-native-pickers.json" };
       }
     );
+    if (
+      selected("claude-code", options.providers) &&
+      selected("anthropic-messages", options.doors)
+    ) {
+      await recordCase(
+        results,
+        {
+          phase: "deterministic",
+          provider: "claude-code",
+          door: "anthropic-thinking"
+        },
+        async () => {
+          await verifyLosslessAnthropicThinking(stack);
+          return {};
+        }
+      );
+    }
     for (const provider of PROVIDERS) {
       if (!selected(provider, options.providers)) continue;
       for (const door of API_DOORS) {

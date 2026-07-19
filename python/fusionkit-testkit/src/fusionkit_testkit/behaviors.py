@@ -87,6 +87,8 @@ class Behavior:
     reply: str | None = None
     tool_calls: list[SimToolCall] = field(default_factory=list)
     reasoning: str | None = None
+    reasoning_signature: str | None = "sim"
+    redacted_thinking: str | None = None
     error: SimError | None = None
     delay_s: float = 0.0
     chunk_delay_s: float = 0.0
@@ -114,6 +116,8 @@ class Behavior:
             "reply": self.reply,
             "tool_calls": [call.to_json() for call in self.tool_calls],
             "reasoning": self.reasoning,
+            "reasoning_signature": self.reasoning_signature,
+            "redacted_thinking": self.redacted_thinking,
             "error": self.error.to_json() if self.error is not None else None,
             "delay_s": self.delay_s,
             "chunk_delay_s": self.chunk_delay_s,
@@ -134,6 +138,8 @@ class Behavior:
             reply=data.get("reply"),
             tool_calls=[SimToolCall.from_json(call) for call in raw_calls],
             reasoning=data.get("reasoning"),
+            reasoning_signature=data.get("reasoning_signature", "sim"),
+            redacted_thinking=data.get("redacted_thinking"),
             error=SimError.from_json(error) if isinstance(error, dict) else None,
             delay_s=float(data.get("delay_s", 0.0)),
             chunk_delay_s=float(data.get("chunk_delay_s", 0.0)),

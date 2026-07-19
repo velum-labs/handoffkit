@@ -92,7 +92,15 @@ test("Anthropic relay strips ingress auth and transparently rotates pooled crede
           type: "message",
           role: "assistant",
           model: "claude-sonnet-4-5",
-          content: [{ type: "text", text: "POOLED_OK" }],
+          content: [
+            {
+              type: "thinking",
+              thinking: "pooled thought",
+              signature: "sig-pooled"
+            },
+            { type: "redacted_thinking", data: "opaque-pooled" },
+            { type: "text", text: "POOLED_OK" }
+          ],
           stop_reason: "end_turn",
           usage: { input_tokens: 1, output_tokens: 1 }
         })
@@ -129,13 +137,64 @@ test("Anthropic relay strips ingress auth and transparently rotates pooled crede
       },
       body: JSON.stringify({
         model: "claude-sonnet-4-5",
-        max_tokens: 32,
-        messages: [{ role: "user", content: "hello" }]
+        max_tokens: 4096,
+        thinking: { type: "adaptive", display: "omitted" },
+        output_config: { effort: "high" },
+        messages: [
+          { role: "user", content: "hello" },
+          {
+            role: "assistant",
+            content: [
+              {
+                type: "thinking",
+                thinking: "prior thought",
+                signature: "sig-prior"
+              },
+              { type: "redacted_thinking", data: "opaque-prior" },
+              {
+                type: "tool_use",
+                id: "tool_1",
+                name: "read",
+                input: { path: "a.ts" }
+              }
+            ]
+          },
+          {
+            role: "user",
+            content: [
+              {
+                type: "tool_result",
+                tool_use_id: "tool_1",
+                content: "source"
+              }
+            ]
+          }
+        ]
       })
     });
     assert.equal(response.status, 200);
-    const payload = (await response.json()) as { content: Array<{ text: string }> };
-    assert.equal(payload.content[0]?.text, "POOLED_OK");
+    const payload = (await response.json()) as {
+      content: Array<{ type: string; text?: string; signature?: string; data?: string }>;
+    };
+    assert.equal(
+      payload.content.find((block) => block.type === "text")?.text,
+      "POOLED_OK"
+    );
+    assert.equal(payload.content[0]?.signature, "sig-pooled");
+    assert.equal(payload.content[1]?.data, "opaque-pooled");
+    const firstBody = seen[0]?.body as {
+      thinking?: unknown;
+      output_config?: unknown;
+      messages?: Array<{ content: unknown }>;
+    };
+    const retriedBody = seen[1]?.body as typeof firstBody;
+    assert.deepEqual(firstBody.thinking, {
+      type: "adaptive",
+      display: "omitted"
+    });
+    assert.deepEqual(firstBody.output_config, { effort: "high" });
+    assert.deepEqual(retriedBody.thinking, firstBody.thinking);
+    assert.deepEqual(retriedBody.messages, firstBody.messages);
     assert.deepEqual(
       seen.map((request) => request.authorization),
       ["Bearer oauth-a", "Bearer oauth-b"]

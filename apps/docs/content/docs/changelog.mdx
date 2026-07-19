@@ -38,6 +38,10 @@ package, and the PyPI FusionKit sidecar package set. Release tags are named
   projects.
 - Hardened `@fusionkit/cli` observability releases by asserting the staged
   Scope standalone server exists and survives the strict package/install smoke.
+- Made Anthropic thinking lossless through translated provider routes:
+  adaptive/manual controls, signed and redacted blocks, streamed signature
+  deltas, stop reasons, and server-tool continuations now round-trip without
+  leaking thinking into answer text.
 - Updated canonical docs, generated API/behavior references, package metadata,
   and testkit fixtures for the completed RouteKit/FusionKit boundary.
 

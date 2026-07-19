@@ -132,6 +132,8 @@ async def test_native_json_dialects_share_behaviors_and_normalize_features(
         Behavior(
             reply="native answer",
             reasoning="careful thought",
+            reasoning_signature="sig-json",
+            redacted_thinking="opaque-json",
             tool_calls=[SimToolCall("call-a", "inspect", '{"path":"README.md"}')],
             prompt_tokens=11,
             completion_tokens=7,
@@ -155,9 +157,12 @@ async def test_native_json_dialects_share_behaviors_and_normalize_features(
     elif dialect == "anthropic-messages":
         assert [block["type"] for block in payload["content"]] == [
             "thinking",
+            "redacted_thinking",
             "text",
             "tool_use",
         ]
+        assert payload["content"][0]["signature"] == "sig-json"
+        assert payload["content"][1]["data"] == "opaque-json"
         assert payload["usage"] == {"input_tokens": 11, "output_tokens": 7}
     elif dialect == "google-generate":
         assert payload["candidates"][0]["content"]["parts"][0]["thought"] is True
@@ -193,6 +198,8 @@ async def test_native_streams_preserve_reasoning_parallel_tools_and_usage(
         Behavior(
             reply="streamed answer",
             reasoning="streamed thought",
+            reasoning_signature="sig-stream",
+            redacted_thinking="opaque-stream",
             tool_calls=[
                 SimToolCall("call-a", "inspect", '{"path":"README.md"}'),
                 SimToolCall("call-b", "search", '{"query":"fusion"}'),
@@ -225,6 +232,21 @@ async def test_native_streams_preserve_reasoning_parallel_tools_and_usage(
         assert frames[-1]["usage"]["total_tokens"] == 22
     elif dialect == "anthropic-messages":
         assert frames[-2]["usage"]["output_tokens"] == 9
+        deltas = [
+            frame.get("delta", {})
+            for frame in frames
+            if frame.get("type") == "content_block_delta"
+        ]
+        assert any(
+            delta.get("type") == "signature_delta"
+            and delta.get("signature") == "sig-stream"
+            for delta in deltas
+        )
+        assert any(
+            frame.get("content_block", {}).get("type") == "redacted_thinking"
+            and frame["content_block"].get("data") == "opaque-stream"
+            for frame in frames
+        )
     elif dialect == "google-generate":
         assert frames[-1]["usageMetadata"]["totalTokenCount"] == 22
     else:

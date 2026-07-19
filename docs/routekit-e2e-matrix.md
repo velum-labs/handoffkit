@@ -20,6 +20,12 @@ as bare Claude names, Codex sees `codex/*` as bare Codex names, duplicate
 namespaced entries are absent from those pickers, and the global OpenAI catalog
 remains namespaced.
 
+The deterministic `anthropic-thinking` case routes both buffered and
+pathologically chunked streaming Messages requests through the canonical
+`claude-code` provider backend. It asserts exact adaptive controls, signed
+assistant-history replay, `signature_delta`, `redacted_thinking`, and separation
+of thinking from answer text.
+
 ## Live, billed mode
 
 Live calls are disabled unless explicitly authorized:

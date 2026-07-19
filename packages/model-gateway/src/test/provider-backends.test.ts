@@ -6,6 +6,7 @@ import {
   CodexResponsesBackend,
   GoogleGenAiBackend
 } from "../provider-backends.js";
+import { anthropicToChat } from "../adapters/anthropic.js";
 import { SseParseError } from "../sse/parse.js";
 
 function sse(
@@ -70,6 +71,250 @@ test("Anthropic egress preserves tools and normalizes the response", async () =>
   } finally {
     globalThis.fetch = original;
   }
+});
+
+test("Anthropic egress preserves native thinking controls, signed history, and buffered blocks", async () => {
+  const original = globalThis.fetch;
+  let request: Request | undefined;
+  globalThis.fetch = async (input, init) => {
+    request = new Request(input, init);
+    return Response.json({
+      id: "msg_think",
+      content: [
+        {
+          type: "thinking",
+          thinking: "native thought",
+          signature: "sig-response"
+        },
+        { type: "redacted_thinking", data: "opaque-redaction" },
+        {
+          type: "tool_use",
+          id: "tool_2",
+          name: "read",
+          input: { path: "b.ts" }
+        }
+      ],
+      stop_reason: "tool_use",
+      usage: { input_tokens: 8, output_tokens: 5 }
+    });
+  };
+  try {
+    const backend = new AnthropicBackend({
+      baseUrl: "https://api.anthropic.test/v1",
+      apiKey: "secret",
+      defaultModel: "claude-test"
+    });
+    const chat = anthropicToChat(
+      {
+        model: "claude-test",
+        max_tokens: 4096,
+        thinking: {
+          type: "enabled",
+          budget_tokens: 2048,
+          display: "summarized"
+        },
+        output_config: { effort: "high" },
+        messages: [
+          { role: "user", content: "inspect" },
+          {
+            role: "assistant",
+            content: [
+              {
+                type: "thinking",
+                thinking: "prior thought",
+                signature: "sig-prior"
+              },
+              { type: "redacted_thinking", data: "prior-redaction" },
+              {
+                type: "tool_use",
+                id: "tool_1",
+                name: "read",
+                input: { path: "a.ts" }
+              }
+            ]
+          },
+          {
+            role: "user",
+            content: [
+              {
+                type: "tool_result",
+                tool_use_id: "tool_1",
+                content: "source"
+              }
+            ]
+          }
+        ],
+        tools: [
+          {
+            name: "read",
+            input_schema: { type: "object" }
+          }
+        ],
+        tool_choice: { type: "tool", name: "read", disable_parallel_tool_use: true }
+      },
+      "claude-test"
+    );
+    const response = await backend.chat(chat);
+    const outbound = (await request?.json()) as {
+      max_tokens: number;
+      thinking: Record<string, unknown>;
+      output_config: Record<string, unknown>;
+      tool_choice: Record<string, unknown>;
+      messages: Array<{ role: string; content: Array<Record<string, unknown>> }>;
+    };
+    assert.equal(outbound.max_tokens, 4096);
+    assert.deepEqual(outbound.thinking, {
+      type: "enabled",
+      budget_tokens: 2048,
+      display: "summarized"
+    });
+    assert.deepEqual(outbound.output_config, { effort: "high" });
+    assert.deepEqual(outbound.tool_choice, {
+      type: "tool",
+      name: "read",
+      disable_parallel_tool_use: true
+    });
+    assert.deepEqual(
+      outbound.messages[1]?.content.map((block) => block.type),
+      ["thinking", "redacted_thinking", "tool_use"]
+    );
+    assert.equal(outbound.messages[1]?.content[0]?.signature, "sig-prior");
+
+    const normalized = (await response.json()) as {
+      choices: Array<{
+        finish_reason: string;
+        message: {
+          content: string | null;
+          reasoning: string;
+          reasoning_details: Array<Record<string, unknown>>;
+        };
+      }>;
+    };
+    assert.equal(normalized.choices[0]?.finish_reason, "tool_calls");
+    assert.equal(normalized.choices[0]?.message.content, null);
+    assert.equal(normalized.choices[0]?.message.reasoning, "native thought");
+    assert.deepEqual(
+      normalized.choices[0]?.message.reasoning_details.map((detail) => detail.type),
+      ["thinking", "redacted_thinking"]
+    );
+    assert.equal(
+      normalized.choices[0]?.message.reasoning_details[0]?.signature,
+      "sig-response"
+    );
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
+test("Anthropic egress maps generic effort within the output budget and rejects impossible budgets", async () => {
+  const requests: Request[] = [];
+  const backend = new AnthropicBackend({
+    baseUrl: "https://api.anthropic.test/v1",
+    apiKey: "secret",
+    defaultModel: "claude-test",
+    transport: async (input, init) => {
+      requests.push(new Request(input, init));
+      return Response.json({
+        content: [{ type: "text", text: "ok" }],
+        stop_reason: "end_turn"
+      });
+    }
+  });
+  const valid = await backend.chat({
+    max_completion_tokens: 5000,
+    reasoning_effort: "high",
+    messages: [{ role: "user", content: "think" }]
+  });
+  assert.equal(valid.status, 200);
+  const outbound = (await requests[0]?.json()) as {
+    max_tokens: number;
+    thinking: { type: string; budget_tokens: number };
+  };
+  assert.equal(outbound.max_tokens, 5000);
+  assert.deepEqual(outbound.thinking, {
+    type: "enabled",
+    budget_tokens: 4999
+  });
+
+  const invalid = await backend.chat({
+    max_completion_tokens: 1024,
+    reasoning_effort: "low",
+    messages: [{ role: "user", content: "think" }]
+  });
+  assert.equal(invalid.status, 400);
+  assert.equal(requests.length, 1, "invalid thinking must fail before transport");
+  assert.match(await invalid.text(), /greater than 1024/);
+});
+
+test("Anthropic egress preserves native stop reasons and stop sequences", async () => {
+  const backend = new AnthropicBackend({
+    baseUrl: "https://api.anthropic.test/v1",
+    apiKey: "secret",
+    defaultModel: "claude-test",
+    transport: async () =>
+      Response.json({
+        content: [{ type: "text", text: "bounded" }],
+        stop_reason: "stop_sequence",
+        stop_sequence: "<END>"
+      })
+  });
+  const response = await backend.chat({
+    messages: [{ role: "user", content: "bounded answer" }]
+  });
+  const canonical = (await response.json()) as {
+    choices: Array<Record<string, unknown>>;
+  };
+  assert.equal(canonical.choices[0]?.finish_reason, "stop");
+  assert.equal(canonical.choices[0]?.anthropic_stop_reason, "stop_sequence");
+  assert.equal(canonical.choices[0]?.anthropic_stop_sequence, "<END>");
+});
+
+test("Anthropic egress replays signed canonical reasoning_details from OpenAI clients", async () => {
+  let request: Request | undefined;
+  const backend = new AnthropicBackend({
+    baseUrl: "https://api.anthropic.test/v1",
+    apiKey: "secret",
+    defaultModel: "claude-test",
+    transport: async (input, init) => {
+      request = new Request(input, init);
+      return Response.json({
+        content: [{ type: "text", text: "done" }],
+        stop_reason: "end_turn"
+      });
+    }
+  });
+  await backend.chat({
+    messages: [
+      {
+        role: "assistant",
+        content: null,
+        reasoning: "prior",
+        reasoning_details: [
+          {
+            type: "thinking",
+            index: 0,
+            thinking: "prior",
+            signature: "sig-canonical"
+          }
+        ],
+        tool_calls: [
+          {
+            id: "tool_1",
+            function: { name: "read", arguments: '{"path":"a.ts"}' }
+          }
+        ]
+      },
+      { role: "tool", tool_call_id: "tool_1", content: "source" }
+    ]
+  });
+  const outbound = (await request?.json()) as {
+    messages: Array<{ content: Array<Record<string, unknown>> }>;
+  };
+  assert.deepEqual(
+    outbound.messages[0]?.content.map((block) => block.type),
+    ["thinking", "tool_use"]
+  );
+  assert.equal(outbound.messages[0]?.content[0]?.signature, "sig-canonical");
 });
 
 test("Google GenAI egress maps content, usage, and API-key auth", async () => {
@@ -214,6 +459,12 @@ test("Anthropic streaming egress preserves tool calls and terminal usage", async
   globalThis.fetch = async () =>
     sse([
       {
+        event: "message_start",
+        data: {
+          message: { usage: { input_tokens: 4 } }
+        }
+      },
+      {
         event: "content_block_start",
         data: {
           index: 0,
@@ -228,7 +479,7 @@ test("Anthropic streaming egress preserves tool calls and terminal usage", async
         event: "message_delta",
         data: {
           delta: { stop_reason: "tool_use" },
-          usage: { input_tokens: 4, output_tokens: 2 }
+          usage: { output_tokens: 2 }
         }
       }
     ], true);
@@ -248,8 +499,87 @@ test("Anthropic streaming egress preserves tool calls and terminal usage", async
     assert.match(text, /\\"path\\":\\"a\.ts\\"/);
     assert.match(text, /"finish_reason":"tool_calls"/);
     assert.match(text, /"input_tokens":4/);
+    assert.match(text, /"output_tokens":2/);
     assert.match(text, /data: \[DONE\]/);
     assert.equal(text.match(/data: \[DONE\]/g)?.length, 1);
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
+test("Anthropic streaming egress preserves thinking lifecycle, signatures, and redactions", async () => {
+  const original = globalThis.fetch;
+  globalThis.fetch = async () =>
+    sse([
+      {
+        event: "content_block_start",
+        data: {
+          index: 0,
+          content_block: { type: "thinking", thinking: "", signature: "" }
+        }
+      },
+      {
+        event: "content_block_delta",
+        data: {
+          index: 0,
+          delta: { type: "thinking_delta", thinking: "native thought" }
+        }
+      },
+      {
+        event: "content_block_delta",
+        data: {
+          index: 0,
+          delta: { type: "signature_delta", signature: "sig-stream" }
+        }
+      },
+      { event: "content_block_stop", data: { index: 0 } },
+      {
+        event: "content_block_start",
+        data: {
+          index: 1,
+          content_block: {
+            type: "redacted_thinking",
+            data: "opaque-stream"
+          }
+        }
+      },
+      { event: "content_block_stop", data: { index: 1 } },
+      {
+        event: "content_block_start",
+        data: { index: 2, content_block: { type: "text", text: "" } }
+      },
+      {
+        event: "content_block_delta",
+        data: { index: 2, delta: { type: "text_delta", text: "answer" } }
+      },
+      { event: "content_block_stop", data: { index: 2 } },
+      {
+        event: "message_delta",
+        data: {
+          delta: { stop_reason: "end_turn" },
+          usage: { input_tokens: 4, output_tokens: 5 }
+        }
+      }
+    ], true);
+  try {
+    const backend = new AnthropicBackend({
+      baseUrl: "https://api.anthropic.test/v1",
+      apiKey: "secret",
+      defaultModel: "claude-test"
+    });
+    const response = await backend.chat({
+      stream: true,
+      messages: [{ role: "user", content: "think" }]
+    });
+    const text = await response.text();
+    assert.match(text, /"reasoning":"native thought"/);
+    assert.match(text, /"phase":"start"/);
+    assert.match(text, /"phase":"signature","signature":"sig-stream"/);
+    assert.match(text, /"phase":"stop"/);
+    assert.match(text, /"type":"redacted_thinking"/);
+    assert.match(text, /"data":"opaque-stream"/);
+    assert.match(text, /"content":"answer"/);
+    assert.match(text, /"finish_reason":"stop"/);
   } finally {
     globalThis.fetch = original;
   }

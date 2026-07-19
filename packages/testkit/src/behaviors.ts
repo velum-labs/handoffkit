@@ -32,6 +32,10 @@ export type SimBehavior = {
   tool_calls?: SimToolCall[];
   /** Out-of-band reasoning (OpenAI `reasoning_content` / Anthropic `thinking`). */
   reasoning?: string | null;
+  /** Opaque Anthropic signature paired with `reasoning` (defaults to `sim`). */
+  reasoning_signature?: string | null;
+  /** Opaque Anthropic `redacted_thinking` payload emitted after reasoning. */
+  redacted_thinking?: string | null;
   error?: SimError | null;
   /** Sleep before answering (latency injection). */
   delay_s?: number;

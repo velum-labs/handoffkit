@@ -202,6 +202,14 @@
       "anchor": "test_routekit_client_parses_streamed_text_reasoning_usage_and_tools"
     },
     {
+      "id": "reasoning.anthropic-lossless",
+      "category": "reasoning",
+      "expectation": "Anthropic thinking controls, signed thinking, signature deltas, and redacted thinking survive native provider translation and tool-loop replay.",
+      "status": "required",
+      "testFile": "packages/model-gateway/src/test/provider-backends.test.ts",
+      "anchor": "Anthropic egress preserves native thinking controls, signed history, and buffered blocks"
+    },
+    {
       "id": "reasoning.candidates-reach-judge",
       "category": "reasoning",
       "expectation": "Each panel candidate's reasoning is preserved as trajectory evidence and reaches the judge prompt.",

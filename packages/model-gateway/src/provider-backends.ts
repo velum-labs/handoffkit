@@ -3,10 +3,20 @@ import { randomId } from "@routekit/runtime";
 import { joinPath } from "./backend.js";
 import type { Backend, BackendRequestOptions } from "./backend.js";
 import { SseDecoder, SseParseError } from "./sse/parse.js";
+import {
+  ANTHROPIC_MESSAGE_CONTENT,
+  ANTHROPIC_REQUEST_METADATA,
+  anthropicReasoningDetailsOf,
+  type AnthropicNativeContentBlock,
+  type AnthropicReasoningDetail,
+  type AnthropicRequestMetadata
+} from "./adapters/openai-chat-wire.js";
 
 type ChatMessage = {
   role?: string;
   content?: unknown;
+  reasoning?: string;
+  reasoning_details?: AnthropicReasoningDetail[];
   tool_calls?: Array<{
     id?: string;
     function?: { name?: string; arguments?: string };
@@ -19,9 +29,14 @@ type ChatBody = {
   messages?: ChatMessage[];
   tools?: Array<{ type?: string; function?: Record<string, unknown> }>;
   tool_choice?: unknown;
+  parallel_tool_calls?: boolean;
   stream?: boolean;
   max_tokens?: number;
+  max_completion_tokens?: number;
   temperature?: number;
+  top_p?: number;
+  top_k?: number;
+  reasoning_effort?: "low" | "medium" | "high" | "xhigh" | "max";
 };
 
 export type ProviderBackendOptions = {
@@ -126,13 +141,19 @@ function copyFailure(response: Response, text: string): Response {
   });
 }
 
-function chatCompletion(model: string, message: Record<string, unknown>, usage?: unknown): unknown {
+function chatCompletion(
+  model: string,
+  message: Record<string, unknown>,
+  usage?: unknown,
+  finishReason = "stop",
+  choiceMetadata: Record<string, unknown> = {}
+): unknown {
   return {
     id: randomId(18, "chatcmpl_"),
     object: "chat.completion",
     created: Math.floor(Date.now() / 1000),
     model,
-    choices: [{ index: 0, message, finish_reason: "stop" }],
+    choices: [{ index: 0, message, finish_reason: finishReason, ...choiceMetadata }],
     ...(usage !== undefined ? { usage } : {})
   };
 }
@@ -200,6 +221,98 @@ function mapSse(
   });
 }
 
+function anthropicNativeContent(message: ChatMessage): AnthropicNativeContentBlock[] | undefined {
+  const content = (message as ChatMessage & {
+    [ANTHROPIC_MESSAGE_CONTENT]?: AnthropicNativeContentBlock[];
+  })[ANTHROPIC_MESSAGE_CONTENT];
+  if (Array.isArray(content)) return content;
+  const details = anthropicReasoningDetailsOf(
+    message.reasoning_details,
+    "message"
+  )
+    .filter(
+      (detail) =>
+        detail.type === "redacted_thinking" ||
+        (detail.type === "thinking" &&
+          typeof detail.signature === "string" &&
+          detail.signature.length > 0)
+    )
+    .sort((a, b) => a.index - b.index);
+  if (details.length === 0) return undefined;
+  const native: AnthropicNativeContentBlock[] = details.map(
+    (detail): AnthropicNativeContentBlock =>
+      detail.type === "redacted_thinking"
+        ? { type: "redacted_thinking", data: detail.data }
+        : {
+            type: "thinking",
+            thinking: detail.thinking ?? "",
+            signature: detail.signature ?? ""
+          }
+  );
+  const text = textContent(message.content);
+  if (text.length > 0) native.push({ type: "text", text });
+  for (const call of message.tool_calls ?? []) {
+    let input: unknown = {};
+    try {
+      input = JSON.parse(call.function?.arguments ?? "{}");
+    } catch {
+      input = { raw: call.function?.arguments ?? "" };
+    }
+    native.push({
+      type: "tool_use",
+      id: call.id ?? randomId(12, "toolu_"),
+      name: call.function?.name ?? "tool",
+      input
+    });
+  }
+  return native;
+}
+
+function anthropicMetadata(body: ChatBody): AnthropicRequestMetadata | undefined {
+  return (body as ChatBody & {
+    [ANTHROPIC_REQUEST_METADATA]?: AnthropicRequestMetadata;
+  })[ANTHROPIC_REQUEST_METADATA];
+}
+
+function anthropicToolChoice(
+  choice: unknown,
+  parallelToolCalls: boolean | undefined
+): Record<string, unknown> | undefined {
+  const disableParallel =
+    parallelToolCalls === false ? { disable_parallel_tool_use: true } : {};
+  if (choice === "auto") return { type: "auto", ...disableParallel };
+  if (choice === "required") return { type: "any", ...disableParallel };
+  if (choice === "none") return { type: "none", ...disableParallel };
+  if (typeof choice !== "object" || choice === null || Array.isArray(choice)) {
+    return parallelToolCalls === false ? { type: "auto", ...disableParallel } : undefined;
+  }
+  const fn = (choice as { function?: { name?: unknown } }).function;
+  return typeof fn?.name === "string"
+    ? { type: "tool", name: fn.name, ...disableParallel }
+    : undefined;
+}
+
+function genericAnthropicThinking(
+  effort: ChatBody["reasoning_effort"],
+  maxTokens: number
+): AnthropicRequestMetadata["thinking"] | undefined {
+  if (effort === undefined || maxTokens <= 1_024) return undefined;
+  const target =
+    effort === "low"
+      ? 1_024
+      : effort === "medium"
+        ? 4_096
+        : effort === "high"
+          ? 8_192
+          : effort === "xhigh"
+            ? 16_384
+            : maxTokens - 1;
+  return {
+    type: "enabled",
+    budget_tokens: Math.max(1_024, Math.min(target, maxTokens - 1))
+  };
+}
+
 function anthropicMessages(body: ChatBody, model: string): Record<string, unknown> {
   const system = (body.messages ?? [])
     .filter((message) => message.role === "system")
@@ -207,6 +320,10 @@ function anthropicMessages(body: ChatBody, model: string): Record<string, unknow
     .join("\n\n");
   const messages = (body.messages ?? []).flatMap((message): Record<string, unknown>[] => {
     if (message.role === "system") return [];
+    const nativeContent = anthropicNativeContent(message);
+    if (message.role === "assistant" && nativeContent !== undefined) {
+      return [{ role: "assistant", content: nativeContent }];
+    }
     if (message.role === "tool") {
       return [
         {
@@ -240,13 +357,23 @@ function anthropicMessages(body: ChatBody, model: string): Record<string, unknow
     }
     return [{ role: message.role === "assistant" ? "assistant" : "user", content }];
   });
+  const maxTokens = body.max_completion_tokens ?? body.max_tokens ?? 4096;
+  const metadata = anthropicMetadata(body);
+  const thinking =
+    metadata?.thinking ?? genericAnthropicThinking(body.reasoning_effort, maxTokens);
+  const toolChoice = anthropicToolChoice(body.tool_choice, body.parallel_tool_calls);
   return {
     model,
     messages,
-    max_tokens: body.max_tokens ?? 4096,
+    max_tokens: maxTokens,
     stream: body.stream === true,
     ...(system.length > 0 ? { system } : {}),
     ...(body.temperature !== undefined ? { temperature: body.temperature } : {}),
+    ...(body.top_p !== undefined ? { top_p: body.top_p } : {}),
+    ...(body.top_k !== undefined ? { top_k: body.top_k } : {}),
+    ...(thinking !== undefined ? { thinking } : {}),
+    ...(metadata?.output_config != null ? { output_config: metadata.output_config } : {}),
+    ...(toolChoice !== undefined ? { tool_choice: toolChoice } : {}),
     ...(body.tools !== undefined
       ? {
           tools: body.tools.flatMap((tool) =>
@@ -265,6 +392,32 @@ function anthropicMessages(body: ChatBody, model: string): Record<string, unknow
   };
 }
 
+function anthropicThinkingValidationError(body: ChatBody): string | undefined {
+  const maxTokens = body.max_completion_tokens ?? body.max_tokens ?? 4096;
+  const exact = anthropicMetadata(body)?.thinking;
+  if (exact?.type === "enabled") {
+    if (
+      !Number.isInteger(exact.budget_tokens) ||
+      exact.budget_tokens < 1_024 ||
+      exact.budget_tokens >= maxTokens
+    ) {
+      return `thinking.budget_tokens must be an integer >= 1024 and less than max_tokens (${maxTokens})`;
+    }
+  } else if (exact === undefined && body.reasoning_effort !== undefined && maxTokens <= 1_024) {
+    return "reasoning_effort requires max_tokens greater than 1024 for Anthropic extended thinking";
+  }
+  return undefined;
+}
+
+function openAiFinishReasonFromAnthropic(stopReason: unknown): string {
+  if (stopReason === "tool_use") return "tool_calls";
+  if (stopReason === "max_tokens" || stopReason === "model_context_window_exceeded") {
+    return "length";
+  }
+  if (stopReason === "refusal") return "content_filter";
+  return "stop";
+}
+
 export class AnthropicBackend extends HttpProviderBackend {
   chat(body: unknown, signal?: AbortSignal): Promise<Response> {
     return this.#chat(bodyRecord(body), signal);
@@ -272,6 +425,13 @@ export class AnthropicBackend extends HttpProviderBackend {
 
   async #chat(body: ChatBody, signal?: AbortSignal): Promise<Response> {
     const model = body.model ?? this.defaultModel ?? "";
+    const thinkingError = anthropicThinkingValidationError(body);
+    if (thinkingError !== undefined) {
+      return jsonResponse(
+        { error: { type: "invalid_request_error", message: thinkingError } },
+        400
+      );
+    }
     const response = await this.transport(joinPath(this.baseUrl, "/messages"), {
       method: "POST",
       headers: {
@@ -285,11 +445,28 @@ export class AnthropicBackend extends HttpProviderBackend {
     });
     if (!response.ok) return copyFailure(response, await response.text());
     if (body.stream === true) {
+      const blockTypes = new Map<number, string>();
       return mapSse(response, (event, data) => {
         const item = data as Record<string, unknown>;
         const delta = item.delta as Record<string, unknown> | undefined;
+        if (event === "message_start") {
+          const message = item.message as Record<string, unknown> | undefined;
+          return message?.usage === undefined
+            ? []
+            : [
+                {
+                  id: randomId(18, "chatcmpl_"),
+                  object: "chat.completion.chunk",
+                  model,
+                  choices: [],
+                  usage: normalizedOpenAiUsage(message.usage)
+                }
+              ];
+        }
         if (event === "content_block_start") {
           const block = item.content_block as Record<string, unknown> | undefined;
+          const sourceIndex = typeof item.index === "number" ? item.index : 0;
+          if (typeof block?.type === "string") blockTypes.set(sourceIndex, block.type);
           if (block?.type === "tool_use") {
             return [
               {
@@ -315,13 +492,67 @@ export class AnthropicBackend extends HttpProviderBackend {
               }
             ];
           }
+          if (block?.type === "thinking") {
+            return [
+              {
+                id: randomId(18, "chatcmpl_"),
+                object: "chat.completion.chunk",
+                model,
+                choices: [
+                  {
+                    index: 0,
+                    delta: {
+                      reasoning_details: [
+                        {
+                          type: "thinking",
+                          index: sourceIndex,
+                          phase: "start",
+                          signature:
+                            typeof block.signature === "string" ? block.signature : ""
+                        }
+                      ]
+                    },
+                    finish_reason: null
+                  }
+                ]
+              }
+            ];
+          }
+          if (
+            block?.type === "redacted_thinking" &&
+            typeof block.data === "string"
+          ) {
+            return [
+              {
+                id: randomId(18, "chatcmpl_"),
+                object: "chat.completion.chunk",
+                model,
+                choices: [
+                  {
+                    index: 0,
+                    delta: {
+                      reasoning_details: [
+                        {
+                          type: "redacted_thinking",
+                          index: sourceIndex,
+                          phase: "block",
+                          data: block.data
+                        }
+                      ]
+                    },
+                    finish_reason: null
+                  }
+                ]
+              }
+            ];
+          }
         }
         if (event === "content_block_delta") {
-          const content =
-            delta?.type === "text_delta" || delta?.type === "thinking_delta"
-              ? delta.text ?? delta.thinking
-              : undefined;
+          const sourceIndex = typeof item.index === "number" ? item.index : 0;
+          const content = delta?.type === "text_delta" ? delta.text : undefined;
           const toolArguments = delta?.type === "input_json_delta" ? delta.partial_json : undefined;
+          const reasoning = delta?.type === "thinking_delta" ? delta.thinking : undefined;
+          const signature = delta?.type === "signature_delta" ? delta.signature : undefined;
           return [
             {
               id: randomId(18, "chatcmpl_"),
@@ -340,12 +571,63 @@ export class AnthropicBackend extends HttpProviderBackend {
                             }
                           ]
                         }
-                      : { content },
+                      : reasoning !== undefined
+                        ? {
+                            reasoning,
+                            reasoning_details: [
+                              {
+                                type: "thinking",
+                                index: sourceIndex,
+                                phase: "delta",
+                                thinking: reasoning
+                              }
+                            ]
+                          }
+                        : signature !== undefined
+                          ? {
+                              reasoning_details: [
+                                {
+                                  type: "thinking",
+                                  index: sourceIndex,
+                                  phase: "signature",
+                                  signature
+                                }
+                              ]
+                            }
+                          : { content },
                   finish_reason: null
                 }
               ]
             }
           ];
+        }
+        if (event === "content_block_stop") {
+          const sourceIndex = typeof item.index === "number" ? item.index : 0;
+          if (blockTypes.get(sourceIndex) === "thinking") {
+            return [
+              {
+                id: randomId(18, "chatcmpl_"),
+                object: "chat.completion.chunk",
+                model,
+                choices: [
+                  {
+                    index: 0,
+                    delta: {
+                      reasoning_details: [
+                        {
+                          type: "thinking",
+                          index: sourceIndex,
+                          phase: "stop"
+                        }
+                      ]
+                    },
+                    finish_reason: null
+                  }
+                ]
+              }
+            ];
+          }
+          return [];
         }
         if (event === "message_delta") {
           const stopReason = delta?.stop_reason;
@@ -358,12 +640,13 @@ export class AnthropicBackend extends HttpProviderBackend {
                 {
                   index: 0,
                   delta: {},
-                  finish_reason:
-                    stopReason === "tool_use"
-                      ? "tool_calls"
-                      : stopReason === "max_tokens"
-                        ? "length"
-                        : "stop"
+                  finish_reason: openAiFinishReasonFromAnthropic(stopReason),
+                  ...(typeof stopReason === "string"
+                    ? { anthropic_stop_reason: stopReason }
+                    : {}),
+                  ...(typeof delta?.stop_sequence === "string"
+                    ? { anthropic_stop_sequence: delta.stop_sequence }
+                    : {})
                 }
               ],
               ...(item.usage !== undefined
@@ -378,11 +661,35 @@ export class AnthropicBackend extends HttpProviderBackend {
     const payload = (await response.json()) as {
       content?: Array<Record<string, unknown>>;
       usage?: unknown;
+      stop_reason?: unknown;
+      stop_sequence?: unknown;
     };
     const content = (payload.content ?? [])
-      .filter((block) => block.type === "text" || block.type === "thinking")
-      .map((block) => String(block.text ?? block.thinking ?? ""))
+      .filter((block) => block.type === "text")
+      .map((block) => String(block.text ?? ""))
       .join("");
+    const reasoning = (payload.content ?? [])
+      .filter((block) => block.type === "thinking")
+      .map((block) => String(block.thinking ?? ""))
+      .join("");
+    const reasoningDetails = (payload.content ?? []).flatMap(
+      (block, index): AnthropicReasoningDetail[] => {
+        if (block.type === "thinking") {
+          return [
+            {
+              type: "thinking",
+              index,
+              thinking: String(block.thinking ?? ""),
+              signature: typeof block.signature === "string" ? block.signature : ""
+            }
+          ];
+        }
+        if (block.type === "redacted_thinking" && typeof block.data === "string") {
+          return [{ type: "redacted_thinking", index, data: block.data }];
+        }
+        return [];
+      }
+    );
     const toolCalls = (payload.content ?? []).flatMap((block, index) =>
       block.type === "tool_use"
         ? [
@@ -400,10 +707,23 @@ export class AnthropicBackend extends HttpProviderBackend {
         model,
         {
           role: "assistant",
-          content,
+          content: content.length > 0 ? content : null,
+          ...(reasoning.length > 0 ? { reasoning } : {}),
+          ...(reasoningDetails.length > 0
+            ? { reasoning_details: reasoningDetails }
+            : {}),
           ...(toolCalls.length > 0 ? { tool_calls: toolCalls } : {})
         },
-        normalizedOpenAiUsage(payload.usage)
+        normalizedOpenAiUsage(payload.usage),
+        openAiFinishReasonFromAnthropic(payload.stop_reason),
+        {
+          ...(typeof payload.stop_reason === "string"
+            ? { anthropic_stop_reason: payload.stop_reason }
+            : {}),
+          ...(typeof payload.stop_sequence === "string"
+            ? { anthropic_stop_sequence: payload.stop_sequence }
+            : {})
+        }
       ),
       200,
       response.headers
