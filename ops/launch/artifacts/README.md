@@ -2,7 +2,7 @@
 
 | ID | File | Gate | Owner role | Replaces |
 |----|------|------|------------|----------|
-| L01 | L01-launch-contract.md | 0 | Shared | A01, A10 |
+| L01 | L01-launch-contract.md | 0 | Shared | A01 (A10 scorecard dropped) |
 | L02 | L02-customer-messaging.md | 0 | CEO | A02, A03 |
 | L03 | L03-brand-license-commercial.md | 0 | CEO | A04, A06 |
 | L04 | L04-architecture-threat-model.md | 0 | CTO | A07, A08 |

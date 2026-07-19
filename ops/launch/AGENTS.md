@@ -44,7 +44,7 @@ L06–L11 Notion pages exist; create Linear issues for them when entering those 
 
 | ID | Name | Gate | Owner | Merges old IDs |
 |----|------|------|-------|----------------|
-| L01 | Launch Contract | 0 | Shared | A01, A10 |
+| L01 | Launch Contract | 0 | Shared | A01 (A10 scorecard dropped) |
 | L02 | Customer & Messaging | 0 | CEO | A02, A03 |
 | L03 | Brand, License & Commercial | 0 | CEO | A04, A06 |
 | L04 | Architecture & Threat Model | 0 | CTO | A07, A08 |
