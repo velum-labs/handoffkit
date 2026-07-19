@@ -22,12 +22,10 @@
 4. Attach evidence links.
 5. Move status: Not started → Draft → In review → Approved.
 
-## Notion migration
+## RouteKit runtime (2026-07-19)
 
-Done for RouteKit Public Launch (2026-07-19):
-
-- L01–L11 created and linked to the RouteKit launch dossier.
-- A01–A22 removed from the Launch Artifacts database (moved under a disposable
-  folder for one-click Delete — Notion MCP cannot trash pages).
-- Gate 0 Linear issues (OPS-66, OPS-64, OPS-68, ENG-638, ENG-641) link to L01–L05.
-- Do not keep superseded artifact rows; delete obsolete pages instead.
+- Notion: L01–L11 seeded and linked to the RouteKit launch dossier.
+- Linear: initiative with **two** projects (Product & Engineering, GTM & Customer).
+  Gates are tracked in Notion, not a third project.
+- Gate 0 issues: OPS-66→L01, OPS-64→L02, OPS-68→L03, ENG-638→L04, ENG-641→L05.
+- Delete obsolete artifact pages; do not keep superseded rows.
