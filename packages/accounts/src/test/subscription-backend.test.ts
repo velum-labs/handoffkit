@@ -45,7 +45,10 @@ test("Claude account backend serves OpenAI chat with managed auth and normalized
   try {
     const response = await backend.chat({
       model: "claude-sonnet-4-5",
-      messages: [{ role: "user", content: "hello" }]
+      messages: [
+        { role: "system", content: "Follow the client system instructions." },
+        { role: "user", content: "hello" }
+      ]
     });
     const payload = (await response.json()) as {
       choices: Array<{ message: { content: string } }>;
@@ -56,6 +59,14 @@ test("Claude account backend serves OpenAI chat with managed auth and normalized
     assert.match(
       JSON.stringify(seenBody?.system),
       /official CLI for Claude/
+    );
+    assert.doesNotMatch(
+      JSON.stringify(seenBody?.system),
+      /client system instructions/
+    );
+    assert.match(
+      JSON.stringify(seenBody?.messages),
+      /client system instructions/
     );
     assert.equal(payload.choices[0]?.message.content, "POOLED");
     assert.deepEqual(
@@ -95,17 +106,25 @@ test("Codex account backend translates OpenAI chat through the managed Responses
   });
   const originalFetch = globalThis.fetch;
   let seenHeaders: Headers | undefined;
+  let seenBody: Record<string, unknown> | undefined;
   globalThis.fetch = async (_url, init) => {
     seenHeaders = new Headers(init?.headers);
-    return Response.json({
-      output: [
-        {
-          type: "message",
-          content: [{ type: "output_text", text: "CODEX_POOLED" }]
-        }
-      ],
-      usage: { input_tokens: 4, output_tokens: 3, total_tokens: 7 }
-    });
+    seenBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
+    const completed = {
+      response: {
+        output: [
+          {
+            type: "message",
+            content: [{ type: "output_text", text: "CODEX_POOLED" }]
+          }
+        ],
+        usage: { input_tokens: 4, output_tokens: 3, total_tokens: 7 }
+      }
+    };
+    return new Response(
+      `event: response.completed\ndata: ${JSON.stringify(completed)}\n\n`,
+      { headers: { "content-type": "text/event-stream" } }
+    );
   };
   try {
     const response = await backend.chat({
@@ -121,6 +140,7 @@ test("Codex account backend translates OpenAI chat through the managed Responses
       "Bearer eyJhbGciOiJub25lIn0.eyJleHAiOjk5OTk5OTk5OTl9."
     );
     assert.equal(seenHeaders?.get("chatgpt-account-id"), "acct-primary");
+    assert.equal(seenBody?.stream, true);
     assert.equal(payload.choices[0]?.message.content, "CODEX_POOLED");
     assert.equal(payload.usage.prompt_tokens, 4);
     assert.equal(payload.usage.completion_tokens, 3);

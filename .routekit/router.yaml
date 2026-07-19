@@ -1,7 +1,4 @@
 providers:
-  openrouter:
-    strategy: capacity_weighted
-    switchThreshold: 0.9
   codex:
     strategy: capacity_weighted
     switchThreshold: 0.9

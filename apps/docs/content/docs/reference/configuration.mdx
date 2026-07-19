@@ -84,16 +84,16 @@ defaultModel: codex/gpt-5.5
 ```
 
 ```bash
-routekit accounts add claude-code --name personal
-routekit accounts add claude-code --name work
+routekit accounts login claude-code --name personal
+routekit accounts login claude-code --name work
 routekit models list
 routekit claude claude-code/claude-sonnet-4-5
 ```
 
-The first `routekit accounts add` enables that provider in the effective router
-config. RouteKit discovers each healthy member, publishes the union, and routes
-a model only to accounts that advertise it. Quotas, refresh, cooldowns, and
-reset windows remain per account.
+The first successful managed login or explicit `routekit accounts add` import
+enables that provider in the effective router config. RouteKit discovers each
+healthy member, publishes the union, and routes a model only to accounts that
+advertise it. Quotas, refresh, cooldowns, and reset windows remain per account.
 
 Inline API keys and authorization tokens are rejected. Omitting a model uses
 the configured default/first live model; an explicit unknown or unnamespaced ID

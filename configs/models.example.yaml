@@ -14,15 +14,15 @@ providers:
   #   routekit providers add cliproxy
   cliproxy: {}
 
-  # Import any number of named official CLI logins before serving:
-  #   routekit accounts add claude-code --name personal
-  #   routekit accounts add claude-code --name work
+  # Log in any number of named accounts through isolated official CLI profiles:
+  #   routekit accounts login claude-code --name personal
+  #   routekit accounts login claude-code --name work
   claude-code:
     strategy: capacity_weighted
     switchThreshold: 0.9
 
-  #   routekit accounts add codex --name personal
-  #   routekit accounts add codex --name work
+  #   routekit accounts login codex --name personal
+  #   routekit accounts login codex --name work
   codex:
     strategy: capacity_weighted
     switchThreshold: 0.9

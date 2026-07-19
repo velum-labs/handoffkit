@@ -30,6 +30,8 @@ export type ProviderBackendOptions = {
   defaultModel?: string;
   headers?: Record<string, string>;
   transport?: ProviderTransport;
+  forceStream?: boolean;
+  omitSampling?: boolean;
 };
 
 export type ProviderTransport = (url: string, init: RequestInit) => Promise<Response>;
@@ -585,7 +587,11 @@ export class GoogleGenAiBackend extends HttpProviderBackend {
   }
 }
 
-function responsesRequest(body: ChatBody, model: string): Record<string, unknown> {
+function responsesRequest(
+  body: ChatBody,
+  model: string,
+  options: { forceStream: boolean; omitSampling: boolean }
+): Record<string, unknown> {
   const input = (body.messages ?? []).flatMap((message): Record<string, unknown>[] => {
     if (message.role === "tool") {
       return [
@@ -622,10 +628,14 @@ function responsesRequest(body: ChatBody, model: string): Record<string, unknown
   return {
     model,
     input,
-    stream: body.stream === true,
+    stream: options.forceStream || body.stream === true,
     store: false,
-    ...(body.max_tokens !== undefined ? { max_output_tokens: body.max_tokens } : {}),
-    ...(body.temperature !== undefined ? { temperature: body.temperature } : {}),
+    ...(!options.omitSampling && body.max_tokens !== undefined
+      ? { max_output_tokens: body.max_tokens }
+      : {}),
+    ...(!options.omitSampling && body.temperature !== undefined
+      ? { temperature: body.temperature }
+      : {}),
     ...(body.tool_choice !== undefined ? { tool_choice: body.tool_choice } : {}),
     ...(body.tools !== undefined
       ? {
@@ -685,10 +695,14 @@ function responsesOutput(payload: Record<string, unknown>): Record<string, unkno
 
 export class CodexResponsesBackend extends HttpProviderBackend {
   readonly #accountId: string | undefined;
+  readonly #forceStream: boolean;
+  readonly #omitSampling: boolean;
 
   constructor(options: ProviderBackendOptions & { accountId?: string }) {
     super(options);
     this.#accountId = options.accountId;
+    this.#forceStream = options.forceStream ?? false;
+    this.#omitSampling = options.omitSampling ?? false;
   }
 
   chat(body: unknown, signal?: AbortSignal): Promise<Response> {
@@ -705,7 +719,12 @@ export class CodexResponsesBackend extends HttpProviderBackend {
         ...(this.#accountId !== undefined ? { "chatgpt-account-id": this.#accountId } : {}),
         ...this.extraHeaders
       },
-      body: JSON.stringify(responsesRequest(body, model)),
+      body: JSON.stringify(
+        responsesRequest(body, model, {
+          forceStream: this.#forceStream,
+          omitSampling: this.#omitSampling
+        })
+      ),
       ...(signal !== undefined ? { signal } : {})
     });
     if (!response.ok) return copyFailure(response, await response.text());
@@ -815,6 +834,45 @@ export class CodexResponsesBackend extends HttpProviderBackend {
         }
         return [];
       });
+    }
+    if (this.#forceStream) {
+      const decoder = new SseDecoder();
+      const events = [
+        ...decoder.feed(await response.text()),
+        ...decoder.flush()
+      ];
+      for (let index = events.length - 1; index >= 0; index -= 1) {
+        const event = events[index];
+        if (event?.event !== "response.completed") continue;
+        let completed: unknown;
+        try {
+          completed = JSON.parse(event.data);
+        } catch {
+          throw new SseParseError(
+            "provider SSE event contained malformed JSON",
+            event.data.slice(0, 200)
+          );
+        }
+        if (
+          typeof completed === "object" &&
+          completed !== null &&
+          typeof (completed as Record<string, unknown>).response === "object" &&
+          (completed as Record<string, unknown>).response !== null
+        ) {
+          const payload = (completed as { response: Record<string, unknown> })
+            .response;
+          return jsonResponse(
+            chatCompletion(
+              model,
+              responsesOutput(payload),
+              normalizedOpenAiUsage(payload.usage)
+            )
+          );
+        }
+      }
+      throw new SseParseError(
+        "provider SSE stream ended without response.completed"
+      );
     }
     const payload = (await response.json()) as Record<string, unknown>;
     return jsonResponse(

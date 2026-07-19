@@ -80,7 +80,11 @@ async function credentialBlob(
 ): Promise<Record<string, unknown>> {
   let text: string | undefined;
   if (existsSync(path)) text = readFileSync(path, "utf8");
-  if (text === undefined && mode === "claude-code") {
+  if (
+    text === undefined &&
+    mode === "claude-code" &&
+    resolve(path) === resolve(defaultSubscriptionCredentialPath(mode))
+  ) {
     const service = subscriptionInfo(mode).keychainService;
     if (service !== undefined) text = await readMacosKeychain(service);
   }

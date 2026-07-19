@@ -50,7 +50,8 @@ Set `ROUTEKIT_DEV_SKIP_BUILD=1` after a build for a faster local check.
 | `codex`, `claude`, `cursor`, `opencode` | Launch one coding tool against an embedded gateway or `--gateway-url`; the optional argument is a namespaced `provider/model` ID. |
 | `providers add`, `remove`, `status` | Manage explicit providers and run live discovery without printing credentials. |
 | `models list` | Discover and list the live namespaced model catalog. |
-| `accounts add`, `remove`, `list`, `status` | Enroll any number of named `claude-code` and `codex` subscription accounts. The first account enables that provider. |
+| `accounts login` | Run an isolated official Claude Code or Codex login, enroll the credential into the native pool, and enable that provider. |
+| `accounts add`, `remove`, `list`, `status` | Import the current official CLI login or manage enrolled native subscription accounts. |
 | `accounts serve`, `stop` | Advanced mode: expose subscription pools as a separate external proxy. Normal provider routing does not require it. |
 | `accounts cliproxy install`, `login`, `serve`, `status` | Manage RouteKit's pinned CLIProxyAPI integration. |
 | `config path`, `show`, `init`, `edit`, `migrate` | Locate, validate, create, edit, or explicitly import RouteKit router state. |
@@ -80,6 +81,12 @@ providers:
     switchThreshold: 0.9
 defaultModel: codex/gpt-5.5
 ```
+
+The default enrollment path is
+`routekit accounts login <kind> --name <label>`. RouteKit gives the official provider CLI a private temporary profile,
+atomically imports the resulting credential, and removes the temporary profile
+without changing the user's normal login. `accounts add` is the explicit
+current-login import path.
 
 API providers infer their key and optional base URL from registry-defined
 environment variables. Subscription providers discover the union of models

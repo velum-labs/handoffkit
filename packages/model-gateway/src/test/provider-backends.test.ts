@@ -160,6 +160,55 @@ test("Codex Responses egress preserves subscription auth and tool output", async
   }
 });
 
+test("Codex subscription egress forces SSE and omits unsupported sampling", async () => {
+  const original = globalThis.fetch;
+  let request: Request | undefined;
+  globalThis.fetch = async (input, init) => {
+    request = new Request(input, init);
+    return sse([
+      {
+        event: "response.completed",
+        data: {
+          response: {
+            output: [
+              {
+                type: "message",
+                content: [{ type: "output_text", text: "done" }]
+              }
+            ],
+            usage: { input_tokens: 3, output_tokens: 1, total_tokens: 4 }
+          }
+        }
+      }
+    ]);
+  };
+  try {
+    const backend = new CodexResponsesBackend({
+      baseUrl: "https://chatgpt.test/backend-api/codex",
+      apiKey: "oauth",
+      defaultModel: "codex-test",
+      forceStream: true,
+      omitSampling: true
+    });
+    const response = await backend.chat({
+      stream: false,
+      max_tokens: 16,
+      temperature: 0,
+      messages: [{ role: "user", content: "reply" }]
+    });
+    const outbound = (await request?.json()) as Record<string, unknown>;
+    assert.equal(outbound.stream, true);
+    assert.equal("max_output_tokens" in outbound, false);
+    assert.equal("temperature" in outbound, false);
+    const body = (await response.json()) as {
+      choices: Array<{ message: { content: string } }>;
+    };
+    assert.equal(body.choices[0]?.message.content, "done");
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
 test("Anthropic streaming egress preserves tool calls and terminal usage", async () => {
   const original = globalThis.fetch;
   globalThis.fetch = async () =>

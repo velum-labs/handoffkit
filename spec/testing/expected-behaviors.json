@@ -554,6 +554,14 @@
       "anchor": "accounts add canonically enrolls and activates the selected config"
     },
     {
+      "id": "accounts.managed-login-isolation",
+      "category": "accounts",
+      "expectation": "Native account login isolates official CLI authentication, scrubs unrelated credentials, stores provider credentials privately, activates routing, and removes temporary state.",
+      "status": "required",
+      "testFile": "packages/routekit-cli/src/test/accounts-command.test.ts",
+      "anchor": "accounts login isolates Codex auth, enrolls it, activates the provider, and cleans up"
+    },
+    {
       "id": "accounts.native-backend-translation",
       "category": "accounts",
       "expectation": "Managed Claude and Codex subscriptions translate OpenAI Chat Completions, inject pool credentials only at egress, and normalize usage.",

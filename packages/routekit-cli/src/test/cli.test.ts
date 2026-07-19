@@ -63,7 +63,7 @@ test("independent command surface is complete and has no compatibility aliases",
   );
   assert.deepEqual(
     command(program, "accounts").commands.map((entry) => entry.name()).sort(),
-    ["add", "cliproxy", "list", "remove", "serve", "status", "stop"]
+    ["add", "cliproxy", "list", "login", "remove", "serve", "status", "stop"]
   );
   assert.deepEqual(
     command(program, "accounts")

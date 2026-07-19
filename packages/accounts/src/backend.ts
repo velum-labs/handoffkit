@@ -41,6 +41,27 @@ function modelFromRequest(body: unknown): string | undefined {
   }
 }
 
+function claudeSubscriptionMessages(
+  messages: readonly unknown[],
+  spoofSystemPrompt: string
+): unknown[] {
+  return [
+    { role: "system", content: spoofSystemPrompt },
+    ...messages.flatMap((message) => {
+      if (typeof message !== "object" || message === null || Array.isArray(message)) {
+        return [message];
+      }
+      const record = message as Record<string, unknown>;
+      if (record.role !== "system" && record.role !== "developer") return [message];
+      if (record.content === spoofSystemPrompt) return [];
+      // Claude subscription OAuth accepts only Claude Code's identity prompt in
+      // the Anthropic `system` field. Preserve caller instructions in the
+      // conversation instead of triggering its generic 429 compatibility guard.
+      return [{ ...record, role: "user" }];
+    })
+  ];
+}
+
 function withSubscriptionInstructions(
   mode: SubscriptionMode,
   body: unknown
@@ -53,7 +74,10 @@ function withSubscriptionInstructions(
   const messages = Array.isArray(input.messages) ? input.messages : [];
   return {
     ...input,
-    messages: [{ role: "system", content: instructions }, ...messages]
+    messages:
+      mode === "claude-code"
+        ? claudeSubscriptionMessages(messages, instructions)
+        : [{ role: "system", content: instructions }, ...messages]
   };
 }
 
@@ -94,6 +118,9 @@ export class SubscriptionAccountBackend implements Backend, ProviderSource {
     const backendOptions = {
       baseUrl: backendBaseUrl(mode),
       apiKey: "",
+      ...(mode === "codex"
+        ? { forceStream: true, omitSampling: true }
+        : {}),
       ...(this.defaultModel !== undefined
         ? { defaultModel: this.defaultModel }
         : {}),

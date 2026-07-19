@@ -12,19 +12,18 @@ Install the independent CLI:
 ```bash
 npm install -g @routekit/cli
 routekit config init
-claude
-routekit accounts add claude-code --name personal
-routekit accounts add claude-code --name work
+routekit accounts login claude-code --name personal
+routekit accounts login claude-code --name work
 routekit providers status claude-code
 routekit models list
 routekit serve
 ```
 
-The canonical subscription kinds are `claude-code` and `codex`. Use
-`codex login` followed by `routekit accounts add codex --name <label>` for each
-Codex subscription. Adding an account imports the current official CLI login;
-the first enrollment enables that provider. The Claude Code tool command
-remains `routekit claude [provider/model]`.
+The canonical subscription kinds are `claude-code` and `codex`.
+`accounts login` runs the official provider login in private temporary state, imports the
+credential, and enables that provider without replacing the user's normal CLI
+login. Use `accounts add` only to import the current official CLI login. The
+Claude Code tool command remains `routekit claude [provider/model]`.
 
 Pool policy lives on the provider:
 

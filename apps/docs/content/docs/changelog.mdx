@@ -16,6 +16,9 @@ package, and the PyPI FusionKit sidecar package set. Release tags are named
   independent `routekit` CLI. RouteKit now owns explicit provider configuration,
   live namespaced model catalogs, credentials, multi-subscription account
   pooling, proxies, provider egress, and direct coding-tool launches.
+- Added `routekit accounts login` for isolated, provider-supported Claude Code
+  and Codex authentication that enrolls directly into RouteKit's native pool
+  without replacing the user's normal official-CLI login.
 - Made `@fusionkit/cli` a Fusion-only front door over live namespaced RouteKit
   model IDs. Removed Fusion forwarding surfaces for account/proxy management,
   install/uninstall, provider/model/key flags, and direct/single-model mode.

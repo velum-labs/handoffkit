@@ -88,7 +88,8 @@ export async function startRouter(options: StartRouterOptions): Promise<RunningR
         Object.values(accountSets).map(async (accountSet) => await accountSet.close())
       );
       throw new Error(
-        `provider "${kind}" requires an enrolled account; run \`routekit accounts add ${kind}\``
+        `provider "${kind}" requires an enrolled account; ` +
+          `run \`routekit accounts login ${kind} --name <label>\``
       );
     }
   }

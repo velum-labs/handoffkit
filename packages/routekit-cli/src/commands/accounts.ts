@@ -16,10 +16,12 @@ import {
   accountsStatus,
   addAccount,
   listAccounts,
+  loginAccount,
   removeAccount,
   serveAccounts,
   stopAccounts
 } from "../accounts.js";
+import type { AccountListEntry } from "../accounts.js";
 import { updateEffectiveRouterConfig } from "../config.js";
 import { waitForShutdown } from "../serve.js";
 
@@ -29,6 +31,20 @@ function record(value: unknown): Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : {};
+}
+
+function activateAccount(command: Command, result: AccountListEntry): string {
+  return updateEffectiveRouterConfig(
+    { configPath: configOverride(command) },
+    (draft) => {
+      const providers = record(draft.providers);
+      const policy = record(providers[result.subscriptionKind]);
+      draft.providers = {
+        ...providers,
+        [result.subscriptionKind]: { ...policy }
+      };
+    }
+  ).path;
 }
 
 function registerCliproxy(accounts: Command): void {
@@ -143,6 +159,39 @@ export function registerAccounts(program: Command): void {
   const accounts = program.command("accounts").description("manage pooled provider subscriptions");
 
   accounts
+    .command("login <subscription-kind>")
+    .description("log in an isolated official CLI profile and enroll it")
+    .requiredOption("--name <name>", "account label")
+    .action(
+      async (
+        subscriptionKind: string,
+        options: { name: string },
+        command: Command
+      ) => {
+        const ctx = contextFor(command);
+        if (ctx.json || ctx.noInput) {
+          throw new Error(
+            "`accounts login` is interactive and does not support --json or --no-input"
+          );
+        }
+        loaded(command);
+        const result = await loginAccount(subscriptionKind, options.name);
+        let configPath: string;
+        try {
+          configPath = activateAccount(command, result);
+        } catch (error) {
+          removeAccount(result.subscriptionKind, result.label);
+          throw error;
+        }
+        ctx.presenter.success(
+          `logged in, enrolled, and enabled ${result.subscriptionKind}/${result.label}`
+        );
+        ctx.presenter.note(`account: ${result.path}`);
+        ctx.presenter.note(`config: ${configPath}`);
+      }
+    );
+
+  accounts
     .command("add <subscription-kind>")
     .description("enroll the current official CLI login")
     .option("--name <name>", "account label")
@@ -150,21 +199,11 @@ export function registerAccounts(program: Command): void {
       const ctx = contextFor(command);
       loaded(command);
       const result = await addAccount(subscriptionKind, options.name);
-      const updated = updateEffectiveRouterConfig(
-        { configPath: configOverride(command) },
-        (draft) => {
-          const providers = record(draft.providers);
-          const policy = record(providers[result.subscriptionKind]);
-          draft.providers = {
-            ...providers,
-            [result.subscriptionKind]: { ...policy }
-          };
-        }
-      );
+      const configPath = activateAccount(command, result);
       const output = {
         ...result,
         activated: true,
-        configPath: updated.path
+        configPath
       };
       if (ctx.json) {
         ctx.emit(output);
@@ -172,7 +211,7 @@ export function registerAccounts(program: Command): void {
         ctx.presenter.success(
           `enrolled and enabled ${result.subscriptionKind} account at ${result.path}`
         );
-        ctx.presenter.note(`config: ${updated.path}`);
+        ctx.presenter.note(`config: ${configPath}`);
       }
     });
 

@@ -10,9 +10,12 @@ and tracks which accounts are eligible for each model.
 
 The canonical subscription kinds are `claude-code` and `codex`. The RouteKit
 tool command is still `routekit claude`; tool names and subscription kinds are
-separate contracts. `routekit accounts add <kind> --name <label>` imports the
-current official CLI login. Any number of named accounts may join a provider;
-the first enrollment enables that provider in the effective router config.
+separate contracts. The RouteKit CLI's default
+`accounts login <kind> --name <label>` flow runs the official provider login in
+isolated temporary state before enrolling it. `accounts add` explicitly imports
+the current official CLI login. Any number of named accounts may join a
+provider; the first enrollment enables that provider in the effective router
+config.
 
 ```ts
 import { startSubscriptionProxy } from "@routekit/accounts";

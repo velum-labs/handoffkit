@@ -30,6 +30,7 @@ release/state.json
 /.fusionkit/runs/
 /.fusionkit/fusion-bench/
 /.fusionkit/hillclimb/
+/.artifacts/
 
 # analysis round caches (regenerable banks/logs; see capability-index-program.md)
 analysis/*/cache/

@@ -7,22 +7,24 @@ namespaced `provider/model` IDs that RouteKit advertises for API-key providers.
 ```sh
 npm install -g @routekit/cli
 routekit config init
-claude                              # establish the official Claude Code login
-routekit accounts add claude-code --name personal
-routekit accounts add claude-code --name work
+routekit accounts login claude-code --name personal
+routekit accounts login claude-code --name work
 routekit providers status claude-code
 routekit models list
 routekit serve
 ```
 
-The canonical subscription kinds are `claude-code` and `codex`. For Codex,
-establish each official login with `codex login`, then run
-`routekit accounts add codex --name <label>`. The Claude Code tool launcher
-remains `routekit claude [provider/model]`; there is no
-`routekit claude-code` command.
+The canonical subscription kinds are `claude-code` and `codex`.
+`accounts login` runs the matching official CLI login in a private temporary profile,
+imports only that credential into RouteKit's native pool, and removes the
+temporary profile. It never replaces the user's normal Claude Code or Codex
+login. Use `accounts add <kind> --name <label>` only to import the current
+official CLI login instead.
 
-The first `accounts add` automatically enables the subscription provider in the
-effective router config. Pool selection policy lives on that provider:
+The Claude Code tool launcher remains `routekit claude [provider/model]`; there
+is no `routekit claude-code` command. The first successful login or import
+automatically enables the subscription provider in the effective router
+config. Pool selection policy lives on that provider:
 
 ```yaml
 providers:
@@ -46,7 +48,7 @@ in process. `routekit accounts serve` is advanced mode for exposing the pool as
 a separate authenticated proxy to an external consumer; it is not an
 enrollment or provider-activation step.
 
-CLIProxyAPI has a separate lifecycle:
+CLIProxyAPI remains an optional external provider with a separate lifecycle:
 
 ```sh
 routekit accounts cliproxy install

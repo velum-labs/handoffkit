@@ -16,7 +16,7 @@ Use it with the narrative references when you need to find the module that owns 
 - `packages/accounts/src/codex-relay.ts`: CodexCatalogEntry (type), ProviderRelayLogger (type), CodexStockEntry (type), CodexRelayOptions (type), CodexRelayAuthSource (type), CodexRelayAuth (type), codexRelayAuth (function), CodexBackendRelay (class)
 - `packages/accounts/src/credentials.ts`: defaultSubscriptionAccountDirectory (function), defaultSubscriptionCredentialPath (function), loadSubscriptionCredential (function), persistSubscriptionCredential (function), sanitizeSubscriptionLabel (function), enrollCurrentSubscription (function), RemoveSubscriptionAccountResult (type), removeSubscriptionAccount (function), subscriptionCredentialLabel (function)
 - `packages/accounts/src/gateway.ts`: SubscriptionAccountConfigs (type), OpenSubscriptionRelaysOptions (type), OpenSubscriptionRelaysResult (type), SubscriptionAccountSets (type), openSubscriptionAccountSets (function), subscriptionRelaysFromAccountSets (function), openSubscriptionRelays (function)
-- `packages/accounts/src/provider.ts`: AdminUsageRange (type), AdminUsageCost (type), SubscriptionProvider (type), subscriptionProvider (function)
+- `packages/accounts/src/provider.ts`: AdminUsageRange (type), AdminUsageCost (type), SubscriptionProvider (type), codexModelsSearch (function), subscriptionProvider (function)
 - `packages/accounts/src/proxy.ts`: StartSubscriptionProxyOptions (type), SubscriptionProxy (type), NoSubscriptionAccountsError (class), startSubscriptionProxy (function)
 - `packages/accounts/src/relay.ts`: SubscriptionRelayDialect (type), SubscriptionRelay (type), forwardRelayHeaders (function), AnthropicRelayOptions (type), RelayOnlyBackend (class), AnthropicBackendRelay (class)
 - `packages/accounts/src/types.ts`: SubscriptionSelectionStrategy (type), SubscriptionCredential (type), RateLimitWindow (type), CreditSnapshot (type), AccountLimits (type), SubscriptionFailure (type), SubscriptionMemberStatus (type), SubscriptionAccountSetSnapshot (type)
@@ -268,7 +268,7 @@ Use it with the narrative references when you need to find the module that owns 
 
 ### `packages/routekit-cli`
 
-- `packages/routekit-cli/src/accounts.ts`: parseAccountMode (function), AccountListEntry (type), listAccounts (function), addAccount (function), removeAccount (function), AccountsStatus (type), accountsStatus (function), serveAccounts (function), stopAccounts (function)
+- `packages/routekit-cli/src/accounts.ts`: parseAccountMode (function), AccountListEntry (type), listAccounts (function), addAccount (function), ManagedAccountLoginInvocation (type), ManagedLoginKeychain (type), ManagedAccountLoginOptions (type), claudeProfileKeychainService (function), loginAccount (function), removeAccount (function), AccountsStatus (type), accountsStatus (function), serveAccounts (function), stopAccounts (function)
 - `packages/routekit-cli/src/catalog.ts`: LiveModel (type), LiveCatalog (type), fetchLiveCatalog (function), discoverCatalog (function)
 - `packages/routekit-cli/src/cli.ts`: routekitVersion (function), buildProgram (function)
 - `packages/routekit-cli/src/commands/accounts.ts`: registerAccounts (function)

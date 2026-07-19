@@ -100,17 +100,22 @@ providers:
 defaultModel: codex/gpt-5.5
 ```
 
-Enroll one or more named official CLI logins. The first enrollment adds the
-provider to the effective config; no model or route is created manually:
+Log in one or more named accounts through RouteKit. Each login uses an isolated
+temporary official-CLI profile, so it does not replace the user's normal Claude
+Code or Codex login. The first enrollment adds the provider to the effective
+config; no model or route is created manually:
 
 ```sh
-routekit accounts add claude-code --name personal
-routekit accounts add claude-code --name work
-routekit accounts add codex --name primary
+routekit accounts login claude-code --name personal
+routekit accounts login claude-code --name work
+routekit accounts login codex --name primary
 routekit accounts status
 routekit models list
 routekit claude claude-code/claude-sonnet-4-5
 ```
+
+`routekit accounts add <kind> --name <label>` remains available for explicitly
+importing the current official CLI login.
 
 Startup discovers models from every healthy account and publishes their union
 under one provider namespace. Requests are eligible only for accounts that
