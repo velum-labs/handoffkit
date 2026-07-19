@@ -19,8 +19,8 @@ Initiative: **RouteKit Public Launch**
 
 | Project | Lead | Team | Typical artifacts |
 |---------|------|------|-------------------|
-| Product & Engineering | CTO | Engineering (`ENG-*`) | L04, L05, L06, L08 (+ shared L09–L11) |
-| GTM & Customer | CEO | Operations (`OPS-*`) | L01, L02, L03, L07 (+ shared L09–L10) |
+| Product & Engineering | CTO | Engineering (`ENG-*`) | L04, L05, L06, L08 |
+| GTM & Customer | CEO | Operations (`OPS-*`) | L01, L02, L03, L07, L09, L10, L11 |
 
 There is **no** Launch Program & Gates project. Founders track gates on the Notion
 launch dossier (`Current gate` + artifact approvals).
@@ -68,8 +68,9 @@ Notion page. Workflow:
 | L11 | Post-Launch Review | Post | Shared | A20, A21, A22 |
 
 For a new launch: create Notion artifact rows linked to the launch, seed bodies
-from these templates, and open Linear issues that link to those pages. Delete
-obsolete artifact pages; do not keep “superseded” rows.
+from these templates, open a Linear **parent** per artifact (linked to Notion),
+and create Linear **children** from each Done-when item. Delete obsolete
+artifact pages; do not keep “superseded” rows.
 
 ## Rules
 
@@ -86,3 +87,5 @@ obsolete artifact pages; do not keep “superseded” rows.
    sequencing unless the founders explicitly ask for it.
 6. **Do not create Notion pages for Linear subtasks.** One Notion page per L*
    artifact; subtasks only exist in Linear (with links to that page).
+7. **Linear gate labels** match Notion gates: `gate-0` … `gate-3`, and
+   `post-launch` for L11 (not `gate-3`).

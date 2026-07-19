@@ -16,11 +16,11 @@
 
 ## How an owner uses these
 
-1. Open the matching Notion Launch Artifact page (or create it from this file).
-2. Paste the markdown body.
-3. Work the **Done when** checkboxes — that list is the job.
-4. Attach evidence links.
-5. Move status: Not started → Draft → In review → Approved.
+1. Open the Notion Launch Artifact page (or seed it from this file).
+2. Work from Linear **children** (one per Done-when item) — each links back here.
+3. Fill the matching Notion section; tick Done-when; mark the Linear child Done.
+4. Attach evidence links on the Notion page.
+5. When all children are Done: Notion status → **Approved**, then close the Linear parent.
 
 ## RouteKit runtime (2026-07-19)
 
