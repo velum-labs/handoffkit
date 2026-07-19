@@ -25,17 +25,28 @@ Initiative: **RouteKit Public Launch**
 There is **no** Launch Program & Gates project. Founders track gates on the Notion
 launch dossier (`Current gate` + artifact approvals).
 
-Gate 0 issues (open today):
+### Issue hierarchy
 
-| Artifact | Issue | Project |
-|----------|-------|---------|
+Each Notion artifact has a Linear **parent** issue. Each Done-when checkbox is a
+Linear **child** (subtask). Subtasks live only in Linear but link back to the
+Notion page. Workflow:
+
+1. Pick a child in Linear → fill that section on the Notion page → mark child Done.
+2. When all children are Done and the Notion page is **Approved**, close the parent.
+
+| Artifact | Parent | Project |
+|----------|--------|---------|
 | L01 | OPS-66 | GTM & Customer |
 | L02 | OPS-64 | GTM & Customer |
 | L03 | OPS-68 | GTM & Customer |
 | L04 | ENG-638 | Product & Engineering |
 | L05 | ENG-641 | Product & Engineering |
-
-L06–L11 Notion pages exist; create Linear issues for them when entering those gates.
+| L06 | ENG-642 | Product & Engineering |
+| L07 | OPS-71 | GTM & Customer |
+| L08 | ENG-643 | Product & Engineering |
+| L09 | OPS-70 | GTM & Customer |
+| L10 | OPS-72 | GTM & Customer |
+| L11 | OPS-69 | GTM & Customer |
 
 ## Artifact model (v2)
 
@@ -66,8 +77,12 @@ obsolete artifact pages; do not keep “superseded” rows.
    different timelines, keep them separate; otherwise merge.
 2. **Done when is binary.** Every checkbox must be answerable yes/no without
    inventing new scope.
-3. **Linear issues produce artifacts.** Notion status must reach **Approved**.
+3. **Linear parent + children produce artifacts.** Children track Done-when
+   steps; Notion status must still reach **Approved** before the gate criterion
+   is met.
 4. **Do not invent new artifact IDs mid-launch.** Propose a blueprint change
    after the launch retro instead.
 5. **Gates live in Notion.** Do not recreate a third Linear project for gate
    sequencing unless the founders explicitly ask for it.
+6. **Do not create Notion pages for Linear subtasks.** One Notion page per L*
+   artifact; subtasks only exist in Linear (with links to that page).

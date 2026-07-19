@@ -27,5 +27,7 @@
 - Notion: L01–L11 seeded and linked to the RouteKit launch dossier.
 - Linear: initiative with **two** projects (Product & Engineering, GTM & Customer).
   Gates are tracked in Notion, not a third project.
-- Gate 0 issues: OPS-66→L01, OPS-64→L02, OPS-68→L03, ENG-638→L04, ENG-641→L05.
+- Each L* has a Linear **parent** + Done-when **children** (subtasks). Subtasks
+  live only in Linear and link back to the Notion page.
+- Parents: OPS-66/64/68, ENG-638/641/642, OPS-71, ENG-643, OPS-70/72/69.
 - Delete obsolete artifact pages; do not keep superseded rows.
