@@ -22,8 +22,11 @@
 4. Attach evidence links.
 5. Move status: Not started → Draft → In review → Approved.
 
-## Notion migration (when MCP available)
+## Notion migration
 
-- Archive or supersede A01–A22 rows.
-- Create L01–L11 rows linked to the active Launch.
-- Point Linear issues at the new IDs.
+Done for RouteKit Public Launch (2026-07-19):
+
+- L01–L11 created and linked to the RouteKit launch dossier.
+- A01–A22 marked **Superseded** with pointers to the matching L page.
+- Hub views filter out Superseded.
+- Gate 0 Linear issues (OPS-66, OPS-64, OPS-68, ENG-638, ENG-641) link to L01–L05.
