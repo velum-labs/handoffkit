@@ -169,7 +169,7 @@ environment-gated rows name the reason and exact live command.
 | ID | Expected behavior | Status | Evidence |
 |---|---|---|---|
 | `composition.routekit-model-ids` | Namespaced RouteKit model IDs cross the real embedded-router, Python-sidecar, and Fusion-gateway stack while provider credentials remain behind RouteKit. | required | `packages/cli/src/test/stack-model-ids-e2e.test.ts` — `embedded RouteKit routes namespaced model ids` |
-| `composition.routekit-authenticated-cli-bridge` | Fusion bridges authenticated external RouteKit CLI traffic over loopback and closes only the bridge, leaving the independently owned RouteKit process alive. | required | `packages/cli/src/test/stack-model-ids-e2e.test.ts` — `authenticated external routekit serve CLI uses a Fusion-owned loopback bridge` |
+| `composition.routekit-authenticated-cli-bridge` | Fusion bridges authenticated external RouteKit CLI traffic over loopback and closes only the bridge, leaving the independently owned RouteKit process alive. | required | `packages/cli/src/test/stack-model-ids-e2e.test.ts` — `authenticated external routekit gateway serve CLI uses a Fusion-owned loopback bridge` |
 | `composition.subscription-provider-fusion` | Subscription-backed namespaced model ids drive panel, judge, and synthesis while credentials remain absent from Fusion responses. | required | `packages/cli/src/test/stack-model-ids-e2e.test.ts` — `subscription-backed model ids drive panel judge and synthesis without leaking credentials` |
 
 ## observability

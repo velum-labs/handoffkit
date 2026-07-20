@@ -23,7 +23,7 @@ const GLOBAL_BOOLEAN_OPTIONS = new Set(["--json", "--no-input", "--yes", "--quie
 
 /**
  * Keep global output/config flags ergonomic after a subcommand
- * (`routekit serve --json`) while preserving everything after `--` for the
+ * (`routekit gateway serve --json`) while preserving everything after `--` for the
  * launched coding tool.
  */
 function normalizeGlobalOptions(argv: readonly string[]): string[] {

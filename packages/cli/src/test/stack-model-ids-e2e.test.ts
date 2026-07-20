@@ -256,7 +256,7 @@ test(
 );
 
 test(
-  "authenticated external routekit serve CLI uses a Fusion-owned loopback bridge",
+  "authenticated external routekit gateway serve CLI uses a Fusion-owned loopback bridge",
   { skip: SKIP },
   async () => {
     const sim = await startProviderSim();
@@ -284,6 +284,7 @@ test(
         join(repoRoot(), "packages", "routekit-cli", "dist", "index.js"),
         "--config",
         configPath,
+        "gateway",
         "serve",
         "--host",
         "127.0.0.1",

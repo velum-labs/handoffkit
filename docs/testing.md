@@ -199,8 +199,8 @@ checks targeted.
 | Concurrency | 24 parallel passthrough streams + 8 parallel fused streams with per-request content identity (cross-talk detection), abort isolation | provider | `packages/cli/src/test/stack-concurrency-e2e.test.ts` |
 | Sidecar runs | native create/inspect/events/idempotency and tool resume over internal APIs | none | `python/fusionkit-server/tests/test_fusion_runs_api.py`, `test_tool_resume.py` |
 | **Real product CLI** | the ACTUAL `fusionkit serve` entrypoint booting its production stack: fusion.json loading, preflight probes, `uv run` router spawn, gateway + setup snippets | provider only | `packages/cli/src/test/stack-npm-cli-e2e.test.ts` |
-| **Real RouteKit CLI** | the ACTUAL `routekit serve --json` process, model discovery, all supported gateway dialects, command surfaces, doctor, install, and missing-harness preflight | provider only | `packages/routekit-cli/src/test/serve-process-e2e.test.ts`, `cli-process-e2e.test.ts` |
-| RouteKit/Fusion composition | namespaced model IDs through embedded routing plus an authenticated external `routekit serve` process behind a Fusion-owned bridge; Fusion close leaves external RouteKit alive | provider only | `packages/cli/src/test/stack-model-ids-e2e.test.ts` |
+| **Real RouteKit CLI** | the ACTUAL `routekit gateway serve --json` process, model discovery, all supported gateway dialects, command surfaces, doctor, install, and missing-harness preflight | provider only | `packages/routekit-cli/src/test/serve-process-e2e.test.ts`, `cli-process-e2e.test.ts` |
+| RouteKit/Fusion composition | namespaced model IDs through embedded routing plus an authenticated external `routekit gateway serve` process behind a Fusion-owned bridge; Fusion close leaves external RouteKit alive | provider only | `packages/cli/src/test/stack-model-ids-e2e.test.ts` |
 | Real command CLI | actual built entrypoint: version/completions/runtime, config CRUD/export, prompts, install/uninstall, telemetry, setup, doctor | provider only for doctor probes | `packages/cli/src/test/cli-command-surfaces-e2e.test.ts` |
 | **Real-CLI e2e** | the ACTUAL `claude` / `codex` / `opencode` binaries: production wire/toolsets and real local tool execution | provider only | `packages/cli/src/test/stack-cli-e2e.test.ts` |
 | Live (env-gated) | everything incl. real provider accounts | nothing | `FUSIONKIT_GATEWAY_LIVE_*` tests, billed benchmarks |
@@ -277,7 +277,7 @@ real Claude/Codex/OpenCode selection of injected named fused models.
 
 M47–M49 pin the RouteKit/Fusion split directly: namespaced model IDs in the
 sidecar config, authenticated external RouteKit bridging, and truthful
-`routekit serve --json` process readiness.
+`routekit gateway serve --json` process readiness.
 
 The preceding mutations pin finite-k terminal
 proposal summaries, k=1 straggler grace, native driver dialect routing,

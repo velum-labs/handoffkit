@@ -39,7 +39,7 @@ function productionSources(directory: string): string[] {
 test("independent command surface is complete and has no compatibility aliases", () => {
   const program = buildProgram();
   const expected = [
-    "serve",
+    "gateway",
     "codex",
     "claude",
     "cursor",
@@ -53,7 +53,6 @@ test("independent command surface is complete and has no compatibility aliases",
     "doctor",
     "install",
     "uninstall",
-    "stop",
     "telemetry",
     "completion",
     "__complete",
@@ -62,6 +61,10 @@ test("independent command surface is complete and has no compatibility aliases",
   assert.deepEqual(
     program.commands.map((entry) => entry.name()).sort(),
     expected.sort()
+  );
+  assert.deepEqual(
+    command(program, "gateway").commands.map((entry) => entry.name()).sort(),
+    ["serve", "stop"]
   );
   assert.deepEqual(
     command(program, "accounts").commands.map((entry) => entry.name()).sort(),
@@ -92,12 +95,18 @@ test("independent command surface is complete and has no compatibility aliases",
 test("dynamic completion follows the command tree", () => {
   const program = buildProgram();
   assert.ok(completionCandidates(program, ["co"]).includes("config"));
+  assert.deepEqual(completionCandidates(program, ["gateway", "s"]), [
+    "serve",
+    "stop"
+  ]);
   assert.deepEqual(completionCandidates(program, ["accounts", "s"]), [
     "serve",
     "status",
     "stop"
   ]);
-  assert.ok(completionCandidates(program, ["serve", "--p"]).includes("--port"));
+  assert.ok(
+    completionCandidates(program, ["gateway", "serve", "--p"]).includes("--port")
+  );
   assert.deepEqual(completionCandidates(program, ["accounts", "remove", ""]), [
     "claude-code",
     "codex"
@@ -117,8 +126,11 @@ test("serve CLI rejects an unauthenticated non-loopback bind", async () => {
   );
   try {
     const program = buildProgram();
+    const gateway = command(program, "gateway");
+    const serve = gateway.commands.find((entry) => entry.name() === "serve");
+    assert.ok(serve);
     assert.match(
-      command(program, "serve").helpInformation(),
+      serve.helpInformation(),
       /authentication token \(required for non-loopback hosts\)/
     );
     await assert.rejects(
@@ -127,6 +139,7 @@ test("serve CLI rejects an unauthenticated non-loopback bind", async () => {
         "routekit",
         "--config",
         config,
+        "gateway",
         "serve",
         "--host",
         "0.0.0.0",
