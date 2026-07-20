@@ -1,4 +1,4 @@
 {
-  "install": "pnpm install --frozen-lockfile && uv sync --all-packages --extra aws && bash scripts/setup-matter-mcp.sh",
+  "install": "export PATH=\"$HOME/.nvm/versions/node/v22.22.2/bin:$HOME/.local/bin:$PATH\" && (command -v uv >/dev/null || curl -LsSf https://astral.sh/uv/install.sh | sh) && pnpm install --frozen-lockfile && uv sync --all-packages --extra aws && bash scripts/setup-matter-mcp.sh",
   "start": "if [ -n \"$CURSOR_AGENT_AWS_ACCESS_KEY_ID\" ] && [ -n \"$CURSOR_AGENT_AWS_SECRET_ACCESS_KEY\" ] && [ -n \"$CURSOR_AGENT_AWS_ROLE_ARN\" ] && [ -n \"$CURSOR_AGENT_AWS_EXTERNAL_ID\" ]; then mkdir -p ~/.aws && printf '[cursor-bootstrap]\naws_access_key_id = %s\naws_secret_access_key = %s\n' \"$CURSOR_AGENT_AWS_ACCESS_KEY_ID\" \"$CURSOR_AGENT_AWS_SECRET_ACCESS_KEY\" > ~/.aws/credentials && chmod 600 ~/.aws/credentials && printf '[profile cursor-agent-infra]\nrole_arn = %s\nsource_profile = cursor-bootstrap\nexternal_id = %s\nregion = us-east-1\n' \"$CURSOR_AGENT_AWS_ROLE_ARN\" \"$CURSOR_AGENT_AWS_EXTERNAL_ID\" > ~/.aws/config; fi"
 }
