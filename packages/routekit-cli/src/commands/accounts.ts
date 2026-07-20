@@ -24,6 +24,7 @@ import {
 import type { AccountListEntry } from "../accounts.js";
 import { updateEffectiveRouterConfig } from "../config.js";
 import { waitForShutdown } from "../serve.js";
+import { limitsSummary } from "../usage-format.js";
 
 import { configOverride, loaded, numberOption } from "./context.js";
 
@@ -280,6 +281,14 @@ export function registerAccounts(program: Command): void {
               ? "stored; routing disabled"
               : "stored; configured; relay ready"
         );
+        const summary = limitsSummary(
+          status.usage,
+          entry.subscriptionKind,
+          entry.label
+        );
+        if (summary !== undefined) {
+          ctx.presenter.note(`${entry.subscriptionKind}/${entry.label} limits: ${summary} · routekit usage`);
+        }
       }
     });
 

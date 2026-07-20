@@ -1,0 +1,62 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+
+import {
+  formatResetCountdown,
+  formatUtilizationBar,
+  limitsSummary,
+  renderUsageLines
+} from "../usage-format.js";
+
+test("usage formatters clamp bars and show precise reset countdowns", () => {
+  assert.match(formatUtilizationBar(0.52), /52%$/);
+  assert.match(formatUtilizationBar(2), /100%$/);
+  assert.equal(
+    formatResetCountdown(Date.UTC(2026, 0, 1, 2, 14), Date.UTC(2026, 0, 1)),
+    "resets in 2h 14m"
+  );
+  assert.equal(formatResetCountdown(Date.UTC(2026, 0, 1), Date.UTC(2026, 0, 1)), "resets now");
+});
+
+test("usage rendering includes windows, provenance, and no-observation hint", () => {
+  const now = Date.UTC(2026, 0, 1);
+  const usage = {
+    accountSets: [{
+      mode: "codex" as const,
+      strategy: "sticky" as const,
+      switchThreshold: 0.9,
+      members: [
+        {
+          id: "one",
+          mode: "codex" as const,
+          label: "work",
+          sourcePath: "/private/work.json",
+          active: true,
+          models: [],
+          limits: {
+            windows: {
+              primary: { utilization: 0.52, resetsAt: now + 2 * 60 * 60 * 1000 }
+            },
+            planType: "pro",
+            observedAt: now - 3 * 60 * 1000,
+            source: "headers" as const
+          }
+        },
+        {
+          id: "two",
+          mode: "codex" as const,
+          label: "spare",
+          sourcePath: "/private/spare.json",
+          active: false,
+          models: []
+        }
+      ]
+    }]
+  };
+  const output = renderUsageLines(usage, now).join("\n");
+  assert.match(output, /primary/);
+  assert.match(output, /52%/);
+  assert.match(output, /observed 3m ago via headers/);
+  assert.match(output, /no usage observed yet/);
+  assert.equal(limitsSummary(usage, "codex", "work", now), "primary 52% · resets in 2h");
+});

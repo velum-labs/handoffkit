@@ -69,6 +69,26 @@ test("providers and models commands use the live namespaced catalog", async () =
     ]);
     assert.equal(models.defaultModel, "openai/gpt-live");
     assert.deepEqual(models.models, ["openai/gpt-live"]);
+    const filtered = await runJson([
+      "--config",
+      configPath,
+      "--json",
+      "models",
+      "list",
+      "--provider",
+      "openai"
+    ]);
+    assert.deepEqual(filtered.models, ["openai/gpt-live"]);
+    const info = await runJson([
+      "--config",
+      configPath,
+      "--json",
+      "models",
+      "info",
+      "openai/gpt-live"
+    ]);
+    assert.equal(info.provider, "openai");
+    assert.equal(info.default, true);
 
     const status = await runJson([
       "--config",

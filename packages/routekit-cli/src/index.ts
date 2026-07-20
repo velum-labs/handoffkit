@@ -10,7 +10,8 @@ import { configureBrand, uiStream } from "@routekit/cli-ui";
 import { runCleanups } from "@routekit/runtime";
 import { CommanderError } from "commander";
 
-import { buildProgram } from "./cli.js";
+import { buildProgram, routekitVersion } from "./cli.js";
+import { notifyIfUpdateAvailable } from "./update-notifier.js";
 
 configureBrand({
   name: "routekit",
@@ -67,7 +68,16 @@ async function main(): Promise<void> {
   program.exitOverride();
   try {
     if (process.argv.length <= 2) program.outputHelp();
-    else await program.parseAsync(normalizeGlobalOptions(process.argv));
+    else {
+      await program.parseAsync(normalizeGlobalOptions(process.argv));
+      const args = process.argv.slice(2);
+      if (
+        !args.some((arg) => ["--json", "--help", "-h"].includes(arg)) &&
+        !args.some((arg) => ["completion", "__complete"].includes(arg))
+      ) {
+        await notifyIfUpdateAvailable(routekitVersion());
+      }
+    }
   } catch (error) {
     process.exitCode = renderError(error);
   } finally {
