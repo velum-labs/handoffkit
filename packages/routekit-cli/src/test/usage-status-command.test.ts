@@ -93,32 +93,6 @@ test("usage and status expose human and JSON snapshots from a stub accounts prox
       }]
     }]
   };
-  const gatewayUsage = {
-    accountSets: [{
-      mode: "claude-code",
-      strategy: "sticky",
-      switchThreshold: 0.9,
-      members: [{
-        id: "gateway",
-        mode: "claude-code",
-        label: "gateway",
-        sourcePath: "/private/gateway.json",
-        active: true,
-        models: ["claude-sonnet"],
-        limits: {
-          windows: {
-            five_hour: {
-              utilization: 0.17,
-              status: "ok",
-              resetsAt: now / 1000 + 60 * 60
-            }
-          },
-          observedAt: now / 1000,
-          source: "usage"
-        }
-      }]
-    }]
-  };
   let proxyHealthy = true;
   const server = createServer((request, response) => {
     assert.equal(request.url, "/usage");
