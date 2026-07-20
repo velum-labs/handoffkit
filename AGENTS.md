@@ -95,3 +95,15 @@ probe `/health`; it intentionally has no public chat or model routes. Notes:
 - The committed `.fusionkit/fusion.json` panel currently uses OpenRouter
   (`moonshotai/kimi-k2-thinking`, `qwen/qwen3-coder`) and requires
   `OPENROUTER_API_KEY`.
+
+### Matter MCP (external research)
+
+Handoffkit can read tagged Matter items through the `matter` MCP server configured in `.cursor/mcp.json`.
+
+- `scripts/setup-matter-mcp.sh` clones and builds `matter-cursor-mcp` into `matter-cursor-mcp/` during cloud startup.
+- `MATTER_API_TOKEN` must be set as a Runtime Secret in the Handoffkit cloud environment.
+- Read `.matter-context.json` before calling Matter tools. Default tags: `cursor`, `repo-handoffkit`.
+- Verify with `matter_health` before relying on Matter evidence.
+- Write durable research to `docs/research/matter/` unless the user asks otherwise.
+
+See `docs/matter-mcp.md` for setup and troubleshooting.

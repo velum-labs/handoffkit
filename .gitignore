@@ -36,5 +36,8 @@ release/state.json
 analysis/*/cache/
 /.hyperkit/
 
+# Cloned and built by scripts/setup-matter-mcp.sh for Cursor Matter MCP.
+/matter-cursor-mcp/
+
 # Shared HyperKit lab runtime state; intent and frozen locks stay tracked.
 lab/experiments/*/work/
