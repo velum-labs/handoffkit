@@ -11,7 +11,7 @@ Handoffkit cloud agents and local Cursor sessions can retrieve read-only evidenc
 | `.cursor/rules/matter-research-rule.mdc` | Agent guidance for Matter-backed research |
 | `scripts/setup-matter-mcp.sh` | Clones and builds `matter-cursor-mcp` during cloud startup |
 
-Cloud agents run `scripts/setup-matter-mcp.sh` from `.cursor/environment.json` so `matter-cursor-mcp/dist/index.js` exists before MCP tools are used.
+Cloud agents run `scripts/setup-matter-mcp.sh` from `.cursor/environment.json` so `matter-cursor-mcp/dist/index.js` exists before MCP tools are used. The script prefers a sibling multi-repo checkout when present, otherwise clones with `gh` (required because `matter-cursor-mcp` is private).
 
 ## One-time secret setup
 
