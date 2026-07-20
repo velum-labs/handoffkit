@@ -532,13 +532,21 @@ No module JSDoc was found.
 
 No module JSDoc was found.
 
-- `export { registerCleanup, runCleanups } from "./cleanup.js";`
+- `export { extendCleanupGrace, registerCleanup, runCleanups } from "./cleanup.js";`
 - `export { buildChildEnv, commandOnPath, DEFAULT_BRIDGE_SCRUB_PREFIXES, definedEnv, scrubBridgeEnv } from "./environment.js";`
 - `export type { BuildChildEnvInput } from "./environment.js";`
 - `export { superviseSpawn, terminateGroup } from "./process.js";`
 - `export type { ExitInfo, Spawned, SuperviseSpawnOptions } from "./process.js";`
 - `export { createActivePortlessSession, createPortlessSession, detectPortlessProxy, reapPortlessProject, reapPortlessService } from "./portless.js";`
 - `export type { DetectedProxy, DiscoverOrSpawnInput, DiscoverOrSpawnResult, PortlessModule, PortlessOptions, PortlessSession, RouteMapping, RouteStoreLike, SpawnedService } from "./portless.js";`
+- `export { createServiceRecordStore, processAlive, SERVICE_SUPERVISOR_ENV, supervisorFromEnv } from "./service/records.js";`
+- `export type { ServiceRecord, ServiceRecordInput, ServiceRecordStore, ServiceSupervisorKind } from "./service/records.js";`
+- `export { readLogTail, rotateLogFile, serviceLogPath, startDaemon, stopDaemonProcess, waitForProcessExit, waitForServiceReady } from "./service/daemon.js";`
+- `export type { ServiceDaemonSpec, StartDaemonOptions, StartDaemonResult, StopDaemonResult } from "./service/daemon.js";`
+- `export { detectSupervisor, launchdAgentPlist, launchdLabel, launchdPlistPath, supervisorController, systemdServiceUnit, systemdUnitName, systemdUnitPath } from "./service/supervisors.js";`
+- `export type { CommandRunner, DetectSupervisorOptions, ServiceUnitSpec, SupervisorController, SupervisorStatus } from "./service/supervisors.js";`
+- `export { planUpgrade, upgradeDetachedDaemon } from "./service/upgrade.js";`
+- `export type { UpgradeDaemonInput, UpgradeDaemonResult, UpgradeStrategy } from "./service/upgrade.js";`
 - `export { assertAuthenticatedBind, isLoopbackHost, normalizeApiBaseUrl, trimSurroundingSlashes, trimTrailingSlashes } from "./url.js";`
 - `export const DEFAULT_RUNTIME_TIMEOUTS ...`
 - `export function defineTimeouts<const T extends Record<string, number>>(timeouts: T): Readonly<T> ...`
