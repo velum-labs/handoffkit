@@ -230,7 +230,9 @@ function refreshPayload(body: unknown): {
 
 function windowsFromUsagePayload(
   mode: SubscriptionMode,
-  payload: unknown
+  payload: unknown,
+  observedAt: number,
+  source: AccountLimits["source"]
 ): Record<string, RateLimitWindow> {
   if (!isRecord(payload)) return {};
   const windows = Object.create(null) as Record<string, RateLimitWindow>;
@@ -244,7 +246,9 @@ function windowsFromUsagePayload(
       utilization: used,
       ...(typeof raw.status === "string" ? { status: raw.status } : {}),
       ...(resetsAt !== undefined ? { resetsAt } : {}),
-      ...(windowSeconds !== undefined ? { windowSeconds } : {})
+      ...(windowSeconds !== undefined ? { windowSeconds } : {}),
+      observedAt,
+      source
     });
   }
   return windows;
@@ -252,6 +256,7 @@ function windowsFromUsagePayload(
 
 function anthropicLimitsFromHeaders(headers: Headers): AccountLimits | undefined {
   const prefix = subscriptionInfo("claude-code").rateLimit.headerPrefix.toLowerCase();
+  const observedAt = Date.now() / 1000;
   const windows = Object.create(null) as Record<string, RateLimitWindow>;
   const suffixes = new Set<string>();
   for (const [name] of headers) {
@@ -267,15 +272,22 @@ function anthropicLimitsFromHeaders(headers: Headers): AccountLimits | undefined
     defineWindow(windows, canonicalRateLimitWindowKey("claude-code", key), {
       utilization: used,
       ...(status !== null ? { status } : {}),
-      ...(resetsAt !== undefined ? { resetsAt } : {})
+      ...(resetsAt !== undefined ? { resetsAt } : {}),
+      observedAt,
+      source: "headers"
     });
   }
   return Object.keys(windows).length > 0
-    ? { windows, observedAt: Date.now() / 1000, source: "headers" }
+    ? { windows, observedAt, source: "headers", completeness: "partial" }
     : undefined;
 }
 
-function codexWindowFromHeaders(headers: Headers, prefix: string, name: string): RateLimitWindow | undefined {
+function codexWindowFromHeaders(
+  headers: Headers,
+  prefix: string,
+  name: string,
+  observedAt: number
+): RateLimitWindow | undefined {
   const used = utilization(headers.get(`${prefix}-${name}-used-percent`));
   if (used === undefined) return undefined;
   const minutes = numeric(headers.get(`${prefix}-${name}-window-minutes`));
@@ -285,7 +297,9 @@ function codexWindowFromHeaders(headers: Headers, prefix: string, name: string):
     utilization: used,
     ...(minutes !== undefined ? { windowSeconds: minutes * 60 } : {}),
     ...(resetsAt !== undefined ? { resetsAt } : {}),
-    ...(limitName !== null ? { limitName } : {})
+    ...(limitName !== null ? { limitName } : {}),
+    observedAt,
+    source: "headers"
   };
 }
 
@@ -303,12 +317,13 @@ function codexCredits(headers: Headers): CreditSnapshot | undefined {
 
 function codexLimitsFromHeaders(headers: Headers): AccountLimits | undefined {
   const info = subscriptionInfo("codex").rateLimit;
+  const observedAt = Date.now() / 1000;
   const active = info.activeLimitHeader === undefined ? null : headers.get(info.activeLimitHeader);
   const prefix = active === null || active.trim().length === 0
     ? info.headerPrefix
     : `x-${active.toLowerCase().replaceAll("_", "-")}`;
-  const primary = codexWindowFromHeaders(headers, prefix, "primary");
-  const secondary = codexWindowFromHeaders(headers, prefix, "secondary");
+  const primary = codexWindowFromHeaders(headers, prefix, "primary", observedAt);
+  const secondary = codexWindowFromHeaders(headers, prefix, "secondary", observedAt);
   const credits = codexCredits(headers);
   if (primary === undefined && secondary === undefined && credits === undefined) return undefined;
   return {
@@ -317,18 +332,25 @@ function codexLimitsFromHeaders(headers: Headers): AccountLimits | undefined {
       ...(secondary !== undefined ? { [`${active ?? "codex"}:secondary`]: secondary } : {})
     },
     ...(credits !== undefined ? { credits } : {}),
-    observedAt: Date.now() / 1000,
-    source: "headers"
+    observedAt,
+    source: "headers",
+    completeness: "partial"
   };
 }
 
 function codexUsageLimits(payload: unknown): AccountLimits {
   if (!isRecord(payload)) throw new Error("Codex usage endpoint returned an invalid payload");
+  const observedAt = Date.now() / 1000;
   const rateLimit = isRecord(payload.rate_limit) ? payload.rate_limit : {};
-  const windows = windowsFromUsagePayload("codex", {
-    primary: rateLimit.primary_window,
-    secondary: rateLimit.secondary_window
-  });
+  const windows = windowsFromUsagePayload(
+    "codex",
+    {
+      primary: rateLimit.primary_window,
+      secondary: rateLimit.secondary_window
+    },
+    observedAt,
+    "usage"
+  );
   const rawCredits = isRecord(payload.credits) ? payload.credits : undefined;
   const credits = rawCredits === undefined
     ? undefined
@@ -345,8 +367,9 @@ function codexUsageLimits(payload: unknown): AccountLimits {
     windows,
     ...(typeof payload.plan_type === "string" ? { planType: payload.plan_type } : {}),
     ...(credits !== undefined ? { credits } : {}),
-    observedAt: Date.now() / 1000,
-    source: "usage"
+    observedAt,
+    source: "usage",
+    completeness: "snapshot"
   };
 }
 
@@ -363,9 +386,10 @@ function rateLimitsObject(value: unknown): Record<string, unknown> | undefined {
 function codexStreamLimits(payload: unknown): AccountLimits | undefined {
   const raw = rateLimitsObject(payload);
   if (raw === undefined) return undefined;
-  const windows = windowsFromUsagePayload("codex", raw);
+  const observedAt = Date.now() / 1000;
+  const windows = windowsFromUsagePayload("codex", raw, observedAt, "stream");
   return Object.keys(windows).length > 0
-    ? { windows, observedAt: Date.now() / 1000, source: "stream" }
+    ? { windows, observedAt, source: "stream", completeness: "partial" }
     : undefined;
 }
 
@@ -434,10 +458,12 @@ function anthropicProvider(): SubscriptionProvider {
       const payload = await usageRequest(info.oauth.usageEndpoint, {
         ...thisAnthropicHeaders(info, credential)
       }, signal);
+      const observedAt = Date.now() / 1000;
       return {
-        windows: windowsFromUsagePayload(mode, payload),
-        observedAt: Date.now() / 1000,
-        source: "usage"
+        windows: windowsFromUsagePayload(mode, payload, observedAt, "usage"),
+        observedAt,
+        source: "usage",
+        completeness: "snapshot"
       };
     },
     parseLimits: (headers) => anthropicLimitsFromHeaders(headers),

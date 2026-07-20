@@ -72,14 +72,33 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function parsedRateLimitWindow(value: unknown): AccountLimits["windows"][string] | undefined {
+function parsedRateLimitWindow(
+  value: unknown,
+  observedAt: number,
+  source: AccountLimits["source"],
+  migration?: { required: boolean }
+): AccountLimits["windows"][string] | undefined {
   if (!isRecord(value) || typeof value.utilization !== "number") return undefined;
+  const windowObservedAt =
+    typeof value.observedAt === "number" ? value.observedAt : observedAt;
+  const windowSource =
+    value.source === "headers" || value.source === "usage" || value.source === "stream"
+      ? value.source
+      : source;
+  if (
+    migration !== undefined &&
+    (typeof value.observedAt !== "number" || value.source !== windowSource)
+  ) {
+    migration.required = true;
+  }
   return {
     utilization: value.utilization,
     ...(typeof value.status === "string" ? { status: value.status } : {}),
     ...(typeof value.resetsAt === "number" ? { resetsAt: value.resetsAt } : {}),
     ...(typeof value.windowSeconds === "number" ? { windowSeconds: value.windowSeconds } : {}),
-    ...(typeof value.limitName === "string" ? { limitName: value.limitName } : {})
+    ...(typeof value.limitName === "string" ? { limitName: value.limitName } : {}),
+    observedAt: windowObservedAt,
+    source: windowSource
   };
 }
 
@@ -96,9 +115,24 @@ function parsedAccountLimits(
   ) {
     return undefined;
   }
+  let completeness: AccountLimits["completeness"];
+  if (value.completeness === "snapshot" || value.completeness === "partial") {
+    completeness = value.completeness;
+  } else {
+    if (migration !== undefined) migration.required = true;
+    // Legacy `usage` state may already contain union-merged header windows.
+    // Its provenance is irrecoverably ambiguous, so discard and re-probe.
+    if (value.source === "usage") return undefined;
+    completeness = "partial";
+  }
   const windows = Object.create(null) as AccountLimits["windows"];
   for (const [key, raw] of Object.entries(value.windows)) {
-    const window = parsedRateLimitWindow(raw);
+    const window = parsedRateLimitWindow(
+      raw,
+      value.observedAt,
+      value.source,
+      migration
+    );
     if (window === undefined) continue;
     const canonicalKey =
       mode === undefined ? key : canonicalRateLimitWindowKey(mode, key);
@@ -118,6 +152,7 @@ function parsedAccountLimits(
     windows,
     observedAt: value.observedAt,
     source: value.source,
+    completeness,
     ...(typeof value.planType === "string" ? { planType: value.planType } : {}),
     ...(isRecord(value.credits) ? { credits: value.credits } : {})
   };
@@ -179,7 +214,11 @@ function mergeLimits(
   mode?: SubscriptionMode
 ): AccountLimits {
   const windows = Object.create(null) as AccountLimits["windows"];
-  for (const source of [previous?.windows, next.windows]) {
+  const sources =
+    next.completeness === "snapshot"
+      ? [next.windows]
+      : [previous?.windows, next.windows];
+  for (const source of sources) {
     if (source === undefined) continue;
     for (const [key, window] of Object.entries(source)) {
       Object.defineProperty(
@@ -194,13 +233,15 @@ function mergeLimits(
       );
     }
   }
-  return {
-    ...previous,
-    ...next,
-    windows,
-    observedAt: next.observedAt,
-    source: next.source
-  };
+  return next.completeness === "snapshot"
+    ? { ...next, windows }
+    : {
+        ...previous,
+        ...next,
+        windows,
+        observedAt: next.observedAt,
+        source: next.source
+      };
 }
 
 export class RateLimitTracker {
@@ -450,8 +491,11 @@ export class SubscriptionAccountSet {
     if (this.#members.length === 0) return;
     const now = Date.now();
     const allFresh = this.#members.every((member) => {
-      const observedAt = this.#tracker.limits(member.id)?.observedAt;
-      return observedAt !== undefined && now - observedAt * 1000 < maxAgeMs;
+      const limits = this.#tracker.limits(member.id);
+      return (
+        limits?.completeness === "snapshot" &&
+        now - limits.observedAt * 1000 < maxAgeMs
+      );
     });
     if (allFresh) return;
     if (this.#usageProbe !== undefined) return await this.#usageProbe;

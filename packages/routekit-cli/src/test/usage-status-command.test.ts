@@ -51,12 +51,15 @@ test("usage and status expose human and JSON snapshots from a stub accounts prox
             five_hour: {
               utilization: 0.52,
               status: "ok",
-              resetsAt: now / 1000 + 2 * 60 * 60
+              resetsAt: now / 1000 + 2 * 60 * 60,
+              observedAt: now / 1000 - 3 * 60,
+              source: "headers"
             }
           },
           planType: "pro",
           observedAt: now / 1000 - 3 * 60,
-          source: "headers"
+          source: "headers",
+          completeness: "partial"
         }
       }]
     }]
@@ -78,11 +81,14 @@ test("usage and status expose human and JSON snapshots from a stub accounts prox
             five_hour: {
               utilization: 0.17,
               status: "ok",
-              resetsAt: now / 1000 + 60 * 60
+              resetsAt: now / 1000 + 60 * 60,
+              observedAt: now / 1000,
+              source: "usage"
             }
           },
           observedAt: now / 1000,
-          source: "usage"
+          source: "usage",
+          completeness: "snapshot"
         }
       }]
     }]
@@ -238,9 +244,16 @@ test("usage and status expose human and JSON snapshots from a stub accounts prox
         members: [{
           id: "local",
           limits: {
-            windows: { primary: { utilization: 0.64 } },
+            windows: {
+              primary: {
+                utilization: 0.64,
+                observedAt: now / 1000,
+                source: "usage"
+              }
+            },
             observedAt: now / 1000,
-            source: "usage"
+            source: "usage",
+            completeness: "snapshot"
           }
         }]
       })

@@ -55,7 +55,12 @@ function fakeProvider(
     async fetchUsage() {
       state.usageCalls = (state.usageCalls ?? 0) + 1;
       if (state.failUsage === true) throw new Error("usage unavailable");
-      return { windows: {}, observedAt: Date.now() / 1000, source: "usage" };
+      return {
+        windows: {},
+        observedAt: Date.now() / 1000,
+        source: "usage",
+        completeness: "snapshot"
+      };
     },
     async fetchAdminUsageCost() {
       return { usage: {}, cost: {} };
@@ -63,10 +68,18 @@ function fakeProvider(
     parseLimits(headers) {
       const value = headers.get("x-test-utilization");
       if (value === null) return undefined;
+      const observedAt = Date.now() / 1000;
       const limits: AccountLimits = {
-        windows: { primary: { utilization: Number(value) } },
-        observedAt: Date.now() / 1000,
-        source: "headers"
+        windows: {
+          primary: {
+            utilization: Number(value),
+            observedAt,
+            source: "headers"
+          }
+        },
+        observedAt,
+        source: "headers",
+        completeness: "partial"
       };
       return limits;
     },
@@ -314,7 +327,7 @@ test("tracker safely migrates hostile object keys into map-backed state", async 
   }
 });
 
-test("tracker migrates Anthropic header aliases to canonical usage windows", async () => {
+test("tracker migrates legacy partial observations to canonical windows", async () => {
   const directory = mkdtempSync(join(tmpdir(), "routekit-pool-window-state-"));
   const statePath = join(directory, ".state.json");
   writeFileSync(
@@ -329,7 +342,7 @@ test("tracker migrates Anthropic header aliases to canonical usage windows", asy
             "7d-sonnet": { utilization: 0.6 }
           },
           observedAt: Date.now() / 1000,
-          source: "usage"
+          source: "headers"
         }
       }]
     })
@@ -341,6 +354,7 @@ test("tracker migrates Anthropic header aliases to canonical usage windows", asy
       "seven_day_sonnet"
     ]);
     assert.equal(tracker.limits("primary")?.windows.five_hour?.utilization, 0.2);
+    assert.equal(tracker.limits("primary")?.completeness, "partial");
 
     const persisted = JSON.parse(await readFile(statePath, "utf8")) as {
       members: Array<{ limits?: { windows: Record<string, unknown> } }>;
@@ -349,6 +363,79 @@ test("tracker migrates Anthropic header aliases to canonical usage windows", asy
       "five_hour",
       "seven_day_sonnet"
     ]);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("tracker discards ambiguous legacy usage aggregates", () => {
+  const directory = mkdtempSync(join(tmpdir(), "routekit-pool-legacy-usage-"));
+  const statePath = join(directory, ".state.json");
+  writeFileSync(
+    statePath,
+    JSON.stringify({
+      members: [{
+        id: "primary",
+        limits: {
+          windows: {
+            "5h": { utilization: 0.4 },
+            five_hour: { utilization: 0.2 }
+          },
+          observedAt: Date.now() / 1000,
+          source: "usage"
+        }
+      }]
+    })
+  );
+  try {
+    const tracker = new RateLimitTracker(statePath, "claude-code");
+    assert.equal(tracker.limits("primary"), undefined);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("authoritative usage snapshots replace partial header windows", () => {
+  const directory = mkdtempSync(join(tmpdir(), "routekit-pool-snapshot-"));
+  const statePath = join(directory, ".state.json");
+  const tracker = new RateLimitTracker(statePath, "claude-code");
+  const headerObservedAt = Date.now() / 1000 - 60;
+  const usageObservedAt = Date.now() / 1000;
+  try {
+    tracker.update("primary", {
+      windows: {
+        "5h": {
+          utilization: 0.4,
+          observedAt: headerObservedAt,
+          source: "headers"
+        },
+        "7d-opus": {
+          utilization: 0.8,
+          observedAt: headerObservedAt,
+          source: "headers"
+        }
+      },
+      observedAt: headerObservedAt,
+      source: "headers",
+      completeness: "partial"
+    });
+    tracker.update("primary", {
+      windows: {
+        five_hour: {
+          utilization: 0.2,
+          observedAt: usageObservedAt,
+          source: "usage"
+        }
+      },
+      observedAt: usageObservedAt,
+      source: "usage",
+      completeness: "snapshot"
+    });
+
+    const limits = tracker.limits("primary");
+    assert.deepEqual(Object.keys(limits?.windows ?? {}), ["five_hour"]);
+    assert.equal(limits?.windows.five_hour?.utilization, 0.2);
+    assert.equal(limits?.completeness, "snapshot");
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }

@@ -42,11 +42,17 @@ test("usage rendering includes windows, provenance, and no-observation hint", ()
           models: [],
           limits: {
             windows: {
-              primary: { utilization: 0.52, resetsAt: now / 1000 + 2 * 60 * 60 }
+              primary: {
+                utilization: 0.52,
+                resetsAt: now / 1000 + 2 * 60 * 60,
+                observedAt: now / 1000 - 3 * 60,
+                source: "headers" as const
+              }
             },
             planType: "pro",
             observedAt: now / 1000 - 3 * 60,
-            source: "headers" as const
+            source: "headers" as const,
+            completeness: "partial" as const
           }
         },
         {
