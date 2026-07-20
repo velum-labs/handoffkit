@@ -1,7 +1,20 @@
 {
   "name": "matter-cursor-mcp",
   "version": "1.0.0",
+  "description": "Local read-only MCP server for retrieving Matter library sources in Cursor.",
+  "license": "MIT",
   "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "files": [
+    "dist",
+    "docs",
+    "examples",
+    "scripts",
+    "LICENSE",
+    "README.md"
+  ],
   "bin": {
     "matter-cursor-mcp": "dist/index.js"
   },
