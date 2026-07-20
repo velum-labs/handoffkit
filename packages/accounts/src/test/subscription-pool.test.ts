@@ -441,6 +441,35 @@ test("authoritative usage snapshots replace partial header windows", () => {
   }
 });
 
+test("a recent partial observation does not suppress an authoritative probe", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "routekit-pool-partial-probe-"));
+  writeMember(directory, "a", { accessToken: "token-a" });
+  const state: FakeProviderState = { refreshes: 0, usageCalls: 0 };
+  const pool = await SubscriptionAccountSet.open(fakeProvider(state), {
+    mode: "codex",
+    source: { kind: "directory", path: directory }
+  });
+  try {
+    await pool.execute("gpt-5.3-codex", () =>
+      Promise.resolve(new Response("ok", {
+        headers: { "x-test-utilization": "0.4" }
+      }))
+    );
+    assert.equal(pool.snapshot().members[0]?.limits?.completeness, "partial");
+
+    await pool.refreshUsage();
+    assert.equal(state.usageCalls, 1);
+    assert.equal(pool.snapshot().members[0]?.limits?.completeness, "snapshot");
+    assert.deepEqual(
+      Object.keys(pool.snapshot().members[0]?.limits?.windows ?? {}),
+      []
+    );
+  } finally {
+    await pool.close();
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 test("usage refresh throttles failed provider probes", async () => {
   const directory = mkdtempSync(join(tmpdir(), "routekit-pool-usage-"));
   writeMember(directory, "a", { accessToken: "token-a" });

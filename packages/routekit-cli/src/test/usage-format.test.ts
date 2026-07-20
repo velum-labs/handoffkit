@@ -74,3 +74,43 @@ test("usage rendering includes windows, provenance, and no-observation hint", ()
   assert.match(output, /routekit doctor/);
   assert.equal(limitsSummary(usage, "codex", "work", now), "primary 52% · resets in 2h");
 });
+
+test("usage rendering keeps provenance accurate for mixed observations", () => {
+  const now = Date.UTC(2026, 0, 1);
+  const output = renderUsageLines({
+    accountSets: [{
+      mode: "claude-code",
+      strategy: "sticky",
+      switchThreshold: 0.9,
+      members: [{
+        id: "work",
+        mode: "claude-code",
+        label: "work",
+        sourcePath: "/private/work.json",
+        active: true,
+        models: [],
+        limits: {
+          windows: {
+            five_hour: {
+              utilization: 0.2,
+              observedAt: now / 1000 - 60,
+              source: "usage"
+            },
+            seven_day: {
+              utilization: 0.4,
+              observedAt: now / 1000 - 5,
+              source: "headers"
+            }
+          },
+          observedAt: now / 1000 - 5,
+          source: "headers",
+          completeness: "partial"
+        }
+      }]
+    }]
+  }, now).join("\n");
+
+  assert.match(output, /observed/);
+  assert.match(output, /1m ago via usage/);
+  assert.match(output, /5s ago via headers/);
+});
