@@ -12,6 +12,18 @@
 /** Whole-run bound: no shutdown may block longer than this on cleanups. */
 const HARD_TIMEOUT_MS = 5_000;
 
+/**
+ * Effective shutdown bound. Long-lived services with a drain window (e.g. a
+ * gateway finishing in-flight LLM streams) may extend it; the default stays
+ * tight so interactive CLIs exit promptly.
+ */
+let hardTimeoutMs = HARD_TIMEOUT_MS;
+
+/** Raise (never lower) the shutdown bound to cover a service's drain grace. */
+export function extendCleanupGrace(ms: number): void {
+  hardTimeoutMs = Math.max(hardTimeoutMs, ms);
+}
+
 /** Conventional exit codes: 128 + signal number (SIGINT=2, SIGTERM=15). */
 const SIGINT_EXIT_CODE = 130;
 const SIGTERM_EXIT_CODE = 143;
@@ -70,7 +82,7 @@ export async function runCleanups(): Promise<void> {
       }
     }
   })();
-  await Promise.race([runAll, delay(HARD_TIMEOUT_MS)]);
+  await Promise.race([runAll, delay(hardTimeoutMs)]);
 }
 
 /**
@@ -92,11 +104,15 @@ function runCleanupsSync(): void {
 }
 
 function handleTerminationSignal(exitCode: number): void {
-  if (signalReceived) return;
+  // A second signal (e.g. an impatient Ctrl+C during a drain) must not be
+  // swallowed: skip the remaining grace and exit right away.
+  if (signalReceived) {
+    process.exit(exitCode);
+  }
   signalReceived = true;
   // Never wedge on shutdown: force the exit even if the cleanup run somehow
   // outlives its own bound. Unref'd so it cannot itself keep the loop alive.
-  const forced = setTimeout(() => process.exit(exitCode), HARD_TIMEOUT_MS + 2_000);
+  const forced = setTimeout(() => process.exit(exitCode), hardTimeoutMs + 2_000);
   forced.unref();
   void runCleanups().finally(() => process.exit(exitCode));
 }

@@ -1,0 +1,166 @@
+/**
+ * Generalized service records.
+ *
+ * A service record is the on-disk contract between a long-lived daemon and the
+ * CLIs that manage it: `<home>/services/<kind>.json` holds the daemon's pid,
+ * URL, version, launch arguments, and owning supervisor. Records are written
+ * atomically with 0600 permissions, validated on read, and reaped when the
+ * recorded pid is gone, so a crashed daemon never leaves a lying record
+ * behind. The store is product-agnostic: each product constructs one with its
+ * own state home and product name (RouteKit, FusionKit, ...).
+ */
+import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
+import { join } from "node:path";
+
+import { writeFileAtomic } from "../index.js";
+
+/** Who supervises a running service process. */
+export type ServiceSupervisorKind = "systemd" | "launchd" | "detached";
+
+const SUPERVISOR_KINDS: readonly ServiceSupervisorKind[] = ["systemd", "launchd", "detached"];
+
+/**
+ * Environment variable a daemonizer or generated unit sets on the service
+ * process so the record it writes names its supervisor. Products read it via
+ * {@link supervisorFromEnv} when stamping their records.
+ */
+export const SERVICE_SUPERVISOR_ENV = "VELUM_SERVICE_SUPERVISOR";
+
+export function supervisorFromEnv(
+  env: Record<string, string | undefined> = process.env
+): ServiceSupervisorKind {
+  const value = env[SERVICE_SUPERVISOR_ENV];
+  return SUPERVISOR_KINDS.includes(value as ServiceSupervisorKind)
+    ? (value as ServiceSupervisorKind)
+    : "detached";
+}
+
+export type ServiceRecord = {
+  product: string;
+  owner: string;
+  kind: string;
+  pid: number;
+  url: string;
+  port: number;
+  startedAt: string;
+  authToken?: string;
+  /** Version of the CLI that started the daemon; enables upgrade skew checks. */
+  version?: string;
+  /** Entry script the daemon was launched from (`process.argv[1]`). */
+  binPath?: string;
+  /** CLI arguments after the entry script; enables restart/upgrade respawns. */
+  args?: readonly string[];
+  supervisor?: ServiceSupervisorKind;
+};
+
+export type ServiceRecordInput = Omit<ServiceRecord, "product" | "owner">;
+
+export type ServiceRecordStore = {
+  directory: string;
+  path(kind: string): string;
+  /** Read a record; reaps and returns undefined when its pid is gone. */
+  read(kind: string): ServiceRecord | undefined;
+  write(record: ServiceRecordInput): ServiceRecord;
+  /**
+   * Remove a record. With `ifPid`, only remove when the stored pid matches —
+   * a replaced daemon shutting down must not delete its successor's record.
+   */
+  remove(kind: string, options?: { ifPid?: number }): void;
+};
+
+export function processAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === "EPERM";
+  }
+}
+
+function optionalString(value: unknown): string | undefined {
+  return typeof value === "string" ? value : undefined;
+}
+
+function optionalArgs(value: unknown): readonly string[] | undefined {
+  return Array.isArray(value) && value.every((entry) => typeof entry === "string")
+    ? (value as string[])
+    : undefined;
+}
+
+export function createServiceRecordStore(input: {
+  home: string;
+  product: string;
+  owner?: string;
+}): ServiceRecordStore {
+  const owner = input.owner ?? input.product;
+  const directory = join(input.home, "services");
+  const path = (kind: string): string => join(directory, `${kind}.json`);
+
+  const readRaw = (kind: string): ServiceRecord | undefined => {
+    const file = path(kind);
+    if (!existsSync(file)) return undefined;
+    let parsed: Partial<ServiceRecord>;
+    try {
+      parsed = JSON.parse(readFileSync(file, "utf8")) as Partial<ServiceRecord>;
+    } catch {
+      return undefined;
+    }
+    if (
+      parsed.product !== input.product ||
+      parsed.owner !== owner ||
+      parsed.kind !== kind ||
+      typeof parsed.pid !== "number" ||
+      typeof parsed.url !== "string" ||
+      typeof parsed.port !== "number" ||
+      typeof parsed.startedAt !== "string"
+    ) {
+      return undefined;
+    }
+    const supervisor = SUPERVISOR_KINDS.includes(parsed.supervisor as ServiceSupervisorKind)
+      ? (parsed.supervisor as ServiceSupervisorKind)
+      : undefined;
+    return {
+      product: input.product,
+      owner,
+      kind,
+      pid: parsed.pid,
+      url: parsed.url,
+      port: parsed.port,
+      startedAt: parsed.startedAt,
+      ...(optionalString(parsed.authToken) !== undefined ? { authToken: parsed.authToken as string } : {}),
+      ...(optionalString(parsed.version) !== undefined ? { version: parsed.version as string } : {}),
+      ...(optionalString(parsed.binPath) !== undefined ? { binPath: parsed.binPath as string } : {}),
+      ...(optionalArgs(parsed.args) !== undefined ? { args: optionalArgs(parsed.args) } : {}),
+      ...(supervisor !== undefined ? { supervisor } : {})
+    };
+  };
+
+  return {
+    directory,
+    path,
+    read(kind) {
+      const record = readRaw(kind);
+      if (record === undefined) return undefined;
+      if (!processAlive(record.pid)) {
+        rmSync(path(kind), { force: true });
+        return undefined;
+      }
+      return record;
+    },
+    write(record) {
+      mkdirSync(directory, { recursive: true, mode: 0o700 });
+      chmodSync(directory, 0o700);
+      const full: ServiceRecord = { product: input.product, owner, ...record };
+      writeFileAtomic(path(record.kind), `${JSON.stringify(full, null, 2)}\n`, { mode: 0o600 });
+      chmodSync(path(record.kind), 0o600);
+      return full;
+    },
+    remove(kind, options = {}) {
+      if (options.ifPid !== undefined) {
+        const record = readRaw(kind);
+        if (record !== undefined && record.pid !== options.ifPid) return;
+      }
+      rmSync(path(kind), { force: true });
+    }
+  };
+}
