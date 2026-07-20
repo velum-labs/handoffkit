@@ -10,7 +10,7 @@
 import { createServer } from "node:http";
 import type { IncomingHttpHeaders, IncomingMessage, ServerResponse } from "node:http";
 
-import { assertAuthenticatedBind } from "@routekit/runtime";
+import { assertAuthenticatedBind, trimTrailingSlashes } from "@routekit/runtime";
 
 import { authorizedRequest } from "./auth.js";
 
@@ -103,7 +103,7 @@ export async function startSwitchingGatewayProxy(input: {
 }): Promise<SwitchingGatewayProxy> {
   const host = input.host ?? "127.0.0.1";
   assertAuthenticatedBind(host, input.authToken);
-  let target = input.target.replace(/\/+$/, "");
+  let target = trimTrailingSlashes(input.target);
   let draining = false;
   let inflight = 0;
   const server = createServer((req, res) => {
@@ -182,7 +182,7 @@ export async function startSwitchingGatewayProxy(input: {
     target: () => target,
     swapTarget(next) {
       const previous = target;
-      target = next.replace(/\/+$/, "");
+      target = trimTrailingSlashes(next);
       return previous;
     },
     drain,

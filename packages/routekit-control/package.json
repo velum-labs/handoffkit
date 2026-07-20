@@ -3,6 +3,11 @@
   "private": false,
   "version": "0.8.0",
   "description": "Typed control protocol for the singleton RouteKit daemon.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/velum-labs/handoffkit.git",
+    "directory": "packages/routekit-control"
+  },
   "license": "Apache-2.0",
   "type": "module",
   "exports": {
@@ -11,7 +16,13 @@
       "default": "./dist/index.js"
     }
   },
-  "files": ["dist"],
+  "files": ["dist", "README.md", "LICENSE"],
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org",
+    "access": "public",
+    "provenance": true
+  },
+  "keywords": ["routekit", "daemon", "control-protocol", "rpc"],
   "dependencies": {
     "@routekit/runtime": "workspace:*"
   },

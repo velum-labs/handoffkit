@@ -46,31 +46,29 @@ Set `ROUTEKIT_DEV_SKIP_BUILD=1` after a build for a faster local check.
 
 | Command | RouteKit responsibility |
 | --- | --- |
-| `gateway serve` | Run the configured OpenAI-compatible model gateway in the foreground. |
-| `gateway start` | Start the gateway as a detached background daemon (idempotent; readiness-verified). |
-| `gateway stop` | Stop the RouteKit-owned model gateway, draining in-flight requests first. |
-| `gateway restart` | Drain and relaunch the running gateway with its recorded arguments. |
-| `gateway upgrade` | Replace the running gateway with the installed CLI version (blue-green on a stable portless route, drain-restart on a fixed port). |
-| `gateway logs` | Tail or follow gateway logs (journalctl for a systemd-supervised service). |
-| `gateway service install`, `uninstall`, `status` | Run the gateway as a persistent OS service (systemd user unit / launchd agent) that restarts on crash and reboot. |
-| `codex`, `claude`, `cursor`, `opencode` | Launch one coding tool against an embedded gateway or `--gateway-url`; the optional argument is a namespaced `provider/model` ID. |
+| `daemon status`, `reload`, `stop`, `logs` | Inspect and operate the singleton RouteKit daemon. |
+| `daemon service install`, `uninstall`, `status` | Manage its persistent systemd user unit / launchd agent. |
+| `gateway serve` | Run the combined daemon + gateway in the foreground for development. |
+| `gateway start`, `stop`, `restart`, `upgrade`, `logs`, `service` | Compatibility names for the corresponding singleton-daemon lifecycle operations. |
+| `codex`, `claude`, `cursor`, `opencode` | Ask the daemon to prepare a launch, then run the coding tool locally against the singleton gateway. |
 | `codex install`, `codex uninstall` | Add or remove RouteKit-owned Codex provider/profile blocks. |
 | `providers add`, `remove`, `status` | Manage explicit providers and run live discovery without printing credentials. |
 | `models list` | Discover and list the live namespaced model catalog. |
 | `accounts login` | Run an isolated official Claude Code or Codex login, enroll the credential into the native pool, and enable that provider. |
 | `accounts add`, `remove`, `list`, `status` | Import the current official CLI login or manage enrolled native subscription accounts. |
 | `usage` | Show subscription rate limits, credits, and reset windows from the running gateway or enrolled local accounts. |
-| `accounts serve`, `stop` | Advanced mode: expose subscription pools as a separate external proxy. Normal provider routing does not require it. |
+| `accounts serve`, `stop` | Deprecated compatibility commands; account pools now live inside the singleton daemon. |
 | `accounts cliproxy install`, `login`, `serve`, `status` | Manage RouteKit's pinned CLIProxyAPI integration. |
-| `config path`, `show`, `init`, `edit`, `migrate` | Locate, validate, create, edit, or explicitly import RouteKit router state. |
+| `config path`, `show`, `init`, `edit`, `import`, `migrate` | Manage the daemon's canonical global router config with revision-checked writes. |
 | `doctor` | Check router configuration, referenced credential variables, and installed coding-agent binaries. |
 | `telemetry status`, `on`, `off` | Control RouteKit's anonymous, opt-in product telemetry. |
 | `completion <bash\|zsh\|fish>` | Print shell completion setup. |
 | `version`, `--version` | Print the `@routekit/cli` version. |
 
-Global options are `--config`, `--json`, `--no-input`, `--yes`, and `--quiet`.
-`routekit usage` does not require `accounts serve`: it reads the normal gateway
-when available and otherwise inspects enrolled accounts directly.
+Global options are `--json`, `--no-input`, `--yes`, and `--quiet`. `--config`
+is retained only for foreground/recovery migration; daemon-backed commands use
+the canonical `~/.config/routekit/router.yaml`. `routekit usage` asks the
+daemon-owned account pools directly.
 Provider activation, live model catalogs, account relays, and registry-defined
 credential environment variables are RouteKit-owned. Fusion policy, panels,
 judging, synthesis, and Fusion sessions are intentionally outside this package.
@@ -102,31 +100,55 @@ offered by healthy enrolled accounts and keep per-account quota, refresh,
 cooldown, and model eligibility state. An explicitly requested unknown or
 unnamespaced model is rejected rather than routed to the default.
 
-## Running the gateway as a service
+## Singleton daemon
 
-The recommended way to keep a RouteKit gateway available (for editors, other
-tools, or FusionKit's external-router mode) is the persistent OS service:
+Every product command is a thin client of one daemon per `ROUTEKIT_HOME`.
+The daemon owns:
+
+- a private, random-token-authenticated `control.v1` listener on loopback;
+- one stable OpenAI-compatible gateway listener;
+- the canonical config, provider discovery/cache, subscription account pools,
+  usage, and telemetry state; and
+- transactional router generations. Config/account changes build and validate
+  a replacement router first, atomically switch new traffic, then drain the old
+  generation so active LLM streams finish.
+
+Help, version, completion, terminal rendering, OAuth/editor interaction, and
+the final coding-tool process remain local. Interactive results are committed
+back through authenticated RPC, so the daemon remains the sole RouteKit state
+writer. Project `.routekit/router.yaml` files are SDK/embedded-router inputs,
+not standalone daemon scopes; import one explicitly:
 
 ```sh
-routekit gateway service install        # systemd user unit / launchd agent
-routekit gateway service status
-routekit gateway logs -f
-routekit gateway service uninstall
+routekit config import --from .routekit/router.yaml
 ```
 
-`install` writes the unit, enables it (with lingering on Linux so it survives
-logout and reboot), starts it, and verifies `/health` before printing the URL.
+The first product command race-safely ensures the singleton exists. Where a
+systemd user manager or launchd is available it installs/starts the persistent
+unit; unsupported container/WSL environments use the documented detached
+fallback. Explicit lifecycle commands are:
+
+```sh
+routekit daemon service install
+routekit daemon service status
+routekit daemon logs -f
+routekit daemon service uninstall
+```
+
+`install` writes `routekit-daemon.service` / the launchd agent, enables it
+(with lingering on Linux so it survives logout and reboot), starts it, and
+verifies authenticated control health before printing the data URL.
 On systemd, provider credentials for the configured providers are captured
-into a private `~/.routekit/env/gateway.env` (mode 0600) referenced by the
-unit; edit that file to rotate keys, then `routekit gateway restart`. Where no
+into a private `~/.routekit/env/daemon.env` (mode 0600) referenced by the
+unit; edit that file to rotate keys, then `routekit daemon reload`. Where no
 init supervisor exists (containers, some WSL setups), `install` falls back to
 a detached daemon and says so.
 
 For a background daemon without OS supervision:
 
 ```sh
-routekit gateway start                  # detached; logs to ~/.routekit/logs/gateway.log
-routekit gateway stop
+routekit gateway start                  # compatibility name; logs to ~/.routekit/logs/daemon.log
+routekit daemon stop
 ```
 
 ### Graceful shutdown and upgrades
@@ -136,19 +158,16 @@ are rejected, and in-flight requests (long-lived LLM streams) get up to the
 drain grace (default 30s; `--drain-grace <seconds>` or `ROUTEKIT_DRAIN_GRACE`)
 to finish before the listener is severed.
 
-After installing a new `@routekit/cli`, `routekit status` reports the version
-skew and:
+After installing a new `@routekit/cli`, the next product command negotiates
+the package/protocol version and gracefully restarts an older daemon before
+retrying. The explicit form is:
 
 ```sh
 routekit gateway upgrade
 ```
 
-replaces the running gateway with the installed version. With a stable
-portless route the upgrade is blue-green (the new process starts on a fresh
-port, the stable URL is re-pointed, and the old process drains — zero
-downtime); on a fixed loopback port it is a drain-restart with a brief,
-bounded gap. `upgrade --force` performs the same rollover without a version
-change (e.g. after editing `router.yaml`). Supervised services restart through
-their supervisor; the unit points at the stable `routekit` bin shim, so it
-only needs rewriting (`gateway service install`) if the install location
-moved.
+replaces the combined daemon after draining model traffic. A fixed loopback
+port has a brief bounded rebind gap; portless keeps the stable client URL.
+`upgrade --force` also rolls the process without version skew. Supervised
+services restart through their supervisor; re-run `daemon service install`
+only if the global `routekit` binary location moved.

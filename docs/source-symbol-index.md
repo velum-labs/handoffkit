@@ -242,6 +242,7 @@ Use it with the narrative references when you need to find the module that owns 
 - `packages/model-gateway/src/sse-wire.ts`: noticeChunk (function), errorEvent (function), finishChunk (function), reasoningChunk (function), sseResponse (function)
 - `packages/model-gateway/src/sse/chat-assembler.ts`: AssembledToolCall (type), AssembledTurn (type), ChatStreamAssembler (class)
 - `packages/model-gateway/src/sse/parse.ts`: SseEvent (interface), SseParseError (class), decodeBufferedSse (function), SseDecoder (class)
+- `packages/model-gateway/src/switching-proxy.ts`: SwitchingGatewayProxy (type), startSwitchingGatewayProxy (function)
 
 ### `packages/protocol`
 
@@ -270,23 +271,25 @@ Use it with the narrative references when you need to find the module that owns 
 
 ### `packages/routekit-cli`
 
-- `packages/routekit-cli/src/accounts.ts`: parseAccountMode (function), AccountListEntry (type), listAccounts (function), addAccount (function), ManagedAccountLoginInvocation (type), ManagedLoginKeychain (type), ManagedAccountLoginOptions (type), claudeProfileKeychainService (function), loginAccount (function), removeAccount (function), AccountsStatus (type), accountsStatus (function), serveAccounts (function), stopAccounts (function)
-- `packages/routekit-cli/src/catalog.ts`: LiveModel (type), LiveCatalog (type), fetchLiveCatalog (function), discoverCatalog (function)
+- `packages/routekit-cli/src/accounts.ts`: parseAccountMode (function), AccountListEntry (type), listAccounts (function), addAccount (function), ManagedAccountLoginInvocation (type), ManagedLoginKeychain (type), ManagedAccountLoginOptions (type), claudeProfileKeychainService (function), loginAccount (function), captureLoginCredential (function), removeAccount (function), AccountsStatus (type), accountsStatus (function), serveAccounts (function), stopAccounts (function)
+- `packages/routekit-cli/src/catalog.ts`: LiveModel (type), LiveCatalog (type), fetchLiveCatalog (function)
 - `packages/routekit-cli/src/cli.ts`: routekitVersion (function), buildProgram (function)
+- `packages/routekit-cli/src/client.ts`: daemonStore (function), readDaemonRecord (function), controlClientForRecord (function), daemonRecordHealthy (function), canonicalConfigOrMigrationError (function), daemonServeArgs (function), ensureDaemon (function), routekitClient (function), daemonLogPath (function), daemonLifecycleLockPath (function)
 - `packages/routekit-cli/src/commands/accounts.ts`: registerAccounts (function)
 - `packages/routekit-cli/src/commands/config.ts`: registerConfig (function)
 - `packages/routekit-cli/src/commands/context.ts`: configOverride (function), editableConfigPath (function), loaded (function), numberOption (function)
+- `packages/routekit-cli/src/commands/daemon.ts`: registerDaemon (function)
 - `packages/routekit-cli/src/commands/doctor.ts`: registerDoctor (function)
-- `packages/routekit-cli/src/commands/gateway-service.ts`: gatewaySupervisorController (function), platformSupervisor (function), registerGatewayService (function), registerLogs (function)
+- `packages/routekit-cli/src/commands/gateway-service.ts`: daemonSupervisorController (function), platformSupervisor (function), registerGatewayService (function), registerLogs (function)
 - `packages/routekit-cli/src/commands/gateway.ts`: registerGateway (function)
 - `packages/routekit-cli/src/commands/index.ts`: registerCommands (function)
 - `packages/routekit-cli/src/commands/install.ts`: registerCodexIntegration (function)
 - `packages/routekit-cli/src/commands/launchers.ts`: registerLaunchers (function)
 - `packages/routekit-cli/src/commands/models.ts`: registerModels (function)
-- `packages/routekit-cli/src/commands/providers.ts`: ProviderStatus (type), registerProviders (function)
+- `packages/routekit-cli/src/commands/providers.ts`: registerProviders (function)
 - `packages/routekit-cli/src/commands/serve-options.ts`: GatewayServeCliOptions (type), DEFAULT_DRAIN_GRACE_SECONDS (const), attachServeOptions (function), drainGraceMs (function), serveArgvFrom (function)
 - `packages/routekit-cli/src/commands/serve.ts`: registerServe (function)
-- `packages/routekit-cli/src/commands/start.ts`: emitStarted (function), registerStart (function), registerRestart (function)
+- `packages/routekit-cli/src/commands/start.ts`: registerStart (function), registerRestart (function)
 - `packages/routekit-cli/src/commands/status.ts`: RouteKitOverview (type), routeKitOverview (function), renderOverviewLines (function), registerStatus (function)
 - `packages/routekit-cli/src/commands/stop.ts`: registerStop (function)
 - `packages/routekit-cli/src/commands/telemetry.ts`: registerTelemetry (function)
@@ -294,7 +297,7 @@ Use it with the narrative references when you need to find the module that owns 
 - `packages/routekit-cli/src/commands/usage.ts`: openSubscriptionUsageSource (function), fetchSubscriptionUsage (function), registerUsage (function)
 - `packages/routekit-cli/src/completion.ts`: completionCandidates (function), registerDynamicCompletion (function)
 - `packages/routekit-cli/src/config.ts`: MigrationAction (type), ConfigMigrationDiagnostic (type), LegacyConfigMigration (type), convertLegacyRouterConfig (function), migrateLegacyRouterConfig (function), migrateLegacyState (function)
-- `packages/routekit-cli/src/daemon.ts`: ROUTEKIT_PRODUCT (const), cliEntryPath (function), gatewayDaemonSpec (function), gatewayLogPath (function), serviceEnvironment (function), serviceEnvFilePath (function), writeServiceEnvFile (function), removeServiceEnvFile (function), gatewayUnitSpec (function)
+- `packages/routekit-cli/src/daemon.ts`: ROUTEKIT_PRODUCT (const), cliEntryPath (function), gatewayDaemonSpec (function), gatewayLogPath (function), serviceEnvironment (function), serviceEnvFilePath (function), writeServiceEnvFile (function), removeServiceEnvFile (function), daemonUnitSpec (function), gatewayUnitSpec (function)
 - `packages/routekit-cli/src/launch.ts`: buildToolLaunchSpec (function), launchToolWithIntegration (function), launchTool (function)
 - `packages/routekit-cli/src/serve.ts`: RouterServeOptions (type), RunningRouter (type), startRouter (function), waitForShutdown (function)
 - `packages/routekit-cli/src/state.ts`: ServiceKind (type), RouteKitServiceRecord (type), routekitVersion (function), writeStateSnapshot (function), readStateSnapshot (function), readServiceRecord (function), ServiceRegistration (type), registerService (function), StopServiceResult (type), stopService (function)
@@ -305,6 +308,14 @@ Use it with the narrative references when you need to find the module that owns 
 ### `packages/routekit-config`
 
 - `packages/routekit-config/src/index.ts`: RouterConfigSource (type), LoadedRouterConfig (type), RouterConfigPaths (type), UpdateRouterConfigInput (type), configuredProviderIds (function), missingModelIds (function), assertModelsAvailable (function), resolveModelId (function), selectModelId (const), routekitHome (function), globalRouterConfigPath (function), projectRouterConfigPath (function), findProjectRouterConfig (function), routerConfigPaths (function), loadRouterConfig (function), writeRouterConfig (function), updateEffectiveRouterConfig (function), updateRouterConfig (function), DEFAULT_ROUTER_CONFIG (const)
+
+### `packages/routekit-control`
+
+- `packages/routekit-control/src/index.ts`: ROUTEKIT_CONTROL_CAPABILITY (const), RouteKitControlMethod (type), RouteKitControlParams (type), DaemonStatus (type), ConfigSnapshot (type), ModelInfo (type), LaunchPreparation (type), RouteKitControlResults (type), RouteKitMethodHandler (type), RouteKitControlHandlers (type), MUTATING_ROUTEKIT_METHODS (const), validateRouteKitParams (function), createRouteKitControlHandler (function), RouteKitControlClient (class)
+
+### `packages/routekit-daemon`
+
+- `packages/routekit-daemon/src/index.ts`: ROUTEKIT_DAEMON_KIND (const), ROUTEKIT_PRODUCT (const), RouteKitDaemonOptions (type), RunningRouteKitDaemon (type), startRouteKitDaemon (function)
 
 ### `packages/routekit-registry`
 
@@ -330,6 +341,8 @@ Use it with the narrative references when you need to find the module that owns 
 - `packages/runtime-utils/src/index.ts`: DEFAULT_RUNTIME_TIMEOUTS (const), defineTimeouts (function), MANAGED_SERVER_DEFAULTS (const), CANDIDATE_ISOLATION_DEFAULTS (const), sleep (function), randomId (function), estimateTokens (function), withDeadline (function), formatDurationMs (function), withTimeout (function), captureWorktreeDiff (function), ensureRunOutputDir (function), writeFileAtomic (function), FileLock (type), tryAcquireFileLock (function), ReservedPort (type), reservePort (function), freePort (function), CliCaptureOptions (type), CliCaptureResult (type), runCliCapture (function), spawnTool (function), LoggedSpawnOptions (type), LoggedChild (type), spawnLogged (function), distillLog (function), waitForHttp (function), waitForOutput (function), terminate (function), escapeMarkdownCell (function), markdownTable (function)
 - `packages/runtime-utils/src/portless.ts`: RouteMapping (type), RouteStoreLike (type), PortlessModule (type), PortlessOptions (type), DetectedProxy (type), SpawnedService (type), DiscoverOrSpawnInput (type), DiscoverOrSpawnResult (type), PortlessSession (type), detectPortlessProxy (function), createActivePortlessSession (function), createPortlessSession (function), reapPortlessService (function), reapPortlessProject (function)
 - `packages/runtime-utils/src/process.ts`: ExitInfo (type), Spawned (interface), SuperviseSpawnOptions (type), terminateGroup (function), superviseSpawn (function)
+- `packages/runtime-utils/src/service/authority.ts`: LifecycleLock (type), acquireLifecycleLock (function), nextServiceGeneration (function)
+- `packages/runtime-utils/src/service/control.ts`: CONTROL_PROTOCOL_VERSION (const), CONTROL_BODY_LIMIT_BYTES (const), ControlErrorCode (type), ControlError (class), ControlRequest (type), ControlSuccess (type), ControlFailure (type), ControlResponse (type), ControlEvent (type), ControlHandlerContext (type), ControlHandler (type), RunningControlServer (type), generateControlToken (function), controlTokenMatches (function), startControlServer (function), ControlClientOptions (type), ControlClient (class)
 - `packages/runtime-utils/src/service/daemon.ts`: ServiceDaemonSpec (type), StartDaemonOptions (type), StartDaemonResult (type), serviceLogPath (function), rotateLogFile (function), readLogTail (function), waitForProcessExit (function), waitForServiceReady (function), startDaemon (function), StopDaemonResult (type), stopDaemonProcess (function)
 - `packages/runtime-utils/src/service/records.ts`: ServiceSupervisorKind (type), SERVICE_SUPERVISOR_ENV (const), supervisorFromEnv (function), ServiceRecord (type), ServiceRecordInput (type), ServiceRecordStore (type), processAlive (function), createServiceRecordStore (function)
 - `packages/runtime-utils/src/service/supervisors.ts`: CommandRunner (type), ServiceUnitSpec (type), SupervisorStatus (type), SupervisorController (type), systemdUnitName (function), systemdUnitPath (function), systemdServiceUnit (function), launchdLabel (function), launchdPlistPath (function), launchdAgentPlist (function), supervisorController (function), DetectSupervisorOptions (type), detectSupervisor (function)

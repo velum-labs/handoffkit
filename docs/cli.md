@@ -20,14 +20,21 @@ routekit codex openai/gpt-5.5
 
 FusionKit has no forwarding aliases for those commands.
 
-RouteKit's gateway can also run as a long-lived service instead of a
-foreground process: `routekit gateway service install` registers a persistent
-OS-supervised service (systemd user unit on Linux, launchd agent on macOS)
-that restarts on crash and reboot, and `routekit gateway start` runs a
-detached background daemon where no supervisor exists. `gateway stop`,
-`restart`, and `upgrade` drain in-flight requests before replacing the
-process; `routekit gateway upgrade` rolls the running gateway onto a newly
-installed CLI version (blue-green when a stable portless route is active).
+RouteKit is a thin client of one singleton daemon per `ROUTEKIT_HOME`. The
+daemon owns a private authenticated `control.v1` listener, the stable model
+gateway, provider/catalog state, subscription pools, usage, and canonical
+global config. Every product command negotiates with it; help/version/shell
+completion, terminal interaction, OAuth/editor subprocesses, and coding-tool
+spawning stay local. Concurrent first calls race-safely start exactly one
+daemon, using a persistent systemd user unit / launchd agent when available
+and a clearly reported detached fallback otherwise.
+
+`routekit daemon status|reload|stop|logs` and `daemon service
+install|uninstall|status` are the canonical lifecycle surface. Existing
+`gateway start|stop|restart|upgrade|logs|service` names remain compatibility
+aliases. Config/account reloads atomically switch router generations while
+old in-flight streams drain; binary upgrade drains and restarts the combined
+daemon, then the initiating client reconnects and retries.
 See the [`@routekit/cli` README](../packages/routekit-cli/README.md) for the
 full service runbook.
 
