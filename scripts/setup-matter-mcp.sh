@@ -8,6 +8,10 @@ matter_mcp_export_path
 
 MCP_DIR="${ROOT_DIR}/matter-cursor-mcp"
 
+# Install runs with Runtime Secrets in the environment; persist the token so
+# MCP child processes spawned later with a filtered env can still read it.
+matter_mcp_persist_token
+
 if [ -f "${MCP_DIR}/dist/index.js" ]; then
   echo "matter-cursor-mcp already built at ${MCP_DIR}"
   exit 0
