@@ -6,7 +6,7 @@ import {
   writeFileSync
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 
 import { contextFor } from "@routekit/cli-core";
@@ -15,37 +15,29 @@ import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 
 import {
   DEFAULT_ROUTER_CONFIG,
+  globalRouterConfigPath,
   migrateLegacyState,
   migrateLegacyRouterConfig,
-  routerConfigPaths,
-  updateEffectiveRouterConfig,
-  updateRouterConfig,
   writeRouterConfig
 } from "../config.js";
+import { ensureDaemon, readDaemonRecord, routekitClient } from "../client.js";
 
-import { configOverride, editableConfigPath, loaded } from "./context.js";
-
-function replaceRecord(
-  target: Record<string, unknown>,
-  replacement: unknown
-): void {
-  if (typeof replacement !== "object" || replacement === null || Array.isArray(replacement)) {
-    throw new Error("router config must be a YAML object");
-  }
-  for (const key of Object.keys(target)) delete target[key];
-  Object.assign(target, replacement);
-}
+import { configOverride } from "./context.js";
 
 export function registerConfig(program: Command): void {
   const config = program.command("config").description("manage router configuration");
 
   config
     .command("path")
-    .description("print the effective router config path")
-    .action((_options: unknown, command: Command) => {
+    .description("print the canonical singleton router config path")
+    .action(async (_options: unknown, command: Command) => {
       const ctx = contextFor(command);
-      const paths = routerConfigPaths({ configPath: configOverride(command) });
-      const path = paths.override ?? paths.project ?? paths.global;
+      if (configOverride(command) !== undefined) {
+        throw new Error(
+          "--config is not supported by daemon-backed commands; use `routekit config import --from <path>`"
+        );
+      }
+      const path = (await (await routekitClient()).call("config.get", {})).path;
       if (ctx.json) ctx.emit({ path, exists: existsSync(path) });
       else process.stdout.write(`${path}\n`);
     });
@@ -53,11 +45,17 @@ export function registerConfig(program: Command): void {
   config
     .command("show")
     .description("show the validated effective router config")
-    .action((_options: unknown, command: Command) => {
+    .action(async (_options: unknown, command: Command) => {
       const ctx = contextFor(command);
-      const result = loaded(command);
-      if (ctx.json) ctx.emit({ ...result, config: result.config });
-      else process.stdout.write(stringifyYaml(result.config));
+      const result = await (await routekitClient()).call("config.get", {});
+      if (ctx.json) {
+        ctx.emit({
+          path: result.path,
+          revision: result.revision,
+          sources: result.sources,
+          config: parseYaml(result.document)
+        });
+      } else process.stdout.write(result.document);
     });
 
   config
@@ -65,13 +63,29 @@ export function registerConfig(program: Command): void {
     .description("create a safe router config template")
     .option("--global", "write the global config")
     .option("--force", "replace an existing config")
-    .action((options: { global?: boolean; force?: boolean }, command: Command) => {
+    .action(async (options: { global?: boolean; force?: boolean }, command: Command) => {
       const ctx = contextFor(command);
-      const path = editableConfigPath({ command, global: options.global });
+      const path = globalRouterConfigPath();
       if (existsSync(path) && options.force !== true) {
         throw new Error(`${path} already exists (pass --force to replace it)`);
       }
-      writeRouterConfig(path, DEFAULT_ROUTER_CONFIG);
+      if (readDaemonRecord() !== undefined && existsSync(path)) {
+        const client = await routekitClient();
+        const current = await client.call("config.get", {});
+        await client.call(
+          "config.update",
+          {
+            expectedRevision: current.revision,
+            document: stringifyYaml(DEFAULT_ROUTER_CONFIG)
+          },
+          { idempotencyKey: `config-init-${current.revision}` }
+        );
+      } else {
+        // Bootstrap/recovery exception: there cannot be a daemon until its
+        // canonical config exists.
+        writeRouterConfig(path, DEFAULT_ROUTER_CONFIG);
+        await ensureDaemon({ configPath: path });
+      }
       if (ctx.json) ctx.emit({ path, created: true });
       else ctx.presenter.success(`created ${path}`);
     });
@@ -80,22 +94,18 @@ export function registerConfig(program: Command): void {
     .command("edit")
     .description("edit and atomically validate the router config")
     .option("--global", "edit the global config")
-    .action((options: { global?: boolean }, command: Command) => {
+    .action(async (_options: { global?: boolean }, command: Command) => {
       const ctx = contextFor(command);
       if (ctx.json) {
         throw new Error("`config edit` is interactive and does not support --json");
       }
-      const path =
-        options.global === true
-          ? editableConfigPath({ command, global: true })
-          : loaded(command).path;
-      if (!existsSync(path)) {
-        throw new Error(`${path} does not exist; run \`routekit config init\``);
-      }
+      const client = await routekitClient();
+      const snapshot = await client.call("config.get", {});
+      const path = snapshot.path;
       const directory = mkdtempSync(join(tmpdir(), "routekit-config-"));
       const temporary = join(directory, "router.yaml");
       try {
-        writeFileSync(temporary, readFileSync(path, "utf8"), { mode: 0o600 });
+        writeFileSync(temporary, snapshot.document, { mode: 0o600 });
         const editor = process.env.EDITOR ?? process.env.VISUAL;
         if (editor === undefined || editor.length === 0) {
           throw new Error("set EDITOR or VISUAL before running config edit");
@@ -103,15 +113,15 @@ export function registerConfig(program: Command): void {
         const result = spawnSync(editor, [temporary], { stdio: "inherit" });
         if (result.error !== undefined) throw result.error;
         if (result.status !== 0) throw new Error(`${editor} exited with status ${result.status}`);
-        const edited = parseYaml(readFileSync(temporary, "utf8")) as unknown;
-        if (options.global === true) {
-          updateRouterConfig(path, (draft) => replaceRecord(draft, edited));
-        } else {
-          updateEffectiveRouterConfig(
-            { configPath: configOverride(command) },
-            (draft) => replaceRecord(draft, edited)
-          );
-        }
+        const editedDocument = readFileSync(temporary, "utf8");
+        // Parse client-side for immediate syntax feedback; the daemon performs
+        // authoritative schema validation and transactional router reload.
+        parseYaml(editedDocument);
+        await client.call(
+          "config.update",
+          { expectedRevision: snapshot.revision, document: editedDocument },
+          { idempotencyKey: `config-edit-${snapshot.revision}` }
+        );
       } finally {
         rmSync(directory, { recursive: true, force: true });
       }
@@ -119,13 +129,48 @@ export function registerConfig(program: Command): void {
     });
 
   config
+    .command("import")
+    .description("import a router file into the canonical singleton config")
+    .requiredOption("--from <path>", "router YAML to import")
+    .action(async (options: { from: string }, command: Command) => {
+      const ctx = contextFor(command);
+      const source = resolve(options.from);
+      if (!existsSync(source)) throw new Error(`router config not found: ${source}`);
+      const document = readFileSync(source, "utf8");
+      parseYaml(document);
+      const canonical = globalRouterConfigPath();
+      let revision: number;
+      if (!existsSync(canonical) && readDaemonRecord() === undefined) {
+        // Bootstrap/recovery exception; validation still goes through the
+        // public config writer before the daemon is started.
+        writeRouterConfig(canonical, parseYaml(document));
+        const started = await ensureDaemon({ configPath: canonical });
+        revision = (await started.client.call("config.get", {})).revision;
+      } else {
+        const client = await routekitClient();
+        const current = await client.call("config.get", {});
+        const imported = await client.call(
+          "config.import",
+          {
+            expectedRevision: current.revision,
+            document,
+            source
+          },
+          { idempotencyKey: `config-import-${current.revision}` }
+        );
+        revision = imported.revision;
+      }
+      if (ctx.json) ctx.emit({ imported: true, source, path: canonical, revision });
+      else ctx.presenter.success(`imported ${source} into ${canonical}`);
+    });
+
+  config
     .command("migrate")
     .description("convert legacy endpoint/account config and import subscription state")
     .option("--dry-run", "diagnose and print the conversion without writing")
-    .action((options: { dryRun?: boolean }, command: Command) => {
+    .action(async (options: { dryRun?: boolean }, command: Command) => {
       const ctx = contextFor(command);
-      const paths = routerConfigPaths({ configPath: configOverride(command) });
-      const path = paths.override ?? paths.project ?? paths.global;
+      const path = globalRouterConfigPath();
       if (!existsSync(path)) {
         throw new Error(`router config not found: ${path}`);
       }
@@ -137,6 +182,14 @@ export function registerConfig(program: Command): void {
       );
       const actions =
         hasErrors || options.dryRun === true ? [] : migrateLegacyState();
+      if (!hasErrors && options.dryRun !== true && migration.changed) {
+        const client = await routekitClient();
+        await client.call(
+          "daemon.reload",
+          {},
+          { idempotencyKey: `legacy-migrate-${Date.now()}` }
+        );
+      }
       if (ctx.json) {
         ctx.emit({ migration, actions, dryRun: options.dryRun === true });
         if (hasErrors) process.exitCode = 1;

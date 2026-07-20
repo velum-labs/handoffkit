@@ -1,9 +1,5 @@
-import type { RouterConfig } from "@routekit/gateway";
 import type { ModelReasoningCapabilities } from "@routekit/contracts";
-import { resolveModelId } from "@routekit/config";
 import { trimTrailingSlashes } from "@routekit/runtime";
-
-import { startRouter } from "./serve.js";
 
 export type LiveModel = {
   id: string;
@@ -72,27 +68,3 @@ export async function fetchLiveCatalog(
   return { defaultModel, models };
 }
 
-export async function discoverCatalog(config: RouterConfig): Promise<LiveCatalog> {
-  const running = await startRouter({
-    config,
-    port: 0,
-    portless: false,
-    register: false
-  });
-  try {
-    const catalog = await fetchLiveCatalog(running.url, {
-      ...(config.defaultModel !== undefined
-        ? { defaultModel: config.defaultModel }
-        : {})
-    });
-    return {
-      ...catalog,
-      defaultModel: resolveModelId(
-        config,
-        catalog.models.map((model) => model.id)
-      )
-    };
-  } finally {
-    await running.close();
-  }
-}

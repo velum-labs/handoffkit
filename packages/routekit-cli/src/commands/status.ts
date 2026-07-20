@@ -9,11 +9,10 @@ import type { Command } from "commander";
 
 import { accountsStatus } from "../accounts.js";
 import type { AccountsStatus } from "../accounts.js";
+import { routekitClient } from "../client.js";
 import { readServiceRecord, readStateSnapshot, routekitVersion } from "../state.js";
 import type { RouteKitServiceRecord, ServiceKind } from "../state.js";
 import { limitsSummary } from "../usage-format.js";
-
-import { loaded } from "./context.js";
 
 type CachedProviderHealth = {
   checkedAt?: string;
@@ -273,16 +272,76 @@ export function registerStatus(program: Command): void {
           message: "`status --watch` is a live human view and cannot be combined with --json"
         });
       }
-      const config = loaded(command).config;
-      const collect = async (): Promise<RouteKitOverview> => routeKitOverview(config);
+      const collect = async () => {
+        const client = await routekitClient();
+        const [daemon, providers, accounts, models] = await Promise.all([
+          client.call("daemon.status", {}),
+          client.call("providers.status", {}),
+          client.call("accounts.status", {}),
+          client.call("models.list", {})
+        ]);
+        return { observedAt: new Date().toISOString(), daemon, providers, accounts, models };
+      };
       if (options.watch !== undefined) {
         await watch(ctx.presenter, interval(options.watch), async () =>
-          renderOverviewLines(await collect())
+          renderDaemonOverviewLines(await collect())
         );
         return;
       }
       const overview = await collect();
       if (ctx.json) ctx.emit(overview);
-      else for (const line of renderOverviewLines(overview)) ctx.presenter.line(line);
+      else for (const line of renderDaemonOverviewLines(overview)) ctx.presenter.line(line);
     });
+}
+
+function renderDaemonOverviewLines(
+  overview: {
+    daemon: {
+      pid: number;
+      packageVersion: string;
+      dataUrl: string;
+      generation: number;
+      configRevision: number;
+    };
+    providers: {
+      providers: Array<{
+        provider: string;
+        credentialAvailable: boolean;
+        models?: readonly string[];
+        error?: string;
+      }>;
+    };
+    accounts: unknown;
+    models: { models: Array<{ id: string }>; defaultModel?: string };
+  }
+): string[] {
+  const lines = [
+    "RouteKit status",
+    "",
+    `  ${stateMark(true)} daemon v${overview.daemon.packageVersion} · pid ${overview.daemon.pid} · generation ${overview.daemon.generation}`,
+    `  ${stateMark(true)} gateway ${overview.daemon.dataUrl}`,
+    `  ${stateMark(true)} config revision ${overview.daemon.configRevision}`,
+    "",
+    "Providers"
+  ];
+  for (const provider of overview.providers.providers) {
+    const ok = provider.credentialAvailable && provider.error === undefined;
+    lines.push(
+      `  ${stateMark(ok)} ${provider.provider} · ${
+        provider.error ??
+        `${provider.models?.length ?? 0} model(s) · ${
+          provider.credentialAvailable ? "credential ready" : "credential missing"
+        }`
+      }`
+    );
+  }
+  lines.push(
+    "",
+    `Models`,
+    `  ${stateMark(overview.models.models.length > 0)} ${overview.models.models.length} live model(s)` +
+      (overview.models.defaultModel === undefined
+        ? ""
+        : ` · default ${overview.models.defaultModel}`)
+  );
+  return lines;
 }

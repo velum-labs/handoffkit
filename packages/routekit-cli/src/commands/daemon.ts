@@ -16,6 +16,7 @@ import {
   readDaemonRecord
 } from "../client.js";
 import { routekitVersion } from "../state.js";
+import { registerGatewayService, registerLogs } from "./gateway-service.js";
 
 function registerRun(group: Command): void {
   const run = new Command("run")
@@ -170,5 +171,7 @@ export function registerDaemon(program: Command): void {
   registerStatus(group);
   registerReload(group);
   registerStop(group);
+  registerLogs(group);
+  registerGatewayService(group);
 }
 

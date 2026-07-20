@@ -1,11 +1,12 @@
 import { contextFor, parsePort } from "@routekit/cli-core";
+import { startRouteKitDaemon } from "@routekit/daemon";
 import type { Command } from "commander";
 
-import { fetchLiveCatalog } from "../catalog.js";
-import { startRouter, waitForShutdown } from "../serve.js";
-import { writeStateSnapshot } from "../state.js";
+import { globalRouterConfigPath } from "../config.js";
+import { waitForShutdown } from "../serve.js";
+import { routekitVersion } from "../state.js";
 
-import { loaded } from "./context.js";
+import { configOverride } from "./context.js";
 import { attachServeOptions, drainGraceMs } from "./serve-options.js";
 import type { GatewayServeCliOptions } from "./serve-options.js";
 
@@ -21,40 +22,31 @@ export function registerServe(program: Command): void {
         command: Command
       ) => {
         const ctx = contextFor(command);
-        const result = loaded(command);
-        const running = await startRouter({
-          config: result.config,
+        const configPath = configOverride(command) ?? globalRouterConfigPath();
+        const running = await startRouteKitDaemon({
+          packageVersion: routekitVersion(),
+          configPath,
           host: options.host,
           port: parsePort(options.port, 8080),
           drainGraceMs: drainGraceMs(options.drainGrace),
           ...(options.authToken !== undefined ? { authToken: options.authToken } : {}),
           ...(options.portless !== undefined ? { portless: options.portless } : {})
         });
-        const catalog = await fetchLiveCatalog(running.gateway.url(), {
-          ...(options.authToken !== undefined
-            ? { authToken: options.authToken }
-            : {}),
-          ...(result.config.defaultModel !== undefined
-            ? { defaultModel: result.config.defaultModel }
-            : {})
-        });
-        writeStateSnapshot("catalog", "models", {
-          updatedAt: new Date().toISOString(),
-          defaultModel: catalog.defaultModel,
-          models: catalog.models
-        });
         if (ctx.json) {
           ctx.emit({
-            url: running.url,
-            port: running.gateway.port(),
-            config: result.path,
+            event: "listening",
+            url: running.dataUrl,
+            controlUrl: running.controlUrl,
+            port: running.record.dataPort,
+            config: configPath,
             authenticated: options.authToken !== undefined,
-            defaultModel: catalog.defaultModel,
-            models: catalog.models.map((model) => model.id)
+            pid: running.record.pid,
+            generation: running.record.generation
           });
         } else {
-          ctx.presenter.success(`RouteKit gateway listening at ${running.url}`);
-          ctx.presenter.note(`config: ${result.path}`);
+          ctx.presenter.success(`RouteKit daemon gateway listening at ${running.dataUrl}`);
+          ctx.presenter.note(`control: ${running.controlUrl}`);
+          ctx.presenter.note(`config: ${configPath}`);
           ctx.presenter.note("Press Ctrl+C to stop.");
         }
         await waitForShutdown();

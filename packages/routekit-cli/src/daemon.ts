@@ -16,7 +16,6 @@ import type { ServiceDaemonSpec, ServiceUnitSpec } from "@routekit/runtime";
 
 import { routekitHome } from "./config.js";
 import { routekitVersion } from "./state.js";
-import type { ServiceKind } from "./state.js";
 
 export const ROUTEKIT_PRODUCT = "routekit";
 
@@ -82,7 +81,7 @@ export function serviceEnvironment(config: RouterConfig): Record<string, string>
   return env;
 }
 
-export function serviceEnvFilePath(kind: ServiceKind): string {
+export function serviceEnvFilePath(kind: string): string {
   return join(routekitHome(), "env", `${kind}.env`);
 }
 
@@ -91,7 +90,7 @@ function quoteEnvValue(value: string): string {
 }
 
 /** Write the 0600 secrets file a systemd unit references via EnvironmentFile. */
-export function writeServiceEnvFile(kind: ServiceKind, env: Record<string, string>): string {
+export function writeServiceEnvFile(kind: string, env: Record<string, string>): string {
   const path = serviceEnvFilePath(kind);
   const directory = join(routekitHome(), "env");
   mkdirSync(directory, { recursive: true, mode: 0o700 });
@@ -102,8 +101,39 @@ export function writeServiceEnvFile(kind: ServiceKind, env: Record<string, strin
   return path;
 }
 
-export function removeServiceEnvFile(kind: ServiceKind): void {
+export function removeServiceEnvFile(kind: string): void {
   rmSync(serviceEnvFilePath(kind), { force: true });
+}
+
+export function daemonUnitSpec(input: {
+  args: readonly string[];
+  supervisor: "systemd" | "launchd";
+  env: Record<string, string>;
+  drainGraceMs: number;
+  cwd?: string;
+}): ServiceUnitSpec {
+  const shared = {
+    product: ROUTEKIT_PRODUCT,
+    kind: "daemon",
+    description: "RouteKit singleton daemon",
+    command: {
+      execPath: process.execPath,
+      args: [cliEntryPath(), ...input.args]
+    },
+    workingDirectory: input.cwd ?? process.cwd(),
+    drainGraceMs: input.drainGraceMs
+  };
+  if (input.supervisor === "systemd") {
+    return {
+      ...shared,
+      environmentFile: writeServiceEnvFile("daemon", input.env)
+    };
+  }
+  return {
+    ...shared,
+    env: input.env,
+    logFile: serviceLogPath(routekitHome(), "daemon")
+  };
 }
 
 export function gatewayUnitSpec(input: {

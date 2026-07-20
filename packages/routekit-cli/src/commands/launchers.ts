@@ -1,12 +1,12 @@
 import { resolve } from "node:path";
 
-import { contextFor, parsePort } from "@routekit/cli-core";
+import { contextFor } from "@routekit/cli-core";
 import { trimTrailingSlashes } from "@routekit/runtime";
 import type { Command } from "commander";
 
 import { launchTool, routekitToolRegistry } from "../launch.js";
+import { routekitClient } from "../client.js";
 
-import { loaded } from "./context.js";
 import { registerCodexIntegration } from "./install.js";
 
 export function registerLaunchers(program: Command): void {
@@ -48,20 +48,26 @@ export function registerLaunchers(program: Command): void {
             `\`${integration.id}\` is interactive and does not support --json`
           );
         }
-        const config = loaded(actionCommand).config;
+        const cwd = options.cwd !== undefined ? resolve(options.cwd) : process.cwd();
+        const tool = integration.id as "codex" | "claude" | "cursor" | "opencode";
+        const prepared = await (await routekitClient()).call("launcher.prepare", {
+          tool,
+          ...(model !== undefined ? { model } : {}),
+          cwd
+        });
         process.exitCode = await launchTool({
           tool: integration.id,
-          config,
-          ...(options.gatewayUrl !== undefined
-            ? { gatewayUrl: trimTrailingSlashes(options.gatewayUrl) }
-            : {}),
-          ...(model !== undefined ? { model } : {}),
+          gatewayUrl:
+            options.gatewayUrl !== undefined
+              ? trimTrailingSlashes(options.gatewayUrl)
+              : prepared.gatewayUrl,
+          model: prepared.model,
           ...(options.effort !== undefined ? { effort: options.effort } : {}),
           args: toolArgs,
-          ...(options.cwd !== undefined ? { cwd: resolve(options.cwd) } : {}),
-          ...(options.authToken !== undefined ? { authToken: options.authToken } : {}),
-          host: options.host,
-          port: parsePort(options.port, 0),
+          cwd,
+          ...((options.authToken ?? prepared.authToken) !== undefined
+            ? { authToken: options.authToken ?? prepared.authToken }
+            : {}),
           ...(integration.id === "cursor" && options.ide !== undefined
             ? { ide: options.ide }
             : {})

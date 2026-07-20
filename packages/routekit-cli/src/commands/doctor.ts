@@ -1,18 +1,9 @@
-import {
-  CLIPROXY_API_KEY_ENV,
-  cliproxyApiKey
-} from "@routekit/accounts";
 import { contextFor, probeBinaryVersion } from "@routekit/cli-core";
-import { configuredProviderIds } from "@routekit/config";
-import type { RouterConfig } from "@routekit/gateway";
-import { defaultKeyEnv } from "@routekit/registry";
 import { commandOnPath } from "@routekit/runtime";
 import type { Command } from "commander";
 
-import { accountsStatus } from "../accounts.js";
+import { routekitClient } from "../client.js";
 import { routekitToolRegistry } from "../launch.js";
-
-import { loaded } from "./context.js";
 
 function installCommand(binary: string): string {
   switch (binary) {
@@ -41,56 +32,34 @@ export function registerDoctor(program: Command): void {
         detail?: string;
         tryCommand?: string;
       }> = [];
-      let config: RouterConfig | undefined;
       try {
-        const result = loaded(command);
-        config = result.config;
-        checks.push({ label: "router config", ok: true, detail: result.path });
-        for (const name of new Set(
-          configuredProviderIds(result.config).flatMap((provider) => {
-            const keyEnv = defaultKeyEnv(provider);
-            return keyEnv === undefined ? [] : [keyEnv];
-          })
-        )) {
-          const credential =
-            process.env[name] ??
-            (name === CLIPROXY_API_KEY_ENV ? cliproxyApiKey() : undefined);
+        const client = await routekitClient();
+        const daemon = await client.call("doctor.run", {});
+        for (const check of daemon.checks) {
           checks.push({
-            label: name,
-            ok: credential !== undefined && credential.length > 0,
-            detail: credential !== undefined ? "set" : "not set"
+            label: check.name,
+            ok: check.ok,
+            ...(check.detail !== undefined ? { detail: check.detail } : {})
+          });
+        }
+        const providers = await client.call("providers.status", { live: true });
+        for (const provider of providers.providers) {
+          checks.push({
+            label: `${provider.provider} provider`,
+            ok: provider.credentialAvailable && provider.error === undefined,
+            detail:
+              provider.error ??
+              `${provider.models?.length ?? 0} model(s); ` +
+                (provider.credentialAvailable ? "credential available" : "credential missing")
           });
         }
       } catch (error) {
         checks.push({
-          label: "router config",
+          label: "RouteKit daemon",
           ok: false,
           detail: error instanceof Error ? error.message : String(error),
-          tryCommand: "routekit config init"
+          tryCommand: "routekit daemon status"
         });
-      }
-      if (config !== undefined) {
-        const status = await accountsStatus(config);
-        for (const subscriptionKind of ["claude-code", "codex"] as const) {
-          if (config.providers[subscriptionKind] === undefined) continue;
-          const entries = status.accounts.filter(
-            (entry) => entry.subscriptionKind === subscriptionKind
-          );
-          const valid = entries.filter((entry) => entry.credentialValid);
-          checks.push({
-            label: `${subscriptionKind} subscription`,
-            ok: valid.length > 0,
-            detail:
-              valid.length > 0
-                ? `${valid.length} valid account(s); routing enabled`
-                : "routing enabled but no valid enrolled account",
-            ...(
-              valid.length === 0
-                ? { tryCommand: `routekit accounts login ${subscriptionKind} --name default` }
-                : {}
-            )
-          });
-        }
       }
       for (const tool of routekitToolRegistry.list()) {
         if (tool.binary === undefined) continue;

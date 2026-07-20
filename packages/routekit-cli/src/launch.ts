@@ -12,7 +12,6 @@ import type { RouterConfig } from "@routekit/gateway";
 import { commandOnPath } from "@routekit/runtime";
 
 import { fetchLiveCatalog, type LiveModel } from "./catalog.js";
-import { startRouter } from "./serve.js";
 
 export { routekitToolRegistry };
 
@@ -123,15 +122,13 @@ export async function launchToolWithIntegration(
 
 export async function launchTool(input: {
   tool: string;
-  config: RouterConfig;
-  gatewayUrl?: string;
+  config?: RouterConfig;
+  gatewayUrl: string;
   model?: string;
   effort?: string;
   args?: readonly string[];
   cwd?: string;
   authToken?: string;
-  host?: string;
-  port?: number;
   ide?: boolean;
 }): Promise<number> {
   const integration = routekitToolRegistry.get(input.tool);
@@ -142,40 +139,32 @@ export async function launchTool(input: {
         (integration.installHint ?? `install ${integration.binary}`)
     );
   }
-  const running =
-    input.gatewayUrl === undefined
-      ? await startRouter({
-          config: input.config,
-          ...(input.host !== undefined ? { host: input.host } : {}),
-          ...(input.port !== undefined ? { port: input.port } : {}),
-          ...(input.authToken !== undefined ? { authToken: input.authToken } : {}),
-          portless: false,
-          register: false
-        })
-      : undefined;
-  const gatewayUrl = input.gatewayUrl ?? running!.url;
-  try {
-    const catalog = await fetchLiveCatalog(gatewayUrl, {
-      ...(input.authToken !== undefined ? { authToken: input.authToken } : {}),
-      ...(input.config.defaultModel !== undefined
-        ? { defaultModel: input.config.defaultModel }
+  const catalog = await fetchLiveCatalog(input.gatewayUrl, {
+    ...(input.authToken !== undefined ? { authToken: input.authToken } : {}),
+    ...(input.config?.defaultModel !== undefined
+      ? { defaultModel: input.config.defaultModel }
+      : input.model !== undefined
+        ? { defaultModel: input.model }
         : {})
-    });
-    return await launchToolWithIntegration(
-      integration,
-      buildToolLaunchSpec({
-        config: input.config,
-        catalog: catalog.models,
-        gatewayUrl,
-        ...(input.model !== undefined ? { model: input.model } : {}),
-        ...(input.effort !== undefined ? { effort: input.effort } : {}),
-        ...(input.args !== undefined ? { args: input.args } : {}),
-        ...(input.cwd !== undefined ? { cwd: input.cwd } : {}),
-        ...(input.authToken !== undefined ? { authToken: input.authToken } : {}),
-        ...(input.ide !== undefined ? { ide: input.ide } : {})
-      })
-    );
-  } finally {
-    await running?.close();
-  }
+  });
+  const config =
+    input.config ??
+    ({
+      providers: {},
+      ...(input.model !== undefined ? { defaultModel: input.model } : {})
+    } as RouterConfig);
+  return await launchToolWithIntegration(
+    integration,
+    buildToolLaunchSpec({
+      config,
+      catalog: catalog.models,
+      gatewayUrl: input.gatewayUrl,
+      ...(input.model !== undefined ? { model: input.model } : {}),
+      ...(input.effort !== undefined ? { effort: input.effort } : {}),
+      ...(input.args !== undefined ? { args: input.args } : {}),
+      ...(input.cwd !== undefined ? { cwd: input.cwd } : {}),
+      ...(input.authToken !== undefined ? { authToken: input.authToken } : {}),
+      ...(input.ide !== undefined ? { ide: input.ide } : {})
+    })
+  );
 }

@@ -94,6 +94,7 @@ export type ModelInfo = {
   id: string;
   provider?: string;
   capabilities?: Record<string, unknown>;
+  reasoning?: Record<string, unknown>;
 };
 
 export type LaunchPreparation = {
