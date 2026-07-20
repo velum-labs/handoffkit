@@ -16,7 +16,7 @@ Use it with the narrative references when you need to find the module that owns 
 - `packages/accounts/src/codex-relay.ts`: CodexCatalogEntry (type), ProviderRelayLogger (type), CodexStockEntry (type), CodexRelayOptions (type), CodexRelayAuthSource (type), CodexRelayAuth (type), codexRelayAuth (function), CodexBackendRelay (class)
 - `packages/accounts/src/credentials.ts`: defaultSubscriptionAccountDirectory (function), defaultSubscriptionCredentialPath (function), loadSubscriptionCredential (function), persistSubscriptionCredential (function), sanitizeSubscriptionLabel (function), enrollCurrentSubscription (function), RemoveSubscriptionAccountResult (type), removeSubscriptionAccount (function), subscriptionCredentialLabel (function)
 - `packages/accounts/src/gateway.ts`: SubscriptionAccountConfigs (type), OpenSubscriptionRelaysOptions (type), OpenSubscriptionRelaysResult (type), SubscriptionAccountSets (type), openSubscriptionAccountSets (function), subscriptionRelaysFromAccountSets (function), openSubscriptionRelays (function)
-- `packages/accounts/src/provider.ts`: AdminUsageRange (type), AdminUsageCost (type), SubscriptionProvider (type), codexModelsSearch (function), subscriptionProvider (function)
+- `packages/accounts/src/provider.ts`: AdminUsageRange (type), AdminUsageCost (type), SubscriptionProvider (type), canonicalRateLimitWindowKey (function), codexModelsSearch (function), subscriptionProvider (function)
 - `packages/accounts/src/proxy.ts`: StartSubscriptionProxyOptions (type), SubscriptionProxy (type), NoSubscriptionAccountsError (class), startSubscriptionProxy (function)
 - `packages/accounts/src/relay.ts`: SubscriptionRelayDialect (type), SubscriptionRelay (type), forwardRelayHeaders (function), AnthropicRelayOptions (type), RelayOnlyBackend (class), AnthropicBackendRelay (class)
 - `packages/accounts/src/types.ts`: SubscriptionSelectionStrategy (type), SubscriptionCredential (type), RateLimitWindow (type), CreditSnapshot (type), AccountLimits (type), SubscriptionFailure (type), SubscriptionMemberStatus (type), SubscriptionAccountSetSnapshot (type)
@@ -294,7 +294,7 @@ Use it with the narrative references when you need to find the module that owns 
 - `packages/routekit-cli/src/state.ts`: ServiceKind (type), RouteKitServiceRecord (type), writeStateSnapshot (function), readStateSnapshot (function), readServiceRecord (function), ServiceRegistration (type), registerService (function), StopServiceResult (type), stopService (function), stopAllServices (function)
 - `packages/routekit-cli/src/telemetry.ts`: telemetryPath (function), resolveTelemetry (const), enableTelemetry (const), disableTelemetry (const), TELEMETRY_FIELDS (const)
 - `packages/routekit-cli/src/update-notifier.ts`: notifyIfUpdateAvailable (function)
-- `packages/routekit-cli/src/usage-format.ts`: formatUtilizationBar (function), formatResetCountdown (function), renderUsageLines (function), limitsSummary (function)
+- `packages/routekit-cli/src/usage-format.ts`: formatUtilizationBar (function), formatResetCountdown (function), formatRateLimitWindowName (function), renderUsageLines (function), limitsSummary (function)
 
 ### `packages/routekit-config`
 
