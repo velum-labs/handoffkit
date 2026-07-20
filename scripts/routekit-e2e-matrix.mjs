@@ -351,7 +351,7 @@ async function startDeterministicStack(tempRoot) {
     codex: "matrix-codex",
     "claude-code": "claude-matrix"
   };
-  const defaultNativeModel = "matrix-default";
+  const defaultNativeModel = nativeModels.codex;
   const defaultPublicModel = `codex/${defaultNativeModel}`;
   const publicModels = Object.fromEntries(
     Object.entries(nativeModels).map(([provider, model]) => [
@@ -367,7 +367,29 @@ async function startDeterministicStack(tempRoot) {
         codex: {},
         "claude-code": {}
       },
-      defaultModel: defaultPublicModel
+      defaultModel: defaultPublicModel,
+      reasoningCapabilities: {
+        [publicModels.openrouter]: {
+          efforts: [{ id: "quick", aliases: ["high"] }, { id: "deep" }],
+          defaultEffort: "quick",
+          wireShape: "openrouter"
+        },
+        [publicModels.codex]: {
+          efforts: [{ id: "quick", aliases: ["high"] }, { id: "deep" }],
+          defaultEffort: "quick",
+          wireShape: "openai-responses"
+        },
+        [defaultPublicModel]: {
+          efforts: [{ id: "quick", aliases: ["high"] }, { id: "deep" }],
+          defaultEffort: "quick",
+          wireShape: "openai-responses"
+        },
+        [publicModels["claude-code"]]: {
+          efforts: [{ id: "quick" }, { id: "deep" }, { id: "high" }],
+          defaultEffort: "quick",
+          wireShape: "anthropic"
+        }
+      }
     },
     sources: Object.fromEntries(
       Object.entries(nativeModels).map(([provider, model]) => [
@@ -375,7 +397,9 @@ async function startDeterministicStack(tempRoot) {
         sourceFor(
           simulator.url,
           provider,
-          provider === "codex" ? [model, defaultNativeModel] : [model]
+          provider === "codex"
+            ? [...new Set([model, defaultNativeModel])]
+            : [model]
         )
       ])
     )
@@ -582,6 +606,41 @@ async function verifyLosslessAnthropicThinking(stack) {
       "sig-prior-matrix"
     );
   }
+}
+
+async function verifyDynamicReasoningCapabilities(stack) {
+  const model = stack.publicModels.openrouter;
+  const catalogResponse = await fetch(`${stack.gateway.url()}/v1/models`);
+  assert.equal(catalogResponse.status, 200);
+  const catalog = await catalogResponse.json();
+  const discovered = catalog.data?.find((entry) => entry.id === model);
+  assert.deepEqual(
+    discovered?.reasoning?.efforts?.map((effort) => effort.id),
+    ["quick", "deep"]
+  );
+  assert.equal(discovered?.reasoning?.provenance, "config");
+
+  const accepted = await fetch(`${stack.gateway.url()}/v1/chat/completions`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      model,
+      messages: [{ role: "user", content: "dynamic effort matrix" }],
+      reasoning_effort: "deep"
+    })
+  });
+  assert.equal(accepted.status, 200);
+
+  const rejected = await fetch(`${stack.gateway.url()}/v1/chat/completions`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      model,
+      messages: [{ role: "user", content: "unsupported effort matrix" }],
+      reasoning_effort: "maximum"
+    })
+  });
+  assert.equal(rejected.status, 400);
 }
 
 function tmux(...args) {
@@ -815,6 +874,13 @@ async function runPtyCase(input) {
         await new Promise((resolveWait) => setTimeout(resolveWait, 250));
       }
       tmux("send-keys", "-t", session, "Enter");
+      if (input.door === "cursor") {
+        await new Promise((resolveWait) => setTimeout(resolveWait, 1_500));
+        if (/Trusting workspace/i.test(capturePane(session))) {
+          tmux("send-keys", "-l", "-t", session, "a");
+          tmux("send-keys", "-t", session, "Enter");
+        }
+      }
       transcript = await waitForPane(
         session,
         (value) =>
@@ -1213,6 +1279,20 @@ async function runDeterministic(options, results, artifactDir, tempRoot) {
         },
         async () => {
           await verifyLosslessAnthropicThinking(stack);
+          return {};
+        }
+      );
+    }
+    if (selected("openrouter", options.providers)) {
+      await recordCase(
+        results,
+        {
+          phase: "deterministic",
+          provider: "openrouter",
+          door: "dynamic-reasoning-capabilities"
+        },
+        async () => {
+          await verifyDynamicReasoningCapabilities(stack);
           return {};
         }
       );

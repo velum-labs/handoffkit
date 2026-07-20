@@ -26,6 +26,7 @@
     "provenance": true
   },
   "dependencies": {
+    "@routekit/contracts": "workspace:*",
     "@routekit/harness-core": "workspace:*",
     "@routekit/runtime": "workspace:*",
     "@routekit/tools": "workspace:*",

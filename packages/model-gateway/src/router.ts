@@ -1,4 +1,9 @@
 import { z } from "zod";
+import { resolveReasoningEffort } from "@routekit/contracts";
+import type {
+  ModelReasoningCapabilities,
+  ReasoningSelection
+} from "@routekit/contracts";
 
 import type {
   Backend,
@@ -11,6 +16,11 @@ import {
   PROVIDER_IDS,
   SUBSCRIPTION_PROVIDER_IDS
 } from "./provider-source.js";
+import {
+  attachReasoningSelection,
+  reasoningSelectionErrorOf,
+  reasoningSelectionOf
+} from "./adapters/openai-chat-wire.js";
 import type {
   ApiProviderId,
   DiscoveredModel,
@@ -36,6 +46,69 @@ const providerPolicySchema = z
   })
   .strict();
 
+const reasoningCapabilityOverrideSchema = z
+  .object({
+    status: z.enum(["supported", "unsupported", "unknown"]).default("supported"),
+    efforts: z
+      .array(
+        z
+          .object({
+            id: z.string().min(1),
+            label: z.string().min(1).optional(),
+            description: z.string().min(1).optional(),
+            aliases: z.array(z.string().min(1)).optional()
+          })
+          .strict()
+      )
+      .optional(),
+    defaultEffort: z.string().min(1).optional(),
+    budget: z
+      .object({
+        minTokens: z.number().int().nonnegative().optional(),
+        maxTokens: z.number().int().positive().optional(),
+        defaultTokens: z.number().int().nonnegative().optional()
+      })
+      .strict()
+      .optional(),
+    adaptive: z.boolean().optional(),
+    wireShape: z.string().min(1).optional()
+  })
+  .strict()
+  .superRefine((capability, context) => {
+    const ids = new Set<string>();
+    for (const [index, effort] of (capability.efforts ?? []).entries()) {
+      if (ids.has(effort.id)) {
+        context.addIssue({
+          code: "custom",
+          path: ["efforts", index, "id"],
+          message: `duplicate reasoning effort "${effort.id}"`
+        });
+      }
+      ids.add(effort.id);
+    }
+    if (
+      capability.defaultEffort !== undefined &&
+      !ids.has(capability.defaultEffort)
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["defaultEffort"],
+        message: "default reasoning effort must be listed in efforts"
+      });
+    }
+    if (
+      capability.budget?.minTokens !== undefined &&
+      capability.budget.maxTokens !== undefined &&
+      capability.budget.minTokens > capability.budget.maxTokens
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["budget"],
+        message: "minimum reasoning budget cannot exceed maximum"
+      });
+    }
+  });
+
 export const routerConfigSchema = z
   .object({
     providers: z
@@ -52,7 +125,10 @@ export const routerConfigSchema = z
       .refine((providers) => Object.keys(providers).length > 0, {
         message: "at least one provider must be configured"
       }),
-    defaultModel: z.string().min(3).optional()
+    defaultModel: z.string().min(3).optional(),
+    reasoningCapabilities: z
+      .record(z.string().min(3), reasoningCapabilityOverrideSchema)
+      .optional()
   })
   .strict();
 
@@ -126,6 +202,7 @@ type CatalogEntry = {
   provider: ProviderId;
   source: ProviderSource;
   capabilities: Readonly<Record<string, string>>;
+  reasoning?: ModelReasoningCapabilities;
 };
 
 export type CatalogBackendOptions = {
@@ -209,12 +286,21 @@ export class CatalogBackend implements Backend {
         for (const model of discovered) {
           const publicId = namespaced(provider, model.id);
           if (entries.has(publicId)) continue;
+          const override = config.reasoningCapabilities?.[publicId];
+          const reasoning =
+            override !== undefined
+              ? {
+                  ...override,
+                  provenance: "config" as const
+                }
+              : model.reasoning ?? source.reasoningCapabilities?.(model.id);
           entries.set(publicId, {
             publicId,
             nativeId: model.id,
             provider,
             source,
-            capabilities: model.capabilities ?? source.capabilities?.(model.id) ?? {}
+            capabilities: model.capabilities ?? source.capabilities?.(model.id) ?? {},
+            ...(reasoning !== undefined ? { reasoning } : {})
           });
         }
       }
@@ -266,13 +352,67 @@ export class CatalogBackend implements Backend {
     return this.#entries.get(model)?.capabilities ?? {};
   }
 
+  reasoningCapabilities(model: string): ModelReasoningCapabilities | undefined {
+    return this.#entries.get(model)?.reasoning;
+  }
+
   chat(
     body: unknown,
     signal?: AbortSignal,
     options?: BackendRequestOptions
   ): Promise<Response> {
     const entry = this.#entry(this.#requestedModel(body));
-    return entry.source.chat(this.#withNativeModel(body, entry.nativeId), signal, options);
+    const selectionError = reasoningSelectionErrorOf(body);
+    if (selectionError !== undefined) {
+      return Promise.resolve(
+        Response.json(
+          {
+            error: {
+              type: "invalid_request_error",
+              code: "invalid_reasoning_control",
+              message: selectionError
+            }
+          },
+          { status: 400 }
+        )
+      );
+    }
+    const selection = this.#validatedReasoning(entry, reasoningSelectionOf(body));
+    if (typeof selection === "string") {
+      return Promise.resolve(
+        Response.json(
+          {
+            error: {
+              type: "invalid_request_error",
+              code: "unsupported_reasoning_control",
+              message: selection
+            }
+          },
+          { status: 400 }
+        )
+      );
+    }
+    const nativeBody = this.#withNativeModel(body, entry.nativeId);
+    if (
+      nativeBody !== null &&
+      typeof nativeBody === "object" &&
+      !Array.isArray(nativeBody)
+    ) {
+      attachReasoningSelection(
+        nativeBody as Record<PropertyKey, unknown>,
+        selection
+      );
+      if (selection.mode === "effort") {
+        (nativeBody as Record<string, unknown>).reasoning_effort =
+          selection.effort;
+      }
+    }
+    return entry.source.chat(nativeBody, signal, {
+      ...options,
+      ...(entry.reasoning !== undefined
+        ? { reasoningCapabilities: entry.reasoning }
+        : {})
+    });
   }
 
   models(): Promise<Response> {
@@ -280,7 +420,8 @@ export class CatalogBackend implements Backend {
       id: entry.publicId,
       object: "model",
       owned_by: entry.provider,
-      capabilities: entry.capabilities
+      capabilities: entry.capabilities,
+      ...(entry.reasoning !== undefined ? { reasoning: entry.reasoning } : {})
     }));
     return Promise.resolve(
       new Response(JSON.stringify({ object: "list", data }), {
@@ -327,8 +468,53 @@ export class CatalogBackend implements Backend {
     return {
       publicId: entry.publicId,
       nativeId: entry.nativeId,
-      provider: entry.provider
+      provider: entry.provider,
+      ...(entry.reasoning !== undefined ? { reasoning: entry.reasoning } : {})
     };
+  }
+
+  #validatedReasoning(
+    entry: CatalogEntry,
+    selection: ReasoningSelection
+  ): ReasoningSelection | string {
+    if (selection.mode === "auto" || selection.mode === "disabled") {
+      return selection;
+    }
+    const capability = entry.reasoning;
+    if (capability === undefined || capability.status === "unknown") {
+      return `model "${entry.publicId}" has no discovered reasoning controls`;
+    }
+    if (capability.status === "unsupported") {
+      return `model "${entry.publicId}" does not support reasoning controls`;
+    }
+    if (selection.mode === "effort") {
+      const effort = resolveReasoningEffort(capability, selection.effort);
+      return effort === undefined
+        ? `reasoning effort "${selection.effort}" is not supported by model "${entry.publicId}"`
+        : { mode: "effort", effort };
+    }
+    if (selection.mode === "adaptive") {
+      return capability.adaptive === true
+        ? selection
+        : `adaptive reasoning is not supported by model "${entry.publicId}"`;
+    }
+    const budget = capability.budget;
+    if (budget === undefined) {
+      return `reasoning token budgets are not supported by model "${entry.publicId}"`;
+    }
+    if (
+      budget.minTokens !== undefined &&
+      selection.budgetTokens < budget.minTokens
+    ) {
+      return `reasoning budget must be at least ${budget.minTokens} tokens`;
+    }
+    if (
+      budget.maxTokens !== undefined &&
+      selection.budgetTokens > budget.maxTokens
+    ) {
+      return `reasoning budget must be at most ${budget.maxTokens} tokens`;
+    }
+    return selection;
   }
 }
 

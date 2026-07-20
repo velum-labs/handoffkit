@@ -5,16 +5,23 @@ import { spawnLogged, spawnTool, terminate, waitForOutput } from "@routekit/runt
 import type { ToolLaunchContext } from "@routekit/tools";
 
 import { cursorIdeEnv } from "./bridge-config.js";
+import type { CursorBridgeModelDescriptor } from "./bridge-config.js";
 import { startCursorBridge } from "./bridge.js";
 import { resolveCursorkitCli } from "./cursorkit-path.js";
 import { scaffoldCursorSubagents } from "./subagents.js";
 
-function modelIds(ctx: ToolLaunchContext): string[] {
-  return [
-    ...new Set(
-      ctx.spec.models.flatMap((model) => [model.id, ...(model.aliases ?? [])])
-    )
-  ];
+function bridgeModels(ctx: ToolLaunchContext): CursorBridgeModelDescriptor[] {
+  return ctx.spec.models.flatMap((model) => [
+    {
+      id: model.id,
+      ...(model.label !== undefined ? { displayName: model.label } : {}),
+      ...(model.reasoning !== undefined ? { reasoning: model.reasoning } : {})
+    },
+    ...(model.aliases ?? []).map((alias) => ({
+      id: alias,
+      ...(model.reasoning !== undefined ? { reasoning: model.reasoning } : {})
+    }))
+  ]);
 }
 
 export function cursorIdeInstructions(model: string): string {
@@ -38,7 +45,7 @@ async function launchCursorCli(ctx: ToolLaunchContext): Promise<number> {
   const started = await startCursorBridge({
     gatewayUrl: ctx.spec.gatewayUrl,
     modelLabel: ctx.spec.defaultModel,
-    models: modelIds(ctx),
+    models: bridgeModels(ctx),
     ...(ctx.spec.logsDir !== undefined
       ? { logFile: join(ctx.spec.logsDir, "cursor-bridge.log") }
       : {}),
@@ -85,7 +92,7 @@ async function launchCursorIde(ctx: ToolLaunchContext): Promise<number> {
       repo,
       gatewayUrl: ctx.spec.gatewayUrl,
       modelLabel: ctx.spec.defaultModel,
-      models: modelIds(ctx),
+      models: bridgeModels(ctx),
       ...(ctx.spec.auth?.token !== undefined ? { apiKey: ctx.spec.auth.token } : {}),
       ...(ctx.spec.tls?.caCertPath !== undefined
         ? { caCertPath: ctx.spec.tls.caCertPath }

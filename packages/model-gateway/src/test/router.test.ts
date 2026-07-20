@@ -71,6 +71,19 @@ test("RouterConfig requires explicit providers and namespaced defaults", () => {
     () => parseRouterConfig({ endpoints: [] }),
     /invalid input|unrecognized key/i
   );
+  assert.throws(
+    () =>
+      parseRouterConfig({
+        providers: { openai: {} },
+        reasoningCapabilities: {
+          "openai/opaque": {
+            efforts: [{ id: "quick" }],
+            defaultEffort: "missing"
+          }
+        }
+      }),
+    /default reasoning effort/
+  );
 });
 test("discovery normalizes native response shapes", () => {
   assert.deepEqual(
@@ -93,10 +106,36 @@ test("discovery normalizes native response shapes", () => {
   );
   assert.deepEqual(
     parseDiscoveredModels("codex", {
-      models: [{ slug: "gpt-5.5" }]
-    }).map((model) => model.id),
+      models: [
+        {
+          slug: "gpt-5.5",
+          default_reasoning_level: "balanced",
+          supported_reasoning_levels: [
+            { effort: "quick", description: "Quick" },
+            { effort: "balanced", description: "Balanced" }
+          ]
+        }
+      ]
+    }, "codex").map((model) => model.id),
     ["gpt-5.5"]
   );
+  const reasoning = parseDiscoveredModels(
+    "codex",
+    {
+      models: [
+        {
+          slug: "opaque",
+          default_reasoning_level: "balanced",
+          supported_reasoning_levels: ["quick", "balanced"]
+        }
+      ]
+    },
+    "codex"
+  )[0]?.reasoning;
+  assert.deepEqual(reasoning?.efforts, [{ id: "quick" }, { id: "balanced" }]);
+  assert.equal(reasoning?.defaultEffort, "balanced");
+  assert.equal(reasoning?.wireShape, "openai-responses");
+  assert.equal(reasoning?.provenance, "provider");
   assert.throws(
     () => parseDiscoveredModels("openai", { data: [] }),
     /no usable openai models/
@@ -161,6 +200,52 @@ test("catalog namespaces live models and strips the source before dispatch", asy
       ["openai/gpt-5.5", "openai"],
       ["openrouter/moonshotai/kimi-k2-thinking", "openrouter"]
     ]
+  );
+});
+
+test("catalog applies configured opaque efforts and rejects unavailable values before egress", async () => {
+  const calls: Array<{ source: string; model?: string }> = [];
+  const backend = await CatalogBackend.create({
+    config: {
+      providers: { openai: {} },
+      defaultModel: "openai/opaque",
+      reasoningCapabilities: {
+        "openai/opaque": {
+          efforts: [
+            { id: "balanced", aliases: ["cursor-balanced"] },
+            { id: "deep" }
+          ],
+          defaultEffort: "balanced",
+          wireShape: "openai-chat"
+        }
+      }
+    },
+    sources: {
+      openai: fakeSource("openai", [{ id: "opaque" }], calls)
+    }
+  });
+  const accepted = await backend.chat({
+    model: "openai/opaque",
+    reasoning_effort: "cursor-balanced",
+    messages: []
+  });
+  assert.equal(accepted.status, 200);
+  const rejected = await backend.chat({
+    model: "openai/opaque",
+    reasoning_effort: "maximum",
+    messages: []
+  });
+  assert.equal(rejected.status, 400);
+  const malformed = await backend.chat({
+    model: "openai/opaque",
+    reasoning_effort: 7,
+    messages: []
+  });
+  assert.equal(malformed.status, 400);
+  assert.equal(calls.length, 1);
+  assert.equal(
+    backend.reasoningCapabilities("openai/opaque")?.provenance,
+    "config"
   );
 });
 

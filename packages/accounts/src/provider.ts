@@ -9,6 +9,7 @@ import {
 } from "@routekit/registry";
 import { parseRetryAfterSeconds } from "@routekit/contracts";
 import { parseDiscoveredModels } from "@routekit/gateway";
+import type { DiscoveredModel } from "@routekit/gateway";
 import { trimSurroundingSlashes, trimTrailingSlashes } from "@routekit/runtime";
 
 import {
@@ -41,7 +42,7 @@ export type SubscriptionProvider = {
   discoverModels(
     credential: SubscriptionCredential,
     signal?: AbortSignal
-  ): Promise<readonly string[]>;
+  ): Promise<readonly (string | DiscoveredModel)[]>;
   authHeaders(credential: SubscriptionCredential): Record<string, string>;
   refresh(credential: SubscriptionCredential, signal?: AbortSignal): Promise<SubscriptionCredential>;
   fetchUsage(credential: SubscriptionCredential, signal?: AbortSignal): Promise<AccountLimits>;
@@ -157,7 +158,7 @@ async function discoverSubscriptionModels(
   baseUrl: string,
   authHeaders: Record<string, string>,
   signal?: AbortSignal
-): Promise<readonly string[]> {
+): Promise<readonly DiscoveredModel[]> {
   const info = subscriptionInfo(mode);
   try {
     const discoveryPath =
@@ -177,16 +178,23 @@ async function discoverSubscriptionModels(
     }
     return parseDiscoveredModels(
       info.discovery.responseShape,
-      await response.json()
-    ).map((model) => model.id);
+      await response.json(),
+      mode
+    );
   } catch (error) {
     if (mode !== "codex" || info.discovery.cacheFallback !== true) throw error;
     const cached = readCodexModelsCache();
     if (cached === undefined) throw error;
-    const cachedModels = parseDiscoveredModels(info.discovery.responseShape, cached)
-      .map((model) => model.id)
-      .filter((model) => !model.includes("/"));
-    return [...new Set([info.defaultModel, ...cachedModels])];
+    const cachedModels = parseDiscoveredModels(
+      info.discovery.responseShape,
+      cached,
+      mode
+    )
+      .filter((model) => !model.id.includes("/"));
+    return [
+      { id: info.defaultModel },
+      ...cachedModels.filter((model) => model.id !== info.defaultModel)
+    ];
   }
 }
 

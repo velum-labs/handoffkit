@@ -707,6 +707,7 @@ test("translates a streamed Responses event sequence", async () => {
 
 test("Codex picker aliases use the canonical catalog and pooled native relay", async () => {
   const sourceCalls: string[] = [];
+  const sourceBodies: Array<Record<string, unknown>> = [];
   const source = (sourceId: "codex" | "claude-code") => ({
     sourceId,
     discoverModels: async () => [
@@ -718,7 +719,9 @@ test("Codex picker aliases use the canonical catalog and pooled native relay", a
       }
     ],
     chat: async (body: unknown) => {
-      sourceCalls.push((body as { model: string }).model);
+      const request = body as Record<string, unknown> & { model: string };
+      sourceCalls.push(request.model);
+      sourceBodies.push(request);
       return Response.json({
         id: "chatcmpl_cross_provider",
         choices: [
@@ -809,6 +812,7 @@ test("Codex picker aliases use the canonical catalog and pooled native relay", a
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           model,
+          instructions: "You are Codex, a coding agent based on GPT-5.",
           input: "hi",
           store: false,
           reasoning: { effort: "high" }
@@ -832,7 +836,31 @@ test("Codex picker aliases use the canonical catalog and pooled native relay", a
           "high"
       )
     );
+    assert.ok(
+      relayedBodies.every(
+        (body) =>
+          body.instructions ===
+          "You are Codex, a coding agent based on GPT-5."
+      ),
+      "native Codex routes preserve the stock instructions verbatim"
+    );
     assert.deepEqual(sourceCalls, []);
+
+    const foreign = await fetch(`${gateway.url()}/v1/responses`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        model: "claude-code/claude-sonnet-4-6",
+        instructions: "You are Codex, a coding agent based on GPT-5.",
+        input: "hi"
+      })
+    });
+    assert.equal(foreign.status, 200);
+    assert.deepEqual(sourceCalls, ["claude-sonnet-4-6"]);
+    assert.ok(
+      !JSON.stringify(sourceBodies[0]?.messages).includes("based on GPT-5"),
+      "a stale startup-model identity must not cross into a foreign provider"
+    );
 
     const unknown = await fetch(`${gateway.url()}/v1/responses`, {
       method: "POST",

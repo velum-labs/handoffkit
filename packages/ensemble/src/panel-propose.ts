@@ -35,6 +35,7 @@ export type ProposalPanelOptions = {
   /** The caller's tool definitions / tool_choice, verbatim. */
   tools?: unknown;
   toolChoice?: unknown;
+  reasoningEffort?: string;
   /** Fallback OpenAI-compatible base URL (the shared router). */
   fusionBackendUrl: string;
   /** Per-member endpoint base URLs keyed by `EnsembleModel.id`. */
@@ -185,6 +186,9 @@ async function proposeOne(
         messages: options.messages,
         ...(options.tools !== undefined ? { tools: options.tools } : {}),
         ...(options.toolChoice !== undefined ? { tool_choice: options.toolChoice } : {}),
+        ...(options.reasoningEffort !== undefined
+          ? { reasoning_effort: options.reasoningEffort }
+          : {}),
         stream: false
       }),
       signal

@@ -27,6 +27,7 @@ export type RunFusionOptions = {
   repo?: string;
   observe?: boolean;
   reasoning?: boolean;
+  effort?: string;
   yes?: boolean;
   subagents?: boolean;
   authToken?: string;

@@ -123,6 +123,8 @@ No module JSDoc was found.
 - `export { SHA256_PREFIX, artifactHash, hashCanonical, hashCanonicalSha256, requestHash, responseHash, schemaBundleHash, sha256Hex, sha256PrefixedHex } from "./hash.js";`
 - `export type { CapabilityStatus, ModelCallContract, ModelCallSideEffects, ModelCallStatus, ModelChatMessage, ModelChatRole, ModelEndpoint, ModelUsage, ProviderError, ProviderErrorKind, ProviderFailure, ProviderFailureCategory } from "./model.js";`
 - `export { ProviderFailureError, classifyProviderFailure, isRetryableProviderFailure, parseRetryAfterSeconds } from "./model.js";`
+- `export type { ModelReasoningCapabilities, ReasoningCapabilityProvenance, ReasoningCapabilityStatus, ReasoningEffortOption, ReasoningSelection } from "./reasoning.js";`
+- `export { resolveReasoningEffort } from "./reasoning.js";`
 - `export type { HarnessApprovalDecision, HarnessContentStream, HarnessEvent, HarnessEventRaw, HarnessEventType, HarnessItemType, HarnessRequestType, HarnessTokenUsage, HarnessTurnEndReason } from "./harness-event.js";`
 
 ### `packages/ensemble/src/index.ts`
@@ -318,7 +320,7 @@ Product-neutral RouteKit gateway and router.
 - `export type { ProviderBackendOptions, ProviderTransport } from "./provider-backends.js";`
 - `export { CatalogBackend, isSubscriptionProvider, normalizeRouterConfigAliases, parseRouterConfig, routerConfigSchema, splitNamespacedModel, UnknownModelError } from "./router.js";`
 - `export type { CatalogBackendOptions, ProviderPolicy, RouterConfig, } from "./router.js";`
-- `export { API_PROVIDER_IDS, ApiProviderSource, parseDiscoveredModels, PROVIDER_IDS, SUBSCRIPTION_PROVIDER_IDS } from "./provider-source.js";`
+- `export { API_PROVIDER_IDS, ApiProviderSource, parseDiscoveredModels, parseReasoningCapabilities, PROVIDER_IDS, SUBSCRIPTION_PROVIDER_IDS } from "./provider-source.js";`
 - `export type { ApiProviderId, ApiProviderSourceOptions, DiscoveredModel, ProviderId, ProviderSource, ProviderSourceTransport, SubscriptionProviderId } from "./provider-source.js";`
 - `export { endpointHealthProbe, probeEndpointHealth, providerAuthHeaders } from "./endpoint-health.js";`
 - `export type { AccountEndpointConfig, EndpointHealthProbe, EndpointHealthProbePlan, EndpointHealthResult, ModelEndpointConfig, UrlEndpointConfig } from "./endpoint-health.js";`

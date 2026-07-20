@@ -66,7 +66,19 @@ for (const driverCase of CASES) {
           {
             id: "member",
             model: driverCase.model,
-            provider: driverCase.provider
+            provider: driverCase.provider,
+            reasoning: {
+              status: "supported" as const,
+              efforts: [{ id: "high" }],
+              ...(driverCase.provider === "anthropic"
+                ? {
+                    budget: { minTokens: 1, maxTokens: 1_000_000 },
+                    adaptive: true,
+                    wireShape: "anthropic"
+                  }
+                : { wireShape: "openai-chat" }),
+              provenance: "provider" as const
+            }
           },
           { id: "judge", model: `${driverCase.id}-judge`, provider: "openai" }
         ],

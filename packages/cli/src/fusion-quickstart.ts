@@ -15,6 +15,8 @@ import {
   assertModelsAvailable,
   loadRouterConfig
 } from "@routekit/config";
+import { resolveReasoningEffort } from "@routekit/contracts";
+import type { ModelReasoningCapabilities } from "@routekit/contracts";
 import { registerCleanup, trimTrailingSlashes } from "@routekit/runtime";
 import { createToolLaunchContext } from "@routekit/tools";
 import type { AgentProfile, ToolLaunchSpec } from "@routekit/tools";
@@ -87,21 +89,51 @@ export function fusionToolLaunchSpec(input: {
   args: readonly string[];
   cwd: string;
   authToken?: string;
+  effort?: string;
+  reasoningByEnsemble?: Readonly<
+    Record<string, ModelReasoningCapabilities | undefined>
+  >;
   subagents?: boolean;
   ide?: boolean;
   logsDir?: string;
 }): ToolLaunchSpec {
+  const defaultModel = fusionModelId(input.defaultEnsemble);
+  const models = input.ensembles.map((ensemble) => ({
+    id: fusionModelId(ensemble.name),
+    label: `${ensemble.name} (fusion)`,
+    ...(input.reasoningByEnsemble?.[ensemble.name] !== undefined
+      ? { reasoning: input.reasoningByEnsemble[ensemble.name] }
+      : {})
+  }));
+  const selectedReasoning = models.find(
+    (model) => model.id === defaultModel
+  )?.reasoning;
+  const effort =
+    input.effort === undefined
+      ? undefined
+      : selectedReasoning?.status !== "supported"
+        ? (() => {
+            throw new Error(
+              `model "${defaultModel}" has no discovered reasoning effort controls`
+            );
+          })()
+        : resolveReasoningEffort(selectedReasoning, input.effort);
+  if (input.effort !== undefined && effort === undefined) {
+    throw new Error(
+      `reasoning effort "${input.effort}" is not supported by model "${defaultModel}"`
+    );
+  }
   return {
     gatewayUrl: input.gatewayUrl,
-    defaultModel: fusionModelId(input.defaultEnsemble),
-    models: input.ensembles.map((ensemble) => ({
-      id: fusionModelId(ensemble.name),
-      label: `${ensemble.name} (fusion)`
-    })),
+    defaultModel,
+    models,
     ...(input.subagents === false
       ? {}
       : { agentProfiles: fusionAgentProfiles(input.ensembles) }),
     args: input.args,
+    ...(effort !== undefined
+      ? { reasoning: { mode: "effort", effort } }
+      : {}),
     cwd: input.cwd,
     ...(input.authToken !== undefined
       ? { auth: { token: input.authToken } }
@@ -109,6 +141,110 @@ export function fusionToolLaunchSpec(input: {
     ...(input.ide !== undefined ? { ide: input.ide } : {}),
     ...(input.logsDir !== undefined ? { logsDir: input.logsDir } : {})
   };
+}
+
+function sharedEffortCapability(
+  members: readonly ModelReasoningCapabilities[]
+): ModelReasoningCapabilities | undefined {
+  if (
+    members.length === 0 ||
+    members.some((capability) => capability.status !== "supported")
+  ) {
+    return undefined;
+  }
+  const efforts = (members[0]?.efforts ?? []).flatMap((effort) => {
+    if (
+      !members
+        .slice(1)
+        .every((capability) =>
+          (capability.efforts ?? []).some(
+            (candidate) => candidate.id === effort.id
+          )
+        )
+    ) {
+      return [];
+    }
+    const aliases = (effort.aliases ?? []).filter((alias) =>
+      members
+        .slice(1)
+        .every(
+          (capability) =>
+            resolveReasoningEffort(capability, alias) === effort.id
+        )
+    );
+    return [
+      {
+        ...effort,
+        ...(aliases.length > 0 ? { aliases } : { aliases: undefined })
+      }
+    ];
+  });
+  if (efforts.length === 0) return undefined;
+  const defaultEffort = members[0]?.defaultEffort;
+  const provenance = members.some(
+    (capability) => capability.provenance === "config"
+  )
+    ? "config"
+    : members.every((capability) => capability.provenance === "provider")
+      ? "provider"
+      : "unknown";
+  return {
+    status: "supported",
+    efforts,
+    ...(defaultEffort !== undefined &&
+    efforts.some((effort) => effort.id === defaultEffort) &&
+    members.every(
+      (capability) => capability.defaultEffort === defaultEffort
+    )
+      ? { defaultEffort }
+      : {}),
+    provenance
+  };
+}
+
+async function fusionReasoningCatalog(
+  url: string,
+  ensembles: readonly EnsembleRunSpec[],
+  token?: string
+): Promise<Record<string, ModelReasoningCapabilities | undefined>> {
+  const root = trimTrailingSlashes(url.replace(/\/v1\/?$/, ""));
+  const response = await fetch(`${root}/v1/models`, {
+    headers:
+      token !== undefined ? { authorization: `Bearer ${token}` } : undefined,
+    signal: AbortSignal.timeout(5000)
+  });
+  if (!response.ok) {
+    throw new Error(
+      `RouteKit gateway returned HTTP ${response.status} from /v1/models`
+    );
+  }
+  const body = (await response.json()) as {
+    data?: Array<{
+      id?: unknown;
+      reasoning?: ModelReasoningCapabilities;
+    }>;
+  };
+  const byModel = new Map(
+    (body.data ?? []).flatMap((entry) =>
+      typeof entry.id === "string" && entry.reasoning !== undefined
+        ? [[entry.id, entry.reasoning] as const]
+        : []
+    )
+  );
+  return Object.fromEntries(
+    ensembles.map((ensemble) => {
+      const capabilities = ensemble.members.flatMap((model) => {
+        const capability = byModel.get(model);
+        return capability === undefined ? [] : [capability];
+      });
+      return [
+        ensemble.name,
+        capabilities.length === ensemble.members.length
+          ? sharedEffortCapability(capabilities)
+          : undefined
+      ];
+    })
+  );
 }
 
 async function externalModelIds(
@@ -354,12 +490,19 @@ export async function runFusion(
       await new Promise<void>(() => undefined);
       return 0;
     }
+    const reasoningByEnsemble = await fusionReasoningCatalog(
+      stack.routekitUrl,
+      ensembles,
+      router.kind === "external" ? router.authToken : undefined
+    );
     const launch = createToolLaunchContext({
       spec: fusionToolLaunchSpec({
         gatewayUrl: stack.fusionUrl,
         defaultEnsemble: ensembles[0]!.name,
         ensembles,
         args: toolArgs,
+        ...(options.effort !== undefined ? { effort: options.effort } : {}),
+        reasoningByEnsemble,
         cwd: repo,
         ...(options.authToken !== undefined
           ? { authToken: options.authToken }

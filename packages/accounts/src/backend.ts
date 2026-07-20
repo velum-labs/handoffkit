@@ -2,6 +2,7 @@ import {
   AnthropicBackend,
   CodexResponsesBackend
 } from "@routekit/gateway";
+import type { ModelReasoningCapabilities } from "@routekit/contracts";
 import type {
   Backend,
   BackendRequestOptions,
@@ -158,14 +159,23 @@ export class SubscriptionAccountBackend implements Backend, ProviderSource {
   capabilities(_model?: string): Readonly<Record<string, string>> {
     return {
       streaming: "supported",
-      tools: "supported",
-      reasoning_controls: "supported"
+      tools: "supported"
     };
+  }
+
+  reasoningCapabilities(model: string): ModelReasoningCapabilities | undefined {
+    return this.#accountSet.reasoningCapabilities(model);
   }
 
   async discoverModels(signal?: AbortSignal): Promise<readonly DiscoveredModel[]> {
     const models = await this.#accountSet.discoverModels(signal);
-    return models.map((id) => ({ id, capabilities: this.capabilities(id) }));
+    return models.map((id) => ({
+      id,
+      capabilities: this.capabilities(id),
+      ...(this.reasoningCapabilities(id) !== undefined
+        ? { reasoning: this.reasoningCapabilities(id) }
+        : {})
+    }));
   }
 
   chat(

@@ -1,4 +1,5 @@
 import type { RouterConfig } from "@routekit/gateway";
+import type { ModelReasoningCapabilities } from "@routekit/contracts";
 import { resolveModelId } from "@routekit/config";
 import { trimTrailingSlashes } from "@routekit/runtime";
 
@@ -8,6 +9,7 @@ export type LiveModel = {
   id: string;
   provider?: string;
   capabilities: Readonly<Record<string, string>>;
+  reasoning?: ModelReasoningCapabilities;
 };
 
 export type LiveCatalog = {
@@ -43,6 +45,9 @@ export async function fetchLiveCatalog(
     const entry = record(value);
     if (entry === undefined || typeof entry.id !== "string") return [];
     const capabilities = record(entry.capabilities);
+    const reasoning = record(entry.reasoning) as
+      | ModelReasoningCapabilities
+      | undefined;
     return [
       {
         id: entry.id,
@@ -53,7 +58,8 @@ export async function fetchLiveCatalog(
           Object.entries(capabilities ?? {}).flatMap(([name, status]) =>
             typeof status === "string" ? [[name, status]] : []
           )
-        )
+        ),
+        ...(reasoning !== undefined ? { reasoning } : {})
       }
     ];
   });

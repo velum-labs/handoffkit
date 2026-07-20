@@ -3,6 +3,7 @@ import type { ChildProcess } from "node:child_process";
 import { reservePort, spawnLogged, terminate, waitForOutput } from "@routekit/runtime";
 
 import { cursorBridgeEnv } from "./bridge-config.js";
+import type { CursorBridgeModelDescriptor } from "./bridge-config.js";
 import { resolveCursorkitCli } from "./cursorkit-path.js";
 
 /**
@@ -12,7 +13,7 @@ import { resolveCursorkitCli } from "./cursorkit-path.js";
 export async function startCursorBridge(input: {
   gatewayUrl: string;
   modelLabel: string;
-  models?: readonly string[];
+  models?: readonly CursorBridgeModelDescriptor[];
   logFile?: string;
   caCertPath?: string;
   log: (line: string) => void;

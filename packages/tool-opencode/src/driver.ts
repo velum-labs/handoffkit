@@ -73,6 +73,7 @@ export interface OpencodeBackend {
     prompt: string;
     model?: string;
     providerId?: string;
+    reasoning?: StartSessionOptions["reasoning"];
     signal?: AbortSignal;
   }): Promise<OpencodeTurnResult>;
   abort(input: { sessionId: string; cwd: string }): Promise<void>;
@@ -108,6 +109,7 @@ class OpencodeSession implements SessionHandle {
   readonly #model: string | undefined;
   readonly #providerId: string | undefined;
   readonly #approvalPolicy: ApprovalPolicy;
+  readonly #reasoning: StartSessionOptions["reasoning"];
   #sessionId: string;
   #stopped = false;
 
@@ -118,6 +120,7 @@ class OpencodeSession implements SessionHandle {
     model?: string;
     providerId?: string;
     approvalPolicy: ApprovalPolicy;
+    reasoning?: StartSessionOptions["reasoning"];
   }) {
     this.#backend = input.backend;
     this.#sessionId = input.sessionId;
@@ -125,6 +128,7 @@ class OpencodeSession implements SessionHandle {
     this.#model = input.model;
     this.#providerId = input.providerId;
     this.#approvalPolicy = input.approvalPolicy;
+    this.#reasoning = input.reasoning;
   }
 
   get sessionId(): string {
@@ -146,6 +150,17 @@ class OpencodeSession implements SessionHandle {
     }
 
     let result: OpencodeTurnResult;
+    const reasoning = input.reasoning ?? this.#reasoning;
+    if (
+      reasoning !== undefined &&
+      reasoning.mode !== "auto" &&
+      reasoning.mode !== "effort"
+    ) {
+      throw new HarnessError(
+        "invalid_config",
+        `OpenCode variants cannot represent reasoning mode "${reasoning.mode}"`
+      );
+    }
     try {
       result = await this.#backend.prompt({
         sessionId: this.#sessionId,
@@ -153,6 +168,7 @@ class OpencodeSession implements SessionHandle {
         prompt: input.prompt,
         ...(this.#model !== undefined ? { model: this.#model } : {}),
         ...(this.#providerId !== undefined ? { providerId: this.#providerId } : {}),
+        ...(reasoning !== undefined ? { reasoning } : {}),
         ...(input.signal !== undefined ? { signal: input.signal } : {})
       });
     } catch (error) {
@@ -297,7 +313,12 @@ class OpencodeInstance implements HarnessInstance {
       ...(options.model ?? this.#config.model !== undefined
         ? { model: options.model ?? this.#config.model }
         : {}),
-      ...(this.#config.providerId !== undefined ? { providerId: this.#config.providerId } : {})
+      ...(this.#config.providerId !== undefined
+        ? { providerId: this.#config.providerId }
+        : {}),
+      ...(options.reasoning !== undefined
+        ? { reasoning: options.reasoning }
+        : {})
     });
     this.#sessions.add(session);
     return session;
@@ -363,7 +384,15 @@ const defaultBackendFactory: OpencodeBackendFactory = async (config, context) =>
       if (data?.id === undefined) throw new HarnessError("provider_error", "opencode session.create returned no id");
       return { sessionId: data.id };
     },
-    prompt: async ({ sessionId, cwd, prompt, model, providerId, signal }) => {
+    prompt: async ({
+      sessionId,
+      cwd,
+      prompt,
+      model,
+      providerId,
+      reasoning,
+      signal
+    }) => {
       const modelBody =
         model !== undefined && providerId !== undefined
           ? { model: { providerID: providerId, modelID: model } }
@@ -371,7 +400,13 @@ const defaultBackendFactory: OpencodeBackendFactory = async (config, context) =>
       const response = await client.session.prompt({
         path: { id: sessionId },
         query: { directory: cwd },
-        body: { parts: [{ type: "text", text: prompt }], ...modelBody },
+        body: {
+          parts: [{ type: "text", text: prompt }],
+          ...modelBody,
+          ...(reasoning?.mode === "effort"
+            ? { variant: reasoning.effort }
+            : {})
+        },
         ...(signal !== undefined ? { signal } : {})
       });
       const data = response.data as { parts?: unknown[] } | undefined;

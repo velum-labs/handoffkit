@@ -5,6 +5,10 @@ import {
   type ProviderInfo,
   type ProviderWireProtocol
 } from "@routekit/registry";
+import type {
+  ModelReasoningCapabilities,
+  ReasoningEffortOption
+} from "@routekit/contracts";
 
 import { OpenAiBackend } from "./backend.js";
 import type { Backend, BackendRequestOptions } from "./backend.js";
@@ -32,6 +36,7 @@ export type ProviderId = (typeof PROVIDER_IDS)[number];
 export type DiscoveredModel = {
   id: string;
   capabilities?: Readonly<Record<string, string>>;
+  reasoning?: ModelReasoningCapabilities;
 };
 
 export type ProviderSource = {
@@ -44,6 +49,7 @@ export type ProviderSource = {
   ): Promise<Response>;
   embeddings(body: unknown, signal?: AbortSignal): Promise<Response>;
   capabilities?(model: string): Readonly<Record<string, string>>;
+  reasoningCapabilities?(model: string): ModelReasoningCapabilities | undefined;
   close?(): Promise<void> | void;
 };
 
@@ -56,6 +62,135 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+function effortOptions(value: unknown): ReasoningEffortOption[] {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  return value.flatMap((candidate): ReasoningEffortOption[] => {
+    const record = isRecord(candidate) ? candidate : undefined;
+    const id =
+      typeof candidate === "string"
+        ? candidate
+        : typeof record?.effort === "string"
+          ? record.effort
+          : typeof record?.id === "string"
+            ? record.id
+            : undefined;
+    if (id === undefined || id.length === 0 || seen.has(id)) return [];
+    seen.add(id);
+    return [
+      {
+        id,
+        ...(typeof record?.label === "string" ? { label: record.label } : {}),
+        ...(typeof record?.description === "string"
+          ? { description: record.description }
+          : {}),
+        ...(Array.isArray(record?.aliases)
+          ? {
+              aliases: record.aliases.filter(
+                (alias): alias is string =>
+                  typeof alias === "string" && alias.length > 0
+              )
+            }
+          : {})
+      }
+    ];
+  });
+}
+
+function reasoningWireShape(provider: ProviderId | undefined): string | undefined {
+  switch (provider) {
+    case "codex":
+      return "openai-responses";
+    case "anthropic":
+    case "claude-code":
+      return "anthropic";
+    case "google":
+      return "google";
+    case "openrouter":
+      return "openrouter";
+    case "openai":
+    case "cliproxy":
+      return "openai-chat";
+    case undefined:
+      return undefined;
+  }
+}
+
+export function parseReasoningCapabilities(
+  entry: unknown,
+  provider?: ProviderId,
+  refreshedAt = new Date().toISOString()
+): ModelReasoningCapabilities | undefined {
+  if (!isRecord(entry)) return undefined;
+  const capabilities = isRecord(entry.capabilities) ? entry.capabilities : undefined;
+  const nested =
+    (isRecord(entry.reasoning) ? entry.reasoning : undefined) ??
+    (isRecord(capabilities?.reasoning) ? capabilities.reasoning : undefined);
+  const efforts = effortOptions(
+    entry.supported_reasoning_levels ??
+      entry.supported_reasoning_efforts ??
+      nested?.efforts ??
+      nested?.supported_efforts
+  );
+  const supportedParameters = Array.isArray(entry.supported_parameters)
+    ? entry.supported_parameters.filter(
+        (parameter): parameter is string => typeof parameter === "string"
+      )
+    : [];
+  const explicitStatus =
+    nested?.status ??
+    capabilities?.reasoning_controls ??
+    entry.reasoning_controls;
+  const supported =
+    efforts.length > 0 ||
+    supportedParameters.includes("reasoning") ||
+    supportedParameters.includes("reasoning_effort") ||
+    explicitStatus === "supported";
+  const unsupported = explicitStatus === "unsupported" || nested?.supported === false;
+  if (!supported && !unsupported && nested === undefined) return undefined;
+  const defaultEffort =
+    typeof entry.default_reasoning_level === "string"
+      ? entry.default_reasoning_level
+      : typeof nested?.default_effort === "string"
+        ? nested.default_effort
+        : typeof nested?.defaultEffort === "string"
+          ? nested.defaultEffort
+          : undefined;
+  const budgetSource = isRecord(nested?.budget) ? nested.budget : undefined;
+  const budget =
+    budgetSource === undefined
+      ? undefined
+      : {
+          ...(typeof budgetSource.min_tokens === "number"
+            ? { minTokens: budgetSource.min_tokens }
+            : typeof budgetSource.minTokens === "number"
+              ? { minTokens: budgetSource.minTokens }
+              : {}),
+          ...(typeof budgetSource.max_tokens === "number"
+            ? { maxTokens: budgetSource.max_tokens }
+            : typeof budgetSource.maxTokens === "number"
+              ? { maxTokens: budgetSource.maxTokens }
+              : {}),
+          ...(typeof budgetSource.default_tokens === "number"
+            ? { defaultTokens: budgetSource.default_tokens }
+            : typeof budgetSource.defaultTokens === "number"
+              ? { defaultTokens: budgetSource.defaultTokens }
+              : {})
+        };
+  return {
+    status: unsupported ? "unsupported" : supported ? "supported" : "unknown",
+    ...(efforts.length > 0 ? { efforts } : {}),
+    ...(defaultEffort !== undefined ? { defaultEffort } : {}),
+    ...(budget !== undefined ? { budget } : {}),
+    ...(typeof nested?.adaptive === "boolean" ? { adaptive: nested.adaptive } : {}),
+    ...(reasoningWireShape(provider) !== undefined
+      ? { wireShape: reasoningWireShape(provider) }
+      : {}),
+    provenance: "provider",
+    refreshedAt
+  };
+}
+
 function modelId(value: unknown, key: "id" | "name" | "slug"): string | undefined {
   if (!isRecord(value) || typeof value[key] !== "string") return undefined;
   const id = value[key].trim();
@@ -65,7 +200,8 @@ function modelId(value: unknown, key: "id" | "name" | "slug"): string | undefine
 
 export function parseDiscoveredModels(
   shape: ProviderDiscoveryResponseShape,
-  payload: unknown
+  payload: unknown,
+  provider?: ProviderId
 ): DiscoveredModel[] {
   if (!isRecord(payload)) throw new Error("model discovery returned a non-object payload");
   let entries: unknown[];
@@ -99,11 +235,13 @@ export function parseDiscoveredModels(
             )
           )
         : undefined;
+    const reasoning = parseReasoningCapabilities(entry, provider);
     models.push({
       id,
       ...(capabilities !== undefined && Object.keys(capabilities).length > 0
         ? { capabilities }
-        : {})
+        : {}),
+      ...(reasoning !== undefined ? { reasoning } : {})
     });
   }
   if (models.length === 0) {
@@ -243,7 +381,11 @@ export class ApiProviderSource implements ProviderSource {
     if (!response.ok) {
       throw new Error(`model discovery returned HTTP ${response.status}`);
     }
-    return parseDiscoveredModels(discovery.responseShape, await response.json());
+    return parseDiscoveredModels(
+      discovery.responseShape,
+      await response.json(),
+      this.sourceId
+    );
   }
 
   chat(

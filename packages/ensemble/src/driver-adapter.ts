@@ -5,7 +5,7 @@ import {
   DEFAULT_AUTOMATION_APPROVAL_POLICY
 } from "@routekit/harness-core";
 import { artifactHash } from "@routekit/contracts";
-import type { JsonValue } from "@routekit/contracts";
+import type { JsonValue, ReasoningSelection } from "@routekit/contracts";
 import type {
   AnyHarnessDriver,
   ApprovalPolicy,
@@ -82,6 +82,7 @@ export type DriverHarnessOptions<Config> = {
   /** Trace carrier of the enclosing run/turn; candidates span under it. */
   trace?: FusionTraceCarrier;
   turn?: number;
+  reasoning?: ReasoningSelection;
 };
 
 function toModelFusionHarnessKind(kind: HarnessKind): ModelFusionHarnessKind {
@@ -316,11 +317,17 @@ export function createDriverHarness<Config>(
             cwd,
             approvalPolicy,
             model: route.model,
+            ...(options.reasoning !== undefined
+              ? { reasoning: options.reasoning }
+              : {}),
             ...(cursor !== undefined ? { resume: cursor } : {})
           });
           try {
             for await (const event of session.sendTurn({
               prompt: descriptor.prompt,
+              ...(options.reasoning !== undefined
+                ? { reasoning: options.reasoning }
+                : {}),
               ...(signal !== undefined ? { signal } : {})
             })) {
               events.push(event);

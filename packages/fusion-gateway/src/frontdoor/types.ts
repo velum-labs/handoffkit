@@ -20,6 +20,7 @@ export type FrontdoorChatBody = {
   messages?: ChatMessageLike[];
   tools?: unknown;
   tool_choice?: unknown;
+  reasoning_effort?: string;
   stream?: boolean;
 };
 

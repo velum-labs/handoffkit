@@ -15,7 +15,11 @@
 
 import type { Backend, BackendRequestOptions } from "../backend.js";
 import { randomId } from "@routekit/runtime";
-import type { OpenAiChoice } from "./openai-chat-wire.js";
+import {
+  attachReasoningSelection,
+  attachReasoningSelectionError,
+  type OpenAiChoice
+} from "./openai-chat-wire.js";
 import { droppedField } from "./dropped.js";
 import { unwrapUpstreamError } from "./upstream-error.js";
 import { openAiSseToResponses } from "./responses-stream.js";
@@ -547,10 +551,14 @@ export function responsesToChat(
   // than treating it as an untranslatable field, and never dereference it.
   if (body.reasoning != null) {
     const effort = body.reasoning.effort;
-    if (effort === "low" || effort === "medium" || effort === "high") {
+    if (typeof effort === "string" && effort.length > 0) {
       chat.reasoning_effort = effort;
+      attachReasoningSelection(chat, { mode: "effort", effort });
     } else {
-      droppedField("responses", "reasoning");
+      attachReasoningSelectionError(
+        chat,
+        "reasoning.effort must be a non-empty string"
+      );
     }
   }
   if (body.text != null) {

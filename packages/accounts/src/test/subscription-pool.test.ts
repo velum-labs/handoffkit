@@ -144,7 +144,7 @@ test("pool proactively moves away from a member over the utilization threshold",
   }
 });
 
-test("pool absorbs a short throttle on the same account instead of rotating the burst", async () => {
+test("pool retries a short throttle locally, then tries only one alternate account", async () => {
   const directory = mkdtempSync(join(tmpdir(), "routekit-pool-"));
   writeMember(directory, "a", { accessToken: "token-a" });
   writeMember(directory, "b", { accessToken: "token-b" });
@@ -164,7 +164,37 @@ test("pool absorbs a short throttle on the same account instead of rotating the 
       );
     });
     assert.equal(response.status, 429);
-    assert.deepEqual(seen, ["token-a", "token-a"]);
+    assert.deepEqual(seen, ["token-a", "token-a", "token-b", "token-b"]);
+  } finally {
+    await pool.close();
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("pool recovers from a persistent account-local throttle on one alternate", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "routekit-pool-"));
+  writeMember(directory, "a", { accessToken: "token-a" });
+  writeMember(directory, "b", { accessToken: "token-b" });
+  const pool = await SubscriptionAccountSet.open(fakeProvider({ refreshes: 0 }), {
+    mode: "codex",
+    source: { kind: "directory", path: directory }
+  });
+  const seen: string[] = [];
+  try {
+    const response = await pool.execute("gpt-5.3-codex", (credential) => {
+      seen.push(credential.accessToken);
+      return Promise.resolve(
+        credential.accessToken === "token-b"
+          ? new Response("recovered")
+          : new Response(JSON.stringify({ quota: false }), {
+              status: 429,
+              headers: { "content-type": "application/json" }
+            })
+      );
+    });
+    assert.equal(response.status, 200);
+    assert.equal(await response.text(), "recovered");
+    assert.deepEqual(seen, ["token-a", "token-a", "token-b"]);
   } finally {
     await pool.close();
     rmSync(directory, { recursive: true, force: true });

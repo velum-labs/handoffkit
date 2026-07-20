@@ -305,6 +305,9 @@ export class FusionTurnAssembler {
     };
     if (req.chat.tools !== undefined) stepBody.tools = req.chat.tools;
     if (req.chat.tool_choice !== undefined) stepBody.tool_choice = req.chat.tool_choice;
+    if (req.chat.reasoning_effort !== undefined) {
+      stepBody.reasoning_effort = req.chat.reasoning_effort;
+    }
     const route = this.#routeFor(req);
     // Finite k fuses receding-horizon step proposals (candidates end in a
     // proposed tool-call batch); the router selects step-mode judge/synth

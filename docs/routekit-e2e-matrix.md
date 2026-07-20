@@ -26,6 +26,11 @@ pathologically chunked streaming Messages requests through the canonical
 assistant-history replay, `signature_delta`, `redacted_thinking`, and separation
 of thinking from answer text.
 
+The deterministic `dynamic-reasoning-capabilities` case verifies that ordered
+opaque effort IDs and config provenance survive model discovery, that a
+supported value reaches OpenRouter egress, and that an unavailable value is
+rejected with `400` before provider transport.
+
 ## Live, billed mode
 
 Live calls are disabled unless explicitly authorized:

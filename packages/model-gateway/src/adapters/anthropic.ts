@@ -14,6 +14,8 @@ import { SseDecoder, SseParseError } from "../sse/parse.js";
 import {
   ANTHROPIC_MESSAGE_CONTENT,
   ANTHROPIC_REQUEST_METADATA,
+  attachReasoningSelection,
+  attachReasoningSelectionError,
   anthropicReasoningDetailsOf,
   type AnthropicNativeContentBlock,
   type AnthropicReasoningDetail,
@@ -56,7 +58,7 @@ type AnthropicContentBlock =
 
 type AnthropicThinking = AnthropicThinkingConfig | null;
 type AnthropicOutputConfig = {
-  effort?: "low" | "medium" | "high" | "xhigh" | "max" | null;
+  effort?: string | null;
   [key: string]: unknown;
 };
 
@@ -192,34 +194,13 @@ function mapToolChoice(
   }
 }
 
-type ReasoningEffort = "low" | "medium" | "high" | "xhigh" | "max";
-
 function mapThinking(
   thinking: NonNullable<AnthropicThinking>,
   outputConfig: AnthropicOutputConfig | null | undefined
-): ReasoningEffort | undefined {
+): string | undefined {
   if (thinking.type === "disabled") return undefined;
   const effort = outputConfig?.effort;
-  if (
-    effort === "low" ||
-    effort === "medium" ||
-    effort === "high" ||
-    effort === "xhigh" ||
-    effort === "max"
-  ) {
-    return effort;
-  }
-  if (thinking.type === "adaptive") return "medium";
-  const budget = thinking.budget_tokens;
-  if (typeof budget === "number") {
-    if (budget <= 1_024) return "low";
-    if (budget <= 8_192) return "medium";
-    if (budget <= 16_384) return "high";
-    if (budget <= 32_768) return "xhigh";
-    return "max";
-  }
-  droppedField("anthropic", "thinking");
-  return undefined;
+  return typeof effort === "string" && effort.length > 0 ? effort : undefined;
 }
 
 function thinkingValidationError(body: AnthropicRequest): string | undefined {
@@ -432,11 +413,38 @@ export function anthropicToChat(
   if (typeof body.top_k === "number") chat.top_k = body.top_k;
   // Explicit nulls mean "unset" (see AnthropicRequest).
   if (body.metadata != null) droppedField("anthropic", "metadata");
+  if (
+    body.output_config != null &&
+    Object.hasOwn(body.output_config, "effort") &&
+    body.output_config.effort !== null &&
+    (typeof body.output_config.effort !== "string" ||
+      body.output_config.effort.length === 0)
+  ) {
+    attachReasoningSelectionError(
+      chat,
+      "output_config.effort must be a non-empty string"
+    );
+  }
   // `thinking: null` means "no extended thinking" — skip, never dereference
   // (same failure class as the Responses adapter's `reasoning: null`).
   if (body.thinking != null) {
     const reasoningEffort = mapThinking(body.thinking, body.output_config);
-    if (reasoningEffort !== undefined) chat.reasoning_effort = reasoningEffort;
+    if (body.thinking.type === "disabled") {
+      attachReasoningSelection(chat, { mode: "disabled" });
+    } else if (reasoningEffort !== undefined) {
+      chat.reasoning_effort = reasoningEffort;
+      attachReasoningSelection(chat, {
+        mode: "effort",
+        effort: reasoningEffort
+      });
+    } else if (body.thinking.type === "adaptive") {
+      attachReasoningSelection(chat, { mode: "adaptive" });
+    } else {
+      attachReasoningSelection(chat, {
+        mode: "budget",
+        budgetTokens: body.thinking.budget_tokens
+      });
+    }
   }
   const metadata: AnthropicRequestMetadata = {
     ...(body.thinking != null ? { thinking: body.thinking } : {}),

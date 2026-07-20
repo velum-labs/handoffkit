@@ -21,6 +21,7 @@ type FusionOpts = {
   repo?: string;
   observe?: boolean;
   reasoning?: boolean;
+  effort?: string;
   subagents?: boolean;
   authToken?: string;
   port?: string;
@@ -68,6 +69,7 @@ function resolveContext(options: FusionOpts): RunFusionOptions {
     ensemble: options.ensemble ?? config.defaultEnsemble,
     observe: options.observe ?? config.observe,
     reasoning: options.reasoning ?? config.reasoning,
+    ...(options.effort !== undefined ? { effort: options.effort } : {}),
     subagents: options.subagents ?? config.subagents,
     portless: options.portless ?? config.portless,
     onRateLimit: parseOnRateLimit(options.onRateLimit) ?? config.onRateLimit,
@@ -101,6 +103,7 @@ function applyFusionOptions(command: Command): Command {
     .option("--no-observe", "disable the observability dashboard")
     .option("--reasoning", "stream fusion reasoning progress")
     .option("--no-reasoning", "disable reasoning progress")
+    .option("--effort <id>", "opaque reasoning effort forwarded to panel calls")
     .option("--subagents", "create one generic agent profile per ensemble")
     .option("--no-subagents", "do not create agent profiles")
     .option("--auth-token <token>", "require authentication on the Fusion gateway")

@@ -6,6 +6,8 @@
  * surface can stream straight through and the dialect adapters can consume the
  * same core without a second abstraction.
  */
+import type { ModelReasoningCapabilities } from "@routekit/contracts";
+import { reasoningSelectionOf } from "./adapters/openai-chat-wire.js";
 
 export type BackendModelRoute = {
   /** Stable RouteKit catalog id (`provider/model`). */
@@ -14,6 +16,7 @@ export type BackendModelRoute = {
   nativeId: string;
   /** Configured provider that owns the model. */
   provider: string;
+  reasoning?: ModelReasoningCapabilities;
 };
 
 export type Backend = {
@@ -54,6 +57,8 @@ export type Backend = {
   servesModel?(model: string): boolean;
   /** Capabilities advertised for a model id. */
   capabilities?(model: string): Readonly<Record<string, string>>;
+  /** Structured reasoning controls advertised for a model id. */
+  reasoningCapabilities?(model: string): ModelReasoningCapabilities | undefined;
   /** POST <base>/chat/completions — supports streaming (SSE) upstream. */
   chat(body: unknown, signal?: AbortSignal, options?: BackendRequestOptions): Promise<Response>;
   /** GET <base>/models. */
@@ -66,6 +71,7 @@ export type Backend = {
 
 export type BackendRequestOptions = {
   modelCallId?: string;
+  reasoningCapabilities?: ModelReasoningCapabilities;
   /**
    * Neutral request context captured at the HTTP boundary. Backends may
    * interpret their own namespaced headers; the gateway does not.
@@ -144,16 +150,58 @@ export class OpenAiBackend implements Backend {
     signal?: AbortSignal,
     options: BackendRequestOptions = {}
   ): Promise<Response> {
-    const payload =
+    const routed =
       this.#forceModel !== undefined && typeof body === "object" && body !== null && !Array.isArray(body)
         ? { ...(body as Record<string, unknown>), model: this.#forceModel }
         : body;
+    const selection = reasoningSelectionOf(routed);
+    if (
+      (selection.mode === "budget" || selection.mode === "adaptive") &&
+      options.reasoningCapabilities?.wireShape !== "openrouter"
+    ) {
+      return Promise.resolve(
+        Response.json(
+          {
+            error: {
+              type: "invalid_request_error",
+              message: `OpenAI Chat cannot represent reasoning mode "${selection.mode}"`
+            }
+          },
+          { status: 400 }
+        )
+      );
+    }
+    const payload =
+      options.reasoningCapabilities?.wireShape === "openrouter" &&
+      routed !== null &&
+      typeof routed === "object" &&
+      !Array.isArray(routed)
+        ? this.#openRouterReasoning(routed as Record<string, unknown>, selection)
+        : routed;
     return fetch(joinPath(this.#baseUrl, "/chat/completions"), {
       method: "POST",
       headers: this.#headers(options),
       body: JSON.stringify(payload),
       ...(signal ? { signal } : {})
     });
+  }
+
+  #openRouterReasoning(
+    body: Record<string, unknown>,
+    selection: ReturnType<typeof reasoningSelectionOf>
+  ): Record<string, unknown> {
+    const payload = { ...body };
+    delete payload.reasoning_effort;
+    if (selection.mode === "effort") {
+      payload.reasoning = { effort: selection.effort };
+    } else if (selection.mode === "budget") {
+      payload.reasoning = { max_tokens: selection.budgetTokens };
+    } else if (selection.mode === "adaptive") {
+      payload.reasoning = { enabled: true };
+    } else if (selection.mode === "disabled") {
+      payload.reasoning = { enabled: false };
+    }
+    return payload;
   }
 
   models(signal?: AbortSignal): Promise<Response> {

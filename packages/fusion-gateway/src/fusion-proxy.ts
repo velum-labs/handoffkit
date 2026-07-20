@@ -284,6 +284,9 @@ export class FusionBackend implements Backend {
       // `runPanelRound`, not re-encoded here.
       ...(req.chat.tools !== undefined ? { tools: req.chat.tools } : {}),
       ...(req.chat.tool_choice !== undefined ? { toolChoice: req.chat.tool_choice } : {}),
+      ...(req.chat.reasoning_effort !== undefined
+        ? { reasoningEffort: req.chat.reasoning_effort }
+        : {}),
       ...(isFiniteK(route?.k) ? { k: route.k } : {}),
       ...(signal !== undefined ? { signal } : {})
     });

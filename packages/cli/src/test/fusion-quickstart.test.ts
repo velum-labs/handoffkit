@@ -89,3 +89,28 @@ test("quickstart auth remains scoped to the public Fusion gateway", () => {
     "the public tool launch spec carries only the Fusion gateway token"
   );
 });
+
+test("quickstart validates effort against the selected compound capability", () => {
+  const input = {
+    gatewayUrl: "http://127.0.0.1:9000",
+    defaultEnsemble: "default",
+    ensembles: ENSEMBLES,
+    args: [],
+    cwd: "/tmp/repo",
+    reasoningByEnsemble: {
+      default: {
+        status: "supported" as const,
+        efforts: [{ id: "balanced", aliases: ["normal"] }],
+        provenance: "provider" as const
+      }
+    }
+  };
+  assert.deepEqual(
+    fusionToolLaunchSpec({ ...input, effort: "normal" }).reasoning,
+    { mode: "effort", effort: "balanced" }
+  );
+  assert.throws(
+    () => fusionToolLaunchSpec({ ...input, effort: "maximum" }),
+    /not supported/
+  );
+});

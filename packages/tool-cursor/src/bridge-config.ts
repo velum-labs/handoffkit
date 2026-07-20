@@ -1,4 +1,5 @@
 import { normalizeApiBaseUrl, scrubBridgeEnv } from "@routekit/runtime";
+import type { ModelReasoningCapabilities } from "@routekit/contracts";
 
 const DEFAULT_CONTEXT_TOKEN_LIMIT = 128000;
 const DEFAULT_LOCAL_API_KEY = "local";
@@ -28,13 +29,19 @@ export type CursorBridgeEnvInput = CursorBridgeModelEnvInput & {
   baseEnv?: NodeJS.ProcessEnv;
   caCertPath?: string;
   routeInventory?: boolean;
-  models?: readonly string[];
+  models?: readonly CursorBridgeModelDescriptor[];
+};
+
+export type CursorBridgeModelDescriptor = {
+  id: string;
+  displayName?: string;
+  reasoning?: ModelReasoningCapabilities;
 };
 
 export type CursorIdeModelsInput = {
   gatewayUrl: string;
   modelLabel: string;
-  models?: readonly string[];
+  models?: readonly CursorBridgeModelDescriptor[];
   apiKey?: string;
   contextTokenLimit?: number;
 };
@@ -73,7 +80,7 @@ export function cursorBridgeEnv(input: CursorBridgeEnvInput): Record<string, str
             ...(input.contextTokenLimit !== undefined
               ? { contextTokenLimit: input.contextTokenLimit }
               : {})
-          })
+          }, true)
         }
       : {}),
     ...cursorBridgeModelEnv(input)
@@ -88,7 +95,7 @@ export function cursorIdeEnv(input: CursorIdeModelsInput & {
   return {
     ...env,
     CK_WORKSPACE_PATH: input.repo,
-    BRIDGE_MODELS_JSON: cursorIdeModelsJson(input),
+    BRIDGE_MODELS_JSON: cursorIdeModelsJson(input, true),
     ...cursorBridgeModelEnv({
       gatewayUrl: input.gatewayUrl,
       modelName: input.modelLabel,
@@ -101,19 +108,37 @@ export function cursorIdeEnv(input: CursorIdeModelsInput & {
   };
 }
 
-export function cursorIdeModelsJson(input: CursorIdeModelsInput): string {
+export function cursorIdeModelsJson(
+  input: CursorIdeModelsInput,
+  legacyArray = false
+): string {
   const baseUrl = cursorBridgeBaseUrl(input.gatewayUrl);
   const apiKey = input.apiKey ?? DEFAULT_LOCAL_API_KEY;
   const contextTokenLimit = input.contextTokenLimit ?? DEFAULT_CONTEXT_TOKEN_LIMIT;
-  const ids = [...new Set([input.modelLabel, ...(input.models ?? [])])];
+  const supplied = input.models ?? [];
+  const byId = new Map(
+    supplied.map((model) => [model.id, model] as const)
+  );
+  if (!byId.has(input.modelLabel)) {
+    byId.set(input.modelLabel, { id: input.modelLabel });
+  }
+  const models = [...byId.values()].map((model) => ({
+    id: model.id,
+    displayName: model.displayName ?? model.id,
+    providerModel: model.id,
+    baseUrl,
+    apiKey,
+    contextTokenLimit,
+    ...(model.reasoning !== undefined
+      ? { reasoning: model.reasoning }
+      : {})
+  }));
   return JSON.stringify(
-    ids.map((model) => ({
-      id: model,
-      displayName: model,
-      providerModel: model,
-      baseUrl,
-      apiKey,
-      contextTokenLimit
-    }))
+    legacyArray
+      ? models
+      : {
+          version: 2,
+          models
+        }
   );
 }

@@ -624,6 +624,14 @@
       "status": "environment-gated",
       "gateReason": "Requires RouteKit account credentials and incurs spend.",
       "liveCommand": "uv run --package fusionkit-evals fusionkit-bench public-bench --help"
+    },
+    {
+      "id": "reasoning.dynamic-capabilities",
+      "category": "model-exposure",
+      "expectation": "Provider-discovered opaque reasoning efforts survive discovery, route validation, per-model tool selectors, and provider egress without model-name inference or fabricated tiers.",
+      "status": "required",
+      "testFile": "packages/model-gateway/src/test/router.test.ts",
+      "anchor": "catalog applies configured opaque efforts and rejects unavailable values before egress"
     }
   ]
 }

@@ -34,6 +34,7 @@
     "@routekit/cli-core": "workspace:*",
     "@routekit/cli-ui": "workspace:*",
     "@routekit/config": "workspace:*",
+    "@routekit/contracts": "workspace:*",
     "@routekit/gateway": "workspace:*",
     "@routekit/registry": "workspace:*",
     "@routekit/router": "workspace:*",

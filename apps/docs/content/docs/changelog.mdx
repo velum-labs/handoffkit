@@ -12,6 +12,29 @@ package, and the PyPI FusionKit sidecar package set. Release tags are named
 
 ## Unreleased
 
+- Added provider-discovered, per-model reasoning capabilities with opaque effort
+  IDs, declarative overrides, route-aware validation, and capability-driven
+  OpenAI, OpenRouter, Anthropic, Google, and Codex egress. RouteKit tool
+  selectors and harness drivers now forward the same validated selection;
+  unknown models no longer receive fabricated effort tiers.
+- Fixed the Codex `/model` picker dropping non-Codex (e.g. Anthropic) gateway
+  models: every launcher catalog entry now serializes the
+  `supported_reasoning_levels` field Codex requires (empty when undiscovered).
+  Codex-native models pass their real stock ModelInfo through verbatim (tuned
+  prompt, reasoning tiers, tool mode), while foreign models get neutral
+  entries — stock behavior fields (`tool_mode`, `use_responses_lite`,
+  service/speed tiers, and the stock `base_instructions` prompt that told
+  every routed model it was GPT-5) no longer leak across models. When Codex
+  retains its startup model's GPT-5 identity after an in-session `/model`
+  switch, RouteKit now drops that contradictory identity only at a
+  cross-provider boundary while preserving native Codex instructions.
+- Subscription pools now recover from a persistent account-local transient
+  throttle by trying one other eligible account after the same-account retry;
+  provider-wide bursts are still capped instead of being sent through the
+  entire pool.
+- Isolated the Codex SDK driver's `CODEX_HOME` for gateway-routed sessions so
+  the user's personal Codex config (model, reasoning effort) cannot leak into
+  panel requests and codex cannot overwrite the user's real models cache.
 - Split the neutral routing foundation into `@routekit/*` packages and the
   independent `routekit` CLI. RouteKit now owns explicit provider configuration,
   live namespaced model catalogs, credentials, multi-subscription account

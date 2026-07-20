@@ -7,6 +7,7 @@ import {
   ANTHROPIC_MESSAGE_CONTENT,
   ANTHROPIC_REQUEST_METADATA,
   anthropicReasoningDetailsOf,
+  reasoningSelectionOf,
   type AnthropicNativeContentBlock,
   type AnthropicReasoningDetail,
   type AnthropicRequestMetadata
@@ -36,7 +37,7 @@ type ChatBody = {
   temperature?: number;
   top_p?: number;
   top_k?: number;
-  reasoning_effort?: "low" | "medium" | "high" | "xhigh" | "max";
+  reasoning_effort?: string;
 };
 
 export type ProviderBackendOptions = {
@@ -292,27 +293,6 @@ function anthropicToolChoice(
     : undefined;
 }
 
-function genericAnthropicThinking(
-  effort: ChatBody["reasoning_effort"],
-  maxTokens: number
-): AnthropicRequestMetadata["thinking"] | undefined {
-  if (effort === undefined || maxTokens <= 1_024) return undefined;
-  const target =
-    effort === "low"
-      ? 1_024
-      : effort === "medium"
-        ? 4_096
-        : effort === "high"
-          ? 8_192
-          : effort === "xhigh"
-            ? 16_384
-            : maxTokens - 1;
-  return {
-    type: "enabled",
-    budget_tokens: Math.max(1_024, Math.min(target, maxTokens - 1))
-  };
-}
-
 function anthropicMessages(body: ChatBody, model: string): Record<string, unknown> {
   const system = (body.messages ?? [])
     .filter((message) => message.role === "system")
@@ -359,8 +339,18 @@ function anthropicMessages(body: ChatBody, model: string): Record<string, unknow
   });
   const maxTokens = body.max_completion_tokens ?? body.max_tokens ?? 4096;
   const metadata = anthropicMetadata(body);
-  const thinking =
-    metadata?.thinking ?? genericAnthropicThinking(body.reasoning_effort, maxTokens);
+  const selection = reasoningSelectionOf(body);
+  const translatedThinking: AnthropicRequestMetadata["thinking"] | undefined =
+    selection.mode === "budget"
+      ? { type: "enabled", budget_tokens: selection.budgetTokens }
+      : selection.mode === "adaptive" || selection.mode === "effort"
+        ? { type: "adaptive" }
+        : selection.mode === "disabled"
+          ? { type: "disabled" }
+          : undefined;
+  const translatedOutput =
+    selection.mode === "effort" ? { effort: selection.effort } : undefined;
+  const thinking = metadata?.thinking ?? translatedThinking;
   const toolChoice = anthropicToolChoice(body.tool_choice, body.parallel_tool_calls);
   return {
     model,
@@ -372,7 +362,11 @@ function anthropicMessages(body: ChatBody, model: string): Record<string, unknow
     ...(body.top_p !== undefined ? { top_p: body.top_p } : {}),
     ...(body.top_k !== undefined ? { top_k: body.top_k } : {}),
     ...(thinking !== undefined ? { thinking } : {}),
-    ...(metadata?.output_config != null ? { output_config: metadata.output_config } : {}),
+    ...(metadata?.output_config != null
+      ? { output_config: metadata.output_config }
+      : translatedOutput !== undefined
+        ? { output_config: translatedOutput }
+        : {}),
     ...(toolChoice !== undefined ? { tool_choice: toolChoice } : {}),
     ...(body.tools !== undefined
       ? {
@@ -395,16 +389,17 @@ function anthropicMessages(body: ChatBody, model: string): Record<string, unknow
 function anthropicThinkingValidationError(body: ChatBody): string | undefined {
   const maxTokens = body.max_completion_tokens ?? body.max_tokens ?? 4096;
   const exact = anthropicMetadata(body)?.thinking;
-  if (exact?.type === "enabled") {
-    if (
-      !Number.isInteger(exact.budget_tokens) ||
-      exact.budget_tokens < 1_024 ||
-      exact.budget_tokens >= maxTokens
-    ) {
+  const selection = reasoningSelectionOf(body);
+  const budget =
+    exact?.type === "enabled"
+      ? exact.budget_tokens
+      : selection.mode === "budget"
+        ? selection.budgetTokens
+        : undefined;
+  if (budget !== undefined) {
+    if (!Number.isInteger(budget) || budget < 1_024 || budget >= maxTokens) {
       return `thinking.budget_tokens must be an integer >= 1024 and less than max_tokens (${maxTokens})`;
     }
-  } else if (exact === undefined && body.reasoning_effort !== undefined && maxTokens <= 1_024) {
-    return "reasoning_effort requires max_tokens greater than 1024 for Anthropic extended thinking";
   }
   return undefined;
 }
@@ -744,6 +739,17 @@ function googleRequest(body: ChatBody): Record<string, unknown> {
       }
     }
   }
+  const reasoning = reasoningSelectionOf(body);
+  const thinkingConfig =
+    reasoning.mode === "effort"
+      ? { thinkingLevel: reasoning.effort }
+      : reasoning.mode === "budget"
+        ? { thinkingBudget: reasoning.budgetTokens }
+        : reasoning.mode === "adaptive"
+          ? { thinkingBudget: -1 }
+          : reasoning.mode === "disabled"
+            ? { thinkingBudget: 0 }
+            : undefined;
   return {
     contents: (body.messages ?? []).flatMap((message) => {
       if (message.role === "system") return [];
@@ -786,7 +792,8 @@ function googleRequest(body: ChatBody): Record<string, unknown> {
       : {}),
     generationConfig: {
       ...(body.max_tokens !== undefined ? { maxOutputTokens: body.max_tokens } : {}),
-      ...(body.temperature !== undefined ? { temperature: body.temperature } : {})
+      ...(body.temperature !== undefined ? { temperature: body.temperature } : {}),
+      ...(thinkingConfig !== undefined ? { thinkingConfig } : {})
     },
     ...(body.tools !== undefined
       ? {
@@ -912,6 +919,7 @@ function responsesRequest(
   model: string,
   options: { forceStream: boolean; omitSampling: boolean }
 ): Record<string, unknown> {
+  const reasoning = reasoningSelectionOf(body);
   const input = (body.messages ?? []).flatMap((message): Record<string, unknown>[] => {
     if (message.role === "tool") {
       return [
@@ -950,6 +958,9 @@ function responsesRequest(
     input,
     stream: options.forceStream || body.stream === true,
     store: false,
+    ...(reasoning.mode === "effort"
+      ? { reasoning: { effort: reasoning.effort } }
+      : {}),
     ...(!options.omitSampling && body.max_tokens !== undefined
       ? { max_output_tokens: body.max_tokens }
       : {}),
@@ -1031,6 +1042,18 @@ export class CodexResponsesBackend extends HttpProviderBackend {
 
   async #chat(body: ChatBody, signal?: AbortSignal): Promise<Response> {
     const model = body.model ?? this.defaultModel ?? "";
+    const reasoning = reasoningSelectionOf(body);
+    if (reasoning.mode === "budget" || reasoning.mode === "adaptive") {
+      return jsonResponse(
+        {
+          error: {
+            type: "invalid_request_error",
+            message: `Codex Responses cannot represent reasoning mode "${reasoning.mode}"`
+          }
+        },
+        400
+      );
+    }
     const response = await this.transport(joinPath(this.baseUrl, "/responses"), {
       method: "POST",
       headers: {

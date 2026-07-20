@@ -84,6 +84,7 @@ test("members receive the caller's messages and tools verbatim, one completion e
       messages: CALLER_MESSAGES,
       tools: CALLER_TOOLS,
       toolChoice: "auto",
+      reasoningEffort: "deep",
       fusionBackendUrl: endpoint.url
     });
 
@@ -93,6 +94,7 @@ test("members receive the caller's messages and tools verbatim, one completion e
       assert.deepEqual(request.body.messages, CALLER_MESSAGES, "messages must be verbatim");
       assert.deepEqual(request.body.tools, CALLER_TOOLS, "tools must be verbatim");
       assert.equal(request.body.tool_choice, "auto");
+      assert.equal(request.body.reasoning_effort, "deep");
       assert.equal(request.body.stream, false);
     }
     assert.deepEqual(new Set(endpoint.requests.map((r) => r.body.model)), new Set(["alpha", "beta"]));

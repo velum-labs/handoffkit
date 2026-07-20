@@ -27,7 +27,7 @@ process.stdin.on("end", () => {
   emit({ type: "thread.started", thread_id: threadId });
   emit({ type: "turn.started" });
   emit({ type: "item.started", item: { id: "i1", type: "agent_message", text: "" } });
-  emit({ type: "item.completed", item: { id: "i1", type: "agent_message", text: "OK: " + input.trim() } });
+  emit({ type: "item.completed", item: { id: "i1", type: "agent_message", text: "ARGS: " + args.join(" ") + "\\nOK: " + input.trim() } });
   emit({ type: "turn.completed", usage: { input_tokens: 3, cached_input_tokens: 0, output_tokens: 2, reasoning_output_tokens: 0 } });
   process.exit(0);
 });
@@ -81,6 +81,31 @@ test("codex driver maps the CLI event stream into canonical events", async () =>
   } finally {
     await instance.dispose();
     repo.cleanup();
+  }
+});
+
+test("codex driver forwards effort as the SDK CLI config", async () => {
+  const driver = createCodexDriver();
+  const effortRepo = fakeCodexRepo();
+  const instance = await driver.createInstance(
+    driver.configSchema.parse({ command: effortRepo.command })
+  );
+  try {
+    const session = await instance.startSession({
+      cwd: effortRepo.cwd,
+      reasoning: { mode: "effort", effort: "low" }
+    });
+    const events: HarnessEvent[] = [];
+    for await (const event of session.sendTurn({ prompt: "reason carefully" })) {
+      events.push(event);
+    }
+    const text = events
+      .flatMap((event) => (event.type === "content.delta" ? [event.text] : []))
+      .join("");
+    assert.match(text, /model_reasoning_effort="low"/);
+  } finally {
+    await instance.dispose();
+    effortRepo.cleanup();
   }
 });
 

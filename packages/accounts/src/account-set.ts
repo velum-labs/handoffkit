@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import {
+  type ModelReasoningCapabilities,
   ProviderFailureError,
   isRetryableProviderFailure
 } from "@routekit/contracts";
@@ -248,6 +249,7 @@ export class SubscriptionAccountSet {
   readonly #capacityPool: CapacityPool<PoolMember> | undefined;
   readonly #tracker: RateLimitTracker;
   readonly #refreshes = new Map<string, Promise<void>>();
+  readonly #reasoning = new Map<string, ModelReasoningCapabilities>();
   #activeId: string | undefined;
   #catalogReady = false;
   #probeTimer: NodeJS.Timeout | undefined;
@@ -332,13 +334,24 @@ export class SubscriptionAccountSet {
   }
 
   async discoverModels(signal?: AbortSignal): Promise<readonly string[]> {
+    this.#reasoning.clear();
     await Promise.allSettled(
       this.#members.map(async (member) => {
         member.models.clear();
         await this.#ensureFresh(member);
-        member.models = new Set(
-          await this.#provider.discoverModels(member.credential, signal)
+        const discovered = await this.#provider.discoverModels(
+          member.credential,
+          signal
         );
+        const normalized = discovered.map((model) =>
+          typeof model === "string" ? { id: model } : model
+        );
+        member.models = new Set(normalized.map((model) => model.id));
+        for (const model of normalized) {
+          if (model.reasoning !== undefined && !this.#reasoning.has(model.id)) {
+            this.#reasoning.set(model.id, model.reasoning);
+          }
+        }
       })
     );
     this.#catalogReady = true;
@@ -351,6 +364,10 @@ export class SubscriptionAccountSet {
       for (const model of member.models) models.add(model);
     }
     return [...models];
+  }
+
+  reasoningCapabilities(model: string): ModelReasoningCapabilities | undefined {
+    return this.#reasoning.get(model);
   }
 
   async close(): Promise<void> {
@@ -380,6 +397,7 @@ export class SubscriptionAccountSet {
     if (this.#members.length === 0) throw new SubscriptionAccountSetExhaustedError(this.mode);
     const excluded = new Set<string>();
     const absorbed = new Set<string>();
+    let transientFailovers = 0;
 
     while (excluded.size < this.#members.length) {
       const lease = await this.#acquire(model, excluded);
@@ -409,8 +427,23 @@ export class SubscriptionAccountSet {
             await new Promise((resolve) => setTimeout(resolve, delaySeconds * 1000));
             continue;
           }
-          // A short provider throttle is account-local and often prompt-cache
-          // sensitive. Do not march the same burst through the whole pool.
+          // One retry absorbs a short prompt-cache-sensitive throttle on the
+          // same account. If it persists and another eligible account exists,
+          // try exactly one alternate: a transient 429 is account-local in
+          // practice, but marching a provider-wide burst through the entire
+          // pool would amplify it.
+          const now = Date.now() / 1000;
+          const hasAlternative = this.#members.some(
+            (candidate) =>
+              candidate.id !== member.id &&
+              !excluded.has(candidate.id) &&
+              this.#eligible(candidate, model, now)
+          );
+          if (transientFailovers === 0 && hasAlternative) {
+            transientFailovers += 1;
+            excluded.add(member.id);
+            continue;
+          }
           return passthrough;
         }
 

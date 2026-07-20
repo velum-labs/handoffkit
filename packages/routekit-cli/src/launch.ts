@@ -1,6 +1,7 @@
 import { toolRegistry as routekitToolRegistry } from "@routekit/tool-registry";
 import { resolveModelId } from "@routekit/config";
 import { createToolLaunchContext } from "@routekit/tools";
+import { resolveReasoningEffort } from "@routekit/contracts";
 import type {
   ToolIntegration,
   ToolLaunchSpec,
@@ -43,7 +44,8 @@ function liveModels(models: readonly LiveModel[]): ToolModel[] {
         reasoning_controls: featureStatus(
           model.capabilities.reasoning_controls
         )
-      }
+      },
+      ...(model.reasoning !== undefined ? { reasoning: model.reasoning } : {})
     };
   });
 }
@@ -53,6 +55,7 @@ export function buildToolLaunchSpec(input: {
   catalog: readonly LiveModel[];
   gatewayUrl: string;
   model?: string;
+  effort?: string;
   args?: readonly string[];
   cwd?: string;
   authToken?: string;
@@ -64,11 +67,36 @@ export function buildToolLaunchSpec(input: {
     models.map((model) => model.id),
     input.model
   );
+  const requestedEffort = input.effort;
+  const selectedModel = models.find((model) => model.id === defaultModel);
+  const reasoning =
+    requestedEffort === undefined || requestedEffort === "auto"
+      ? undefined
+      : selectedModel?.reasoning === undefined ||
+          selectedModel.reasoning.status !== "supported"
+        ? (() => {
+            throw new Error(
+              `model "${defaultModel}" has no discovered reasoning effort controls`
+            );
+          })()
+        : (() => {
+            const resolved = resolveReasoningEffort(
+              selectedModel.reasoning,
+              requestedEffort
+            );
+            if (resolved === undefined) {
+              throw new Error(
+                `reasoning effort "${requestedEffort}" is not supported by model "${defaultModel}"`
+              );
+            }
+            return { mode: "effort" as const, effort: resolved };
+          })();
   return {
     gatewayUrl: input.gatewayUrl,
     defaultModel,
     models,
     args: input.args ?? [],
+    ...(reasoning !== undefined ? { reasoning } : {}),
     ...(input.cwd !== undefined ? { cwd: input.cwd } : {}),
     ...(input.authToken !== undefined ? { auth: { token: input.authToken } } : {}),
     ...(input.ide !== undefined ? { ide: input.ide } : {})
@@ -98,6 +126,7 @@ export async function launchTool(input: {
   config: RouterConfig;
   gatewayUrl?: string;
   model?: string;
+  effort?: string;
   args?: readonly string[];
   cwd?: string;
   authToken?: string;
@@ -139,6 +168,7 @@ export async function launchTool(input: {
         catalog: catalog.models,
         gatewayUrl,
         ...(input.model !== undefined ? { model: input.model } : {}),
+        ...(input.effort !== undefined ? { effort: input.effort } : {}),
         ...(input.args !== undefined ? { args: input.args } : {}),
         ...(input.cwd !== undefined ? { cwd: input.cwd } : {}),
         ...(input.authToken !== undefined ? { authToken: input.authToken } : {}),

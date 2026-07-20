@@ -23,7 +23,13 @@ const catalog = [
   {
     id: "codex/gpt-5.5",
     provider: "codex",
-    capabilities: {}
+    capabilities: {},
+    reasoning: {
+      status: "supported",
+      efforts: [{ id: "balanced", aliases: ["cursor-balanced"] }],
+      defaultEffort: "balanced",
+      provenance: "provider"
+    }
   }
 ] as const;
 
@@ -46,6 +52,29 @@ test("every canonical launcher receives the same live catalog specification", ()
     assert.equal(spec.models[0]?.features?.tools, "degraded");
     assert.equal(spec.models[0]?.features?.images, "unsupported");
   }
+});
+
+test("launch effort resolves against the selected model capability", () => {
+  const spec = buildToolLaunchSpec({
+    config,
+    catalog,
+    gatewayUrl: "https://gateway.example",
+    effort: "cursor-balanced"
+  });
+  assert.deepEqual(spec.reasoning, {
+    mode: "effort",
+    effort: "balanced"
+  });
+  assert.throws(
+    () =>
+      buildToolLaunchSpec({
+        config,
+        catalog,
+        gatewayUrl: "https://gateway.example",
+        effort: "maximum"
+      }),
+    /not supported/
+  );
 });
 
 test("an explicitly requested model absent from the live catalog is rejected", () => {

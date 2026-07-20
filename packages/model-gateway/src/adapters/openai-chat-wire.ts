@@ -1,3 +1,5 @@
+import type { ReasoningSelection } from "@routekit/contracts";
+
 export type OpenAiToolCall = {
   id?: string;
   index?: number;
@@ -136,7 +138,7 @@ export type AnthropicThinkingConfig =
 export type AnthropicRequestMetadata = {
   thinking?: AnthropicThinkingConfig;
   output_config?: {
-    effort?: "low" | "medium" | "high" | "xhigh" | "max" | null;
+    effort?: string | null;
     [key: string]: unknown;
   } | null;
 };
@@ -152,6 +154,71 @@ export const ANTHROPIC_REQUEST_METADATA = Symbol.for(
 export const ANTHROPIC_MESSAGE_CONTENT = Symbol.for(
   "@routekit/gateway/anthropic-message-content"
 );
+export const REASONING_SELECTION = Symbol.for(
+  "@routekit/gateway/reasoning-selection"
+);
+export const REASONING_SELECTION_ERROR = Symbol.for(
+  "@routekit/gateway/reasoning-selection-error"
+);
+
+export function attachReasoningSelection(
+  target: Record<PropertyKey, unknown>,
+  selection: ReasoningSelection
+): void {
+  Object.defineProperty(target, REASONING_SELECTION, {
+    value: selection,
+    enumerable: true
+  });
+}
+
+export function attachReasoningSelectionError(
+  target: Record<PropertyKey, unknown>,
+  message: string
+): void {
+  Object.defineProperty(target, REASONING_SELECTION_ERROR, {
+    value: message,
+    enumerable: true
+  });
+}
+
+export function reasoningSelectionErrorOf(value: unknown): string | undefined {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    return undefined;
+  }
+  const record = value as Record<PropertyKey, unknown>;
+  const attachedError = record[REASONING_SELECTION_ERROR];
+  if (typeof attachedError === "string") return attachedError;
+  if (
+    Object.hasOwn(record, "reasoning_effort") &&
+    (typeof record.reasoning_effort !== "string" ||
+      record.reasoning_effort.length === 0)
+  ) {
+    return "reasoning_effort must be a non-empty string";
+  }
+  return undefined;
+}
+
+export function reasoningSelectionOf(value: unknown): ReasoningSelection {
+  if (value !== null && typeof value === "object" && !Array.isArray(value)) {
+    const record = value as Record<PropertyKey, unknown>;
+    const attached = record[REASONING_SELECTION];
+    if (
+      attached !== null &&
+      typeof attached === "object" &&
+      !Array.isArray(attached) &&
+      typeof (attached as { mode?: unknown }).mode === "string"
+    ) {
+      return attached as ReasoningSelection;
+    }
+    if (
+      typeof record.reasoning_effort === "string" &&
+      record.reasoning_effort.length > 0
+    ) {
+      return { mode: "effort", effort: record.reasoning_effort };
+    }
+  }
+  return { mode: "auto" };
+}
 
 export type AnthropicNativeContentBlock =
   | { type: "text"; text: string }

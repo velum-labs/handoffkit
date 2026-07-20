@@ -114,7 +114,15 @@ test("subscription adapters discover native models with member credentials", asy
     requests.push({ url, headers: new Headers(init?.headers) });
     return url.includes("anthropic")
       ? Response.json({ data: [{ id: "claude-opus-4-1" }] })
-      : Response.json({ models: [{ slug: "gpt-5.5" }] });
+      : Response.json({
+          models: [
+            {
+              slug: "gpt-5.5",
+              supported_reasoning_levels: ["quick", "deep"],
+              default_reasoning_level: "deep"
+            }
+          ]
+        });
   };
   try {
     const claude = await subscriptionProvider("claude-code").discoverModels({
@@ -128,8 +136,12 @@ test("subscription adapters discover native models with member credentials", asy
       accountId: "acct",
       sourcePath: "/tmp/codex.json"
     });
-    assert.deepEqual(claude, ["claude-opus-4-1"]);
-    assert.deepEqual(codex, ["gpt-5.5"]);
+    assert.deepEqual(claude, [{ id: "claude-opus-4-1" }]);
+    assert.equal(typeof codex[0] === "string" ? codex[0] : codex[0]?.id, "gpt-5.5");
+    assert.deepEqual(
+      typeof codex[0] === "string" ? undefined : codex[0]?.reasoning?.efforts,
+      [{ id: "quick" }, { id: "deep" }]
+    );
     assert.equal(requests[0]?.headers.get("authorization"), "Bearer claude-token");
     assert.equal(requests[0]?.headers.get("anthropic-version"), "2023-06-01");
     assert.equal(requests[1]?.headers.get("authorization"), "Bearer codex-token");

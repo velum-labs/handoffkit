@@ -35,6 +35,7 @@ import {
   OpenAiBackend,
   parseRouterConfig
 } from "@routekit/gateway";
+import type { ModelReasoningCapabilities } from "@routekit/contracts";
 import type {
   Backend,
   BackendRequestOptions,
@@ -46,7 +47,9 @@ import type {
 import type { PromptOverrides } from "../fusion-config.js";
 import { startFusionStack } from "../fusion/stack.js";
 
-export type SimStackMember = SimModelSpec;
+export type SimStackMember = SimModelSpec & {
+  reasoning?: ModelReasoningCapabilities;
+};
 
 export type SimStackEnsemble = {
   name: string;
@@ -175,7 +178,13 @@ function simulatorProviderSource(
   const backend = simulatorBackend(simUrl, provider, models[0]!);
   return {
     sourceId: provider,
-    discoverModels: async () => models.map((id) => ({ id })),
+    discoverModels: async () =>
+      members.map((member) => ({
+        id: member.model,
+        ...(member.reasoning !== undefined
+          ? { reasoning: member.reasoning }
+          : {})
+      })),
     chat: async (
       body: unknown,
       signal?: AbortSignal,

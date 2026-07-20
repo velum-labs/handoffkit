@@ -18,6 +18,8 @@ import type { AgentProfile, ToolLaunchContext, ToolLaunchSpec } from "@routekit/
 
 const PROVIDER_ID = "routekit";
 const CATALOG_FILE = "model-catalog.json";
+/** Model-agnostic agent prompt, matching the gateway's synthesized entries. */
+const NEUTRAL_INSTRUCTIONS = "You are a coding agent.";
 const PROFILE_DIR = "agent-profiles";
 const CONFIG_FAILURE_PATTERNS: readonly RegExp[] = [
   /config\.toml/i,
@@ -100,30 +102,119 @@ function catalogIds(spec: ToolLaunchSpec): string[] {
   ];
 }
 
+/** True when a bare catalog id was projected from a `codex/`-namespaced model. */
+function isCodexNativeId(
+  spec: Pick<ToolLaunchSpec, "defaultModel" | "models">,
+  id: string
+): boolean {
+  const namespaced = `codex/${id}`;
+  return (
+    spec.defaultModel === namespaced ||
+    spec.models.some(
+      (model) =>
+        model.id === namespaced || model.aliases?.includes(namespaced) === true
+    )
+  );
+}
+
 export function codexCatalogEntries(
   spec: Pick<ToolLaunchSpec, "defaultModel" | "models">,
   template: CodexModelPreset,
-  stockModels: readonly CodexModelPreset[] = []
+  stockModels: readonly CodexModelPreset[] = [],
+  options: { appendUnlistedStock?: boolean } = {}
 ): Record<string, unknown>[] {
+  const appendUnlistedStock = options.appendUnlistedStock ?? true;
   const ids = catalogIds({ ...spec, gatewayUrl: "", args: [] });
   const listed = new Set(ids);
-  const entries: Record<string, unknown>[] = ids.map((id, priority) => ({
-    ...template,
-    prefer_websockets: false,
-    slug: id,
-    display_name:
-      spec.models.find((model) => codexModelId(model.id) === id)?.label ?? id,
-    description: "Gateway-routed model.",
-    visibility: "list",
-    priority,
-    availability_nux: null,
-    upgrade: null
-  }));
-  for (const stock of stockModels) {
-    const slug = presetSlug(stock);
-    if (slug === undefined || listed.has(slug)) continue;
-    listed.add(slug);
-    entries.push({ ...stock, priority: entries.length });
+  const stockBySlug = new Map(
+    stockModels.flatMap((entry) => {
+      const slug = presetSlug(entry);
+      return slug === undefined ? [] : [[slug, entry] as const];
+    })
+  );
+  // The template (a stock Codex model entry) only exists to satisfy the
+  // catalog schema of the installed Codex version. Fields that change how
+  // Codex talks to the model must not leak from an unrelated stock model into
+  // gateway-routed entries: reasoning tiers are replaced by each model's
+  // discovered capabilities; `tool_mode` (e.g. "code_mode_only") and
+  // `use_responses_lite` alter (or drop entirely) the tool declarations Codex
+  // sends; service tiers are a stock-model billing offer; and
+  // `base_instructions` / `model_messages` become the developer message, so a
+  // stock prompt ("You are Codex, an agent based on GPT-5...") would tell
+  // every routed model it is GPT-5. Fields are reset to neutral values only
+  // when the template carries them, so the output still matches the installed
+  // Codex version's required fields.
+  const {
+    supported_reasoning_levels: _templateLevels,
+    default_reasoning_level: _templateDefault,
+    supports_reasoning_summaries: _templateSummaries,
+    tool_mode: _templateToolMode,
+    default_service_tier: _templateServiceTier,
+    ...neutralTemplate
+  } = template;
+  for (const [field, neutral] of [
+    ["use_responses_lite", false],
+    ["additional_speed_tiers", []],
+    ["service_tiers", []],
+    ["base_instructions", NEUTRAL_INSTRUCTIONS]
+  ] as const) {
+    if (field in neutralTemplate) neutralTemplate[field] = neutral;
+  }
+  if (
+    typeof neutralTemplate.model_messages === "object" &&
+    neutralTemplate.model_messages !== null
+  ) {
+    neutralTemplate.model_messages = {
+      ...neutralTemplate.model_messages,
+      instructions_template: NEUTRAL_INSTRUCTIONS
+    };
+  }
+  const entries: Record<string, unknown>[] = ids.map((id, priority) => {
+    // A Codex-native model whose real ModelInfo is in the stock cache keeps
+    // it verbatim (its tuned prompt, reasoning tiers, tool mode) — through
+    // the gateway it still reaches the real Codex backend, so the stock
+    // behavior is the correct behavior. This mirrors the gateway's own
+    // picker merge. Only the transport hint is pinned to the gateway's HTTP.
+    const stock = stockBySlug.get(id);
+    if (stock !== undefined && isCodexNativeId(spec, id)) {
+      return { ...stock, slug: id, visibility: "list", priority, prefer_websockets: false };
+    }
+    const model = spec.models.find(
+      (candidate) =>
+        codexModelId(candidate.id) === id ||
+        candidate.aliases?.some((alias) => codexModelId(alias) === id) === true
+    );
+    const levels = (model?.reasoning?.efforts ?? []).map((effort) => ({
+      effort: effort.id,
+      description: effort.description ?? effort.label ?? effort.id
+    }));
+    return {
+      ...neutralTemplate,
+      prefer_websockets: false,
+      slug: id,
+      display_name: model?.label ?? id,
+      description: "Gateway-routed model.",
+      visibility: "list",
+      priority,
+      availability_nux: null,
+      upgrade: null,
+      // Codex requires this field on every catalog entry; an empty list means
+      // "no discovered effort controls" without fabricating tiers.
+      supported_reasoning_levels: levels,
+      ...(model?.reasoning?.defaultEffort !== undefined
+        ? { default_reasoning_level: model.reasoning.defaultEffort }
+        : {}),
+      supports_reasoning_summaries:
+        model?.reasoning?.status === "supported"
+    };
+  });
+  if (appendUnlistedStock) {
+    for (const stock of stockModels) {
+      const slug = presetSlug(stock);
+      if (slug === undefined || listed.has(slug)) continue;
+      listed.add(slug);
+      entries.push({ ...stock, priority: entries.length });
+    }
   }
   return entries;
 }
@@ -131,9 +222,14 @@ export function codexCatalogEntries(
 export function codexModelCatalogJson(
   spec: Pick<ToolLaunchSpec, "defaultModel" | "models">,
   template: CodexModelPreset,
-  stockModels: readonly CodexModelPreset[] = []
+  stockModels: readonly CodexModelPreset[] = [],
+  options: { appendUnlistedStock?: boolean } = {}
 ): string {
-  return JSON.stringify({ models: codexCatalogEntries(spec, template, stockModels) }, null, 2);
+  return JSON.stringify(
+    { models: codexCatalogEntries(spec, template, stockModels, options) },
+    null,
+    2
+  );
 }
 
 export function codexProfileFileToml(model: string, provider: string = PROVIDER_ID): string {
@@ -182,7 +278,7 @@ export function codexAgentRoleToml(profile: AgentProfile): string {
 }
 
 export function codexLaunchConfigToml(
-  spec: Pick<ToolLaunchSpec, "gatewayUrl" | "defaultModel">,
+  spec: Pick<ToolLaunchSpec, "gatewayUrl" | "defaultModel" | "reasoning">,
   modelCatalogPath?: string,
   roles: readonly CodexAgentRole[] = []
 ): string {
@@ -190,6 +286,9 @@ export function codexLaunchConfigToml(
     `model = ${JSON.stringify(codexModelId(spec.defaultModel))}`,
     `model_provider = ${JSON.stringify(PROVIDER_ID)}`
   ];
+  if (spec.reasoning?.mode === "effort") {
+    lines.push(`model_reasoning_effort = ${JSON.stringify(spec.reasoning.effort)}`);
+  }
   if (modelCatalogPath !== undefined) {
     lines.push(`model_catalog_json = ${JSON.stringify(modelCatalogPath)}`);
   }
@@ -250,7 +349,15 @@ export async function launchCodex(ctx: ToolLaunchContext): Promise<number> {
   const template = readCodexCatalogTemplate();
   const catalogPath = template === undefined ? undefined : join(home, CATALOG_FILE);
   if (catalogPath !== undefined && template !== undefined) {
-    writeFileSync(catalogPath, codexModelCatalogJson(spec, template));
+    // The stock cache supplies verbatim ModelInfo for gateway models that are
+    // Codex-native. Unlisted stock models are not appended: without a codex
+    // route in the gateway catalog they would not resolve.
+    writeFileSync(
+      catalogPath,
+      codexModelCatalogJson(spec, template, readCodexModelsCache(), {
+        appendUnlistedStock: false
+      })
+    );
   }
   const roles = codexAgentRoles(home, spec.agentProfiles ?? []);
   if (roles.length > 0) {

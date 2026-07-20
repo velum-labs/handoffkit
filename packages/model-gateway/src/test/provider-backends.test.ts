@@ -7,6 +7,7 @@ import {
   GoogleGenAiBackend
 } from "../provider-backends.js";
 import { anthropicToChat } from "../adapters/anthropic.js";
+import { attachReasoningSelection } from "../adapters/openai-chat-wire.js";
 import { SseParseError } from "../sse/parse.js";
 
 function sse(
@@ -206,7 +207,7 @@ test("Anthropic egress preserves native thinking controls, signed history, and b
   }
 });
 
-test("Anthropic egress maps generic effort within the output budget and rejects impossible budgets", async () => {
+test("Anthropic egress preserves opaque effort and rejects impossible explicit budgets", async () => {
   const requests: Request[] = [];
   const backend = new AnthropicBackend({
     baseUrl: "https://api.anthropic.test/v1",
@@ -222,28 +223,31 @@ test("Anthropic egress maps generic effort within the output budget and rejects 
   });
   const valid = await backend.chat({
     max_completion_tokens: 5000,
-    reasoning_effort: "high",
+    reasoning_effort: "ultra",
     messages: [{ role: "user", content: "think" }]
   });
   assert.equal(valid.status, 200);
   const outbound = (await requests[0]?.json()) as {
     max_tokens: number;
-    thinking: { type: string; budget_tokens: number };
+    thinking: { type: string };
+    output_config: { effort: string };
   };
   assert.equal(outbound.max_tokens, 5000);
-  assert.deepEqual(outbound.thinking, {
-    type: "enabled",
-    budget_tokens: 4999
-  });
+  assert.deepEqual(outbound.thinking, { type: "adaptive" });
+  assert.deepEqual(outbound.output_config, { effort: "ultra" });
 
-  const invalid = await backend.chat({
+  const invalidBody: Record<PropertyKey, unknown> = {
     max_completion_tokens: 1024,
-    reasoning_effort: "low",
     messages: [{ role: "user", content: "think" }]
+  };
+  attachReasoningSelection(invalidBody, {
+    mode: "budget",
+    budgetTokens: 1024
   });
+  const invalid = await backend.chat(invalidBody);
   assert.equal(invalid.status, 400);
   assert.equal(requests.length, 1, "invalid thinking must fail before transport");
-  assert.match(await invalid.text(), /greater than 1024/);
+  assert.match(await invalid.text(), /less than max_tokens/);
 });
 
 test("Anthropic egress preserves native stop reasons and stop sequences", async () => {
@@ -338,10 +342,18 @@ test("Google GenAI egress maps content, usage, and API-key auth", async () => {
       defaultModel: "gemini-test"
     });
     const response = await backend.chat({
+      reasoning_effort: "deliberate",
       messages: [{ role: "user", content: "hello" }]
     });
     assert.match(request?.url ?? "", /models\/gemini-test:generateContent$/);
     assert.equal(request?.headers.get("x-goog-api-key"), "google-secret");
+    const outbound = (await request?.json()) as {
+      generationConfig: { thinkingConfig: { thinkingLevel: string } };
+    };
+    assert.equal(
+      outbound.generationConfig.thinkingConfig.thinkingLevel,
+      "deliberate"
+    );
     const body = (await response.json()) as {
       choices: Array<{ message: { content: string } }>;
       usage: { total_tokens: number };
@@ -384,6 +396,7 @@ test("Codex Responses egress preserves subscription auth and tool output", async
       defaultModel: "codex-test"
     });
     const response = await backend.chat({
+      reasoning_effort: "deep",
       messages: [{ role: "user", content: "fix it" }],
       tools: [{ type: "function", function: { name: "apply" } }]
     });
@@ -392,6 +405,7 @@ test("Codex Responses egress preserves subscription auth and tool output", async
     assert.equal(request?.headers.get("chatgpt-account-id"), "account");
     const upstreamBody = (await request?.json()) as Record<string, unknown> | undefined;
     assert.equal(upstreamBody?.store, false);
+    assert.deepEqual(upstreamBody?.reasoning, { effort: "deep" });
     const body = (await response.json()) as {
       choices: Array<{
         message: { content: string; reasoning: string; tool_calls: unknown[] };

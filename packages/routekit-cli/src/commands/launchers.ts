@@ -18,6 +18,7 @@ export function registerLaunchers(program: Command): void {
       .option("--gateway-url <url>", "connect to an existing RouteKit gateway")
       .option("--host <host>", "embedded gateway bind host", "127.0.0.1")
       .option("--port <port>", "embedded gateway bind port", "0")
+      .option("--effort <id>", "opaque reasoning effort for the selected model")
       .option("--auth-token <token>", "gateway authentication token")
       .option("--cwd <dir>", "tool working directory");
     if (integration.id === "cursor") {
@@ -33,6 +34,7 @@ export function registerLaunchers(program: Command): void {
           port: string;
           authToken?: string;
           cwd?: string;
+          effort?: string;
           ide?: boolean;
         },
         actionCommand: Command
@@ -50,6 +52,7 @@ export function registerLaunchers(program: Command): void {
             ? { gatewayUrl: trimTrailingSlashes(options.gatewayUrl) }
             : {}),
           ...(model !== undefined ? { model } : {}),
+          ...(options.effort !== undefined ? { effort: options.effort } : {}),
           args: toolArgs,
           ...(options.cwd !== undefined ? { cwd: resolve(options.cwd) } : {}),
           ...(options.authToken !== undefined ? { authToken: options.authToken } : {}),

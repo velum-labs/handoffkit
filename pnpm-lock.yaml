@@ -361,6 +361,9 @@ importers:
       '@routekit/config':
         specifier: workspace:*
         version: link:../routekit-config
+      '@routekit/contracts':
+        specifier: workspace:*
+        version: link:../contracts
       '@routekit/gateway':
         specifier: workspace:*
         version: link:../model-gateway
@@ -510,6 +513,9 @@ importers:
 
   packages/tool-cursor:
     dependencies:
+      '@routekit/contracts':
+        specifier: workspace:*
+        version: link:../contracts
       '@routekit/harness-core':
         specifier: workspace:*
         version: link:../harness-core
@@ -567,6 +573,9 @@ importers:
 
   packages/tools:
     dependencies:
+      '@routekit/contracts':
+        specifier: workspace:*
+        version: link:../contracts
       '@routekit/harness-core':
         specifier: workspace:*
         version: link:../harness-core

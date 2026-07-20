@@ -1,6 +1,7 @@
 import type { ModelFusionStatus } from "@fusionkit/protocol";
 import type { JsonValue } from "@routekit/contracts";
 import type { ResumeCursor } from "@routekit/harness-core";
+import type { ReasoningSelection } from "@routekit/contracts";
 import type { ToolRegistry } from "@routekit/tools";
 import type { FusionTraceCarrier } from "@fusionkit/tracing";
 import type { EnsembleModel, EnsembleRunResult } from "./harness.js";
@@ -77,6 +78,7 @@ export type ToolHarnessResolveOptions = {
    */
   trace?: FusionTraceCarrier;
   turn?: number;
+  reasoning?: ReasoningSelection;
   /** When true, the tool harness tells its model which panel member it is. */
   panelIdentity?: boolean;
   /** Panel candidate trust level; unset means `full` (maximum autonomy). */
@@ -153,6 +155,7 @@ export type UnifiedHarnessE2EOptions = {
   repo: string;
   outputRoot: string;
   prompt: string;
+  reasoning?: ReasoningSelection;
   harnesses: UnifiedHarnessKind[];
   models: EnsembleModel[];
   command?: string;

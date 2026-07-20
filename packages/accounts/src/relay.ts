@@ -155,9 +155,10 @@ export class AnthropicBackendRelay implements SubscriptionRelay {
     signal?: AbortSignal
   ): Promise<Response> {
     return this.#accounts.execute(body.model, (credential) => {
+      const upstreamHeaders = this.#upstreamHeaders(headers, credential.accessToken);
       return fetch(`${this.#backendUrl}/v1/messages`, {
         method: "POST",
-        headers: this.#upstreamHeaders(headers, credential.accessToken),
+        headers: upstreamHeaders,
         body: JSON.stringify(withAnthropicAccount(body, credential.accountId)),
         ...(signal !== undefined ? { signal } : {})
       });

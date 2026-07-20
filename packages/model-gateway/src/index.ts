@@ -41,6 +41,7 @@ export {
   API_PROVIDER_IDS,
   ApiProviderSource,
   parseDiscoveredModels,
+  parseReasoningCapabilities,
   PROVIDER_IDS,
   SUBSCRIPTION_PROVIDER_IDS
 } from "./provider-source.js";

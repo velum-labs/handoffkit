@@ -66,6 +66,24 @@ test("cursor driver maps ACP session updates into canonical events", async () =>
   }
 });
 
+test("cursor driver forwards effort through the ACP config option", async () => {
+  const instance = await driver.createInstance(
+    driver.configSchema.parse({ command: wrapperCommand() })
+  );
+  try {
+    const session = await instance.startSession({
+      cwd: here,
+      reasoning: { mode: "effort", effort: "deep" }
+    });
+    for await (const _event of session.sendTurn({ prompt: "reason about this" })) {
+      // Drain.
+    }
+    await session.stop();
+  } finally {
+    await instance.dispose();
+  }
+});
+
 test("cursor driver auto-approves under the automation policy", async () => {
   const instance = await driver.createInstance(
     driver.configSchema.parse({ command: wrapperCommand() })

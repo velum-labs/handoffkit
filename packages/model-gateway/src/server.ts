@@ -3,6 +3,7 @@ import { createServer } from "node:http";
 import type { IncomingMessage, ServerResponse } from "node:http";
 
 import { ProviderFailureError } from "@routekit/contracts";
+import type { ModelReasoningCapabilities } from "@routekit/contracts";
 
 import {
   anthropicModelsResponse,
@@ -106,19 +107,26 @@ export type Gateway = {
   close(): Promise<void>;
 };
 
-function codexModelInfo(id: string, priority: number): Record<string, unknown> {
+function codexModelInfo(
+  id: string,
+  priority: number,
+  reasoning?: ModelReasoningCapabilities
+): Record<string, unknown> {
+  const levels = (reasoning?.efforts ?? []).map((effort) => ({
+    effort: effort.id,
+    description: effort.description ?? effort.label ?? effort.id
+  }));
   return {
     slug: id,
     prefer_websockets: false,
     display_name: id,
     description: "RouteKit live model",
-    default_reasoning_level: "medium",
-    supported_reasoning_levels: [
-      {
-        effort: "medium",
-        description: "Balanced reasoning through the RouteKit gateway"
-      }
-    ],
+    ...(reasoning?.defaultEffort !== undefined
+      ? { default_reasoning_level: reasoning.defaultEffort }
+      : {}),
+    // Codex parses ModelInfo strictly; this field must exist on every entry,
+    // and an empty list means "no discovered effort controls".
+    supported_reasoning_levels: levels,
     shell_type: "shell_command",
     visibility: "list",
     supported_in_api: true,
@@ -130,7 +138,7 @@ function codexModelInfo(id: string, priority: number): Record<string, unknown> {
       instructions_template: "You are a coding agent.",
       instructions_variables: null
     },
-    supports_reasoning_summaries: true,
+    supports_reasoning_summaries: reasoning?.status === "supported",
     default_reasoning_summary: "none",
     support_verbosity: true,
     default_verbosity: "low",
@@ -174,6 +182,30 @@ function withModel<T extends Record<string, unknown>>(body: T, model: string): T
   return { ...body, model };
 }
 
+/**
+ * Codex keeps the session's initial model instructions when `/model` switches
+ * to a different provider. A session started on a stock Codex model therefore
+ * sends its "You are Codex ... based on GPT-5" identity even after selecting
+ * Claude. The selected model's current instructions are already present in the
+ * Responses input, so remove only this contradictory stale identity at the
+ * cross-provider boundary. Native Codex routes remain byte-for-byte intact.
+ */
+function withoutStaleCodexIdentity(
+  body: ResponsesRequest,
+  route: BackendModelRoute | undefined
+): ResponsesRequest {
+  if (
+    route?.provider === "codex" ||
+    typeof body.instructions !== "string" ||
+    !/^\s*You are Codex\b/i.test(body.instructions) ||
+    !/\bbased on GPT-5\b/i.test(body.instructions)
+  ) {
+    return body;
+  }
+  const { instructions: _staleIdentity, ...rest } = body;
+  return rest;
+}
+
 function codexPickerModels(
   backend: Backend,
   configured: Array<{ id: string } & Record<string, unknown>>,
@@ -193,7 +225,7 @@ function codexPickerModels(
     seen.add(slug);
     const upstream = nativeBySlug.get(slug);
     return upstream === undefined
-      ? codexModelInfo(slug, priority)
+      ? codexModelInfo(slug, priority, route?.reasoning)
       : { ...upstream, slug, priority };
   });
   if (!includeUnroutedNative) return models;
@@ -578,10 +610,11 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
         codexProviderRelay === undefined
           ? backend.resolveModelRoute?.(requestedModel)
           : resolveNativeModelRoute(backend, "codex", requestedModel);
+      const routedBody = withoutStaleCodexIdentity(body, route);
       const canonicalBody =
         route === undefined || route.publicId === requestedModel
-          ? body
-          : withModel(body, route.publicId);
+          ? routedBody
+          : withModel(routedBody, route.publicId);
       if (
         codexProviderRelay !== undefined &&
         route?.provider === "codex"
