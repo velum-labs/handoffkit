@@ -62,6 +62,32 @@ export type {
   ServiceSupervisorKind
 } from "./service/records.js";
 export {
+  CONTROL_BODY_LIMIT_BYTES,
+  CONTROL_PROTOCOL_VERSION,
+  ControlClient,
+  ControlError,
+  controlTokenMatches,
+  generateControlToken,
+  startControlServer
+} from "./service/control.js";
+export type {
+  ControlClientOptions,
+  ControlErrorCode,
+  ControlEvent,
+  ControlFailure,
+  ControlHandler,
+  ControlHandlerContext,
+  ControlRequest,
+  ControlResponse,
+  ControlSuccess,
+  RunningControlServer
+} from "./service/control.js";
+export {
+  acquireLifecycleLock,
+  nextServiceGeneration
+} from "./service/authority.js";
+export type { LifecycleLock } from "./service/authority.js";
+export {
   readLogTail,
   rotateLogFile,
   serviceLogPath,

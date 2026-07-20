@@ -53,6 +53,16 @@ export type ServiceRecord = {
   /** Working directory the daemon runs in (project config discovery). */
   cwd?: string;
   supervisor?: ServiceSupervisorKind;
+  /** Monotonic authority generation used by singleton control daemons. */
+  generation?: number;
+  /** Version of the private control protocol spoken by the daemon. */
+  protocolVersion?: string;
+  /** Random bearer credential for the private loopback control listener. */
+  controlToken?: string;
+  /** Public/data-plane URL exposed by a combined daemon. */
+  dataUrl?: string;
+  /** Data-plane port exposed by a combined daemon. */
+  dataPort?: number;
 };
 
 export type ServiceRecordInput = Omit<ServiceRecord, "product" | "owner">;
@@ -134,7 +144,20 @@ export function createServiceRecordStore(input: {
       ...(optionalString(parsed.binPath) !== undefined ? { binPath: parsed.binPath as string } : {}),
       ...(optionalArgs(parsed.args) !== undefined ? { args: optionalArgs(parsed.args) } : {}),
       ...(optionalString(parsed.cwd) !== undefined ? { cwd: parsed.cwd as string } : {}),
-      ...(supervisor !== undefined ? { supervisor } : {})
+      ...(supervisor !== undefined ? { supervisor } : {}),
+      ...(typeof parsed.generation === "number" && Number.isSafeInteger(parsed.generation)
+        ? { generation: parsed.generation }
+        : {}),
+      ...(optionalString(parsed.protocolVersion) !== undefined
+        ? { protocolVersion: parsed.protocolVersion as string }
+        : {}),
+      ...(optionalString(parsed.controlToken) !== undefined
+        ? { controlToken: parsed.controlToken as string }
+        : {}),
+      ...(optionalString(parsed.dataUrl) !== undefined
+        ? { dataUrl: parsed.dataUrl as string }
+        : {}),
+      ...(typeof parsed.dataPort === "number" ? { dataPort: parsed.dataPort } : {})
     };
   };
 
