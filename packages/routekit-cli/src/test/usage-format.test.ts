@@ -60,6 +60,7 @@ test("usage rendering includes windows, provenance, and no-observation hint", ()
   assert.match(output, /primary/);
   assert.match(output, /52%/);
   assert.match(output, /observed 3m ago via headers/);
-  assert.match(output, /no usage observed yet/);
+  assert.match(output, /no usage data available yet/);
+  assert.match(output, /routekit doctor/);
   assert.equal(limitsSummary(usage, "codex", "work", now), "primary 52% · resets in 2h");
 });

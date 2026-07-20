@@ -379,7 +379,10 @@ export class SubscriptionAccountSet {
       clearInterval(this.#probeTimer);
       this.#probeTimer = undefined;
     }
-    await Promise.allSettled(this.#refreshes.values());
+    await Promise.allSettled([
+      ...this.#refreshes.values(),
+      ...(this.#usageProbe !== undefined ? [this.#usageProbe] : [])
+    ]);
   }
 
   async probe(): Promise<void> {
@@ -407,13 +410,13 @@ export class SubscriptionAccountSet {
       return observedAt !== undefined && now - observedAt * 1000 < maxAgeMs;
     });
     if (allFresh) return;
+    if (this.#usageProbe !== undefined) return await this.#usageProbe;
     if (
       this.#lastUsageProbeAt !== undefined &&
       now - this.#lastUsageProbeAt < maxAgeMs
     ) {
       return;
     }
-    if (this.#usageProbe !== undefined) return await this.#usageProbe;
     this.#lastUsageProbeAt = now;
     const probe = this.probe().finally(() => {
       if (this.#usageProbe === probe) this.#usageProbe = undefined;

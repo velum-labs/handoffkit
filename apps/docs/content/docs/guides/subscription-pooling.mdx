@@ -64,6 +64,11 @@ Normal embedded provider routing does not require a separate account proxy.
 `routekit accounts serve` is advanced mode for exposing the subscription pool
 to an external consumer.
 
+Inspect current limits at any time with `routekit usage` (or
+`routekit usage --watch 10`). It reads live pools from the normal RouteKit
+gateway when one is running and otherwise checks enrolled accounts directly;
+the advanced accounts proxy is not a prerequisite.
+
 For CLIProxyAPI, login, keep the proxy serving, and enable its provider:
 
 ```bash

@@ -23,6 +23,19 @@ function claudeAccountDir(): string {
       claudeAiOauth: { accessToken: "oauth-primary", expiresAt: FUTURE_EXPIRY_MS }
     })
   );
+  writeFileSync(
+    join(directory, ".state.json"),
+    JSON.stringify({
+      members: [{
+        id: "primary",
+        limits: {
+          windows: { five_hour: { utilization: 0.25 } },
+          observedAt: Date.now() / 1000,
+          source: "usage"
+        }
+      }]
+    })
+  );
   return directory;
 }
 

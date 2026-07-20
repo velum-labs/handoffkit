@@ -58,6 +58,9 @@ test("SDK starts only after live provider discovery", async () => {
         body.data.map((model) => model.id),
         ["openai/gpt-live"]
       );
+      const usageResponse = await fetch(`${running.url}/usage`);
+      assert.equal(usageResponse.status, 200);
+      assert.deepEqual(await usageResponse.json(), { accountSets: [] });
     } finally {
       await running.close();
     }
@@ -77,6 +80,15 @@ test("SDK requires authentication for non-loopback router binds", async () => {
       authToken: "secret",
       env: { OPENAI_API_KEY: "test", OPENAI_BASE_URL: `${baseUrl}/v1` }
     });
-    await authenticated.close();
+    try {
+      assert.equal((await fetch(`${authenticated.url}/usage`)).status, 401);
+      const usageResponse = await fetch(`${authenticated.url}/usage`, {
+        headers: { authorization: "Bearer secret" }
+      });
+      assert.equal(usageResponse.status, 200);
+      assert.deepEqual(await usageResponse.json(), { accountSets: [] });
+    } finally {
+      await authenticated.close();
+    }
   });
 });
