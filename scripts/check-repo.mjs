@@ -52,6 +52,7 @@ const requiredFiles = [
   "scripts/generate-pricing.mjs",
   "scripts/generate-local-catalog.mjs",
   "scripts/generate-registry.mjs",
+  "scripts/check-fusion-router-alignment.mjs",
   // fusion trace semantic conventions (spec/fusion-trace is the source of
   // truth; TS/Python/scope bindings are generated)
   "spec/fusion-trace/registry.json",
@@ -411,6 +412,21 @@ if (pricingCheck.stderr.trim()) {
 }
 if (pricingCheck.status !== 0) {
   fail("pricing check failed");
+}
+
+const fusionRouterAlignmentCheck = spawnSync(
+  process.execPath,
+  ["scripts/check-fusion-router-alignment.mjs"],
+  { encoding: "utf8" }
+);
+if (fusionRouterAlignmentCheck.stdout.trim()) {
+  console.log(fusionRouterAlignmentCheck.stdout.trim());
+}
+if (fusionRouterAlignmentCheck.stderr.trim()) {
+  console.error(fusionRouterAlignmentCheck.stderr.trim());
+}
+if (fusionRouterAlignmentCheck.status !== 0) {
+  fail("Fusion/RouteKit committed config alignment failed");
 }
 
 const modelFusionProtocolCheck = spawnSync(

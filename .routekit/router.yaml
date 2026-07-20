@@ -1,8 +1,5 @@
 providers:
-  codex:
+  openrouter:
     strategy: capacity_weighted
     switchThreshold: 0.9
-  claude-code:
-    strategy: capacity_weighted
-    switchThreshold: 0.9
-defaultModel: codex/gpt-5.5
+defaultModel: openrouter/moonshotai/kimi-k2-thinking
