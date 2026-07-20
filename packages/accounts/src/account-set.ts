@@ -250,6 +250,8 @@ export class SubscriptionAccountSet {
   readonly #tracker: RateLimitTracker;
   readonly #refreshes = new Map<string, Promise<void>>();
   readonly #reasoning = new Map<string, ModelReasoningCapabilities>();
+  #usageProbe: Promise<void> | undefined;
+  #lastUsageProbeAt: number | undefined;
   #activeId: string | undefined;
   #catalogReady = false;
   #probeTimer: NodeJS.Timeout | undefined;
@@ -388,6 +390,36 @@ export class SubscriptionAccountSet {
         this.#tracker.update(member.id, limits);
       })
     );
+  }
+
+  /**
+   * Refresh stale or missing usage without allowing rapid callers to hammer
+   * provider quota endpoints. Failed attempts are throttled as well.
+   */
+  async refreshUsage(maxAgeMs = 60_000): Promise<void> {
+    if (!Number.isFinite(maxAgeMs) || maxAgeMs < 0) {
+      throw new RangeError("usage refresh age must be a non-negative finite number");
+    }
+    if (this.#members.length === 0) return;
+    const now = Date.now();
+    const allFresh = this.#members.every((member) => {
+      const observedAt = this.#tracker.limits(member.id)?.observedAt;
+      return observedAt !== undefined && now - observedAt * 1000 < maxAgeMs;
+    });
+    if (allFresh) return;
+    if (
+      this.#lastUsageProbeAt !== undefined &&
+      now - this.#lastUsageProbeAt < maxAgeMs
+    ) {
+      return;
+    }
+    if (this.#usageProbe !== undefined) return await this.#usageProbe;
+    this.#lastUsageProbeAt = now;
+    const probe = this.probe().finally(() => {
+      if (this.#usageProbe === probe) this.#usageProbe = undefined;
+    });
+    this.#usageProbe = probe;
+    await probe;
   }
 
   async execute(
@@ -684,10 +716,10 @@ export class SubscriptionAccountSet {
     const interval = this.#options.probeIntervalMs ?? 0;
     if (interval <= 0) return;
     this.#probeTimer = setInterval(() => {
-      void this.probe();
+      void this.refreshUsage(0);
     }, Math.max(60_000, interval));
     this.#probeTimer.unref();
-    void this.probe();
+    void this.refreshUsage(0);
   }
 }
 

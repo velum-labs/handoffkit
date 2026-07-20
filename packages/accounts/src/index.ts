@@ -93,6 +93,14 @@ export type {
 export { SubscriptionProxyClient, SubscriptionProxyClientError } from "./client.js";
 export type { SubscriptionProxyClientOptions } from "./client.js";
 
+// Fresh usage collection over live or locally opened account sets
+export {
+  collectSubscriptionUsage,
+  DEFAULT_SUBSCRIPTION_USAGE_REFRESH_MS,
+  openLocalSubscriptionUsage
+} from "./usage.js";
+export type { SubscriptionUsageSource } from "./usage.js";
+
 // Managed CLIProxyAPI lifecycle
 export {
   CLIPROXY_API_KEY_ENV,
