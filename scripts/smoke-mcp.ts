@@ -74,7 +74,15 @@ if (!initialize?.result || !toolsList?.result) {
 
 const result = toolsList.result as { tools?: Array<{ name?: string }> };
 const toolNames = (result.tools ?? []).map((tool) => tool.name).sort();
-const expected = ["matter_health", "matter_list_items", "matter_list_tags", "matter_search_items"].sort();
+const expected = [
+  "matter_build_context_bundle",
+  "matter_get_annotations",
+  "matter_get_item",
+  "matter_health",
+  "matter_list_items",
+  "matter_list_tags",
+  "matter_search_items"
+].sort();
 if (JSON.stringify(toolNames) !== JSON.stringify(expected)) {
   throw new Error(`Expected tools ${expected.join(", ")}, got ${toolNames.join(", ")}`);
 }

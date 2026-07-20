@@ -1,6 +1,8 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
+import { type MatterCache } from "./cache/cache.js";
+import { createMatterCache } from "./cache/file-cache.js";
 import {
   DEFAULT_RATE_LIMITS,
   SERVER_NAME,
@@ -24,6 +26,13 @@ import {
   type TagMatchMode
 } from "./retrieval/item-filtering.js";
 import { resolveTagNames } from "./retrieval/tag-resolution.js";
+import {
+  annotationForOutput,
+  CONTENT_SAFETY_NOTICE,
+  itemForDetail,
+  MatterContentService
+} from "./retrieval/content-service.js";
+import { buildContextBundle } from "./retrieval/context-bundle.js";
 
 const STATUS_SCHEMA = z.enum(["inbox", "queue", "archive"]);
 const SEARCH_STATUS_SCHEMA = z.enum(["queue", "archive"]);
@@ -65,6 +74,41 @@ const searchItemsInputSchema = z
   })
   .strict();
 
+const getAnnotationsInputSchema = z
+  .object({
+    item_id: z.string().regex(/^itm_[A-Za-z0-9]+$/),
+    limit: z.number().int().min(1).max(1000).default(500),
+    force_refresh: z.boolean().default(false)
+  })
+  .strict();
+
+const getItemInputSchema = z
+  .object({
+    item_id: z.string().regex(/^itm_[A-Za-z0-9]+$/),
+    include_markdown: z.boolean().default(true),
+    include_annotations: z.boolean().default(true),
+    max_markdown_chars: z.number().int().min(1000).max(300000).default(120000),
+    force_refresh: z.boolean().default(false)
+  })
+  .strict();
+
+const buildContextBundleInputSchema = z
+  .object({
+    query: z.string().min(2),
+    tag_names: z.array(z.string().min(1)).default([]),
+    tag_match: TAG_MATCH_SCHEMA.default("all"),
+    statuses: z.array(SEARCH_STATUS_SCHEMA).default(["queue", "archive"]),
+    content_types: z.array(CONTENT_TYPE_SCHEMA).default(["article", "tweet", "pdf", "newsletter"]),
+    max_items: z.number().int().min(1).max(20).default(8),
+    max_total_chars: z.number().int().min(5000).max(200000).default(60000),
+    max_chars_per_item: z.number().int().min(1000).max(50000).default(12000),
+    candidate_scan_limit: z.number().int().min(10).max(500).default(100),
+    include_annotations: z.boolean().default(true),
+    include_unannotated_items: z.boolean().default(true),
+    force_refresh: z.boolean().default(false)
+  })
+  .strict();
+
 export interface TagListCache {
   getTags(): Promise<{ tags: MatterTag[]; cacheHit: boolean }>;
 }
@@ -74,6 +118,7 @@ export class InMemoryTagListCache implements TagListCache {
 
   constructor(
     private readonly client: MatterClient,
+    private readonly cache: MatterCache,
     private readonly ttlMs = 5 * 60_000,
     private readonly now = () => Date.now()
   ) {}
@@ -83,12 +128,19 @@ export class InMemoryTagListCache implements TagListCache {
       return { tags: this.cached.tags, cacheHit: true };
     }
 
+    const fileCached = await this.cache.getTags(this.now());
+    if (fileCached.hit && fileCached.value) {
+      this.cached = { tags: fileCached.value, expiresAt: this.now() + this.ttlMs };
+      return { tags: fileCached.value, cacheHit: true };
+    }
+
     const collected = await collectPages({
       fetchPage: (cursor) => this.client.listTags({ limit: 100, cursor }),
       maxItems: 10_000,
       maxPages: 50
     });
     this.cached = { tags: collected.results, expiresAt: this.now() + this.ttlMs };
+    await this.cache.setTags(collected.results, this.now());
     return { tags: collected.results, cacheHit: false };
   }
 }
@@ -99,6 +151,9 @@ export interface CreateMatterServerOptions {
   logger?: Logger;
   rateLimiter?: { acquire(category: "read" | "search" | "markdown"): Promise<void> };
   tagCache?: TagListCache;
+  cache?: MatterCache;
+  contentService?: MatterContentService;
+  now?: () => number;
 }
 
 export function createMatterServer(options: CreateMatterServerOptions = {}): McpServer {
@@ -117,10 +172,18 @@ export function createMatterServer(options: CreateMatterServerOptions = {}): Mcp
     rateLimiter,
     logger
   });
-  const tagCache = options.tagCache ?? new InMemoryTagListCache(client);
+  const cache =
+    options.cache ??
+    createMatterCache({
+      rootDir: config.cacheDir,
+      enabled: config.cacheMode === "on",
+      now: options.now
+    });
+  const tagCache = options.tagCache ?? new InMemoryTagListCache(client, cache);
+  const contentService = options.contentService ?? new MatterContentService(client, cache, options.now);
   const server = new McpServer({ name: SERVER_NAME, version: SERVER_VERSION });
 
-  registerTools(server, { config, logger, client, tagCache });
+  registerTools(server, { config, logger, client, tagCache, cache, contentService, now: options.now ?? (() => Date.now()) });
   return server;
 }
 
@@ -129,6 +192,9 @@ interface ToolContext {
   logger: Logger;
   client: MatterClient;
   tagCache: TagListCache;
+  cache: MatterCache;
+  contentService: MatterContentService;
+  now: () => number;
 }
 
 function registerTools(server: McpServer, context: ToolContext): void {
@@ -141,7 +207,11 @@ function registerTools(server: McpServer, context: ToolContext): void {
     },
     async () =>
       runTool(context, "matter_health", async () => {
-        const account = await context.client.getMe();
+        const cached = await context.cache.getAccount(context.now());
+        const account = cached.hit && cached.value ? cached.value : await context.client.getMe();
+        if (!cached.hit) {
+          await context.cache.setAccount(account, context.now());
+        }
         return {
           schema_version: "1.0",
           ok: true,
@@ -291,6 +361,127 @@ function registerTools(server: McpServer, context: ToolContext): void {
             : []
         };
       })
+  );
+
+  server.registerTool(
+    "matter_get_annotations",
+    {
+      title: "Get Matter annotations",
+      description: "Retrieve all highlights and user notes for one Matter item without interpreting or summarizing them.",
+      inputSchema: getAnnotationsInputSchema
+    },
+    async (args) =>
+      runTool(context, "matter_get_annotations", async () => {
+        const metadata = await context.contentService.getMetadata(args.item_id, {
+          forceRefresh: args.force_refresh
+        });
+        const annotations = await context.contentService.getAnnotations(args.item_id, {
+          limit: args.limit,
+          forceRefresh: args.force_refresh,
+          parentUpdatedAt: metadata.item.updated_at
+        });
+
+        return {
+          schema_version: "1.0",
+          item_id: args.item_id,
+          annotations: annotations.annotations.map(annotationForOutput),
+          returned_count: annotations.annotations.length,
+          has_more: annotations.hasMore,
+          cache: {
+            hit: annotations.cacheHit
+          }
+        };
+      })
+  );
+
+  server.registerTool(
+    "matter_get_item",
+    {
+      title: "Get Matter item",
+      description: "Retrieve one Matter item with optional parsed Markdown and annotations for selected sources.",
+      inputSchema: getItemInputSchema
+    },
+    async (args) =>
+      runTool(context, "matter_get_item", async () => {
+        const metadata = await context.contentService.getMetadata(args.item_id, {
+          forceRefresh: args.force_refresh
+        });
+        const warnings: string[] = [];
+        let markdown: string | null = null;
+        let markdownMetadata = {
+          included: false,
+          complete_char_count: 0,
+          returned_char_count: 0,
+          truncated: false,
+          sha256: null as string | null
+        };
+        let markdownHit = false;
+
+        if (metadata.item.processing_status === "processing") {
+          warnings.push("Matter item is still processing; markdown was not requested.");
+        } else if (args.include_markdown) {
+          const markdownResult = await context.contentService.getMarkdown(metadata.item, {
+            forceRefresh: args.force_refresh
+          });
+          markdownHit = markdownResult.cacheHit;
+          if (markdownResult.markdown !== null && markdownResult.meta) {
+            const returned = markdownResult.markdown.slice(0, args.max_markdown_chars);
+            markdown = returned;
+            markdownMetadata = {
+              included: true,
+              complete_char_count: markdownResult.meta.char_count,
+              returned_char_count: returned.length,
+              truncated: markdownResult.markdown.length > returned.length,
+              sha256: markdownResult.meta.sha256
+            };
+            if (markdownMetadata.truncated) {
+              warnings.push("Markdown was truncated only in the MCP response; the complete markdown remains cached.");
+            }
+          }
+        }
+
+        const annotations = args.include_annotations
+          ? await context.contentService.getAnnotations(args.item_id, {
+              limit: 1000,
+              forceRefresh: args.force_refresh,
+              parentUpdatedAt: metadata.item.updated_at
+            })
+          : { annotations: [], hasMore: false, cacheHit: false };
+
+        return {
+          schema_version: "1.0",
+          item: itemForDetail(metadata.item),
+          markdown,
+          markdown_metadata: markdownMetadata,
+          annotations: annotations.annotations.map(annotationForOutput),
+          warnings,
+          content_safety_notice: CONTENT_SAFETY_NOTICE,
+          cache: {
+            metadata_hit: metadata.cacheHit,
+            markdown_hit: markdownHit,
+            annotations_hit: annotations.cacheHit
+          }
+        };
+      })
+  );
+
+  server.registerTool(
+    "matter_build_context_bundle",
+    {
+      title: "Build Matter context bundle",
+      description:
+        "Build a bounded, deterministic, provenance-preserving evidence bundle for broad repository research tasks.",
+      inputSchema: buildContextBundleInputSchema
+    },
+    async (args) =>
+      runTool(context, "matter_build_context_bundle", async () =>
+        buildContextBundle(args, {
+          client: context.client,
+          contentService: context.contentService,
+          tagProvider: context.tagCache,
+          now: context.now
+        })
+      )
   );
 }
 
