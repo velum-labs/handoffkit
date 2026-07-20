@@ -12,18 +12,25 @@ import { join } from "node:path";
 import {
   findProjectRouterConfig,
   globalRouterConfigPath,
+  loadRouterConfig,
   routekitHome
 } from "@routekit/config";
 import { RouteKitControlClient } from "@routekit/control";
 import {
+  acquireLifecycleLock,
   ControlClient,
   createServiceRecordStore,
+  detectSupervisor,
   serviceLogPath,
-  startDaemon
+  startDaemon,
+  stopDaemonProcess,
+  supervisorController,
+  waitForServiceReady
 } from "@routekit/runtime";
 import type { ServiceRecord, StartDaemonResult } from "@routekit/runtime";
 
 import { routekitVersion } from "./state.js";
+import { daemonUnitSpec, serviceEnvironment } from "./daemon.js";
 
 const PRODUCT = "routekit";
 const KIND = "daemon";
@@ -65,6 +72,15 @@ export async function daemonRecordHealthy(record: ServiceRecord): Promise<boolea
 }
 
 export function canonicalConfigOrMigrationError(): string {
+  if (
+    (process.env.ROUTEKIT_CONFIG ?? "").length > 0 ||
+    process.argv.includes("--config")
+  ) {
+    throw new Error(
+      "--config / ROUTEKIT_CONFIG are not supported by singleton daemon operations; " +
+        "use `routekit config import --from <path>`"
+    );
+  }
   const global = globalRouterConfigPath();
   if (existsSync(global)) return global;
   const project = findProjectRouterConfig();
@@ -114,8 +130,71 @@ export async function ensureDaemon(input: {
 }> {
   const current = readDaemonRecord();
   if (current !== undefined && (await daemonRecordHealthy(current))) {
+    if (current.version !== undefined && current.version !== routekitVersion()) {
+      const entry = process.argv[1];
+      if (
+        (current.supervisor === "systemd" || current.supervisor === "launchd") &&
+        current.binPath !== undefined &&
+        entry !== undefined &&
+        current.binPath !== entry
+      ) {
+        throw new Error(
+          `the singleton daemon runs ${current.binPath}, but this CLI is ${entry}; ` +
+            "run `routekit daemon service install` to rewrite the unit"
+        );
+      }
+      const lock = await acquireLifecycleLock(daemonLifecycleLockPath());
+      try {
+        // Re-read under the lock: another client may already have upgraded it.
+        const authoritative = readDaemonRecord();
+        if (
+          authoritative !== undefined &&
+          authoritative.version !== routekitVersion()
+        ) {
+          if (
+            authoritative.supervisor === "systemd" ||
+            authoritative.supervisor === "launchd"
+          ) {
+            await supervisorController(
+              authoritative.supervisor,
+              PRODUCT,
+              KIND
+            ).restart();
+            const replacement = await waitForServiceReady({
+              home: routekitHome(),
+              product: PRODUCT,
+              kind: KIND,
+              previousPid: authoritative.pid,
+              timeoutMs: START_TIMEOUT_MS,
+              logFile: daemonLogPath(),
+              ready: daemonRecordHealthy
+            });
+            const client = controlClientForRecord(replacement);
+            await client.hello();
+            return { client, record: replacement };
+          }
+          await stopDaemonProcess(authoritative, { graceMs: 45_000 });
+        }
+      } finally {
+        lock.release();
+      }
+      // Detached daemon: fall through to the ordinary race-safe start after
+      // the old generation has drained and removed its record.
+      return await ensureDaemon({
+        ...input,
+        port: input.port ?? current.dataPort ?? 8080,
+        ...(input.authToken !== undefined
+          ? { authToken: input.authToken }
+          : current.authToken !== undefined
+            ? { authToken: current.authToken }
+            : {})
+      });
+    }
     const client = controlClientForRecord(current);
-    await client.hello();
+    const hello = await client.hello();
+    if (!hello.capabilities.includes("routekit.control.v1")) {
+      throw new Error("RouteKit daemon does not advertise routekit.control.v1");
+    }
     return { client, record: current };
   }
   if (current !== undefined) {
@@ -127,6 +206,31 @@ export async function ensureDaemon(input: {
   const entry = process.argv[1];
   if (entry === undefined) throw new Error("cannot resolve the routekit entry script");
   const home = routekitHome();
+  const configPath = input.configPath ?? canonicalConfigOrMigrationError();
+  const supervisor = await detectSupervisor(PRODUCT, KIND);
+  if (supervisor !== undefined) {
+    const graceMs = input.drainGraceMs ?? 30_000;
+    const config = loadRouterConfig({ configPath }).config;
+    await supervisor.install(
+      daemonUnitSpec({
+        args: daemonServeArgs({ ...input, configPath }),
+        supervisor: supervisor.kind,
+        env: serviceEnvironment(config),
+        drainGraceMs: graceMs
+      })
+    );
+    const record = await waitForServiceReady({
+      home,
+      product: PRODUCT,
+      kind: KIND,
+      timeoutMs: START_TIMEOUT_MS,
+      logFile: daemonLogPath(),
+      ready: daemonRecordHealthy
+    });
+    const client = controlClientForRecord(record);
+    await client.hello();
+    return { client, record };
+  }
   const start = await startDaemon(
     {
       product: PRODUCT,
@@ -135,7 +239,7 @@ export async function ensureDaemon(input: {
       version: routekitVersion(),
       command: {
         execPath: process.execPath,
-        args: [entry, ...daemonServeArgs(input)]
+        args: [entry, ...daemonServeArgs({ ...input, configPath })]
       },
       cwd: process.cwd()
     },

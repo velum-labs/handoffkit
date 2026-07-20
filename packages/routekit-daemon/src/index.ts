@@ -98,7 +98,7 @@ export type RunningRouteKitDaemon = {
   reload(): Promise<void>;
 };
 
-type RevisionState = { config: number; accounts: number };
+type RevisionState = { config: number; accounts: number; daemon: number };
 
 function revisionPath(home: string): string {
   return join(home, "daemon-revisions.json");
@@ -115,10 +115,14 @@ function readRevisions(home: string): RevisionState {
       accounts:
         typeof parsed.accounts === "number" && Number.isSafeInteger(parsed.accounts)
           ? parsed.accounts
+          : 0,
+      daemon:
+        typeof parsed.daemon === "number" && Number.isSafeInteger(parsed.daemon)
+          ? parsed.daemon
           : 0
     };
   } catch {
-    return { config: 0, accounts: 0 };
+    return { config: 0, accounts: 0, daemon: 0 };
   }
 }
 
@@ -281,7 +285,11 @@ export async function startRouteKitDaemon(
         message: `RouteKit daemon pid ${previous.pid} is alive but its control plane is unhealthy; stop it before recovery`
       });
     }
-    const generation = nextServiceGeneration(previous?.generation);
+    const generation = nextServiceGeneration(
+      Math.max(previous?.generation ?? 0, revisions.daemon)
+    );
+    revisions.daemon = generation;
+    writeRevisions(home, revisions);
     const startGeneration = async (config: RouterConfig): Promise<RunningRouter> =>
       await startRouter({
         config,
