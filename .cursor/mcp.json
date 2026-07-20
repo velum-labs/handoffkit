@@ -1,13 +1,9 @@
 {
   "mcpServers": {
     "matter": {
-      "type": "stdio",
-      "command": "bash",
-      "args": ["${workspaceFolder}/scripts/run-matter-mcp.sh"],
-      "env": {
-        "MATTER_API_TOKEN": "${env:MATTER_API_TOKEN}",
-        "MATTER_MCP_CACHE_MODE": "on",
-        "LOG_LEVEL": "info"
+      "url": "https://MATTER-MCP-HOST-PLACEHOLDER/mcp",
+      "headers": {
+        "Authorization": "Bearer ${env:MATTER_MCP_ACCESS_KEY}"
       }
     }
   }
