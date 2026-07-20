@@ -51,8 +51,6 @@ test("independent command surface is complete and has no compatibility aliases",
     "models",
     "config",
     "doctor",
-    "install",
-    "uninstall",
     "telemetry",
     "completion",
     "__complete",
@@ -66,6 +64,13 @@ test("independent command surface is complete and has no compatibility aliases",
     command(program, "gateway").commands.map((entry) => entry.name()).sort(),
     ["serve", "stop"]
   );
+  assert.deepEqual(
+    command(program, "codex").commands.map((entry) => entry.name()).sort(),
+    ["install", "uninstall"]
+  );
+  for (const launcher of ["claude", "cursor", "opencode"]) {
+    assert.deepEqual(command(program, launcher).commands, []);
+  }
   assert.deepEqual(
     command(program, "accounts").commands.map((entry) => entry.name()).sort(),
     ["add", "cliproxy", "list", "login", "remove", "serve", "status", "stop"]
@@ -104,6 +109,7 @@ test("dynamic completion follows the command tree", () => {
     "status",
     "stop"
   ]);
+  assert.ok(completionCandidates(program, ["codex", "in"]).includes("install"));
   assert.ok(
     completionCandidates(program, ["gateway", "serve", "--p"]).includes("--port")
   );

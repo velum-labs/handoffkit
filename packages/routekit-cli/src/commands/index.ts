@@ -10,7 +10,6 @@ import { registerAccounts } from "./accounts.js";
 import { registerConfig } from "./config.js";
 import { registerDoctor } from "./doctor.js";
 import { registerGateway } from "./gateway.js";
-import { registerInstall } from "./install.js";
 import { registerLaunchers } from "./launchers.js";
 import { registerModels } from "./models.js";
 import { registerProviders } from "./providers.js";
@@ -37,7 +36,6 @@ export function registerCommands(program: Command): void {
   registerDoctor(program);
 
   program.commandsGroup("Maintain");
-  registerInstall(program);
   registerTelemetry(program);
   registerCompletion(program, "routekit");
   registerDynamicCompletion(program);

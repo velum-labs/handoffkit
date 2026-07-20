@@ -7,6 +7,7 @@ import type { Command } from "commander";
 import { launchTool, routekitToolRegistry } from "../launch.js";
 
 import { loaded } from "./context.js";
+import { registerCodexIntegration } from "./install.js";
 
 export function registerLaunchers(program: Command): void {
   for (const integration of routekitToolRegistry.list()) {
@@ -23,6 +24,9 @@ export function registerLaunchers(program: Command): void {
       .option("--cwd <dir>", "tool working directory");
     if (integration.id === "cursor") {
       command.option("--ide", "launch the desktop integration");
+    }
+    if (integration.id === "codex") {
+      registerCodexIntegration(command);
     }
     command.action(
       async (
