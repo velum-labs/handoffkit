@@ -76,9 +76,9 @@ RouteKit for single-model launches and edit `.routekit/router.yaml` for routing.
 `fusionkit stop` never stops an external RouteKit daemon. An embedded RouteKit
 router is owned by the launching Fusion process and closes with that process.
 
-Removed Fusion commands include `proxy`, account/CLIProxy management,
-`install|uninstall codex`, and direct/single-model mode. Their equivalents live
-in RouteKit.
+Removed Fusion commands include `proxy`, account/CLIProxy management, Codex
+install/uninstall, and direct/single-model mode. Their equivalents live in
+RouteKit (for example `routekit codex install|uninstall`).
 
 ## Configuration
 

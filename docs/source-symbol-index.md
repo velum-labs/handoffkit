@@ -279,7 +279,7 @@ Use it with the narrative references when you need to find the module that owns 
 - `packages/routekit-cli/src/commands/doctor.ts`: registerDoctor (function)
 - `packages/routekit-cli/src/commands/gateway.ts`: registerGateway (function)
 - `packages/routekit-cli/src/commands/index.ts`: registerCommands (function)
-- `packages/routekit-cli/src/commands/install.ts`: registerInstall (function)
+- `packages/routekit-cli/src/commands/install.ts`: registerCodexIntegration (function)
 - `packages/routekit-cli/src/commands/launchers.ts`: registerLaunchers (function)
 - `packages/routekit-cli/src/commands/models.ts`: registerModels (function)
 - `packages/routekit-cli/src/commands/providers.ts`: ProviderStatus (type), registerProviders (function)

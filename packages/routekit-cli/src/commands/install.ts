@@ -15,14 +15,10 @@ const CODEX_OWNER: CodexInstallOwner = {
   id: "routekit",
   displayName: "RouteKit",
   providerId: "routekit",
-  installCommand: "routekit install codex",
-  uninstallCommand: "routekit uninstall codex",
+  installCommand: "routekit codex install",
+  uninstallCommand: "routekit codex uninstall",
   startCommand: "routekit gateway serve"
 };
-
-function assertCodex(tool: string): void {
-  if (tool !== "codex") throw new Error("supported install target: codex");
-}
 
 function codexProfileId(modelId: string, index: number): string {
   return modelId.length > 0 &&
@@ -33,19 +29,17 @@ function codexProfileId(modelId: string, index: number): string {
     : `routekit-model-${index + 1}`;
 }
 
-export function registerInstall(program: Command): void {
-  program
-    .command("install <tool>")
-    .description("install a RouteKit-owned provider and profiles")
+export function registerCodexIntegration(codex: Command): void {
+  codex
+    .command("install")
+    .description("install a RouteKit-owned Codex provider and profiles")
     .requiredOption("--gateway-url <url>", "running gateway URL")
     .option("--codex-home <dir>", "Codex home directory")
     .action(
       async (
-        tool: string,
         options: { gatewayUrl: string; codexHome?: string },
         command: Command
       ) => {
-        assertCodex(tool);
         const ctx = contextFor(command);
         const config = loaded(command).config;
         const catalog = await fetchLiveCatalog(options.gatewayUrl, {
@@ -68,12 +62,11 @@ export function registerInstall(program: Command): void {
       }
     );
 
-  program
-    .command("uninstall <tool>")
-    .description("remove RouteKit-owned tool configuration")
+  codex
+    .command("uninstall")
+    .description("remove RouteKit-owned Codex configuration")
     .option("--codex-home <dir>", "Codex home directory")
-    .action((tool: string, options: { codexHome?: string }, command: Command) => {
-      assertCodex(tool);
+    .action((options: { codexHome?: string }, command: Command) => {
       const ctx = contextFor(command);
       const result = uninstallCodexIntegration({
         ownerId: CODEX_OWNER.id,
