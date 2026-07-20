@@ -3,9 +3,9 @@
 Handoffkit agents and local Cursor sessions retrieve read-only evidence from Matter through the [`matter-cursor-mcp`](https://github.com/velum-labs/matter-cursor-mcp) stdio MCP server.
 
 The server ships as the public npm package `matter-cursor-mcp`. Cloud MCP
-registrations run it through a login shell so `npx` is on `PATH`; Handoffkit
-does not vendor the server, build it during agent setup, or host a remote HTTP
-deployment.
+registrations use a shell command that locates the VM's `npx` and adds its
+directory (which also contains `node`) to `PATH`; Handoffkit does not vendor
+the server, build it during agent setup, or host a remote HTTP deployment.
 
 ## What stays in this repo
 
@@ -32,14 +32,16 @@ Use:
 |-------|-------|
 | Name | `matter` |
 | Command | `bash` |
-| Args | `-lc`, `exec npx -y matter-cursor-mcp` |
+| Arg 1 | `-c` |
+| Arg 2 | `for npx_bin in "$HOME"/.nvm/versions/node/*/bin/npx /usr/local/bin/npx /usr/bin/npx; do if [ -x "$npx_bin" ]; then export PATH="${npx_bin%/*}:$PATH"; exec "$npx_bin" -y matter-cursor-mcp; fi; done; echo "npx not found; install Node.js with npm in the cloud environment" >&2; exit 127` |
 | Env | `MATTER_API_TOKEN=<your Matter token>`, `MATTER_MCP_CACHE_MODE=on`, `LOG_LEVEL=info` |
 
 Enter `MATTER_API_TOKEN` directly in the registration's env block; Cursor encrypts env values for cloud MCP configs. No VM build step or Cursor Runtime Secret is needed for Matter.
 
 Enter the two arguments as separate entries. Do not add quote characters around
-the second argument. The login shell is required because cloud MCP child
-processes can start with a minimal `PATH` that does not include `npx`.
+the second argument. The locator is necessary because cloud MCP children can
+start with neither `npx` nor `node` on `PATH`; direct `npx`, `bash -lc`, and an
+absolute `npx` path alone are insufficient in that environment.
 
 ### Cursor desktop
 
@@ -83,8 +85,8 @@ Optional routing tags:
 ## Cutover checklist
 
 1. Publish `matter-cursor-mcp` to npm; see the `matter-cursor-mcp` README publishing steps.
-2. Add the cloud MCP registration with `bash`, args `-lc` and
-   `exec npx -y matter-cursor-mcp`, and the encrypted env token.
+2. Add the cloud MCP registration with the tested `bash -c` locator above and
+   the encrypted env token.
 3. Merge this PR.
 4. Delete old per-account stdio registrations pointing at `/workspace` scripts and, optionally, the `MATTER_API_TOKEN` Runtime Secret.
 5. Start a new cloud agent and verify with `matter_health`.
