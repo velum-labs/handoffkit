@@ -36,6 +36,16 @@ const PRODUCT = "routekit";
 const KIND = "daemon";
 const START_TIMEOUT_MS = 90_000;
 
+function defaultDaemonPort(): number {
+  const raw = process.env.ROUTEKIT_DAEMON_PORT;
+  if (raw === undefined) return 8080;
+  const port = Number.parseInt(raw, 10);
+  if (!Number.isInteger(port) || port < 0 || port > 65_535) {
+    throw new Error("ROUTEKIT_DAEMON_PORT must be an integer between 0 and 65535");
+  }
+  return port;
+}
+
 export function daemonStore() {
   return createServiceRecordStore({ home: routekitHome(), product: PRODUCT });
 }
@@ -108,7 +118,7 @@ export function daemonServeArgs(input: {
     "--config-path",
     input.configPath ?? canonicalConfigOrMigrationError(),
     "--port",
-    String(input.port ?? 8080),
+    String(input.port ?? defaultDaemonPort()),
     ...(input.authToken !== undefined ? ["--auth-token", input.authToken] : []),
     ...(input.portless === false ? ["--no-portless"] : []),
     ...(input.drainGraceMs !== undefined

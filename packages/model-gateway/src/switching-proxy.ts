@@ -10,6 +10,8 @@
 import { createServer } from "node:http";
 import type { IncomingHttpHeaders, IncomingMessage, ServerResponse } from "node:http";
 
+import { assertAuthenticatedBind } from "@routekit/runtime";
+
 import { authorizedRequest } from "./auth.js";
 
 const MAX_BODY_BYTES = 16 * 1024 * 1024;
@@ -100,6 +102,7 @@ export async function startSwitchingGatewayProxy(input: {
   authToken?: string;
 }): Promise<SwitchingGatewayProxy> {
   const host = input.host ?? "127.0.0.1";
+  assertAuthenticatedBind(host, input.authToken);
   let target = input.target.replace(/\/+$/, "");
   let draining = false;
   let inflight = 0;

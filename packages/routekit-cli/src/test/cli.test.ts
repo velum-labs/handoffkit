@@ -40,6 +40,7 @@ test("independent command surface is complete and has no compatibility aliases",
   const program = buildProgram();
   const expected = [
     "gateway",
+    "daemon",
     "codex",
     "claude",
     "cursor",
@@ -99,7 +100,7 @@ test("independent command surface is complete and has no compatibility aliases",
   );
   assert.deepEqual(
     command(program, "config").commands.map((entry) => entry.name()).sort(),
-    ["edit", "init", "migrate", "path", "show"]
+    ["edit", "import", "init", "migrate", "path", "show"]
   );
   assert.equal(program.commands.some((entry) => entry.aliases().length > 0), false);
 });
@@ -131,6 +132,8 @@ test("dynamic completion follows the command tree", () => {
 test("serve CLI rejects an unauthenticated non-loopback bind", async () => {
   const root = mkdtempSync(join(tmpdir(), "routekit-serve-auth-"));
   const config = join(root, "router.yaml");
+  const previousStateHome = process.env.ROUTEKIT_HOME;
+  process.env.ROUTEKIT_HOME = join(root, "state");
   writeFileSync(
     config,
     [
@@ -165,6 +168,8 @@ test("serve CLI rejects an unauthenticated non-loopback bind", async () => {
       /binding to non-loopback host "0\.0\.0\.0" requires an auth token/
     );
   } finally {
+    if (previousStateHome === undefined) delete process.env.ROUTEKIT_HOME;
+    else process.env.ROUTEKIT_HOME = previousStateHome;
     rmSync(root, { recursive: true, force: true });
   }
 });

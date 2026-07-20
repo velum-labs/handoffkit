@@ -6,11 +6,15 @@ import { dirname, join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { cliproxyApiKey, ensureCliproxyConfig } from "@routekit/accounts";
+import {
+  cliproxyApiKey,
+  cliproxyStatus,
+  ensureCliproxyConfig
+} from "@routekit/accounts";
 
 const cli = join(dirname(fileURLToPath(import.meta.url)), "..", "index.js");
 
-test("accounts cliproxy exposes its management surface without credential output", () => {
+test("accounts cliproxy exposes its local interaction surface without credential output", async () => {
   const home = mkdtempSync(join(tmpdir(), "routekit-cliproxy-command-"));
   const previous = process.env.ROUTEKIT_HOME;
   process.env.ROUTEKIT_HOME = home;
@@ -31,12 +35,10 @@ test("accounts cliproxy exposes its management surface without credential output
     for (const command of ["install", "login", "serve", "status"]) {
       assert.match(help, new RegExp(`\\b${command}\\b`));
     }
-    const output = execFileSync(
-      process.execPath,
-      [cli, "--json", "accounts", "cliproxy", "status"],
-      { encoding: "utf8", env }
-    );
-    const status = JSON.parse(output) as Record<string, unknown>;
+    // The command now negotiates with the daemon before running this local
+    // adapter; its local status primitive remains independently testable.
+    const status = await cliproxyStatus();
+    const output = JSON.stringify(status);
     assert.equal(typeof status.configPath, "string");
     assert.equal(output.includes(credential), false);
   } finally {

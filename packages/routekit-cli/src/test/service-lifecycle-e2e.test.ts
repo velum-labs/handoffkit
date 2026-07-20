@@ -50,7 +50,9 @@ function alive(pid: number): boolean {
 test("gateway service lifecycle: start, idempotency, upgrade, drain-on-stop", async () => {
   const root = mkdtempSync(join(tmpdir(), "routekit-service-e2e-"));
   const project = join(root, "project");
+  const home = join(root, "home");
   const stateHome = join(root, "state");
+  mkdirSync(join(home, ".config", "routekit"), { recursive: true });
   mkdirSync(project, { recursive: true });
 
   // A mock upstream whose /slow completion takes 2.5s: long enough to still be
@@ -90,13 +92,14 @@ test("gateway service lifecycle: start, idempotency, upgrade, drain-on-stop", as
   await new Promise<void>((resolveListen) => upstream.listen(0, "127.0.0.1", resolveListen));
   const upstreamPort = (upstream.address() as AddressInfo).port;
 
-  const configPath = join(project, "router.yaml");
+  const configPath = join(home, ".config", "routekit", "router.yaml");
   writeFileSync(
     configPath,
     ["providers:", "  openai: {}", "defaultModel: openai/mock-model", ""].join("\n")
   );
   const env = {
     ...process.env,
+    HOME: home,
     ROUTEKIT_HOME: stateHome,
     OPENAI_API_KEY: "mock-secret",
     OPENAI_BASE_URL: `http://127.0.0.1:${upstreamPort}/v1`,
@@ -105,8 +108,8 @@ test("gateway service lifecycle: start, idempotency, upgrade, drain-on-stop", as
     NO_COLOR: "1"
   };
   const cli = { cwd: project, env };
-  const base = ["--config", configPath, "gateway"];
-  const recordPath = join(stateHome, "services", "gateway.json");
+  const base = ["gateway"];
+  const recordPath = join(stateHome, "services", "daemon.json");
   let daemonPid: number | undefined;
 
   try {
@@ -137,7 +140,7 @@ test("gateway service lifecycle: start, idempotency, upgrade, drain-on-stop", as
     };
     assert.equal(typeof record.version, "string");
     assert.equal(record.supervisor, "detached");
-    assert.ok(record.args?.includes("serve"));
+    assert.ok(record.args?.includes("run"));
 
     // upgrade without skew is a no-op; --force performs a drain-restart.
     const upToDate = json(await runCli([...base, "upgrade", "--json"], cli));
@@ -156,7 +159,7 @@ test("gateway service lifecycle: start, idempotency, upgrade, drain-on-stop", as
     // logs: the daemon's output landed in the shared log file.
     const logs = await runCli([...base, "logs", "-n", "50"], cli);
     assert.equal(logs.exitCode, 0);
-    assert.match(logs.stdout, /RouteKit gateway listening/);
+    assert.match(logs.stdout, /RouteKit daemon listening/);
 
     // Drain on stop: an in-flight (slow) completion finishes while the
     // gateway refuses new work and then shuts down.

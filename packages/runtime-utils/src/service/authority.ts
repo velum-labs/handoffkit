@@ -79,7 +79,12 @@ function tryAcquire(path: string): LifecycleLock | undefined {
 
 export async function acquireLifecycleLock(
   path: string,
-  options: { timeoutMs?: number; pollMs?: number } = {}
+  options: {
+    timeoutMs?: number;
+    pollMs?: number;
+    /** Abort contention early when another authority becomes discoverable. */
+    onWait?: () => Error | undefined | Promise<Error | undefined>;
+  } = {}
 ): Promise<LifecycleLock> {
   const timeoutMs = options.timeoutMs ?? 30_000;
   const pollMs = options.pollMs ?? 75;
@@ -94,6 +99,8 @@ export async function acquireLifecycleLock(
       rmSync(path, { force: true });
       continue;
     }
+    const waitError = await options.onWait?.();
+    if (waitError !== undefined) throw waitError;
     if (Date.now() >= deadline) {
       throw new Error(
         `timed out waiting for lifecycle lock ${path} (owned by pid ${current.pid})`

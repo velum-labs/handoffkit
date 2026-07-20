@@ -134,6 +134,14 @@ function writeRevisions(home: string, revisions: RevisionState): void {
   chmodSync(revisionPath(home), 0o600);
 }
 
+function writeSnapshot(home: string, category: "catalog" | "health", name: string, value: unknown): void {
+  const directory = join(home, category);
+  mkdirSync(directory, { recursive: true, mode: 0o700 });
+  const path = join(directory, `${name}.json`);
+  writeFileAtomic(path, `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600 });
+  chmodSync(path, 0o600);
+}
+
 function canonicalConfigDocument(path: string): string {
   if (!existsSync(path)) {
     throw new ControlError({
@@ -249,7 +257,17 @@ export async function startRouteKitDaemon(
   // Held for the daemon's whole lifetime. Lifecycle clients use daemon.lock
   // while this authority lock prevents any second daemon from becoming live.
   const authority = await acquireLifecycleLock(join(store.directory, "daemon-authority.lock"), {
-    timeoutMs: 30_000
+    timeoutMs: 30_000,
+    onWait: async () => {
+      const existing = store.read(ROUTEKIT_DAEMON_KIND);
+      return existing !== undefined && (await healthyControl(existing))
+        ? new ControlError({
+            code: "conflict",
+            message: `RouteKit daemon is already running (pid ${existing.pid})`,
+            details: { record: existing }
+          })
+        : undefined;
+    }
   });
 
   let control: RunningControlServer | undefined;
@@ -431,7 +449,7 @@ export async function startRouteKitDaemon(
         } catch {
           // Individual provider status still reports configuration/credentials.
         }
-        return {
+        const result = {
           providers: configuredProviderIds(currentConfig).map((provider) => ({
             provider,
             configured: true,
@@ -441,6 +459,11 @@ export async function startRouteKitDaemon(
               .map((model) => model.id)
           }))
         };
+        writeSnapshot(home, "health", "providers", {
+          checkedAt: new Date().toISOString(),
+          providers: result.providers
+        });
+        return result;
       },
       "providers.set": async (params) => {
         const raw = parseYaml(currentDocument) as Record<string, unknown>;
@@ -476,13 +499,19 @@ export async function startRouteKitDaemon(
         const models = (body.data ?? []).filter(
           (model) => params.provider === undefined || model.id.startsWith(`${params.provider}/`)
         );
-        return {
+        const result = {
           models,
           ...(currentConfig.defaultModel !== undefined
             ? { defaultModel: currentConfig.defaultModel }
             : {}),
           revision: revisions.config
         };
+        writeSnapshot(home, "catalog", "models", {
+          updatedAt: new Date().toISOString(),
+          defaultModel: result.defaultModel,
+          models
+        });
+        return result;
       },
       "models.info": async (params) => {
         const listed = await handlers["models.list"]({}, {

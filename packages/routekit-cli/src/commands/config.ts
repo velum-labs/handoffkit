@@ -170,7 +170,8 @@ export function registerConfig(program: Command): void {
     .option("--dry-run", "diagnose and print the conversion without writing")
     .action(async (options: { dryRun?: boolean }, command: Command) => {
       const ctx = contextFor(command);
-      const path = globalRouterConfigPath();
+      const override = configOverride(command);
+      const path = override ?? globalRouterConfigPath();
       if (!existsSync(path)) {
         throw new Error(`router config not found: ${path}`);
       }
@@ -182,7 +183,12 @@ export function registerConfig(program: Command): void {
       );
       const actions =
         hasErrors || options.dryRun === true ? [] : migrateLegacyState();
-      if (!hasErrors && options.dryRun !== true && migration.changed) {
+      if (
+        override === undefined &&
+        !hasErrors &&
+        options.dryRun !== true &&
+        migration.changed
+      ) {
         const client = await routekitClient();
         await client.call(
           "daemon.reload",
