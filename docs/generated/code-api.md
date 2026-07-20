@@ -38,6 +38,8 @@ contract. Product CLIs can wrap this module without owning account logic.
 - `export type { StartSubscriptionProxyOptions, SubscriptionProxy } from "./proxy.js";`
 - `export { SubscriptionProxyClient, SubscriptionProxyClientError } from "./client.js";`
 - `export type { SubscriptionProxyClientOptions } from "./client.js";`
+- `export { collectSubscriptionUsage, DEFAULT_SUBSCRIPTION_USAGE_REFRESH_MS, openLocalSubscriptionUsage } from "./usage.js";`
+- `export type { SubscriptionUsageSource } from "./usage.js";`
 - `export { CLIPROXY_API_KEY_ENV, CLIPROXY_BASE_URL_ENV, CLIPROXY_HOME_ENV, CLIPROXY_LOGIN_FLAGS, CLIPROXY_PINNED_VERSION, cliproxyAssetName, cliproxyApiKey, cliproxyBaseUrl, cliproxyBinaryPath, cliproxyConfigPath, cliproxyHome, cliproxyStatus, ensureCliproxyConfig, installCliproxy, runCliproxyLogin, spawnCliproxy } from "./cliproxy.js";`
 - `export type { CliproxyInstallResult, CliproxyStatus } from "./cliproxy.js";`
 - `export { snapshotsToUsage, SUBSCRIPTION_USAGE_PATH, subscriptionUsageResponseSchema } from "./wire.js";`
