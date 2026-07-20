@@ -35,7 +35,8 @@ test("status and usage expose safe empty-state JSON", async () => {
         accounts: { running: false }
       },
       accounts: [],
-      usage: null
+      usage: null,
+      recoveredTransactions: []
     });
     assert.deepEqual(await captureJson(["--config", configPath, "usage"]), {
       available: false,

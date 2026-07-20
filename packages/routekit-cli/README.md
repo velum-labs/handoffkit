@@ -89,6 +89,11 @@ atomically imports the resulting credential, and removes the temporary profile
 without changing the user's normal login. `accounts add` is the explicit
 current-login import path.
 
+Enrollment and provider activation are journaled as one CLI transaction. A
+failed activation restores the previous credential/config state, and
+`routekit status` or `routekit doctor` rolls an interrupted transaction back
+before reporting readiness.
+
 API providers infer their key and optional base URL from registry-defined
 environment variables. Subscription providers discover the union of models
 offered by healthy enrolled accounts and keep per-account quota, refresh,

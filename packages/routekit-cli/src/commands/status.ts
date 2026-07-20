@@ -3,6 +3,7 @@ import type { RouterConfig } from "@routekit/gateway";
 import type { Command } from "commander";
 
 import { accountsStatus } from "../accounts.js";
+import { recoverPendingEnrollmentTransactions } from "../account-transaction.js";
 import { readServiceRecord } from "../state.js";
 
 import { loaded } from "./context.js";
@@ -27,6 +28,7 @@ function serviceStatus(kind: "gateway" | "accounts"): PublicServiceStatus {
 }
 
 export async function collectRouteKitStatus(config: RouterConfig) {
+  const recoveredTransactions = recoverPendingEnrollmentTransactions();
   const accountState = await accountsStatus(config);
   return {
     ready:
@@ -38,7 +40,8 @@ export async function collectRouteKitStatus(config: RouterConfig) {
       accounts: serviceStatus("accounts")
     },
     accounts: accountState.accounts,
-    usage: accountState.usage ?? null
+    usage: accountState.usage ?? null,
+    recoveredTransactions
   };
 }
 

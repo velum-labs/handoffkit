@@ -10,6 +10,7 @@ import { commandOnPath } from "@routekit/runtime";
 import type { Command } from "commander";
 
 import { accountsStatus } from "../accounts.js";
+import { recoverPendingEnrollmentTransactions } from "../account-transaction.js";
 import { routekitToolRegistry } from "../launch.js";
 
 import { loaded } from "./context.js";
@@ -21,6 +22,14 @@ export function registerDoctor(program: Command): void {
     .action(async (_options: unknown, command: Command) => {
       const ctx = contextFor(command);
       const checks: Array<{ label: string; ok: boolean; detail?: string }> = [];
+      const recovered = recoverPendingEnrollmentTransactions();
+      for (const account of recovered) {
+        checks.push({
+          label: `${account} interrupted enrollment`,
+          ok: true,
+          detail: "rolled back before diagnostics"
+        });
+      }
       let config: RouterConfig | undefined;
       try {
         const result = loaded(command);

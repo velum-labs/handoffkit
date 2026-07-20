@@ -18,46 +18,6 @@ import {
   loginAccount
 } from "../accounts.js";
 import { buildProgram } from "../cli.js";
-import { activateAccountTransaction } from "../commands/accounts.js";
-
-test("account activation rolls credentials back and reports rollback failures", () => {
-  const result = {
-    subscriptionKind: "codex" as const,
-    provider: "codex" as const,
-    label: "primary",
-    path: "/private/primary.json"
-  };
-  const rolledBack: string[] = [];
-  assert.throws(
-    () =>
-      activateAccountTransaction(
-        result,
-        () => {
-          throw new Error("config write failed");
-        },
-        (kind, label) => rolledBack.push(`${kind}/${label}`)
-      ),
-    /config write failed/
-  );
-  assert.deepEqual(rolledBack, ["codex/primary"]);
-
-  assert.throws(
-    () =>
-      activateAccountTransaction(
-        result,
-        () => {
-          throw new Error("config write failed");
-        },
-        () => {
-          throw new Error("credential unlink failed");
-        }
-      ),
-    (error: unknown) =>
-      error instanceof AggregateError &&
-      /credential rollback also failed/.test(error.message) &&
-      error.errors.length === 2
-  );
-});
 
 test("accounts add canonically enrolls and activates the selected config", async () => {
   const root = mkdtempSync(join(tmpdir(), "routekit-accounts-add-"));

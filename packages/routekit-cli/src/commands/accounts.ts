@@ -14,58 +14,20 @@ import type { Command } from "commander";
 
 import {
   accountsStatus,
-  addAccount,
   listAccounts,
   loginAccount,
+  parseAccountMode,
   removeAccount,
   serveAccounts,
   stopAccounts
 } from "../accounts.js";
-import type { AccountListEntry } from "../accounts.js";
-import { updateEffectiveRouterConfig } from "../config.js";
+import {
+  enrollAndActivateAccount,
+  recoverPendingEnrollmentTransactions
+} from "../account-transaction.js";
 import { waitForShutdown } from "../serve.js";
 
 import { configOverride, loaded, numberOption } from "./context.js";
-
-function record(value: unknown): Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : {};
-}
-
-function activateAccount(command: Command, result: AccountListEntry): string {
-  return updateEffectiveRouterConfig(
-    { configPath: configOverride(command) },
-    (draft) => {
-      const providers = record(draft.providers);
-      const policy = record(providers[result.subscriptionKind]);
-      draft.providers = {
-        ...providers,
-        [result.subscriptionKind]: { ...policy }
-      };
-    }
-  ).path;
-}
-
-export function activateAccountTransaction(
-  result: AccountListEntry,
-  activate: () => string,
-  rollback: (subscriptionKind: string, label: string) => unknown = removeAccount
-): string {
-  try {
-    return activate();
-  } catch (activationError) {
-    try {
-      rollback(result.subscriptionKind, result.label);
-    } catch (rollbackError) {
-      throw new AggregateError(
-        [activationError, rollbackError],
-        `could not activate ${result.subscriptionKind}/${result.label}; credential rollback also failed`
-      );
-    }
-    throw activationError;
-  }
-}
 
 function registerCliproxy(accounts: Command): void {
   const cliproxy = accounts
@@ -194,12 +156,19 @@ export function registerAccounts(program: Command): void {
             "`accounts login` is interactive and does not support --json or --no-input"
           );
         }
+        recoverPendingEnrollmentTransactions();
         loaded(command);
-        const result = await loginAccount(subscriptionKind, options.name);
-        const configPath = activateAccountTransaction(
-          result,
-          () => activateAccount(command, result)
-        );
+        let configPath = "";
+        const result = await loginAccount(subscriptionKind, options.name, {
+          enroll: async (enrollment) => {
+            const committed = await enrollAndActivateAccount({
+              ...enrollment,
+              config: { configPath: configOverride(command) }
+            });
+            configPath = committed.configPath;
+            return committed;
+          }
+        });
         ctx.presenter.success(
           `logged in, enrolled, and enabled ${result.subscriptionKind}/${result.label}`
         );
@@ -215,11 +184,12 @@ export function registerAccounts(program: Command): void {
     .action(async (subscriptionKind: string, options: { name?: string }, command: Command) => {
       const ctx = contextFor(command);
       loaded(command);
-      const result = await addAccount(subscriptionKind, options.name);
-      const configPath = activateAccountTransaction(
-        result,
-        () => activateAccount(command, result)
-      );
+      const result = await enrollAndActivateAccount({
+        subscriptionKind: parseAccountMode(subscriptionKind),
+        ...(options.name !== undefined ? { label: options.name } : {}),
+        config: { configPath: configOverride(command) }
+      });
+      const configPath = result.configPath;
       const output = {
         ...result,
         activated: true,
