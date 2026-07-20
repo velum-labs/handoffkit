@@ -104,6 +104,14 @@ export type Gateway = {
   /** Base URL clients should target (without the `/v1` suffix). */
   url(): string;
   port(): number;
+  /**
+   * Graceful drain: flip `/health` to 503 and reject new model calls while
+   * letting in-flight requests (long-lived LLM streams) finish, bounded by
+   * `graceMs`; then close the listener and sever whatever remains. Does not
+   * release the backend — follow with {@link close}.
+   */
+  drain(graceMs?: number): Promise<void>;
+  /** Immediate close: equivalent to `drain(0)` plus backend/relay teardown. */
   close(): Promise<void>;
 };
 
@@ -286,7 +294,15 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
       : codexClientRelay;
   const codexRequestRelay = codexProviderRelay ?? codexClientRelay;
 
+  // In-flight request count drives the drain loop: a drain completes as soon
+  // as every accepted request has finished (or its grace expires).
+  let inflight = 0;
+  let draining = false;
   const server = createServer((req, res) => {
+    inflight += 1;
+    res.once("close", () => {
+      inflight -= 1;
+    });
     void handle(req, res).catch((error: unknown) => {
       // This catch must never throw: a throw here becomes an unhandled
       // rejection that kills the process hosting the gateway.
@@ -300,7 +316,17 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
     const path = url.pathname;
 
     if (path === "/health") {
-      writeJson(res, 200, { status: "ok" });
+      // A draining gateway reports unhealthy so pollers (readiness probes,
+      // upgrade orchestration) route new work elsewhere.
+      if (draining) writeJson(res, 503, { status: "draining" });
+      else writeJson(res, 200, { status: "ok" });
+      return;
+    }
+
+    if (draining) {
+      writeJson(res, 503, {
+        error: { message: "gateway is draining", type: "unavailable" }
+      });
       return;
     }
 
@@ -674,13 +700,32 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
   const address = server.address();
   const port = typeof address === "object" && address !== null ? address.port : options.port ?? 0;
 
+  let drainRun: Promise<void> | undefined;
+  const drain = (graceMs = 0): Promise<void> => {
+    drainRun ??= (async () => {
+      draining = true;
+      // Reap idle keep-alive sockets now; active streams keep their sockets
+      // until they finish or the grace expires.
+      server.closeIdleConnections();
+      const deadline = Date.now() + graceMs;
+      while (inflight > 0 && Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+      const closed = new Promise<void>((resolve) => {
+        server.close(() => resolve());
+      });
+      server.closeAllConnections();
+      await closed;
+    })();
+    return drainRun;
+  };
+
   return {
     url: () => `http://${host}:${port}`,
     port: () => port,
+    drain,
     close: async () => {
-      await new Promise<void>((resolve, reject) => {
-        server.close((error) => (error ? reject(error) : resolve()));
-      });
+      await drain(0);
       await backend.close?.();
       const relays = new Set(
         [codexClientRelay, anthropicRelay, codexProviderRelay].filter(

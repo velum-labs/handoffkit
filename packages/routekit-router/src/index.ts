@@ -17,7 +17,11 @@ import type {
   ProviderSource,
   RouterConfig
 } from "@routekit/gateway";
-import { assertAuthenticatedBind, registerCleanup } from "@routekit/runtime";
+import {
+  assertAuthenticatedBind,
+  extendCleanupGrace,
+  registerCleanup
+} from "@routekit/runtime";
 
 export type StartRouterOptions = {
   config: RouterConfig;
@@ -26,6 +30,13 @@ export type StartRouterOptions = {
   authToken?: string;
   env?: NodeJS.ProcessEnv;
   sources?: Partial<Record<ProviderId, ProviderSource>>;
+  /**
+   * Graceful-drain window applied on SIGINT/SIGTERM: in-flight requests
+   * (long-lived LLM streams) get up to this long to finish before the
+   * listener is severed. 0 (the default) preserves immediate shutdown for
+   * embedded and interactive uses; service processes pass a real grace.
+   */
+  drainGraceMs?: number;
 };
 
 export type RunningRouter = {
@@ -150,6 +161,15 @@ export async function startRouter(options: StartRouterOptions): Promise<RunningR
     closed = true;
     await gateway.close();
   };
-  registerCleanup(close);
+  const drainGraceMs = options.drainGraceMs ?? 0;
+  if (drainGraceMs > 0) {
+    // The cleanup registry's default bound would SIGKILL-equivalent the drain
+    // after 5s; a service granted a drain window needs the bound to cover it.
+    extendCleanupGrace(drainGraceMs + 5_000);
+  }
+  registerCleanup(async () => {
+    if (drainGraceMs > 0) await gateway.drain(drainGraceMs);
+    await close();
+  });
   return { gateway, url: gateway.url(), close };
 }
