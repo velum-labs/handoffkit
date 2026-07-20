@@ -1,6 +1,11 @@
 import type { Command } from "commander";
 
-import { createPresenter, forceNonInteractive, PlainPresenter } from "@routekit/cli-ui";
+import {
+  createPresenter,
+  forceNonInteractive,
+  PlainPresenter,
+  stripAnsi
+} from "@routekit/cli-ui";
 import type {
   ChecklistController,
   KeyValueRow,
@@ -84,7 +89,14 @@ class QuietPresenter extends PlainPresenter {
     };
   }
   override liveFrame(): LiveFrameController {
-    return { render: () => {}, stop: () => {} };
+    return {
+      render: () => {},
+      renderError: (content) => {
+        const lines = typeof content === "function" ? content() : content;
+        this.error(lines.map((line) => stripAnsi(line)).join("\n"));
+      },
+      stop: () => {}
+    };
   }
 }
 

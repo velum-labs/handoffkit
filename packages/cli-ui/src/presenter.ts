@@ -49,6 +49,8 @@ export type LiveFrameContent = readonly string[] | (() => readonly string[]);
 export type LiveFrameController = {
   /** Replace the current frame. Plain output appends a timestamped snapshot. */
   render(content: LiveFrameContent): void;
+  /** Render a failed refresh. Quiet presenters may surface only this frame. */
+  renderError?(content: LiveFrameContent): void;
   /** Settle the frame and release any terminal resources. Idempotent. */
   stop(): void;
 };
@@ -153,19 +155,49 @@ export type WatchOptions = {
 
 function waitForInterval(milliseconds: number, signal: AbortSignal): Promise<void> {
   return new Promise((resolve) => {
-    if (signal.aborted) {
+    let settled = false;
+    let timer: NodeJS.Timeout | undefined;
+    const finish = (): void => {
+      if (settled) return;
+      settled = true;
+      if (timer !== undefined) clearTimeout(timer);
+      signal.removeEventListener("abort", finish);
       resolve();
+    };
+    timer = setTimeout(finish, milliseconds);
+    signal.addEventListener("abort", finish, { once: true });
+    if (signal.aborted) finish();
+  });
+}
+
+function fetchFrame(
+  fetchAndRender: (signal: AbortSignal) => Promise<LiveFrameContent> | LiveFrameContent,
+  signal: AbortSignal
+): Promise<LiveFrameContent | undefined> {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const cleanup = (): void => signal.removeEventListener("abort", onAbort);
+    const succeed = (content: LiveFrameContent | undefined): void => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve(content);
+    };
+    const fail = (error: unknown): void => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(error);
+    };
+    const onAbort = (): void => succeed(undefined);
+    signal.addEventListener("abort", onAbort, { once: true });
+    if (signal.aborted) {
+      onAbort();
       return;
     }
-    const timer = setTimeout(resolve, milliseconds);
-    signal.addEventListener(
-      "abort",
-      () => {
-        clearTimeout(timer);
-        resolve();
-      },
-      { once: true }
-    );
+    Promise.resolve()
+      .then(() => fetchAndRender(signal))
+      .then(succeed, fail);
   });
 }
 
@@ -176,7 +208,7 @@ function waitForInterval(milliseconds: number, signal: AbortSignal): Promise<voi
 export async function watch(
   presenter: Presenter,
   intervalSeconds: number,
-  fetchAndRender: () => Promise<LiveFrameContent> | LiveFrameContent,
+  fetchAndRender: (signal: AbortSignal) => Promise<LiveFrameContent> | LiveFrameContent,
   options: WatchOptions = {}
 ): Promise<void> {
   const frame = presenter.liveFrame();
@@ -185,18 +217,22 @@ export async function watch(
   const onExternalAbort = (): void => localAbort.abort();
   process.once("SIGINT", onSigint);
   options.signal?.addEventListener("abort", onExternalAbort, { once: true });
+  if (options.signal?.aborted === true) localAbort.abort();
   const milliseconds = Math.max(0.1, intervalSeconds) * 1000;
   try {
     while (!localAbort.signal.aborted) {
       try {
-        frame.render(await fetchAndRender());
+        const content = await fetchFrame(fetchAndRender, localAbort.signal);
+        if (content === undefined || localAbort.signal.aborted) break;
+        frame.render(content);
       } catch (error) {
-        frame.render(
-          options.errorFrame?.(error) ?? [
-            `error: ${error instanceof Error ? error.message : String(error)}`,
-            `retrying in ${intervalSeconds}s`
-          ]
-        );
+        if (localAbort.signal.aborted) break;
+        const content = options.errorFrame?.(error) ?? [
+          `error: ${error instanceof Error ? error.message : String(error)}`,
+          `retrying in ${intervalSeconds}s`
+        ];
+        if (frame.renderError !== undefined) frame.renderError(content);
+        else frame.render(content);
       }
       await waitForInterval(milliseconds, localAbort.signal);
     }
