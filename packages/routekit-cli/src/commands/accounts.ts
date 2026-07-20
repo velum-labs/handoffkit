@@ -266,9 +266,17 @@ export function registerAccounts(program: Command): void {
         return;
       }
       ctx.presenter.status(
-        status.running ? "ok" : "pending",
+        status.running && status.usageError === undefined
+          ? "ok"
+          : status.running
+            ? "warn"
+            : "pending",
         "accounts proxy",
-        status.running ? status.url : "not running"
+        status.running
+          ? status.usageError === undefined
+            ? status.url
+            : `${status.url}; usage unavailable`
+          : "not running"
       );
       for (const entry of status.accounts) {
         const ok = entry.credentialValid && entry.configured;

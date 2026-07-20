@@ -51,19 +51,24 @@ test("usage and status expose human and JSON snapshots from a stub accounts prox
             five_hour: {
               utilization: 0.52,
               status: "ok",
-              resetsAt: now + 2 * 60 * 60 * 1000
+              resetsAt: now / 1000 + 2 * 60 * 60
             }
           },
           planType: "pro",
-          observedAt: now - 3 * 60 * 1000,
+          observedAt: now / 1000 - 3 * 60,
           source: "headers"
         }
       }]
     }]
   };
+  let proxyHealthy = true;
   const server = createServer((request, response) => {
     assert.equal(request.url, "/usage");
     assert.equal(request.headers.authorization, "Bearer test-token");
+    if (!proxyHealthy) {
+      response.writeHead(503).end();
+      return;
+    }
     response.setHeader("content-type", "application/json");
     response.end(JSON.stringify(usage));
   });
@@ -109,7 +114,7 @@ test("usage and status expose human and JSON snapshots from a stub accounts prox
     const status = await run(["--config", config, "--json", "status"], env);
     assert.equal(status.code, 0, status.stderr);
     const overview = JSON.parse(status.stdout) as {
-      services: Array<{ kind: string; running: boolean }>;
+      services: Array<{ kind: string; running: boolean; reachable?: boolean }>;
       models: { count: number; defaultModel: string };
       providers: Array<{ provider: string; credentialAvailable: boolean }>;
     };
@@ -117,6 +122,29 @@ test("usage and status expose human and JSON snapshots from a stub accounts prox
     assert.equal(overview.models.count, 1);
     assert.equal(overview.models.defaultModel, "openai/gpt");
     assert.equal(overview.providers[0]?.credentialAvailable, true);
+
+    const emptyKeyStatus = await run(
+      ["--config", config, "--json", "status"],
+      { ...env, OPENAI_API_KEY: "" }
+    );
+    assert.equal(emptyKeyStatus.code, 0, emptyKeyStatus.stderr);
+    const emptyKeyOverview = JSON.parse(emptyKeyStatus.stdout) as {
+      providers: Array<{ credentialAvailable: boolean }>;
+    };
+    assert.equal(emptyKeyOverview.providers[0]?.credentialAvailable, false);
+
+    proxyHealthy = false;
+    const unreachableStatus = await run(["--config", config, "--json", "status"], env);
+    assert.equal(unreachableStatus.code, 0, unreachableStatus.stderr);
+    const unreachableOverview = JSON.parse(unreachableStatus.stdout) as {
+      services: Array<{ kind: string; reachable?: boolean }>;
+      accounts: { usageError?: string };
+    };
+    assert.equal(
+      unreachableOverview.services.find((entry) => entry.kind === "accounts")?.reachable,
+      false
+    );
+    assert.match(unreachableOverview.accounts.usageError ?? "", /503/);
 
     rmSync(join(state, "services", "accounts.json"));
     const down = await run(["--config", config, "usage"], env);

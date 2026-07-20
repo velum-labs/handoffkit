@@ -20,7 +20,7 @@ export function formatUtilizationBar(utilization: number, width = 10): string {
 
 export function formatResetCountdown(resetsAt: number | undefined, now = Date.now()): string {
   if (resetsAt === undefined) return "reset unknown";
-  let seconds = Math.max(0, Math.round((resetsAt - now) / 1000));
+  let seconds = Math.max(0, Math.round(resetsAt - now / 1000));
   if (seconds === 0) return "resets now";
   const days = Math.floor(seconds / 86_400);
   seconds %= 86_400;
@@ -36,7 +36,7 @@ export function formatResetCountdown(resetsAt: number | undefined, now = Date.no
 }
 
 function observedAge(observedAt: number, now: number): string {
-  const seconds = Math.max(0, Math.round((now - observedAt) / 1000));
+  const seconds = Math.max(0, Math.round(now / 1000 - observedAt));
   if (seconds < 60) return `${seconds}s ago`;
   const minutes = Math.round(seconds / 60);
   if (minutes < 60) return `${minutes}m ago`;

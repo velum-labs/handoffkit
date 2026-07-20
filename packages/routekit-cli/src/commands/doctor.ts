@@ -14,6 +14,21 @@ import { routekitToolRegistry } from "../launch.js";
 
 import { loaded } from "./context.js";
 
+function installCommand(binary: string): string {
+  switch (binary) {
+    case "codex":
+      return "npm install -g @openai/codex";
+    case "claude":
+      return "npm install -g @anthropic-ai/claude-code";
+    case "cursor-agent":
+      return "curl https://cursor.com/install -fsS | bash";
+    case "opencode":
+      return "npm install -g opencode-ai";
+    default:
+      return `command -v ${binary}`;
+  }
+}
+
 export function registerDoctor(program: Command): void {
   program
     .command("doctor")
@@ -85,7 +100,7 @@ export function registerDoctor(program: Command): void {
           ok,
           ...(ok
             ? { detail: probeBinaryVersion(tool.binary) ?? "installed" }
-            : { tryCommand: `${tool.binary} --help` })
+            : { tryCommand: installCommand(tool.binary) })
         });
       }
       for (const check of checks) {
@@ -93,7 +108,7 @@ export function registerDoctor(program: Command): void {
           check.tryCommand = check.label === "router config"
             ? "routekit config init"
             : check.label.endsWith("_API_KEY")
-              ? `export ${check.label}=<key>`
+              ? `export ${check.label}='your-key'`
               : "routekit doctor";
         }
       }

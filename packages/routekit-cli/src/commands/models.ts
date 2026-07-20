@@ -24,6 +24,10 @@ export function registerModels(program: Command): void {
     });
   }
 
+  function shouldRenderTable(): boolean {
+    return process.stdout.isTTY === true;
+  }
+
   modelsCommand
     .command("list", { isDefault: true })
     .description("discover live namespaced model ids")
@@ -43,7 +47,7 @@ export function registerModels(program: Command): void {
           models: modelIds,
           catalog: filtered
         });
-      } else if (ctx.presenter.interactive) {
+      } else if (shouldRenderTable()) {
         ctx.presenter.table(
           filtered.map((model) => [
             providerFor(model),

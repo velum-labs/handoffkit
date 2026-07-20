@@ -12,10 +12,13 @@ test("usage formatters clamp bars and show precise reset countdowns", () => {
   assert.match(formatUtilizationBar(0.52), /52%$/);
   assert.match(formatUtilizationBar(2), /100%$/);
   assert.equal(
-    formatResetCountdown(Date.UTC(2026, 0, 1, 2, 14), Date.UTC(2026, 0, 1)),
+    formatResetCountdown(Date.UTC(2026, 0, 1, 2, 14) / 1000, Date.UTC(2026, 0, 1)),
     "resets in 2h 14m"
   );
-  assert.equal(formatResetCountdown(Date.UTC(2026, 0, 1), Date.UTC(2026, 0, 1)), "resets now");
+  assert.equal(
+    formatResetCountdown(Date.UTC(2026, 0, 1) / 1000, Date.UTC(2026, 0, 1)),
+    "resets now"
+  );
 });
 
 test("usage rendering includes windows, provenance, and no-observation hint", () => {
@@ -35,10 +38,10 @@ test("usage rendering includes windows, provenance, and no-observation hint", ()
           models: [],
           limits: {
             windows: {
-              primary: { utilization: 0.52, resetsAt: now + 2 * 60 * 60 * 1000 }
+              primary: { utilization: 0.52, resetsAt: now / 1000 + 2 * 60 * 60 }
             },
             planType: "pro",
-            observedAt: now - 3 * 60 * 1000,
+            observedAt: now / 1000 - 3 * 60,
             source: "headers" as const
           }
         },

@@ -72,7 +72,8 @@ async function main(): Promise<void> {
       await program.parseAsync(normalizeGlobalOptions(process.argv));
       const args = process.argv.slice(2);
       if (
-        !args.some((arg) => ["--json", "--help", "-h"].includes(arg)) &&
+        process.exitCode === undefined &&
+        !args.some((arg) => ["--json", "--quiet", "--help", "-h"].includes(arg)) &&
         !args.some((arg) => ["completion", "__complete"].includes(arg))
       ) {
         await notifyIfUpdateAvailable(routekitVersion());

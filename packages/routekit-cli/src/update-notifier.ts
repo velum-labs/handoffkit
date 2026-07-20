@@ -1,4 +1,4 @@
-import { chmodSync, existsSync, mkdirSync, readFileSync } from "node:fs";
+import { chmodSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { createPresenter, isInteractive } from "@routekit/cli-ui";
@@ -70,11 +70,14 @@ export async function notifyIfUpdateAvailable(currentVersion: string): Promise<v
   let cache = readCache();
   if (cache === undefined || Date.now() - cache.checkedAt >= DAY_MS) {
     try {
-      cache = { checkedAt: Date.now(), latest: await latestVersion() };
+      const latest = await latestVersion();
+      cache = {
+        checkedAt: Date.now(),
+        ...(latest !== undefined ? { latest } : {})
+      };
       writeCache(cache);
     } catch {
       // Update checks are best-effort and must never affect a command result.
-      if (!existsSync(cachePath())) writeCache({ checkedAt: Date.now() });
       return;
     }
   }

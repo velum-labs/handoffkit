@@ -35,6 +35,8 @@ export type RouteKitOverview = {
     pid?: number;
     startedAt?: string;
     uptimeSeconds?: number;
+    reachable?: boolean;
+    error?: string;
   }>;
   providers: Array<{
     provider: string;
@@ -96,7 +98,8 @@ function cachedCatalog(): CachedCatalog | undefined {
 function serviceOverview(
   kind: ServiceKind,
   service: RouteKitServiceRecord | undefined,
-  now: number
+  now: number,
+  probe?: { reachable: boolean; error?: string }
 ): RouteKitOverview["services"][number] {
   if (service === undefined) return { kind, running: false };
   const started = Date.parse(service.startedAt);
@@ -106,7 +109,9 @@ function serviceOverview(
     url: service.url,
     pid: service.pid,
     startedAt: service.startedAt,
-    ...(Number.isFinite(started) ? { uptimeSeconds: Math.max(0, Math.round((now - started) / 1000)) } : {})
+    ...(Number.isFinite(started) ? { uptimeSeconds: Math.max(0, Math.round((now - started) / 1000)) } : {}),
+    ...(probe !== undefined ? { reachable: probe.reachable } : {}),
+    ...(probe?.error !== undefined ? { error: probe.error } : {})
   };
 }
 
@@ -117,11 +122,14 @@ export async function routeKitOverview(config: RouterConfig, now = Date.now()): 
   const providers = configuredProviderIds(config).map((configuredProvider) => {
     const provider = configuredProvider as ProviderId;
     const keyEnv = defaultKeyEnv(provider);
+    const credentialValue = keyEnv === undefined
+      ? undefined
+      : process.env[keyEnv] ?? (keyEnv === CLIPROXY_API_KEY_ENV ? cliproxyApiKey() : undefined);
     const credentialAvailable = isSubscriptionProvider(provider)
       ? accounts.accounts.some((entry) => entry.subscriptionKind === provider && entry.credentialValid)
       : keyEnv === undefined
         ? true
-        : (process.env[keyEnv] ?? (keyEnv === CLIPROXY_API_KEY_ENV ? cliproxyApiKey() : undefined)) !== undefined;
+        : credentialValue !== undefined && credentialValue.trim().length > 0;
     const checked = health?.providers.find((entry) => entry.provider === provider);
     return {
       provider,
@@ -142,7 +150,15 @@ export async function routeKitOverview(config: RouterConfig, now = Date.now()): 
     observedAt: new Date(now).toISOString(),
     services: [
       serviceOverview("gateway", readServiceRecord("gateway"), now),
-      serviceOverview("accounts", readServiceRecord("accounts"), now)
+      serviceOverview(
+        "accounts",
+        readServiceRecord("accounts"),
+        now,
+        {
+          reachable: accounts.usageError === undefined,
+          ...(accounts.usageError !== undefined ? { error: accounts.usageError } : {})
+        }
+      )
     ],
     providers,
     accounts,
@@ -172,9 +188,11 @@ function stateMark(ok: boolean): string {
 export function renderOverviewLines(overview: RouteKitOverview): string[] {
   const lines = ["RouteKit status", "", "Services"];
   lines.push(...renderTableLines(overview.services.map((service) => [
-    stateMark(service.running),
+    stateMark(service.running && service.reachable !== false),
     service.kind,
-    service.running ? service.url ?? "" : "stopped",
+    service.running
+      ? `${service.url ?? ""}${service.reachable === false ? " (usage unavailable)" : ""}`
+      : "stopped",
     service.running ? `pid ${service.pid ?? "?"} · up ${duration(service.uptimeSeconds)}` : ""
   ]), { head: ["", "service", "state", "process"], indent: 2 }));
   lines.push("", "Providers");
