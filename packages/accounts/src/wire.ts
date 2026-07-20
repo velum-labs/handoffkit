@@ -17,7 +17,7 @@ const rateLimitWindowSchema = z.object({
   windowSeconds: z.number().optional(),
   limitName: z.string().optional(),
   observedAt: z.number(),
-  source: z.enum(["headers", "usage", "stream"])
+  source: z.enum(["headers", "response", "usage", "stream"])
 });
 
 const creditSnapshotSchema = z.object({
@@ -31,7 +31,7 @@ const accountLimitsSchema = z.object({
   planType: z.string().optional(),
   credits: creditSnapshotSchema.optional(),
   observedAt: z.number(),
-  source: z.enum(["headers", "usage", "stream"]),
+  source: z.enum(["headers", "response", "usage", "stream"]),
   completeness: z.enum(["snapshot", "partial"])
 });
 

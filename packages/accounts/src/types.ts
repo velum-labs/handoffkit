@@ -4,7 +4,11 @@ import type { ProviderFailure } from "@routekit/contracts";
 import type { CapacityPoolStrategy } from "@routekit/gateway";
 
 export type SubscriptionSelectionStrategy = CapacityPoolStrategy;
-export type RateLimitObservationSource = "headers" | "usage" | "stream";
+export type RateLimitObservationSource =
+  | "headers"
+  | "response"
+  | "usage"
+  | "stream";
 
 export type SubscriptionCredential = {
   mode: SubscriptionMode;

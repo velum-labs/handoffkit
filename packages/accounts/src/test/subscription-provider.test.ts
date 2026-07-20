@@ -80,6 +80,15 @@ test("Codex adapter parses dynamic limit headers and stream rate-limit events", 
   });
   assert.equal(stream?.windows.primary?.utilization, 0.5);
   assert.equal(stream?.windows.secondary?.utilization, 0.1);
+
+  const response = provider.parseLimits(new Headers(), {
+    rate_limit: {
+      primary_window: { used_percent: 20, reset_at: 1774933300 }
+    }
+  });
+  assert.equal(response?.source, "response");
+  assert.equal(response?.completeness, "partial");
+  assert.equal(response?.windows.primary?.source, "response");
 });
 
 test("Codex adapter recognizes usage_limit_reached as quota exhaustion", () => {

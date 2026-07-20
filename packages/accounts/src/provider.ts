@@ -338,7 +338,11 @@ function codexLimitsFromHeaders(headers: Headers): AccountLimits | undefined {
   };
 }
 
-function codexUsageLimits(payload: unknown): AccountLimits {
+function codexUsageLimits(
+  payload: unknown,
+  source: AccountLimits["source"] = "usage",
+  completeness: AccountLimits["completeness"] = "snapshot"
+): AccountLimits {
   if (!isRecord(payload)) throw new Error("Codex usage endpoint returned an invalid payload");
   const observedAt = Date.now() / 1000;
   const rateLimit = isRecord(payload.rate_limit) ? payload.rate_limit : {};
@@ -349,7 +353,7 @@ function codexUsageLimits(payload: unknown): AccountLimits {
       secondary: rateLimit.secondary_window
     },
     observedAt,
-    "usage"
+    source
   );
   const rawCredits = isRecord(payload.credits) ? payload.credits : undefined;
   const credits = rawCredits === undefined
@@ -368,8 +372,8 @@ function codexUsageLimits(payload: unknown): AccountLimits {
     ...(typeof payload.plan_type === "string" ? { planType: payload.plan_type } : {}),
     ...(credits !== undefined ? { credits } : {}),
     observedAt,
-    source: "usage",
-    completeness: "snapshot"
+    source,
+    completeness
   };
 }
 
@@ -572,7 +576,9 @@ function codexProvider(): SubscriptionProvider {
     parseLimits: (headers, body) => {
       const fromHeaders = codexLimitsFromHeaders(headers);
       if (fromHeaders !== undefined) return fromHeaders;
-      if (isRecord(body) && isRecord(body.rate_limit)) return codexUsageLimits(body);
+      if (isRecord(body) && isRecord(body.rate_limit)) {
+        return codexUsageLimits(body, "response", "partial");
+      }
       return undefined;
     },
     parseStreamEvent: codexStreamLimits,

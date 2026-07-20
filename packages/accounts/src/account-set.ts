@@ -82,7 +82,10 @@ function parsedRateLimitWindow(
   const windowObservedAt =
     typeof value.observedAt === "number" ? value.observedAt : observedAt;
   const windowSource =
-    value.source === "headers" || value.source === "usage" || value.source === "stream"
+    value.source === "headers" ||
+    value.source === "response" ||
+    value.source === "usage" ||
+    value.source === "stream"
       ? value.source
       : source;
   if (
@@ -111,7 +114,12 @@ function parsedAccountLimits(
     !isRecord(value) ||
     !isRecord(value.windows) ||
     typeof value.observedAt !== "number" ||
-    (value.source !== "headers" && value.source !== "usage" && value.source !== "stream")
+    (
+      value.source !== "headers" &&
+      value.source !== "response" &&
+      value.source !== "usage" &&
+      value.source !== "stream"
+    )
   ) {
     return undefined;
   }
