@@ -8,6 +8,7 @@ import { listAccounts } from "../accounts.js";
 import {
   registerService,
   readServiceRecord,
+  stopService,
   writeStateSnapshot
 } from "../state.js";
 import {
@@ -17,7 +18,7 @@ import {
   telemetryPath
 } from "../telemetry.js";
 
-test("account state and service records live under ROUTEKIT_HOME with private modes", async () => {
+test("gateway stop preserves accounts state and service records stay private", async () => {
   const previous = process.env.ROUTEKIT_HOME;
   const home = mkdtempSync(join(tmpdir(), "routekit-state-test-"));
   process.env.ROUTEKIT_HOME = home;
@@ -43,11 +44,21 @@ test("account state and service records live under ROUTEKIT_HOME with private mo
       statSync(join(home, "services", "gateway.json")).mode & 0o777,
       0o600
     );
+    const accountsRegistration = await registerService({
+      kind: "accounts",
+      loopbackUrl: "http://127.0.0.1:43211",
+      port: 43211,
+      portless: false
+    });
+    await stopService("gateway");
+    assert.equal(readServiceRecord("gateway"), undefined);
+    assert.equal(readServiceRecord("accounts")?.kind, "accounts");
     const catalog = writeStateSnapshot("catalog", "models", { models: ["opaque"] });
     const health = writeStateSnapshot("health", "providers", { providers: [] });
     assert.equal(statSync(catalog).mode & 0o777, 0o600);
     assert.equal(statSync(health).mode & 0o777, 0o600);
     await registration.release();
+    await accountsRegistration.release();
   } finally {
     if (previous === undefined) delete process.env.ROUTEKIT_HOME;
     else process.env.ROUTEKIT_HOME = previous;

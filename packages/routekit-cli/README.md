@@ -10,7 +10,7 @@ sidecar, or download local models.
 ```sh
 npm install -g @routekit/cli
 routekit config init
-routekit serve
+routekit gateway serve
 routekit codex
 ```
 
@@ -46,7 +46,8 @@ Set `ROUTEKIT_DEV_SKIP_BUILD=1` after a build for a faster local check.
 
 | Command | RouteKit responsibility |
 | --- | --- |
-| `serve` | Run the configured OpenAI-compatible model gateway. |
+| `gateway serve` | Run the configured OpenAI-compatible model gateway. |
+| `gateway stop` | Stop the RouteKit-owned model gateway. |
 | `codex`, `claude`, `cursor`, `opencode` | Launch one coding tool against an embedded gateway or `--gateway-url`; the optional argument is a namespaced `provider/model` ID. |
 | `providers add`, `remove`, `status` | Manage explicit providers and run live discovery without printing credentials. |
 | `models list` | Discover and list the live namespaced model catalog. |
@@ -57,7 +58,6 @@ Set `ROUTEKIT_DEV_SKIP_BUILD=1` after a build for a faster local check.
 | `config path`, `show`, `init`, `edit`, `migrate` | Locate, validate, create, edit, or explicitly import RouteKit router state. |
 | `install codex`, `uninstall codex` | Add or remove RouteKit-owned Codex provider/profile blocks. |
 | `doctor` | Check router configuration, referenced credential variables, and installed coding-agent binaries. |
-| `stop` | Stop only RouteKit-owned services and portless routes. |
 | `telemetry status`, `on`, `off` | Control RouteKit's anonymous, opt-in product telemetry. |
 | `completion <bash\|zsh\|fish>` | Print shell completion setup. |
 | `version`, `--version` | Print the `@routekit/cli` version. |

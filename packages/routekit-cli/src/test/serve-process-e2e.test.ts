@@ -92,7 +92,7 @@ async function requestJson(
   });
 }
 
-test("real routekit serve process reports JSON readiness and serves every supported door", async () => {
+test("real routekit gateway serve process reports JSON readiness and serves every supported door", async () => {
   const root = mkdtempSync(join(tmpdir(), "routekit-serve-process-"));
   const project = join(root, "project");
   const stateHome = join(root, "state");
@@ -159,6 +159,7 @@ test("real routekit serve process reports JSON readiness and serves every suppor
     [
       "--config",
       configPath,
+      "gateway",
       "serve",
       "--host",
       "127.0.0.1",

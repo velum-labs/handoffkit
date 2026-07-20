@@ -980,6 +980,7 @@ async function startLiveRoutekit(configPath) {
       ROUTEKIT_ENTRY,
       "--config",
       configPath,
+      "gateway",
       "serve",
       "--host",
       "127.0.0.1",

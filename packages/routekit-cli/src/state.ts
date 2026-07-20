@@ -3,7 +3,6 @@ import { join } from "node:path";
 
 import {
   createPortlessSession,
-  reapPortlessProject,
   reapPortlessService,
   writeFileAtomic
 } from "@routekit/runtime";
@@ -181,15 +180,4 @@ export async function stopService(
   return stopped
     ? { kind, stopped: true, pid: record.pid }
     : { kind, stopped: false, stale: true };
-}
-
-export async function stopAllServices(
-  log?: (line: string) => void
-): Promise<StopServiceResult[]> {
-  const results = await Promise.all([
-    stopService("gateway", log),
-    stopService("accounts", log)
-  ]);
-  await reapPortlessProject(portlessOptions(log));
-  return results;
 }
