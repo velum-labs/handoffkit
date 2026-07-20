@@ -6,6 +6,8 @@ export type {
   ProviderRelay,
   ProviderRelayDialect
 } from "./server.js";
+export { startSwitchingGatewayProxy } from "./switching-proxy.js";
+export type { SwitchingGatewayProxy } from "./switching-proxy.js";
 
 export { joinPath, ModelRoutedBackend, OpenAiBackend } from "./backend.js";
 export type {

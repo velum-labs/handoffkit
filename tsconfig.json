@@ -29,6 +29,12 @@
       "path": "packages/routekit-router"
     },
     {
+      "path": "packages/routekit-control"
+    },
+    {
+      "path": "packages/routekit-daemon"
+    },
+    {
       "path": "packages/telemetry-core"
     },
     {

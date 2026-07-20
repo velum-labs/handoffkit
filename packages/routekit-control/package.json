@@ -1,0 +1,21 @@
+{
+  "name": "@routekit/control",
+  "private": false,
+  "version": "0.8.0",
+  "description": "Typed control protocol for the singleton RouteKit daemon.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": ["dist"],
+  "dependencies": {
+    "@routekit/runtime": "workspace:*"
+  },
+  "scripts": {
+    "test": "node --test \"dist/test/*.test.js\""
+  }
+}

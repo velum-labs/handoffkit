@@ -1,0 +1,29 @@
+{
+  "name": "@routekit/daemon",
+  "private": false,
+  "version": "0.8.0",
+  "description": "Singleton RouteKit control daemon and stable model gateway.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": ["dist"],
+  "dependencies": {
+    "@routekit/accounts": "workspace:*",
+    "@routekit/config": "workspace:*",
+    "@routekit/control": "workspace:*",
+    "@routekit/gateway": "workspace:*",
+    "@routekit/registry": "workspace:*",
+    "@routekit/router": "workspace:*",
+    "@routekit/runtime": "workspace:*",
+    "@routekit/telemetry-core": "workspace:*",
+    "yaml": "2.9.0"
+  },
+  "scripts": {
+    "test": "node --test \"dist/test/*.test.js\""
+  }
+}

@@ -59,6 +59,8 @@ export type StartDaemonOptions = {
    * ignored instead of short-circuiting to "already running" (blue-green).
    */
   previousPid?: number;
+  /** Product-specific readiness check; defaults to loopback GET /health. */
+  ready?: (record: ServiceRecord) => Promise<boolean>;
 };
 
 export type StartDaemonResult = {
@@ -156,6 +158,8 @@ export async function waitForServiceReady(input: {
   expectPid?: () => number | undefined;
   logFile?: string;
   label?: string;
+  /** Product-specific readiness check; defaults to loopback GET /health. */
+  ready?: (record: ServiceRecord) => Promise<boolean>;
 }): Promise<ServiceRecord> {
   const store = createServiceRecordStore({ home: input.home, product: input.product });
   const label = input.label ?? `${input.product} ${input.kind}`;
@@ -169,7 +173,13 @@ export async function waitForServiceReady(input: {
     }
     const record = store.read(input.kind);
     if (record !== undefined && record.pid !== input.previousPid) {
-      if (await healthOk(`http://127.0.0.1:${record.port}`)) return record;
+      if (
+        input.ready !== undefined
+          ? await input.ready(record)
+          : await healthOk(`http://127.0.0.1:${record.port}`)
+      ) {
+        return record;
+      }
       lastState = `pid ${record.pid} is not answering /health on port ${record.port}`;
     }
     await sleep(READY_POLL_MS);
@@ -191,7 +201,12 @@ export async function startDaemon(
 
   const existing = store.read(spec.kind);
   if (existing !== undefined && existing.pid !== options.previousPid) {
-    return { alreadyRunning: true, record: existing, logFile };
+    if (options.ready === undefined || (await options.ready(existing))) {
+      return { alreadyRunning: true, record: existing, logFile };
+    }
+    throw new Error(
+      `${label} pid ${existing.pid} is alive but failed its readiness check`
+    );
   }
 
   mkdirSync(store.directory, { recursive: true, mode: 0o700 });
@@ -203,7 +218,9 @@ export async function startDaemon(
     // racing it, but reclaim the lock if that starter died mid-flight.
     const record = store.read(spec.kind);
     if (record !== undefined && record.pid !== options.previousPid) {
-      return { alreadyRunning: true, record, logFile };
+      if (options.ready === undefined || (await options.ready(record))) {
+        return { alreadyRunning: true, record, logFile };
+      }
     }
     if (Date.now() >= deadline) {
       throw new Error(`${label} start is locked by another process (${lockPath})`);
@@ -246,7 +263,8 @@ export async function startDaemon(
         expectPid: () =>
           spawnError !== undefined || exited ? undefined : child.pid,
         logFile,
-        label
+        label,
+        ...(options.ready !== undefined ? { ready: options.ready } : {})
       });
       spec.log?.(`${label} started (pid ${record.pid})`);
       return { alreadyRunning: false, record, logFile };

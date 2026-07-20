@@ -22,6 +22,12 @@
       "path": "../routekit-config"
     },
     {
+      "path": "../routekit-control"
+    },
+    {
+      "path": "../routekit-daemon"
+    },
+    {
       "path": "../model-gateway"
     },
     {
