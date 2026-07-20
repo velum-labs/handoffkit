@@ -9,13 +9,12 @@ import { registerDynamicCompletion } from "../completion.js";
 import { registerAccounts } from "./accounts.js";
 import { registerConfig } from "./config.js";
 import { registerDoctor } from "./doctor.js";
+import { registerGateway } from "./gateway.js";
 import { registerInstall } from "./install.js";
 import { registerLaunchers } from "./launchers.js";
 import { registerModels } from "./models.js";
 import { registerProviders } from "./providers.js";
-import { registerServe } from "./serve.js";
 import { registerStatus } from "./status.js";
-import { registerStop } from "./stop.js";
 import { registerTelemetry } from "./telemetry.js";
 import { registerUsage } from "./usage.js";
 
@@ -28,7 +27,7 @@ export function registerCommands(program: Command): void {
   registerConfig(program);
 
   program.commandsGroup("Run");
-  registerServe(program);
+  registerGateway(program);
   registerLaunchers(program);
 
   program.commandsGroup("Inspect");
@@ -39,7 +38,6 @@ export function registerCommands(program: Command): void {
 
   program.commandsGroup("Maintain");
   registerInstall(program);
-  registerStop(program);
   registerTelemetry(program);
   registerCompletion(program, "routekit");
   registerDynamicCompletion(program);

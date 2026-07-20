@@ -14,7 +14,7 @@ npm install -g @routekit/cli
 routekit config init
 routekit providers status
 routekit models list
-routekit serve
+routekit gateway serve
 routekit codex openai/gpt-5.5
 ```
 

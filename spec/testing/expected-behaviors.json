@@ -543,7 +543,7 @@
       "expectation": "Fusion bridges authenticated external RouteKit CLI traffic over loopback and closes only the bridge, leaving the independently owned RouteKit process alive.",
       "status": "required",
       "testFile": "packages/cli/src/test/stack-model-ids-e2e.test.ts",
-      "anchor": "authenticated external routekit serve CLI uses a Fusion-owned loopback bridge"
+      "anchor": "authenticated external routekit gateway serve CLI uses a Fusion-owned loopback bridge"
     },
     {
       "id": "observability.trace-semantics",

@@ -226,7 +226,7 @@ export function renderOverviewLines(overview: RouteKitOverview): string[] {
   );
   if (overview.models.updatedAt !== undefined) lines.push(dim(`  catalog updated ${overview.models.updatedAt}`));
   const gateway = overview.services.find((service) => service.kind === "gateway");
-  if (gateway?.running !== true) lines.push("", "→ try: routekit serve");
+  if (gateway?.running !== true) lines.push("", "→ try: routekit gateway serve");
   if (
     overview.providers.some((provider) => !provider.credentialAvailable || provider.lastCheck?.ok === false)
   ) {

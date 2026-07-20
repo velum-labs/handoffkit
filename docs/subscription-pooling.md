@@ -11,7 +11,7 @@ routekit accounts login claude-code --name personal
 routekit accounts login claude-code --name work
 routekit providers status claude-code
 routekit models list
-routekit serve
+routekit gateway serve
 ```
 
 The canonical subscription kinds are `claude-code` and `codex`.
@@ -52,7 +52,7 @@ configuration continue to use namespaced IDs.
 Reference the advertised namespaced ID from `.fusionkit/fusion.json`. Do not
 put account enrollment, provider policy, URLs, or keys in Fusion config.
 
-Normal `routekit serve` and `routekit <tool>` paths use subscription backends
+Normal `routekit gateway serve` and `routekit <tool>` paths use subscription backends
 in process. `routekit accounts serve` is advanced mode for exposing the pool as
 a separate authenticated proxy to an external consumer; it is not an
 enrollment or provider-activation step.

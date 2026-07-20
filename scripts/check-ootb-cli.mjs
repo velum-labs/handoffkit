@@ -85,7 +85,7 @@ if (!routeHelp.stdout.startsWith("Usage: routekit ")) {
   fail("RouteKit help does not identify the routekit executable");
 }
 for (const command of [
-  "serve",
+  "gateway",
   "codex",
   "claude",
   "cursor",
@@ -99,11 +99,17 @@ for (const command of [
   "uninstall",
   "telemetry",
   "version",
-  "stop",
   "completion"
 ]) {
   if (!helpHasCommand(routeHelp.stdout, command)) {
     fail(`RouteKit help is missing command "${command}"`);
+  }
+}
+const gatewayHelp = runCli(ROUTE_CLI, ["gateway", "--help"]);
+if (gatewayHelp.status !== 0) fail(`\`routekit gateway --help\` exited ${gatewayHelp.status}`);
+for (const command of ["serve", "stop"]) {
+  if (!helpHasCommand(gatewayHelp.stdout, command)) {
+    fail(`RouteKit gateway help is missing command "${command}"`);
   }
 }
 for (const fusionOnly of ["setup", "prompts", "sessions", "ensemble"]) {

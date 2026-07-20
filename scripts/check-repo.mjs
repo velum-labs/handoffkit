@@ -194,6 +194,7 @@ const requiredFiles = [
   "packages/routekit-cli/src/cli.ts",
   "packages/routekit-cli/src/commands/index.ts",
   "packages/routekit-cli/src/commands/context.ts",
+  "packages/routekit-cli/src/commands/gateway.ts",
   "packages/routekit-cli/src/commands/serve.ts",
   "packages/routekit-cli/src/commands/launchers.ts",
   "packages/routekit-cli/src/commands/accounts.ts",

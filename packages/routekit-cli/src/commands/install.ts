@@ -17,7 +17,7 @@ const CODEX_OWNER: CodexInstallOwner = {
   providerId: "routekit",
   installCommand: "routekit install codex",
   uninstallCommand: "routekit uninstall codex",
-  startCommand: "routekit serve"
+  startCommand: "routekit gateway serve"
 };
 
 function assertCodex(tool: string): void {
