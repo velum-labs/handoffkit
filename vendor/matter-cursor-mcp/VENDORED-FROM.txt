@@ -1,0 +1,5 @@
+Vendored from https://github.com/velum-labs/matter-cursor-mcp
+commit 6eee0f9d3acb6ab30c623edfbbf84cf93ca51e33
+
+Refresh: copy src/, package.json, package-lock.json, tsconfig.json, LICENSE
+from an up-to-date checkout, then update this file.

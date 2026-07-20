@@ -39,6 +39,8 @@ analysis/*/cache/
 # Cloned, linked, or built by scripts/setup-matter-mcp.sh for Cursor Matter MCP.
 /matter-cursor-mcp/
 /matter-cursor-mcp
+/vendor/matter-cursor-mcp/node_modules/
+/vendor/matter-cursor-mcp/dist/
 
 # Shared HyperKit lab runtime state; intent and frozen locks stay tracked.
 lab/experiments/*/work/
