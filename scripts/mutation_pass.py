@@ -613,9 +613,12 @@ MUTATIONS = [
     ),
     Mutation(
         id="M49",
-        what="routekit gateway serve reports a false readiness URL instead of its listening gateway",
+        what=(
+            "routekit daemon serve reports a false readiness URL instead of "
+            "its stable gateway"
+        ),
         file="packages/routekit-cli/src/commands/serve.ts",
-        old="            url: running.url,",
+        old="            url: running.dataUrl,",
         new='            url: "http://127.0.0.1:1",',
         build=True,
         cmd=(
