@@ -1,5 +1,11 @@
-import { SubscriptionProxyClient } from "@routekit/accounts";
-import type { SubscriptionUsageResponse } from "@routekit/accounts";
+import {
+  openLocalSubscriptionUsage,
+  SubscriptionProxyClient
+} from "@routekit/accounts";
+import type {
+  SubscriptionUsageResponse,
+  SubscriptionUsageSource
+} from "@routekit/accounts";
 import { CliError, contextFor } from "@routekit/cli-core";
 import { renderErrorPanelLines, watch } from "@routekit/cli-ui";
 import type { Command } from "commander";
@@ -7,32 +13,68 @@ import type { Command } from "commander";
 import { readServiceRecord } from "../state.js";
 import { renderUsageLines } from "../usage-format.js";
 
-const TRY_ACCOUNTS_SERVE = "routekit accounts serve";
+const TRY_DOCTOR = "routekit doctor";
 
 function unavailable(message: string): CliError {
   return new CliError({
-    code: "accounts_proxy_unavailable",
+    code: "subscription_usage_unavailable",
     message,
-    hint: "Usage is reported by the local accounts proxy.",
-    tryCommand: TRY_ACCOUNTS_SERVE
+    hint: "Check enrolled subscription accounts and provider connectivity.",
+    tryCommand: TRY_DOCTOR
   });
 }
 
-export async function fetchSubscriptionUsage(): Promise<SubscriptionUsageResponse> {
-  const record = readServiceRecord("accounts");
-  if (record === undefined) throw unavailable("The accounts proxy is not running.");
-  if (record.authToken === undefined) {
-    throw unavailable("The accounts proxy service record has no authentication token.");
-  }
-  try {
-    return await SubscriptionProxyClient.open({
+function prefetchedUsageSource(
+  client: SubscriptionProxyClient,
+  first: SubscriptionUsageResponse
+): SubscriptionUsageSource {
+  let prefetched: SubscriptionUsageResponse | undefined = first;
+  return {
+    usage: async () => {
+      if (prefetched !== undefined) {
+        const usage = prefetched;
+        prefetched = undefined;
+        return usage;
+      }
+      return await client.usage();
+    },
+    close: async () => {}
+  };
+}
+
+export async function openSubscriptionUsageSource(): Promise<SubscriptionUsageSource> {
+  for (const kind of ["gateway", "accounts"] as const) {
+    const record = readServiceRecord(kind);
+    if (record === undefined) continue;
+    const client = SubscriptionProxyClient.open({
       baseUrl: record.url,
-      token: record.authToken
-    }).usage();
+      ...(record.authToken !== undefined ? { token: record.authToken } : {})
+    });
+    try {
+      return prefetchedUsageSource(client, await client.usage());
+    } catch {
+      // Old, unreachable, or unhealthy services do not make usage unavailable:
+      // try the next live service before opening the enrolled accounts locally.
+    }
+  }
+
+  try {
+    return await openLocalSubscriptionUsage();
   } catch (error) {
     throw unavailable(
-      `Could not read usage from ${record.url}: ${error instanceof Error ? error.message : String(error)}`
+      `Could not open enrolled subscription accounts: ${
+        error instanceof Error ? error.message : String(error)
+      }`
     );
+  }
+}
+
+export async function fetchSubscriptionUsage(): Promise<SubscriptionUsageResponse> {
+  const source = await openSubscriptionUsageSource();
+  try {
+    return await source.usage();
+  } finally {
+    await source.close();
   }
 }
 
@@ -50,8 +92,8 @@ function usageErrorLines(error: unknown): string[] {
   return renderErrorPanelLines({
     title: "usage unavailable",
     message,
-    hint: "Usage is reported by the local accounts proxy.",
-    tryCommand: TRY_ACCOUNTS_SERVE
+    hint: "Check enrolled subscription accounts and provider connectivity.",
+    tryCommand: TRY_DOCTOR
   });
 }
 
@@ -68,12 +110,17 @@ export function registerUsage(program: Command): void {
         });
       }
       if (options.watch !== undefined) {
-        await watch(
-          ctx.presenter,
-          watchInterval(options.watch),
-          async () => renderUsageLines(await fetchSubscriptionUsage()),
-          { errorFrame: usageErrorLines }
-        );
+        const source = await openSubscriptionUsageSource();
+        try {
+          await watch(
+            ctx.presenter,
+            watchInterval(options.watch),
+            async () => renderUsageLines(await source.usage()),
+            { errorFrame: usageErrorLines }
+          );
+        } finally {
+          await source.close();
+        }
         return;
       }
       try {

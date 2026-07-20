@@ -20,6 +20,7 @@ Use it with the narrative references when you need to find the module that owns 
 - `packages/accounts/src/proxy.ts`: StartSubscriptionProxyOptions (type), SubscriptionProxy (type), NoSubscriptionAccountsError (class), startSubscriptionProxy (function)
 - `packages/accounts/src/relay.ts`: SubscriptionRelayDialect (type), SubscriptionRelay (type), forwardRelayHeaders (function), AnthropicRelayOptions (type), RelayOnlyBackend (class), AnthropicBackendRelay (class)
 - `packages/accounts/src/types.ts`: SubscriptionSelectionStrategy (type), SubscriptionCredential (type), RateLimitWindow (type), CreditSnapshot (type), AccountLimits (type), SubscriptionFailure (type), SubscriptionMemberStatus (type), SubscriptionAccountSetSnapshot (type)
+- `packages/accounts/src/usage.ts`: DEFAULT_SUBSCRIPTION_USAGE_REFRESH_MS (const), SubscriptionUsageSource (type), collectSubscriptionUsage (function), openLocalSubscriptionUsage (function)
 - `packages/accounts/src/wire.ts`: SUBSCRIPTION_USAGE_PATH (const), subscriptionUsageResponseSchema (const), SubscriptionUsageResponse (type), snapshotsToUsage (function)
 
 ### `packages/adapter-ai-sdk`
@@ -285,7 +286,7 @@ Use it with the narrative references when you need to find the module that owns 
 - `packages/routekit-cli/src/commands/status.ts`: RouteKitOverview (type), routeKitOverview (function), renderOverviewLines (function), registerStatus (function)
 - `packages/routekit-cli/src/commands/stop.ts`: registerStop (function)
 - `packages/routekit-cli/src/commands/telemetry.ts`: registerTelemetry (function)
-- `packages/routekit-cli/src/commands/usage.ts`: fetchSubscriptionUsage (function), registerUsage (function)
+- `packages/routekit-cli/src/commands/usage.ts`: openSubscriptionUsageSource (function), fetchSubscriptionUsage (function), registerUsage (function)
 - `packages/routekit-cli/src/completion.ts`: completionCandidates (function), registerDynamicCompletion (function)
 - `packages/routekit-cli/src/config.ts`: MigrationAction (type), ConfigMigrationDiagnostic (type), LegacyConfigMigration (type), convertLegacyRouterConfig (function), migrateLegacyRouterConfig (function), migrateLegacyState (function)
 - `packages/routekit-cli/src/launch.ts`: buildToolLaunchSpec (function), launchToolWithIntegration (function), launchTool (function)

@@ -121,6 +121,7 @@ const requiredFiles = [
   "packages/accounts/src/types.ts",
   "packages/accounts/src/proxy.ts",
   "packages/accounts/src/client.ts",
+  "packages/accounts/src/usage.ts",
   "packages/accounts/src/cliproxy.ts",
   "packages/accounts/src/wire.ts",
   "packages/accounts/src/test/account-removal.test.ts",

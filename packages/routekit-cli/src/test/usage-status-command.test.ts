@@ -61,6 +61,32 @@ test("usage and status expose human and JSON snapshots from a stub accounts prox
       }]
     }]
   };
+  const gatewayUsage = {
+    accountSets: [{
+      mode: "claude-code",
+      strategy: "sticky",
+      switchThreshold: 0.9,
+      members: [{
+        id: "gateway",
+        mode: "claude-code",
+        label: "gateway",
+        sourcePath: "/private/gateway.json",
+        active: true,
+        models: ["claude-sonnet"],
+        limits: {
+          windows: {
+            five_hour: {
+              utilization: 0.17,
+              status: "ok",
+              resetsAt: now / 1000 + 60 * 60
+            }
+          },
+          observedAt: now / 1000,
+          source: "usage"
+        }
+      }]
+    }]
+  };
   let proxyHealthy = true;
   const server = createServer((request, response) => {
     assert.equal(request.url, "/usage");
@@ -72,8 +98,23 @@ test("usage and status expose human and JSON snapshots from a stub accounts prox
     response.setHeader("content-type", "application/json");
     response.end(JSON.stringify(usage));
   });
+  let gatewayHealthy = true;
+  const gatewayServer = createServer((request, response) => {
+    assert.equal(request.url, "/usage");
+    assert.equal(request.headers.authorization, undefined);
+    if (!gatewayHealthy) {
+      response.writeHead(503).end();
+      return;
+    }
+    response.setHeader("content-type", "application/json");
+    response.end(JSON.stringify(gatewayUsage));
+  });
   await new Promise<void>((resolveListen) => server.listen(0, "127.0.0.1", resolveListen));
   const port = (server.address() as AddressInfo).port;
+  await new Promise<void>((resolveListen) =>
+    gatewayServer.listen(0, "127.0.0.1", resolveListen)
+  );
+  const gatewayPort = (gatewayServer.address() as AddressInfo).port;
   mkdirSync(join(state, "services"), { recursive: true });
   mkdirSync(join(state, "catalog"), { recursive: true });
   writeFileSync(config, "providers:\n  openai: {}\ndefaultModel: openai/gpt\n");
@@ -87,6 +128,15 @@ test("usage and status expose human and JSON snapshots from a stub accounts prox
     startedAt: new Date(now - 60_000).toISOString(),
     authToken: "test-token"
   }));
+  writeFileSync(join(state, "services", "gateway.json"), JSON.stringify({
+    product: "routekit",
+    owner: "routekit",
+    kind: "gateway",
+    pid: process.pid,
+    url: `http://127.0.0.1:${gatewayPort}`,
+    port: gatewayPort,
+    startedAt: new Date(now - 30_000).toISOString()
+  }));
   writeFileSync(join(state, "catalog", "models.json"), JSON.stringify({
     updatedAt: new Date(now).toISOString(),
     defaultModel: "openai/gpt",
@@ -94,6 +144,7 @@ test("usage and status expose human and JSON snapshots from a stub accounts prox
   }));
   const env = {
     ...process.env,
+    HOME: root,
     ROUTEKIT_HOME: state,
     OPENAI_API_KEY: "test-key",
     ROUTEKIT_NO_UPDATE_CHECK: "1",
@@ -103,13 +154,18 @@ test("usage and status expose human and JSON snapshots from a stub accounts prox
   try {
     const json = await run(["--config", config, "--json", "usage"], env);
     assert.equal(json.code, 0, json.stderr);
-    assert.deepEqual(JSON.parse(json.stdout), usage);
+    assert.deepEqual(JSON.parse(json.stdout), gatewayUsage);
 
     const human = await run(["--config", config, "usage"], env);
     assert.equal(human.code, 0, human.stderr);
     assert.match(human.stderr, /five_hour/);
-    assert.match(human.stderr, /52%/);
-    assert.match(human.stderr, /observed 3m ago via headers/);
+    assert.match(human.stderr, /17%/);
+
+    gatewayHealthy = false;
+    const proxyFallback = await run(["--config", config, "--json", "usage"], env);
+    assert.equal(proxyFallback.code, 0, proxyFallback.stderr);
+    assert.deepEqual(JSON.parse(proxyFallback.stdout), usage);
+    rmSync(join(state, "services", "gateway.json"));
 
     const status = await run(["--config", config, "--json", "status"], env);
     assert.equal(status.code, 0, status.stderr);
@@ -148,13 +204,60 @@ test("usage and status expose human and JSON snapshots from a stub accounts prox
 
     rmSync(join(state, "services", "accounts.json"));
     const down = await run(["--config", config, "usage"], env);
-    assert.equal(down.code, 1);
-    assert.match(down.stderr, /accounts proxy is not running/i);
-    assert.match(down.stderr, /routekit accounts serve/);
-  } finally {
-    await new Promise<void>((resolveClose, reject) =>
-      server.close((error) => error === undefined ? resolveClose() : reject(error))
+    assert.equal(down.code, 0, down.stderr);
+    assert.match(down.stderr, /no enrolled accounts/i);
+    assert.doesNotMatch(down.stderr, /accounts proxy is not running/i);
+
+    const localJson = await run(["--config", config, "--json", "usage"], env);
+    assert.equal(localJson.code, 0, localJson.stderr);
+    assert.deepEqual(
+      (JSON.parse(localJson.stdout) as {
+        accountSets: Array<{ mode: string; members: unknown[] }>;
+      }).accountSets.map((entry) => ({ mode: entry.mode, members: entry.members })),
+      [
+        { mode: "claude-code", members: [] },
+        { mode: "codex", members: [] }
+      ]
     );
+
+    const codexDirectory = join(state, "subscriptions", "codex");
+    mkdirSync(codexDirectory, { recursive: true });
+    writeFileSync(
+      join(codexDirectory, "local.json"),
+      JSON.stringify({
+        tokens: {
+          access_token: "eyJhbGciOiJub25lIn0.eyJleHAiOjk5OTk5OTk5OTl9.",
+          refresh_token: "refresh-local",
+          account_id: "acct-local"
+        }
+      })
+    );
+    writeFileSync(
+      join(codexDirectory, ".state.json"),
+      JSON.stringify({
+        members: [{
+          id: "local",
+          limits: {
+            windows: { primary: { utilization: 0.64 } },
+            observedAt: now / 1000,
+            source: "usage"
+          }
+        }]
+      })
+    );
+    const enrolledLocal = await run(["--config", config, "usage"], env);
+    assert.equal(enrolledLocal.code, 0, enrolledLocal.stderr);
+    assert.match(enrolledLocal.stderr, /local/);
+    assert.match(enrolledLocal.stderr, /64%/);
+  } finally {
+    await Promise.all([
+      new Promise<void>((resolveClose, reject) =>
+        server.close((error) => error === undefined ? resolveClose() : reject(error))
+      ),
+      new Promise<void>((resolveClose, reject) =>
+        gatewayServer.close((error) => error === undefined ? resolveClose() : reject(error))
+      )
+    ]);
     rmSync(root, { recursive: true, force: true });
   }
 });

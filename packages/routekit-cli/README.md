@@ -52,6 +52,7 @@ Set `ROUTEKIT_DEV_SKIP_BUILD=1` after a build for a faster local check.
 | `models list` | Discover and list the live namespaced model catalog. |
 | `accounts login` | Run an isolated official Claude Code or Codex login, enroll the credential into the native pool, and enable that provider. |
 | `accounts add`, `remove`, `list`, `status` | Import the current official CLI login or manage enrolled native subscription accounts. |
+| `usage` | Show subscription rate limits, credits, and reset windows from the running gateway or enrolled local accounts. |
 | `accounts serve`, `stop` | Advanced mode: expose subscription pools as a separate external proxy. Normal provider routing does not require it. |
 | `accounts cliproxy install`, `login`, `serve`, `status` | Manage RouteKit's pinned CLIProxyAPI integration. |
 | `config path`, `show`, `init`, `edit`, `migrate` | Locate, validate, create, edit, or explicitly import RouteKit router state. |
@@ -63,6 +64,8 @@ Set `ROUTEKIT_DEV_SKIP_BUILD=1` after a build for a faster local check.
 | `version`, `--version` | Print the `@routekit/cli` version. |
 
 Global options are `--config`, `--json`, `--no-input`, `--yes`, and `--quiet`.
+`routekit usage` does not require `accounts serve`: it reads the normal gateway
+when available and otherwise inspects enrolled accounts directly.
 Provider activation, live model catalogs, account relays, and registry-defined
 credential environment variables are RouteKit-owned. Fusion policy, panels,
 judging, synthesis, and Fusion sessions are intentionally outside this package.

@@ -58,8 +58,8 @@ function memberLines(member: SubscriptionMemberStatus, now: number): string[] {
   const marker = member.active ? " (active)" : "";
   const lines = [`  ${member.label}${marker}`];
   if (member.limits === undefined || Object.keys(member.limits.windows).length === 0) {
-    lines.push("    no usage observed yet");
-    lines.push(dim("    enable account probing with `routekit accounts serve --probe-interval <seconds>`"));
+    lines.push("    no usage data available yet");
+    lines.push(dim("    check the account with `routekit doctor` if this persists"));
     return lines;
   }
   const metadata = [

@@ -57,6 +57,10 @@ in process. `routekit accounts serve` is advanced mode for exposing the pool as
 a separate authenticated proxy to an external consumer; it is not an
 enrollment or provider-activation step.
 
+`routekit usage` and `routekit usage --watch <seconds>` inspect the normal
+gateway's live pools when it is running, then fall back to enrolled accounts
+directly. They do not require the advanced accounts proxy.
+
 CLIProxyAPI remains an optional external provider with a separate lifecycle:
 
 ```sh

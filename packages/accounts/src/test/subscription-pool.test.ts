@@ -20,8 +20,14 @@ type FakeCredentialFile = {
   expiresAt?: number;
 };
 
+type FakeProviderState = {
+  refreshes: number;
+  usageCalls?: number;
+  failUsage?: boolean;
+};
+
 function fakeProvider(
-  state: { refreshes: number },
+  state: FakeProviderState,
   modelsByToken: Readonly<Record<string, readonly string[]>> = {}
 ): SubscriptionProvider {
   return {
@@ -47,6 +53,8 @@ function fakeProvider(
       return { ...credential, accessToken: `${credential.accessToken}-refreshed`, expiresAt: Date.now() / 1000 + 3600 };
     },
     async fetchUsage() {
+      state.usageCalls = (state.usageCalls ?? 0) + 1;
+      if (state.failUsage === true) throw new Error("usage unavailable");
       return { windows: {}, observedAt: Date.now() / 1000, source: "usage" };
     },
     async fetchAdminUsageCost() {
@@ -302,6 +310,31 @@ test("tracker safely migrates hostile object keys into map-backed state", async 
     );
     assert.equal(({} as { polluted?: unknown }).polluted, undefined);
   } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("usage refresh throttles failed provider probes", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "routekit-pool-usage-"));
+  writeMember(directory, "a", { accessToken: "token-a" });
+  const state: FakeProviderState = {
+    refreshes: 0,
+    usageCalls: 0,
+    failUsage: true
+  };
+  const pool = await SubscriptionAccountSet.open(fakeProvider(state), {
+    mode: "codex",
+    source: { kind: "directory", path: directory }
+  });
+  try {
+    await pool.refreshUsage();
+    await pool.refreshUsage();
+    assert.equal(state.usageCalls, 1);
+
+    await pool.refreshUsage(0);
+    assert.equal(state.usageCalls, 2);
+  } finally {
+    await pool.close();
     rmSync(directory, { recursive: true, force: true });
   }
 });
