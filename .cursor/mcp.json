@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "matter": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["${workspaceFolder}/matter-cursor-mcp/dist/index.js"],
+      "env": {
+        "MATTER_API_TOKEN": "${env:MATTER_API_TOKEN}",
+        "MATTER_MCP_CACHE_MODE": "on",
+        "LOG_LEVEL": "info"
+      }
+    }
+  }
+}
