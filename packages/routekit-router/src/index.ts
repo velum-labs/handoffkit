@@ -1,6 +1,7 @@
 import {
   CLIPROXY_API_KEY_ENV,
   cliproxyApiKey,
+  collectSubscriptionUsage,
   openSubscriptionAccountSets,
   SubscriptionAccountBackend,
   subscriptionRelaysFromAccountSets
@@ -133,7 +134,8 @@ export async function startRouter(options: StartRouterOptions): Promise<RunningR
       host,
       ...(options.port !== undefined ? { port: options.port } : {}),
       ...(options.authToken !== undefined ? { authToken: options.authToken } : {}),
-      ...(Object.keys(relays).length > 0 ? { providerRelays: relays } : {})
+      ...(Object.keys(relays).length > 0 ? { providerRelays: relays } : {}),
+      usage: async () => await collectSubscriptionUsage(accountSets)
     });
   } catch (error) {
     await backend.close();

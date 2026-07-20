@@ -5,6 +5,7 @@ import { openSubscriptionRelays } from "./gateway.js";
 import type { SubscriptionAccountConfigs } from "./gateway.js";
 import { RelayOnlyBackend } from "./relay.js";
 import type { SubscriptionRelay, SubscriptionRelayDialect } from "./relay.js";
+import { collectSubscriptionUsage } from "./usage.js";
 import { snapshotsToUsage } from "./wire.js";
 import type { SubscriptionUsageResponse } from "./wire.js";
 
@@ -56,7 +57,7 @@ function generateToken(): string {
 export async function startSubscriptionProxy(
   options: StartSubscriptionProxyOptions
 ): Promise<SubscriptionProxy> {
-  const { relays } = await openSubscriptionRelays({ accounts: options.accounts });
+  const { relays, accountSets } = await openSubscriptionRelays({ accounts: options.accounts });
   const live = Object.entries(relays).filter(
     (entry): entry is [SubscriptionRelayDialect, SubscriptionRelay] => entry[1] !== undefined
   );
@@ -69,7 +70,7 @@ export async function startSubscriptionProxy(
     ...(options.port !== undefined ? { port: options.port } : {}),
     authToken: token,
     providerRelays: relays,
-    usage: () => snapshotsToUsage(live.map(([, relay]) => relay.snapshot?.()))
+    usage: async () => await collectSubscriptionUsage(accountSets)
   });
 
   return {

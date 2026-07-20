@@ -22,6 +22,7 @@ export type OpenSubscriptionRelaysOptions = {
 
 export type OpenSubscriptionRelaysResult = {
   relays: Partial<Record<SubscriptionRelayDialect, SubscriptionRelay>>;
+  accountSets: SubscriptionAccountSets;
 };
 
 export type SubscriptionAccountSets = Partial<
@@ -83,11 +84,16 @@ export async function openSubscriptionRelays(
 ): Promise<OpenSubscriptionRelaysResult> {
   const sets = await openSubscriptionAccountSets(options.accounts);
   const relays = subscriptionRelaysFromAccountSets(sets, options.codex);
-  for (const [mode, accounts] of Object.entries(sets)) {
+  for (const mode of ["claude-code", "codex"] as const) {
+    const accounts = sets[mode];
+    if (accounts === undefined) continue;
     const hasRelay =
       (mode === "claude-code" && relays.anthropic !== undefined) ||
       (mode === "codex" && relays.codex !== undefined);
-    if (!hasRelay) await accounts.close();
+    if (!hasRelay) {
+      await accounts.close();
+      delete sets[mode];
+    }
   }
-  return { relays };
+  return { relays, accountSets: sets };
 }

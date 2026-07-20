@@ -59,7 +59,7 @@ export type GatewayOptions = {
   /** Provider-native relays sharing this HTTP boundary. */
   providerRelays?: Partial<Record<ProviderRelayDialect, ProviderRelay>>;
   /** Optional provider usage payload for `GET /usage`. */
-  usage?: () => unknown;
+  usage?: () => unknown | Promise<unknown>;
 };
 
 export type ProviderRelayDialect = "anthropic" | "codex";
@@ -310,7 +310,8 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
     }
 
     if (method === "GET" && path === "/usage") {
-      writeJson(res, options.usage === undefined ? 404 : 200, options.usage?.() ?? {
+      const usage = options.usage === undefined ? undefined : await options.usage();
+      writeJson(res, usage === undefined ? 404 : 200, usage ?? {
         error: { message: "provider usage is not configured", type: "not_found" }
       });
       return;
