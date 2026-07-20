@@ -11,6 +11,11 @@ propagates the protocol pin, and triggers each repo's existing, gated GitHub
 publish workflow (see [release-publishing.md](release-publishing.md) for
 handoffkit's own workflow).
 
+Emergency recovery follows [Release rollback](release-rollback.md). Do not move
+or delete an immutable release tag to hide a bad artifact; deprecate or yank as
+appropriate, restore the public dist-tag to a verified version, and ship a
+reviewed patch.
+
 ## Release units and dependency graph
 
 ```mermaid

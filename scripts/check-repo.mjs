@@ -26,6 +26,7 @@ const requiredFiles = [
   "pnpm-lock.yaml",
   "pnpm-workspace.yaml",
   ".github/workflows/ci.yml",
+  ".github/workflows/dependency-review.yml",
   ".github/workflows/release-packages.yml",
   ".github/dependabot.yml",
   ".github/CODEOWNERS",
@@ -259,6 +260,14 @@ const requiredFiles = [
   "apps/docs/content/docs/changelog.mdx",
   "docs/release-publishing.md",
   "docs/releasing.md",
+  "docs/release-security.md",
+  "docs/release-rollback.md",
+  "docs/supported-client-versions.md",
+  "docs/telemetry-inventory.md",
+  "docs/runbooks/README.md",
+  "docs/runbooks/credential-compromise.md",
+  "docs/runbooks/bad-release.md",
+  "docs/runbooks/provider-outage.md",
   "docs/planning/ensemble-product-plan.md",
   "docs/specs/harness-prompt-passthrough.md",
   "docs/generated/code-api.md",
@@ -523,6 +532,22 @@ for (const command of [
   "node --test packages/cli/dist/test/stack-model-ids-e2e.test.js"
 ]) {
   if (!ciWorkflow.includes(command)) fail(`CI workflow must run ${command}`);
+}
+const dependencyReviewWorkflow = readFileSync(
+  ".github/workflows/dependency-review.yml",
+  "utf8"
+);
+for (const required of [
+  "pull_request:",
+  "actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294",
+  "fail-on-severity: high"
+]) {
+  if (!dependencyReviewWorkflow.includes(required)) {
+    fail(`dependency review workflow must include ${required}`);
+  }
+}
+if (dependencyReviewWorkflow.includes("pull_request_target")) {
+  fail("dependency review workflow must not use pull_request_target");
 }
 
 const npmrc = readFileSync(".npmrc", "utf8");

@@ -40,6 +40,8 @@ passed to the Python sidecar or persisted by the Fusion session store; committed
 config stores only environment-variable names.
 
 See [Privacy and data handling](docs/privacy.md) for local retention, provider egress, OpenRouter disclosure, and rate-limit failover behavior.
+Release controls and incident procedures are indexed in
+[RouteKit release security](docs/release-security.md).
 
 ## Supply-chain posture
 
@@ -47,3 +49,6 @@ See [Privacy and data handling](docs/privacy.md) for local retention, provider e
 - `.npmrc` enables `engine-strict`, `ignore-scripts`, store-integrity verification, exact saves, and a minimum release age for new packages.
 - Lockfiles are committed and CI installs with frozen lockfiles.
 - npm publishing uses provenance, and PyPI publishing uses trusted publishing.
+- Pull requests run dependency review, and GitHub default setup runs CodeQL.
+- Credential, bad-release, and provider-outage response procedures live under
+  [`docs/runbooks/`](docs/runbooks/).

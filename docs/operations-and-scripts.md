@@ -227,7 +227,11 @@ Workflows live under `.github/workflows/`. `ci.yml` defines five jobs:
 | `python` | uv lockfile check, sync, Ruff, Pyright, uniroute and FusionKit pytest suites, contract fixture validation, and PyPI metadata smoke. |
 | `observability` | Hyperkit Grafana dashboard validation: boots seeded Prometheus and Grafana and executes every panel query via `scripts/validate_hyperkit_dashboards.py`. |
 
-The release workflows are `release-packages.yml` (npm), `pypi-release.yml`, and `model-fusion-protocol-release.yml` (protocol publication). There is no docs-deployment workflow; the docs site deploys through its own Vercel configuration.
+The release workflows are `release-packages.yml` (npm), `pypi-release.yml`, and `model-fusion-protocol-release.yml` (protocol publication). Pull requests also run `dependency-review.yml`; CodeQL uses GitHub default setup. There is no docs-deployment workflow; the docs site deploys through its own Vercel configuration.
+
+Release-security evidence, rollback, incident response, supported client
+versions, and telemetry review are indexed in
+[RouteKit release security](release-security.md).
 
 When a local check fails in CI but passes locally, compare the workflow's Node, pnpm, Python, and uv versions first. Then compare environment variables and optional service credentials. Do not assume a CI-only failure is flaky until the workflow logs show an external service or network error.
 
