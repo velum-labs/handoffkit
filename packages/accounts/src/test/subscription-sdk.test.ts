@@ -60,7 +60,7 @@ test("startSubscriptionProxy serves a typed client over the usage wire contract"
     assert.equal(usage.accountSets[0]?.members[0]?.label, "primary");
 
     // The in-process snapshot and the over-the-wire response agree.
-    assert.deepEqual(proxy.usage(), usage);
+    assert.deepEqual(JSON.parse(JSON.stringify(proxy.usage())), usage);
 
     // The wrong ingress token is rejected before any account is touched.
     const unauthorized = SubscriptionProxyClient.open({ baseUrl: proxy.url(), token: "wrong" });
