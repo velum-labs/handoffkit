@@ -20,8 +20,11 @@ if [ -e "${MCP_DIR}" ] && [ ! -f "${MCP_DIR}/package.json" ]; then
 fi
 
 if [ ! -e "${MCP_DIR}" ]; then
-  # Prefer a sibling checkout from multi-repo cloud environments.
+  # Prefer the vendored copy (works on single-repo environments whose GitHub
+  # token cannot see the private matter-cursor-mcp repo), then a sibling
+  # checkout from multi-repo cloud environments.
   for candidate in \
+    "${ROOT_DIR}/vendor/matter-cursor-mcp" \
     "${ROOT_DIR}/../matter-cursor-mcp" \
     "/agent/repos/matter-cursor-mcp" \
     "/workspace/matter-cursor-mcp"

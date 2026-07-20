@@ -12,7 +12,13 @@ Handoffkit cloud agents and local Cursor sessions can retrieve read-only evidenc
 | `scripts/setup-matter-mcp.sh` | Clones/links and builds `matter-cursor-mcp` during cloud startup |
 | `scripts/run-matter-mcp.sh` | MCP launcher (PATH bootstrap + ensure build + exec server) |
 
-Cloud agents run `scripts/setup-matter-mcp.sh` from `.cursor/environment.json` so `matter-cursor-mcp/dist/index.js` exists before MCP tools are used. The script prefers a sibling multi-repo checkout when present, otherwise clones with `gh` (required because `matter-cursor-mcp` is private).
+Cloud agents run `scripts/setup-matter-mcp.sh` from `.cursor/environment.json` so `matter-cursor-mcp/dist/index.js` exists before MCP tools are used. The script resolves the server source in this order:
+
+1. `vendor/matter-cursor-mcp/` — vendored copy committed to this repo (works everywhere, including single-repo environments whose GitHub token cannot see the private upstream repo)
+2. A sibling checkout from a multi-repo cloud environment
+3. `gh repo clone velum-labs/matter-cursor-mcp` (requires GitHub access to the private repo)
+
+To refresh the vendored copy, see `vendor/matter-cursor-mcp/VENDORED-FROM.txt`.
 
 ## One-time secret setup (required)
 
