@@ -47,7 +47,7 @@ Use it with the narrative references when you need to find the module that owns 
 - `packages/cli-ui/src/index.ts`: createPresenter (function)
 - `packages/cli-ui/src/ink/store.ts`: Store (class)
 - `packages/cli-ui/src/plain.ts`: renderTableLines (function), renderErrorPanelLines (function), renderKeyValueLines (function), PlainPresenter (class)
-- `packages/cli-ui/src/presenter.ts`: StepStatus (type), StepInput (type), ChecklistController (type), TaskController (type), ProgressUpdate (type), ProgressController (type), KeyValueRow (type), TableOptions (type), ErrorPanelInput (type), StatusKind (type), Presenter (interface), withTask (function)
+- `packages/cli-ui/src/presenter.ts`: StepStatus (type), StepInput (type), ChecklistController (type), TaskController (type), ProgressUpdate (type), ProgressController (type), LiveFrameContent (type), LiveFrameController (type), KeyValueRow (type), TableOptions (type), ErrorPanelInput (type), StatusKind (type), Presenter (interface), withTask (function), WatchOptions (type), watch (function)
 - `packages/cli-ui/src/runtime.ts`: isCI (function), uiStream (function), forceNonInteractive (function), isInteractive (function), canPromptInteractively (function)
 - `packages/cli-ui/src/theme.ts`: supportsColor (function), supportsUnicode (function), bold (const), dim (const), italic (const), underline (const), red (const), green (const), yellow (const), blue (const), magenta (const), cyan (const), gray (const), glyph (const), SPINNER_FRAMES (const), BrandOptions (type), configureBrand (function), brandHeader (function), stripAnsi (function), visibleWidth (function), wrapAnsi (function), BoxTone (type), box (function), gradient (function), brandBanner (function)
 - `packages/cli-ui/src/wizard.ts`: WizardStep (type), runWizard (function)
@@ -282,14 +282,18 @@ Use it with the narrative references when you need to find the module that owns 
 - `packages/routekit-cli/src/commands/models.ts`: registerModels (function)
 - `packages/routekit-cli/src/commands/providers.ts`: ProviderStatus (type), registerProviders (function)
 - `packages/routekit-cli/src/commands/serve.ts`: registerServe (function)
+- `packages/routekit-cli/src/commands/status.ts`: RouteKitOverview (type), routeKitOverview (function), renderOverviewLines (function), registerStatus (function)
 - `packages/routekit-cli/src/commands/stop.ts`: registerStop (function)
 - `packages/routekit-cli/src/commands/telemetry.ts`: registerTelemetry (function)
+- `packages/routekit-cli/src/commands/usage.ts`: fetchSubscriptionUsage (function), registerUsage (function)
 - `packages/routekit-cli/src/completion.ts`: completionCandidates (function), registerDynamicCompletion (function)
 - `packages/routekit-cli/src/config.ts`: MigrationAction (type), ConfigMigrationDiagnostic (type), LegacyConfigMigration (type), convertLegacyRouterConfig (function), migrateLegacyRouterConfig (function), migrateLegacyState (function)
 - `packages/routekit-cli/src/launch.ts`: buildToolLaunchSpec (function), launchToolWithIntegration (function), launchTool (function)
 - `packages/routekit-cli/src/serve.ts`: RouterServeOptions (type), RunningRouter (type), startRouter (function), waitForShutdown (function)
 - `packages/routekit-cli/src/state.ts`: ServiceKind (type), RouteKitServiceRecord (type), writeStateSnapshot (function), readStateSnapshot (function), readServiceRecord (function), ServiceRegistration (type), registerService (function), StopServiceResult (type), stopService (function), stopAllServices (function)
 - `packages/routekit-cli/src/telemetry.ts`: telemetryPath (function), resolveTelemetry (const), enableTelemetry (const), disableTelemetry (const), TELEMETRY_FIELDS (const)
+- `packages/routekit-cli/src/update-notifier.ts`: notifyIfUpdateAvailable (function)
+- `packages/routekit-cli/src/usage-format.ts`: formatUtilizationBar (function), formatResetCountdown (function), renderUsageLines (function), limitsSummary (function)
 
 ### `packages/routekit-config`
 
