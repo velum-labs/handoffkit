@@ -103,6 +103,20 @@ function defineWindow(
   });
 }
 
+/**
+ * Canonical identity for a provider quota window, independent of whether it
+ * was observed through response headers, a stream event, or a usage endpoint.
+ */
+export function canonicalRateLimitWindowKey(mode: SubscriptionMode, key: string): string {
+  if (mode !== "claude-code") return key;
+  const normalized = key.trim().toLowerCase().replaceAll("-", "_");
+  if (normalized === "5h") return "five_hour";
+  if (normalized.startsWith("5h_")) return `five_hour_${normalized.slice(3)}`;
+  if (normalized === "7d") return "seven_day";
+  if (normalized.startsWith("7d_")) return `seven_day_${normalized.slice(3)}`;
+  return normalized;
+}
+
 function retryAfter(headers: Headers, mode: SubscriptionMode): number | undefined {
   return parseRetryAfterSeconds(
     headers.get(subscriptionInfo(mode).rateLimit.retryAfterHeader)
@@ -214,7 +228,12 @@ function refreshPayload(body: unknown): {
   };
 }
 
-function windowsFromUsagePayload(payload: unknown): Record<string, RateLimitWindow> {
+function windowsFromUsagePayload(
+  mode: SubscriptionMode,
+  payload: unknown,
+  observedAt: number,
+  source: AccountLimits["source"]
+): Record<string, RateLimitWindow> {
   if (!isRecord(payload)) return {};
   const windows = Object.create(null) as Record<string, RateLimitWindow>;
   for (const [key, raw] of Object.entries(payload)) {
@@ -223,11 +242,13 @@ function windowsFromUsagePayload(payload: unknown): Record<string, RateLimitWind
     if (used === undefined) continue;
     const resetsAt = epochSeconds(raw.resets_at ?? raw.reset_at);
     const windowSeconds = numeric(raw.limit_window_seconds);
-    defineWindow(windows, key, {
+    defineWindow(windows, canonicalRateLimitWindowKey(mode, key), {
       utilization: used,
       ...(typeof raw.status === "string" ? { status: raw.status } : {}),
       ...(resetsAt !== undefined ? { resetsAt } : {}),
-      ...(windowSeconds !== undefined ? { windowSeconds } : {})
+      ...(windowSeconds !== undefined ? { windowSeconds } : {}),
+      observedAt,
+      source
     });
   }
   return windows;
@@ -235,6 +256,7 @@ function windowsFromUsagePayload(payload: unknown): Record<string, RateLimitWind
 
 function anthropicLimitsFromHeaders(headers: Headers): AccountLimits | undefined {
   const prefix = subscriptionInfo("claude-code").rateLimit.headerPrefix.toLowerCase();
+  const observedAt = Date.now() / 1000;
   const windows = Object.create(null) as Record<string, RateLimitWindow>;
   const suffixes = new Set<string>();
   for (const [name] of headers) {
@@ -247,18 +269,25 @@ function anthropicLimitsFromHeaders(headers: Headers): AccountLimits | undefined
     if (used === undefined) continue;
     const status = headers.get(`${prefix}-${key}-status`);
     const resetsAt = epochSeconds(headers.get(`${prefix}-${key}-reset`));
-    defineWindow(windows, key, {
+    defineWindow(windows, canonicalRateLimitWindowKey("claude-code", key), {
       utilization: used,
       ...(status !== null ? { status } : {}),
-      ...(resetsAt !== undefined ? { resetsAt } : {})
+      ...(resetsAt !== undefined ? { resetsAt } : {}),
+      observedAt,
+      source: "headers"
     });
   }
   return Object.keys(windows).length > 0
-    ? { windows, observedAt: Date.now() / 1000, source: "headers" }
+    ? { windows, observedAt, source: "headers", completeness: "partial" }
     : undefined;
 }
 
-function codexWindowFromHeaders(headers: Headers, prefix: string, name: string): RateLimitWindow | undefined {
+function codexWindowFromHeaders(
+  headers: Headers,
+  prefix: string,
+  name: string,
+  observedAt: number
+): RateLimitWindow | undefined {
   const used = utilization(headers.get(`${prefix}-${name}-used-percent`));
   if (used === undefined) return undefined;
   const minutes = numeric(headers.get(`${prefix}-${name}-window-minutes`));
@@ -268,7 +297,9 @@ function codexWindowFromHeaders(headers: Headers, prefix: string, name: string):
     utilization: used,
     ...(minutes !== undefined ? { windowSeconds: minutes * 60 } : {}),
     ...(resetsAt !== undefined ? { resetsAt } : {}),
-    ...(limitName !== null ? { limitName } : {})
+    ...(limitName !== null ? { limitName } : {}),
+    observedAt,
+    source: "headers"
   };
 }
 
@@ -286,12 +317,13 @@ function codexCredits(headers: Headers): CreditSnapshot | undefined {
 
 function codexLimitsFromHeaders(headers: Headers): AccountLimits | undefined {
   const info = subscriptionInfo("codex").rateLimit;
+  const observedAt = Date.now() / 1000;
   const active = info.activeLimitHeader === undefined ? null : headers.get(info.activeLimitHeader);
   const prefix = active === null || active.trim().length === 0
     ? info.headerPrefix
     : `x-${active.toLowerCase().replaceAll("_", "-")}`;
-  const primary = codexWindowFromHeaders(headers, prefix, "primary");
-  const secondary = codexWindowFromHeaders(headers, prefix, "secondary");
+  const primary = codexWindowFromHeaders(headers, prefix, "primary", observedAt);
+  const secondary = codexWindowFromHeaders(headers, prefix, "secondary", observedAt);
   const credits = codexCredits(headers);
   if (primary === undefined && secondary === undefined && credits === undefined) return undefined;
   return {
@@ -300,18 +332,29 @@ function codexLimitsFromHeaders(headers: Headers): AccountLimits | undefined {
       ...(secondary !== undefined ? { [`${active ?? "codex"}:secondary`]: secondary } : {})
     },
     ...(credits !== undefined ? { credits } : {}),
-    observedAt: Date.now() / 1000,
-    source: "headers"
+    observedAt,
+    source: "headers",
+    completeness: "partial"
   };
 }
 
-function codexUsageLimits(payload: unknown): AccountLimits {
+function codexUsageLimits(
+  payload: unknown,
+  source: AccountLimits["source"] = "usage",
+  completeness: AccountLimits["completeness"] = "snapshot"
+): AccountLimits {
   if (!isRecord(payload)) throw new Error("Codex usage endpoint returned an invalid payload");
+  const observedAt = Date.now() / 1000;
   const rateLimit = isRecord(payload.rate_limit) ? payload.rate_limit : {};
-  const windows = windowsFromUsagePayload({
-    primary: rateLimit.primary_window,
-    secondary: rateLimit.secondary_window
-  });
+  const windows = windowsFromUsagePayload(
+    "codex",
+    {
+      primary: rateLimit.primary_window,
+      secondary: rateLimit.secondary_window
+    },
+    observedAt,
+    source
+  );
   const rawCredits = isRecord(payload.credits) ? payload.credits : undefined;
   const credits = rawCredits === undefined
     ? undefined
@@ -328,8 +371,9 @@ function codexUsageLimits(payload: unknown): AccountLimits {
     windows,
     ...(typeof payload.plan_type === "string" ? { planType: payload.plan_type } : {}),
     ...(credits !== undefined ? { credits } : {}),
-    observedAt: Date.now() / 1000,
-    source: "usage"
+    observedAt,
+    source,
+    completeness
   };
 }
 
@@ -346,9 +390,10 @@ function rateLimitsObject(value: unknown): Record<string, unknown> | undefined {
 function codexStreamLimits(payload: unknown): AccountLimits | undefined {
   const raw = rateLimitsObject(payload);
   if (raw === undefined) return undefined;
-  const windows = windowsFromUsagePayload(raw);
+  const observedAt = Date.now() / 1000;
+  const windows = windowsFromUsagePayload("codex", raw, observedAt, "stream");
   return Object.keys(windows).length > 0
-    ? { windows, observedAt: Date.now() / 1000, source: "stream" }
+    ? { windows, observedAt, source: "stream", completeness: "partial" }
     : undefined;
 }
 
@@ -417,10 +462,12 @@ function anthropicProvider(): SubscriptionProvider {
       const payload = await usageRequest(info.oauth.usageEndpoint, {
         ...thisAnthropicHeaders(info, credential)
       }, signal);
+      const observedAt = Date.now() / 1000;
       return {
-        windows: windowsFromUsagePayload(payload),
-        observedAt: Date.now() / 1000,
-        source: "usage"
+        windows: windowsFromUsagePayload(mode, payload, observedAt, "usage"),
+        observedAt,
+        source: "usage",
+        completeness: "snapshot"
       };
     },
     parseLimits: (headers) => anthropicLimitsFromHeaders(headers),
@@ -529,7 +576,9 @@ function codexProvider(): SubscriptionProvider {
     parseLimits: (headers, body) => {
       const fromHeaders = codexLimitsFromHeaders(headers);
       if (fromHeaders !== undefined) return fromHeaders;
-      if (isRecord(body) && isRecord(body.rate_limit)) return codexUsageLimits(body);
+      if (isRecord(body) && isRecord(body.rate_limit)) {
+        return codexUsageLimits(body, "response", "partial");
+      }
       return undefined;
     },
     parseStreamEvent: codexStreamLimits,

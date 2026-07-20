@@ -134,6 +134,7 @@ export type { SubscriptionUsageResponse } from "./wire.js";
 export type {
   AccountLimits,
   CreditSnapshot,
+  RateLimitObservationSource,
   RateLimitWindow,
   SubscriptionAccountSetSnapshot,
   SubscriptionCredential,

@@ -54,6 +54,19 @@ function creditsLabel(limits: AccountLimits): string | undefined {
   return undefined;
 }
 
+export function formatRateLimitWindowName(name: string): string {
+  if (name === "five_hour") return "5 hour";
+  if (name.startsWith("five_hour_")) {
+    return `5 hour · ${name.slice("five_hour_".length).replaceAll("_", " ")}`;
+  }
+  if (name === "seven_day") return "7 day";
+  if (name.startsWith("seven_day_")) {
+    return `7 day · ${name.slice("seven_day_".length).replaceAll("_", " ")}`;
+  }
+  if (name === "extra_usage") return "extra usage";
+  return name;
+}
+
 function memberLines(member: SubscriptionMemberStatus, now: number): string[] {
   const marker = member.active ? " (active)" : "";
   const lines = [`  ${member.label}${marker}`];
@@ -67,18 +80,37 @@ function memberLines(member: SubscriptionMemberStatus, now: number): string[] {
     creditsLabel(member.limits)
   ].filter((value): value is string => value !== undefined);
   if (metadata.length > 0) lines.push(dim(`    ${metadata.join(" · ")}`));
-  const rows = Object.entries(member.limits.windows)
-    .sort(([left], [right]) => left.localeCompare(right))
-    .map(([name, window]) => [
-      window.limitName ?? name,
+  const windows = Object.entries(member.limits.windows)
+    .sort(([left], [right]) => left.localeCompare(right));
+  const observations = new Set(
+    windows.map(([, window]) => `${window.source}:${window.observedAt}`)
+  );
+  const mixedObservations = observations.size > 1;
+  const rows = windows.map(([name, window]) => [
+      window.limitName ?? formatRateLimitWindowName(name),
       formatUtilizationBar(window.utilization),
       window.status ?? "ok",
-      formatResetCountdown(window.resetsAt, now)
+      formatResetCountdown(window.resetsAt, now),
+      ...(mixedObservations
+        ? [`${observedAge(window.observedAt, now)} via ${window.source}`]
+        : [])
     ]);
-  lines.push(...renderTableLines(rows, { head: ["window", "used", "status", "reset"], indent: 4 }));
-  lines.push(
-    dim(`    observed ${observedAge(member.limits.observedAt, now)} via ${member.limits.source}`)
-  );
+  lines.push(...renderTableLines(rows, {
+    head: [
+      "window",
+      "used",
+      "status",
+      "reset",
+      ...(mixedObservations ? ["observed"] : [])
+    ],
+    indent: 4
+  }));
+  const firstWindow = windows[0]?.[1];
+  if (!mixedObservations && firstWindow !== undefined) {
+    lines.push(
+      dim(`    observed ${observedAge(firstWindow.observedAt, now)} via ${firstWindow.source}`)
+    );
+  }
   return lines;
 }
 

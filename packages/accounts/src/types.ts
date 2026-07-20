@@ -4,6 +4,11 @@ import type { ProviderFailure } from "@routekit/contracts";
 import type { CapacityPoolStrategy } from "@routekit/gateway";
 
 export type SubscriptionSelectionStrategy = CapacityPoolStrategy;
+export type RateLimitObservationSource =
+  | "headers"
+  | "response"
+  | "usage"
+  | "stream";
 
 export type SubscriptionCredential = {
   mode: SubscriptionMode;
@@ -20,6 +25,8 @@ export type RateLimitWindow = {
   resetsAt?: number;
   windowSeconds?: number;
   limitName?: string;
+  observedAt: number;
+  source: RateLimitObservationSource;
 };
 
 export type CreditSnapshot = {
@@ -33,7 +40,9 @@ export type AccountLimits = {
   planType?: string;
   credits?: CreditSnapshot;
   observedAt: number;
-  source: "headers" | "usage" | "stream";
+  source: RateLimitObservationSource;
+  /** Whether this observation replaces all windows or updates only those present. */
+  completeness: "snapshot" | "partial";
 };
 
 export type SubscriptionFailure = Pick<

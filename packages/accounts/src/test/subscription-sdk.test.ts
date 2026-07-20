@@ -17,6 +17,7 @@ const FUTURE_EXPIRY_MS = Date.now() + 3_600_000;
 
 function claudeAccountDir(): string {
   const directory = mkdtempSync(join(tmpdir(), "routekit-sdk-"));
+  const observedAt = Date.now() / 1000;
   writeFileSync(
     join(directory, "primary.json"),
     JSON.stringify({
@@ -29,9 +30,16 @@ function claudeAccountDir(): string {
       members: [{
         id: "primary",
         limits: {
-          windows: { five_hour: { utilization: 0.25 } },
-          observedAt: Date.now() / 1000,
-          source: "usage"
+          windows: {
+            five_hour: {
+              utilization: 0.25,
+              observedAt,
+              source: "usage"
+            }
+          },
+          observedAt,
+          source: "usage",
+          completeness: "snapshot"
         }
       }]
     })
@@ -102,9 +110,17 @@ test("the usage wire schema round-trips an account-set snapshot", () => {
         active: true,
         models: ["gpt-5.5"],
         limits: {
-          windows: { "codex:primary": { utilization: 0.4, resetsAt: 1_777_000_000 } },
+          windows: {
+            "codex:primary": {
+              utilization: 0.4,
+              resetsAt: 1_777_000_000,
+              observedAt: 1_776_000_000,
+              source: "headers"
+            }
+          },
           observedAt: 1_776_000_000,
-          source: "headers"
+          source: "headers",
+          completeness: "partial"
         }
       }
     ]

@@ -55,7 +55,12 @@ function fakeProvider(
     async fetchUsage() {
       state.usageCalls = (state.usageCalls ?? 0) + 1;
       if (state.failUsage === true) throw new Error("usage unavailable");
-      return { windows: {}, observedAt: Date.now() / 1000, source: "usage" };
+      return {
+        windows: {},
+        observedAt: Date.now() / 1000,
+        source: "usage",
+        completeness: "snapshot"
+      };
     },
     async fetchAdminUsageCost() {
       return { usage: {}, cost: {} };
@@ -63,10 +68,18 @@ function fakeProvider(
     parseLimits(headers) {
       const value = headers.get("x-test-utilization");
       if (value === null) return undefined;
+      const observedAt = Date.now() / 1000;
       const limits: AccountLimits = {
-        windows: { primary: { utilization: Number(value) } },
-        observedAt: Date.now() / 1000,
-        source: "headers"
+        windows: {
+          primary: {
+            utilization: Number(value),
+            observedAt,
+            source: "headers"
+          }
+        },
+        observedAt,
+        source: "headers",
+        completeness: "partial"
       };
       return limits;
     },
@@ -310,6 +323,149 @@ test("tracker safely migrates hostile object keys into map-backed state", async 
     );
     assert.equal(({} as { polluted?: unknown }).polluted, undefined);
   } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("tracker migrates legacy partial observations to canonical windows", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "routekit-pool-window-state-"));
+  const statePath = join(directory, ".state.json");
+  writeFileSync(
+    statePath,
+    JSON.stringify({
+      members: [{
+        id: "primary",
+        limits: {
+          windows: {
+            "5h": { utilization: 0.4 },
+            five_hour: { utilization: 0.2 },
+            "7d-sonnet": { utilization: 0.6 }
+          },
+          observedAt: Date.now() / 1000,
+          source: "headers"
+        }
+      }]
+    })
+  );
+  const tracker = new RateLimitTracker(statePath, "claude-code");
+  try {
+    assert.deepEqual(Object.keys(tracker.limits("primary")?.windows ?? {}), [
+      "five_hour",
+      "seven_day_sonnet"
+    ]);
+    assert.equal(tracker.limits("primary")?.windows.five_hour?.utilization, 0.2);
+    assert.equal(tracker.limits("primary")?.completeness, "partial");
+
+    const persisted = JSON.parse(await readFile(statePath, "utf8")) as {
+      members: Array<{ limits?: { windows: Record<string, unknown> } }>;
+    };
+    assert.deepEqual(Object.keys(persisted.members[0]?.limits?.windows ?? {}), [
+      "five_hour",
+      "seven_day_sonnet"
+    ]);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("tracker discards ambiguous legacy usage aggregates", () => {
+  const directory = mkdtempSync(join(tmpdir(), "routekit-pool-legacy-usage-"));
+  const statePath = join(directory, ".state.json");
+  writeFileSync(
+    statePath,
+    JSON.stringify({
+      members: [{
+        id: "primary",
+        limits: {
+          windows: {
+            "5h": { utilization: 0.4 },
+            five_hour: { utilization: 0.2 }
+          },
+          observedAt: Date.now() / 1000,
+          source: "usage"
+        }
+      }]
+    })
+  );
+  try {
+    const tracker = new RateLimitTracker(statePath, "claude-code");
+    assert.equal(tracker.limits("primary"), undefined);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("authoritative usage snapshots replace partial header windows", () => {
+  const directory = mkdtempSync(join(tmpdir(), "routekit-pool-snapshot-"));
+  const statePath = join(directory, ".state.json");
+  const tracker = new RateLimitTracker(statePath, "claude-code");
+  const headerObservedAt = Date.now() / 1000 - 60;
+  const usageObservedAt = Date.now() / 1000;
+  try {
+    tracker.update("primary", {
+      windows: {
+        "5h": {
+          utilization: 0.4,
+          observedAt: headerObservedAt,
+          source: "headers"
+        },
+        "7d-opus": {
+          utilization: 0.8,
+          observedAt: headerObservedAt,
+          source: "headers"
+        }
+      },
+      observedAt: headerObservedAt,
+      source: "headers",
+      completeness: "partial"
+    });
+    tracker.update("primary", {
+      windows: {
+        five_hour: {
+          utilization: 0.2,
+          observedAt: usageObservedAt,
+          source: "usage"
+        }
+      },
+      observedAt: usageObservedAt,
+      source: "usage",
+      completeness: "snapshot"
+    });
+
+    const limits = tracker.limits("primary");
+    assert.deepEqual(Object.keys(limits?.windows ?? {}), ["five_hour"]);
+    assert.equal(limits?.windows.five_hour?.utilization, 0.2);
+    assert.equal(limits?.completeness, "snapshot");
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("a recent partial observation does not suppress an authoritative probe", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "routekit-pool-partial-probe-"));
+  writeMember(directory, "a", { accessToken: "token-a" });
+  const state: FakeProviderState = { refreshes: 0, usageCalls: 0 };
+  const pool = await SubscriptionAccountSet.open(fakeProvider(state), {
+    mode: "codex",
+    source: { kind: "directory", path: directory }
+  });
+  try {
+    await pool.execute("gpt-5.3-codex", () =>
+      Promise.resolve(new Response("ok", {
+        headers: { "x-test-utilization": "0.4" }
+      }))
+    );
+    assert.equal(pool.snapshot().members[0]?.limits?.completeness, "partial");
+
+    await pool.refreshUsage();
+    assert.equal(state.usageCalls, 1);
+    assert.equal(pool.snapshot().members[0]?.limits?.completeness, "snapshot");
+    assert.deepEqual(
+      Object.keys(pool.snapshot().members[0]?.limits?.windows ?? {}),
+      []
+    );
+  } finally {
+    await pool.close();
     rmSync(directory, { recursive: true, force: true });
   }
 });
