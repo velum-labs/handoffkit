@@ -63,7 +63,7 @@ Use stdio transport with:
 | Command | `bash` |
 | Args | `-lc`, `for d in /workspace /agent/repos/handoffkit; do [ -f "$d/scripts/run-matter-mcp.sh" ] && exec bash "$d/scripts/run-matter-mcp.sh"; done; echo "handoffkit checkout not found" >&2; exit 1` |
 
-The launcher self-heals (bootstraps PATH and rebuilds `matter-cursor-mcp/dist/index.js` if missing) and reads `MATTER_API_TOKEN` from the VM environment, which Cloud Agents Runtime Secrets populate. The path loop covers both single-repo (`/workspace`) and multi-repo (`/agent/repos/handoffkit`) environments.
+The launcher self-heals (bootstraps PATH and rebuilds `matter-cursor-mcp/dist/index.js` if missing) and reads `MATTER_API_TOKEN` from the VM environment, which Cloud Agents Runtime Secrets populate. If the MCP child process is spawned with a filtered env that drops the secret, the launcher recovers it from an ancestor process (typically the exec-daemon) without printing the value. The path loop covers both single-repo (`/workspace`) and multi-repo (`/agent/repos/handoffkit`) environments.
 
 Until the server is registered, agents can still verify Matter by invoking `scripts/run-matter-mcp.sh` directly over stdio, but `matter_*` tools will not appear in their MCP catalog.
 
@@ -97,7 +97,7 @@ Search my Matter library for items tagged cursor and repo-handoffkit related to 
 | Update fails: `Repository not found` cloning matter-cursor-mcp | Private repo + unauthenticated git | Ensure `main` uses `scripts/setup-matter-mcp.sh` with `gh repo clone` |
 | `matter-cursor-mcp/` missing after install | Install aborted earlier in the chain | Check update script logs; fix the first failing step |
 | Matter MCP tools missing (only Linear/Notion/etc.) | Server binary missing or MCP launch failed | Confirm `dist/index.js` exists; relaunch agent on latest `main` |
-| `MATTER_API_TOKEN` unset / `configuration_error` | Secret missing on **this** environment, wrong name/type, or agent started before secret was added | Add Runtime Secret `MATTER_API_TOKEN`, then start a new agent |
+| `MATTER_API_TOKEN` unset / `configuration_error` | Secret missing on **this** environment, wrong name/type, agent started before secret was added, or MCP child env filtered the secret | Add Runtime Secret `MATTER_API_TOKEN`, start a new agent; ensure `scripts/run-matter-mcp.sh` can inherit from the parent process tree |
 | `401` from Matter | Invalid/revoked token | Regenerate Matter token (revokes old) and update the Runtime Secret |
 
 ## Local Cursor
