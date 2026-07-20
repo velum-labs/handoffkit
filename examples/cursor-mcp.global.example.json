@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "matter": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["/ABSOLUTE/PATH/TO/matter-cursor-mcp/dist/index.js"],
+      "envFile": "/ABSOLUTE/PATH/TO/.config/matter-cursor-mcp/.env"
+    }
+  }
+}
