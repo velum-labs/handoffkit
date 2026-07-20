@@ -4,6 +4,7 @@ import { createPresenter, forceNonInteractive, PlainPresenter } from "@routekit/
 import type {
   ChecklistController,
   KeyValueRow,
+  LiveFrameController,
   Presenter,
   ProgressController,
   StatusKind,
@@ -81,6 +82,9 @@ class QuietPresenter extends PlainPresenter {
       fail: (line) => this.error(line ?? label),
       stop: () => {}
     };
+  }
+  override liveFrame(): LiveFrameController {
+    return { render: () => {}, stop: () => {} };
   }
 }
 

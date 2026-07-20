@@ -44,6 +44,15 @@ export type ProgressController = {
   stop(): void;
 };
 
+export type LiveFrameContent = readonly string[] | (() => readonly string[]);
+
+export type LiveFrameController = {
+  /** Replace the current frame. Plain output appends a timestamped snapshot. */
+  render(content: LiveFrameContent): void;
+  /** Settle the frame and release any terminal resources. Idempotent. */
+  stop(): void;
+};
+
 /** One row of a `keyValue` block: label, rendered value, optional dim tag. */
 export type KeyValueRow = { label: string; value: string; tag?: string; indent?: number };
 
@@ -115,6 +124,8 @@ export interface Presenter {
   task(text: string): TaskController;
   /** A live byte-download progress bar. */
   progress(label: string): ProgressController;
+  /** A generic replaceable region for status dashboards and watch commands. */
+  liveFrame(): LiveFrameController;
 }
 
 /** Run `work` under a task spinner, settling to success/failure automatically. */
@@ -132,5 +143,66 @@ export async function withTask<T>(
   } catch (error) {
     task.fail(options.failure ? options.failure(error) : `${text} (failed)`);
     throw error;
+  }
+}
+
+export type WatchOptions = {
+  signal?: AbortSignal;
+  errorFrame?: (error: unknown) => readonly string[];
+};
+
+function waitForInterval(milliseconds: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    if (signal.aborted) {
+      resolve();
+      return;
+    }
+    const timer = setTimeout(resolve, milliseconds);
+    signal.addEventListener(
+      "abort",
+      () => {
+        clearTimeout(timer);
+        resolve();
+      },
+      { once: true }
+    );
+  });
+}
+
+/**
+ * Poll and redraw a live frame until Ctrl+C or an AbortSignal stops it.
+ * Fetch failures become frames and are retried on the next interval.
+ */
+export async function watch(
+  presenter: Presenter,
+  intervalSeconds: number,
+  fetchAndRender: () => Promise<LiveFrameContent> | LiveFrameContent,
+  options: WatchOptions = {}
+): Promise<void> {
+  const frame = presenter.liveFrame();
+  const localAbort = new AbortController();
+  const onSigint = (): void => localAbort.abort();
+  const onExternalAbort = (): void => localAbort.abort();
+  process.once("SIGINT", onSigint);
+  options.signal?.addEventListener("abort", onExternalAbort, { once: true });
+  const milliseconds = Math.max(0.1, intervalSeconds) * 1000;
+  try {
+    while (!localAbort.signal.aborted) {
+      try {
+        frame.render(await fetchAndRender());
+      } catch (error) {
+        frame.render(
+          options.errorFrame?.(error) ?? [
+            `error: ${error instanceof Error ? error.message : String(error)}`,
+            `retrying in ${intervalSeconds}s`
+          ]
+        );
+      }
+      await waitForInterval(milliseconds, localAbort.signal);
+    }
+  } finally {
+    process.removeListener("SIGINT", onSigint);
+    options.signal?.removeEventListener("abort", onExternalAbort);
+    frame.stop();
   }
 }
