@@ -52,7 +52,11 @@ placeholder. Edit that file directly or install the independent
   owned by the Fusion process.
 - `{ "url": "http://127.0.0.1:8787", "authEnv": "ROUTEKIT_TOKEN" }`
   connects to an external router. FusionKit validates `/v1/models` but never
-  stops that external process.
+  stops that external process. The recommended target for this mode is a
+  persistent RouteKit service (`routekit gateway service install`, or
+  `routekit gateway start` for an unsupervised daemon): it survives Fusion
+  sessions, restarts on crash/reboot when supervised, and upgrades in place
+  via `routekit gateway upgrade`.
 
 Each ensemble requires non-empty `members` and a `judge`, all expressed as
 namespaced IDs advertised by RouteKit's live `/v1/models` catalog.

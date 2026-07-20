@@ -6,23 +6,18 @@ import { startRouter, waitForShutdown } from "../serve.js";
 import { writeStateSnapshot } from "../state.js";
 
 import { loaded } from "./context.js";
+import { attachServeOptions, drainGraceMs } from "./serve-options.js";
+import type { GatewayServeCliOptions } from "./serve-options.js";
 
 export function registerServe(program: Command): void {
-  program
-    .command("serve")
-    .description("serve the configured model router in the foreground")
-    .option("--host <host>", "bind host", "127.0.0.1")
-    .option("--port <port>", "bind port", "8080")
-    .option("--auth-token <token>", "authentication token (required for non-loopback hosts)")
-    .option("--no-portless", "disable the stable local route")
+  attachServeOptions(
+    program
+      .command("serve")
+      .description("serve the configured model router in the foreground")
+  )
     .action(
       async (
-        options: {
-          host: string;
-          port: string;
-          authToken?: string;
-          portless?: boolean;
-        },
+        options: GatewayServeCliOptions,
         command: Command
       ) => {
         const ctx = contextFor(command);
@@ -31,6 +26,7 @@ export function registerServe(program: Command): void {
           config: result.config,
           host: options.host,
           port: parsePort(options.port, 8080),
+          drainGraceMs: drainGraceMs(options.drainGrace),
           ...(options.authToken !== undefined ? { authToken: options.authToken } : {}),
           ...(options.portless !== undefined ? { portless: options.portless } : {})
         });

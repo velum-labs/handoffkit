@@ -20,6 +20,17 @@ routekit codex openai/gpt-5.5
 
 FusionKit has no forwarding aliases for those commands.
 
+RouteKit's gateway can also run as a long-lived service instead of a
+foreground process: `routekit gateway service install` registers a persistent
+OS-supervised service (systemd user unit on Linux, launchd agent on macOS)
+that restarts on crash and reboot, and `routekit gateway start` runs a
+detached background daemon where no supervisor exists. `gateway stop`,
+`restart`, and `upgrade` drain in-flight requests before replacing the
+process; `routekit gateway upgrade` rolls the running gateway onto a newly
+installed CLI version (blue-green when a stable portless route is active).
+See the [`@routekit/cli` README](../packages/routekit-cli/README.md) for the
+full service runbook.
+
 ## Fusion launchers
 
 ```sh
