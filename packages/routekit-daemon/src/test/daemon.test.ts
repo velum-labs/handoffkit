@@ -101,6 +101,14 @@ test("singleton daemon exposes authenticated control and a stable reloadable dat
 
     const beforeUrl = status.dataUrl;
     const snapshot = await client.call("config.get", {});
+    await assert.rejects(
+      client.call("config.update", {
+        expectedRevision: snapshot.revision,
+        document:
+          "providers:\n  openai:\n    apiKey: must-not-enter-daemon-state\n"
+      }),
+      /inline credential/
+    );
     const updated = await client.call(
       "config.update",
       {
@@ -205,7 +213,18 @@ test("second daemon cannot claim authority and generations remain monotonic", as
   } as const;
   const first = await startRouteKitDaemon(options);
   try {
-    await assert.rejects(startRouteKitDaemon(options), /already running/);
+    await assert.rejects(
+      startRouteKitDaemon(options),
+      (error: unknown) => {
+        assert.match(error instanceof Error ? error.message : String(error), /already running/);
+        assert.equal(
+          JSON.stringify(error).includes(first.record.controlToken ?? "impossible-token"),
+          false,
+          "singleton conflicts must not disclose the control credential"
+        );
+        return true;
+      }
+    );
     assert.equal(first.record.generation, 1);
   } finally {
     await first.close();

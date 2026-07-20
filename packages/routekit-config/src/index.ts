@@ -173,6 +173,25 @@ function readYamlObject(path: string): Record<string, unknown> {
   return normalized;
 }
 
+/** Parse and validate an in-memory router YAML document without writing it. */
+export function parseRouterConfigDocument(
+  document: string,
+  source = "router config"
+): RouterConfig {
+  let parsed: unknown;
+  try {
+    parsed = parseYaml(document);
+  } catch (error) {
+    throw new Error(
+      `${source}: invalid YAML (${error instanceof Error ? error.message : String(error)})`
+    );
+  }
+  const normalized = normalizeRouterConfigAliases(parsed);
+  if (!isRecord(normalized)) throw new Error(`${source}: router config must be a YAML object`);
+  assertNoInlineCredentials(normalized, source);
+  return parseRouterConfig(normalized);
+}
+
 function mergeConfig(
   globalConfig: Record<string, unknown>,
   projectConfig: Record<string, unknown>

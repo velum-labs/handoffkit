@@ -452,6 +452,8 @@ No module JSDoc was found.
 - `export function projectRouterConfigPath(cwd: string ...`
 - `export function findProjectRouterConfig(cwd: string ...`
 - `export function routerConfigPaths(`
+- `export function parseRouterConfigDocument(`
+  Parse and validate an in-memory router YAML document without writing it.
 - `export function loadRouterConfig(`
 - `export function writeRouterConfig(path: string, config: RouterConfig | unknown): string ...`
 - `export function updateEffectiveRouterConfig(`

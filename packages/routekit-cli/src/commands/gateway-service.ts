@@ -185,13 +185,28 @@ function registerServiceStatus(group: Command): void {
         kind !== undefined ? daemonSupervisorController(kind) : await platformSupervisor();
       const status = controller === undefined ? undefined : await controller.status();
       if (ctx.json) {
+        const publicRecord =
+          record === undefined
+            ? undefined
+            : {
+                product: record.product,
+                kind: record.kind,
+                pid: record.pid,
+                dataUrl: record.dataUrl,
+                dataPort: record.dataPort,
+                startedAt: record.startedAt,
+                version: record.version,
+                protocolVersion: record.protocolVersion,
+                generation: record.generation,
+                supervisor: record.supervisor
+              };
         ctx.emit({
           supervisor: controller?.kind,
           unit: controller?.unitName,
           unitPath: controller?.unitPath,
           installed: status?.installed ?? false,
           active: status?.active ?? false,
-          record
+          record: publicRecord
         });
         return;
       }

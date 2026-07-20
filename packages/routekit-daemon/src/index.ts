@@ -27,6 +27,7 @@ import type { SubscriptionCredential } from "@routekit/accounts";
 import {
   configuredProviderIds,
   globalRouterConfigPath,
+  parseRouterConfigDocument,
   routekitHome,
   writeRouterConfig
 } from "@routekit/config";
@@ -41,7 +42,6 @@ import type {
   RouteKitControlHandlers
 } from "@routekit/control";
 import {
-  parseRouterConfig,
   startSwitchingGatewayProxy
 } from "@routekit/gateway";
 import type {
@@ -155,17 +155,8 @@ function canonicalConfigDocument(path: string): string {
 }
 
 function parseConfigDocument(document: string): RouterConfig {
-  let parsed: unknown;
   try {
-    parsed = parseYaml(document);
-  } catch (error) {
-    throw new ControlError({
-      code: "bad_request",
-      message: `invalid router YAML: ${error instanceof Error ? error.message : String(error)}`
-    });
-  }
-  try {
-    return parseRouterConfig(parsed);
+    return parseRouterConfigDocument(document, "daemon config update");
   } catch (error) {
     throw new ControlError({
       code: "bad_request",
@@ -263,8 +254,7 @@ export async function startRouteKitDaemon(
       return existing !== undefined && (await healthyControl(existing))
         ? new ControlError({
             code: "conflict",
-            message: `RouteKit daemon is already running (pid ${existing.pid})`,
-            details: { record: existing }
+            message: `RouteKit daemon is already running (pid ${existing.pid})`
           })
         : undefined;
     }
@@ -292,8 +282,7 @@ export async function startRouteKitDaemon(
     ) {
       throw new ControlError({
         code: "conflict",
-        message: `RouteKit daemon is already running (pid ${previous.pid})`,
-        details: { record: previous }
+        message: `RouteKit daemon is already running (pid ${previous.pid})`
       });
     }
     if (previous !== undefined && previous.pid !== process.pid) {

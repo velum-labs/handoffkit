@@ -134,7 +134,11 @@ function bearer(req: IncomingMessage): string | undefined {
 }
 
 function loopbackHost(req: IncomingMessage): boolean {
-  const host = req.headers.host?.split(":")[0]?.replace(/^\[|\]$/g, "");
+  const raw = req.headers.host;
+  const host =
+    raw?.startsWith("[") === true
+      ? raw.slice(1, raw.indexOf("]"))
+      : raw?.split(":")[0];
   return host === "127.0.0.1" || host === "localhost" || host === "::1";
 }
 
@@ -493,6 +497,9 @@ export class ControlClient {
         ...(this.#options.cwd !== undefined ? { cwd: this.#options.cwd } : {})
       }
     };
+    const timeout = AbortSignal.timeout(this.#options.timeoutMs ?? 30_000);
+    const signal =
+      options.signal === undefined ? timeout : AbortSignal.any([timeout, options.signal]);
     const response = await (this.#options.fetch ?? fetch)(
       `${this.#options.url}/control/v1/call`,
       {
@@ -503,7 +510,7 @@ export class ControlClient {
           accept: "application/x-ndjson"
         },
         body: JSON.stringify(request),
-        ...(options.signal !== undefined ? { signal: options.signal } : {})
+        signal
       }
     );
     if (!response.ok || response.body === null) {
