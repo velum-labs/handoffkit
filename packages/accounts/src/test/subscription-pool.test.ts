@@ -274,6 +274,46 @@ test("pool unions heterogeneous member catalogs and routes only eligible account
   }
 });
 
+test("capability conflicts resolve by configured account order, not response timing", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "routekit-pool-capabilities-"));
+  writeMember(directory, "a", { accessToken: "token-a" });
+  writeMember(directory, "b", { accessToken: "token-b" });
+  const provider = fakeProvider({ refreshes: 0 });
+  provider.discoverModels = async (credential) => {
+    if (credential.accessToken === "token-a") {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    return [
+      {
+        id: "gpt-shared",
+        reasoning: {
+          status: "supported",
+          efforts: [
+            {
+              id: credential.accessToken === "token-a" ? "first-account" : "fast-account"
+            }
+          ],
+          provenance: "provider"
+        }
+      }
+    ];
+  };
+  const pool = await SubscriptionAccountSet.open(provider, {
+    mode: "codex",
+    source: { kind: "directory", path: directory }
+  });
+  try {
+    await pool.discoverModels();
+    assert.deepEqual(
+      pool.reasoningCapabilities("gpt-shared")?.efforts?.map((effort) => effort.id),
+      ["first-account"]
+    );
+  } finally {
+    await pool.close();
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 test("subscription labels are normalized in linear time without credential-derived hashes", () => {
   assert.equal(sanitizeSubscriptionLabel("  Work !!! Account --"), "work-account");
   assert.equal(sanitizeSubscriptionLabel("-".repeat(100_000)), "account");
