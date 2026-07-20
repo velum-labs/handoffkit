@@ -196,8 +196,13 @@ function fetchFrame(
       return;
     }
     Promise.resolve()
-      .then(() => fetchAndRender(signal))
-      .then(succeed, fail);
+      .then(() => {
+        if (settled || signal.aborted) return undefined;
+        return fetchAndRender(signal);
+      })
+      .then((content) => {
+        if (content !== undefined) succeed(content);
+      }, fail);
   });
 }
 

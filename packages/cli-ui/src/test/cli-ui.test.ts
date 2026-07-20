@@ -246,6 +246,23 @@ test("watch does not poll with a pre-aborted signal", async () => {
   assert.deepEqual(lines(), []);
 });
 
+test("watch does not start a refresh when abort wins the microtask race", async () => {
+  const { presenter } = capturingPresenter();
+  const abort = new AbortController();
+  let calls = 0;
+  queueMicrotask(() => abort.abort());
+  await watch(
+    presenter,
+    0.1,
+    () => {
+      calls += 1;
+      return ["unexpected"];
+    },
+    { signal: abort.signal }
+  );
+  assert.equal(calls, 0);
+});
+
 test("watch removes interval abort listeners after each refresh", async () => {
   const { presenter } = capturingPresenter();
   const abort = new AbortController();
@@ -254,11 +271,11 @@ test("watch removes interval abort listeners after each refresh", async () => {
   await watch(
     presenter,
     0.1,
-    () => {
+    (signal) => {
       calls += 1;
       maximumListeners = Math.max(
         maximumListeners,
-        getEventListeners(abort.signal, "abort").length
+        getEventListeners(signal, "abort").length
       );
       if (calls === 3) abort.abort();
       return [`frame ${calls}`];
@@ -266,7 +283,7 @@ test("watch removes interval abort listeners after each refresh", async () => {
     { signal: abort.signal }
   );
   assert.equal(calls, 3);
-  assert.ok(maximumListeners <= 2, `abort listeners accumulated: ${maximumListeners}`);
+  assert.ok(maximumListeners <= 1, `abort listeners accumulated: ${maximumListeners}`);
 });
 
 test("plain presenter status renders glyph, detail, and hint", () => {
