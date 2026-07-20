@@ -24,6 +24,7 @@ import {
 import type { AccountListEntry } from "../accounts.js";
 import { updateEffectiveRouterConfig } from "../config.js";
 import { waitForShutdown } from "../serve.js";
+import { limitsSummary } from "../usage-format.js";
 
 import { configOverride, loaded, numberOption } from "./context.js";
 
@@ -265,9 +266,17 @@ export function registerAccounts(program: Command): void {
         return;
       }
       ctx.presenter.status(
-        status.running ? "ok" : "pending",
+        status.running && status.usageError === undefined
+          ? "ok"
+          : status.running
+            ? "warn"
+            : "pending",
         "accounts proxy",
-        status.running ? status.url : "not running"
+        status.running
+          ? status.usageError === undefined
+            ? status.url
+            : `${status.url}; usage unavailable`
+          : "not running"
       );
       for (const entry of status.accounts) {
         const ok = entry.credentialValid && entry.configured;
@@ -280,6 +289,14 @@ export function registerAccounts(program: Command): void {
               ? "stored; routing disabled"
               : "stored; configured; relay ready"
         );
+        const summary = limitsSummary(
+          status.usage,
+          entry.subscriptionKind,
+          entry.label
+        );
+        if (summary !== undefined) {
+          ctx.presenter.note(`${entry.subscriptionKind}/${entry.label} limits: ${summary} · routekit usage`);
+        }
       }
     });
 

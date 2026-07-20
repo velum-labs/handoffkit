@@ -313,6 +313,7 @@ export type AccountsStatus = {
   url?: string;
   pid?: number;
   usage?: SubscriptionUsageResponse;
+  usageError?: string;
   accounts: Array<
     AccountListEntry & {
       credentialValid: boolean;
@@ -345,21 +346,26 @@ export async function accountsStatus(config?: RouterConfig): Promise<AccountsSta
   );
   if (record === undefined) return { running: false, accounts };
   let usage: SubscriptionUsageResponse | undefined;
+  let usageError: string | undefined;
   if (record.authToken !== undefined) {
     try {
       usage = await SubscriptionProxyClient.open({
         baseUrl: record.url,
         token: record.authToken
       }).usage();
-    } catch {
+    } catch (error) {
       usage = undefined;
+      usageError = error instanceof Error ? error.message : String(error);
     }
+  } else {
+    usageError = "service record has no authentication token";
   }
   return {
     running: true,
     url: record.url,
     pid: record.pid,
     ...(usage !== undefined ? { usage } : {}),
+    ...(usageError !== undefined ? { usageError } : {}),
     accounts
   };
 }

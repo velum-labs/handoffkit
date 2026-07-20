@@ -8,6 +8,8 @@ import type {
   ChecklistController,
   ErrorPanelInput,
   KeyValueRow,
+  LiveFrameContent,
+  LiveFrameController,
   Presenter,
   ProgressController,
   ProgressUpdate,
@@ -244,6 +246,25 @@ class PlainProgress implements ProgressController {
   }
 }
 
+class PlainLiveFrame implements LiveFrameController {
+  private readonly write: (line: string) => void;
+  private stopped = false;
+
+  constructor(write: (line: string) => void) {
+    this.write = write;
+  }
+
+  render(content: LiveFrameContent): void {
+    if (this.stopped) return;
+    this.write(dim(`[${new Date().toISOString()}]`));
+    for (const line of typeof content === "function" ? content() : content) this.write(line);
+  }
+
+  stop(): void {
+    this.stopped = true;
+  }
+}
+
 export class PlainPresenter implements Presenter {
   readonly interactive: boolean = false;
   private readonly stream: NodeJS.WriteStream;
@@ -309,5 +330,8 @@ export class PlainPresenter implements Presenter {
   }
   progress(label: string): ProgressController {
     return new PlainProgress(label, this.writeLine);
+  }
+  liveFrame(): LiveFrameController {
+    return new PlainLiveFrame(this.writeLine);
   }
 }

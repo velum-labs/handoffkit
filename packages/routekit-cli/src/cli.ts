@@ -15,6 +15,18 @@ export function buildProgram(): Command {
     .version(`@routekit/cli ${version}`, "-v, --version", "print the RouteKit CLI version")
     .enablePositionalOptions();
   registerCommands(program);
+  program.addHelpText(
+    "after",
+    [
+      "",
+      "Examples:",
+      "  routekit accounts login codex --name work",
+      "  routekit serve",
+      "  routekit status --watch",
+      "  routekit usage --watch 10",
+      "  routekit models list --provider openai"
+    ].join("\n")
+  );
   program
     .command("version")
     .description("show the RouteKit CLI version")
