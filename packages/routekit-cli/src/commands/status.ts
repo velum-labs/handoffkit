@@ -2,7 +2,7 @@ import { CLIPROXY_API_KEY_ENV, cliproxyApiKey } from "@routekit/accounts";
 import { contextFor, CliError } from "@routekit/cli-core";
 import { configuredProviderIds } from "@routekit/config";
 import { isSubscriptionProvider } from "@routekit/gateway";
-import type { RouterConfig } from "@routekit/gateway";
+import type { ProviderId, RouterConfig } from "@routekit/gateway";
 import { defaultKeyEnv } from "@routekit/registry";
 import { dim, glyph, renderTableLines, watch } from "@routekit/cli-ui";
 import type { Command } from "commander";
@@ -114,7 +114,8 @@ export async function routeKitOverview(config: RouterConfig, now = Date.now()): 
   const accounts = await accountsStatus(config);
   const health = cachedHealth();
   const catalog = cachedCatalog();
-  const providers = configuredProviderIds(config).map((provider) => {
+  const providers = configuredProviderIds(config).map((configuredProvider) => {
+    const provider = configuredProvider as ProviderId;
     const keyEnv = defaultKeyEnv(provider);
     const credentialAvailable = isSubscriptionProvider(provider)
       ? accounts.accounts.some((entry) => entry.subscriptionKind === provider && entry.credentialValid)
