@@ -21,6 +21,37 @@ if [ ! -f "${DIST}" ]; then
   exit 1
 fi
 
+# Cloud Agents Runtime Secrets are present on the exec-daemon, but MCP child
+# processes are sometimes spawned with a filtered environment that drops
+# MATTER_API_TOKEN. Walk ancestor /proc/<pid>/environ to recover it without
+# ever printing the value.
+matter_mcp_inherit_token_from_ancestors() {
+  if [ -n "${MATTER_API_TOKEN:-}" ]; then
+    return 0
+  fi
+  local pid="${PPID:-}"
+  local hops=0
+  while [ -n "${pid}" ] && [ "${pid}" != "0" ] && [ "${pid}" != "1" ] && [ "${hops}" -lt 12 ]; do
+    if [ -r "/proc/${pid}/environ" ]; then
+      local line
+      line="$(tr '\0' '\n' < "/proc/${pid}/environ" | grep -m1 '^MATTER_API_TOKEN=' || true)"
+      if [ -n "${line}" ]; then
+        export MATTER_API_TOKEN="${line#MATTER_API_TOKEN=}"
+        echo "warning: MATTER_API_TOKEN was missing in MCP child env; inherited from ancestor pid ${pid}" >&2
+        return 0
+      fi
+    fi
+    if [ ! -r "/proc/${pid}/status" ]; then
+      break
+    fi
+    pid="$(awk '/^PPid:/{print $2}' "/proc/${pid}/status")"
+    hops=$((hops + 1))
+  done
+  return 0
+}
+
+matter_mcp_inherit_token_from_ancestors
+
 # Diagnose common token problems without ever printing the value.
 if [ -z "${MATTER_API_TOKEN:-}" ]; then
   echo "warning: MATTER_API_TOKEN is unset; Matter tools will return configuration_error" >&2
