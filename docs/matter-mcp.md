@@ -2,7 +2,10 @@
 
 Handoffkit agents and local Cursor sessions retrieve read-only evidence from Matter through the [`matter-cursor-mcp`](https://github.com/velum-labs/matter-cursor-mcp) stdio MCP server.
 
-The server ships as the public npm package `matter-cursor-mcp`. It runs with `npx -y matter-cursor-mcp`, so Handoffkit does not vendor the server, build it during agent setup, or host a remote HTTP deployment.
+The server ships as the public npm package `matter-cursor-mcp`. Cloud MCP
+registrations run it through a login shell so `npx` is on `PATH`; Handoffkit
+does not vendor the server, build it during agent setup, or host a remote HTTP
+deployment.
 
 ## What stays in this repo
 
@@ -28,18 +31,15 @@ Use:
 | Field | Value |
 |-------|-------|
 | Name | `matter` |
-| Command | `npx` |
-| Args | `-y`, `matter-cursor-mcp` |
+| Command | `bash` |
+| Args | `-lc`, `exec npx -y matter-cursor-mcp` |
 | Env | `MATTER_API_TOKEN=<your Matter token>`, `MATTER_MCP_CACHE_MODE=on`, `LOG_LEVEL=info` |
 
 Enter `MATTER_API_TOKEN` directly in the registration's env block; Cursor encrypts env values for cloud MCP configs. No VM build step or Cursor Runtime Secret is needed for Matter.
 
-If `npx` is not on the MCP spawn `PATH`, use this fallback:
-
-| Field | Value |
-|-------|-------|
-| Command | `bash` |
-| Args | `-lc`, `npx -y matter-cursor-mcp` |
+Enter the two arguments as separate entries. Do not add quote characters around
+the second argument. The login shell is required because cloud MCP child
+processes can start with a minimal `PATH` that does not include `npx`.
 
 ### Cursor desktop
 
@@ -83,7 +83,8 @@ Optional routing tags:
 ## Cutover checklist
 
 1. Publish `matter-cursor-mcp` to npm; see the `matter-cursor-mcp` README publishing steps.
-2. Add the cloud MCP registration with `npx -y matter-cursor-mcp` and the encrypted env token.
+2. Add the cloud MCP registration with `bash`, args `-lc` and
+   `exec npx -y matter-cursor-mcp`, and the encrypted env token.
 3. Merge this PR.
 4. Delete old per-account stdio registrations pointing at `/workspace` scripts and, optionally, the `MATTER_API_TOKEN` Runtime Secret.
 5. Start a new cloud agent and verify with `matter_health`.
