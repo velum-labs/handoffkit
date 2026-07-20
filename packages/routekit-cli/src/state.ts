@@ -1,34 +1,40 @@
 import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 
+import { readPackageVersion } from "@routekit/cli-core";
 import {
   createPortlessSession,
+  createServiceRecordStore,
+  processAlive,
   reapPortlessService,
+  stopDaemonProcess,
+  supervisorController,
+  supervisorFromEnv,
   writeFileAtomic
 } from "@routekit/runtime";
-import type { PortlessOptions, PortlessSession } from "@routekit/runtime";
+import type {
+  PortlessOptions,
+  PortlessSession,
+  ServiceRecord,
+  ServiceRecordStore
+} from "@routekit/runtime";
 
 import { routekitHome } from "./config.js";
 
 export type ServiceKind = "gateway" | "accounts";
 
-export type RouteKitServiceRecord = {
+export type RouteKitServiceRecord = ServiceRecord & {
   product: "routekit";
   owner: "routekit";
   kind: ServiceKind;
-  pid: number;
-  url: string;
-  port: number;
-  startedAt: string;
-  authToken?: string;
 };
 
-function serviceDirectory(): string {
-  return join(routekitHome(), "services");
+export function routekitVersion(): string {
+  return readPackageVersion(import.meta.url);
 }
 
-function servicePath(kind: ServiceKind): string {
-  return join(serviceDirectory(), `${kind}.json`);
+function store(): ServiceRecordStore {
+  return createServiceRecordStore({ home: routekitHome(), product: "routekit" });
 }
 
 export function writeStateSnapshot(
@@ -71,48 +77,8 @@ function portlessOptions(log?: (line: string) => void): PortlessOptions {
   };
 }
 
-function alive(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (error) {
-    return (error as NodeJS.ErrnoException).code === "EPERM";
-  }
-}
-
 export function readServiceRecord(kind: ServiceKind): RouteKitServiceRecord | undefined {
-  const path = servicePath(kind);
-  if (!existsSync(path)) return undefined;
-  try {
-    const parsed = JSON.parse(readFileSync(path, "utf8")) as Partial<RouteKitServiceRecord>;
-    if (
-      parsed.product !== "routekit" ||
-      parsed.owner !== "routekit" ||
-      parsed.kind !== kind ||
-      typeof parsed.pid !== "number" ||
-      typeof parsed.url !== "string" ||
-      typeof parsed.port !== "number" ||
-      typeof parsed.startedAt !== "string"
-    ) {
-      return undefined;
-    }
-    if (!alive(parsed.pid)) {
-      rmSync(path, { force: true });
-      return undefined;
-    }
-    return parsed as RouteKitServiceRecord;
-  } catch {
-    return undefined;
-  }
-}
-
-function writeServiceRecord(record: RouteKitServiceRecord): void {
-  mkdirSync(serviceDirectory(), { recursive: true, mode: 0o700 });
-  chmodSync(serviceDirectory(), 0o700);
-  writeFileAtomic(servicePath(record.kind), `${JSON.stringify(record, null, 2)}\n`, {
-    mode: 0o600
-  });
-  chmodSync(servicePath(record.kind), 0o600);
+  return store().read(kind) as RouteKitServiceRecord | undefined;
 }
 
 export type ServiceRegistration = {
@@ -134,21 +100,27 @@ export async function registerService(input: {
   );
   const name = input.kind;
   const url = session.enabled ? session.register(name, input.port) : input.loopbackUrl;
-  writeServiceRecord({
-    product: "routekit",
-    owner: "routekit",
+  const records = store();
+  records.write({
     kind: input.kind,
     pid: process.pid,
     url,
     port: input.port,
     startedAt: new Date().toISOString(),
+    version: routekitVersion(),
+    supervisor: supervisorFromEnv(),
+    ...(process.argv[1] !== undefined ? { binPath: process.argv[1] } : {}),
+    args: process.argv.slice(2),
+    cwd: process.cwd(),
     ...(input.authToken !== undefined ? { authToken: input.authToken } : {})
   });
   return {
     url,
     release: async () => {
       if (session.enabled) session.unregister(name);
-      rmSync(servicePath(input.kind), { force: true });
+      // pid-guarded: a blue-green replacement writes its own record before
+      // this (old) process shuts down, and that record must survive.
+      records.remove(input.kind, { ifPid: process.pid });
     }
   };
 }
@@ -158,26 +130,42 @@ export type StopServiceResult = {
   stopped: boolean;
   stale?: boolean;
   pid?: number;
+  supervisor?: RouteKitServiceRecord["supervisor"];
 };
 
+/**
+ * Stop a RouteKit service. Supervised processes (systemd/launchd) are stopped
+ * through their supervisor — a raw SIGTERM would just be restarted — while
+ * detached daemons get SIGTERM plus a wait that covers the drain window.
+ */
 export async function stopService(
   kind: ServiceKind,
-  log?: (line: string) => void
+  options: { graceMs?: number; log?: (line: string) => void } = {}
 ): Promise<StopServiceResult> {
   const record = readServiceRecord(kind);
-  const reaped = await reapPortlessService(kind, portlessOptions(log));
-  if (record === undefined) return { kind, stopped: reaped };
-  let stopped = reaped;
-  if (record.pid !== process.pid && alive(record.pid)) {
-    try {
-      process.kill(record.pid, "SIGTERM");
-      stopped = true;
-    } catch {
-      // The process exited between the liveness probe and signal.
-    }
+  const reaped = await reapPortlessService(kind, portlessOptions(options.log));
+  if (record === undefined) {
+    store().remove(kind);
+    return { kind, stopped: reaped };
   }
-  rmSync(servicePath(kind), { force: true });
+  let stopped = reaped;
+  if (record.supervisor === "systemd" || record.supervisor === "launchd") {
+    const controller = supervisorController(record.supervisor, "routekit", kind);
+    await controller.stop();
+    stopped = true;
+  } else if (record.pid !== process.pid && processAlive(record.pid)) {
+    const result = await stopDaemonProcess(record, {
+      ...(options.graceMs !== undefined ? { graceMs: options.graceMs } : {})
+    });
+    stopped = stopped || result.stopped;
+  }
+  store().remove(kind);
   return stopped
-    ? { kind, stopped: true, pid: record.pid }
+    ? {
+        kind,
+        stopped: true,
+        pid: record.pid,
+        ...(record.supervisor !== undefined ? { supervisor: record.supervisor } : {})
+      }
     : { kind, stopped: false, stale: true };
 }

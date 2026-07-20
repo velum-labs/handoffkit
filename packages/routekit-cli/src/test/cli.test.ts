@@ -62,7 +62,14 @@ test("independent command surface is complete and has no compatibility aliases",
   );
   assert.deepEqual(
     command(program, "gateway").commands.map((entry) => entry.name()).sort(),
-    ["serve", "stop"]
+    ["logs", "restart", "serve", "service", "start", "stop", "upgrade"]
+  );
+  assert.deepEqual(
+    command(program, "gateway")
+      .commands.find((entry) => entry.name() === "service")
+      ?.commands.map((entry) => entry.name())
+      .sort(),
+    ["install", "status", "uninstall"]
   );
   assert.deepEqual(
     command(program, "codex").commands.map((entry) => entry.name()).sort(),
@@ -102,6 +109,8 @@ test("dynamic completion follows the command tree", () => {
   assert.ok(completionCandidates(program, ["co"]).includes("config"));
   assert.deepEqual(completionCandidates(program, ["gateway", "s"]), [
     "serve",
+    "service",
+    "start",
     "stop"
   ]);
   assert.deepEqual(completionCandidates(program, ["accounts", "s"]), [
@@ -137,7 +146,7 @@ test("serve CLI rejects an unauthenticated non-loopback bind", async () => {
     assert.ok(serve);
     assert.match(
       serve.helpInformation(),
-      /authentication token \(required for non-loopback hosts\)/
+      /authentication token \(required for non-loopback\s+hosts\)/
     );
     await assert.rejects(
       program.parseAsync([

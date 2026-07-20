@@ -50,6 +50,8 @@ export type ServiceRecord = {
   binPath?: string;
   /** CLI arguments after the entry script; enables restart/upgrade respawns. */
   args?: readonly string[];
+  /** Working directory the daemon runs in (project config discovery). */
+  cwd?: string;
   supervisor?: ServiceSupervisorKind;
 };
 
@@ -131,6 +133,7 @@ export function createServiceRecordStore(input: {
       ...(optionalString(parsed.version) !== undefined ? { version: parsed.version as string } : {}),
       ...(optionalString(parsed.binPath) !== undefined ? { binPath: parsed.binPath as string } : {}),
       ...(optionalArgs(parsed.args) !== undefined ? { args: optionalArgs(parsed.args) } : {}),
+      ...(optionalString(parsed.cwd) !== undefined ? { cwd: parsed.cwd as string } : {}),
       ...(supervisor !== undefined ? { supervisor } : {})
     };
   };

@@ -326,6 +326,32 @@ function createLaunchdController(input: {
   };
 }
 
+/**
+ * Controller for a known supervisor kind (e.g. from a service record's
+ * `supervisor` stamp). Use {@link detectSupervisor} when the platform's
+ * supervisor is not known yet.
+ */
+export function supervisorController(
+  kind: "systemd" | "launchd",
+  product: string,
+  service: string,
+  options: { runner?: CommandRunner; home?: string; uid?: number } = {}
+): SupervisorController {
+  const runner = options.runner ?? defaultRunner;
+  const scoped = {
+    product,
+    kind: service,
+    runner,
+    ...(options.home !== undefined ? { home: options.home } : {})
+  };
+  return kind === "systemd"
+    ? createSystemdController(scoped)
+    : createLaunchdController({
+        ...scoped,
+        ...(options.uid !== undefined ? { uid: options.uid } : {})
+      });
+}
+
 // ---- detection ----
 
 export type DetectSupervisorOptions = {

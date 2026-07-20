@@ -81,6 +81,7 @@ export {
   launchdAgentPlist,
   launchdLabel,
   launchdPlistPath,
+  supervisorController,
   systemdServiceUnit,
   systemdUnitName,
   systemdUnitPath

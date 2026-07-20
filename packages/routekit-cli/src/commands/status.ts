@@ -9,7 +9,7 @@ import type { Command } from "commander";
 
 import { accountsStatus } from "../accounts.js";
 import type { AccountsStatus } from "../accounts.js";
-import { readServiceRecord, readStateSnapshot } from "../state.js";
+import { readServiceRecord, readStateSnapshot, routekitVersion } from "../state.js";
 import type { RouteKitServiceRecord, ServiceKind } from "../state.js";
 import { limitsSummary } from "../usage-format.js";
 
@@ -28,6 +28,7 @@ type CachedCatalog = {
 
 export type RouteKitOverview = {
   observedAt: string;
+  cliVersion: string;
   services: Array<{
     kind: ServiceKind;
     running: boolean;
@@ -37,6 +38,10 @@ export type RouteKitOverview = {
     uptimeSeconds?: number;
     reachable?: boolean;
     error?: string;
+    version?: string;
+    supervisor?: string;
+    /** The daemon runs an older/newer build than the installed CLI. */
+    versionSkew?: boolean;
   }>;
   providers: Array<{
     provider: string;
@@ -111,7 +116,12 @@ function serviceOverview(
     startedAt: service.startedAt,
     ...(Number.isFinite(started) ? { uptimeSeconds: Math.max(0, Math.round((now - started) / 1000)) } : {}),
     ...(probe !== undefined ? { reachable: probe.reachable } : {}),
-    ...(probe?.error !== undefined ? { error: probe.error } : {})
+    ...(probe?.error !== undefined ? { error: probe.error } : {}),
+    ...(service.version !== undefined ? { version: service.version } : {}),
+    ...(service.supervisor !== undefined ? { supervisor: service.supervisor } : {}),
+    ...(service.version !== undefined && service.version !== routekitVersion()
+      ? { versionSkew: true }
+      : {})
   };
 }
 
@@ -148,6 +158,7 @@ export async function routeKitOverview(config: RouterConfig, now = Date.now()): 
   });
   return {
     observedAt: new Date(now).toISOString(),
+    cliVersion: routekitVersion(),
     services: [
       serviceOverview("gateway", readServiceRecord("gateway"), now),
       serviceOverview(
@@ -226,7 +237,13 @@ export function renderOverviewLines(overview: RouteKitOverview): string[] {
   );
   if (overview.models.updatedAt !== undefined) lines.push(dim(`  catalog updated ${overview.models.updatedAt}`));
   const gateway = overview.services.find((service) => service.kind === "gateway");
-  if (gateway?.running !== true) lines.push("", "→ try: routekit gateway serve");
+  if (gateway?.versionSkew === true) {
+    lines.push(
+      "",
+      `→ gateway is running v${gateway.version} but the installed CLI is v${overview.cliVersion} — run: routekit gateway upgrade`
+    );
+  }
+  if (gateway?.running !== true) lines.push("", "→ try: routekit gateway start");
   if (
     overview.providers.some((provider) => !provider.credentialAvailable || provider.lastCheck?.ok === false)
   ) {
