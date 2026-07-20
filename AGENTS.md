@@ -98,11 +98,11 @@ probe `/health`; it intentionally has no public chat or model routes. Notes:
 
 ### Matter MCP (external research)
 
-Handoffkit reads tagged Matter items through a hosted HTTP `matter` MCP server registered in the Cursor dashboard. See `docs/matter-mcp.md` for the hosted architecture and cutover notes.
+Handoffkit reads tagged Matter items through the `matter-cursor-mcp` npm package registered as an MCP server in the Cursor dashboard for cloud agents or via `.cursor/mcp.json` for desktop Cursor. There is no local build in this repo; see `docs/matter-mcp.md` for setup and cutover notes.
 
 - Read `.matter-context.json` before calling Matter tools. Default tags: `cursor`, `repo-handoffkit`.
 - Verify with `matter_health` before relying on Matter evidence.
 - Write durable research to `docs/research/matter/` unless the user asks otherwise.
-- If `matter_*` tools are absent from the MCP catalog, the team HTTP MCP registration is missing; tell the user. There is no local fallback in this repo.
+- If `matter_*` tools are absent from the MCP catalog, the MCP registration is missing; tell the user.
 
 See `docs/matter-mcp.md` for setup and verification.

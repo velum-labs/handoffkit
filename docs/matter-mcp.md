@@ -1,6 +1,8 @@
 # Matter MCP for Cursor
 
-Handoffkit agents and local Cursor sessions retrieve read-only evidence from Matter through the hosted [`matter-cursor-mcp`](https://github.com/velum-labs/matter-cursor-mcp) server over streamable HTTP.
+Handoffkit agents and local Cursor sessions retrieve read-only evidence from Matter through the [`matter-cursor-mcp`](https://github.com/velum-labs/matter-cursor-mcp) stdio MCP server.
+
+The server ships as the public npm package `matter-cursor-mcp`. It runs with `npx -y matter-cursor-mcp`, so Handoffkit does not vendor the server, build it during agent setup, or host a remote HTTP deployment.
 
 ## What stays in this repo
 
@@ -9,46 +11,60 @@ Handoffkit agents and local Cursor sessions retrieve read-only evidence from Mat
 | `.matter-context.json` | Repository tags (`cursor`, `repo-handoffkit`), retrieval budgets, and output directories (`docs/research/matter/`, `docs/decisions/`) |
 | `.matter-context.schema.json` | Schema for the Matter context file |
 | `.cursor/rules/matter-research-rule.mdc` | Agent guidance for Matter-backed research |
-| `.cursor/mcp.json` | Cursor desktop HTTP MCP registration template |
+| `.cursor/mcp.json` | Cursor desktop stdio MCP registration template |
 | `AGENTS.md` | Cloud-agent operating notes for Matter research |
-
-The server is deployed separately from `github.com/velum-labs/matter-cursor-mcp`; see that repo's `docs/deploy.md`. `MATTER_API_TOKEN` lives only on the hosted deployment. MCP clients authenticate to the hosted server with per-client access keys.
 
 ## Register clients
 
 ### Cursor cloud agents
 
-Register the hosted HTTP MCP server once for the team:
+Register the npm package once as a stdio MCP server:
 
-1. Open **Dashboard -> Integrations & MCP**.
-2. Add an HTTP MCP server named `matter`.
-3. Set URL to `https://<host>/mcp`.
-4. Add header `Authorization: Bearer <key>`.
+- Personal: [cursor.com/agents](https://cursor.com/agents) -> **MCP dropdown** -> add server
+- Team-wide: **Dashboard -> Integrations & MCP** -> add MCP server
 
-This one-time team registration covers all repos and all team accounts. Handoffkit no longer needs per-repo MCP files for cloud agents, a VM build step, or a Cursor Runtime Secret for Matter.
+Use:
+
+| Field | Value |
+|-------|-------|
+| Name | `matter` |
+| Command | `npx` |
+| Args | `-y`, `matter-cursor-mcp` |
+| Env | `MATTER_API_TOKEN=<your Matter token>`, `MATTER_MCP_CACHE_MODE=on`, `LOG_LEVEL=info` |
+
+Enter `MATTER_API_TOKEN` directly in the registration's env block; Cursor encrypts env values for cloud MCP configs. No VM build step or Cursor Runtime Secret is needed for Matter.
+
+If `npx` is not on the MCP spawn `PATH`, use this fallback:
+
+| Field | Value |
+|-------|-------|
+| Command | `bash` |
+| Args | `-lc`, `npx -y matter-cursor-mcp` |
 
 ### Cursor desktop
 
-Use this repo's `.cursor/mcp.json` or your global `~/.cursor/mcp.json`:
+Use this repo's `.cursor/mcp.json` or your global `~/.cursor/mcp.json`. Export `MATTER_API_TOKEN` in the shell that launches Cursor:
 
 ```json
 {
   "mcpServers": {
     "matter": {
-      "url": "https://MATTER-MCP-HOST-PLACEHOLDER/mcp",
-      "headers": {
-        "Authorization": "Bearer ${env:MATTER_MCP_ACCESS_KEY}"
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "matter-cursor-mcp"],
+      "env": {
+        "MATTER_API_TOKEN": "${env:MATTER_API_TOKEN}",
+        "MATTER_MCP_CACHE_MODE": "on",
+        "LOG_LEVEL": "info"
       }
     }
   }
 }
 ```
 
-After the hosted deployment is live, replace `MATTER-MCP-HOST-PLACEHOLDER` with the deployed host and export `MATTER_MCP_ACCESS_KEY` in your local shell.
-
 ### Other MCP clients
 
-OpenClaw, Hermes, and other MCP clients use the same streamable HTTP URL (`https://<host>/mcp`) and `Authorization: Bearer <key>` header.
+OpenClaw, Hermes, and other MCP clients use the same stdio command (`npx -y matter-cursor-mcp`) with `MATTER_API_TOKEN` in the MCP server environment.
 
 ## Tag your Matter library
 
@@ -66,12 +82,11 @@ Optional routing tags:
 
 ## Cutover checklist
 
-1. Deploy the hosted server from `github.com/velum-labs/matter-cursor-mcp`.
-2. Replace the placeholder URL in `.cursor/mcp.json`.
-3. Register the team HTTP MCP server in Cursor Dashboard -> Integrations & MCP.
-4. Merge this PR.
-5. Delete old per-account stdio MCP registrations and, optionally, the `MATTER_API_TOKEN` Runtime Secret.
-6. Start a new cloud agent and verify with `matter_health`.
+1. Publish `matter-cursor-mcp` to npm; see the `matter-cursor-mcp` README publishing steps.
+2. Add the cloud MCP registration with `npx -y matter-cursor-mcp` and the encrypted env token.
+3. Merge this PR.
+4. Delete old per-account stdio registrations pointing at `/workspace` scripts and, optionally, the `MATTER_API_TOKEN` Runtime Secret.
+5. Start a new cloud agent and verify with `matter_health`.
 
 ## Verify
 

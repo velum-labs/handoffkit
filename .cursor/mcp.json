@@ -1,9 +1,13 @@
 {
   "mcpServers": {
     "matter": {
-      "url": "https://MATTER-MCP-HOST-PLACEHOLDER/mcp",
-      "headers": {
-        "Authorization": "Bearer ${env:MATTER_MCP_ACCESS_KEY}"
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "matter-cursor-mcp"],
+      "env": {
+        "MATTER_API_TOKEN": "${env:MATTER_API_TOKEN}",
+        "MATTER_MCP_CACHE_MODE": "on",
+        "LOG_LEVEL": "info"
       }
     }
   }
