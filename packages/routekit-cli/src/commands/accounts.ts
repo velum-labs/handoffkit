@@ -14,38 +14,20 @@ import type { Command } from "commander";
 
 import {
   accountsStatus,
-  addAccount,
   listAccounts,
   loginAccount,
+  parseAccountMode,
   removeAccount,
   serveAccounts,
   stopAccounts
 } from "../accounts.js";
-import type { AccountListEntry } from "../accounts.js";
-import { updateEffectiveRouterConfig } from "../config.js";
+import {
+  enrollAndActivateAccount,
+  recoverPendingEnrollmentTransactions
+} from "../account-transaction.js";
 import { waitForShutdown } from "../serve.js";
 
 import { configOverride, loaded, numberOption } from "./context.js";
-
-function record(value: unknown): Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : {};
-}
-
-function activateAccount(command: Command, result: AccountListEntry): string {
-  return updateEffectiveRouterConfig(
-    { configPath: configOverride(command) },
-    (draft) => {
-      const providers = record(draft.providers);
-      const policy = record(providers[result.subscriptionKind]);
-      draft.providers = {
-        ...providers,
-        [result.subscriptionKind]: { ...policy }
-      };
-    }
-  ).path;
-}
 
 function registerCliproxy(accounts: Command): void {
   const cliproxy = accounts
@@ -174,15 +156,19 @@ export function registerAccounts(program: Command): void {
             "`accounts login` is interactive and does not support --json or --no-input"
           );
         }
+        recoverPendingEnrollmentTransactions();
         loaded(command);
-        const result = await loginAccount(subscriptionKind, options.name);
-        let configPath: string;
-        try {
-          configPath = activateAccount(command, result);
-        } catch (error) {
-          removeAccount(result.subscriptionKind, result.label);
-          throw error;
-        }
+        let configPath = "";
+        const result = await loginAccount(subscriptionKind, options.name, {
+          enroll: async (enrollment) => {
+            const committed = await enrollAndActivateAccount({
+              ...enrollment,
+              config: { configPath: configOverride(command) }
+            });
+            configPath = committed.configPath;
+            return committed;
+          }
+        });
         ctx.presenter.success(
           `logged in, enrolled, and enabled ${result.subscriptionKind}/${result.label}`
         );
@@ -198,8 +184,12 @@ export function registerAccounts(program: Command): void {
     .action(async (subscriptionKind: string, options: { name?: string }, command: Command) => {
       const ctx = contextFor(command);
       loaded(command);
-      const result = await addAccount(subscriptionKind, options.name);
-      const configPath = activateAccount(command, result);
+      const result = await enrollAndActivateAccount({
+        subscriptionKind: parseAccountMode(subscriptionKind),
+        ...(options.name !== undefined ? { label: options.name } : {}),
+        config: { configPath: configOverride(command) }
+      });
+      const configPath = result.configPath;
       const output = {
         ...result,
         activated: true,

@@ -29,6 +29,11 @@ export type UpdateRouterConfigInput = {
   configPath?: string;
 };
 
+export type PlannedRouterConfigUpdate = LoadedRouterConfig & {
+  draft: Record<string, unknown>;
+  previousContent: string;
+};
+
 /** Explicit provider ids in schema declaration order. */
 export function configuredProviderIds(config: RouterConfig): string[] {
   return Object.keys(config.providers);
@@ -248,23 +253,25 @@ function writeRouterConfigDocument(path: string, config: unknown): string {
  * This keeps project overlays sparse instead of materializing defaults or
  * inherited global values into the project file.
  */
-export function updateEffectiveRouterConfig(
+export function planEffectiveRouterConfigUpdate(
   input: UpdateRouterConfigInput,
   mutate: (draft: Record<string, unknown>) => void
-): LoadedRouterConfig {
+): PlannedRouterConfigUpdate {
   const paths = routerConfigPaths(input);
   const override = paths.override;
   if (override !== undefined) {
     if (!existsSync(override)) throw new Error(`router config not found: ${override}`);
+    const previousContent = readFileSync(override, "utf8");
     const draft = structuredClone(readYamlObject(override));
     mutate(draft);
     assertNoInlineCredentials(draft, override);
     const config = parseRouterConfig(draft);
-    writeRouterConfigDocument(override, draft);
     return {
       config,
       path: override,
-      sources: [input.configPath !== undefined ? "flag" : "environment"]
+      sources: [input.configPath !== undefined ? "flag" : "environment"],
+      draft,
+      previousContent
     };
   }
 
@@ -274,6 +281,7 @@ export function updateEffectiveRouterConfig(
     throw new Error("no router config found; run `routekit config init` or set ROUTEKIT_CONFIG");
   }
   const target = projectPath ?? paths.global;
+  const previousContent = readFileSync(target, "utf8");
   const draft = structuredClone(readYamlObject(target));
   mutate(draft);
   assertNoInlineCredentials(draft, target);
@@ -281,15 +289,43 @@ export function updateEffectiveRouterConfig(
   const effective =
     projectPath !== undefined ? mergeConfig(globalConfig, draft) : draft;
   const config = parseRouterConfig(effective);
-  writeRouterConfigDocument(target, draft);
   return {
     config,
     path: target,
     sources: [
       ...(projectPath !== undefined ? (["project"] as const) : []),
       ...(hasGlobal ? (["global"] as const) : [])
-    ]
+    ],
+    draft,
+    previousContent
   };
+}
+
+export function commitEffectiveRouterConfigUpdate(
+  plan: PlannedRouterConfigUpdate
+): LoadedRouterConfig {
+  writeRouterConfigDocument(plan.path, plan.draft);
+  return {
+    config: plan.config,
+    path: plan.path,
+    sources: plan.sources
+  };
+}
+
+export function restoreEffectiveRouterConfigUpdate(
+  plan: Pick<PlannedRouterConfigUpdate, "path" | "previousContent">
+): void {
+  writeFileAtomic(plan.path, plan.previousContent, { mode: 0o600 });
+  chmodSync(plan.path, 0o600);
+}
+
+export function updateEffectiveRouterConfig(
+  input: UpdateRouterConfigInput,
+  mutate: (draft: Record<string, unknown>) => void
+): LoadedRouterConfig {
+  return commitEffectiveRouterConfigUpdate(
+    planEffectiveRouterConfigUpdate(input, mutate)
+  );
 }
 
 export function updateRouterConfig(

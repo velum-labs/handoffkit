@@ -51,6 +51,11 @@ A page belongs in the public site when it helps a user install, run, configure, 
 | `packages.md` | Reference | Short package guide for readers who do not need full package references. |
 | `release-publishing.md` | Operations | npm publishing workflow and trusted publishing setup. |
 | `releasing.md` | Operations | Cross-repo release plan/apply workflow. |
+| `release-security.md` | Operations / Privacy and policy | RouteKit release-readiness evidence hub: provenance, security controls, SBOM/licenses, rollback, runbooks, client versions, and telemetry. |
+| `release-rollback.md` | Operations | Emergency npm/PyPI/Git rollback and rehearsal procedure. |
+| `supported-client-versions.md` | Privacy and policy | Release-qualified external client-version contract and deprecation rules. |
+| `telemetry-inventory.md` | Privacy and policy | RouteKit product telemetry fields, prohibited data, and review procedure. |
+| `runbooks/README.md` | Operations | Index for credential compromise, bad release, and provider outage response. |
 | `model-fusion-protocol-consumption.md` | Reference | How consumers use model-fusion protocol records and generated bindings. |
 | `model-fusion-protocol-release.md` | Operations | Protocol release process and propagation. |
 | `model-fusion-learnings.md` | Design archive | Durable lessons from model-fusion implementation work. |

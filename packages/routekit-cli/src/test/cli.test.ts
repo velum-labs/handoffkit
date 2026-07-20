@@ -51,6 +51,8 @@ test("independent command surface is complete and has no compatibility aliases",
     "doctor",
     "install",
     "uninstall",
+    "status",
+    "usage",
     "stop",
     "telemetry",
     "completion",
@@ -75,6 +77,10 @@ test("independent command surface is complete and has no compatibility aliases",
   assert.deepEqual(
     command(program, "providers").commands.map((entry) => entry.name()).sort(),
     ["add", "remove", "status"]
+  );
+  assert.deepEqual(
+    command(program, "models").commands.map((entry) => entry.name()).sort(),
+    ["explain", "list"]
   );
   assert.deepEqual(
     command(program, "config").commands.map((entry) => entry.name()).sort(),

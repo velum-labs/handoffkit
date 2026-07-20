@@ -7,12 +7,13 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 import { loadFusionConfig } from "@fusionkit/config";
-import { startProviderSim } from "@fusionkit/testkit";
+import { stackToolingSkip, startProviderSim } from "@fusionkit/testkit";
 import { loadRouterConfig } from "@routekit/config";
 
 import { configuredDefaultToolArgv } from "../commands/palette.js";
 
 const cli = fileURLToPath(new URL("../index.js", import.meta.url));
+const STACK_SKIP = stackToolingSkip();
 
 function run(
   args: readonly string[],
@@ -29,7 +30,7 @@ function run(
   });
 }
 
-test("init, config, and ensemble commands persist only Fusion v4 model ids", async () => {
+test("init, config, and ensemble commands persist only Fusion v4 model ids", { skip: STACK_SKIP }, async () => {
   const sim = await startProviderSim();
   await sim.queue("gpt-5.5", ["discovery fixture"]);
   const providerEnv = {

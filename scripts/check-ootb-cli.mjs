@@ -77,7 +77,7 @@ for (const tool of ["codex", "claude", "cursor", "opencode"]) {
   }
 }
 
-// 2) RouteKit independently owns router, endpoint, account, and direct tool
+// 2) RouteKit independently owns router, provider, account, and direct tool
 // launch surfaces without exposing Fusion lifecycle commands.
 const routeHelp = runCli(ROUTE_CLI, ["--help"]);
 if (routeHelp.status !== 0) fail(`\`routekit --help\` exited ${routeHelp.status}`);
@@ -91,12 +91,14 @@ for (const command of [
   "cursor",
   "opencode",
   "accounts",
-  "endpoints",
+  "providers",
   "models",
   "config",
   "doctor",
   "install",
   "uninstall",
+  "status",
+  "usage",
   "telemetry",
   "version",
   "stop",
@@ -139,11 +141,9 @@ mkdirSync(routekitProject, { recursive: true });
 writeFileSync(
   routekitConfig,
   [
-    "endpoints:",
-    "  - endpointId: ootb",
-    "    model: provider-private",
-    "    baseUrl: http://127.0.0.1:9/v1",
-    "defaultEndpointId: ootb",
+    "providers:",
+    "  openai: {}",
+    "defaultModel: openai/private",
     ""
   ].join("\n")
 );
@@ -181,7 +181,7 @@ try {
 
   const missingHarness = runCli(
     ROUTE_CLI,
-    ["--config", routekitConfig, "codex", "ootb"],
+    ["--config", routekitConfig, "codex", "openai/private"],
     routekitEnv
   );
   if (missingHarness.status === 0) {

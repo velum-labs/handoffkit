@@ -38,6 +38,9 @@ the RouteKit CLI. FusionKit keeps `observe`, `local`, and `fusion.session` as
 product-specific metadata because RouteKit has no equivalent fusion semantics;
 the two CLIs may render the same consent state differently.
 
+The RouteKit-specific field inventory, prohibited data, and release review
+procedure are maintained in [RouteKit telemetry inventory](telemetry-inventory.md).
+
 Events are anonymous by design: the only identifier is a random install UUID minted when you opt in, and PostHog person profiles and client IP retention are disabled on every event (`$process_person_profile: false`, `$ip: null`).
 
 Controls:

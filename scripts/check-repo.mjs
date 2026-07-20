@@ -26,6 +26,7 @@ const requiredFiles = [
   "pnpm-lock.yaml",
   "pnpm-workspace.yaml",
   ".github/workflows/ci.yml",
+  ".github/workflows/dependency-review.yml",
   ".github/workflows/release-packages.yml",
   ".github/dependabot.yml",
   ".github/CODEOWNERS",
@@ -52,6 +53,7 @@ const requiredFiles = [
   "scripts/generate-pricing.mjs",
   "scripts/generate-local-catalog.mjs",
   "scripts/generate-registry.mjs",
+  "scripts/check-fusion-router-alignment.mjs",
   // fusion trace semantic conventions (spec/fusion-trace is the source of
   // truth; TS/Python/scope bindings are generated)
   "spec/fusion-trace/registry.json",
@@ -201,12 +203,14 @@ const requiredFiles = [
   "packages/routekit-cli/src/commands/config.ts",
   "packages/routekit-cli/src/commands/doctor.ts",
   "packages/routekit-cli/src/commands/install.ts",
+  "packages/routekit-cli/src/commands/status.ts",
   "packages/routekit-cli/src/commands/telemetry.ts",
   "packages/routekit-cli/src/commands/stop.ts",
   "packages/routekit-cli/src/config.ts",
   "packages/routekit-cli/src/catalog.ts",
   "packages/routekit-cli/src/serve.ts",
   "packages/routekit-cli/src/launch.ts",
+  "packages/routekit-cli/src/account-transaction.ts",
   "packages/routekit-cli/src/accounts.ts",
   "packages/routekit-cli/src/state.ts",
   "packages/routekit-cli/src/telemetry.ts",
@@ -258,6 +262,14 @@ const requiredFiles = [
   "apps/docs/content/docs/changelog.mdx",
   "docs/release-publishing.md",
   "docs/releasing.md",
+  "docs/release-security.md",
+  "docs/release-rollback.md",
+  "docs/supported-client-versions.md",
+  "docs/telemetry-inventory.md",
+  "docs/runbooks/README.md",
+  "docs/runbooks/credential-compromise.md",
+  "docs/runbooks/bad-release.md",
+  "docs/runbooks/provider-outage.md",
   "docs/planning/ensemble-product-plan.md",
   "docs/specs/harness-prompt-passthrough.md",
   "docs/generated/code-api.md",
@@ -413,6 +425,21 @@ if (pricingCheck.status !== 0) {
   fail("pricing check failed");
 }
 
+const fusionRouterAlignmentCheck = spawnSync(
+  process.execPath,
+  ["scripts/check-fusion-router-alignment.mjs"],
+  { encoding: "utf8" }
+);
+if (fusionRouterAlignmentCheck.stdout.trim()) {
+  console.log(fusionRouterAlignmentCheck.stdout.trim());
+}
+if (fusionRouterAlignmentCheck.stderr.trim()) {
+  console.error(fusionRouterAlignmentCheck.stderr.trim());
+}
+if (fusionRouterAlignmentCheck.status !== 0) {
+  fail("Fusion/RouteKit committed config alignment failed");
+}
+
 const modelFusionProtocolCheck = spawnSync(
   process.execPath,
   ["scripts/check-model-fusion-protocol.mjs"],
@@ -504,9 +531,26 @@ if (pkg.scripts?.["test:dual-cli-pack"] !== "node scripts/check-dual-cli-pack.mj
 const ciWorkflow = readFileSync(".github/workflows/ci.yml", "utf8");
 for (const command of [
   "node scripts/check-dual-cli-pack.mjs",
-  "node --test packages/cli/dist/test/stack-model-ids-e2e.test.js"
+  "node --test packages/cli/dist/test/stack-model-ids-e2e.test.js",
+  "node --test packages/cli/dist/test/v4-commands.test.js"
 ]) {
   if (!ciWorkflow.includes(command)) fail(`CI workflow must run ${command}`);
+}
+const dependencyReviewWorkflow = readFileSync(
+  ".github/workflows/dependency-review.yml",
+  "utf8"
+);
+for (const required of [
+  "pull_request:",
+  "actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294",
+  "fail-on-severity: high"
+]) {
+  if (!dependencyReviewWorkflow.includes(required)) {
+    fail(`dependency review workflow must include ${required}`);
+  }
+}
+if (dependencyReviewWorkflow.includes("pull_request_target")) {
+  fail("dependency review workflow must not use pull_request_target");
 }
 
 const npmrc = readFileSync(".npmrc", "utf8");

@@ -112,6 +112,11 @@ export type ManagedAccountLoginOptions = {
   runLogin?: (invocation: ManagedAccountLoginInvocation) => Promise<number>;
   platform?: NodeJS.Platform;
   keychain?: ManagedLoginKeychain;
+  enroll?: (input: {
+    subscriptionKind: SubscriptionMode;
+    label: string;
+    sourcePath: string;
+  }) => Promise<AccountListEntry>;
 };
 
 function managedLoginInvocation(
@@ -289,16 +294,21 @@ export async function loginAccount(
         `${invocation.command} login completed without creating ${invocation.sourcePath}`
       );
     }
-    const path = await enrollCurrentSubscription(subscriptionKind, {
-      label: normalizedLabel,
-      sourcePath: invocation.sourcePath
-    });
-    return {
-      subscriptionKind,
-      provider: subscriptionKind,
-      label: normalizedLabel,
-      path
-    };
+    return options.enroll !== undefined
+      ? await options.enroll({
+          subscriptionKind,
+          label: normalizedLabel,
+          sourcePath: invocation.sourcePath
+        })
+      : {
+          subscriptionKind,
+          provider: subscriptionKind,
+          label: normalizedLabel,
+          path: await enrollCurrentSubscription(subscriptionKind, {
+            label: normalizedLabel,
+            sourcePath: invocation.sourcePath
+          })
+        };
   } finally {
     rmSync(temporaryDirectory, { recursive: true, force: true });
   }

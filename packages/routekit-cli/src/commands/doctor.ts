@@ -10,6 +10,7 @@ import { commandOnPath } from "@routekit/runtime";
 import type { Command } from "commander";
 
 import { accountsStatus } from "../accounts.js";
+import { recoverPendingEnrollmentTransactions } from "../account-transaction.js";
 import { routekitToolRegistry } from "../launch.js";
 
 import { loaded } from "./context.js";
@@ -21,6 +22,14 @@ export function registerDoctor(program: Command): void {
     .action(async (_options: unknown, command: Command) => {
       const ctx = contextFor(command);
       const checks: Array<{ label: string; ok: boolean; detail?: string }> = [];
+      const recovered = recoverPendingEnrollmentTransactions();
+      for (const account of recovered) {
+        checks.push({
+          label: `${account} interrupted enrollment`,
+          ok: true,
+          detail: "rolled back before diagnostics"
+        });
+      }
       let config: RouterConfig | undefined;
       try {
         const result = loaded(command);
@@ -63,6 +72,15 @@ export function registerDoctor(program: Command): void {
               valid.length > 0
                 ? `${valid.length} valid account(s); routing enabled`
                 : "routing enabled but no valid enrolled account"
+          });
+        }
+        for (const account of status.accounts) {
+          if (!account.credentialValid || account.configured) continue;
+          checks.push({
+            label: `${account.subscriptionKind}/${account.label} enrollment`,
+            ok: false,
+            detail:
+              "credential is stored but routing is disabled; retry enrollment or remove the account"
           });
         }
       }

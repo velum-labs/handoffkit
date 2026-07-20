@@ -261,6 +261,41 @@ test("unknown models never fall through to the default source", async () => {
   );
 });
 
+test("subscription failures never fall through to a paid API provider", async () => {
+  const calls: string[] = [];
+  const codex: ProviderSource = {
+    ...fakeSource("codex", [{ id: "gpt-5.5" }]),
+    async chat() {
+      calls.push("codex");
+      return Response.json(
+        { error: { type: "rate_limit_error", message: "subscription exhausted" } },
+        { status: 429 }
+      );
+    }
+  };
+  const openai: ProviderSource = {
+    ...fakeSource("openai", [{ id: "gpt-5.5" }]),
+    async chat() {
+      calls.push("openai");
+      return Response.json({ charged: true });
+    }
+  };
+  const backend = await CatalogBackend.create({
+    config: {
+      providers: { codex: {}, openai: {} },
+      defaultModel: "codex/gpt-5.5"
+    },
+    sources: { codex, openai }
+  });
+
+  const response = await backend.chat({
+    model: "codex/gpt-5.5",
+    messages: []
+  });
+  assert.equal(response.status, 429);
+  assert.deepEqual(calls, ["codex"]);
+});
+
 test("startup reports provider-specific discovery and credential failures", async () => {
   await assert.rejects(
     CatalogBackend.create({

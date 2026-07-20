@@ -8,7 +8,7 @@ The root `package.json` is private and defines the TypeScript workspace commands
 
 | Command | What it does | When to run it |
 | --- | --- | --- |
-| `pnpm check` | Runs `scripts/check-repo.mjs`, protocol package checks, generated OpenAPI SDK checks, generated code docs checks, expected-behavior checks, and release publish checks. | Before committing package, protocol, release, or documentation changes. |
+| `pnpm check` | Runs `scripts/check-repo.mjs`, committed Fusion/RouteKit config alignment, protocol package checks, generated OpenAPI SDK checks, generated code docs checks, expected-behavior checks, and release publish checks. | Before committing package, protocol, release, or documentation changes. |
 | `pnpm build` | Runs `tsc -b tsconfig.json` across TypeScript project references. | After changing TypeScript packages or examples. |
 | `pnpm build:cli` | Runs `tsc -b packages/cli` only. | For fast CLI-only rebuilds. |
 | `pnpm build:routekit` | Runs `tsc -b packages/routekit-cli` only. | For fast RouteKit CLI-only rebuilds. |
@@ -122,7 +122,8 @@ pnpm docs:check-code
 
 | Script | Purpose |
 | --- | --- |
-| `scripts/check-ootb-cli.mjs` | Out-of-the-box shape smoke for the published `fusionkit` CLI: bin name, top-level command surface, packaged files, and loud preflight failures. Run after `pnpm build`. |
+| `scripts/check-ootb-cli.mjs` | Out-of-the-box shape smoke for the published `routekit` and `fusionkit` CLIs: bin names, provider-based command surfaces, packaged files, and loud preflight failures. Run after `pnpm build`. |
+| `scripts/check-fusion-router-alignment.mjs` | Fails when a provider prefix referenced by the committed Fusion ensembles is absent from the committed RouteKit router config. Runs as part of `pnpm check`. |
 | `scripts/check-fusionkit-cli-pack.mjs` | Packs and clean-installs the FusionKit dependency closure. If a Scope bundle is staged, it verifies `scope/server.js` survives packing; release validation passes `--require-scope` to fail when staging was skipped. |
 | `scripts/check-model-fusion-protocol.mjs` | Validates the model-fusion protocol package state. |
 | `scripts/check-generated-model-fusion-sdk.mjs` | Checks the generated OpenAPI SDK outputs (TypeScript and Python) for drift. |
@@ -226,7 +227,11 @@ Workflows live under `.github/workflows/`. `ci.yml` defines five jobs:
 | `python` | uv lockfile check, sync, Ruff, Pyright, uniroute and FusionKit pytest suites, contract fixture validation, and PyPI metadata smoke. |
 | `observability` | Hyperkit Grafana dashboard validation: boots seeded Prometheus and Grafana and executes every panel query via `scripts/validate_hyperkit_dashboards.py`. |
 
-The release workflows are `release-packages.yml` (npm), `pypi-release.yml`, and `model-fusion-protocol-release.yml` (protocol publication). There is no docs-deployment workflow; the docs site deploys through its own Vercel configuration.
+The release workflows are `release-packages.yml` (npm), `pypi-release.yml`, and `model-fusion-protocol-release.yml` (protocol publication). Pull requests also run `dependency-review.yml`; CodeQL uses GitHub default setup. There is no docs-deployment workflow; the docs site deploys through its own Vercel configuration.
+
+Release-security evidence, rollback, incident response, supported client
+versions, and telemetry review are indexed in
+[RouteKit release security](release-security.md).
 
 When a local check fails in CI but passes locally, compare the workflow's Node, pnpm, Python, and uv versions first. Then compare environment variables and optional service credentials. Do not assume a CI-only failure is flaky until the workflow logs show an external service or network error.
 

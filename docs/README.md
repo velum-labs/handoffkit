@@ -34,6 +34,10 @@ Read [Documentation taxonomy](documentation-taxonomy.md) before adding, moving, 
 | [Specs and APIs](specs-and-apis.md) | Reference | Protocol schemas, generated bindings, HTTP APIs, trace conventions, and contract workflow. |
 | [Apps and examples](apps-and-examples.md) | Reference | Apps, examples, demo commands, and expected behavior. |
 | [Operations and scripts](operations-and-scripts.md) | Operations | Root scripts, release files, CI workflows, dependency policy, and verification commands. |
+| [RouteKit release security](release-security.md) | Operations and policy | Publish provenance, repository controls, SBOM/license evidence, rollback, incident runbooks, client versions, and telemetry review. |
+| [Release rollback](release-rollback.md) | Operations | npm/PyPI/Git recovery and rehearsal procedure for a bad release. |
+| [Supported client versions](supported-client-versions.md) | Policy | Release-qualified Codex, Claude Code, Cursor, OpenCode, and CLIProxyAPI versions. |
+| [Telemetry inventory](telemetry-inventory.md) | Privacy and policy | RouteKit product events, allowed fields, prohibited data, and review procedure. |
 | [Benchmarking runbook](benchmarking-runbook.md) | Evaluation and tuning | Benchmark execution and troubleshooting runbook. |
 | [Prompt tuning](prompt-tuning.md) | Evaluation and tuning | Prompt tuning workflow and reporting guidance. |
 | [Public benchmark smoke](public-benchmark-smoke.md) | Evaluation and tuning | Public benchmark smoke-test workflow. |

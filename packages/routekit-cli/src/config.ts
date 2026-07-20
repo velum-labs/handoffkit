@@ -23,7 +23,10 @@ import { parse as parseYaml } from "yaml";
 
 export {
   DEFAULT_ROUTER_CONFIG,
+  commitEffectiveRouterConfigUpdate,
   findProjectRouterConfig,
+  planEffectiveRouterConfigUpdate,
+  restoreEffectiveRouterConfigUpdate,
   globalRouterConfigPath,
   loadRouterConfig,
   projectRouterConfigPath,
@@ -35,6 +38,7 @@ export {
 } from "@routekit/config";
 export type {
   LoadedRouterConfig,
+  PlannedRouterConfigUpdate,
   RouterConfigPaths,
   RouterConfigSource,
   UpdateRouterConfigInput

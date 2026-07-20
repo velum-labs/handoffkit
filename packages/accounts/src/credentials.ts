@@ -261,10 +261,19 @@ async function enrichClaudePoolBlob(
   }
 }
 
-export async function enrollCurrentSubscription(
+export type PlannedSubscriptionEnrollment = {
+  mode: SubscriptionMode;
+  label: string;
+  targetPath: string;
+  directory: string;
+  content: string;
+  previousContent?: string;
+};
+
+export async function planSubscriptionEnrollment(
   mode: SubscriptionMode,
   options: { label?: string; accountsDirectory?: string; sourcePath?: string } = {}
-): Promise<string> {
+): Promise<PlannedSubscriptionEnrollment> {
   const info: SubscriptionInfo = subscriptionInfo(mode);
   const sourcePath = options.sourcePath ?? defaultSubscriptionCredentialPath(mode);
   const source = await credentialBlob(mode, sourcePath);
@@ -272,14 +281,47 @@ export async function enrollCurrentSubscription(
   if (mode === "claude-code") await enrichClaudePoolBlob(info, credential, source);
   const directory =
     options.accountsDirectory ?? defaultSubscriptionAccountDirectory(mode);
-  mkdirSync(directory, { recursive: true, mode: 0o700 });
-  chmodSync(directory, 0o700);
   const identity = credentialIdentity(credential);
   const label = sanitizeSubscriptionLabel(options.label ?? `${mode}-${identity}`);
   const target = join(directory, `${label}.json`);
-  writeFileAtomic(target, `${JSON.stringify(source, null, 2)}\n`, { mode: 0o600 });
-  chmodSync(target, 0o600);
-  return target;
+  return {
+    mode,
+    label,
+    targetPath: target,
+    directory,
+    content: `${JSON.stringify(source, null, 2)}\n`,
+    ...(existsSync(target) ? { previousContent: readFileSync(target, "utf8") } : {})
+  };
+}
+
+export function commitSubscriptionEnrollment(
+  plan: PlannedSubscriptionEnrollment
+): string {
+  mkdirSync(plan.directory, { recursive: true, mode: 0o700 });
+  chmodSync(plan.directory, 0o700);
+  writeFileAtomic(plan.targetPath, plan.content, { mode: 0o600 });
+  chmodSync(plan.targetPath, 0o600);
+  return plan.targetPath;
+}
+
+export function restoreSubscriptionEnrollment(
+  plan: Pick<PlannedSubscriptionEnrollment, "targetPath" | "previousContent">
+): void {
+  if (plan.previousContent === undefined) {
+    if (existsSync(plan.targetPath)) unlinkSync(plan.targetPath);
+    return;
+  }
+  writeFileAtomic(plan.targetPath, plan.previousContent, { mode: 0o600 });
+  chmodSync(plan.targetPath, 0o600);
+}
+
+export async function enrollCurrentSubscription(
+  mode: SubscriptionMode,
+  options: { label?: string; accountsDirectory?: string; sourcePath?: string } = {}
+): Promise<string> {
+  return commitSubscriptionEnrollment(
+    await planSubscriptionEnrollment(mode, options)
+  );
 }
 
 export type RemoveSubscriptionAccountResult = {

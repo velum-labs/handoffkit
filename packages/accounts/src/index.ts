@@ -14,14 +14,20 @@
 export {
   defaultSubscriptionAccountDirectory,
   defaultSubscriptionCredentialPath,
+  commitSubscriptionEnrollment,
   enrollCurrentSubscription,
   loadSubscriptionCredential,
+  planSubscriptionEnrollment,
   persistSubscriptionCredential,
   removeSubscriptionAccount,
+  restoreSubscriptionEnrollment,
   sanitizeSubscriptionLabel,
   subscriptionCredentialLabel
 } from "./credentials.js";
-export type { RemoveSubscriptionAccountResult } from "./credentials.js";
+export type {
+  PlannedSubscriptionEnrollment,
+  RemoveSubscriptionAccountResult
+} from "./credentials.js";
 
 // Account sources (canonical / directory / explicit)
 export { resolveSubscriptionAccounts } from "./account-source.js";

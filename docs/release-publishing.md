@@ -1,5 +1,9 @@
 # Release publishing
 
+For repository security controls, evidence requirements, incident runbooks, and
+rollback rehearsal, see [RouteKit release security](release-security.md) and
+[Release rollback](release-rollback.md).
+
 HandoffKit publishes the RouteKit foundation (`@routekit/*`, including the
 `routekit` CLI) and FusionKit product packages (`@fusionkit/*`, including the
 `fusionkit` CLI) to the public npm registry only from the canonical repository.
