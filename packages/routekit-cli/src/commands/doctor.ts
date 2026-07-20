@@ -65,6 +65,15 @@ export function registerDoctor(program: Command): void {
                 : "routing enabled but no valid enrolled account"
           });
         }
+        for (const account of status.accounts) {
+          if (!account.credentialValid || account.configured) continue;
+          checks.push({
+            label: `${account.subscriptionKind}/${account.label} enrollment`,
+            ok: false,
+            detail:
+              "credential is stored but routing is disabled; retry enrollment or remove the account"
+          });
+        }
       }
       for (const tool of routekitToolRegistry.list()) {
         if (tool.binary === undefined) continue;

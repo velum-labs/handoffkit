@@ -47,6 +47,26 @@ function activateAccount(command: Command, result: AccountListEntry): string {
   ).path;
 }
 
+export function activateAccountTransaction(
+  result: AccountListEntry,
+  activate: () => string,
+  rollback: (subscriptionKind: string, label: string) => unknown = removeAccount
+): string {
+  try {
+    return activate();
+  } catch (activationError) {
+    try {
+      rollback(result.subscriptionKind, result.label);
+    } catch (rollbackError) {
+      throw new AggregateError(
+        [activationError, rollbackError],
+        `could not activate ${result.subscriptionKind}/${result.label}; credential rollback also failed`
+      );
+    }
+    throw activationError;
+  }
+}
+
 function registerCliproxy(accounts: Command): void {
   const cliproxy = accounts
     .command("cliproxy")
@@ -176,13 +196,10 @@ export function registerAccounts(program: Command): void {
         }
         loaded(command);
         const result = await loginAccount(subscriptionKind, options.name);
-        let configPath: string;
-        try {
-          configPath = activateAccount(command, result);
-        } catch (error) {
-          removeAccount(result.subscriptionKind, result.label);
-          throw error;
-        }
+        const configPath = activateAccountTransaction(
+          result,
+          () => activateAccount(command, result)
+        );
         ctx.presenter.success(
           `logged in, enrolled, and enabled ${result.subscriptionKind}/${result.label}`
         );
@@ -199,7 +216,10 @@ export function registerAccounts(program: Command): void {
       const ctx = contextFor(command);
       loaded(command);
       const result = await addAccount(subscriptionKind, options.name);
-      const configPath = activateAccount(command, result);
+      const configPath = activateAccountTransaction(
+        result,
+        () => activateAccount(command, result)
+      );
       const output = {
         ...result,
         activated: true,
