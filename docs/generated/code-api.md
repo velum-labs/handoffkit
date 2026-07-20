@@ -18,8 +18,8 @@ protocols. `startSubscriptionProxy` is the one-call programmatic entrypoint;
 `SubscriptionProxyClient` reads a running proxy's usage over a typed wire
 contract. Product CLIs can wrap this module without owning account logic.
 
-- `export { defaultSubscriptionAccountDirectory, defaultSubscriptionCredentialPath, enrollCurrentSubscription, loadSubscriptionCredential, persistSubscriptionCredential, removeSubscriptionAccount, sanitizeSubscriptionLabel, subscriptionCredentialLabel } from "./credentials.js";`
-- `export type { RemoveSubscriptionAccountResult } from "./credentials.js";`
+- `export { defaultSubscriptionAccountDirectory, defaultSubscriptionCredentialPath, commitSubscriptionEnrollment, enrollCurrentSubscription, loadSubscriptionCredential, planSubscriptionEnrollment, persistSubscriptionCredential, removeSubscriptionAccount, restoreSubscriptionEnrollment, sanitizeSubscriptionLabel, subscriptionCredentialLabel } from "./credentials.js";`
+- `export type { PlannedSubscriptionEnrollment, RemoveSubscriptionAccountResult } from "./credentials.js";`
 - `export { resolveSubscriptionAccounts } from "./account-source.js";`
 - `export type { ResolvedSubscriptionAccounts, SubscriptionAccountSource } from "./account-source.js";`
 - `export { subscriptionProvider } from "./provider.js";`
@@ -433,6 +433,7 @@ No module JSDoc was found.
 - `export type LoadedRouterConfig ...`
 - `export type RouterConfigPaths ...`
 - `export type UpdateRouterConfigInput ...`
+- `export type PlannedRouterConfigUpdate ...`
 - `export function configuredProviderIds(config: RouterConfig): string[] ...`
   Explicit provider ids in schema declaration order.
 - `export function missingModelIds(`
@@ -450,8 +451,11 @@ No module JSDoc was found.
 - `export function routerConfigPaths(`
 - `export function loadRouterConfig(`
 - `export function writeRouterConfig(path: string, config: RouterConfig | unknown): string ...`
-- `export function updateEffectiveRouterConfig(`
+- `export function planEffectiveRouterConfigUpdate(`
   Mutate only the selected raw config layer while validating the merged result.  This keeps project overlays sparse instead of materializing defaults or inherited global values into the project file.
+- `export function commitEffectiveRouterConfigUpdate(`
+- `export function restoreEffectiveRouterConfigUpdate(`
+- `export function updateEffectiveRouterConfig(`
 - `export function updateRouterConfig(`
 - `export const DEFAULT_ROUTER_CONFIG: RouterConfig ...`
 

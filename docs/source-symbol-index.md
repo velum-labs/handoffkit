@@ -14,7 +14,7 @@ Use it with the narrative references when you need to find the module that owns 
 - `packages/accounts/src/client.ts`: SubscriptionProxyClientOptions (type), SubscriptionProxyClient (class), SubscriptionProxyClientError (class)
 - `packages/accounts/src/cliproxy.ts`: CLIPROXY_PINNED_VERSION (const), CLIPROXY_API_KEY_ENV (const), CLIPROXY_BASE_URL_ENV (const), CLIPROXY_HOME_ENV (const), cliproxyHome (function), cliproxyBaseUrl (function), cliproxyConfigPath (function), cliproxyBinaryPath (function), cliproxyAssetName (function), cliproxyApiKey (function), ensureCliproxyConfig (function), CliproxyInstallResult (type), installCliproxy (function), CLIPROXY_LOGIN_FLAGS (const), runCliproxyLogin (function), spawnCliproxy (function), CliproxyStatus (type), cliproxyStatus (function)
 - `packages/accounts/src/codex-relay.ts`: CodexCatalogEntry (type), ProviderRelayLogger (type), CodexStockEntry (type), CodexRelayOptions (type), CodexRelayAuthSource (type), CodexRelayAuth (type), codexRelayAuth (function), CodexBackendRelay (class)
-- `packages/accounts/src/credentials.ts`: defaultSubscriptionAccountDirectory (function), defaultSubscriptionCredentialPath (function), loadSubscriptionCredential (function), persistSubscriptionCredential (function), sanitizeSubscriptionLabel (function), enrollCurrentSubscription (function), RemoveSubscriptionAccountResult (type), removeSubscriptionAccount (function), subscriptionCredentialLabel (function)
+- `packages/accounts/src/credentials.ts`: defaultSubscriptionAccountDirectory (function), defaultSubscriptionCredentialPath (function), loadSubscriptionCredential (function), persistSubscriptionCredential (function), sanitizeSubscriptionLabel (function), PlannedSubscriptionEnrollment (type), planSubscriptionEnrollment (function), commitSubscriptionEnrollment (function), restoreSubscriptionEnrollment (function), enrollCurrentSubscription (function), RemoveSubscriptionAccountResult (type), removeSubscriptionAccount (function), subscriptionCredentialLabel (function)
 - `packages/accounts/src/gateway.ts`: SubscriptionAccountConfigs (type), OpenSubscriptionRelaysOptions (type), OpenSubscriptionRelaysResult (type), SubscriptionAccountSets (type), openSubscriptionAccountSets (function), subscriptionRelaysFromAccountSets (function), openSubscriptionRelays (function)
 - `packages/accounts/src/provider.ts`: AdminUsageRange (type), AdminUsageCost (type), SubscriptionProvider (type), codexModelsSearch (function), subscriptionProvider (function)
 - `packages/accounts/src/proxy.ts`: StartSubscriptionProxyOptions (type), SubscriptionProxy (type), NoSubscriptionAccountsError (class), startSubscriptionProxy (function)
@@ -269,10 +269,11 @@ Use it with the narrative references when you need to find the module that owns 
 
 ### `packages/routekit-cli`
 
+- `packages/routekit-cli/src/account-transaction.ts`: recoverPendingEnrollmentTransactions (function), enrollAndActivateAccount (function)
 - `packages/routekit-cli/src/accounts.ts`: parseAccountMode (function), AccountListEntry (type), listAccounts (function), addAccount (function), ManagedAccountLoginInvocation (type), ManagedLoginKeychain (type), ManagedAccountLoginOptions (type), claudeProfileKeychainService (function), loginAccount (function), removeAccount (function), AccountsStatus (type), accountsStatus (function), serveAccounts (function), stopAccounts (function)
 - `packages/routekit-cli/src/catalog.ts`: LiveModel (type), LiveCatalog (type), fetchLiveCatalog (function), discoverCatalog (function)
 - `packages/routekit-cli/src/cli.ts`: routekitVersion (function), buildProgram (function)
-- `packages/routekit-cli/src/commands/accounts.ts`: activateAccountTransaction (function), registerAccounts (function)
+- `packages/routekit-cli/src/commands/accounts.ts`: registerAccounts (function)
 - `packages/routekit-cli/src/commands/config.ts`: registerConfig (function)
 - `packages/routekit-cli/src/commands/context.ts`: configOverride (function), editableConfigPath (function), loaded (function), numberOption (function)
 - `packages/routekit-cli/src/commands/doctor.ts`: registerDoctor (function)
@@ -294,7 +295,7 @@ Use it with the narrative references when you need to find the module that owns 
 
 ### `packages/routekit-config`
 
-- `packages/routekit-config/src/index.ts`: RouterConfigSource (type), LoadedRouterConfig (type), RouterConfigPaths (type), UpdateRouterConfigInput (type), configuredProviderIds (function), missingModelIds (function), assertModelsAvailable (function), resolveModelId (function), selectModelId (const), routekitHome (function), globalRouterConfigPath (function), projectRouterConfigPath (function), findProjectRouterConfig (function), routerConfigPaths (function), loadRouterConfig (function), writeRouterConfig (function), updateEffectiveRouterConfig (function), updateRouterConfig (function), DEFAULT_ROUTER_CONFIG (const)
+- `packages/routekit-config/src/index.ts`: RouterConfigSource (type), LoadedRouterConfig (type), RouterConfigPaths (type), UpdateRouterConfigInput (type), PlannedRouterConfigUpdate (type), configuredProviderIds (function), missingModelIds (function), assertModelsAvailable (function), resolveModelId (function), selectModelId (const), routekitHome (function), globalRouterConfigPath (function), projectRouterConfigPath (function), findProjectRouterConfig (function), routerConfigPaths (function), loadRouterConfig (function), writeRouterConfig (function), planEffectiveRouterConfigUpdate (function), commitEffectiveRouterConfigUpdate (function), restoreEffectiveRouterConfigUpdate (function), updateEffectiveRouterConfig (function), updateRouterConfig (function), DEFAULT_ROUTER_CONFIG (const)
 
 ### `packages/routekit-registry`
 
