@@ -98,7 +98,7 @@ probe `/health`; it intentionally has no public chat or model routes. Notes:
 
 ### Matter MCP (external research)
 
-Handoffkit can read tagged Matter items through the `matter` MCP server configured in `.cursor/mcp.json` (launcher: `scripts/run-matter-mcp.sh`).
+Handoffkit can read tagged Matter items through the `matter` MCP server (launcher: `scripts/run-matter-mcp.sh`; `.cursor/mcp.json` covers the desktop IDE, while cloud agents need the server registered in the Cursor dashboard — see `docs/matter-mcp.md`). If `matter_*` tools are not in your MCP catalog, you can still run the launcher directly as a stdio MCP server.
 
 - `scripts/setup-matter-mcp.sh` builds the vendored `vendor/matter-cursor-mcp/` copy (falling back to a sibling checkout or `gh` clone) into `matter-cursor-mcp/dist/index.js` during cloud startup.
 - `MATTER_API_TOKEN` must be a **Runtime Secret** on the **same** cloud environment the agent uses (existing runs do not pick up new secrets).

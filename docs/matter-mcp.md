@@ -48,6 +48,25 @@ Optional routing tags:
 - `domain-fusion`
 - `domain-routekit`
 
+## Register the MCP server for Cloud Agents (one-time, dashboard)
+
+Cloud Agents do **not** load this repo's `.cursor/mcp.json` into their MCP tool catalog — that file applies to the desktop IDE. For cloud agents, register the stdio server once:
+
+- Personal: [cursor.com/agents](https://cursor.com/agents) → **MCP dropdown** → add server
+- Team-wide (recommended): **Dashboard → Integrations & MCP** → add MCP server
+
+Use stdio transport with:
+
+| Field | Value |
+|-------|-------|
+| Name | `matter` |
+| Command | `bash` |
+| Args | `-lc`, `for d in /workspace /agent/repos/handoffkit; do [ -f "$d/scripts/run-matter-mcp.sh" ] && exec bash "$d/scripts/run-matter-mcp.sh"; done; echo "handoffkit checkout not found" >&2; exit 1` |
+
+The launcher self-heals (bootstraps PATH and rebuilds `matter-cursor-mcp/dist/index.js` if missing) and reads `MATTER_API_TOKEN` from the VM environment, which Cloud Agents Runtime Secrets populate. The path loop covers both single-repo (`/workspace`) and multi-repo (`/agent/repos/handoffkit`) environments.
+
+Until the server is registered, agents can still verify Matter by invoking `scripts/run-matter-mcp.sh` directly over stdio, but `matter_*` tools will not appear in their MCP catalog.
+
 ## Verify
 
 Start a **new** cloud agent on `main` and ask:
