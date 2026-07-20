@@ -54,6 +54,19 @@ function creditsLabel(limits: AccountLimits): string | undefined {
   return undefined;
 }
 
+export function formatRateLimitWindowName(name: string): string {
+  if (name === "five_hour") return "5 hour";
+  if (name.startsWith("five_hour_")) {
+    return `5 hour · ${name.slice("five_hour_".length).replaceAll("_", " ")}`;
+  }
+  if (name === "seven_day") return "7 day";
+  if (name.startsWith("seven_day_")) {
+    return `7 day · ${name.slice("seven_day_".length).replaceAll("_", " ")}`;
+  }
+  if (name === "extra_usage") return "extra usage";
+  return name;
+}
+
 function memberLines(member: SubscriptionMemberStatus, now: number): string[] {
   const marker = member.active ? " (active)" : "";
   const lines = [`  ${member.label}${marker}`];
@@ -70,7 +83,7 @@ function memberLines(member: SubscriptionMemberStatus, now: number): string[] {
   const rows = Object.entries(member.limits.windows)
     .sort(([left], [right]) => left.localeCompare(right))
     .map(([name, window]) => [
-      window.limitName ?? name,
+      window.limitName ?? formatRateLimitWindowName(name),
       formatUtilizationBar(window.utilization),
       window.status ?? "ok",
       formatResetCountdown(window.resetsAt, now)

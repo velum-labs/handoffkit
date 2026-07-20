@@ -158,7 +158,7 @@ test("usage and status expose human and JSON snapshots from a stub accounts prox
 
     const human = await run(["--config", config, "usage"], env);
     assert.equal(human.code, 0, human.stderr);
-    assert.match(human.stderr, /five_hour/);
+    assert.match(human.stderr, /5 hour/);
     assert.match(human.stderr, /17%/);
 
     gatewayHealthy = false;

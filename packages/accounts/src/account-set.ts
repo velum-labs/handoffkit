@@ -14,7 +14,10 @@ import { writeFileAtomic } from "@routekit/runtime";
 import { resolveSubscriptionAccounts } from "./account-source.js";
 import type { SubscriptionAccountSource } from "./account-source.js";
 import { subscriptionCredentialLabel } from "./credentials.js";
-import type { SubscriptionProvider } from "./provider.js";
+import {
+  canonicalRateLimitWindowKey,
+  type SubscriptionProvider
+} from "./provider.js";
 import type {
   AccountLimits,
   SubscriptionCredential,
@@ -40,6 +43,11 @@ type PersistedMemberState = {
 
 type PersistedTrackerFile = {
   members: Array<{ id: string; limits?: AccountLimits; coolingUntil?: number }>;
+};
+
+type TrackerStateRead = {
+  state: Map<string, PersistedMemberState>;
+  migrated: boolean;
 };
 
 type PoolMember = {
@@ -75,7 +83,11 @@ function parsedRateLimitWindow(value: unknown): AccountLimits["windows"][string]
   };
 }
 
-function parsedAccountLimits(value: unknown): AccountLimits | undefined {
+function parsedAccountLimits(
+  value: unknown,
+  mode?: SubscriptionMode,
+  migration?: { required: boolean }
+): AccountLimits | undefined {
   if (
     !isRecord(value) ||
     !isRecord(value.windows) ||
@@ -87,12 +99,20 @@ function parsedAccountLimits(value: unknown): AccountLimits | undefined {
   const windows = Object.create(null) as AccountLimits["windows"];
   for (const [key, raw] of Object.entries(value.windows)) {
     const window = parsedRateLimitWindow(raw);
-    if (window !== undefined) Object.defineProperty(windows, key, {
-      value: window,
-      enumerable: true,
-      configurable: true,
-      writable: true
-    });
+    if (window === undefined) continue;
+    const canonicalKey =
+      mode === undefined ? key : canonicalRateLimitWindowKey(mode, key);
+    if (canonicalKey !== key && migration !== undefined) migration.required = true;
+    Object.defineProperty(
+      windows,
+      canonicalKey,
+      {
+        value: window,
+        enumerable: true,
+        configurable: true,
+        writable: true
+      }
+    );
   }
   return {
     windows,
@@ -103,9 +123,13 @@ function parsedAccountLimits(value: unknown): AccountLimits | undefined {
   };
 }
 
-function parsedMemberState(value: unknown): PersistedMemberState | undefined {
+function parsedMemberState(
+  value: unknown,
+  mode?: SubscriptionMode,
+  migration?: { required: boolean }
+): PersistedMemberState | undefined {
   if (!isRecord(value)) return undefined;
-  const limits = parsedAccountLimits(value.limits);
+  const limits = parsedAccountLimits(value.limits, mode, migration);
   const coolingUntil =
     typeof value.coolingUntil === "number" && Number.isFinite(value.coolingUntil)
       ? value.coolingUntil
@@ -117,44 +141,57 @@ function parsedMemberState(value: unknown): PersistedMemberState | undefined {
   };
 }
 
-function readTrackerState(path: string): Map<string, PersistedMemberState> {
+function readTrackerState(
+  path: string,
+  mode?: SubscriptionMode
+): TrackerStateRead {
   const state = new Map<string, PersistedMemberState>();
-  if (!existsSync(path)) return state;
+  const migration = { required: false };
+  if (!existsSync(path)) return { state, migrated: false };
   try {
     const parsed: unknown = JSON.parse(readFileSync(path, "utf8"));
-    if (!isRecord(parsed)) return state;
+    if (!isRecord(parsed)) return { state, migrated: false };
     if (Array.isArray(parsed.members)) {
       for (const entry of parsed.members) {
         if (!isRecord(entry) || typeof entry.id !== "string") continue;
-        const member = parsedMemberState(entry);
+        const member = parsedMemberState(entry, mode, migration);
         if (member !== undefined) state.set(entry.id, member);
       }
-      return state;
+      return { state, migrated: migration.required };
     }
     // One-time migration from the original object-keyed state format.
     if (isRecord(parsed.members)) {
+      migration.required = true;
       for (const [id, raw] of Object.entries(parsed.members)) {
-        const member = parsedMemberState(raw);
+        const member = parsedMemberState(raw, mode, migration);
         if (member !== undefined) state.set(id, member);
       }
     }
-    return state;
+    return { state, migrated: migration.required };
   } catch {
-    return state;
+    return { state, migrated: false };
   }
 }
 
-function mergeLimits(previous: AccountLimits | undefined, next: AccountLimits): AccountLimits {
+function mergeLimits(
+  previous: AccountLimits | undefined,
+  next: AccountLimits,
+  mode?: SubscriptionMode
+): AccountLimits {
   const windows = Object.create(null) as AccountLimits["windows"];
   for (const source of [previous?.windows, next.windows]) {
     if (source === undefined) continue;
     for (const [key, window] of Object.entries(source)) {
-      Object.defineProperty(windows, key, {
-        value: window,
-        enumerable: true,
-        configurable: true,
-        writable: true
-      });
+      Object.defineProperty(
+        windows,
+        mode === undefined ? key : canonicalRateLimitWindowKey(mode, key),
+        {
+          value: window,
+          enumerable: true,
+          configurable: true,
+          writable: true
+        }
+      );
     }
   }
   return {
@@ -168,11 +205,15 @@ function mergeLimits(previous: AccountLimits | undefined, next: AccountLimits): 
 
 export class RateLimitTracker {
   readonly #statePath: string;
+  readonly #mode: SubscriptionMode | undefined;
   readonly #state: Map<string, PersistedMemberState>;
 
-  constructor(statePath: string) {
+  constructor(statePath: string, mode?: SubscriptionMode) {
     this.#statePath = statePath;
-    this.#state = readTrackerState(statePath);
+    this.#mode = mode;
+    const loaded = readTrackerState(statePath, mode);
+    this.#state = loaded.state;
+    if (loaded.migrated) this.#persist();
   }
 
   limits(memberId: string): AccountLimits | undefined {
@@ -185,7 +226,7 @@ export class RateLimitTracker {
 
   update(memberId: string, limits: AccountLimits): void {
     const member = this.#state.get(memberId) ?? {};
-    member.limits = mergeLimits(member.limits, limits);
+    member.limits = mergeLimits(member.limits, limits, this.#mode);
     this.#state.set(memberId, member);
     this.#persist();
   }
@@ -289,7 +330,10 @@ export class SubscriptionAccountSet {
   ): Promise<SubscriptionAccountSet> {
     const source = options.source ?? { kind: "auto" as const };
     const accounts = await resolveSubscriptionAccounts(options.mode, source);
-    const tracker = new RateLimitTracker(join(accounts.stateDirectory, ".state.json"));
+    const tracker = new RateLimitTracker(
+      join(accounts.stateDirectory, ".state.json"),
+      provider.mode
+    );
     const members: PoolMember[] = [];
     for (const sourcePath of accounts.paths) {
       try {

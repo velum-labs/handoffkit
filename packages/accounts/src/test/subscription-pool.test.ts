@@ -314,6 +314,46 @@ test("tracker safely migrates hostile object keys into map-backed state", async 
   }
 });
 
+test("tracker migrates Anthropic header aliases to canonical usage windows", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "routekit-pool-window-state-"));
+  const statePath = join(directory, ".state.json");
+  writeFileSync(
+    statePath,
+    JSON.stringify({
+      members: [{
+        id: "primary",
+        limits: {
+          windows: {
+            "5h": { utilization: 0.4 },
+            five_hour: { utilization: 0.2 },
+            "7d-sonnet": { utilization: 0.6 }
+          },
+          observedAt: Date.now() / 1000,
+          source: "usage"
+        }
+      }]
+    })
+  );
+  const tracker = new RateLimitTracker(statePath, "claude-code");
+  try {
+    assert.deepEqual(Object.keys(tracker.limits("primary")?.windows ?? {}), [
+      "five_hour",
+      "seven_day_sonnet"
+    ]);
+    assert.equal(tracker.limits("primary")?.windows.five_hour?.utilization, 0.2);
+
+    const persisted = JSON.parse(await readFile(statePath, "utf8")) as {
+      members: Array<{ limits?: { windows: Record<string, unknown> } }>;
+    };
+    assert.deepEqual(Object.keys(persisted.members[0]?.limits?.windows ?? {}), [
+      "five_hour",
+      "seven_day_sonnet"
+    ]);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 test("usage refresh throttles failed provider probes", async () => {
   const directory = mkdtempSync(join(tmpdir(), "routekit-pool-usage-"));
   writeMember(directory, "a", { accessToken: "token-a" });

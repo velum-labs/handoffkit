@@ -103,6 +103,20 @@ function defineWindow(
   });
 }
 
+/**
+ * Canonical identity for a provider quota window, independent of whether it
+ * was observed through response headers, a stream event, or a usage endpoint.
+ */
+export function canonicalRateLimitWindowKey(mode: SubscriptionMode, key: string): string {
+  if (mode !== "claude-code") return key;
+  const normalized = key.trim().toLowerCase().replaceAll("-", "_");
+  if (normalized === "5h") return "five_hour";
+  if (normalized.startsWith("5h_")) return `five_hour_${normalized.slice(3)}`;
+  if (normalized === "7d") return "seven_day";
+  if (normalized.startsWith("7d_")) return `seven_day_${normalized.slice(3)}`;
+  return normalized;
+}
+
 function retryAfter(headers: Headers, mode: SubscriptionMode): number | undefined {
   return parseRetryAfterSeconds(
     headers.get(subscriptionInfo(mode).rateLimit.retryAfterHeader)
@@ -214,7 +228,10 @@ function refreshPayload(body: unknown): {
   };
 }
 
-function windowsFromUsagePayload(payload: unknown): Record<string, RateLimitWindow> {
+function windowsFromUsagePayload(
+  mode: SubscriptionMode,
+  payload: unknown
+): Record<string, RateLimitWindow> {
   if (!isRecord(payload)) return {};
   const windows = Object.create(null) as Record<string, RateLimitWindow>;
   for (const [key, raw] of Object.entries(payload)) {
@@ -223,7 +240,7 @@ function windowsFromUsagePayload(payload: unknown): Record<string, RateLimitWind
     if (used === undefined) continue;
     const resetsAt = epochSeconds(raw.resets_at ?? raw.reset_at);
     const windowSeconds = numeric(raw.limit_window_seconds);
-    defineWindow(windows, key, {
+    defineWindow(windows, canonicalRateLimitWindowKey(mode, key), {
       utilization: used,
       ...(typeof raw.status === "string" ? { status: raw.status } : {}),
       ...(resetsAt !== undefined ? { resetsAt } : {}),
@@ -247,7 +264,7 @@ function anthropicLimitsFromHeaders(headers: Headers): AccountLimits | undefined
     if (used === undefined) continue;
     const status = headers.get(`${prefix}-${key}-status`);
     const resetsAt = epochSeconds(headers.get(`${prefix}-${key}-reset`));
-    defineWindow(windows, key, {
+    defineWindow(windows, canonicalRateLimitWindowKey("claude-code", key), {
       utilization: used,
       ...(status !== null ? { status } : {}),
       ...(resetsAt !== undefined ? { resetsAt } : {})
@@ -308,7 +325,7 @@ function codexLimitsFromHeaders(headers: Headers): AccountLimits | undefined {
 function codexUsageLimits(payload: unknown): AccountLimits {
   if (!isRecord(payload)) throw new Error("Codex usage endpoint returned an invalid payload");
   const rateLimit = isRecord(payload.rate_limit) ? payload.rate_limit : {};
-  const windows = windowsFromUsagePayload({
+  const windows = windowsFromUsagePayload("codex", {
     primary: rateLimit.primary_window,
     secondary: rateLimit.secondary_window
   });
@@ -346,7 +363,7 @@ function rateLimitsObject(value: unknown): Record<string, unknown> | undefined {
 function codexStreamLimits(payload: unknown): AccountLimits | undefined {
   const raw = rateLimitsObject(payload);
   if (raw === undefined) return undefined;
-  const windows = windowsFromUsagePayload(raw);
+  const windows = windowsFromUsagePayload("codex", raw);
   return Object.keys(windows).length > 0
     ? { windows, observedAt: Date.now() / 1000, source: "stream" }
     : undefined;
@@ -418,7 +435,7 @@ function anthropicProvider(): SubscriptionProvider {
         ...thisAnthropicHeaders(info, credential)
       }, signal);
       return {
-        windows: windowsFromUsagePayload(payload),
+        windows: windowsFromUsagePayload(mode, payload),
         observedAt: Date.now() / 1000,
         source: "usage"
       };

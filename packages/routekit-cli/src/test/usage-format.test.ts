@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  formatRateLimitWindowName,
   formatResetCountdown,
   formatUtilizationBar,
   limitsSummary,
@@ -19,6 +20,9 @@ test("usage formatters clamp bars and show precise reset countdowns", () => {
     formatResetCountdown(Date.UTC(2026, 0, 1) / 1000, Date.UTC(2026, 0, 1)),
     "resets now"
   );
+  assert.equal(formatRateLimitWindowName("five_hour"), "5 hour");
+  assert.equal(formatRateLimitWindowName("seven_day_sonnet"), "7 day · sonnet");
+  assert.equal(formatRateLimitWindowName("extra_usage"), "extra usage");
 });
 
 test("usage rendering includes windows, provenance, and no-observation hint", () => {
