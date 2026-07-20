@@ -44,7 +44,7 @@ contract. Product CLIs can wrap this module without owning account logic.
 - `export type { CliproxyInstallResult, CliproxyStatus } from "./cliproxy.js";`
 - `export { snapshotsToUsage, SUBSCRIPTION_USAGE_PATH, subscriptionUsageResponseSchema } from "./wire.js";`
 - `export type { SubscriptionUsageResponse } from "./wire.js";`
-- `export type { AccountLimits, CreditSnapshot, RateLimitWindow, SubscriptionAccountSetSnapshot, SubscriptionCredential, SubscriptionFailure, SubscriptionMemberStatus, SubscriptionSelectionStrategy } from "./types.js";`
+- `export type { AccountLimits, CreditSnapshot, RateLimitObservationSource, RateLimitWindow, SubscriptionAccountSetSnapshot, SubscriptionCredential, SubscriptionFailure, SubscriptionMemberStatus, SubscriptionSelectionStrategy } from "./types.js";`
 
 ### `packages/adapter-ai-sdk/src/index.ts`
 

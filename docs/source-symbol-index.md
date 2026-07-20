@@ -19,7 +19,7 @@ Use it with the narrative references when you need to find the module that owns 
 - `packages/accounts/src/provider.ts`: AdminUsageRange (type), AdminUsageCost (type), SubscriptionProvider (type), canonicalRateLimitWindowKey (function), codexModelsSearch (function), subscriptionProvider (function)
 - `packages/accounts/src/proxy.ts`: StartSubscriptionProxyOptions (type), SubscriptionProxy (type), NoSubscriptionAccountsError (class), startSubscriptionProxy (function)
 - `packages/accounts/src/relay.ts`: SubscriptionRelayDialect (type), SubscriptionRelay (type), forwardRelayHeaders (function), AnthropicRelayOptions (type), RelayOnlyBackend (class), AnthropicBackendRelay (class)
-- `packages/accounts/src/types.ts`: SubscriptionSelectionStrategy (type), SubscriptionCredential (type), RateLimitWindow (type), CreditSnapshot (type), AccountLimits (type), SubscriptionFailure (type), SubscriptionMemberStatus (type), SubscriptionAccountSetSnapshot (type)
+- `packages/accounts/src/types.ts`: SubscriptionSelectionStrategy (type), RateLimitObservationSource (type), SubscriptionCredential (type), RateLimitWindow (type), CreditSnapshot (type), AccountLimits (type), SubscriptionFailure (type), SubscriptionMemberStatus (type), SubscriptionAccountSetSnapshot (type)
 - `packages/accounts/src/usage.ts`: DEFAULT_SUBSCRIPTION_USAGE_REFRESH_MS (const), SubscriptionUsageSource (type), collectSubscriptionUsage (function), openLocalSubscriptionUsage (function)
 - `packages/accounts/src/wire.ts`: SUBSCRIPTION_USAGE_PATH (const), subscriptionUsageResponseSchema (const), SubscriptionUsageResponse (type), snapshotsToUsage (function)
 
