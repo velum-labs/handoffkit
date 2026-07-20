@@ -232,7 +232,8 @@ export function registerLogs(program: Command): void {
         if (options.follow !== true) return;
       }
       const trailing = tail.split("\n").filter((line) => line.length > 0).slice(-lines);
-      for (const line of trailing) ctx.presenter.line(line);
+      // Log content goes to stdout (pipeable), not the presenter (stderr).
+      if (trailing.length > 0) process.stdout.write(`${trailing.join("\n")}\n`);
       if (options.follow !== true) return;
       // Poll-based follow: read appended bytes until interrupted.
       let offset = (() => {
