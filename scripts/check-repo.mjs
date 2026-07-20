@@ -531,7 +531,8 @@ if (pkg.scripts?.["test:dual-cli-pack"] !== "node scripts/check-dual-cli-pack.mj
 const ciWorkflow = readFileSync(".github/workflows/ci.yml", "utf8");
 for (const command of [
   "node scripts/check-dual-cli-pack.mjs",
-  "node --test packages/cli/dist/test/stack-model-ids-e2e.test.js"
+  "node --test packages/cli/dist/test/stack-model-ids-e2e.test.js",
+  "node --test packages/cli/dist/test/v4-commands.test.js"
 ]) {
   if (!ciWorkflow.includes(command)) fail(`CI workflow must run ${command}`);
 }
