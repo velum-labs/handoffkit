@@ -51,6 +51,10 @@ matter_mcp_inherit_token_from_ancestors() {
 }
 
 matter_mcp_inherit_token_from_ancestors
+# Fall back to the token persisted at install time, then persist a valid
+# env-provided token for future filtered-env launches.
+matter_mcp_load_token
+matter_mcp_persist_token
 
 # Diagnose common token problems without ever printing the value.
 if [ -z "${MATTER_API_TOKEN:-}" ]; then
