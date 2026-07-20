@@ -97,6 +97,8 @@ for (const command of [
   "doctor",
   "install",
   "uninstall",
+  "status",
+  "usage",
   "telemetry",
   "version",
   "stop",

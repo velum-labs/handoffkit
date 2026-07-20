@@ -49,7 +49,7 @@ Set `ROUTEKIT_DEV_SKIP_BUILD=1` after a build for a faster local check.
 | `serve` | Run the configured OpenAI-compatible model gateway. |
 | `codex`, `claude`, `cursor`, `opencode` | Launch one coding tool against an embedded gateway or `--gateway-url`; the optional argument is a namespaced `provider/model` ID. |
 | `providers add`, `remove`, `status` | Manage explicit providers and run live discovery without printing credentials. |
-| `models list` | Discover and list the live namespaced model catalog. |
+| `models list`, `models explain` | Discover live namespaced models or explain one model's provider, billing mode, capabilities, reasoning controls, and default status. |
 | `accounts login` | Run an isolated official Claude Code or Codex login, enroll the credential into the native pool, and enable that provider. |
 | `accounts add`, `remove`, `list`, `status` | Import the current official CLI login or manage enrolled native subscription accounts. |
 | `accounts serve`, `stop` | Advanced mode: expose subscription pools as a separate external proxy. Normal provider routing does not require it. |
@@ -57,6 +57,7 @@ Set `ROUTEKIT_DEV_SKIP_BUILD=1` after a build for a faster local check.
 | `config path`, `show`, `init`, `edit`, `migrate` | Locate, validate, create, edit, or explicitly import RouteKit router state. |
 | `install codex`, `uninstall codex` | Add or remove RouteKit-owned Codex provider/profile blocks. |
 | `doctor` | Check router configuration, referenced credential variables, and installed coding-agent binaries. |
+| `status`, `usage` | Show RouteKit-owned services, enrolled-account readiness, and pooled subscription usage without credential values. |
 | `stop` | Stop only RouteKit-owned services and portless routes. |
 | `telemetry status`, `on`, `off` | Control RouteKit's anonymous, opt-in product telemetry. |
 | `completion <bash\|zsh\|fish>` | Print shell completion setup. |

@@ -14,6 +14,7 @@ import { registerLaunchers } from "./launchers.js";
 import { registerModels } from "./models.js";
 import { registerProviders } from "./providers.js";
 import { registerServe } from "./serve.js";
+import { registerStatus } from "./status.js";
 import { registerStop } from "./stop.js";
 import { registerTelemetry } from "./telemetry.js";
 
@@ -28,6 +29,7 @@ export function registerCommands(program: Command): void {
   registerConfig(program);
   registerDoctor(program);
   registerInstall(program);
+  registerStatus(program);
   registerStop(program);
   registerTelemetry(program);
   registerCompletion(program, "routekit");

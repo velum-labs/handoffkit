@@ -203,6 +203,7 @@ const requiredFiles = [
   "packages/routekit-cli/src/commands/config.ts",
   "packages/routekit-cli/src/commands/doctor.ts",
   "packages/routekit-cli/src/commands/install.ts",
+  "packages/routekit-cli/src/commands/status.ts",
   "packages/routekit-cli/src/commands/telemetry.ts",
   "packages/routekit-cli/src/commands/stop.ts",
   "packages/routekit-cli/src/config.ts",
