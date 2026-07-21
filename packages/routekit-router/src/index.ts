@@ -176,9 +176,11 @@ export async function startRouter(options: StartRouterOptions): Promise<RunningR
     throw error;
   }
   let closed = false;
+  let unregisterCleanup = (): void => {};
   const close = async (): Promise<void> => {
     if (closed) return;
     closed = true;
+    unregisterCleanup();
     await gateway.close();
     await Promise.all(
       Object.values(accountSets).map(async (accountSet) => await accountSet.close())
@@ -190,7 +192,7 @@ export async function startRouter(options: StartRouterOptions): Promise<RunningR
     // after 5s; a service granted a drain window needs the bound to cover it.
     extendCleanupGrace(drainGraceMs + 5_000);
   }
-  registerCleanup(async () => {
+  unregisterCleanup = registerCleanup(async () => {
     if (drainGraceMs > 0) await gateway.drain(drainGraceMs);
     await close();
   });

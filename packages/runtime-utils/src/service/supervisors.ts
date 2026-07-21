@@ -188,9 +188,13 @@ function createSystemdController(input: {
     },
     async uninstall(options) {
       if (!existsSync(unitPath)) return false;
-      await runner("systemctl", ["--user", "disable", "--now", unitName], options);
+      await systemctl(
+        ["disable", "--now", unitName],
+        `systemctl disable --now ${unitName}`,
+        options
+      );
       rmSync(unitPath, { force: true });
-      await runner("systemctl", ["--user", "daemon-reload"]);
+      await systemctl(["daemon-reload"], "systemctl daemon-reload");
       return true;
     },
     async start(options) {
@@ -326,7 +330,11 @@ function createLaunchdController(input: {
     },
     async uninstall(options) {
       if (!existsSync(unitPath)) return false;
-      await runner("launchctl", ["bootout", serviceTarget], options);
+      await launchctl(
+        ["bootout", serviceTarget],
+        `launchctl bootout ${label}`,
+        options
+      );
       rmSync(unitPath, { force: true });
       return true;
     },

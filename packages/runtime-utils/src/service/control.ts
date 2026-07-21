@@ -322,9 +322,16 @@ export async function startControlServer(input: {
             res.setHeader("content-type", "application/x-ndjson");
             res.setHeader("cache-control", "no-store");
             const iterator = result[Symbol.asyncIterator]();
+            const disconnected = new Promise<IteratorResult<unknown>>((resolve) => {
+              aborter.signal.addEventListener(
+                "abort",
+                () => resolve({ done: true, value: undefined }),
+                { once: true }
+              );
+            });
             try {
               while (!aborter.signal.aborted) {
-                const next = await iterator.next();
+                const next = await Promise.race([iterator.next(), disconnected]);
                 if (next.done) break;
                 if (!ndjson(res, {
                   protocol: CONTROL_PROTOCOL_VERSION,

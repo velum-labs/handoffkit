@@ -107,9 +107,14 @@ async function retireLegacyGateway(): Promise<void> {
         timeoutMs: supervisorOperationTimeoutMs(current.drainGraceMs)
       });
     } else {
-      await stopDaemonProcess(current, {
+      const stopped = await stopDaemonProcess(current, {
         graceMs: supervisorOperationTimeoutMs(current.drainGraceMs)
       });
+      if (!stopped.stopped) {
+        throw new Error(
+          "legacy gateway record has no verifiable process identity; stop it manually before daemon migration"
+        );
+      }
     }
     store.remove("gateway");
   } finally {
@@ -354,6 +359,7 @@ export async function ensureDaemon(input: {
       const config = loadRouterConfig({ configPath }).config;
       let installed = false;
       try {
+        installed = true;
         await supervisor.install(
           daemonUnitSpec({
             args: daemonServeArgs({ ...input, configPath, authTokenFile }),
@@ -362,7 +368,6 @@ export async function ensureDaemon(input: {
             drainGraceMs: graceMs
           })
         );
-        installed = true;
         const record = await waitForServiceReady({
           home,
           product: PRODUCT,

@@ -115,7 +115,7 @@ export class SubscriptionAccountBackend implements Backend, ProviderSource {
           headers.set(name, value);
         }
         return await fetch(url, { ...init, headers });
-      });
+      }, init.signal ?? undefined);
     const backendOptions = {
       baseUrl: backendBaseUrl(mode),
       apiKey: "",

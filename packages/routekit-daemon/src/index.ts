@@ -748,8 +748,9 @@ export async function startRouteKitDaemon(
       cwd: process.cwd()
     });
     extendCleanupGrace(drainGraceMs + 10_000);
-    const close = async (): Promise<void> => {
-      if (closed) return;
+    let closeRun: Promise<void> | undefined;
+    const close = (): Promise<void> => {
+      closeRun ??= (async () => {
       closed = true;
       if (lifecycle === "running") lifecycle = "quiescing";
       draining = true;
@@ -762,6 +763,8 @@ export async function startRouteKitDaemon(
       store.remove(ROUTEKIT_DAEMON_KIND, { ifPid: process.pid });
       authority.release();
       lifecycle = "closed";
+      })();
+      return closeRun;
     };
     registerCleanup(close);
     process.on("SIGHUP", () => {
