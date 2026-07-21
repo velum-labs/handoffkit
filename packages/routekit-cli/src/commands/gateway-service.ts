@@ -2,10 +2,12 @@ import { createReadStream, statSync } from "node:fs";
 
 import { contextFor, CliError } from "@routekit/cli-core";
 import {
+  acquireLifecycleLock,
   detectSupervisor,
   readLogTail,
   spawnTool,
   supervisorController,
+  supervisorOperationTimeoutMs,
   systemdUnitName,
   waitForProcessExit,
   waitForServiceReady
@@ -15,6 +17,7 @@ import type { Command } from "commander";
 
 import {
   controlClientForRecord,
+  daemonLifecycleLockPath,
   daemonLogPath,
   daemonRecordHealthy,
   daemonServeArgs,
@@ -31,8 +34,6 @@ import {
 
 import { attachServeOptions, drainGraceMs } from "./serve-options.js";
 import type { GatewayServeCliOptions } from "./serve-options.js";
-
-const READY_TIMEOUT_MS = 60_000;
 
 export function daemonSupervisorController(
   kind: "systemd" | "launchd"
@@ -64,7 +65,6 @@ function registerInstall(group: Command): void {
       drainGraceMs: graceMs
     });
     const controller = await platformSupervisor();
-    const previous = readDaemonRecord();
     if (controller === undefined) {
       // No init supervisor (container, WSL without a systemd user session):
       // fall back to the detached daemon so the service still starts, but be
@@ -85,52 +85,65 @@ function registerInstall(group: Command): void {
       else ctx.presenter.success(`RouteKit daemon started at ${status.dataUrl}`);
       return;
     }
-    // An unsupervised daemon on the same record/port must hand over first.
-    if (previous !== undefined && previous.supervisor === "detached") {
-      await controlClientForRecord(previous).call(
-        "daemon.prepareShutdown",
-        { reason: "restart" },
-        { idempotencyKey: `service-install-${previous.generation ?? previous.pid}` }
-      );
-      if (!(await waitForProcessExit(previous.pid, graceMs + 10_000))) {
-        throw new Error(`RouteKit daemon pid ${previous.pid} did not drain`);
+    const lock = await acquireLifecycleLock(daemonLifecycleLockPath(), {
+      timeoutMs: supervisorOperationTimeoutMs(graceMs)
+    });
+    try {
+      const previous = readDaemonRecord();
+      // An unsupervised daemon on the same record/port must hand over first.
+      if (previous !== undefined && previous.supervisor === "detached") {
+        await controlClientForRecord(previous).call(
+          "daemon.prepareShutdown",
+          { reason: "restart" },
+          { idempotencyKey: `service-install-${previous.generation ?? previous.pid}` }
+        );
+        if (
+          !(await waitForProcessExit(
+            previous.pid,
+            supervisorOperationTimeoutMs(previous.drainGraceMs)
+          ))
+        ) {
+          throw new Error(`RouteKit daemon pid ${previous.pid} did not drain`);
+        }
       }
-    }
-    const spec = daemonUnitSpec({
-      args: serveArgs,
-      supervisor: controller.kind,
-      env: serviceEnvironment(result.config),
-      drainGraceMs: graceMs
-    });
-    await controller.install(spec);
-    const record = await waitForServiceReady({
-      home: routekitHome(),
-      product: ROUTEKIT_PRODUCT,
-      kind: "daemon",
-      timeoutMs: READY_TIMEOUT_MS,
-      ...(previous !== undefined ? { previousPid: previous.pid } : {}),
-      logFile: daemonLogPath(),
-      ready: daemonRecordHealthy
-    });
-    if (ctx.json) {
-      ctx.emit({
-        installed: true,
+      const spec = daemonUnitSpec({
+        args: serveArgs,
         supervisor: controller.kind,
-        unit: controller.unitName,
-        unitPath: controller.unitPath,
-        url: record.dataUrl,
-        pid: record.pid,
-        version: record.version
+        env: serviceEnvironment(result.config),
+        drainGraceMs: graceMs
       });
-      return;
+      await controller.install(spec);
+      const record = await waitForServiceReady({
+        home: routekitHome(),
+        product: ROUTEKIT_PRODUCT,
+        kind: "daemon",
+        timeoutMs: supervisorOperationTimeoutMs(graceMs),
+        ...(previous !== undefined ? { previousPid: previous.pid } : {}),
+        logFile: daemonLogPath(),
+        ready: daemonRecordHealthy
+      });
+      if (ctx.json) {
+        ctx.emit({
+          installed: true,
+          supervisor: controller.kind,
+          unit: controller.unitName,
+          unitPath: controller.unitPath,
+          url: record.dataUrl,
+          pid: record.pid,
+          version: record.version
+        });
+        return;
+      }
+      ctx.presenter.success(`RouteKit daemon installed as ${controller.unitName} (${controller.kind})`);
+      ctx.presenter.line(`  listening at ${record.dataUrl} (pid ${record.pid})`);
+      ctx.presenter.note(
+        controller.kind === "systemd"
+          ? `logs: journalctl --user -u ${controller.unitName} (or \`routekit gateway logs\`)`
+          : `logs: ${daemonLogPath()} (or \`routekit gateway logs\`)`
+      );
+    } finally {
+      lock.release();
     }
-    ctx.presenter.success(`RouteKit daemon installed as ${controller.unitName} (${controller.kind})`);
-    ctx.presenter.line(`  listening at ${record.dataUrl} (pid ${record.pid})`);
-    ctx.presenter.note(
-      controller.kind === "systemd"
-        ? `logs: journalctl --user -u ${controller.unitName} (or \`routekit gateway logs\`)`
-        : `logs: ${daemonLogPath()} (or \`routekit gateway logs\`)`
-    );
   });
 }
 
@@ -148,7 +161,11 @@ function registerUninstall(group: Command): void {
       const controller =
         kind !== undefined ? daemonSupervisorController(kind) : await platformSupervisor();
       let removed = false;
-      if (controller !== undefined) removed = await controller.uninstall();
+      if (controller !== undefined) {
+        removed = await controller.uninstall({
+          timeoutMs: supervisorOperationTimeoutMs(record?.drainGraceMs)
+        });
+      }
       let stopped = false;
       if (record !== undefined && record.supervisor === "detached") {
         await controlClientForRecord(record).call(

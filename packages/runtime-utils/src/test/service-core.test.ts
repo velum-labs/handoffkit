@@ -246,8 +246,10 @@ test("systemd controller install writes the unit and drives systemctl", async ()
       calls.filter((call) => call[0] === "systemctl").map((call) => call.slice(1)),
       [
         ["--user", "is-system-running"],
+        ["--user", "is-active", "routekit-gateway.service"],
         ["--user", "daemon-reload"],
-        ["--user", "enable", "--now", "routekit-gateway.service"]
+        ["--user", "enable", "routekit-gateway.service"],
+        ["--user", "restart", "routekit-gateway.service"]
       ]
     );
     assert.ok(calls.some((call) => call[0] === "loginctl" && call[1] === "enable-linger"));

@@ -6,6 +6,8 @@ import {
   acquireLifecycleLock,
   processAlive,
   stopDaemonProcess,
+  supervisorController,
+  supervisorOperationTimeoutMs,
   waitForProcessExit
 } from "@routekit/runtime";
 
@@ -137,17 +139,31 @@ function registerStop(group: Command): void {
           return;
         }
         let requested = false;
-        try {
-          await controlClientForRecord(record).call(
-            "daemon.prepareShutdown",
-            { reason: "stop" },
-            { idempotencyKey: `stop-${record.generation ?? record.pid}` }
-          );
+        if (record.supervisor === "systemd" || record.supervisor === "launchd") {
+          await supervisorController(
+            record.supervisor,
+            "routekit",
+            "daemon"
+          ).stop({
+            timeoutMs: supervisorOperationTimeoutMs(record.drainGraceMs)
+          });
           requested = true;
-        } catch (error) {
-          if (options.force !== true) throw error;
+        } else {
+          try {
+            await controlClientForRecord(record).call(
+              "daemon.prepareShutdown",
+              { reason: "stop" },
+              { idempotencyKey: `stop-${record.generation ?? record.pid}` }
+            );
+            requested = true;
+          } catch (error) {
+            if (options.force !== true) throw error;
+          }
         }
-        let stopped = await waitForProcessExit(record.pid, 45_000);
+        let stopped = await waitForProcessExit(
+          record.pid,
+          supervisorOperationTimeoutMs(record.drainGraceMs)
+        );
         if (!stopped && options.force === true) {
           await stopDaemonProcess(record, { graceMs: 0 });
           stopped = !processAlive(record.pid);

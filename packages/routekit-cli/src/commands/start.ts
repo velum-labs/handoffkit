@@ -1,6 +1,8 @@
 import { contextFor, CliError } from "@routekit/cli-core";
 import {
   acquireLifecycleLock,
+  supervisorOperationTimeoutMs,
+  waitForServiceReady,
   waitForProcessExit
 } from "@routekit/runtime";
 import type { Command } from "commander";
@@ -9,9 +11,11 @@ import {
   controlClientForRecord,
   daemonLifecycleLockPath,
   daemonLogPath,
+  daemonRecordHealthy,
   ensureDaemon,
   readDaemonRecord
 } from "../client.js";
+import { routekitHome } from "../config.js";
 
 import { attachServeOptions, drainGraceMs } from "./serve-options.js";
 import type { GatewayServeCliOptions } from "./serve-options.js";
@@ -29,7 +33,12 @@ export function registerStart(program: Command): void {
       port: Number.parseInt(options.port, 10),
       ...(options.authToken !== undefined ? { authToken: options.authToken } : {}),
       ...(options.portless !== undefined ? { portless: options.portless } : {}),
-      drainGraceMs: drainGraceMs(options.drainGrace)
+      ...(
+        options.drainGrace !== undefined ||
+        process.env.ROUTEKIT_DRAIN_GRACE !== undefined
+          ? { drainGraceMs: drainGraceMs(options.drainGrace) }
+          : {}
+      )
     });
     const status = await running.client.call("daemon.status", {});
     const result = {
@@ -67,23 +76,41 @@ export function registerRestart(program: Command): void {
       }
       drainGraceMs(options.drainGrace);
       const lock = await acquireLifecycleLock(daemonLifecycleLockPath());
+      let supervisedRecord;
       try {
         if (record.supervisor === "systemd" || record.supervisor === "launchd") {
-          await daemonSupervisorController(record.supervisor).restart();
+          const timeoutMs = supervisorOperationTimeoutMs(record.drainGraceMs);
+          await daemonSupervisorController(record.supervisor).restart({ timeoutMs });
+          supervisedRecord = await waitForServiceReady({
+            home: routekitHome(),
+            product: "routekit",
+            kind: "daemon",
+            previousPid: record.pid,
+            timeoutMs,
+            logFile: daemonLogPath(),
+            ready: daemonRecordHealthy
+          });
         } else {
           await controlClientForRecord(record).call(
             "daemon.prepareShutdown",
             { reason: "restart" },
             { idempotencyKey: `restart-${record.generation ?? record.pid}` }
           );
-          if (!(await waitForProcessExit(record.pid, 45_000))) {
+          if (
+            !(await waitForProcessExit(
+              record.pid,
+              supervisorOperationTimeoutMs(record.drainGraceMs)
+            ))
+          ) {
             throw new Error(`RouteKit daemon pid ${record.pid} did not drain`);
           }
         }
       } finally {
         lock.release();
       }
-      const restarted = await ensureDaemon({
+      const restarted =
+        supervisedRecord === undefined
+          ? await ensureDaemon({
         ...(record.host !== undefined ? { host: record.host } : {}),
         port: record.dataPort ?? 8080,
         ...(record.portless !== undefined ? { portless: record.portless } : {}),
@@ -91,7 +118,11 @@ export function registerRestart(program: Command): void {
         drainGraceMs: options.drainGrace === undefined
           ? record.drainGraceMs
           : drainGraceMs(options.drainGrace)
-      });
+            })
+          : {
+              record: supervisedRecord,
+              client: controlClientForRecord(supervisedRecord)
+            };
       const status = await restarted.client.call("daemon.status", {});
       if (ctx.json) ctx.emit({ restarted: true, url: status.dataUrl, pid: status.pid });
       else ctx.presenter.success(`RouteKit daemon restarted at ${status.dataUrl}`);

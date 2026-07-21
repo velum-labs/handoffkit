@@ -25,6 +25,7 @@ import {
   startDaemon,
   stopDaemonProcess,
   supervisorController,
+  supervisorOperationTimeoutMs,
   waitForServiceReady
 } from "@routekit/runtime";
 import type { ServiceRecord, StartDaemonResult } from "@routekit/runtime";
@@ -142,6 +143,7 @@ export async function ensureDaemon(input: {
   record: ServiceRecord;
   start?: StartDaemonResult;
 }> {
+  const requestedConfigPath = input.configPath ?? canonicalConfigOrMigrationError();
   const current = readDaemonRecord();
   if (current !== undefined && (await daemonRecordHealthy(current))) {
     if (
@@ -183,17 +185,20 @@ export async function ensureDaemon(input: {
             authoritative.supervisor === "systemd" ||
             authoritative.supervisor === "launchd"
           ) {
+            const timeoutMs = supervisorOperationTimeoutMs(
+              authoritative.drainGraceMs
+            );
             await supervisorController(
               authoritative.supervisor,
               PRODUCT,
               KIND
-            ).restart();
+            ).restart({ timeoutMs });
             const replacement = await waitForServiceReady({
               home: routekitHome(),
               product: PRODUCT,
               kind: KIND,
               previousPid: authoritative.pid,
-              timeoutMs: START_TIMEOUT_MS,
+              timeoutMs,
               logFile: daemonLogPath(),
               ready: daemonRecordHealthy
             });
@@ -201,7 +206,9 @@ export async function ensureDaemon(input: {
             await client.hello();
             return { client, record: replacement };
           }
-          await stopDaemonProcess(authoritative, { graceMs: 45_000 });
+          await stopDaemonProcess(authoritative, {
+            graceMs: supervisorOperationTimeoutMs(authoritative.drainGraceMs)
+          });
         }
       } finally {
         lock.release();
@@ -234,30 +241,43 @@ export async function ensureDaemon(input: {
   const entry = process.argv[1];
   if (entry === undefined) throw new Error("cannot resolve the routekit entry script");
   const home = routekitHome();
-  const configPath = input.configPath ?? canonicalConfigOrMigrationError();
+  const configPath = requestedConfigPath;
   const supervisor = await detectSupervisor(PRODUCT, KIND);
   if (supervisor !== undefined) {
-    const graceMs = input.drainGraceMs ?? 30_000;
-    const config = loadRouterConfig({ configPath }).config;
-    await supervisor.install(
-      daemonUnitSpec({
-        args: daemonServeArgs({ ...input, configPath }),
-        supervisor: supervisor.kind,
-        env: serviceEnvironment(config),
-        drainGraceMs: graceMs
-      })
-    );
-    const record = await waitForServiceReady({
-      home,
-      product: PRODUCT,
-      kind: KIND,
-      timeoutMs: START_TIMEOUT_MS,
-      logFile: daemonLogPath(),
-      ready: daemonRecordHealthy
+    const lock = await acquireLifecycleLock(daemonLifecycleLockPath(), {
+      timeoutMs: START_TIMEOUT_MS
     });
-    const client = controlClientForRecord(record);
-    await client.hello();
-    return { client, record };
+    try {
+      const joined = readDaemonRecord();
+      if (joined !== undefined && (await daemonRecordHealthy(joined))) {
+        const client = controlClientForRecord(joined);
+        await client.hello();
+        return { client, record: joined };
+      }
+      const graceMs = input.drainGraceMs ?? 30_000;
+      const config = loadRouterConfig({ configPath }).config;
+      await supervisor.install(
+        daemonUnitSpec({
+          args: daemonServeArgs({ ...input, configPath }),
+          supervisor: supervisor.kind,
+          env: serviceEnvironment(config),
+          drainGraceMs: graceMs
+        })
+      );
+      const record = await waitForServiceReady({
+        home,
+        product: PRODUCT,
+        kind: KIND,
+        timeoutMs: supervisorOperationTimeoutMs(graceMs),
+        logFile: daemonLogPath(),
+        ready: daemonRecordHealthy
+      });
+      const client = controlClientForRecord(record);
+      await client.hello();
+      return { client, record };
+    } finally {
+      lock.release();
+    }
   }
   const start = await startDaemon(
     {

@@ -108,6 +108,7 @@ export {
   launchdLabel,
   launchdPlistPath,
   supervisorController,
+  supervisorOperationTimeoutMs,
   systemdServiceUnit,
   systemdUnitName,
   systemdUnitPath

@@ -1,5 +1,10 @@
 import { contextFor } from "@routekit/cli-core";
-import { acquireLifecycleLock, waitForProcessExit } from "@routekit/runtime";
+import {
+  acquireLifecycleLock,
+  supervisorController,
+  supervisorOperationTimeoutMs,
+  waitForProcessExit
+} from "@routekit/runtime";
 import type { Command } from "commander";
 
 import {
@@ -20,12 +25,25 @@ export function registerStop(program: Command): void {
         const record = readDaemonRecord();
         if (record === undefined) result = { stopped: false };
         else {
-          await controlClientForRecord(record).call(
-            "daemon.prepareShutdown",
-            { reason: "stop" },
-            { idempotencyKey: `gateway-stop-${record.generation ?? record.pid}` }
+          if (record.supervisor === "systemd" || record.supervisor === "launchd") {
+            await supervisorController(
+              record.supervisor,
+              "routekit",
+              "daemon"
+            ).stop({
+              timeoutMs: supervisorOperationTimeoutMs(record.drainGraceMs)
+            });
+          } else {
+            await controlClientForRecord(record).call(
+              "daemon.prepareShutdown",
+              { reason: "stop" },
+              { idempotencyKey: `gateway-stop-${record.generation ?? record.pid}` }
+            );
+          }
+          const stopped = await waitForProcessExit(
+            record.pid,
+            supervisorOperationTimeoutMs(record.drainGraceMs)
           );
-          const stopped = await waitForProcessExit(record.pid, 45_000);
           if (!stopped) throw new Error(`RouteKit daemon pid ${record.pid} did not drain`);
           result = { stopped: true, pid: record.pid };
         }

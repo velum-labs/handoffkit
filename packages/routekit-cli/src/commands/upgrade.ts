@@ -1,6 +1,8 @@
 import { contextFor, CliError } from "@routekit/cli-core";
 import {
   acquireLifecycleLock,
+  supervisorOperationTimeoutMs,
+  waitForServiceReady,
   waitForProcessExit
 } from "@routekit/runtime";
 import type { Command } from "commander";
@@ -8,9 +10,12 @@ import type { Command } from "commander";
 import {
   controlClientForRecord,
   daemonLifecycleLockPath,
+  daemonLogPath,
+  daemonRecordHealthy,
   ensureDaemon,
   readDaemonRecord
 } from "../client.js";
+import { routekitHome } from "../config.js";
 import { routekitVersion } from "../state.js";
 
 import { drainGraceMs } from "./serve-options.js";
@@ -65,23 +70,41 @@ export function registerUpgrade(program: Command): void {
         });
       }
       const lock = await acquireLifecycleLock(daemonLifecycleLockPath());
+      let supervisedRecord;
       try {
         if (record.supervisor === "systemd" || record.supervisor === "launchd") {
-          await daemonSupervisorController(record.supervisor).restart();
+          const timeoutMs = supervisorOperationTimeoutMs(record.drainGraceMs);
+          await daemonSupervisorController(record.supervisor).restart({ timeoutMs });
+          supervisedRecord = await waitForServiceReady({
+            home: routekitHome(),
+            product: "routekit",
+            kind: "daemon",
+            previousPid: record.pid,
+            timeoutMs,
+            logFile: daemonLogPath(),
+            ready: daemonRecordHealthy
+          });
         } else {
           await controlClientForRecord(record).call(
             "daemon.prepareShutdown",
             { reason: "upgrade" },
             { idempotencyKey: `upgrade-${record.generation ?? record.pid}` }
           );
-          if (!(await waitForProcessExit(record.pid, 45_000))) {
+          if (
+            !(await waitForProcessExit(
+              record.pid,
+              supervisorOperationTimeoutMs(record.drainGraceMs)
+            ))
+          ) {
             throw new Error(`RouteKit daemon pid ${record.pid} did not drain`);
           }
         }
       } finally {
         lock.release();
       }
-      const replacement = await ensureDaemon({
+      const replacement =
+        supervisedRecord === undefined
+          ? await ensureDaemon({
         ...(record.host !== undefined ? { host: record.host } : {}),
         port: record.dataPort ?? 8080,
         ...(record.portless !== undefined ? { portless: record.portless } : {}),
@@ -89,7 +112,11 @@ export function registerUpgrade(program: Command): void {
           ? { drainGraceMs: record.drainGraceMs }
           : {}),
         ...(record.authToken !== undefined ? { authToken: record.authToken } : {})
-      });
+            })
+          : {
+              record: supervisedRecord,
+              client: controlClientForRecord(supervisedRecord)
+            };
       const status = await replacement.client.call("daemon.status", {});
       const result = {
         action:
