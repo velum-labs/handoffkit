@@ -63,10 +63,10 @@ Governance / VM-isolation documentation has moved to [`legacy/docs/`](../legacy/
 
 ## Repository at a glance
 
-- `packages/` contains the TypeScript pnpm workspace. Start with [TypeScript reference](typescript-reference.md).
+- `packages/`, `examples/`, and `apps/` form the pnpm/Turborepo Node workspace. Start with [TypeScript reference](typescript-reference.md).
 - `python/` contains the uv workspace, including the `hyperkit` experiment platform. Start with [Python reference](python-reference.md).
 - `spec/` contains schemas, OpenAPI contracts, generated bindings, fixtures, trace specs, and the registry data under `spec/registry/`. Start with [Specs and APIs](specs-and-apis.md).
-- `apps/` and `examples/` contain standalone apps and runnable demos. Start with [Apps and examples](apps-and-examples.md).
+- `apps/` and `examples/` contain workspace applications and runnable demos. Start with [Apps and examples](apps-and-examples.md).
 - `scripts/`, `release/`, and `.github/workflows/` contain maintainer automation. Start with [Operations and scripts](operations-and-scripts.md).
 - `lab/` is the shared Hyperkit experiment lab (registry, journal, experiment procedures). Start with [`lab/AGENTS.md`](../lab/AGENTS.md).
 - `infra/` contains Hyperkit deployment infrastructure: `infra/hyperkit` (Terraform + Grafana), `infra/hypergrid-batch`, and `infra/hypergrid-obs` (deploy scripts and observability compose stack).

@@ -1,0 +1,65 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "globalDependencies": [
+    ".npmrc",
+    "pnpm-lock.yaml",
+    "tsconfig.base.json"
+  ],
+  "globalEnv": [
+    "CI"
+  ],
+  "tasks": {
+    "build": {
+      "dependsOn": [
+        "^build"
+      ],
+      "outputs": [
+        "dist/**",
+        "tsconfig.tsbuildinfo"
+      ]
+    },
+    "scope#build": {
+      "dependsOn": [
+        "^build"
+      ],
+      "outputs": [
+        ".next/**",
+        "!.next/cache/**"
+      ]
+    },
+    "fusionkit-docs#build": {
+      "dependsOn": [
+        "^build"
+      ],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "../../CHANGELOG.md",
+        "../../scripts/sync-docs-changelog.mjs"
+      ],
+      "outputs": [
+        ".next/**",
+        "!.next/cache/**",
+        ".source/**"
+      ]
+    },
+    "test": {
+      "dependsOn": [
+        "build"
+      ],
+      "cache": false,
+      "env": [
+        "PORTLESS"
+      ]
+    },
+    "lint": {
+      "cache": true
+    },
+    "clean": {
+      "cache": false
+    },
+    "dev": {
+      "cache": false,
+      "persistent": true
+    }
+  }
+}

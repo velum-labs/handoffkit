@@ -16,7 +16,10 @@
       "default": "./dist/index.js"
     }
   },
-  "files": ["dist", "LICENSE"],
+  "files": [
+    "dist",
+    "LICENSE"
+  ],
   "publishConfig": {
     "registry": "https://registry.npmjs.org",
     "access": "public",
@@ -32,8 +35,15 @@
     "@opentelemetry/sdk-trace-base": "2.9.0",
     "@opentelemetry/sdk-trace-node": "2.9.0"
   },
-  "keywords": ["routekit", "opentelemetry", "tracing", "observability"],
+  "keywords": [
+    "routekit",
+    "opentelemetry",
+    "tracing",
+    "observability"
+  ],
   "scripts": {
+    "build": "tsc -b",
+    "clean": "tsc -b --clean",
     "test": "node --test \"dist/test/*.test.js\""
   }
 }

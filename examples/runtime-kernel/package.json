@@ -8,5 +8,9 @@
   "dependencies": {
     "@fusionkit/ensemble": "workspace:*",
     "@fusionkit/example-utils": "workspace:*"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "clean": "tsc -b --clean"
   }
 }

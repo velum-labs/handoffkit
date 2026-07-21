@@ -19,6 +19,9 @@
       "path": "../cli-ui"
     },
     {
+      "path": "../contracts"
+    },
+    {
       "path": "../routekit-config"
     },
     {

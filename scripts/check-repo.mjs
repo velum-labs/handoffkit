@@ -25,6 +25,7 @@ const requiredFiles = [
   ".npmrc",
   "pnpm-lock.yaml",
   "pnpm-workspace.yaml",
+  "turbo.json",
   ".github/workflows/ci.yml",
   ".github/workflows/release-packages.yml",
   ".github/dependabot.yml",
@@ -604,13 +605,45 @@ const TRUSTED_THIRD_PARTY = new Map([
   // TOML parser/serializer used by RouteKit-owned Codex configuration.
   ["smol-toml", "1.7.0"],
   ["string-width", "8.2.1"],
+  ["turbo", "2.10.5"],
   ["typescript", "6.0.3"],
   ["ws", "8.21.0"],
   ["yaml", "2.9.0"],
   ["zod", "4.4.3"]
 ]);
 
-function checkDeps(manifestPath, manifest) {
+// The private Next.js applications share the frozen workspace lockfile and
+// exact-pin policy, but retain their framework-compatible toolchain versions.
+// Keeping this as an explicit extension preserves the core allowlist's
+// single-version invariant while making application dependency review equally
+// visible.
+const TRUSTED_APP_THIRD_PARTY = new Map([
+  ...TRUSTED_THIRD_PARTY,
+  ["@tailwindcss/postcss", "4.3.1"],
+  ["@types/mdx", "2.0.14"],
+  ["@types/react-dom", "19.2.3"],
+  ["class-variance-authority", "0.7.1"],
+  ["clsx", "2.1.1"],
+  ["fumadocs-core", "15.8.5"],
+  ["fumadocs-mdx", "11.10.1"],
+  ["fumadocs-openapi", "8.1.12"],
+  ["fumadocs-ui", "15.8.5"],
+  ["lucide-react", "1.20.0"],
+  ["mermaid", "11.15.0"],
+  ["next", "15.5.19"],
+  ["next-themes", "0.4.6"],
+  ["radix-ui", "1.6.0"],
+  ["react-dom", "19.2.7"],
+  ["recharts", "2.15.4"],
+  ["shadcn", "4.11.0"],
+  ["tailwind-merge", "3.6.0"],
+  ["tailwindcss", "4.3.1"],
+  ["tw-animate-css", "1.4.0"],
+  ["tsx", "4.22.4"],
+  ["typescript", "5.9.3"]
+]);
+
+function checkDeps(manifestPath, manifest, trustedDependencies = TRUSTED_THIRD_PARTY) {
   for (const [section, deps] of [
     ["dependencies", manifest.dependencies ?? {}],
     ["devDependencies", manifest.devDependencies ?? {}]
@@ -622,7 +655,7 @@ function checkDeps(manifestPath, manifest) {
         }
         continue;
       }
-      const trusted = TRUSTED_THIRD_PARTY.get(name);
+      const trusted = trustedDependencies.get(name);
       if (trusted === undefined) {
         fail(
           `${manifestPath} ${section} "${name}": not on the trusted dependency allowlist in scripts/check-repo.mjs`
@@ -646,7 +679,8 @@ const publishableWorkspaceDirs = new Set(
 
 const workspaceDirs = [
   ...readdirSync("packages").map((dir) => join("packages", dir)),
-  ...readdirSync("examples").map((dir) => join("examples", dir))
+  ...readdirSync("examples").map((dir) => join("examples", dir)),
+  ...readdirSync("apps").map((dir) => join("apps", dir))
 ];
 const workspaceManifests = [];
 for (const dir of workspaceDirs) {
@@ -677,7 +711,11 @@ for (const dir of workspaceDirs) {
   if (existsSync(join(dir, "src", "test")) && manifest.scripts?.test === undefined) {
     fail(`${manifestPath} has src/test/ but no "test" script — its tests would never run`);
   }
-  checkDeps(manifestPath, manifest);
+  checkDeps(
+    manifestPath,
+    manifest,
+    dir.startsWith("apps/") ? TRUSTED_APP_THIRD_PARTY : TRUSTED_THIRD_PARTY
+  );
   workspaceManifests.push({ manifestPath, manifest, dir });
 }
 

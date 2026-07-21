@@ -16,7 +16,10 @@
       "default": "./dist/index.js"
     }
   },
-  "files": ["dist", "LICENSE"],
+  "files": [
+    "dist",
+    "LICENSE"
+  ],
   "publishConfig": {
     "registry": "https://registry.npmjs.org",
     "access": "public",
@@ -25,8 +28,14 @@
   "dependencies": {
     "@routekit/runtime": "workspace:*"
   },
-  "keywords": ["routekit", "configuration", "migration"],
+  "keywords": [
+    "routekit",
+    "configuration",
+    "migration"
+  ],
   "scripts": {
+    "build": "tsc -b",
+    "clean": "tsc -b --clean",
     "test": "node --test \"dist/test/*.test.js\""
   }
 }
