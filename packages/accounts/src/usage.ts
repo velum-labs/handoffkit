@@ -15,11 +15,12 @@ export type SubscriptionUsageSource = {
 
 export async function collectSubscriptionUsage(
   accountSets: SubscriptionAccountSets,
-  refreshAfterMs = DEFAULT_SUBSCRIPTION_USAGE_REFRESH_MS
+  refreshAfterMs = DEFAULT_SUBSCRIPTION_USAGE_REFRESH_MS,
+  signal?: AbortSignal
 ): Promise<SubscriptionUsageResponse> {
   await Promise.all(
     Object.values(accountSets).map(async (accountSet) => {
-      await accountSet.refreshUsage(refreshAfterMs);
+      await accountSet.refreshUsage(refreshAfterMs, signal);
     })
   );
   return snapshotsToUsage(

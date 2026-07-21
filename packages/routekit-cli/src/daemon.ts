@@ -8,7 +8,6 @@ import { chmodSync, mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 
 import { CliError } from "@routekit/cli-core";
-import { configuredProviderIds } from "@routekit/config";
 import type { RouterConfig } from "@routekit/gateway";
 import { PROVIDERS } from "@routekit/registry";
 import { serviceLogPath, writeFileAtomic } from "@routekit/runtime";
@@ -61,7 +60,7 @@ export function gatewayLogPath(): string {
  */
 export function serviceEnvironment(config: RouterConfig): Record<string, string> {
   const names = new Set<string>(["ROUTEKIT_HOME", "ROUTEKIT_PORTLESS", "ROUTEKIT_DRAIN_GRACE", "PORTLESS_STATE_DIR", "PORTLESS_TLD"]);
-  for (const provider of configuredProviderIds(config)) {
+  for (const provider of Object.keys(PROVIDERS)) {
     const info = PROVIDERS[provider];
     if (info === undefined) continue;
     for (const name of [

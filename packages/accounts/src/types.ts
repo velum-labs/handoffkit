@@ -58,6 +58,8 @@ export type SubscriptionMemberStatus = {
   expiresAt?: number;
   coolingUntil?: number;
   active: boolean;
+  credentialValid?: boolean;
+  relayReady?: boolean;
   models: string[];
   limits?: AccountLimits;
 };

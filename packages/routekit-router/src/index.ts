@@ -49,7 +49,7 @@ export type RunningRouter = {
   close(): Promise<void>;
   providerStatuses(signal?: AbortSignal): ReturnType<CatalogBackend["providerStatuses"]>;
   accountSnapshots(): SubscriptionAccountSetSnapshot[];
-  usage(): Promise<SubscriptionUsageResponse>;
+  usage(signal?: AbortSignal): Promise<SubscriptionUsageResponse>;
 };
 
 function gatewayEnvironment(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
@@ -63,7 +63,10 @@ function gatewayEnvironment(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
 
 function accountConfigs(config: RouterConfig): SubscriptionAccountConfigs {
   const configured = config.providers;
-  const accounts: SubscriptionAccountConfigs = {};
+  const accounts: SubscriptionAccountConfigs = {
+    "claude-code": { source: { kind: "auto" } },
+    codex: { source: { kind: "auto" } }
+  };
   const claude = configured["claude-code"];
   if (claude !== undefined) {
     accounts["claude-code"] = {
@@ -118,7 +121,11 @@ export async function startRouter(options: StartRouterOptions): Promise<RunningR
       );
     }
   }
-  const relays = subscriptionRelaysFromAccountSets(accountSets);
+  const relays = subscriptionRelaysFromAccountSets(
+    Object.fromEntries(
+      [...requiredKinds].map((kind) => [kind, accountSets[kind]])
+    ) as typeof accountSets
+  );
   for (const [kind, accountSet] of Object.entries(accountSets)) {
     if (accountSet.size === 0 && !requiredKinds.has(kind as "claude-code" | "codex")) {
       await accountSet.close();
@@ -185,6 +192,7 @@ export async function startRouter(options: StartRouterOptions): Promise<RunningR
     providerStatuses: async (signal) => await backend.providerStatuses(signal),
     accountSnapshots: () =>
       Object.values(accountSets).map((accountSet) => accountSet.snapshot()),
-    usage: async () => await collectSubscriptionUsage(accountSets)
+    usage: async (signal) =>
+      await collectSubscriptionUsage(accountSets, undefined, signal)
   };
 }

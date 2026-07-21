@@ -478,11 +478,11 @@ export class SubscriptionAccountSet {
     ]);
   }
 
-  async probe(): Promise<void> {
+  async probe(signal?: AbortSignal): Promise<void> {
     await Promise.allSettled(
       this.#members.map(async (member) => {
         await this.#ensureFresh(member);
-        const limits = await this.#provider.fetchUsage(member.credential);
+        const limits = await this.#provider.fetchUsage(member.credential, signal);
         this.#tracker.update(member.id, limits);
       })
     );
@@ -492,7 +492,7 @@ export class SubscriptionAccountSet {
    * Refresh stale or missing usage without allowing rapid callers to hammer
    * provider quota endpoints. Failed attempts are throttled as well.
    */
-  async refreshUsage(maxAgeMs = 60_000): Promise<void> {
+  async refreshUsage(maxAgeMs = 60_000, signal?: AbortSignal): Promise<void> {
     if (!Number.isFinite(maxAgeMs) || maxAgeMs < 0) {
       throw new RangeError("usage refresh age must be a non-negative finite number");
     }
@@ -514,7 +514,7 @@ export class SubscriptionAccountSet {
       return;
     }
     this.#lastUsageProbeAt = now;
-    const probe = this.probe().finally(() => {
+    const probe = this.probe(signal).finally(() => {
       if (this.#usageProbe === probe) this.#usageProbe = undefined;
     });
     this.#usageProbe = probe;
@@ -600,6 +600,11 @@ export class SubscriptionAccountSet {
   }
 
   #memberStatus(member: PoolMember): SubscriptionMemberStatus {
+    const credentialValid =
+      member.credential.accessToken.length > 0 &&
+      (member.credential.expiresAt === undefined ||
+        member.credential.expiresAt > Date.now() / 1000 ||
+        member.credential.refreshToken !== undefined);
     return {
       id: member.id,
       mode: this.mode,
@@ -610,6 +615,10 @@ export class SubscriptionAccountSet {
         : {}),
       ...(member.coolingUntil !== undefined ? { coolingUntil: member.coolingUntil } : {}),
       active: member.id === this.#activeId,
+      credentialValid,
+      relayReady:
+        credentialValid &&
+        (member.coolingUntil === undefined || member.coolingUntil <= Date.now()),
       models: [...member.models],
       ...(this.#tracker.limits(member.id) !== undefined
         ? { limits: this.#tracker.limits(member.id) }
