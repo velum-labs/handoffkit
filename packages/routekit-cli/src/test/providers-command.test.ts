@@ -39,8 +39,13 @@ test("providers and models commands use the live namespaced catalog", async () =
   const previousBaseUrl = process.env.OPENAI_BASE_URL;
   const previousPortless = process.env.ROUTEKIT_PORTLESS;
   const previousDaemonPort = process.env.ROUTEKIT_DAEMON_PORT;
+  let providerHealthy = true;
   const server = createServer((request, response) => {
     assert.equal(request.headers.authorization, "Bearer test-key");
+    if (!providerHealthy) {
+      response.writeHead(503).end();
+      return;
+    }
     response.setHeader("content-type", "application/json");
     response.end(
       JSON.stringify({
@@ -114,6 +119,20 @@ test("providers and models commands use the live namespaced catalog", async () =
       "round_robin"
     ]);
     assert.match(readFileSync(configPath, "utf8"), /strategy: round_robin/);
+    providerHealthy = false;
+    await assert.rejects(
+      runJson(["--json", "providers", "status"]),
+      (error: unknown) => {
+        const stdout =
+          typeof error === "object" &&
+          error !== null &&
+          "stdout" in error
+            ? String((error as { stdout?: unknown }).stdout)
+            : "";
+        assert.match(stdout, /503|discovery/i);
+        return true;
+      }
+    );
     await runJson(["--json", "daemon", "stop"]);
   } finally {
     if (previousOsHome === undefined) delete process.env.HOME;

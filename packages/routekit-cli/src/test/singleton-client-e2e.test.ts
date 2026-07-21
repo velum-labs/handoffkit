@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import {
+  chmodSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -179,6 +180,57 @@ test("project overlays require explicit import into the canonical global config"
       "the daemon must never silently adopt a project overlay"
     );
   } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("explicit external gateway launch neither boots local daemon nor leaks its token", async () => {
+  const root = mkdtempSync(join(tmpdir(), "routekit-external-launch-"));
+  const bin = join(root, "bin");
+  mkdirSync(bin, { recursive: true });
+  const codex = join(bin, "codex");
+  writeFileSync(codex, "#!/bin/sh\nexit 0\n");
+  chmodSync(codex, 0o755);
+  const authorizations: Array<string | undefined> = [];
+  const gateway = createServer((request, response) => {
+    authorizations.push(request.headers.authorization);
+    response.setHeader("content-type", "application/json");
+    response.end(
+      JSON.stringify({
+        data: [{ id: "openai/external-model", capabilities: {} }]
+      })
+    );
+  });
+  await new Promise<void>((resolveListen) =>
+    gateway.listen(0, "127.0.0.1", resolveListen)
+  );
+  const port = (gateway.address() as AddressInfo).port;
+  const state = join(root, "state");
+  try {
+    const result = await run(
+      [
+        "codex",
+        "openai/external-model",
+        "--gateway-url",
+        `http://127.0.0.1:${port}`,
+        "--auth-token",
+        "external-secret"
+      ],
+      root,
+      {
+        ...process.env,
+        HOME: join(root, "home"),
+        ROUTEKIT_HOME: state,
+        PATH: `${bin}:${process.env.PATH ?? ""}`,
+        NO_COLOR: "1"
+      }
+    );
+    assert.equal(result.code, 0, result.stderr);
+    assert.deepEqual(authorizations, ["Bearer external-secret"]);
+    assert.equal(existsSync(join(state, "services", "daemon.json")), false);
+    assert.equal(existsSync(join(state, "secrets", "data-token")), false);
+  } finally {
+    await new Promise<void>((resolveClose) => gateway.close(() => resolveClose()));
     rmSync(root, { recursive: true, force: true });
   }
 });

@@ -140,7 +140,12 @@ routekit daemon service uninstall
 verifies authenticated control health before printing the data URL.
 On systemd, provider credentials for the configured providers are captured
 into a private `~/.routekit/env/daemon.env` (mode 0600) referenced by the
-unit; edit that file to rotate keys, then `routekit daemon reload`. Where no
+unit; edit that file to rotate provider keys, then restart the daemon so the
+supervisor supplies the new process environment. `daemon reload` reloads
+router/account state, not process environment. The gateway bearer is generated
+into `~/.routekit/secrets/data-token` (0600) and never appears in status, logs,
+or process arguments; `routekit daemon auth show` reveals it only when
+explicitly requested for an external client such as FusionKit. Where no
 init supervisor exists (containers, some WSL setups), `install` falls back to
 a detached daemon and says so.
 
