@@ -5,6 +5,7 @@ import { commandOnPath } from "@routekit/runtime";
 import type { Command } from "commander";
 
 import { routekitClient } from "../client.js";
+import { migrateLegacyRouterConfig } from "../config.js";
 import { routekitToolRegistry } from "../launch.js";
 import { configOverride, loaded } from "./context.js";
 
@@ -35,16 +36,25 @@ export function registerDoctor(program: Command): void {
         detail?: string;
         tryCommand?: string;
       }> = [];
-      if (configOverride(command) !== undefined) {
-        const explicit = configOverride(command)!;
+      const explicitConfig =
+        configOverride(command) ?? process.env.ROUTEKIT_CONFIG;
+      if (explicitConfig !== undefined) {
+        const explicit = explicitConfig;
         try {
           const config = loaded(command);
           checks.push({ label: "router config", ok: true, detail: config.path });
         } catch (error) {
+          const migration = existsSync(explicit)
+            ? migrateLegacyRouterConfig(explicit, { write: false })
+            : undefined;
+          const validLegacy =
+            migration?.legacy === true &&
+            migration.changed &&
+            !migration.diagnostics.some((diagnostic) => diagnostic.level === "error");
           checks.push({
             label: "router config",
-            ok: existsSync(explicit),
-            detail: existsSync(explicit)
+            ok: validLegacy,
+            detail: validLegacy
               ? `${explicit} (legacy/recovery config)`
               : error instanceof Error
                 ? error.message

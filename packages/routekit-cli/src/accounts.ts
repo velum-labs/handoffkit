@@ -250,7 +250,7 @@ export async function loginAccount(
 ): Promise<AccountListEntry> {
   const subscriptionKind = parseAccountMode(subscriptionKindInput);
   const normalizedLabel = sanitizeSubscriptionLabel(label);
-  if (normalizedLabel !== label) {
+  if (normalizedLabel !== label || label.startsWith(".")) {
     throw new Error(
       "account name must be lowercase and contain only letters, numbers, dots, underscores, or hyphens"
     );
@@ -264,7 +264,6 @@ export async function loginAccount(
       `${subscriptionKind}/${normalizedLabel} is already enrolled; remove it before logging in again`
     );
   }
-
   const temporaryDirectory = mkdtempSync(
     join(options.temporaryParent ?? tmpdir(), "routekit-account-login-")
   );
@@ -322,9 +321,18 @@ export async function captureLoginCredential(
 }> {
   const subscriptionKind = parseAccountMode(subscriptionKindInput);
   const normalizedLabel = sanitizeSubscriptionLabel(label);
-  if (normalizedLabel !== label) {
+  if (normalizedLabel !== label || label.startsWith(".")) {
     throw new Error(
       "account name must be lowercase and contain only letters, numbers, dots, underscores, or hyphens"
+    );
+  }
+  const target = join(
+    defaultSubscriptionAccountDirectory(subscriptionKind),
+    `${normalizedLabel}.json`
+  );
+  if (existsSync(target)) {
+    throw new Error(
+      `${subscriptionKind}/${normalizedLabel} is already enrolled; remove it before logging in again`
     );
   }
   const temporaryDirectory = mkdtempSync(

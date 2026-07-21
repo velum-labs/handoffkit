@@ -161,6 +161,14 @@ export async function acquireLifecycleLock(
         Date.now() - Date.parse(reaper.acquiredAt) >= LOCK_STABILIZE_MS
       ) {
         rmSync(reaperPath, { force: true });
+      } else if (reaper === undefined) {
+        try {
+          if (Date.now() - statSync(reaperPath).mtimeMs >= LOCK_STABILIZE_MS) {
+            rmSync(reaperPath, { force: true });
+          }
+        } catch {
+          // no reaper
+        }
       }
     } catch {
       // no reaper

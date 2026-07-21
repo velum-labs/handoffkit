@@ -330,11 +330,14 @@ function createLaunchdController(input: {
     },
     async uninstall(options) {
       if (!existsSync(unitPath)) return false;
-      await launchctl(
-        ["bootout", serviceTarget],
-        `launchctl bootout ${label}`,
-        options
-      );
+      const active = await runner("launchctl", ["print", serviceTarget]);
+      if (active.exitCode === 0) {
+        await launchctl(
+          ["bootout", serviceTarget],
+          `launchctl bootout ${label}`,
+          options
+        );
+      }
       rmSync(unitPath, { force: true });
       return true;
     },

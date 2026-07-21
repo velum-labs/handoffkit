@@ -305,9 +305,14 @@ export async function ensureDaemon(input: {
             await client.hello();
             return { client, record: replacement };
           }
-          await stopDaemonProcess(authoritative, {
+          const stopped = await stopDaemonProcess(authoritative, {
             graceMs: supervisorOperationTimeoutMs(authoritative.drainGraceMs)
           });
+          if (!stopped.stopped) {
+            throw new Error(
+              "cannot auto-upgrade a legacy daemon without verifiable process identity; stop it manually"
+            );
+          }
         }
       } finally {
         lock.release();

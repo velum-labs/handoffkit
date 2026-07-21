@@ -612,7 +612,7 @@ export async function startRouteKitDaemon(
       "accounts.enroll": async (params) => {
         await serializeMutation(async () => {
           const label = sanitizeSubscriptionLabel(params.label);
-          if (label !== params.label) {
+          if (label !== params.label || label.startsWith(".")) {
             throw new ControlError({
               code: "bad_request",
               message: "account label must already be normalized"
@@ -621,6 +621,12 @@ export async function startRouteKitDaemon(
           const directory = defaultSubscriptionAccountDirectory(params.kind);
           mkdirSync(directory, { recursive: true, mode: 0o700 });
           const path = join(directory, `${label}.json`);
+          if (existsSync(path)) {
+            throw new ControlError({
+              code: "conflict",
+              message: `${params.kind}/${label} is already enrolled; remove it before enrolling again`
+            });
+          }
           const previous = existsSync(path) ? readFileSync(path) : undefined;
           writeFileAtomic(
             path,
