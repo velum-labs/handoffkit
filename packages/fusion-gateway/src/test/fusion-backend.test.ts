@@ -352,7 +352,7 @@ test("expired sessions are evicted so panels re-run after the TTL", async () => 
     let panelCalls = 0;
     const backend = new FusionBackend({
       stepUrl: step.url,
-      sessionTtlMs: 50,
+      sessionTtlMs: 500,
       runPanels: async () => {
         panelCalls += 1;
         return [candidate("a")];
@@ -362,7 +362,7 @@ test("expired sessions are evicted so panels re-run after the TTL", async () => 
     await (await backend.chat({ ...userTurn, stream: false })).json();
     assert.equal(panelCalls, 1, "within the TTL the panel run is cached");
 
-    await new Promise((resolve) => setTimeout(resolve, 80));
+    await new Promise((resolve) => setTimeout(resolve, 600));
     await (await backend.chat({ ...userTurn, stream: false })).json();
     assert.equal(panelCalls, 2, "after the TTL the session is evicted and panels re-run");
   } finally {
