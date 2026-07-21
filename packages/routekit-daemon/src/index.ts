@@ -101,6 +101,22 @@ function dataTokenPath(home: string): string {
   return join(home, "secrets", "data-token");
 }
 
+function redactedProcessArgs(args: readonly string[]): string[] {
+  const result: string[] = [];
+  for (let index = 0; index < args.length; index += 1) {
+    const value = args[index]!;
+    if (value === "--auth-token") {
+      index += 1;
+      result.push("--auth-token", "[REDACTED]");
+    } else if (value.startsWith("--auth-token=")) {
+      result.push("--auth-token=[REDACTED]");
+    } else {
+      result.push(value);
+    }
+  }
+  return result;
+}
+
 function resolveDataToken(
   home: string,
   input: { authToken?: string; authTokenFile?: string }
@@ -572,9 +588,11 @@ export async function startRouteKitDaemon(
           return {
             subscriptionKind: entry.subscriptionKind,
             label: entry.label,
-            credentialValid: member?.active ?? false,
+            credentialValid: member !== undefined,
             configured: currentConfig.providers[entry.subscriptionKind] !== undefined,
-            relayOpen: member?.active ?? false,
+            relayOpen:
+              member !== undefined &&
+              currentConfig.providers[entry.subscriptionKind] !== undefined,
             active: member?.active ?? false,
             models: member?.models ?? [],
             ...(member?.limits !== undefined ? { limits: member.limits } : {})
@@ -714,7 +732,7 @@ export async function startRouteKitDaemon(
       generation,
       supervisor: supervisorFromEnv(env),
       ...(process.argv[1] !== undefined ? { binPath: process.argv[1] } : {}),
-      args: process.argv.slice(2),
+      args: redactedProcessArgs(process.argv.slice(2)),
       cwd: process.cwd()
     });
     extendCleanupGrace(drainGraceMs + 10_000);

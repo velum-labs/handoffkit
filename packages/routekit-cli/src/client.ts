@@ -81,7 +81,8 @@ export function controlClientForRecord(record: ServiceRecord): RouteKitControlCl
     url: record.url,
     token: record.controlToken,
     packageVersion: routekitVersion(),
-    cwd: process.cwd()
+    cwd: process.cwd(),
+    timeoutMs: (record.drainGraceMs ?? 30_000) * 2 + 30_000
   });
 }
 
@@ -103,7 +104,8 @@ export async function daemonRecordHealthy(record: ServiceRecord): Promise<boolea
 export function canonicalConfigOrMigrationError(): string {
   if (
     (process.env.ROUTEKIT_CONFIG ?? "").length > 0 ||
-    process.argv.includes("--config")
+    process.argv.includes("--config") ||
+    process.argv.some((argument) => argument.startsWith("--config="))
   ) {
     throw new Error(
       "--config / ROUTEKIT_CONFIG are not supported by singleton daemon operations; " +

@@ -44,8 +44,16 @@ function readLock(path: string): LockRecord | undefined {
   }
 }
 
-function tryAcquire(path: string): LifecycleLock | undefined {
+function tryAcquire(path: string, ignoreReaper = false): LifecycleLock | undefined {
   mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
+  if (!ignoreReaper) {
+    try {
+      statSync(`${path}.reap`);
+      return undefined;
+    } catch {
+      // no reaper
+    }
+  }
   let fd: number;
   try {
     fd = openSync(path, "wx", 0o600);
@@ -79,6 +87,38 @@ function tryAcquire(path: string): LifecycleLock | undefined {
   };
 }
 
+function tryReapAndAcquire(path: string): LifecycleLock | undefined {
+  const reaperPath = `${path}.reap`;
+  let reaper: number;
+  try {
+    reaper = openSync(reaperPath, "wx", 0o600);
+  } catch {
+    return undefined;
+  }
+  closeSync(reaper);
+  try {
+    const current = readLock(path);
+    let stale = false;
+    if (current === undefined) {
+      try {
+        stale = Date.now() - statSync(path).mtimeMs >= LOCK_STABILIZE_MS;
+      } catch {
+        stale = true;
+      }
+    } else {
+      const acquiredAt = Date.parse(current.acquiredAt);
+      stale =
+        !processAlive(current.pid) &&
+        (!Number.isFinite(acquiredAt) || Date.now() - acquiredAt >= LOCK_STABILIZE_MS);
+    }
+    if (!stale) return undefined;
+    rmSync(path, { force: true });
+    return tryAcquire(path, true);
+  } finally {
+    rmSync(reaperPath, { force: true });
+  }
+}
+
 export async function acquireLifecycleLock(
   path: string,
   options: {
@@ -105,14 +145,14 @@ export async function acquireLifecycleLock(
         continue;
       }
       if (ageMs >= LOCK_STABILIZE_MS) {
-        rmSync(path, { force: true });
-        continue;
+        const recovered = tryReapAndAcquire(path);
+        if (recovered !== undefined) return recovered;
       }
     } else if (!processAlive(current.pid)) {
       const acquiredAt = Date.parse(current.acquiredAt);
       if (!Number.isFinite(acquiredAt) || Date.now() - acquiredAt >= LOCK_STABILIZE_MS) {
-        rmSync(path, { force: true });
-        continue;
+        const recovered = tryReapAndAcquire(path);
+        if (recovered !== undefined) return recovered;
       }
     }
     const waitError = await options.onWait?.();

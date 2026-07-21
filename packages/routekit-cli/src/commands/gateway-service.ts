@@ -156,37 +156,42 @@ function registerUninstall(group: Command): void {
     .description("stop the supervised gateway service and remove its unit")
     .action(async (_options: unknown, command: Command) => {
       const ctx = contextFor(command);
-      const record = readDaemonRecord();
-      const kind =
-        record?.supervisor === "systemd" || record?.supervisor === "launchd"
-          ? record.supervisor
-          : undefined;
-      const controller =
-        kind !== undefined ? daemonSupervisorController(kind) : await platformSupervisor();
-      let removed = false;
-      if (controller !== undefined) {
-        removed = await controller.uninstall({
-          timeoutMs: supervisorOperationTimeoutMs(record?.drainGraceMs)
-        });
+      const lock = await acquireLifecycleLock(daemonLifecycleLockPath());
+      try {
+        const record = readDaemonRecord();
+        const kind =
+          record?.supervisor === "systemd" || record?.supervisor === "launchd"
+            ? record.supervisor
+            : undefined;
+        const controller =
+          kind !== undefined ? daemonSupervisorController(kind) : await platformSupervisor();
+        let removed = false;
+        if (controller !== undefined) {
+          removed = await controller.uninstall({
+            timeoutMs: supervisorOperationTimeoutMs(record?.drainGraceMs)
+          });
+        }
+        let stopped = false;
+        if (record !== undefined && record.supervisor === "detached") {
+          await controlClientForRecord(record).call(
+            "daemon.prepareShutdown",
+            { reason: "stop" },
+            { idempotencyKey: `service-uninstall-${record.generation ?? record.pid}` }
+          );
+          stopped = true;
+        }
+        const stopResult = { stopped, pid: record?.pid };
+        removeServiceEnvFile("daemon");
+        if (ctx.json) {
+          ctx.emit({ uninstalled: removed, service: stopResult });
+          return;
+        }
+        if (removed) ctx.presenter.success("removed the RouteKit daemon service");
+        else if (stopResult.stopped) ctx.presenter.success("stopped the RouteKit daemon");
+        else ctx.presenter.note("no RouteKit daemon service is installed");
+      } finally {
+        lock.release();
       }
-      let stopped = false;
-      if (record !== undefined && record.supervisor === "detached") {
-        await controlClientForRecord(record).call(
-          "daemon.prepareShutdown",
-          { reason: "stop" },
-          { idempotencyKey: `service-uninstall-${record.generation ?? record.pid}` }
-        );
-        stopped = true;
-      }
-      const stopResult = { stopped, pid: record?.pid };
-      removeServiceEnvFile("daemon");
-      if (ctx.json) {
-        ctx.emit({ uninstalled: removed, service: stopResult });
-        return;
-      }
-      if (removed) ctx.presenter.success("removed the RouteKit daemon service");
-      else if (stopResult.stopped) ctx.presenter.success("stopped the RouteKit daemon");
-      else ctx.presenter.note("no RouteKit daemon service is installed");
     });
 }
 

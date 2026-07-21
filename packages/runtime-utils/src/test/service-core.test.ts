@@ -99,6 +99,8 @@ test("pid-guarded removal protects a successor's record", () => {
     store.remove("svc", { ifPid: process.pid + 1 });
     assert.equal(store.read("svc")?.pid, process.pid);
     store.remove("svc", { ifPid: process.pid });
+    assert.equal(store.read("svc")?.pid, process.pid);
+    store.remove("svc");
     assert.equal(store.read("svc"), undefined);
   } finally {
     rmSync(home, { recursive: true, force: true });

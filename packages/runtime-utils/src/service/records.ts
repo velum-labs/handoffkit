@@ -196,6 +196,11 @@ export function createServiceRecordStore(input: {
       if (options.ifPid !== undefined) {
         const record = readRaw(kind);
         if (record !== undefined && record.pid !== options.ifPid) return;
+        // A guarded caller cannot safely unlink with a compare-then-delete:
+        // a successor may atomically publish between those operations. Leave
+        // the matching record in place; once this process exits, reads treat
+        // it as stale and the successor overwrites it under lifecycle lock.
+        return;
       }
       rmSync(path(kind), { force: true });
     }

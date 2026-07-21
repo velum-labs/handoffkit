@@ -283,6 +283,7 @@ export function registerStatus(program: Command): void {
         const observedAt = new Date().toISOString();
         return {
           observedAt,
+          cliVersion: daemon.packageVersion,
           daemon,
           services: [
             {
@@ -291,6 +292,10 @@ export function registerStatus(program: Command): void {
               url: daemon.dataUrl,
               pid: daemon.pid,
               startedAt: daemon.startedAt,
+              uptimeSeconds: Math.max(
+                0,
+                Math.round((Date.now() - Date.parse(daemon.startedAt)) / 1000)
+              ),
               reachable: true,
               version: daemon.packageVersion,
               supervisor: daemon.supervisor
@@ -301,12 +306,27 @@ export function registerStatus(program: Command): void {
               url: daemon.dataUrl,
               pid: daemon.pid,
               startedAt: daemon.startedAt,
+              uptimeSeconds: Math.max(
+                0,
+                Math.round((Date.now() - Date.parse(daemon.startedAt)) / 1000)
+              ),
               reachable: true,
               version: daemon.packageVersion,
               supervisor: daemon.supervisor
             }
           ],
-          providers: providers.providers,
+          providers: providers.providers.map((provider) => ({
+            ...provider,
+            configured: true as const,
+            credential: provider.credentialAvailable
+              ? "available"
+              : "missing",
+            lastCheck: {
+              ok: provider.error === undefined,
+              ...(provider.error !== undefined ? { error: provider.error } : {}),
+              models: provider.models?.length ?? 0
+            }
+          })),
           accounts: {
             running: true,
             url: daemon.dataUrl,
