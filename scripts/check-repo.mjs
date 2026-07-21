@@ -25,6 +25,7 @@ const requiredFiles = [
   ".npmrc",
   "pnpm-lock.yaml",
   "pnpm-workspace.yaml",
+  "turbo.json",
   ".github/workflows/ci.yml",
   ".github/workflows/release-packages.yml",
   ".github/dependabot.yml",
