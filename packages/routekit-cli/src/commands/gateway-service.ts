@@ -21,6 +21,7 @@ import {
   daemonLogPath,
   daemonRecordHealthy,
   daemonServeArgs,
+  ensureDaemonDataToken,
   ensureDaemon,
   readDaemonRecord
 } from "../client.js";
@@ -57,10 +58,12 @@ function registerInstall(group: Command): void {
     const configPath = globalRouterConfigPath();
     const result = loadRouterConfig({ configPath });
     const graceMs = drainGraceMs(options.drainGrace);
+    const authTokenFile = ensureDaemonDataToken(options.authToken);
     const serveArgs = daemonServeArgs({
       configPath,
+      host: options.host,
       port: Number.parseInt(options.port, 10),
-      ...(options.authToken !== undefined ? { authToken: options.authToken } : {}),
+      authTokenFile,
       ...(options.portless !== undefined ? { portless: options.portless } : {}),
       drainGraceMs: graceMs
     });

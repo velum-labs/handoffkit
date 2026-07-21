@@ -85,6 +85,7 @@ export type RouteKitDaemonOptions = {
   host?: string;
   port?: number;
   authToken?: string;
+  authTokenFile?: string;
   portless?: boolean;
   drainGraceMs?: number;
   onShutdownRequested?: (reason: "stop" | "restart" | "upgrade") => void;
@@ -97,6 +98,25 @@ export type RunningRouteKitDaemon = {
   close(): Promise<void>;
   reload(): Promise<void>;
 };
+
+function dataTokenPath(home: string): string {
+  return join(home, "secrets", "data-token");
+}
+
+function resolveDataToken(
+  home: string,
+  input: { authToken?: string; authTokenFile?: string }
+): { token: string; path: string } {
+  const path = input.authTokenFile ?? dataTokenPath(home);
+  mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
+  const token =
+    input.authToken ??
+    (existsSync(path) ? readFileSync(path, "utf8").trim() : generateControlToken());
+  if (token.length === 0) throw new Error("RouteKit data-plane token is empty");
+  writeFileAtomic(path, `${token}\n`, { mode: 0o600 });
+  chmodSync(path, 0o600);
+  return { token, path };
+}
 
 type RevisionState = { config: number; accounts: number; daemon: number };
 
@@ -244,6 +264,7 @@ export async function startRouteKitDaemon(
   const home = options.stateHome ?? routekitHome(env);
   const configPath = options.configPath ?? globalRouterConfigPath();
   const drainGraceMs = options.drainGraceMs ?? 30_000;
+  const dataAuth = resolveDataToken(home, options);
   const store = createServiceRecordStore({ home, product: ROUTEKIT_PRODUCT });
   // Held for the daemon's whole lifetime. Lifecycle clients use daemon.lock
   // while this authority lock prevents any second daemon from becoming live.
@@ -318,7 +339,7 @@ export async function startRouteKitDaemon(
       target: activeRouter.url,
       host: options.host ?? "127.0.0.1",
       port: options.port ?? 8080,
-      ...(options.authToken !== undefined ? { authToken: options.authToken } : {})
+      authToken: dataAuth.token
     });
     portless = await createPortlessSession(
       options.portless ?? env.ROUTEKIT_PORTLESS !== "0",
@@ -355,13 +376,16 @@ export async function startRouteKitDaemon(
       const previousRouter = activeRouter;
       // From this point the mutation is committed. `swapTarget` is synchronous
       // and non-throwing; retirement failures must never close the candidate.
-      proxy?.swapTarget(candidate.url);
+      const previousTarget = proxy?.swapTarget(candidate.url);
       activeRouter = candidate;
       currentConfig = nextConfig;
       currentDocument = input.write ? readFileSync(configPath, "utf8") : nextDocument;
       revisions = nextRevisions;
       if (previousRouter !== undefined) {
         try {
+          if (previousTarget !== undefined) {
+            await proxy?.waitForTargetIdle(previousTarget, drainGraceMs);
+          }
           await previousRouter.gateway.drain(drainGraceMs);
           await previousRouter.close();
         } catch (error) {
@@ -459,9 +483,7 @@ export async function startRouteKitDaemon(
         let models: ModelInfo[] = [];
         try {
           const response = await fetch(`${dataUrl}/v1/models`, {
-            ...(options.authToken !== undefined
-              ? { headers: { authorization: `Bearer ${options.authToken}` } }
-              : {})
+            headers: { authorization: `Bearer ${dataAuth.token}` }
           });
           const body = (await response.json()) as { data?: ModelInfo[] };
           models = body.data ?? [];
@@ -506,9 +528,7 @@ export async function startRouteKitDaemon(
       },
       "models.list": async (params) => {
         const response = await fetch(`${dataUrl}/v1/models`, {
-          ...(options.authToken !== undefined
-            ? { headers: { authorization: `Bearer ${options.authToken}` } }
-            : {})
+          headers: { authorization: `Bearer ${dataAuth.token}` }
         });
         if (!response.ok) {
           throw new ControlError({
@@ -654,7 +674,7 @@ export async function startRouteKitDaemon(
           tool: params.tool,
           model,
           gatewayUrl: dataUrl,
-          ...(options.authToken !== undefined ? { authToken: options.authToken } : {}),
+          authToken: dataAuth.token,
           env: {}
         };
       }
@@ -681,9 +701,9 @@ export async function startRouteKitDaemon(
       host: options.host ?? "127.0.0.1",
       portless: portless.enabled,
       drainGraceMs,
+      authTokenFile: dataAuth.path,
       generation,
       supervisor: supervisorFromEnv(env),
-      ...(options.authToken !== undefined ? { authToken: options.authToken } : {}),
       ...(process.argv[1] !== undefined ? { binPath: process.argv[1] } : {}),
       args: process.argv.slice(2),
       cwd: process.cwd()

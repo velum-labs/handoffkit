@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
@@ -85,6 +85,9 @@ test("singleton daemon exposes authenticated control and a stable reloadable dat
     assert.equal(record.protocolVersion, "control.v1");
     assert.equal(record.generation, 1);
     assert.equal(statSync(join(stateHome, "services", "daemon.json")).mode & 0o777, 0o600);
+    assert.ok(record.authTokenFile !== undefined);
+    const dataToken = readFileSync(record.authTokenFile, "utf8").trim();
+    assert.equal((await fetch(`${daemon.dataUrl}/v1/models`)).status, 401);
 
     await assert.rejects(
       new ControlClient({ url: record.url, token: "wrong" }).health()
@@ -126,6 +129,7 @@ test("singleton daemon exposes authenticated control and a stable reloadable dat
       method: "POST",
       headers: {
         "content-type": "application/json",
+        authorization: `Bearer ${dataToken}`,
         "x-test-slow": "1"
       },
       body: JSON.stringify({

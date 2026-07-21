@@ -1,6 +1,7 @@
 import { Command } from "commander";
 
 import { contextFor, parsePort } from "@routekit/cli-core";
+import { readFileSync } from "node:fs";
 import { startRouteKitDaemon } from "@routekit/daemon";
 import {
   acquireLifecycleLock,
@@ -14,6 +15,7 @@ import {
 import {
   controlClientForRecord,
   daemonLifecycleLockPath,
+  daemonDataTokenPath,
   ensureDaemon,
   readDaemonRecord
 } from "../client.js";
@@ -27,6 +29,7 @@ function registerRun(group: Command): void {
     .option("--host <host>", "data-plane bind host", "127.0.0.1")
     .option("--port <port>", "data-plane bind port", "8080")
     .option("--auth-token <token>", "data-plane authentication token")
+    .option("--auth-token-file <path>", "private data-plane token file")
     .option("--no-portless", "disable the stable local route")
     .option("--drain-grace-ms <ms>", "in-flight drain grace in milliseconds", "30000")
     .action(
@@ -36,6 +39,7 @@ function registerRun(group: Command): void {
           host: string;
           port: string;
           authToken?: string;
+          authTokenFile?: string;
           portless?: boolean;
           drainGraceMs: string;
         },
@@ -57,6 +61,9 @@ function registerRun(group: Command): void {
           host: options.host,
           port: parsePort(options.port, 8080),
           ...(options.authToken !== undefined ? { authToken: options.authToken } : {}),
+          ...(options.authTokenFile !== undefined
+            ? { authTokenFile: options.authTokenFile }
+            : {}),
           ...(options.portless !== undefined ? { portless: options.portless } : {}),
           drainGraceMs: Number.parseInt(options.drainGraceMs, 10),
           onShutdownRequested: requestShutdown
@@ -179,6 +186,19 @@ function registerStop(group: Command): void {
     });
 }
 
+function registerAuth(group: Command): void {
+  const auth = group.command("auth").description("manage daemon data-plane authentication");
+  auth
+    .command("show")
+    .description("explicitly print the private data-plane token")
+    .action((_options: unknown, command: Command) => {
+      const ctx = contextFor(command);
+      const token = readFileSync(daemonDataTokenPath(), "utf8").trim();
+      if (ctx.json) ctx.emit({ token });
+      else process.stdout.write(`${token}\n`);
+    });
+}
+
 export function registerDaemon(program: Command): void {
   const group = program
     .command("daemon")
@@ -187,6 +207,7 @@ export function registerDaemon(program: Command): void {
   registerStatus(group);
   registerReload(group);
   registerStop(group);
+  registerAuth(group);
   registerLogs(group);
   registerGatewayService(group);
 }

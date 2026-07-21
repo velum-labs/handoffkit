@@ -6,8 +6,8 @@
  * when absent. UI, terminal interaction, and local tool spawning stay outside
  * the daemon.
  */
-import { existsSync } from "node:fs";
-import { join } from "node:path";
+import { chmodSync, existsSync, mkdirSync, readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 
 import {
   findProjectRouterConfig,
@@ -21,12 +21,14 @@ import {
   ControlClient,
   createServiceRecordStore,
   detectSupervisor,
+  generateControlToken,
   serviceLogPath,
   startDaemon,
   stopDaemonProcess,
   supervisorController,
   supervisorOperationTimeoutMs,
-  waitForServiceReady
+  waitForServiceReady,
+  writeFileAtomic
 } from "@routekit/runtime";
 import type { ServiceRecord, StartDaemonResult } from "@routekit/runtime";
 
@@ -45,6 +47,22 @@ function defaultDaemonPort(): number {
     throw new Error("ROUTEKIT_DAEMON_PORT must be an integer between 0 and 65535");
   }
   return port;
+}
+
+export function daemonDataTokenPath(): string {
+  return join(routekitHome(), "secrets", "data-token");
+}
+
+export function ensureDaemonDataToken(authToken?: string): string {
+  const path = daemonDataTokenPath();
+  mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
+  const token =
+    authToken ??
+    (existsSync(path) ? readFileSync(path, "utf8").trim() : generateControlToken());
+  if (token.length === 0) throw new Error("RouteKit data-plane token is empty");
+  writeFileAtomic(path, `${token}\n`, { mode: 0o600 });
+  chmodSync(path, 0o600);
+  return path;
 }
 
 export function daemonStore() {
@@ -110,7 +128,7 @@ export function daemonServeArgs(input: {
   configPath?: string;
   host?: string;
   port?: number;
-  authToken?: string;
+  authTokenFile?: string;
   portless?: boolean;
   drainGraceMs?: number;
 } = {}): string[] {
@@ -123,7 +141,9 @@ export function daemonServeArgs(input: {
     input.host ?? "127.0.0.1",
     "--port",
     String(input.port ?? defaultDaemonPort()),
-    ...(input.authToken !== undefined ? ["--auth-token", input.authToken] : []),
+    ...(input.authTokenFile !== undefined
+      ? ["--auth-token-file", input.authTokenFile]
+      : []),
     ...(input.portless === false ? ["--no-portless"] : []),
     ...(input.drainGraceMs !== undefined
       ? ["--drain-grace-ms", String(input.drainGraceMs)]
@@ -146,6 +166,15 @@ export async function ensureDaemon(input: {
   const requestedConfigPath = input.configPath ?? canonicalConfigOrMigrationError();
   const current = readDaemonRecord();
   if (current !== undefined && (await daemonRecordHealthy(current))) {
+    if (
+      input.authToken !== undefined &&
+      current.authTokenFile !== undefined &&
+      readFileSync(current.authTokenFile, "utf8").trim() !== input.authToken
+    ) {
+      throw new Error(
+        "RouteKit daemon is already running with a different data-plane token; restart it to rotate credentials"
+      );
+    }
     if (
       (input.host !== undefined && current.host !== input.host) ||
       (input.port !== undefined &&
@@ -241,6 +270,7 @@ export async function ensureDaemon(input: {
   const entry = process.argv[1];
   if (entry === undefined) throw new Error("cannot resolve the routekit entry script");
   const home = routekitHome();
+  const authTokenFile = ensureDaemonDataToken(input.authToken);
   const configPath = requestedConfigPath;
   const supervisor = await detectSupervisor(PRODUCT, KIND);
   if (supervisor !== undefined) {
@@ -258,7 +288,7 @@ export async function ensureDaemon(input: {
       const config = loadRouterConfig({ configPath }).config;
       await supervisor.install(
         daemonUnitSpec({
-          args: daemonServeArgs({ ...input, configPath }),
+        args: daemonServeArgs({ ...input, configPath, authTokenFile }),
           supervisor: supervisor.kind,
           env: serviceEnvironment(config),
           drainGraceMs: graceMs
@@ -287,7 +317,7 @@ export async function ensureDaemon(input: {
       version: routekitVersion(),
       command: {
         execPath: process.execPath,
-        args: [entry, ...daemonServeArgs({ ...input, configPath })]
+        args: [entry, ...daemonServeArgs({ ...input, configPath, authTokenFile })]
       },
       cwd: process.cwd()
     },

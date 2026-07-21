@@ -31,6 +31,7 @@ export type SwitchingGatewayProxy = {
   port(): number;
   target(): string;
   swapTarget(target: string): string;
+  waitForTargetIdle(target: string, graceMs: number): Promise<boolean>;
   drain(graceMs?: number): Promise<void>;
   close(): Promise<void>;
 };
@@ -103,7 +104,17 @@ export async function startSwitchingGatewayProxy(input: {
 }): Promise<SwitchingGatewayProxy> {
   const host = input.host ?? "127.0.0.1";
   assertAuthenticatedBind(host, input.authToken);
-  let target = trimTrailingSlashes(input.target);
+  type TargetGeneration = {
+    url: string;
+    leases: number;
+    waiters: Set<() => void>;
+  };
+  let active: TargetGeneration = {
+    url: trimTrailingSlashes(input.target),
+    leases: 0,
+    waiters: new Set()
+  };
+  const generations = new Map<string, TargetGeneration>([[active.url, active]]);
   let draining = false;
   let inflight = 0;
   const server = createServer((req, res) => {
@@ -131,23 +142,39 @@ export async function startSwitchingGatewayProxy(input: {
         });
         return;
       }
-      const selected = target;
+      const selected = active;
+      selected.leases += 1;
+      const aborter = new AbortController();
+      const onClose = (): void => {
+        if (!res.writableEnded) aborter.abort(new Error("gateway client disconnected"));
+      };
+      res.once("close", onClose);
       try {
         const body = await requestBody(req);
-        const upstream = await fetch(`${selected}${path}`, {
+        const upstream = await fetch(`${selected.url}${path}`, {
           method: req.method ?? "GET",
           headers: requestHeaders(req.headers),
           ...(body !== undefined ? { body } : {}),
-          signal: AbortSignal.timeout(10 * 60 * 1000)
+          signal: AbortSignal.any([
+            aborter.signal,
+            AbortSignal.timeout(10 * 60 * 1000)
+          ])
         });
         await pipe(res, upstream);
       } catch {
-        if (!res.headersSent) {
+        if (!res.destroyed && !res.headersSent) {
           writeJson(res, 502, {
             error: { message: "router generation unavailable", type: "upstream_error" }
           });
         } else if (!res.writableEnded) {
           res.destroy();
+        }
+      } finally {
+        res.off("close", onClose);
+        selected.leases -= 1;
+        if (selected.leases === 0) {
+          for (const resolve of selected.waiters) resolve();
+          selected.waiters.clear();
         }
       }
     })();
@@ -179,11 +206,32 @@ export async function startSwitchingGatewayProxy(input: {
   return {
     url: () => `http://${host}:${port}`,
     port: () => port,
-    target: () => target,
+    target: () => active.url,
     swapTarget(next) {
-      const previous = target;
-      target = trimTrailingSlashes(next);
+      const previous = active.url;
+      const url = trimTrailingSlashes(next);
+      active = generations.get(url) ?? { url, leases: 0, waiters: new Set() };
+      generations.set(url, active);
       return previous;
+    },
+    async waitForTargetIdle(url, graceMs) {
+      const generation = generations.get(trimTrailingSlashes(url));
+      if (generation === undefined || generation.leases === 0) return true;
+      let timer: NodeJS.Timeout | undefined;
+      const idle = new Promise<boolean>((resolve) => {
+        const done = (): void => {
+          if (timer !== undefined) clearTimeout(timer);
+          resolve(true);
+        };
+        generation.waiters.add(done);
+        timer = setTimeout(() => {
+          generation.waiters.delete(done);
+          resolve(false);
+        }, graceMs);
+      });
+      const result = await idle;
+      if (generation !== active && generation.leases === 0) generations.delete(generation.url);
+      return result;
     },
     drain,
     close: async () => await drain(0)

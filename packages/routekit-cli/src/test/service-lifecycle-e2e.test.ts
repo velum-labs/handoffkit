@@ -137,10 +137,14 @@ test("gateway service lifecycle: start, idempotency, upgrade, drain-on-stop", as
       version?: string;
       args?: string[];
       supervisor?: string;
+      authTokenFile?: string;
     };
     assert.equal(typeof record.version, "string");
     assert.equal(record.supervisor, "detached");
     assert.ok(record.args?.includes("run"));
+    assert.ok(record.authTokenFile !== undefined);
+    const dataToken = readFileSync(record.authTokenFile, "utf8").trim();
+    assert.equal(record.args?.join(" ").includes(dataToken), false);
 
     // upgrade without skew is a no-op; --force performs a drain-restart.
     const upToDate = json(await runCli([...base, "upgrade", "--json"], cli));
@@ -165,7 +169,10 @@ test("gateway service lifecycle: start, idempotency, upgrade, drain-on-stop", as
     // gateway refuses new work and then shuts down.
     const inflight = fetch(`${upgradedUrl}/v1/chat/completions`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${dataToken}`
+      },
       body: JSON.stringify({
         model: "openai/mock-model",
         messages: [{ role: "user", content: "slow" }]

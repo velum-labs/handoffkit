@@ -17,8 +17,6 @@ export function registerLaunchers(program: Command): void {
       .argument("[model]", "live namespaced provider/model id")
       .argument("[toolArgs...]", `arguments passed to ${integration.displayName}`)
       .option("--gateway-url <url>", "connect to an existing RouteKit gateway")
-      .option("--host <host>", "embedded gateway bind host", "127.0.0.1")
-      .option("--port <port>", "embedded gateway bind port", "0")
       .option("--effort <id>", "opaque reasoning effort for the selected model")
       .option("--auth-token <token>", "gateway authentication token")
       .option("--cwd <dir>", "tool working directory");
@@ -34,8 +32,6 @@ export function registerLaunchers(program: Command): void {
         toolArgs: string[],
         options: {
           gatewayUrl?: string;
-          host: string;
-          port: string;
           authToken?: string;
           cwd?: string;
           effort?: string;
@@ -50,23 +46,37 @@ export function registerLaunchers(program: Command): void {
         }
         const cwd = options.cwd !== undefined ? resolve(options.cwd) : process.cwd();
         const tool = integration.id as "codex" | "claude" | "cursor" | "opencode";
-        const prepared = await (await routekitClient()).call("launcher.prepare", {
-          tool,
-          ...(model !== undefined ? { model } : {}),
-          cwd
-        });
+        const prepared =
+          options.gatewayUrl === undefined
+            ? await (await routekitClient()).call("launcher.prepare", {
+                tool,
+                ...(model !== undefined ? { model } : {}),
+                cwd
+              })
+            : undefined;
         process.exitCode = await launchTool({
           tool: integration.id,
           gatewayUrl:
             options.gatewayUrl !== undefined
               ? trimTrailingSlashes(options.gatewayUrl)
-              : prepared.gatewayUrl,
-          model: prepared.model,
+              : prepared!.gatewayUrl,
+          ...(prepared?.model !== undefined
+            ? { model: prepared.model }
+            : model !== undefined
+              ? { model }
+              : {}),
           ...(options.effort !== undefined ? { effort: options.effort } : {}),
           args: toolArgs,
           cwd,
-          ...((options.authToken ?? prepared.authToken) !== undefined
-            ? { authToken: options.authToken ?? prepared.authToken }
+          ...((options.gatewayUrl !== undefined
+            ? options.authToken
+            : prepared?.authToken) !== undefined
+            ? {
+                authToken:
+                  options.gatewayUrl !== undefined
+                    ? options.authToken
+                    : prepared?.authToken
+              }
             : {}),
           ...(integration.id === "cursor" && options.ide !== undefined
             ? { ide: options.ide }

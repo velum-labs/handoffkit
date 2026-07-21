@@ -129,49 +129,12 @@ test("dynamic completion follows the command tree", () => {
   ]);
 });
 
-test("serve CLI rejects an unauthenticated non-loopback bind", async () => {
-  const root = mkdtempSync(join(tmpdir(), "routekit-serve-auth-"));
-  const config = join(root, "router.yaml");
-  const previousStateHome = process.env.ROUTEKIT_HOME;
-  process.env.ROUTEKIT_HOME = join(root, "state");
-  writeFileSync(
-    config,
-    [
-      "providers:",
-      "  openai: {}",
-      ""
-    ].join("\n")
-  );
-  try {
-    const program = buildProgram();
-    const gateway = command(program, "gateway");
-    const serve = gateway.commands.find((entry) => entry.name() === "serve");
-    assert.ok(serve);
-    assert.match(
-      serve.helpInformation(),
-      /authentication token \(required for non-loopback\s+hosts\)/
-    );
-    await assert.rejects(
-      program.parseAsync([
-        "node",
-        "routekit",
-        "--config",
-        config,
-        "gateway",
-        "serve",
-        "--host",
-        "0.0.0.0",
-        "--port",
-        "0",
-        "--no-portless"
-      ]),
-      /binding to non-loopback host "0\.0\.0\.0" requires an auth token/
-    );
-  } finally {
-    if (previousStateHome === undefined) delete process.env.ROUTEKIT_HOME;
-    else process.env.ROUTEKIT_HOME = previousStateHome;
-    rmSync(root, { recursive: true, force: true });
-  }
+test("serve CLI documents explicit data-plane authentication", () => {
+  const program = buildProgram();
+  const gateway = command(program, "gateway");
+  const serve = gateway.commands.find((entry) => entry.name() === "serve");
+  assert.ok(serve);
+  assert.match(serve.helpInformation(), /authentication token/);
 });
 
 test("account removal completion only suggests managed labels for its provider", () => {
