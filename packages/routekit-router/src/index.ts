@@ -180,6 +180,9 @@ export async function startRouter(options: StartRouterOptions): Promise<RunningR
     if (closed) return;
     closed = true;
     await gateway.close();
+    await Promise.all(
+      Object.values(accountSets).map(async (accountSet) => await accountSet.close())
+    );
   };
   const drainGraceMs = options.drainGraceMs ?? 0;
   if (drainGraceMs > 0) {

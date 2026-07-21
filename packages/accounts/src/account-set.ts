@@ -438,7 +438,7 @@ export class SubscriptionAccountSet {
           member.credential.accessToken.length > 0 &&
           (member.credential.expiresAt === undefined ||
             member.credential.expiresAt > Date.now() / 1000 ||
-            member.credential.refreshToken !== undefined);
+            (member.credential.refreshToken?.length ?? 0) > 0);
         return {
           ...status,
           credentialValid,

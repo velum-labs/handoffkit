@@ -178,6 +178,7 @@ export async function startSwitchingGatewayProxy(input: {
         if (selected.leases === 0) {
           for (const resolve of selected.waiters) resolve();
           selected.waiters.clear();
+          if (selected !== active) generations.delete(selected.url);
         }
       }
     })();

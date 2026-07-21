@@ -7,6 +7,7 @@
  * errors. It never accepts argv or executes a CLI parser.
  */
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import { once } from "node:events";
 import { createServer } from "node:http";
 import type { IncomingMessage, ServerResponse } from "node:http";
 
@@ -238,8 +239,8 @@ function isAsyncIterable(value: unknown): value is AsyncIterable<unknown> {
   );
 }
 
-function ndjson(res: ServerResponse, event: ControlEvent): void {
-  res.write(`${JSON.stringify(event)}\n`);
+function ndjson(res: ServerResponse, event: ControlEvent): boolean {
+  return res.write(`${JSON.stringify(event)}\n`);
 }
 
 export async function startControlServer(input: {
@@ -320,20 +321,36 @@ export async function startControlServer(input: {
             res.statusCode = 200;
             res.setHeader("content-type", "application/x-ndjson");
             res.setHeader("cache-control", "no-store");
-            for await (const data of result) {
+            const iterator = result[Symbol.asyncIterator]();
+            try {
+              while (!aborter.signal.aborted) {
+                const next = await iterator.next();
+                if (next.done) break;
+                if (!ndjson(res, {
+                  protocol: CONTROL_PROTOCOL_VERSION,
+                  id: request.id,
+                  event: "data",
+                  data: next.value
+                })) {
+                  await Promise.race([once(res, "drain"), once(res, "close")]);
+                }
+              }
+            } finally {
+              if (aborter.signal.aborted) {
+                await Promise.race([
+                  iterator.return?.(),
+                  new Promise((resolve) => setTimeout(resolve, 1_000))
+                ]).catch(() => undefined);
+              }
+            }
+            if (!aborter.signal.aborted) {
               ndjson(res, {
                 protocol: CONTROL_PROTOCOL_VERSION,
                 id: request.id,
-                event: "data",
-                data
+                event: "done"
               });
+              res.end();
             }
-            ndjson(res, {
-              protocol: CONTROL_PROTOCOL_VERSION,
-              id: request.id,
-              event: "done"
-            });
-            res.end();
           } else {
             writeJson(res, 200, {
               protocol: CONTROL_PROTOCOL_VERSION,
@@ -382,9 +399,14 @@ export async function startControlServer(input: {
     token,
     port,
     close: async () => {
+      const closed = new Promise<void>((resolve) => server.close(() => resolve()));
       server.closeIdleConnections();
-      await new Promise<void>((resolve) => server.close(() => resolve()));
+      await Promise.race([
+        closed,
+        new Promise<void>((resolve) => setTimeout(resolve, 2_000))
+      ]);
       server.closeAllConnections();
+      await closed;
     }
   };
 }

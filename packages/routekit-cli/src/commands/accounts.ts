@@ -286,7 +286,10 @@ export function registerAccounts(program: Command): void {
       }
       ctx.presenter.status("ok", "daemon account pool", `revision ${status.revision}`);
       for (const entry of status.accounts) {
-        const ok = entry.credentialValid !== false && entry.configured !== false;
+        const ok =
+          entry.credentialValid === true &&
+          entry.configured === true &&
+          entry.relayOpen === true;
         ctx.presenter.status(
           ok ? "ok" : "pending",
           `${entry.subscriptionKind}/${entry.label}`,
@@ -294,7 +297,9 @@ export function registerAccounts(program: Command): void {
             ? "stored; credential invalid"
             : !entry.configured
               ? "stored; routing disabled"
-              : "stored; configured; relay ready"
+              : !entry.relayOpen
+                ? "stored; configured; relay unavailable or cooling"
+                : "stored; configured; relay ready"
         );
       }
     });
