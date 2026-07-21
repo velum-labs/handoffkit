@@ -14,7 +14,8 @@
         "^build"
       ],
       "outputs": [
-        "dist/**"
+        "dist/**",
+        "tsconfig.tsbuildinfo"
       ]
     },
     "scope#build": {
