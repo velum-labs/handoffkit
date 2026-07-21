@@ -1,4 +1,5 @@
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+import { parse as parseYaml } from "yaml";
 
 import { contextFor, probeBinaryVersion } from "@routekit/cli-core";
 import { commandOnPath } from "@routekit/runtime";
@@ -47,10 +48,23 @@ export function registerDoctor(program: Command): void {
           const migration = existsSync(explicit)
             ? migrateLegacyRouterConfig(explicit, { write: false })
             : undefined;
+          let legacyShape = false;
+          if (existsSync(explicit)) {
+            try {
+              const parsed = parseYaml(readFileSync(explicit, "utf8")) as unknown;
+              legacyShape =
+                typeof parsed === "object" &&
+                parsed !== null &&
+                Array.isArray((parsed as { endpoints?: unknown }).endpoints);
+            } catch {
+              legacyShape = false;
+            }
+          }
           const validLegacy =
-            migration?.legacy === true &&
-            migration.changed &&
-            !migration.diagnostics.some((diagnostic) => diagnostic.level === "error");
+            legacyShape ||
+            (migration?.legacy === true &&
+              migration.changed &&
+              !migration.diagnostics.some((diagnostic) => diagnostic.level === "error"));
           checks.push({
             label: "router config",
             ok: validLegacy,
