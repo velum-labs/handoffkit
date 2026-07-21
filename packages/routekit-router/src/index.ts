@@ -7,6 +7,10 @@ import {
   subscriptionRelaysFromAccountSets
 } from "@routekit/accounts";
 import type { SubscriptionAccountConfigs } from "@routekit/accounts";
+import type {
+  SubscriptionAccountSetSnapshot,
+  SubscriptionUsageResponse
+} from "@routekit/accounts";
 import {
   CatalogBackend,
   startGateway
@@ -43,6 +47,9 @@ export type RunningRouter = {
   gateway: Gateway;
   url: string;
   close(): Promise<void>;
+  providerStatuses(signal?: AbortSignal): ReturnType<CatalogBackend["providerStatuses"]>;
+  accountSnapshots(): SubscriptionAccountSetSnapshot[];
+  usage(): Promise<SubscriptionUsageResponse>;
 };
 
 function gatewayEnvironment(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
@@ -171,5 +178,13 @@ export async function startRouter(options: StartRouterOptions): Promise<RunningR
     if (drainGraceMs > 0) await gateway.drain(drainGraceMs);
     await close();
   });
-  return { gateway, url: gateway.url(), close };
+  return {
+    gateway,
+    url: gateway.url(),
+    close,
+    providerStatuses: async (signal) => await backend.providerStatuses(signal),
+    accountSnapshots: () =>
+      Object.values(accountSets).map((accountSet) => accountSet.snapshot()),
+    usage: async () => await collectSubscriptionUsage(accountSets)
+  };
 }

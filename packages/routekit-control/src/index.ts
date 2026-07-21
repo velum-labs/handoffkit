@@ -127,7 +127,19 @@ export type RouteKitControlResults = {
   "models.list": { models: ModelInfo[]; defaultModel?: string; revision: number };
   "models.info": ModelInfo;
   "accounts.list": { accounts: unknown[]; revision: number };
-  "accounts.status": unknown;
+  "accounts.status": {
+    accounts: Array<{
+      subscriptionKind: "claude-code" | "codex";
+      label: string;
+      credentialValid: boolean;
+      configured: boolean;
+      relayOpen: boolean;
+      active: boolean;
+      models: string[];
+      limits?: unknown;
+    }>;
+    revision: number;
+  };
   "accounts.enroll": { enrolled: true; revision: number };
   "accounts.remove": { removed: boolean; revision: number };
   "accounts.usage": unknown;

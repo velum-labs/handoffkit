@@ -17,9 +17,7 @@ import {
 import { dirname, join } from "node:path";
 
 import {
-  collectSubscriptionUsage,
   defaultSubscriptionAccountDirectory,
-  openLocalSubscriptionUsage,
   removeSubscriptionAccount,
   sanitizeSubscriptionLabel
 } from "@routekit/accounts";
@@ -478,27 +476,20 @@ export async function startRouteKitDaemon(
         });
         return configSnapshot();
       },
-      "providers.status": async () => {
+      "providers.status": async (_params, context) => {
         const accounts = accountEntries();
-        let models: ModelInfo[] = [];
-        try {
-          const response = await fetch(`${dataUrl}/v1/models`, {
-            headers: { authorization: `Bearer ${dataAuth.token}` }
-          });
-          const body = (await response.json()) as { data?: ModelInfo[] };
-          models = body.data ?? [];
-        } catch {
-          // Individual provider status still reports configuration/credentials.
-        }
+        const live = await activeRouter!.providerStatuses(context.signal);
         const result = {
-          providers: configuredProviderIds(currentConfig).map((provider) => ({
-            provider,
-            configured: true,
-            credentialAvailable: providerCredentialAvailable(provider, accounts),
-            models: models
-              .filter((model) => model.id.startsWith(`${provider}/`))
-              .map((model) => model.id)
-          }))
+          providers: configuredProviderIds(currentConfig).map((provider) => {
+            const status = live.find((entry) => entry.provider === provider);
+            return {
+              provider,
+              configured: true,
+              credentialAvailable: providerCredentialAvailable(provider, accounts),
+              models: status?.models ?? [],
+              ...(status?.error !== undefined ? { error: status.error } : {})
+            };
+          })
         };
         writeSnapshot(home, "health", "providers", {
           checkedAt: new Date().toISOString(),
@@ -573,7 +564,22 @@ export async function startRouteKitDaemon(
         revision: revisions.accounts
       }),
       "accounts.status": async () => ({
-        accounts: accountEntries(),
+        accounts: accountEntries().map((entry) => {
+          const member = activeRouter!
+            .accountSnapshots()
+            .find((snapshot) => snapshot.mode === entry.subscriptionKind)
+            ?.members.find((candidate) => candidate.label === entry.label);
+          return {
+            subscriptionKind: entry.subscriptionKind,
+            label: entry.label,
+            credentialValid: member?.active ?? false,
+            configured: currentConfig.providers[entry.subscriptionKind] !== undefined,
+            relayOpen: member?.active ?? false,
+            active: member?.active ?? false,
+            models: member?.models ?? [],
+            ...(member?.limits !== undefined ? { limits: member.limits } : {})
+          };
+        }),
         revision: revisions.accounts
       }),
       "accounts.enroll": async (params) => {
@@ -636,12 +642,7 @@ export async function startRouteKitDaemon(
         return { removed, revision: revisions.accounts };
       },
       "accounts.usage": async () => {
-        const source = await openLocalSubscriptionUsage();
-        try {
-          return await source.usage();
-        } finally {
-          await source.close();
-        }
+        return await activeRouter!.usage();
       },
       "telemetry.get": async () => ({ enabled: telemetry.resolve().enabled }),
       "telemetry.set": async (params) => {
@@ -651,13 +652,21 @@ export async function startRouteKitDaemon(
         });
         return { enabled: telemetry.resolve().enabled };
       },
-      "doctor.run": async () => ({
-        checks: [
-          { name: "canonical config", ok: existsSync(configPath), detail: configPath },
-          { name: "control plane", ok: control !== undefined },
-          { name: "model gateway", ok: proxy !== undefined, detail: dataUrl }
-        ]
-      }),
+      "doctor.run": async (_params, context) => {
+        const providers = await activeRouter!.providerStatuses(context.signal);
+        return {
+          checks: [
+            { name: "canonical config", ok: existsSync(configPath), detail: configPath },
+            { name: "control plane", ok: control !== undefined },
+            { name: "model gateway", ok: proxy !== undefined, detail: dataUrl },
+            ...providers.map((provider) => ({
+              name: `${provider.provider} live discovery`,
+              ok: provider.ok,
+              detail: provider.error ?? `${provider.models.length} model(s)`
+            }))
+          ]
+        };
+      },
       "launcher.prepare": async (params) => {
         const listed = await handlers["models.list"]({}, {
           signal: new AbortController().signal,

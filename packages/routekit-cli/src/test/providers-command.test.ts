@@ -106,8 +106,6 @@ test("providers and models commands use the live namespaced catalog", async () =
     );
 
     await runJson([
-      "--config",
-      configPath,
       "--json",
       "providers",
       "add",
