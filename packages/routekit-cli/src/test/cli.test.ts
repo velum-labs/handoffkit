@@ -48,9 +48,6 @@ test("independent command surface is complete and has no compatibility aliases",
     "status",
     "usage",
     "accounts",
-    "endpoints",
-    "install",
-    "uninstall",
     "providers",
     "models",
     "config",
@@ -66,7 +63,11 @@ test("independent command surface is complete and has no compatibility aliases",
   );
   assert.deepEqual(
     command(program, "gateway").commands.map((entry) => entry.name()).sort(),
-    ["logs", "restart", "serve", "service", "start", "stop", "upgrade"]
+    ["serve"]
+  );
+  assert.deepEqual(
+    command(program, "daemon").commands.map((entry) => entry.name()).sort(),
+    ["auth", "logs", "reload", "restart", "run", "service", "start", "status", "stop", "upgrade"]
   );
   assert.deepEqual(
     command(program, "gateway")
@@ -84,7 +85,7 @@ test("independent command surface is complete and has no compatibility aliases",
   }
   assert.deepEqual(
     command(program, "accounts").commands.map((entry) => entry.name()).sort(),
-    ["add", "cliproxy", "list", "login", "remove", "serve", "status", "stop"]
+    ["add", "cliproxy", "list", "login", "remove", "status"]
   );
   assert.deepEqual(
     command(program, "accounts")
@@ -112,15 +113,10 @@ test("dynamic completion follows the command tree", () => {
   const program = buildProgram();
   assert.ok(completionCandidates(program, ["co"]).includes("config"));
   assert.deepEqual(completionCandidates(program, ["gateway", "s"]), [
-    "serve",
-    "service",
-    "start",
-    "stop"
+    "serve"
   ]);
   assert.deepEqual(completionCandidates(program, ["accounts", "s"]), [
-    "serve",
-    "status",
-    "stop"
+    "status"
   ]);
   assert.ok(completionCandidates(program, ["codex", "in"]).includes("install"));
   assert.ok(

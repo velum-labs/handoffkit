@@ -77,7 +77,7 @@ for (const tool of ["codex", "claude", "cursor", "opencode"]) {
   }
 }
 
-// 2) RouteKit independently owns router, endpoint, account, and direct tool
+// 2) RouteKit independently owns its daemon, router, account, and direct tool
 // launch surfaces without exposing Fusion lifecycle commands.
 const routeHelp = runCli(ROUTE_CLI, ["--help"]);
 if (routeHelp.status !== 0) fail(`\`routekit --help\` exited ${routeHelp.status}`);
@@ -86,17 +86,15 @@ if (!routeHelp.stdout.startsWith("Usage: routekit ")) {
 }
 for (const command of [
   "gateway",
+  "daemon",
   "codex",
   "claude",
   "cursor",
   "opencode",
   "accounts",
-  "endpoints",
   "models",
   "config",
   "doctor",
-  "install",
-  "uninstall",
   "telemetry",
   "version",
   "completion"
@@ -107,9 +105,16 @@ for (const command of [
 }
 const gatewayHelp = runCli(ROUTE_CLI, ["gateway", "--help"]);
 if (gatewayHelp.status !== 0) fail(`\`routekit gateway --help\` exited ${gatewayHelp.status}`);
-for (const command of ["serve", "stop"]) {
+for (const command of ["serve"]) {
   if (!helpHasCommand(gatewayHelp.stdout, command)) {
     fail(`RouteKit gateway help is missing command "${command}"`);
+  }
+}
+const daemonHelp = runCli(ROUTE_CLI, ["daemon", "--help"]);
+if (daemonHelp.status !== 0) fail(`\`routekit daemon --help\` exited ${daemonHelp.status}`);
+for (const command of ["start", "stop", "restart", "upgrade", "service"]) {
+  if (!helpHasCommand(daemonHelp.stdout, command)) {
+    fail(`RouteKit daemon help is missing command "${command}"`);
   }
 }
 for (const fusionOnly of ["setup", "prompts", "sessions", "ensemble"]) {

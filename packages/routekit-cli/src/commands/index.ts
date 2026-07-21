@@ -8,7 +8,6 @@ import { registerDynamicCompletion } from "../completion.js";
 
 import { registerAccounts } from "./accounts.js";
 import { registerConfig } from "./config.js";
-import { registerCompatibilityCommands } from "./compatibility.js";
 import { registerDaemon } from "./daemon.js";
 import { registerDoctor } from "./doctor.js";
 import { registerGateway } from "./gateway.js";
@@ -26,7 +25,6 @@ export function registerCommands(program: Command): void {
   registerAccounts(program);
   registerProviders(program);
   registerConfig(program);
-  registerCompatibilityCommands(program);
 
   program.commandsGroup("Run");
   registerDaemon(program);

@@ -51,7 +51,7 @@ function registerInstall(group: Command): void {
     group
       .command("install")
       .description(
-        "install the gateway as an OS-supervised service (systemd/launchd) that restarts on crash and reboot"
+        "install the daemon as an OS-supervised service (systemd/launchd)"
       )
   ).action(async (options: GatewayServeCliOptions, command: Command) => {
     const ctx = contextFor(command);
@@ -141,8 +141,8 @@ function registerInstall(group: Command): void {
       ctx.presenter.line(`  listening at ${record.dataUrl} (pid ${record.pid})`);
       ctx.presenter.note(
         controller.kind === "systemd"
-          ? `logs: journalctl --user -u ${controller.unitName} (or \`routekit gateway logs\`)`
-          : `logs: ${daemonLogPath()} (or \`routekit gateway logs\`)`
+          ? `logs: journalctl --user -u ${controller.unitName} (or \`routekit daemon logs\`)`
+          : `logs: ${daemonLogPath()} (or \`routekit daemon logs\`)`
       );
     } finally {
       lock.release();
@@ -153,7 +153,7 @@ function registerInstall(group: Command): void {
 function registerUninstall(group: Command): void {
   group
     .command("uninstall")
-    .description("stop the supervised gateway service and remove its unit")
+    .description("stop the supervised daemon and remove its unit")
     .action(async (_options: unknown, command: Command) => {
       const ctx = contextFor(command);
       const lock = await acquireLifecycleLock(daemonLifecycleLockPath());
@@ -198,7 +198,7 @@ function registerUninstall(group: Command): void {
 function registerServiceStatus(group: Command): void {
   group
     .command("status")
-    .description("show the OS supervisor state of the gateway service")
+    .description("show the OS supervisor state of the daemon")
     .action(async (_options: unknown, command: Command) => {
       const ctx = contextFor(command);
       const record = readDaemonRecord();
@@ -256,10 +256,10 @@ function registerServiceStatus(group: Command): void {
     });
 }
 
-export function registerGatewayService(program: Command): void {
+export function registerDaemonService(program: Command): void {
   const group = program
     .command("service")
-    .description("compatibility alias: manage the singleton daemon as a persistent OS service");
+    .description("manage the singleton daemon as a persistent OS service");
   registerInstall(group);
   registerUninstall(group);
   registerServiceStatus(group);

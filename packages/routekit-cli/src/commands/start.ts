@@ -25,7 +25,7 @@ export function registerStart(program: Command): void {
   attachServeOptions(
     program
       .command("start")
-      .description("start the model router as a background service")
+      .description("start the singleton RouteKit daemon")
   ).action(async (options: GatewayServeCliOptions, command: Command) => {
     const ctx = contextFor(command);
     const running = await ensureDaemon({
@@ -63,7 +63,7 @@ export function registerStart(program: Command): void {
 export function registerRestart(program: Command): void {
   program
     .command("restart")
-    .description("restart the running gateway service (drains in-flight requests)")
+    .description("restart the singleton daemon (drains in-flight requests)")
     .option("--drain-grace <seconds>", "grace for in-flight requests (default: $ROUTEKIT_DRAIN_GRACE or 30)")
     .action(async (options: { drainGrace?: string }, command: Command) => {
       const ctx = contextFor(command);
@@ -71,7 +71,7 @@ export function registerRestart(program: Command): void {
       if (record === undefined) {
         throw new CliError({
           message: "RouteKit daemon is not running",
-          tryCommand: "routekit gateway start"
+          tryCommand: "routekit daemon start"
         });
       }
       drainGraceMs(options.drainGrace);

@@ -50,7 +50,6 @@ Set `ROUTEKIT_DEV_SKIP_BUILD=1` after a build for a faster local check.
 | `daemon status`, `reload`, `stop`, `logs` | Inspect and operate the singleton RouteKit daemon. |
 | `daemon service install`, `uninstall`, `status` | Manage its persistent systemd user unit / launchd agent. |
 | `gateway serve` | Run the combined daemon + gateway in the foreground for development. |
-| `gateway start`, `stop`, `restart`, `upgrade`, `logs`, `service` | Compatibility names for the corresponding singleton-daemon lifecycle operations. |
 | `codex`, `claude`, `cursor`, `opencode` | Ask the daemon to prepare a launch, then run the coding tool locally against the singleton gateway. |
 | `codex install`, `codex uninstall` | Add or remove RouteKit-owned Codex provider/profile blocks. |
 | `providers add`, `remove`, `status` | Manage explicit providers and run live discovery without printing credentials. |
@@ -58,7 +57,6 @@ Set `ROUTEKIT_DEV_SKIP_BUILD=1` after a build for a faster local check.
 | `accounts login` | Run an isolated official Claude Code or Codex login, enroll the credential into the native pool, and enable that provider. |
 | `accounts add`, `remove`, `list`, `status` | Import the current official CLI login or manage enrolled native subscription accounts. |
 | `usage` | Show subscription rate limits, credits, and reset windows from the running gateway or enrolled local accounts. |
-| `accounts serve`, `stop` | Deprecated compatibility commands; account pools now live inside the singleton daemon. |
 | `accounts cliproxy install`, `login`, `serve`, `status` | Manage RouteKit's pinned CLIProxyAPI integration. |
 | `config path`, `show`, `init`, `edit`, `import`, `migrate` | Manage the daemon's canonical global router config with revision-checked writes. |
 | `doctor` | Check router configuration, referenced credential variables, and installed coding-agent binaries. |
@@ -153,7 +151,7 @@ a detached daemon and says so.
 For a background daemon without OS supervision:
 
 ```sh
-routekit gateway start                  # compatibility name; logs to ~/.routekit/logs/daemon.log
+routekit daemon start                   # logs to ~/.routekit/logs/daemon.log
 routekit daemon stop
 ```
 
@@ -169,7 +167,7 @@ the package/protocol version and gracefully restarts an older daemon before
 retrying. The explicit form is:
 
 ```sh
-routekit gateway upgrade
+routekit daemon upgrade
 ```
 
 replaces the combined daemon after draining model traffic. A fixed loopback

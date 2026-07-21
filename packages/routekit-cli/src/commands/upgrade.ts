@@ -37,7 +37,7 @@ export function argsWithPort(args: readonly string[], port: string): string[] {
 export function registerUpgrade(program: Command): void {
   program
     .command("upgrade")
-    .description("replace the running gateway with the installed CLI version, draining in-flight requests")
+    .description("upgrade the running daemon to the installed CLI version")
     .option("--force", "restart even when versions already match (e.g. after a config change)")
     .option("--drain-grace <seconds>", "grace for in-flight requests (default: $ROUTEKIT_DRAIN_GRACE or 30)")
     .action(async (options: { force?: boolean; drainGrace?: string }, command: Command) => {
@@ -48,7 +48,7 @@ export function registerUpgrade(program: Command): void {
       if (record === undefined) {
         throw new CliError({
           message: "RouteKit daemon is not running",
-          tryCommand: "routekit gateway start"
+          tryCommand: "routekit daemon start"
         });
       }
       if (record.version === version && options.force !== true) {

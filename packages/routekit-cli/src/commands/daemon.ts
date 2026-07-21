@@ -21,7 +21,9 @@ import {
   readDaemonRecord
 } from "../client.js";
 import { routekitVersion } from "../state.js";
-import { registerGatewayService, registerLogs } from "./gateway-service.js";
+import { registerDaemonService, registerLogs } from "./gateway-service.js";
+import { registerRestart, registerStart } from "./start.js";
+import { registerUpgrade } from "./upgrade.js";
 
 function registerRun(group: Command): void {
   const run = new Command("run")
@@ -210,10 +212,13 @@ export function registerDaemon(program: Command): void {
     .command("daemon")
     .description("manage the singleton RouteKit daemon");
   registerRun(group);
+  registerStart(group);
+  registerRestart(group);
+  registerUpgrade(group);
   registerStatus(group);
   registerReload(group);
   registerStop(group);
   registerAuth(group);
   registerLogs(group);
-  registerGatewayService(group);
+  registerDaemonService(group);
 }

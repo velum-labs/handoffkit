@@ -47,7 +47,7 @@ function alive(pid: number): boolean {
   }
 }
 
-test("gateway service lifecycle: start, idempotency, upgrade, drain-on-stop", async () => {
+test("daemon lifecycle: start, idempotency, upgrade, drain-on-stop", async () => {
   const root = mkdtempSync(join(tmpdir(), "routekit-service-e2e-"));
   const project = join(root, "project");
   const home = join(root, "home");
@@ -108,7 +108,7 @@ test("gateway service lifecycle: start, idempotency, upgrade, drain-on-stop", as
     NO_COLOR: "1"
   };
   const cli = { cwd: project, env };
-  const base = ["gateway"];
+  const base = ["daemon"];
   const recordPath = join(stateHome, "services", "daemon.json");
   let daemonPid: number | undefined;
 
@@ -184,7 +184,7 @@ test("gateway service lifecycle: start, idempotency, upgrade, drain-on-stop", as
     assert.equal(inflightResponse.status, 200);
     assert.match(await inflightResponse.text(), /drained answer/);
     const stopped = json(await stopRun);
-    assert.equal((stopped.service as { stopped?: boolean }).stopped, true);
+    assert.equal(stopped.stopped, true);
     // Guarded cleanup intentionally leaves the dead generation record in
     // place rather than risking deletion of a concurrently published
     // successor; readers treat its dead pid as unavailable.

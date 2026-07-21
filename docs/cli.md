@@ -29,10 +29,9 @@ spawning stay local. Concurrent first calls race-safely start exactly one
 daemon, using a persistent systemd user unit / launchd agent when available
 and a clearly reported detached fallback otherwise.
 
-`routekit daemon status|reload|stop|logs` and `daemon service
-install|uninstall|status` are the canonical lifecycle surface. Existing
-`gateway start|stop|restart|upgrade|logs|service` names remain compatibility
-aliases. Config/account reloads atomically switch router generations while
+`routekit daemon start|status|reload|restart|upgrade|stop|logs` and `daemon
+service install|uninstall|status` are the lifecycle surface. Config/account
+reloads atomically switch router generations while
 old in-flight streams drain; binary upgrade drains and restarts the combined
 daemon, then the initiating client reconnects and retries.
 See the [`@routekit/cli` README](../packages/routekit-cli/README.md) for the

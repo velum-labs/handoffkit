@@ -19,7 +19,7 @@ import {
   captureLoginCredential,
   parseAccountMode
 } from "../accounts.js";
-import { ensureDaemon, routekitClient } from "../client.js";
+import { routekitClient } from "../client.js";
 
 
 async function activateAccount(subscriptionKind: "claude-code" | "codex"): Promise<string> {
@@ -297,54 +297,6 @@ export function registerAccounts(program: Command): void {
               : "stored; configured; relay ready"
         );
       }
-    });
-
-  accounts
-    .command("serve")
-    .description("compatibility alias: ensure the singleton daemon account pool is running")
-    .option("--host <host>", "bind host", "127.0.0.1")
-    .option("--port <port>", "bind port", "8790")
-    .option("--strategy <strategy>", "sticky | round_robin | capacity_weighted", "sticky")
-    .option("--switch-threshold <ratio>", "proactive utilization threshold", "0.9")
-    .option("--probe-interval <seconds>", "usage poll interval", "0")
-    .option("--no-portless", "disable the stable local route")
-    .action(
-      async (
-        options: {
-          host: string;
-          port: string;
-          strategy: "sticky" | "round_robin" | "capacity_weighted";
-          switchThreshold: string;
-          probeInterval: string;
-          portless?: boolean;
-        },
-        command: Command
-      ) => {
-        const ctx = contextFor(command);
-        const running = await ensureDaemon();
-        const status = await running.client.call("daemon.status", {});
-        if (ctx.json) {
-          ctx.emit({
-            compatibilityAlias: true,
-            daemon: status,
-            providers: ["claude-code", "codex"]
-          });
-        }
-        else {
-          ctx.presenter.success(`singleton daemon account pool is running at ${status.dataUrl}`);
-          ctx.presenter.note("`accounts serve` is deprecated; accounts now live inside the daemon.");
-        }
-      }
-    );
-
-  accounts
-    .command("stop")
-    .description("compatibility alias; there is no separate account proxy")
-    .action(async (_options: unknown, command: Command) => {
-      const ctx = contextFor(command);
-      await routekitClient();
-      if (ctx.json) ctx.emit({ stopped: false, integrated: true });
-      else ctx.presenter.note("accounts are integrated into the singleton daemon; nothing separate to stop");
     });
 
   registerCliproxy(accounts);

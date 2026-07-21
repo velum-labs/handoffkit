@@ -93,7 +93,7 @@ test("real routekit command surfaces execute independently of FusionKit", () => 
 
     const legacyInstall = runCli(["install", "codex"], input);
     assert.equal(legacyInstall.status, 1);
-    assert.match(legacyInstall.stderr, /routekit codex install/);
+    assert.match(legacyInstall.stderr, /unknown command/i);
 
     for (const fusionOnly of ["setup", "prompts", "sessions", "ensemble"]) {
       const rejected = runCli([fusionOnly], input);

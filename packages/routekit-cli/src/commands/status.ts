@@ -239,10 +239,10 @@ export function renderOverviewLines(overview: RouteKitOverview): string[] {
   if (gateway?.versionSkew === true) {
     lines.push(
       "",
-      `→ gateway is running v${gateway.version} but the installed CLI is v${overview.cliVersion} — run: routekit gateway upgrade`
+      `→ daemon is running v${gateway.version} but the installed CLI is v${overview.cliVersion} — run: routekit daemon upgrade`
     );
   }
-  if (gateway?.running !== true) lines.push("", "→ try: routekit gateway start");
+  if (gateway?.running !== true) lines.push("", "→ try: routekit daemon start");
   if (
     overview.providers.some((provider) => !provider.credentialAvailable || provider.lastCheck?.ok === false)
   ) {
