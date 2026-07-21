@@ -68,6 +68,7 @@ test("singleton daemon exposes authenticated control and a stable reloadable dat
     drainGraceMs: 2_000,
     env: {
       ...process.env,
+      HOME: root,
       ROUTEKIT_HOME: stateHome,
       OPENAI_API_KEY: "test-key",
       OPENAI_BASE_URL: upstream.url,
@@ -237,6 +238,7 @@ test("second daemon cannot claim authority and generations remain monotonic", as
     portless: false,
     env: {
       ...process.env,
+      HOME: root,
       ROUTEKIT_HOME: stateHome,
       OPENAI_API_KEY: "test-key",
       OPENAI_BASE_URL: upstream.url,

@@ -305,7 +305,7 @@ export function registerStatus(program: Command): void {
         const observedAt = new Date().toISOString();
         return {
           observedAt,
-          cliVersion: daemon.packageVersion,
+          cliVersion: routekitVersion(),
           daemon,
           services: [
             {

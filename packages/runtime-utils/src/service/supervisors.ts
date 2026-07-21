@@ -13,7 +13,7 @@
  */
 import { chmodSync, existsSync, mkdirSync, rmSync } from "node:fs";
 import { homedir, userInfo } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 import { runCliCapture, writeFileAtomic } from "../index.js";
 
@@ -319,6 +319,9 @@ function createLaunchdController(input: {
     unitPath,
     async install(spec) {
       mkdirSync(join(unitPath, ".."), { recursive: true });
+      if (spec.logFile !== undefined) {
+        mkdirSync(dirname(spec.logFile), { recursive: true, mode: 0o700 });
+      }
       // The plist may embed secrets (launchd has no EnvironmentFile): 0600.
       writeFileAtomic(unitPath, launchdAgentPlist(spec), { mode: 0o600 });
       chmodSync(unitPath, 0o600);

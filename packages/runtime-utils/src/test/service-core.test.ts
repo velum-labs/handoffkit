@@ -176,6 +176,47 @@ test("launchd plist generation embeds the program, keep-alive, env stamp, and lo
   assert.match(plist, /<key>StandardOutPath<\/key>/);
 });
 
+test("launchd controller creates log directories and manages the agent lifecycle", async () => {
+  const home = mkdtempSync(join(tmpdir(), "launchd-install-"));
+  const calls: string[][] = [];
+  const runner: CommandRunner = async (command, args) => {
+    calls.push([command, ...args]);
+    return { exitCode: 0, stdout: "", stderr: "" };
+  };
+  try {
+    const controller = await detectSupervisor("routekit", "daemon", {
+      platform: "darwin",
+      runner,
+      home,
+      uid: 501
+    });
+    assert.ok(controller !== undefined);
+    const logFile = join(home, "state", "logs", "daemon.log");
+    await controller.install({
+      product: "routekit",
+      kind: "daemon",
+      description: "RouteKit singleton daemon",
+      command: { execPath: "/usr/local/bin/node", args: ["/bin.js", "daemon", "run"] },
+      logFile
+    });
+    assert.equal(statSync(join(home, "state", "logs")).isDirectory(), true);
+    assert.equal(statSync(controller.unitPath).mode & 0o777, 0o600);
+    assert.deepEqual(
+      calls.map((call) => call.slice(1)),
+      [
+        ["version"],
+        ["bootout", "gui/501/com.routekit.daemon"],
+        ["bootstrap", "gui/501", controller.unitPath],
+        ["enable", "gui/501/com.routekit.daemon"]
+      ]
+    );
+    assert.equal(await controller.uninstall(), true);
+    assert.equal(existsSync(controller.unitPath), false);
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
 test("supervisor detection uses the platform and a live user manager", async () => {
   const calls: string[][] = [];
   const runnerFor =

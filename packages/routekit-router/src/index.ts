@@ -2,6 +2,8 @@ import {
   CLIPROXY_API_KEY_ENV,
   cliproxyApiKey,
   collectSubscriptionUsage,
+  defaultSubscriptionAccountDirectory,
+  defaultSubscriptionCredentialPath,
   openSubscriptionAccountSets,
   SubscriptionAccountBackend,
   subscriptionRelaysFromAccountSets
@@ -55,22 +57,28 @@ export type RunningRouter = {
 function gatewayEnvironment(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   const resolved = { ...env };
   if (resolved[CLIPROXY_API_KEY_ENV] === undefined) {
-    const managed = cliproxyApiKey();
+    const managed = cliproxyApiKey(env);
     if (managed !== undefined) resolved[CLIPROXY_API_KEY_ENV] = managed;
   }
   return resolved;
 }
 
-function accountConfigs(config: RouterConfig): SubscriptionAccountConfigs {
+function accountConfigs(
+  config: RouterConfig,
+  env: NodeJS.ProcessEnv
+): SubscriptionAccountConfigs {
   const configured = config.providers;
-  const accounts: SubscriptionAccountConfigs = {
-    "claude-code": { source: { kind: "auto" } },
-    codex: { source: { kind: "auto" } }
-  };
+  // Do not inspect or auto-import unrelated local subscription credentials
+  // when an embedded router only configures API-key providers.
+  const accounts: SubscriptionAccountConfigs = {};
   const claude = configured["claude-code"];
   if (claude !== undefined) {
     accounts["claude-code"] = {
-      source: { kind: "auto" },
+      source: {
+        kind: "auto",
+        directory: defaultSubscriptionAccountDirectory("claude-code", env),
+        canonicalPath: defaultSubscriptionCredentialPath("claude-code", env)
+      },
       strategy: claude.strategy,
       switchThreshold: claude.switchThreshold,
       ...(claude.probeIntervalMs !== undefined
@@ -84,7 +92,11 @@ function accountConfigs(config: RouterConfig): SubscriptionAccountConfigs {
   const codex = configured.codex;
   if (codex !== undefined) {
     accounts.codex = {
-      source: { kind: "auto" },
+      source: {
+        kind: "auto",
+        directory: defaultSubscriptionAccountDirectory("codex", env),
+        canonicalPath: defaultSubscriptionCredentialPath("codex", env)
+      },
       strategy: codex.strategy,
       switchThreshold: codex.switchThreshold,
       ...(codex.probeIntervalMs !== undefined
@@ -101,7 +113,8 @@ function accountConfigs(config: RouterConfig): SubscriptionAccountConfigs {
 export async function startRouter(options: StartRouterOptions): Promise<RunningRouter> {
   const host = options.host ?? "127.0.0.1";
   assertAuthenticatedBind(host, options.authToken);
-  const accounts = accountConfigs(options.config);
+  const env = options.env ?? process.env;
+  const accounts = accountConfigs(options.config, env);
   const accountSets = await openSubscriptionAccountSets(accounts);
   const requiredKinds = new Set(
     (["claude-code", "codex"] as const).filter(
@@ -143,7 +156,7 @@ export async function startRouter(options: StartRouterOptions): Promise<RunningR
   try {
     backend = await CatalogBackend.create({
       config: options.config,
-      env: gatewayEnvironment(options.env ?? process.env),
+      env: gatewayEnvironment(env),
       sources
     });
   } catch (error) {

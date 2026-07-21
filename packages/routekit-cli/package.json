@@ -56,8 +56,8 @@
     "cli"
   ],
   "scripts": {
-    "build": "tsc -b",
-    "clean": "tsc -b --clean",
+    "build": "node --input-type=module -e \"import { rmSync } from 'node:fs'; for (const path of ['dist', 'tsconfig.tsbuildinfo']) rmSync(path, { recursive: true, force: true })\" && tsc -b",
+    "clean": "node --input-type=module -e \"import { rmSync } from 'node:fs'; for (const path of ['dist', 'tsconfig.tsbuildinfo']) rmSync(path, { recursive: true, force: true })\"",
     "test": "node --test \"dist/test/*.test.js\""
   }
 }

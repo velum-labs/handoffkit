@@ -20,6 +20,7 @@ import {
  * process fulfils. In "crash" mode it logs and exits before becoming ready.
  */
 const FIXTURE = `
+import { spawnSync } from "node:child_process";
 import { createServer } from "node:http";
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -36,6 +37,11 @@ const server = createServer((req, res) => {
 });
 server.listen(0, "127.0.0.1", () => {
   const port = server.address().port;
+  const processIdentity = process.platform === "linux"
+    ? readFileSync("/proc/self/stat", "utf8").slice(readFileSync("/proc/self/stat", "utf8").lastIndexOf(")") + 2).split(" ")[19]
+    : process.platform === "darwin"
+      ? spawnSync("ps", ["-o", "lstart=", "-p", String(process.pid)], { encoding: "utf8" }).stdout.trim()
+      : undefined;
   mkdirSync(join(home, "services"), { recursive: true });
   writeFileSync(
     join(home, "services", "svc.json"),
@@ -47,9 +53,7 @@ server.listen(0, "127.0.0.1", () => {
       url: "http://127.0.0.1:" + port,
       port,
       startedAt: new Date().toISOString(),
-      processIdentity: process.platform === "linux"
-        ? readFileSync("/proc/self/stat", "utf8").slice(readFileSync("/proc/self/stat", "utf8").lastIndexOf(")") + 2).split(" ")[19]
-        : undefined,
+      processIdentity: processIdentity || undefined,
       supervisor: process.env.${SERVICE_SUPERVISOR_ENV}
     })
   );

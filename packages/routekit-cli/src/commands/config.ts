@@ -21,6 +21,7 @@ import {
   writeRouterConfig
 } from "../config.js";
 import { ensureDaemon, readDaemonRecord, routekitClient } from "../client.js";
+import { missingServiceCredentialVariables } from "../daemon.js";
 
 import { configOverride } from "./context.js";
 
@@ -84,7 +85,27 @@ export function registerConfig(program: Command): void {
         // Bootstrap/recovery exception: there cannot be a daemon until its
         // canonical config exists.
         writeRouterConfig(path, DEFAULT_ROUTER_CONFIG);
-        await ensureDaemon({ configPath: path });
+        const missingCredentials =
+          missingServiceCredentialVariables(DEFAULT_ROUTER_CONFIG);
+        if (missingCredentials.length === 0) {
+          await ensureDaemon({ configPath: path });
+        } else {
+          if (ctx.json) {
+            ctx.emit({
+              path,
+              created: true,
+              daemonStarted: false,
+              missingCredentials
+            });
+            return;
+          }
+          ctx.presenter.success(`created ${path}`);
+          ctx.presenter.warn(
+            `daemon not started: set ${missingCredentials.join(" or ")}`
+          );
+          ctx.presenter.note("then run `routekit daemon start`");
+          return;
+        }
       }
       if (ctx.json) ctx.emit({ path, created: true });
       else ctx.presenter.success(`created ${path}`);

@@ -7,7 +7,12 @@
 import { chmodSync, mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 
+import {
+  CLIPROXY_API_KEY_ENV,
+  cliproxyApiKey
+} from "@routekit/accounts";
 import { CliError } from "@routekit/cli-core";
+import { configuredProviderIds } from "@routekit/config";
 import type { RouterConfig } from "@routekit/gateway";
 import { PROVIDERS } from "@routekit/registry";
 import { serviceLogPath, writeFileAtomic } from "@routekit/runtime";
@@ -60,7 +65,7 @@ export function gatewayLogPath(): string {
  */
 export function serviceEnvironment(config: RouterConfig): Record<string, string> {
   const names = new Set<string>(["ROUTEKIT_HOME", "ROUTEKIT_PORTLESS", "ROUTEKIT_DRAIN_GRACE", "PORTLESS_STATE_DIR", "PORTLESS_TLD"]);
-  for (const provider of Object.keys(PROVIDERS)) {
+  for (const provider of configuredProviderIds(config)) {
     const info = PROVIDERS[provider];
     if (info === undefined) continue;
     for (const name of [
@@ -78,6 +83,30 @@ export function serviceEnvironment(config: RouterConfig): Record<string, string>
     if (value !== undefined) env[name] = value;
   }
   return env;
+}
+
+export function missingServiceCredentialVariables(
+  config: RouterConfig,
+  env: NodeJS.ProcessEnv = process.env
+): string[] {
+  const missing = new Set<string>();
+  for (const provider of configuredProviderIds(config)) {
+    const info = PROVIDERS[provider];
+    if (info === undefined) continue;
+    const alternatives = [info.keyEnv, info.authTokenEnv].filter(
+      (name): name is string => name !== undefined
+    );
+    if (
+      alternatives.length === 0 ||
+      alternatives.some((name) => (env[name] ?? "").trim().length > 0) ||
+      (alternatives.includes(CLIPROXY_API_KEY_ENV) &&
+        cliproxyApiKey(env) !== undefined)
+    ) {
+      continue;
+    }
+    for (const name of alternatives) missing.add(name);
+  }
+  return [...missing];
 }
 
 export function serviceEnvFilePath(kind: string): string {
@@ -119,7 +148,10 @@ export function daemonUnitSpec(input: {
       execPath: process.execPath,
       args: [cliEntryPath(), ...input.args]
     },
-    workingDirectory: input.cwd ?? process.cwd(),
+    // Persistent services must not depend on the directory from which the
+    // install command happened to be run. That project may later be moved or
+    // deleted, preventing launchd/systemd from starting the daemon.
+    workingDirectory: input.cwd ?? routekitHome(),
     drainGraceMs: input.drainGraceMs
   };
   if (input.supervisor === "systemd") {

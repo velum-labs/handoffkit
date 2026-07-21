@@ -24,8 +24,11 @@ import type { SubscriptionCredential } from "./types.js";
 
 const execFileAsync = promisify(execFile);
 
-function expandHome(path: string): string {
-  return path.startsWith("~/") ? join(homedir(), path.slice(2)) : path;
+function expandHome(
+  path: string,
+  env: Readonly<Record<string, string | undefined>> = process.env
+): string {
+  return path.startsWith("~/") ? join(env.HOME ?? homedir(), path.slice(2)) : path;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -96,9 +99,12 @@ async function credentialBlob(
   return parsed;
 }
 
-export function defaultSubscriptionAccountDirectory(mode: SubscriptionMode): string {
+export function defaultSubscriptionAccountDirectory(
+  mode: SubscriptionMode,
+  env: Readonly<Record<string, string | undefined>> = process.env
+): string {
   const configured = subscriptionInfo(mode).accountsDirectory;
-  const stateHome = process.env.ROUTEKIT_HOME;
+  const stateHome = env.ROUTEKIT_HOME;
   if (
     stateHome !== undefined &&
     stateHome.length > 0 &&
@@ -106,11 +112,14 @@ export function defaultSubscriptionAccountDirectory(mode: SubscriptionMode): str
   ) {
     return join(stateHome, configured.slice("~/.routekit/".length));
   }
-  return expandHome(configured);
+  return expandHome(configured, env);
 }
 
-export function defaultSubscriptionCredentialPath(mode: SubscriptionMode): string {
-  return expandHome(subscriptionInfo(mode).credentialsPath);
+export function defaultSubscriptionCredentialPath(
+  mode: SubscriptionMode,
+  env: Readonly<Record<string, string | undefined>> = process.env
+): string {
+  return expandHome(subscriptionInfo(mode).credentialsPath, env);
 }
 
 export async function loadSubscriptionCredential(

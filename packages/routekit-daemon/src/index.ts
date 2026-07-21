@@ -206,12 +206,12 @@ function revisionConflict(expected: number, actual: number): never {
   });
 }
 
-function accountEntries(): Array<{
+function accountEntries(env: NodeJS.ProcessEnv): Array<{
   subscriptionKind: "claude-code" | "codex";
   label: string;
 }> {
   return (["claude-code", "codex"] as const).flatMap((subscriptionKind) => {
-    const directory = defaultSubscriptionAccountDirectory(subscriptionKind);
+    const directory = defaultSubscriptionAccountDirectory(subscriptionKind, env);
     if (!existsSync(directory)) return [];
     return readdirSync(directory)
       .filter((name) => name.endsWith(".json") && !name.startsWith("."))
@@ -223,13 +223,17 @@ function accountEntries(): Array<{
   });
 }
 
-function providerCredentialAvailable(provider: string, accounts: ReturnType<typeof accountEntries>): boolean {
+function providerCredentialAvailable(
+  provider: string,
+  accounts: ReturnType<typeof accountEntries>,
+  env: NodeJS.ProcessEnv
+): boolean {
   if (provider === "claude-code" || provider === "codex") {
     return accounts.some((entry) => entry.subscriptionKind === provider);
   }
   const info = PROVIDERS[provider];
   if (info?.keyEnv === undefined) return true;
-  return (process.env[info.keyEnv] ?? "").length > 0;
+  return (env[info.keyEnv] ?? "").length > 0;
 }
 
 function safeCredentialBlob(
@@ -502,7 +506,7 @@ export async function startRouteKitDaemon(
         return configSnapshot();
       },
       "providers.status": async (_params, context) => {
-        const accounts = accountEntries();
+        const accounts = accountEntries(env);
         const live = await activeRouter!.providerStatuses(context.signal);
         const result = {
           providers: configuredProviderIds(currentConfig).map((provider) => {
@@ -510,7 +514,7 @@ export async function startRouteKitDaemon(
             return {
               provider,
               configured: true,
-              credentialAvailable: providerCredentialAvailable(provider, accounts),
+              credentialAvailable: providerCredentialAvailable(provider, accounts, env),
               models: status?.models ?? [],
               ...(status?.error !== undefined ? { error: status.error } : {})
             };
@@ -585,11 +589,11 @@ export async function startRouteKitDaemon(
         return model;
       },
       "accounts.list": async () => ({
-        accounts: accountEntries(),
+        accounts: accountEntries(env),
         revision: revisions.accounts
       }),
       "accounts.status": async () => ({
-        accounts: accountEntries().map((entry) => {
+        accounts: accountEntries(env).map((entry) => {
           const member = activeRouter!
             .accountSnapshots()
             .find((snapshot) => snapshot.mode === entry.subscriptionKind)
@@ -618,7 +622,7 @@ export async function startRouteKitDaemon(
               message: "account label must already be normalized"
             });
           }
-          const directory = defaultSubscriptionAccountDirectory(params.kind);
+          const directory = defaultSubscriptionAccountDirectory(params.kind, env);
           mkdirSync(directory, { recursive: true, mode: 0o700 });
           const path = join(directory, `${label}.json`);
           if (existsSync(path)) {
@@ -653,10 +657,12 @@ export async function startRouteKitDaemon(
       "accounts.remove": async (params) => {
         let removed = false;
         await serializeMutation(async () => {
-          const directory = defaultSubscriptionAccountDirectory(params.kind);
+          const directory = defaultSubscriptionAccountDirectory(params.kind, env);
           const path = join(directory, `${params.label}.json`);
           const previous = existsSync(path) ? readFileSync(path) : undefined;
-          const result = removeSubscriptionAccount(params.kind, params.label);
+          const result = removeSubscriptionAccount(params.kind, params.label, {
+            accountsDirectory: directory
+          });
           removed = result.removed;
           if (!result.removed) return;
           try {

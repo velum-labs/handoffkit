@@ -33,7 +33,11 @@ import {
 import type { ServiceRecord, StartDaemonResult } from "@routekit/runtime";
 
 import { routekitVersion } from "./state.js";
-import { daemonUnitSpec, serviceEnvironment } from "./daemon.js";
+import {
+  daemonUnitSpec,
+  missingServiceCredentialVariables,
+  serviceEnvironment
+} from "./daemon.js";
 
 const PRODUCT = "routekit";
 const KIND = "daemon";
@@ -345,8 +349,15 @@ export async function ensureDaemon(input: {
   const entry = process.argv[1];
   if (entry === undefined) throw new Error("cannot resolve the routekit entry script");
   const home = routekitHome();
-  const authTokenFile = ensureDaemonDataToken(input.authToken);
   const configPath = requestedConfigPath;
+  const config = loadRouterConfig({ configPath }).config;
+  const missingCredentials = missingServiceCredentialVariables(config);
+  if (missingCredentials.length > 0) {
+    throw new Error(
+      `cannot start RouteKit: set ${missingCredentials.join(" or ")} for the configured provider`
+    );
+  }
+  const authTokenFile = ensureDaemonDataToken(input.authToken);
   const supervisor =
     input.lifecycleLockHeld === true ||
     process.env.ROUTEKIT_NO_SUPERVISOR === "1"
@@ -364,7 +375,6 @@ export async function ensureDaemon(input: {
         return { client, record: joined };
       }
       const graceMs = input.drainGraceMs ?? 30_000;
-      const config = loadRouterConfig({ configPath }).config;
       let installed = false;
       try {
         installed = true;
@@ -386,7 +396,15 @@ export async function ensureDaemon(input: {
         });
         const client = controlClientForRecord(record);
         await client.hello();
-        return { client, record };
+        return {
+          client,
+          record,
+          start: {
+            alreadyRunning: false,
+            record,
+            logFile: daemonLogPath()
+          }
+        };
       } catch (error) {
         if (installed) {
           await supervisor

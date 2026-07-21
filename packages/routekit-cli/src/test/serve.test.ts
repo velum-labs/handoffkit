@@ -157,6 +157,7 @@ test("serve resolves the managed cliproxy credential without printing or exporti
     port: 0,
     register: false,
     env: {
+      ROUTEKIT_HOME: stateHome,
       ROUTEKIT_CLIPROXY_BASE_URL: `http://127.0.0.1:${port}`
     }
   });

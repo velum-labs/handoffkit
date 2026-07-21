@@ -28,6 +28,7 @@ import {
 import { globalRouterConfigPath, loadRouterConfig, routekitHome } from "../config.js";
 import {
   daemonUnitSpec,
+  missingServiceCredentialVariables,
   removeServiceEnvFile,
   ROUTEKIT_PRODUCT,
   serviceEnvironment
@@ -57,6 +58,14 @@ function registerInstall(group: Command): void {
     const ctx = contextFor(command);
     const configPath = globalRouterConfigPath();
     const result = loadRouterConfig({ configPath });
+    const missingCredentials = missingServiceCredentialVariables(result.config);
+    if (missingCredentials.length > 0) {
+      throw new CliError({
+        message:
+          `cannot install the RouteKit daemon: set ` +
+          `${missingCredentials.join(" or ")} for the configured provider`
+      });
+    }
     const graceMs = drainGraceMs(options.drainGrace);
     const authTokenFile = ensureDaemonDataToken(options.authToken);
     const serveArgs = daemonServeArgs({
@@ -167,12 +176,24 @@ function registerUninstall(group: Command): void {
         const controller =
           kind !== undefined ? daemonSupervisorController(kind) : await platformSupervisor();
         let removed = false;
+        let stopped = false;
         if (controller !== undefined) {
           removed = await controller.uninstall({
             timeoutMs: supervisorOperationTimeoutMs(record?.drainGraceMs)
           });
+          if (
+            removed &&
+            record !== undefined &&
+            (record.supervisor === "systemd" || record.supervisor === "launchd")
+          ) {
+            stopped = await waitForProcessExit(
+              record.pid,
+              supervisorOperationTimeoutMs(record.drainGraceMs),
+              record.processIdentity
+            );
+            if (!stopped) throw new Error(`RouteKit daemon pid ${record.pid} did not stop`);
+          }
         }
-        let stopped = false;
         if (record !== undefined && record.supervisor === "detached") {
           await controlClientForRecord(record).call(
             "daemon.prepareShutdown",
@@ -215,6 +236,7 @@ function registerServiceStatus(group: Command): void {
       const controller =
         kind !== undefined ? daemonSupervisorController(kind) : await platformSupervisor();
       const status = controller === undefined ? undefined : await controller.status();
+      const healthy = record !== undefined && (await daemonRecordHealthy(record));
       if (ctx.json) {
         const publicRecord =
           record === undefined
@@ -237,6 +259,7 @@ function registerServiceStatus(group: Command): void {
           unitPath: controller?.unitPath,
           installed: status?.installed ?? false,
           active: status?.active ?? false,
+          healthy,
           record: publicRecord
         });
         return;
@@ -252,7 +275,7 @@ function registerServiceStatus(group: Command): void {
       }
       if (record !== undefined) {
         ctx.presenter.line(
-          `daemon running at ${record.dataUrl ?? record.url} (pid ${record.pid}` +
+          `daemon ${healthy ? "running" : "unhealthy"} at ${record.dataUrl ?? record.url} (pid ${record.pid}` +
             `${record.version !== undefined ? `, v${record.version}` : ""}` +
             `, ${record.supervisor ?? "detached"})`
         );

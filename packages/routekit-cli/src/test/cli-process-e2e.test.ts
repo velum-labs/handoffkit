@@ -105,6 +105,46 @@ test("real routekit command surfaces execute independently of FusionKit", () => 
   }
 });
 
+test("config init does not install a crash-looping daemon when credentials are missing", () => {
+  const root = mkdtempSync(join(tmpdir(), "routekit-config-init-"));
+  const home = join(root, "home");
+  const project = join(root, "project");
+  const stateHome = join(root, "state");
+  mkdirSync(home);
+  mkdirSync(project);
+  const env = {
+    ...process.env,
+    HOME: home,
+    ROUTEKIT_HOME: stateHome,
+    ROUTEKIT_NO_SUPERVISOR: "1",
+    PORTLESS: "0",
+    NO_COLOR: "1",
+    OPENAI_API_KEY: undefined
+  };
+  try {
+    const result = runCli(["config", "init", "--json"], {
+      cwd: project,
+      env
+    });
+    assert.equal(result.status, 0, result.stderr);
+    const payload = JSON.parse(result.stdout) as {
+      created?: boolean;
+      daemonStarted?: boolean;
+      missingCredentials?: string[];
+    };
+    assert.equal(payload.created, true);
+    assert.equal(payload.daemonStarted, false);
+    assert.deepEqual(payload.missingCredentials, ["OPENAI_API_KEY"]);
+    assert.equal(
+      existsSync(join(home, ".config", "routekit", "router.yaml")),
+      true
+    );
+    assert.equal(existsSync(join(stateHome, "services", "daemon.json")), false);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("config migrate diagnoses and converts legacy endpoint config explicitly", () => {
   const root = mkdtempSync(join(tmpdir(), "routekit-config-migrate-command-"));
   const configPath = join(root, "router.yaml");
