@@ -14,9 +14,10 @@ routekit gateway serve
 routekit codex
 ```
 
-Configuration is loaded from `.routekit/router.yaml`, then
-`~/.config/routekit/router.yaml`. Set `ROUTEKIT_CONFIG` to use an explicit
-file and `ROUTEKIT_HOME` to relocate runtime state.
+The singleton daemon loads `~/.config/routekit/router.yaml`; import a project
+overlay explicitly with `routekit config import --from .routekit/router.yaml`.
+`--config` / `ROUTEKIT_CONFIG` are reserved for foreground doctor/migration
+recovery paths. `ROUTEKIT_HOME` relocates runtime state.
 
 ## Local checkout development
 

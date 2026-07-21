@@ -5,12 +5,14 @@ import { configuredProviderIds } from "@routekit/config";
 import { PROVIDER_IDS } from "@routekit/gateway";
 
 import { listAccounts } from "./accounts.js";
-import { loadRouterConfig } from "./config.js";
+import { globalRouterConfigPath, loadRouterConfig } from "./config.js";
 import { readStateSnapshot } from "./state.js";
 
 function providerIds(): string[] {
   try {
-    return configuredProviderIds(loadRouterConfig().config);
+    return configuredProviderIds(
+      loadRouterConfig({ configPath: globalRouterConfigPath() }).config
+    );
   } catch {
     return [];
   }
