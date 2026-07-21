@@ -151,7 +151,7 @@ test("lifecycle lock serializes contenders and reaps dead owners", async () => {
       JSON.stringify({
         pid: 2 ** 22 + 123,
         nonce: "dead",
-        acquiredAt: new Date().toISOString()
+        acquiredAt: new Date(Date.now() - 5_000).toISOString()
       })
     );
     const recovered = await acquireLifecycleLock(path, { timeoutMs: 100 });
