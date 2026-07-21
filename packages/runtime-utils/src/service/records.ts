@@ -71,6 +71,8 @@ export type ServiceRecord = {
   drainGraceMs?: number;
   /** Private file containing the data-plane bearer token. */
   authTokenFile?: string;
+  /** OS process birth identity used to reject PID reuse. */
+  processIdentity?: string;
 };
 
 export type ServiceRecordInput = Omit<ServiceRecord, "product" | "owner">;
@@ -88,10 +90,22 @@ export type ServiceRecordStore = {
   remove(kind: string, options?: { ifPid?: number }): void;
 };
 
-export function processAlive(pid: number): boolean {
+export function processIdentity(pid: number): string | undefined {
+  if (process.platform !== "linux") return undefined;
+  try {
+    const stat = readFileSync(`/proc/${pid}/stat`, "utf8");
+    const close = stat.lastIndexOf(")");
+    const fields = stat.slice(close + 2).split(" ");
+    return fields[19];
+  } catch {
+    return undefined;
+  }
+}
+
+export function processAlive(pid: number, identity?: string): boolean {
   try {
     process.kill(pid, 0);
-    return true;
+    return identity === undefined || processIdentity(pid) === identity;
   } catch (error) {
     return (error as NodeJS.ErrnoException).code === "EPERM";
   }
@@ -171,6 +185,9 @@ export function createServiceRecordStore(input: {
       ...(typeof parsed.drainGraceMs === "number" ? { drainGraceMs: parsed.drainGraceMs } : {}),
       ...(optionalString(parsed.authTokenFile) !== undefined
         ? { authTokenFile: parsed.authTokenFile as string }
+        : {}),
+      ...(optionalString(parsed.processIdentity) !== undefined
+        ? { processIdentity: parsed.processIdentity as string }
         : {})
     };
   };
@@ -181,7 +198,7 @@ export function createServiceRecordStore(input: {
     read(kind) {
       const record = readRaw(kind);
       if (record === undefined) return undefined;
-      if (!processAlive(record.pid)) return undefined;
+      if (!processAlive(record.pid, record.processIdentity)) return undefined;
       return record;
     },
     write(record) {

@@ -339,7 +339,12 @@ function createLaunchdController(input: {
       await launchctl(["bootout", serviceTarget], `launchctl bootout ${label}`, options);
     },
     async restart(options) {
-      await launchctl(["kickstart", "-k", serviceTarget], `launchctl kickstart ${label}`, options);
+      await launchctl(["bootout", serviceTarget], `launchctl bootout ${label}`, options);
+      await launchctl(
+        ["bootstrap", domainTarget, unitPath],
+        `launchctl bootstrap ${label}`,
+        options
+      );
     },
     async status() {
       const installed = existsSync(unitPath);

@@ -118,13 +118,17 @@ export function readLogTail(path: string, maxBytes = LOG_TAIL_BYTES): string {
   }
 }
 
-export async function waitForProcessExit(pid: number, timeoutMs: number): Promise<boolean> {
+export async function waitForProcessExit(
+  pid: number,
+  timeoutMs: number,
+  identity?: string
+): Promise<boolean> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    if (!processAlive(pid)) return true;
+    if (!processAlive(pid, identity)) return true;
     await sleep(50);
   }
-  return !processAlive(pid);
+  return !processAlive(pid, identity);
 }
 
 async function healthOk(url: string): Promise<boolean> {
@@ -301,14 +305,18 @@ export type StopDaemonResult = {
  * grace must cover the service's drain window or in-flight work is severed.
  */
 export async function stopDaemonProcess(
-  record: Pick<ServiceRecord, "pid">,
+  record: Pick<ServiceRecord, "pid" | "processIdentity">,
   options: { graceMs?: number } = {}
 ): Promise<StopDaemonResult> {
   const graceMs = options.graceMs ?? 35_000;
-  if (record.pid === process.pid || !processAlive(record.pid)) {
+  if (
+    record.pid === process.pid ||
+    !processAlive(record.pid, record.processIdentity)
+  ) {
     return { stopped: false, forced: false };
   }
   const signalGroup = (signal: NodeJS.Signals): void => {
+    if (!processAlive(record.pid, record.processIdentity)) return;
     try {
       process.kill(-record.pid, signal);
     } catch {
@@ -320,8 +328,10 @@ export async function stopDaemonProcess(
     }
   };
   signalGroup("SIGTERM");
-  if (await waitForProcessExit(record.pid, graceMs)) return { stopped: true, forced: false };
+  if (await waitForProcessExit(record.pid, graceMs, record.processIdentity)) {
+    return { stopped: true, forced: false };
+  }
   signalGroup("SIGKILL");
-  await waitForProcessExit(record.pid, 2_000);
+  await waitForProcessExit(record.pid, 2_000, record.processIdentity);
   return { stopped: true, forced: true };
 }

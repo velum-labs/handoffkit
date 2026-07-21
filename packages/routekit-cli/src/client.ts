@@ -73,6 +73,33 @@ export function readDaemonRecord(): ServiceRecord | undefined {
   return daemonStore().read(KIND);
 }
 
+async function retireLegacyGateway(): Promise<void> {
+  const store = daemonStore();
+  const legacy = store.read("gateway");
+  if (legacy === undefined) return;
+  const lock = await acquireLifecycleLock(daemonLifecycleLockPath());
+  try {
+    const current = store.read("gateway");
+    if (current === undefined) return;
+    if (current.supervisor === "systemd" || current.supervisor === "launchd") {
+      await supervisorController(
+        current.supervisor,
+        PRODUCT,
+        "gateway"
+      ).uninstall({
+        timeoutMs: supervisorOperationTimeoutMs(current.drainGraceMs)
+      });
+    } else {
+      await stopDaemonProcess(current, {
+        graceMs: supervisorOperationTimeoutMs(current.drainGraceMs)
+      });
+    }
+    store.remove("gateway");
+  } finally {
+    lock.release();
+  }
+}
+
 export function controlClientForRecord(record: ServiceRecord): RouteKitControlClient {
   if (record.controlToken === undefined) {
     throw new Error("RouteKit daemon record has no control credential");
@@ -166,6 +193,7 @@ export async function ensureDaemon(input: {
   start?: StartDaemonResult;
 }> {
   const requestedConfigPath = input.configPath ?? canonicalConfigOrMigrationError();
+  await retireLegacyGateway();
   const current = readDaemonRecord();
   if (current !== undefined && (await daemonRecordHealthy(current))) {
     if (
@@ -288,25 +316,36 @@ export async function ensureDaemon(input: {
       }
       const graceMs = input.drainGraceMs ?? 30_000;
       const config = loadRouterConfig({ configPath }).config;
-      await supervisor.install(
-        daemonUnitSpec({
-        args: daemonServeArgs({ ...input, configPath, authTokenFile }),
-          supervisor: supervisor.kind,
-          env: serviceEnvironment(config),
-          drainGraceMs: graceMs
-        })
-      );
-      const record = await waitForServiceReady({
-        home,
-        product: PRODUCT,
-        kind: KIND,
-        timeoutMs: supervisorOperationTimeoutMs(graceMs),
-        logFile: daemonLogPath(),
-        ready: daemonRecordHealthy
-      });
-      const client = controlClientForRecord(record);
-      await client.hello();
-      return { client, record };
+      let installed = false;
+      try {
+        await supervisor.install(
+          daemonUnitSpec({
+            args: daemonServeArgs({ ...input, configPath, authTokenFile }),
+            supervisor: supervisor.kind,
+            env: serviceEnvironment(config),
+            drainGraceMs: graceMs
+          })
+        );
+        installed = true;
+        const record = await waitForServiceReady({
+          home,
+          product: PRODUCT,
+          kind: KIND,
+          timeoutMs: supervisorOperationTimeoutMs(graceMs),
+          logFile: daemonLogPath(),
+          ready: daemonRecordHealthy
+        });
+        const client = controlClientForRecord(record);
+        await client.hello();
+        return { client, record };
+      } catch (error) {
+        if (installed) {
+          await supervisor
+            .uninstall({ timeoutMs: supervisorOperationTimeoutMs(graceMs) })
+            .catch(() => undefined);
+        }
+        throw error;
+      }
     } finally {
       lock.release();
     }

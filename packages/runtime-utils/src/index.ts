@@ -52,6 +52,7 @@ export type {
 export {
   createServiceRecordStore,
   processAlive,
+  processIdentity,
   SERVICE_SUPERVISOR_ENV,
   supervisorFromEnv
 } from "./service/records.js";

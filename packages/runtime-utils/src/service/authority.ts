@@ -132,6 +132,14 @@ export async function acquireLifecycleLock(
   const pollMs = options.pollMs ?? 75;
   const deadline = Date.now() + timeoutMs;
   for (;;) {
+    try {
+      const reaperPath = `${path}.reap`;
+      if (Date.now() - statSync(reaperPath).mtimeMs >= LOCK_STABILIZE_MS) {
+        rmSync(reaperPath, { force: true });
+      }
+    } catch {
+      // no reaper
+    }
     const lock = tryAcquire(path);
     if (lock !== undefined) return lock;
     const current = readLock(path);
@@ -142,7 +150,7 @@ export async function acquireLifecycleLock(
       try {
         ageMs = Date.now() - statSync(path).mtimeMs;
       } catch {
-        continue;
+        ageMs = 0;
       }
       if (ageMs >= LOCK_STABILIZE_MS) {
         const recovered = tryReapAndAcquire(path);
