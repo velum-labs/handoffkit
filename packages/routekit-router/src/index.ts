@@ -192,7 +192,12 @@ export async function startRouter(options: StartRouterOptions): Promise<RunningR
     providerStatuses: async (signal) => await backend.providerStatuses(signal),
     accountSnapshots: () =>
       Object.values(accountSets).map((accountSet) => accountSet.statusSnapshot()),
-    usage: async (signal) =>
-      await collectSubscriptionUsage(accountSets, undefined, signal)
+    usage: async (signal) => {
+      const usage = await collectSubscriptionUsage(accountSets, undefined, signal);
+      return {
+        ...usage,
+        accountSets: usage.accountSets.filter((set) => set.members.length > 0)
+      };
+    }
   };
 }
