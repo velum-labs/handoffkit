@@ -213,4 +213,3 @@ test("accounts login rejects non-interactive modes before starting OAuth", async
     /interactive and does not support --json or --no-input/
   );
 });
-

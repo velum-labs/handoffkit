@@ -102,7 +102,6 @@ test("control transport rejects wrong tokens, hosts, protocols, and content type
     await server.close();
   }
 });
-
 test("control transport streams NDJSON events and structured failures", async () => {
   const server = await startControlServer({
     handler: (method) => {

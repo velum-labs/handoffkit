@@ -58,7 +58,6 @@ function statusForCode(code: ControlErrorCode): number {
       return 500;
   }
 }
-
 export type ControlRequest = {
   protocol: string;
   id: string;

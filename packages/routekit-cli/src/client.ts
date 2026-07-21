@@ -392,4 +392,3 @@ export function daemonLogPath(): string {
 export function daemonLifecycleLockPath(): string {
   return join(routekitHome(), "services", "daemon.lock");
 }
-

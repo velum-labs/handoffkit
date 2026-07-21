@@ -240,4 +240,3 @@ export async function startSwitchingGatewayProxy(input: {
     close: async () => await drain(0)
   };
 }
-

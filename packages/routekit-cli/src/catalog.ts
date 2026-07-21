@@ -66,4 +66,3 @@ export async function fetchLiveCatalog(
       : ids[0]!;
   return { defaultModel, models };
 }
-

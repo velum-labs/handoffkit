@@ -270,4 +270,3 @@ test("second daemon cannot claim authority and generations remain monotonic", as
     rmSync(root, { recursive: true, force: true });
   }
 });
-

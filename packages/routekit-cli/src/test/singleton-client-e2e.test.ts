@@ -182,7 +182,6 @@ test("project overlays require explicit import into the canonical global config"
     rmSync(root, { recursive: true, force: true });
   }
 });
-
 test("explicit external gateway launch neither boots local daemon nor leaks its token", async () => {
   const root = mkdtempSync(join(tmpdir(), "routekit-external-launch-"));
   const bin = join(root, "bin");

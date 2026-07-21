@@ -198,7 +198,6 @@ function parseConfigDocument(document: string): RouterConfig {
     });
   }
 }
-
 function revisionConflict(expected: number, actual: number): never {
   throw new ControlError({
     code: "conflict",
