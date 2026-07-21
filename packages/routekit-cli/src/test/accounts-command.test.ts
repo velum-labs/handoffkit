@@ -213,3 +213,14 @@ test("accounts login rejects non-interactive modes before starting OAuth", async
     /interactive and does not support --json or --no-input/
   );
 });
+
+test("daemon enrollment rejects hidden and duplicate account labels before OAuth", async () => {
+  await assert.rejects(
+    captureLoginCredential("codex", ".hidden", {
+      runLogin: async () => {
+        throw new Error("OAuth must not run");
+      }
+    }),
+    /account name/
+  );
+});
