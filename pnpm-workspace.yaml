@@ -1,6 +1,13 @@
 packages:
   - "packages/*"
   - "examples/*"
+  - "apps/*"
+
+# Build scripts stay disabled globally by .npmrc. This allowlist documents the
+# only native dependencies the application workspaces may rebuild explicitly.
+onlyBuiltDependencies:
+  - esbuild
+  - sharp
 
 # @ai-sdk/harness-claude-code declares @anthropic-ai/claude-agent-sdk as a
 # peer, but never executes it on the host: the adapter ships a bridge bundle

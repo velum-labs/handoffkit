@@ -9,6 +9,9 @@
   ],
   "references": [
     {
+      "path": "../adapter-ai-sdk"
+    },
+    {
       "path": "../harness-core"
     },
     {
