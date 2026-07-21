@@ -74,6 +74,15 @@ export function registerRestart(program: Command): void {
           tryCommand: "routekit daemon start"
         });
       }
+      if (
+        options.drainGrace !== undefined &&
+        (record.supervisor === "systemd" || record.supervisor === "launchd")
+      ) {
+        throw new CliError({
+          message: "changing drain grace for a supervised daemon requires reinstalling its unit",
+          tryCommand: `routekit daemon service install --drain-grace ${options.drainGrace}`
+        });
+      }
       drainGraceMs(options.drainGrace);
       const lock = await acquireLifecycleLock(daemonLifecycleLockPath());
       let restarted;

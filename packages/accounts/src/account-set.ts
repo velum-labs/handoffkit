@@ -675,15 +675,20 @@ export class SubscriptionAccountSet {
     }
     const lease = this.#capacityPool.acquire(model ?? "default", ineligible);
     const member = lease.value;
-    await this.#ensureFresh(member, signal);
-    if (this.#activeId !== member.id) {
-      this.#activeId = member.id;
-      member.switchedAt = Date.now();
+    try {
+      await this.#ensureFresh(member, signal);
+      if (this.#activeId !== member.id) {
+        this.#activeId = member.id;
+        member.switchedAt = Date.now();
+      }
+      await this.#waitForRamp(member, signal);
+      member.inFlight += 1;
+      member.lastUsed = Date.now();
+      return lease;
+    } catch (error) {
+      lease.release();
+      throw error;
     }
-    await this.#waitForRamp(member, signal);
-    member.inFlight += 1;
-    member.lastUsed = Date.now();
-    return lease;
   }
 
   #release(member: PoolMember): void {

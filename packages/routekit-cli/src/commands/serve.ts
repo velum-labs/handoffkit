@@ -22,7 +22,10 @@ export function registerServe(program: Command): void {
         command: Command
       ) => {
         const ctx = contextFor(command);
-        const configPath = configOverride(command) ?? globalRouterConfigPath();
+        const configPath =
+          configOverride(command) ??
+          process.env.ROUTEKIT_CONFIG ??
+          globalRouterConfigPath();
         let running: Awaited<ReturnType<typeof startRouteKitDaemon>> | undefined;
         const requestShutdown = (): void => {
           setImmediate(() => void running?.close().finally(() => process.exit(0)));
