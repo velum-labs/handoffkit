@@ -47,7 +47,7 @@ Set `ROUTEKIT_DEV_SKIP_BUILD=1` after a build for a faster local check.
 
 | Command | RouteKit responsibility |
 | --- | --- |
-| `daemon status`, `reload`, `stop`, `logs` | Inspect and operate the singleton RouteKit daemon. |
+| `daemon start`, `status`, `reload`, `restart`, `upgrade`, `stop`, `logs` | Operate the singleton RouteKit daemon. |
 | `daemon service install`, `uninstall`, `status` | Manage its persistent systemd user unit / launchd agent. |
 | `gateway serve` | Run the combined daemon + gateway in the foreground for development. |
 | `codex`, `claude`, `cursor`, `opencode` | Ask the daemon to prepare a launch, then run the coding tool locally against the singleton gateway. |

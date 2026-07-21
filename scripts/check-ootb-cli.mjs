@@ -112,9 +112,27 @@ for (const command of ["serve"]) {
 }
 const daemonHelp = runCli(ROUTE_CLI, ["daemon", "--help"]);
 if (daemonHelp.status !== 0) fail(`\`routekit daemon --help\` exited ${daemonHelp.status}`);
-for (const command of ["start", "stop", "restart", "upgrade", "service"]) {
+for (const command of [
+  "start", "status", "reload", "restart", "upgrade", "stop", "logs", "auth", "service"
+]) {
   if (!helpHasCommand(daemonHelp.stdout, command)) {
     fail(`RouteKit daemon help is missing command "${command}"`);
+  }
+}
+for (const removed of ["endpoints", "install", "uninstall"]) {
+  if (helpHasCommand(routeHelp.stdout, removed)) {
+    fail(`RouteKit help unexpectedly includes removed alias "${removed}"`);
+  }
+}
+for (const removed of ["start", "stop", "restart", "upgrade", "logs", "service"]) {
+  if (helpHasCommand(gatewayHelp.stdout, removed)) {
+    fail(`RouteKit gateway help unexpectedly includes daemon command "${removed}"`);
+  }
+}
+const serviceHelp = runCli(ROUTE_CLI, ["daemon", "service", "--help"]);
+for (const command of ["install", "status", "uninstall"]) {
+  if (!helpHasCommand(serviceHelp.stdout, command)) {
+    fail(`RouteKit daemon service help is missing command "${command}"`);
   }
 }
 for (const fusionOnly of ["setup", "prompts", "sessions", "ensemble"]) {

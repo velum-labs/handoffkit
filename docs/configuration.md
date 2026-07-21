@@ -55,7 +55,7 @@ placeholder. Edit that file directly or install the independent
   stops that external process. The recommended target is the stable data URL
   of the singleton RouteKit daemon (`routekit daemon service install`): it survives
   Fusion sessions, restarts on crash/reboot when supervised, transactionally
-  reloads routing/account generations, and upgrades via `routekit gateway
+  reloads routing/account generations, and upgrades via `routekit daemon
   upgrade`.
 
 Each ensemble requires non-empty `members` and a `judge`, all expressed as
