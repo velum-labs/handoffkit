@@ -577,7 +577,7 @@ No module JSDoc was found.
 - `export type { ExitInfo, Spawned, SuperviseSpawnOptions } from "./process.js";`
 - `export { createActivePortlessSession, createPortlessSession, detectPortlessProxy, reapPortlessProject, reapPortlessService } from "./portless.js";`
 - `export type { DetectedProxy, DiscoverOrSpawnInput, DiscoverOrSpawnResult, PortlessModule, PortlessOptions, PortlessSession, RouteMapping, RouteStoreLike, SpawnedService } from "./portless.js";`
-- `export { createServiceRecordStore, processAlive, SERVICE_SUPERVISOR_ENV, supervisorFromEnv } from "./service/records.js";`
+- `export { createServiceRecordStore, processAlive, processIdentity, SERVICE_SUPERVISOR_ENV, supervisorFromEnv } from "./service/records.js";`
 - `export type { ServiceRecord, ServiceRecordInput, ServiceRecordStore, ServiceSupervisorKind } from "./service/records.js";`
 - `export { CONTROL_BODY_LIMIT_BYTES, CONTROL_PROTOCOL_VERSION, ControlClient, ControlError, controlTokenMatches, generateControlToken, startControlServer } from "./service/control.js";`
 - `export type { ControlClientOptions, ControlErrorCode, ControlEvent, ControlFailure, ControlHandler, ControlHandlerContext, ControlRequest, ControlResponse, ControlSuccess, RunningControlServer } from "./service/control.js";`
