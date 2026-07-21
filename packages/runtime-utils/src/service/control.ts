@@ -518,30 +518,45 @@ export class ControlClient {
     }
     const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
     let pending = "";
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      pending += value;
+    let terminal = false;
+    try {
       for (;;) {
-        const newline = pending.indexOf("\n");
-        if (newline < 0) break;
-        const line = pending.slice(0, newline);
-        pending = pending.slice(newline + 1);
-        if (line.length === 0) continue;
-        const event = JSON.parse(line) as ControlEvent;
-        if (event.id !== id || event.protocol !== CONTROL_PROTOCOL_VERSION) {
-          throw new Error("invalid control event");
+        const { done, value } = await reader.read();
+        if (done) break;
+        pending += value;
+        if (Buffer.byteLength(pending, "utf8") > CONTROL_BODY_LIMIT_BYTES) {
+          throw new Error("control stream event exceeds the size limit");
         }
-        if (event.event === "data") yield event.data as T;
-        if (event.event === "error") {
-          throw new ControlError({
-            code: event.error?.code ?? "internal",
-            message: event.error?.message ?? "control stream failed",
-            ...(event.error?.details !== undefined ? { details: event.error.details } : {})
-          });
+        for (;;) {
+          const newline = pending.indexOf("\n");
+          if (newline < 0) break;
+          const line = pending.slice(0, newline);
+          pending = pending.slice(newline + 1);
+          if (line.length === 0) continue;
+          const event = JSON.parse(line) as ControlEvent;
+          if (event.id !== id || event.protocol !== CONTROL_PROTOCOL_VERSION) {
+            throw new Error("invalid control event");
+          }
+          if (event.event === "data") yield event.data as T;
+          if (event.event === "error") {
+            terminal = true;
+            throw new ControlError({
+              code: event.error?.code ?? "internal",
+              message: event.error?.message ?? "control stream failed",
+              ...(event.error?.details !== undefined ? { details: event.error.details } : {})
+            });
+          }
+          if (event.event === "done") {
+            terminal = true;
+            return;
+          }
         }
-        if (event.event === "done") return;
       }
+      if (pending.length > 0) throw new Error("control stream ended with a partial event");
+      if (!terminal) throw new Error("control stream ended without a terminal event");
+    } finally {
+      if (!terminal) await reader.cancel().catch(() => undefined);
+      reader.releaseLock();
     }
   }
 }

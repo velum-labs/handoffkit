@@ -97,6 +97,31 @@ test("concurrent product commands auto-start exactly one daemon and all use its 
     const status = await run(["daemon", "status", "--json"], project, env);
     assert.equal(status.code, 0, status.stderr);
     assert.equal((JSON.parse(status.stdout) as { pid: number }).pid, pid);
+    const overviewResult = await run(["status", "--json"], project, env);
+    assert.equal(overviewResult.code, 0, overviewResult.stderr);
+    const overview = JSON.parse(overviewResult.stdout) as {
+      daemon?: { pid?: number };
+      services?: Array<{ kind?: string; running?: boolean }>;
+      models?: { count?: number; defaultModel?: string };
+      providers?: Array<{ provider?: string; credentialAvailable?: boolean }>;
+      accounts?: { running?: boolean; accounts?: unknown[] };
+    };
+    assert.equal(overview.daemon?.pid, pid);
+    assert.equal(
+      overview.services?.find((service) => service.kind === "gateway")?.running,
+      true
+    );
+    assert.equal(overview.models?.count, 1);
+    assert.equal(overview.models?.defaultModel, "openai/mock-model");
+    assert.equal(overview.providers?.[0]?.credentialAvailable, true);
+    assert.equal(overview.accounts?.running, true);
+    const warmOverride = await run(
+      ["models", "list"],
+      project,
+      { ...env, ROUTEKIT_CONFIG: join(project, "other.yaml") }
+    );
+    assert.equal(warmOverride.code, 1);
+    assert.match(warmOverride.stderr, /not supported by singleton daemon operations/);
     const serviceStatus = await run(
       ["daemon", "service", "status", "--json"],
       project,

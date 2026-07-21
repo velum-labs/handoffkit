@@ -280,7 +280,49 @@ export function registerStatus(program: Command): void {
           client.call("accounts.status", {}),
           client.call("models.list", {})
         ]);
-        return { observedAt: new Date().toISOString(), daemon, providers, accounts, models };
+        const observedAt = new Date().toISOString();
+        return {
+          observedAt,
+          daemon,
+          services: [
+            {
+              kind: "gateway",
+              running: true,
+              url: daemon.dataUrl,
+              pid: daemon.pid,
+              startedAt: daemon.startedAt,
+              reachable: true,
+              version: daemon.packageVersion,
+              supervisor: daemon.supervisor
+            },
+            {
+              kind: "accounts",
+              running: true,
+              url: daemon.dataUrl,
+              pid: daemon.pid,
+              startedAt: daemon.startedAt,
+              reachable: true,
+              version: daemon.packageVersion,
+              supervisor: daemon.supervisor
+            }
+          ],
+          providers: providers.providers,
+          accounts: {
+            running: true,
+            url: daemon.dataUrl,
+            pid: daemon.pid,
+            accounts: accounts.accounts,
+            revision: accounts.revision
+          },
+          models: {
+            count: models.models.length,
+            ...(models.defaultModel !== undefined
+              ? { defaultModel: models.defaultModel }
+              : {}),
+            cached: false
+          },
+          catalog: models
+        };
       };
       if (options.watch !== undefined) {
         await watch(ctx.presenter, interval(options.watch), async () =>
@@ -303,16 +345,17 @@ function renderDaemonOverviewLines(
       generation: number;
       configRevision: number;
     };
-    providers: {
-      providers: Array<{
+    providers: Array<{
         provider: string;
         credentialAvailable: boolean;
         models?: readonly string[];
         error?: string;
       }>;
+    accounts: {
+      accounts: Array<{ subscriptionKind: string; label: string; credentialValid: boolean }>;
     };
-    accounts: unknown;
-    models: { models: Array<{ id: string }>; defaultModel?: string };
+    models: { count: number; defaultModel?: string };
+    catalog: { models: Array<{ id: string }>; defaultModel?: string };
   }
 ): string[] {
   const lines = [
@@ -324,7 +367,7 @@ function renderDaemonOverviewLines(
     "",
     "Providers"
   ];
-  for (const provider of overview.providers.providers) {
+  for (const provider of overview.providers) {
     const ok = provider.credentialAvailable && provider.error === undefined;
     lines.push(
       `  ${stateMark(ok)} ${provider.provider} · ${
@@ -335,13 +378,20 @@ function renderDaemonOverviewLines(
       }`
     );
   }
+  lines.push("", "Accounts");
+  if (overview.accounts.accounts.length === 0) lines.push("  no enrolled accounts");
+  for (const account of overview.accounts.accounts) {
+    lines.push(
+      `  ${stateMark(account.credentialValid)} ${account.subscriptionKind}/${account.label}`
+    );
+  }
   lines.push(
     "",
     `Models`,
-    `  ${stateMark(overview.models.models.length > 0)} ${overview.models.models.length} live model(s)` +
-      (overview.models.defaultModel === undefined
+    `  ${stateMark(overview.catalog.models.length > 0)} ${overview.catalog.models.length} live model(s)` +
+      (overview.catalog.defaultModel === undefined
         ? ""
-        : ` · default ${overview.models.defaultModel}`)
+        : ` · default ${overview.catalog.defaultModel}`)
   );
   return lines;
 }

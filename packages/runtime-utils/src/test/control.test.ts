@@ -133,6 +133,33 @@ test("control transport streams NDJSON events and structured failures", async ()
   }
 });
 
+test("control client rejects truncated streams without a terminal event", async () => {
+  const client = new ControlClient({
+    url: "http://127.0.0.1:1",
+    token: "test",
+    fetch: async (_input, init) => {
+      const request = JSON.parse(String(init?.body)) as { id: string };
+      return new Response(
+        `${JSON.stringify({
+          protocol: CONTROL_PROTOCOL_VERSION,
+          id: request.id,
+          event: "data",
+          data: 1
+        })}\n`,
+        { status: 200, headers: { "content-type": "application/x-ndjson" } }
+      );
+    }
+  });
+  await assert.rejects(
+    async () => {
+      for await (const _value of client.stream("events")) {
+        // consume
+      }
+    },
+    /without a terminal event/
+  );
+});
+
 test("lifecycle lock serializes contenders and reaps dead owners", async () => {
   const home = mkdtempSync(join(tmpdir(), "lifecycle-lock-"));
   const path = join(home, "daemon.lock");

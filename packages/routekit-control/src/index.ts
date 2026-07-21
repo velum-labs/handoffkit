@@ -227,6 +227,22 @@ function requiredRevision(
   return value as number;
 }
 
+function requiredEnum<T extends string>(
+  params: Record<string, unknown>,
+  key: string,
+  method: string,
+  allowed: readonly T[]
+): T {
+  const value = requiredString(params, key, method);
+  if (!allowed.includes(value as T)) {
+    throw new ControlError({
+      code: "bad_request",
+      message: `${method} ${key} must be one of: ${allowed.join(", ")}`
+    });
+  }
+  return value as T;
+}
+
 /**
  * Validate method-specific structural invariants at the protocol edge. Domain
  * parsers perform deeper validation (provider ids, router schema, credentials).
@@ -252,14 +268,14 @@ export function validateRouteKitParams<M extends RouteKitControlMethod>(
       requiredString(params, "model", method);
       break;
     case "accounts.enroll":
-      requiredString(params, "kind", method);
+      requiredEnum(params, "kind", method, ["claude-code", "codex"] as const);
       requiredString(params, "label", method);
       if (params.credential === undefined) {
         throw new ControlError({ code: "bad_request", message: `${method} requires credential` });
       }
       break;
     case "accounts.remove":
-      requiredString(params, "kind", method);
+      requiredEnum(params, "kind", method, ["claude-code", "codex"] as const);
       requiredString(params, "label", method);
       break;
     case "telemetry.set":
@@ -268,10 +284,15 @@ export function validateRouteKitParams<M extends RouteKitControlMethod>(
       }
       break;
     case "launcher.prepare":
-      requiredString(params, "tool", method);
+      requiredEnum(params, "tool", method, [
+        "codex",
+        "claude",
+        "cursor",
+        "opencode"
+      ] as const);
       break;
     case "daemon.prepareShutdown":
-      requiredString(params, "reason", method);
+      requiredEnum(params, "reason", method, ["stop", "restart", "upgrade"] as const);
       break;
     default:
       break;

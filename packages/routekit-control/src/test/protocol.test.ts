@@ -29,6 +29,18 @@ test("method-specific validators reject malformed mutations at the protocol edge
     validateRouteKitParams("launcher.prepare", { tool: "codex", cwd: "/tmp" }),
     { tool: "codex", cwd: "/tmp" }
   );
+  assert.throws(
+    () => validateRouteKitParams("launcher.prepare", { tool: "shell" }),
+    /must be one of/
+  );
+  assert.throws(
+    () =>
+      validateRouteKitParams("accounts.remove", {
+        kind: "github",
+        label: "work"
+      }),
+    /must be one of/
+  );
 });
 
 test("dispatcher rejects unknown methods and deduplicates idempotent mutations", async () => {
