@@ -41,7 +41,6 @@ test("control server authenticates health/calls and negotiates control.v1", asyn
     await server.close();
   }
 });
-
 test("control transport rejects wrong tokens, hosts, protocols, and content types", async () => {
   let calls = 0;
   const server = await startControlServer({

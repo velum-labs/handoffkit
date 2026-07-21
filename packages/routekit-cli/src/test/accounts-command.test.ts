@@ -94,7 +94,6 @@ test("accounts login captures isolated Codex auth without writing daemon-owned s
     rmSync(root, { recursive: true, force: true });
   }
 });
-
 test("managed Claude login uses isolated state and rejects failures and duplicate labels", async () => {
   const root = mkdtempSync(join(tmpdir(), "routekit-claude-login-"));
   const stateHome = join(root, "state");

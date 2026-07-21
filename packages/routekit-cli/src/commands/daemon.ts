@@ -217,4 +217,3 @@ export function registerDaemon(program: Command): void {
   registerLogs(group);
   registerGatewayService(group);
 }
-

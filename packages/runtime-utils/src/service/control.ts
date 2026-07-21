@@ -40,7 +40,6 @@ export class ControlError extends Error {
     this.details = input.details;
   }
 }
-
 function statusForCode(code: ControlErrorCode): number {
   switch (code) {
     case "bad_request":

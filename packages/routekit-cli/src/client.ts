@@ -48,7 +48,6 @@ function defaultDaemonPort(): number {
   }
   return port;
 }
-
 export function daemonDataTokenPath(): string {
   return join(routekitHome(), "secrets", "data-token");
 }

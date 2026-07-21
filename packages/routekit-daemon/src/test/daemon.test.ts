@@ -220,7 +220,6 @@ test("singleton daemon exposes authenticated control and a stable reloadable dat
     rmSync(root, { recursive: true, force: true });
   }
 });
-
 test("second daemon cannot claim authority and generations remain monotonic", async () => {
   const root = mkdtempSync(join(tmpdir(), "routekit-daemon-singleton-"));
   const stateHome = join(root, "state");

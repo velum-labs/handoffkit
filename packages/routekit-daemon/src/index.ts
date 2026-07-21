@@ -160,7 +160,6 @@ function readRevisions(home: string): RevisionState {
     return { config: 0, accounts: 0, daemon: 0 };
   }
 }
-
 function writeRevisions(home: string, revisions: RevisionState): void {
   mkdirSync(home, { recursive: true, mode: 0o700 });
   writeFileAtomic(revisionPath(home), `${JSON.stringify(revisions, null, 2)}\n`, {

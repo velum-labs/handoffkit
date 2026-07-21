@@ -120,4 +120,3 @@ test("concurrent idempotent retries share one in-flight mutation", async () => {
   release();
   assert.deepEqual(await first, await second);
 });
-

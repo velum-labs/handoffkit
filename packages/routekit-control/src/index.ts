@@ -394,4 +394,3 @@ export class RouteKitControlClient {
     return this.#client.call(method, params, options);
   }
 }
-

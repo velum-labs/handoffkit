@@ -180,4 +180,3 @@ export function nextServiceGeneration(previous: number | undefined): number {
   if (base >= Number.MAX_SAFE_INTEGER) throw new Error("service generation exhausted");
   return base + 1;
 }
-

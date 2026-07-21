@@ -48,7 +48,6 @@ function requestHeaders(headers: IncomingHttpHeaders): Headers {
   }
   return result;
 }
-
 async function requestBody(req: IncomingMessage): Promise<Buffer | undefined> {
   if (req.method === "GET" || req.method === "HEAD") return undefined;
   const chunks: Buffer[] = [];

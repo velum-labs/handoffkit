@@ -7,4 +7,3 @@ types, validates requests at the protocol edge, deduplicates idempotent
 mutations, and wraps `@routekit/runtime`'s authenticated `ControlClient`.
 Commander argv, terminal rendering, and product state implementations do not
 belong here.
-

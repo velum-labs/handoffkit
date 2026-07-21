@@ -146,7 +146,6 @@ test("concurrent product commands auto-start exactly one daemon and all use its 
     rmSync(root, { recursive: true, force: true });
   }
 });
-
 test("project overlays require explicit import into the canonical global config", async () => {
   const root = mkdtempSync(join(tmpdir(), "routekit-singleton-import-"));
   const home = join(root, "home");

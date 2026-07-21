@@ -11,4 +11,3 @@ snapshots, and telemetry state.
 
 Applications normally use it through `@routekit/cli`; embedders should keep
 using `@routekit/router` instead of claiming the singleton service record.
-

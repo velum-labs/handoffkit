@@ -18,7 +18,6 @@ function record(value: unknown): Record<string, unknown> | undefined {
     ? (value as Record<string, unknown>)
     : undefined;
 }
-
 export async function fetchLiveCatalog(
   gatewayUrl: string,
   input: { authToken?: string; defaultModel?: string } = {}
