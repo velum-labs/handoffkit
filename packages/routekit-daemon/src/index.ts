@@ -59,6 +59,7 @@ import {
   extendCleanupGrace,
   generateControlToken,
   nextServiceGeneration,
+  processIdentity,
   registerCleanup,
   startControlServer,
   supervisorFromEnv,
@@ -302,11 +303,18 @@ export async function startRouteKitDaemon(
   let record: ServiceRecord | undefined;
   let closed = false;
   let draining = false;
+  let lifecycle: "running" | "quiescing" | "draining" | "closed" = "running";
   let revisions = readRevisions(home);
   let currentDocument = canonicalConfigDocument(configPath);
   let currentConfig = parseConfigDocument(currentDocument);
   let mutationTail: Promise<void> = Promise.resolve();
   const serializeMutation = async <T>(operation: () => Promise<T>): Promise<T> => {
+    if (lifecycle !== "running") {
+      throw new ControlError({
+        code: "unavailable",
+        message: "RouteKit daemon is shutting down"
+      });
+    }
     const result = mutationTail.then(operation);
     mutationTail = result.then(
       () => undefined,
@@ -461,7 +469,10 @@ export async function startRouteKitDaemon(
         };
       },
       "daemon.prepareShutdown": async (params) => {
+        if (lifecycle !== "running") return { accepted: true };
+        lifecycle = "quiescing";
         draining = true;
+        await mutationTail;
         queueMicrotask(() => options.onShutdownRequested?.(params.reason));
         return { accepted: true };
       },
@@ -588,10 +599,10 @@ export async function startRouteKitDaemon(
           return {
             subscriptionKind: entry.subscriptionKind,
             label: entry.label,
-            credentialValid: member !== undefined,
+            credentialValid: member?.credentialValid ?? false,
             configured: currentConfig.providers[entry.subscriptionKind] !== undefined,
             relayOpen:
-              member !== undefined &&
+              member?.relayReady === true &&
               currentConfig.providers[entry.subscriptionKind] !== undefined,
             active: member?.active ?? false,
             models: member?.models ?? [],
@@ -659,8 +670,8 @@ export async function startRouteKitDaemon(
         });
         return { removed, revision: revisions.accounts };
       },
-      "accounts.usage": async () => {
-        return await activeRouter!.usage();
+      "accounts.usage": async (_params, context) => {
+        return await activeRouter!.usage(context.signal);
       },
       "telemetry.get": async () => ({ enabled: telemetry.resolve().enabled }),
       "telemetry.set": async (params) => {
@@ -717,6 +728,9 @@ export async function startRouteKitDaemon(
     record = store.write({
       kind: ROUTEKIT_DAEMON_KIND,
       pid: process.pid,
+      ...(processIdentity(process.pid) !== undefined
+        ? { processIdentity: processIdentity(process.pid) }
+        : {}),
       url: control.url,
       port: control.port,
       startedAt,
@@ -739,13 +753,17 @@ export async function startRouteKitDaemon(
     const close = async (): Promise<void> => {
       if (closed) return;
       closed = true;
+      if (lifecycle === "running") lifecycle = "quiescing";
       draining = true;
+      await mutationTail;
+      lifecycle = "draining";
       await proxy?.drain(drainGraceMs);
       await activeRouter?.close();
       await control?.close();
       if (portless?.enabled) portless.unregister("gateway");
       store.remove(ROUTEKIT_DAEMON_KIND, { ifPid: process.pid });
       authority.release();
+      lifecycle = "closed";
     };
     registerCleanup(close);
     process.on("SIGHUP", () => {
