@@ -82,10 +82,14 @@ async function requestJson(
   body?: Record<string, unknown>
 ): Promise<Response> {
   return await fetch(`${url}${path}`, {
+    headers: { authorization: "Bearer test-gateway-token" },
     ...(body !== undefined
       ? {
           method: "POST",
-          headers: { "content-type": "application/json" },
+          headers: {
+            authorization: "Bearer test-gateway-token",
+            "content-type": "application/json"
+          },
           body: JSON.stringify(body)
         }
       : {})
@@ -166,6 +170,8 @@ test("real routekit gateway serve process reports JSON readiness and serves ever
       "--port",
       "0",
       "--no-portless",
+      "--auth-token",
+      "test-gateway-token",
       "--json"
     ],
     {
@@ -182,7 +188,7 @@ test("real routekit gateway serve process reports JSON readiness and serves ever
   );
   try {
     const readiness = await waitForJsonLine(routekit);
-    assert.equal(readiness.authenticated, false);
+    assert.equal(readiness.authenticated, true);
     assert.equal(readiness.config, configPath);
     assert.equal(typeof readiness.url, "string");
     const routekitUrl = readiness.url as string;

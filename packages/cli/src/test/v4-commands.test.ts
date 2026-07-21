@@ -1,13 +1,14 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 import { loadFusionConfig } from "@fusionkit/config";
-import { startProviderSim } from "@fusionkit/testkit";
 import { loadRouterConfig } from "@routekit/config";
 
 import { configuredDefaultToolArgv } from "../commands/palette.js";
@@ -30,11 +31,19 @@ function run(
 }
 
 test("init, config, and ensemble commands persist only Fusion v4 model ids", async () => {
-  const sim = await startProviderSim();
-  await sim.queue("gpt-5.5", ["discovery fixture"]);
+  const provider = createServer((request, response) => {
+    if (request.url === "/v1/models") {
+      response.setHeader("content-type", "application/json");
+      response.end(JSON.stringify({ data: [{ id: "gpt-5.5" }] }));
+      return;
+    }
+    response.writeHead(404).end();
+  });
+  await new Promise<void>((resolve) => provider.listen(0, "127.0.0.1", resolve));
+  const providerPort = (provider.address() as AddressInfo).port;
   const providerEnv = {
     OPENAI_API_KEY: "test-provider-key",
-    OPENAI_BASE_URL: `${sim.url}/v1`
+    OPENAI_BASE_URL: `http://127.0.0.1:${providerPort}/v1`
   };
   const repo = mkdtempSync(join(tmpdir(), "fusionkit-v4-commands-"));
   try {
@@ -96,7 +105,7 @@ test("init, config, and ensemble commands persist only Fusion v4 model ids", asy
     assert.equal("provider" in persisted, false);
     assert.equal("subscriptionAccounts" in persisted, false);
   } finally {
-    await sim.close();
+    await new Promise<void>((resolve) => provider.close(() => resolve()));
     rmSync(repo, { recursive: true, force: true });
   }
 });

@@ -27,6 +27,5 @@ remain in private files and are never printed. CLIProxy login does not enable a
 RouteKit provider: keep the proxy serving and run
 `routekit providers add cliproxy`.
 
-`routekit accounts serve` is an advanced external-proxy mode. Normal RouteKit
-subscription providers use the in-process backend and do not require that
-command.
+Native subscription providers run inside the singleton RouteKit daemon; there
+is no separate accounts-proxy command.

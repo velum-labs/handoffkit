@@ -323,6 +323,40 @@ export class CatalogBackend implements Backend {
     return [...this.#entries.keys()];
   }
 
+  async providerStatuses(
+    signal?: AbortSignal
+  ): Promise<
+    Array<{ provider: string; ok: boolean; models: string[]; error?: string }>
+  > {
+    return await Promise.all(
+      this.#sources.map(async (source) => {
+        try {
+          const models = await source.discoverModels(signal);
+          if (models.length === 0) {
+            return {
+              provider: source.sourceId,
+              ok: false,
+              models: [],
+              error: "live discovery returned no models"
+            };
+          }
+          return {
+            provider: source.sourceId,
+            ok: true,
+            models: models.map((model) => namespaced(source.sourceId, model.id))
+          };
+        } catch (error) {
+          return {
+            provider: source.sourceId,
+            ok: false,
+            models: [],
+            error: error instanceof Error ? error.message : String(error)
+          };
+        }
+      })
+    );
+  }
+
   servesModel(model: string): boolean {
     return this.#entries.has(model);
   }

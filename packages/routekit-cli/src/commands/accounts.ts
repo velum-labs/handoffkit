@@ -5,47 +5,31 @@ import {
   cliproxyBaseUrl,
   cliproxyConfigPath,
   cliproxyStatus,
+  defaultSubscriptionCredentialPath,
   installCliproxy,
   runCliproxyLogin,
   spawnCliproxy
 } from "@routekit/accounts";
-import { contextFor, parsePort } from "@routekit/cli-core";
+import { contextFor } from "@routekit/cli-core";
+import { randomId } from "@routekit/runtime";
 import type { Command } from "commander";
+import { readFileSync } from "node:fs";
 
 import {
-  accountsStatus,
-  addAccount,
-  listAccounts,
-  loginAccount,
-  removeAccount,
-  serveAccounts,
-  stopAccounts
+  captureLoginCredential,
+  parseAccountMode
 } from "../accounts.js";
-import type { AccountListEntry } from "../accounts.js";
-import { updateEffectiveRouterConfig } from "../config.js";
-import { waitForShutdown } from "../serve.js";
-import { limitsSummary } from "../usage-format.js";
+import { routekitClient } from "../client.js";
 
-import { configOverride, loaded, numberOption } from "./context.js";
 
-function record(value: unknown): Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : {};
-}
-
-function activateAccount(command: Command, result: AccountListEntry): string {
-  return updateEffectiveRouterConfig(
-    { configPath: configOverride(command) },
-    (draft) => {
-      const providers = record(draft.providers);
-      const policy = record(providers[result.subscriptionKind]);
-      draft.providers = {
-        ...providers,
-        [result.subscriptionKind]: { ...policy }
-      };
-    }
-  ).path;
+async function activateAccount(subscriptionKind: "claude-code" | "codex"): Promise<string> {
+  const client = await routekitClient();
+  const updated = await client.call(
+    "providers.set",
+    { provider: subscriptionKind, enabled: true },
+    { idempotencyKey: `account-activate-${subscriptionKind}-${randomId(16)}` }
+  );
+  return updated.path;
 }
 
 function registerCliproxy(accounts: Command): void {
@@ -58,6 +42,7 @@ function registerCliproxy(accounts: Command): void {
     .description(`download and verify CLIProxyAPI v${CLIPROXY_PINNED_VERSION}`)
     .action(async (_options: unknown, command: Command) => {
       const ctx = contextFor(command);
+      await (await routekitClient()).call("daemon.status", {});
       const result = await installCliproxy({
         onProgress: (line) => {
           if (!ctx.json) ctx.presenter.note(line);
@@ -88,6 +73,7 @@ function registerCliproxy(accounts: Command): void {
             "`accounts cliproxy login` is interactive and does not support --json"
           );
         }
+        await (await routekitClient()).call("daemon.status", {});
         const code = await runCliproxyLogin(provider, {
           noBrowser: options.browser === false
         });
@@ -107,6 +93,7 @@ function registerCliproxy(accounts: Command): void {
     .description("run the managed CLIProxyAPI in the foreground")
     .action(async (_options: unknown, command: Command) => {
       const ctx = contextFor(command);
+      await (await routekitClient()).call("daemon.status", {});
       const child = spawnCliproxy();
       if (ctx.json) {
         ctx.emit({
@@ -130,6 +117,7 @@ function registerCliproxy(accounts: Command): void {
     .description("show install, reachability, model count, and enrolled account files")
     .action(async (_options: unknown, command: Command) => {
       const ctx = contextFor(command);
+      await (await routekitClient()).call("daemon.status", {});
       const status = await cliproxyStatus();
       if (ctx.json) {
         ctx.emit(status);
@@ -175,19 +163,21 @@ export function registerAccounts(program: Command): void {
             "`accounts login` is interactive and does not support --json or --no-input"
           );
         }
-        loaded(command);
-        const result = await loginAccount(subscriptionKind, options.name);
-        let configPath: string;
-        try {
-          configPath = activateAccount(command, result);
-        } catch (error) {
-          removeAccount(result.subscriptionKind, result.label);
-          throw error;
-        }
+        const result = await captureLoginCredential(subscriptionKind, options.name);
+        const client = await routekitClient();
+        await client.call(
+          "accounts.enroll",
+          {
+            kind: result.subscriptionKind,
+            label: result.label,
+            credential: result.credential
+          },
+          { idempotencyKey: `account-login-${randomId(16)}` }
+        );
+        const configPath = await activateAccount(result.subscriptionKind);
         ctx.presenter.success(
           `logged in, enrolled, and enabled ${result.subscriptionKind}/${result.label}`
         );
-        ctx.presenter.note(`account: ${result.path}`);
         ctx.presenter.note(`config: ${configPath}`);
       }
     );
@@ -198,11 +188,21 @@ export function registerAccounts(program: Command): void {
     .option("--name <name>", "account label")
     .action(async (subscriptionKind: string, options: { name?: string }, command: Command) => {
       const ctx = contextFor(command);
-      loaded(command);
-      const result = await addAccount(subscriptionKind, options.name);
-      const configPath = activateAccount(command, result);
+      const kind = parseAccountMode(subscriptionKind);
+      const label = options.name ?? `${kind}-default`;
+      const sourcePath = defaultSubscriptionCredentialPath(kind);
+      const credential = JSON.parse(readFileSync(sourcePath, "utf8")) as unknown;
+      const client = await routekitClient();
+      const enrolled = await client.call(
+        "accounts.enroll",
+        { kind, label, credential },
+        { idempotencyKey: `account-add-${randomId(16)}` }
+      );
+      const configPath = await activateAccount(kind);
       const output = {
-        ...result,
+        subscriptionKind: kind,
+        label,
+        revision: enrolled.revision,
         activated: true,
         configPath
       };
@@ -210,7 +210,7 @@ export function registerAccounts(program: Command): void {
         ctx.emit(output);
       } else {
         ctx.presenter.success(
-          `enrolled and enabled ${result.subscriptionKind} account at ${result.path}`
+          `enrolled and enabled ${kind}/${label}`
         );
         ctx.presenter.note(`config: ${configPath}`);
       }
@@ -219,38 +219,48 @@ export function registerAccounts(program: Command): void {
   accounts
     .command("remove <subscription-kind> <name>")
     .description("remove an enrolled account from RouteKit-managed state")
-    .action((provider: string, name: string, _options: unknown, command: Command) => {
+    .action(async (provider: string, name: string, _options: unknown, command: Command) => {
       const ctx = contextFor(command);
-      const result = removeAccount(provider, name);
+      const kind = parseAccountMode(provider);
+      const result = await (await routekitClient()).call(
+        "accounts.remove",
+        { kind, label: name },
+        { idempotencyKey: `account-remove-${randomId(16)}` }
+      );
       if (ctx.json) {
-        ctx.emit({ ...result, subscriptionKind: result.mode });
+        ctx.emit({ ...result, subscriptionKind: kind, label: name });
       } else if (result.removed) {
-        ctx.presenter.success(`removed ${result.mode}/${result.label}`);
+        ctx.presenter.success(`removed ${kind}/${name}`);
+        const remaining = await (await routekitClient()).call("accounts.list", {});
         if (
-          listAccounts().every(
-            (entry) => entry.subscriptionKind !== result.mode
+          (remaining.accounts as Array<{ subscriptionKind?: string }>).every(
+            (entry) => entry.subscriptionKind !== kind
           )
         ) {
           ctx.presenter.note(
-            `The official ${result.mode} login may be imported again on startup; ` +
-              `run \`routekit providers remove ${result.mode}\` to stop subscription routing.`
+            `The official ${kind} login may be imported again; ` +
+              `run \`routekit providers remove ${kind}\` to stop subscription routing.`
           );
         }
       } else {
-        ctx.presenter.note(`${result.mode}/${result.label} is not enrolled`);
+        ctx.presenter.note(`${kind}/${name} is not enrolled`);
       }
     });
 
   accounts
     .command("list")
     .description("list enrolled accounts without reading credential values")
-    .action((_options: unknown, command: Command) => {
+    .action(async (_options: unknown, command: Command) => {
       const ctx = contextFor(command);
-      const entries = listAccounts();
+      const response = await (await routekitClient()).call("accounts.list", {});
+      const entries = response.accounts as Array<{
+        subscriptionKind: string;
+        label: string;
+      }>;
       if (ctx.json) ctx.emit({ accounts: entries });
       else {
         ctx.presenter.table(
-          entries.map((entry) => [entry.subscriptionKind, entry.label, entry.path])
+          entries.map((entry) => [entry.subscriptionKind, entry.label])
         );
       }
     });
@@ -260,26 +270,26 @@ export function registerAccounts(program: Command): void {
     .description("show account proxy and pooled account status")
     .action(async (_options: unknown, command: Command) => {
       const ctx = contextFor(command);
-      const status = await accountsStatus(loaded(command).config);
+      const status = (await (await routekitClient()).call("accounts.status", {})) as {
+        accounts: Array<{
+          subscriptionKind: string;
+          label: string;
+          credentialValid?: boolean;
+          configured?: boolean;
+          relayOpen?: boolean;
+        }>;
+        revision: number;
+      };
       if (ctx.json) {
         ctx.emit(status);
         return;
       }
-      ctx.presenter.status(
-        status.running && status.usageError === undefined
-          ? "ok"
-          : status.running
-            ? "warn"
-            : "pending",
-        "accounts proxy",
-        status.running
-          ? status.usageError === undefined
-            ? status.url
-            : `${status.url}; usage unavailable`
-          : "not running"
-      );
+      ctx.presenter.status("ok", "daemon account pool", `revision ${status.revision}`);
       for (const entry of status.accounts) {
-        const ok = entry.credentialValid && entry.configured;
+        const ok =
+          entry.credentialValid === true &&
+          entry.configured === true &&
+          entry.relayOpen === true;
         ctx.presenter.status(
           ok ? "ok" : "pending",
           `${entry.subscriptionKind}/${entry.label}`,
@@ -287,78 +297,11 @@ export function registerAccounts(program: Command): void {
             ? "stored; credential invalid"
             : !entry.configured
               ? "stored; routing disabled"
-              : "stored; configured; relay ready"
+              : !entry.relayOpen
+                ? "stored; configured; relay unavailable or cooling"
+                : "stored; configured; relay ready"
         );
-        const summary = limitsSummary(
-          status.usage,
-          entry.subscriptionKind,
-          entry.label
-        );
-        if (summary !== undefined) {
-          ctx.presenter.note(`${entry.subscriptionKind}/${entry.label} limits: ${summary} · routekit usage`);
-        }
       }
-    });
-
-  accounts
-    .command("serve")
-    .description("serve pooled Claude and Codex subscriptions in the foreground")
-    .option("--host <host>", "bind host", "127.0.0.1")
-    .option("--port <port>", "bind port", "8790")
-    .option("--strategy <strategy>", "sticky | round_robin | capacity_weighted", "sticky")
-    .option("--switch-threshold <ratio>", "proactive utilization threshold", "0.9")
-    .option("--probe-interval <seconds>", "usage poll interval", "0")
-    .option("--no-portless", "disable the stable local route")
-    .action(
-      async (
-        options: {
-          host: string;
-          port: string;
-          strategy: "sticky" | "round_robin" | "capacity_weighted";
-          switchThreshold: string;
-          probeInterval: string;
-          portless?: boolean;
-        },
-        command: Command
-      ) => {
-        const ctx = contextFor(command);
-        const probeSeconds = numberOption(options.probeInterval, "probe interval", {
-          min: 0,
-          max: 86_400
-        });
-        const running = await serveAccounts({
-          host: options.host,
-          port: parsePort(options.port, 8790),
-          strategy: options.strategy,
-          switchThreshold: numberOption(options.switchThreshold, "switch threshold", {
-            min: 0.01,
-            max: 1
-          }),
-          ...(probeSeconds > 0 ? { probeIntervalMs: probeSeconds * 1000 } : {}),
-          ...(process.env.ROUTEKIT_ACCOUNTS_TOKEN !== undefined
-            ? { token: process.env.ROUTEKIT_ACCOUNTS_TOKEN }
-            : {}),
-          ...(options.portless !== undefined ? { portless: options.portless } : {})
-        });
-        if (ctx.json) ctx.emit({ url: running.url, providers: running.providers });
-        else {
-          ctx.presenter.success(`accounts proxy listening at ${running.url}`);
-          ctx.presenter.note("The ingress token is stored privately and is never printed.");
-          ctx.presenter.note("Press Ctrl+C to stop.");
-        }
-        await waitForShutdown();
-      }
-    );
-
-  accounts
-    .command("stop")
-    .description("stop the RouteKit-owned account proxy")
-    .action(async (_options: unknown, command: Command) => {
-      const ctx = contextFor(command);
-      const result = await stopAccounts();
-      if (ctx.json) ctx.emit(result);
-      else if (result.stopped) ctx.presenter.success("stopped the accounts proxy");
-      else ctx.presenter.note("accounts proxy is not running");
     });
 
   registerCliproxy(accounts);

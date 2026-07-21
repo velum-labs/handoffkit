@@ -11,9 +11,7 @@ ingress key. FusionKit references namespaced `cliproxy/<model>` IDs.
 ## Where it fits
 
 Use native RouteKit `claude-code` and `codex` providers. They use
-provider-native relays and quota-aware selection without a separate proxy
-process. `routekit accounts serve` is only the advanced mode that exposes those
-pools to an external consumer.
+provider-native relays and quota-aware selection inside the singleton daemon.
 
 Reach for `cliproxy` when an ensemble needs a subscription provider RouteKit
 does not support natively (Gemini, Grok, Kimi), or when you already run

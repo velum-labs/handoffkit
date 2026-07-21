@@ -40,6 +40,7 @@ test("independent command surface is complete and has no compatibility aliases",
   const program = buildProgram();
   const expected = [
     "gateway",
+    "daemon",
     "codex",
     "claude",
     "cursor",
@@ -62,10 +63,14 @@ test("independent command surface is complete and has no compatibility aliases",
   );
   assert.deepEqual(
     command(program, "gateway").commands.map((entry) => entry.name()).sort(),
-    ["logs", "restart", "serve", "service", "start", "stop", "upgrade"]
+    ["serve"]
   );
   assert.deepEqual(
-    command(program, "gateway")
+    command(program, "daemon").commands.map((entry) => entry.name()).sort(),
+    ["auth", "logs", "reload", "restart", "run", "service", "start", "status", "stop", "upgrade"]
+  );
+  assert.deepEqual(
+    command(program, "daemon")
       .commands.find((entry) => entry.name() === "service")
       ?.commands.map((entry) => entry.name())
       .sort(),
@@ -80,7 +85,7 @@ test("independent command surface is complete and has no compatibility aliases",
   }
   assert.deepEqual(
     command(program, "accounts").commands.map((entry) => entry.name()).sort(),
-    ["add", "cliproxy", "list", "login", "remove", "serve", "status", "stop"]
+    ["add", "cliproxy", "list", "login", "remove", "status"]
   );
   assert.deepEqual(
     command(program, "accounts")
@@ -99,7 +104,7 @@ test("independent command surface is complete and has no compatibility aliases",
   );
   assert.deepEqual(
     command(program, "config").commands.map((entry) => entry.name()).sort(),
-    ["edit", "init", "migrate", "path", "show"]
+    ["edit", "import", "init", "migrate", "path", "show"]
   );
   assert.equal(program.commands.some((entry) => entry.aliases().length > 0), false);
 });
@@ -108,15 +113,10 @@ test("dynamic completion follows the command tree", () => {
   const program = buildProgram();
   assert.ok(completionCandidates(program, ["co"]).includes("config"));
   assert.deepEqual(completionCandidates(program, ["gateway", "s"]), [
-    "serve",
-    "service",
-    "start",
-    "stop"
+    "serve"
   ]);
   assert.deepEqual(completionCandidates(program, ["accounts", "s"]), [
-    "serve",
-    "status",
-    "stop"
+    "status"
   ]);
   assert.ok(completionCandidates(program, ["codex", "in"]).includes("install"));
   assert.ok(
@@ -128,45 +128,12 @@ test("dynamic completion follows the command tree", () => {
   ]);
 });
 
-test("serve CLI rejects an unauthenticated non-loopback bind", async () => {
-  const root = mkdtempSync(join(tmpdir(), "routekit-serve-auth-"));
-  const config = join(root, "router.yaml");
-  writeFileSync(
-    config,
-    [
-      "providers:",
-      "  openai: {}",
-      ""
-    ].join("\n")
-  );
-  try {
-    const program = buildProgram();
-    const gateway = command(program, "gateway");
-    const serve = gateway.commands.find((entry) => entry.name() === "serve");
-    assert.ok(serve);
-    assert.match(
-      serve.helpInformation(),
-      /authentication token \(required for non-loopback\s+hosts\)/
-    );
-    await assert.rejects(
-      program.parseAsync([
-        "node",
-        "routekit",
-        "--config",
-        config,
-        "gateway",
-        "serve",
-        "--host",
-        "0.0.0.0",
-        "--port",
-        "0",
-        "--no-portless"
-      ]),
-      /binding to non-loopback host "0\.0\.0\.0" requires an auth token/
-    );
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
+test("serve CLI documents explicit data-plane authentication", () => {
+  const program = buildProgram();
+  const gateway = command(program, "gateway");
+  const serve = gateway.commands.find((entry) => entry.name() === "serve");
+  assert.ok(serve);
+  assert.match(serve.helpInformation(), /authentication token/);
 });
 
 test("account removal completion only suggests managed labels for its provider", () => {

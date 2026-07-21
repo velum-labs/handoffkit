@@ -1,21 +1,25 @@
 import { contextFor, CliError } from "@routekit/cli-core";
 import {
-  planUpgrade,
-  upgradeDetachedDaemon,
-  waitForServiceReady
+  acquireLifecycleLock,
+  supervisorOperationTimeoutMs,
+  waitForServiceReady,
+  waitForProcessExit
 } from "@routekit/runtime";
-import type { ServiceDaemonSpec } from "@routekit/runtime";
 import type { Command } from "commander";
 
+import {
+  controlClientForRecord,
+  daemonLifecycleLockPath,
+  daemonLogPath,
+  daemonRecordHealthy,
+  ensureDaemon,
+  readDaemonRecord
+} from "../client.js";
 import { routekitHome } from "../config.js";
-import { gatewayDaemonSpec, gatewayLogPath, ROUTEKIT_PRODUCT } from "../daemon.js";
-import { readServiceRecord, routekitVersion } from "../state.js";
-import type { RouteKitServiceRecord } from "../state.js";
+import { routekitVersion } from "../state.js";
 
 import { drainGraceMs } from "./serve-options.js";
-import { gatewaySupervisorController } from "./gateway-service.js";
-
-const READY_TIMEOUT_MS = 60_000;
+import { daemonSupervisorController } from "./gateway-service.js";
 
 /**
  * Rebuild the recorded serve argv with a different `--port` value: a
@@ -30,116 +34,120 @@ export function argsWithPort(args: readonly string[], port: string): string[] {
   return rebuilt;
 }
 
-function replacementSpec(
-  record: RouteKitServiceRecord,
-  strategy: "blue-green" | "drain-restart"
-): ServiceDaemonSpec {
-  if (record.args === undefined) {
-    throw new CliError({
-      message: "the running gateway did not record its launch arguments",
-      hint: "stop it and start it again with `routekit gateway start`"
-    });
-  }
-  // The replacement always launches through the CURRENT entry script (the
-  // stable bin shim), which is exactly what an upgrade must pick up.
-  return gatewayDaemonSpec({
-    args: strategy === "blue-green" ? argsWithPort(record.args, "0") : [...record.args],
-    ...(record.cwd !== undefined ? { cwd: record.cwd } : {})
-  });
-}
-
 export function registerUpgrade(program: Command): void {
   program
     .command("upgrade")
-    .description("replace the running gateway with the installed CLI version, draining in-flight requests")
+    .description("upgrade the running daemon to the installed CLI version")
     .option("--force", "restart even when versions already match (e.g. after a config change)")
     .option("--drain-grace <seconds>", "grace for in-flight requests (default: $ROUTEKIT_DRAIN_GRACE or 30)")
     .action(async (options: { force?: boolean; drainGrace?: string }, command: Command) => {
       const ctx = contextFor(command);
       const version = routekitVersion();
-      const record = readServiceRecord("gateway");
-      const strategy = planUpgrade({ record, version, force: options.force });
-      const graceMs = drainGraceMs(options.drainGrace);
-
-      if (strategy === "up-to-date") {
-        if (ctx.json) ctx.emit({ action: "up-to-date", version, pid: record?.pid });
-        else ctx.presenter.success(`RouteKit gateway is already running v${version}`);
-        return;
-      }
-
-      if (strategy === "start") {
+      const record = readDaemonRecord();
+      const requestedGrace =
+        options.drainGrace === undefined
+          ? record?.drainGraceMs
+          : drainGraceMs(options.drainGrace);
+      if (record === undefined) {
         throw new CliError({
-          message: "RouteKit gateway is not running",
-          tryCommand: "routekit gateway start"
+          message: "RouteKit daemon is not running",
+          tryCommand: "routekit daemon start"
         });
       }
-
-      if (strategy === "supervisor-restart") {
-        const running = record as RouteKitServiceRecord;
-        const supervisor = running.supervisor as "systemd" | "launchd";
-        const controller = gatewaySupervisorController(supervisor);
-        // The unit's ExecStart points at the stable bin shim, so a restart is
-        // enough unless the shim itself moved (e.g. a different install
-        // prefix); then the unit must be rewritten via `service install`.
-        const currentBin = process.argv[1];
-        if (running.binPath !== undefined && currentBin !== undefined && running.binPath !== currentBin) {
-          throw new CliError({
-            message:
-              `the installed CLI (${currentBin}) is not the binary the service unit runs (${running.binPath})`,
-            hint: "re-run `routekit gateway service install` to rewrite the unit for the new location"
-          });
-        }
-        await controller.restart();
-        const restarted = await waitForServiceReady({
-          home: routekitHome(),
-          product: ROUTEKIT_PRODUCT,
-          kind: "gateway",
-          previousPid: running.pid,
-          timeoutMs: READY_TIMEOUT_MS,
-          logFile: gatewayLogPath()
+      if (
+        options.drainGrace !== undefined &&
+        (record.supervisor === "systemd" || record.supervisor === "launchd")
+      ) {
+        throw new CliError({
+          message: "changing drain grace for a supervised daemon requires reinstalling its unit",
+          tryCommand: `routekit daemon service install --drain-grace ${options.drainGrace}`
         });
-        if (ctx.json) {
-          ctx.emit({
-            action: "supervisor-restart",
-            supervisor,
-            url: restarted.url,
-            pid: restarted.pid,
-            from: running.version,
-            to: restarted.version
-          });
-        } else {
-          ctx.presenter.success(
-            `RouteKit gateway upgraded to v${restarted.version ?? version} via ${supervisor} restart`
-          );
-        }
+      }
+      if (record.version === version && options.force !== true) {
+        if (ctx.json) ctx.emit({ action: "up-to-date", version, pid: record?.pid });
+        else ctx.presenter.success(`RouteKit daemon is already running v${version}`);
         return;
       }
-
-      const running = record as RouteKitServiceRecord;
-      const result = await upgradeDetachedDaemon({
-        record: running,
-        strategy,
-        spec: replacementSpec(running, strategy),
-        drainGraceMs: graceMs,
-        readyTimeoutMs: READY_TIMEOUT_MS,
-        ...(ctx.json ? {} : { log: (line) => ctx.presenter.note(line) })
-      });
-      if (ctx.json) {
-        ctx.emit({
-          action: result.strategy,
-          url: result.record.url,
-          pid: result.record.pid,
-          previousPid: result.previousPid,
-          from: running.version,
-          to: result.record.version
+      const currentBin = process.argv[1];
+      if (
+        record.binPath !== undefined &&
+        currentBin !== undefined &&
+        record.binPath !== currentBin &&
+        (record.supervisor === "systemd" || record.supervisor === "launchd")
+      ) {
+        throw new CliError({
+          message:
+            `the installed CLI (${currentBin}) is not the binary the daemon unit runs (${record.binPath})`,
+          hint: "re-run `routekit daemon service install` to rewrite the unit"
         });
+      }
+      const lock = await acquireLifecycleLock(daemonLifecycleLockPath());
+      let replacement;
+      try {
+        if (record.supervisor === "systemd" || record.supervisor === "launchd") {
+          const timeoutMs = supervisorOperationTimeoutMs(requestedGrace);
+          await daemonSupervisorController(record.supervisor).restart({ timeoutMs });
+          const supervisedRecord = await waitForServiceReady({
+            home: routekitHome(),
+            product: "routekit",
+            kind: "daemon",
+            previousPid: record.pid,
+            timeoutMs,
+            logFile: daemonLogPath(),
+            ready: daemonRecordHealthy
+          });
+          replacement = {
+            record: supervisedRecord,
+            client: controlClientForRecord(supervisedRecord)
+          };
+        } else {
+          await controlClientForRecord(record).call(
+            "daemon.prepareShutdown",
+            { reason: "upgrade" },
+            { idempotencyKey: `upgrade-${record.generation ?? record.pid}` }
+          );
+          if (
+            !(await waitForProcessExit(
+              record.pid,
+              supervisorOperationTimeoutMs(requestedGrace),
+              record.processIdentity
+            ))
+          ) {
+            throw new Error(`RouteKit daemon pid ${record.pid} did not drain`);
+          }
+          replacement = await ensureDaemon({
+            ...(record.host !== undefined ? { host: record.host } : {}),
+            port: record.dataPort ?? 8080,
+            ...(record.portless !== undefined ? { portless: record.portless } : {}),
+            ...(requestedGrace !== undefined
+              ? { drainGraceMs: requestedGrace }
+              : {}),
+            lifecycleLockHeld: true
+          });
+        }
+      } finally {
+        lock.release();
+      }
+      if (replacement === undefined) throw new Error("RouteKit daemon upgrade did not produce a successor");
+      const status = await replacement.client.call("daemon.status", {});
+      const result = {
+        action:
+          record.supervisor === "systemd" || record.supervisor === "launchd"
+            ? "supervisor-restart"
+            : "drain-restart",
+        url: status.dataUrl,
+        pid: status.pid,
+        previousPid: record.pid,
+        from: record.version,
+        to: status.packageVersion
+      };
+      if (ctx.json) {
+        ctx.emit(result);
         return;
       }
       ctx.presenter.success(
-        result.strategy === "blue-green"
-          ? `RouteKit gateway upgraded to v${result.record.version ?? version} with zero downtime (stable route re-pointed)`
-          : `RouteKit gateway upgraded to v${result.record.version ?? version} (drain-restart on port ${result.record.port})`
+        `RouteKit daemon upgraded to v${status.packageVersion} (${result.action})`
       );
-      ctx.presenter.note(`pid ${result.record.pid} · url ${result.record.url}`);
+      ctx.presenter.note(`pid ${status.pid} · url ${status.dataUrl}`);
     });
 }

@@ -564,18 +564,18 @@
     {
       "id": "accounts.canonical-identities-and-activation",
       "category": "accounts",
-      "expectation": "Subscription kinds serialize as claude-code or codex, and enrollment atomically enables the selected effective RouteKit config.",
+      "expectation": "Subscription kinds serialize as claude-code or codex, and the singleton daemon privately enrolls and removes credentials without returning secret material.",
       "status": "required",
-      "testFile": "packages/routekit-cli/src/test/accounts-command.test.ts",
-      "anchor": "accounts add canonically enrolls and activates the selected config"
+      "testFile": "packages/routekit-daemon/src/test/daemon.test.ts",
+      "anchor": "singleton daemon exposes authenticated control and a stable reloadable data plane"
     },
     {
       "id": "accounts.managed-login-isolation",
       "category": "accounts",
-      "expectation": "Native account login isolates official CLI authentication, scrubs unrelated credentials, stores provider credentials privately, activates routing, and removes temporary state.",
+      "expectation": "Native account login isolates official CLI authentication, scrubs unrelated credentials, returns the credential only to the authenticated daemon client, and removes temporary state without writing daemon-owned stores locally.",
       "status": "required",
       "testFile": "packages/routekit-cli/src/test/accounts-command.test.ts",
-      "anchor": "accounts login isolates Codex auth, enrolls it, activates the provider, and cleans up"
+      "anchor": "accounts login captures isolated Codex auth without writing daemon-owned state"
     },
     {
       "id": "accounts.native-backend-translation",

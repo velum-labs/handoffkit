@@ -6,6 +6,7 @@ import {
   mkdirSync,
   mkdtempSync,
   realpathSync,
+  readFileSync,
   readdirSync,
   rmSync,
   writeFileSync
@@ -249,7 +250,7 @@ export async function loginAccount(
 ): Promise<AccountListEntry> {
   const subscriptionKind = parseAccountMode(subscriptionKindInput);
   const normalizedLabel = sanitizeSubscriptionLabel(label);
-  if (normalizedLabel !== label) {
+  if (normalizedLabel !== label || label.startsWith(".")) {
     throw new Error(
       "account name must be lowercase and contain only letters, numbers, dots, underscores, or hyphens"
     );
@@ -263,7 +264,6 @@ export async function loginAccount(
       `${subscriptionKind}/${normalizedLabel} is already enrolled; remove it before logging in again`
     );
   }
-
   const temporaryDirectory = mkdtempSync(
     join(options.temporaryParent ?? tmpdir(), "routekit-account-login-")
   );
@@ -298,6 +298,70 @@ export async function loginAccount(
       provider: subscriptionKind,
       label: normalizedLabel,
       path
+    };
+  } finally {
+    rmSync(temporaryDirectory, { recursive: true, force: true });
+  }
+}
+
+/**
+ * Run the interactive provider login in an isolated local profile, but return
+ * the credential blob instead of writing RouteKit state. The singleton daemon
+ * is the sole account-store writer; the thin CLI sends this blob over its
+ * authenticated control channel.
+ */
+export async function captureLoginCredential(
+  subscriptionKindInput: string,
+  label: string,
+  options: ManagedAccountLoginOptions = {}
+): Promise<{
+  subscriptionKind: SubscriptionMode;
+  label: string;
+  credential: unknown;
+}> {
+  const subscriptionKind = parseAccountMode(subscriptionKindInput);
+  const normalizedLabel = sanitizeSubscriptionLabel(label);
+  if (normalizedLabel !== label || label.startsWith(".")) {
+    throw new Error(
+      "account name must be lowercase and contain only letters, numbers, dots, underscores, or hyphens"
+    );
+  }
+  const target = join(
+    defaultSubscriptionAccountDirectory(subscriptionKind),
+    `${normalizedLabel}.json`
+  );
+  if (existsSync(target)) {
+    throw new Error(
+      `${subscriptionKind}/${normalizedLabel} is already enrolled; remove it before logging in again`
+    );
+  }
+  const temporaryDirectory = mkdtempSync(
+    join(options.temporaryParent ?? tmpdir(), "routekit-account-login-")
+  );
+  chmodSync(temporaryDirectory, 0o700);
+  const profilePath = join(temporaryDirectory, subscriptionKind);
+  mkdirSync(profilePath, { mode: 0o700 });
+  const profileDirectory = realpathSync(profilePath);
+  prepareManagedLoginProfile(subscriptionKind, profileDirectory);
+  const invocation = managedLoginInvocation(subscriptionKind, profileDirectory);
+  try {
+    const code = await (options.runLogin ?? spawnManagedLogin)(invocation);
+    if (code !== 0) throw new Error(`${invocation.command} login exited with code ${code}`);
+    await materializeManagedCredential(
+      subscriptionKind,
+      invocation,
+      options.platform ?? platform(),
+      options.keychain ?? systemKeychain()
+    );
+    if (!existsSync(invocation.sourcePath)) {
+      throw new Error(
+        `${invocation.command} login completed without creating ${invocation.sourcePath}`
+      );
+    }
+    return {
+      subscriptionKind,
+      label: normalizedLabel,
+      credential: JSON.parse(readFileSync(invocation.sourcePath, "utf8")) as unknown
     };
   } finally {
     rmSync(temporaryDirectory, { recursive: true, force: true });

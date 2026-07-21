@@ -24,8 +24,9 @@ import { spawn } from "node:child_process";
 import { join } from "node:path";
 
 import { definedEnv } from "../environment.js";
-import { distillLog, sleep, tryAcquireFileLock } from "../index.js";
+import { distillLog, sleep } from "../index.js";
 
+import { acquireLifecycleLock } from "./authority.js";
 import { createServiceRecordStore, processAlive, SERVICE_SUPERVISOR_ENV } from "./records.js";
 import type { ServiceRecord, ServiceSupervisorKind } from "./records.js";
 
@@ -59,6 +60,10 @@ export type StartDaemonOptions = {
    * ignored instead of short-circuiting to "already running" (blue-green).
    */
   previousPid?: number;
+  /** Product-specific readiness check; defaults to loopback GET /health. */
+  ready?: (record: ServiceRecord) => Promise<boolean>;
+  /** Caller already holds `<kind>.lock` across a larger lifecycle transaction. */
+  lockHeld?: boolean;
 };
 
 export type StartDaemonResult = {
@@ -115,13 +120,17 @@ export function readLogTail(path: string, maxBytes = LOG_TAIL_BYTES): string {
   }
 }
 
-export async function waitForProcessExit(pid: number, timeoutMs: number): Promise<boolean> {
+export async function waitForProcessExit(
+  pid: number,
+  timeoutMs: number,
+  identity?: string
+): Promise<boolean> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    if (!processAlive(pid)) return true;
+    if (!processAlive(pid, identity)) return true;
     await sleep(50);
   }
-  return !processAlive(pid);
+  return !processAlive(pid, identity);
 }
 
 async function healthOk(url: string): Promise<boolean> {
@@ -156,6 +165,8 @@ export async function waitForServiceReady(input: {
   expectPid?: () => number | undefined;
   logFile?: string;
   label?: string;
+  /** Product-specific readiness check; defaults to loopback GET /health. */
+  ready?: (record: ServiceRecord) => Promise<boolean>;
 }): Promise<ServiceRecord> {
   const store = createServiceRecordStore({ home: input.home, product: input.product });
   const label = input.label ?? `${input.product} ${input.kind}`;
@@ -169,7 +180,13 @@ export async function waitForServiceReady(input: {
     }
     const record = store.read(input.kind);
     if (record !== undefined && record.pid !== input.previousPid) {
-      if (await healthOk(`http://127.0.0.1:${record.port}`)) return record;
+      if (
+        input.ready !== undefined
+          ? await input.ready(record)
+          : await healthOk(`http://127.0.0.1:${record.port}`)
+      ) {
+        return record;
+      }
       lastState = `pid ${record.pid} is not answering /health on port ${record.port}`;
     }
     await sleep(READY_POLL_MS);
@@ -191,25 +208,31 @@ export async function startDaemon(
 
   const existing = store.read(spec.kind);
   if (existing !== undefined && existing.pid !== options.previousPid) {
-    return { alreadyRunning: true, record: existing, logFile };
+    if (options.ready === undefined || (await options.ready(existing))) {
+      return { alreadyRunning: true, record: existing, logFile };
+    }
+    throw new Error(
+      `${label} pid ${existing.pid} is alive but failed its readiness check`
+    );
   }
 
   mkdirSync(store.directory, { recursive: true, mode: 0o700 });
   const lockPath = join(store.directory, `${spec.kind}.lock`);
   const deadline = Date.now() + (options.readyTimeoutMs ?? DEFAULT_READY_TIMEOUT_MS);
-  let lock = tryAcquireFileLock(lockPath);
-  while (lock === undefined) {
-    // Another CLI is starting the same daemon: wait for its record instead of
-    // racing it, but reclaim the lock if that starter died mid-flight.
-    const record = store.read(spec.kind);
-    if (record !== undefined && record.pid !== options.previousPid) {
-      return { alreadyRunning: true, record, logFile };
-    }
-    if (Date.now() >= deadline) {
-      throw new Error(`${label} start is locked by another process (${lockPath})`);
-    }
-    await sleep(READY_POLL_MS);
-    lock = tryAcquireFileLock(lockPath);
+  const lock = options.lockHeld
+    ? { release: () => {} }
+    : await acquireLifecycleLock(lockPath, {
+        timeoutMs: options.readyTimeoutMs ?? DEFAULT_READY_TIMEOUT_MS,
+        pollMs: READY_POLL_MS
+      });
+  const joined = store.read(spec.kind);
+  if (
+    joined !== undefined &&
+    joined.pid !== options.previousPid &&
+    (options.ready === undefined || (await options.ready(joined)))
+  ) {
+    lock.release();
+    return { alreadyRunning: true, record: joined, logFile };
   }
 
   try {
@@ -246,7 +269,8 @@ export async function startDaemon(
         expectPid: () =>
           spawnError !== undefined || exited ? undefined : child.pid,
         logFile,
-        label
+        label,
+        ...(options.ready !== undefined ? { ready: options.ready } : {})
       });
       spec.log?.(`${label} started (pid ${record.pid})`);
       return { alreadyRunning: false, record, logFile };
@@ -285,14 +309,21 @@ export type StopDaemonResult = {
  * grace must cover the service's drain window or in-flight work is severed.
  */
 export async function stopDaemonProcess(
-  record: Pick<ServiceRecord, "pid">,
+  record: Pick<ServiceRecord, "pid" | "processIdentity">,
   options: { graceMs?: number } = {}
 ): Promise<StopDaemonResult> {
   const graceMs = options.graceMs ?? 35_000;
-  if (record.pid === process.pid || !processAlive(record.pid)) {
+  if (record.processIdentity === undefined) {
+    return { stopped: false, forced: false };
+  }
+  if (
+    record.pid === process.pid ||
+    !processAlive(record.pid, record.processIdentity)
+  ) {
     return { stopped: false, forced: false };
   }
   const signalGroup = (signal: NodeJS.Signals): void => {
+    if (!processAlive(record.pid, record.processIdentity)) return;
     try {
       process.kill(-record.pid, signal);
     } catch {
@@ -304,8 +335,10 @@ export async function stopDaemonProcess(
     }
   };
   signalGroup("SIGTERM");
-  if (await waitForProcessExit(record.pid, graceMs)) return { stopped: true, forced: false };
+  if (await waitForProcessExit(record.pid, graceMs, record.processIdentity)) {
+    return { stopped: true, forced: false };
+  }
   signalGroup("SIGKILL");
-  await waitForProcessExit(record.pid, 2_000);
+  await waitForProcessExit(record.pid, 2_000, record.processIdentity);
   return { stopped: true, forced: true };
 }

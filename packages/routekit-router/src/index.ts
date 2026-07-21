@@ -7,6 +7,10 @@ import {
   subscriptionRelaysFromAccountSets
 } from "@routekit/accounts";
 import type { SubscriptionAccountConfigs } from "@routekit/accounts";
+import type {
+  SubscriptionAccountSetSnapshot,
+  SubscriptionUsageResponse
+} from "@routekit/accounts";
 import {
   CatalogBackend,
   startGateway
@@ -43,6 +47,9 @@ export type RunningRouter = {
   gateway: Gateway;
   url: string;
   close(): Promise<void>;
+  providerStatuses(signal?: AbortSignal): ReturnType<CatalogBackend["providerStatuses"]>;
+  accountSnapshots(): SubscriptionAccountSetSnapshot[];
+  usage(signal?: AbortSignal): Promise<SubscriptionUsageResponse>;
 };
 
 function gatewayEnvironment(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
@@ -56,7 +63,10 @@ function gatewayEnvironment(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
 
 function accountConfigs(config: RouterConfig): SubscriptionAccountConfigs {
   const configured = config.providers;
-  const accounts: SubscriptionAccountConfigs = {};
+  const accounts: SubscriptionAccountConfigs = {
+    "claude-code": { source: { kind: "auto" } },
+    codex: { source: { kind: "auto" } }
+  };
   const claude = configured["claude-code"];
   if (claude !== undefined) {
     accounts["claude-code"] = {
@@ -111,7 +121,11 @@ export async function startRouter(options: StartRouterOptions): Promise<RunningR
       );
     }
   }
-  const relays = subscriptionRelaysFromAccountSets(accountSets);
+  const relays = subscriptionRelaysFromAccountSets(
+    Object.fromEntries(
+      [...requiredKinds].map((kind) => [kind, accountSets[kind]])
+    ) as typeof accountSets
+  );
   for (const [kind, accountSet] of Object.entries(accountSets)) {
     if (accountSet.size === 0 && !requiredKinds.has(kind as "claude-code" | "codex")) {
       await accountSet.close();
@@ -146,7 +160,13 @@ export async function startRouter(options: StartRouterOptions): Promise<RunningR
       ...(options.port !== undefined ? { port: options.port } : {}),
       ...(options.authToken !== undefined ? { authToken: options.authToken } : {}),
       ...(Object.keys(relays).length > 0 ? { providerRelays: relays } : {}),
-      usage: async () => await collectSubscriptionUsage(accountSets)
+      usage: async () => {
+        const usage = await collectSubscriptionUsage(accountSets);
+        return {
+          ...usage,
+          accountSets: usage.accountSets.filter((set) => set.members.length > 0)
+        };
+      }
     });
   } catch (error) {
     await backend.close();
@@ -156,10 +176,15 @@ export async function startRouter(options: StartRouterOptions): Promise<RunningR
     throw error;
   }
   let closed = false;
+  let unregisterCleanup = (): void => {};
   const close = async (): Promise<void> => {
     if (closed) return;
     closed = true;
+    unregisterCleanup();
     await gateway.close();
+    await Promise.all(
+      Object.values(accountSets).map(async (accountSet) => await accountSet.close())
+    );
   };
   const drainGraceMs = options.drainGraceMs ?? 0;
   if (drainGraceMs > 0) {
@@ -167,9 +192,23 @@ export async function startRouter(options: StartRouterOptions): Promise<RunningR
     // after 5s; a service granted a drain window needs the bound to cover it.
     extendCleanupGrace(drainGraceMs + 5_000);
   }
-  registerCleanup(async () => {
+  unregisterCleanup = registerCleanup(async () => {
     if (drainGraceMs > 0) await gateway.drain(drainGraceMs);
     await close();
   });
-  return { gateway, url: gateway.url(), close };
+  return {
+    gateway,
+    url: gateway.url(),
+    close,
+    providerStatuses: async (signal) => await backend.providerStatuses(signal),
+    accountSnapshots: () =>
+      Object.values(accountSets).map((accountSet) => accountSet.statusSnapshot()),
+    usage: async (signal) => {
+      const usage = await collectSubscriptionUsage(accountSets, undefined, signal);
+      return {
+        ...usage,
+        accountSets: usage.accountSets.filter((set) => set.members.length > 0)
+      };
+    }
+  };
 }

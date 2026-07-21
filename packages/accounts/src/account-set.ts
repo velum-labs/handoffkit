@@ -428,12 +428,34 @@ export class SubscriptionAccountSet {
     };
   }
 
+  statusSnapshot(): SubscriptionAccountSetSnapshot {
+    const snapshot = this.snapshot();
+    return {
+      ...snapshot,
+      members: snapshot.members.map((status) => {
+        const member = this.#members.find((candidate) => candidate.id === status.id)!;
+        const credentialValid =
+          member.credential.accessToken.length > 0 &&
+          (member.credential.expiresAt === undefined ||
+            member.credential.expiresAt > Date.now() / 1000 ||
+            (member.credential.refreshToken?.length ?? 0) > 0);
+        return {
+          ...status,
+          credentialValid,
+          relayReady:
+            credentialValid &&
+            (member.coolingUntil === undefined || member.coolingUntil <= Date.now())
+        };
+      })
+    };
+  }
+
   async discoverModels(signal?: AbortSignal): Promise<readonly string[]> {
     this.#reasoning.clear();
     await Promise.allSettled(
       this.#members.map(async (member) => {
         member.models.clear();
-        await this.#ensureFresh(member);
+        await this.#ensureFresh(member, signal);
         const discovered = await this.#provider.discoverModels(
           member.credential,
           signal
@@ -478,11 +500,11 @@ export class SubscriptionAccountSet {
     ]);
   }
 
-  async probe(): Promise<void> {
+  async probe(signal?: AbortSignal): Promise<void> {
     await Promise.allSettled(
       this.#members.map(async (member) => {
-        await this.#ensureFresh(member);
-        const limits = await this.#provider.fetchUsage(member.credential);
+        await this.#ensureFresh(member, signal);
+        const limits = await this.#provider.fetchUsage(member.credential, signal);
         this.#tracker.update(member.id, limits);
       })
     );
@@ -492,7 +514,7 @@ export class SubscriptionAccountSet {
    * Refresh stale or missing usage without allowing rapid callers to hammer
    * provider quota endpoints. Failed attempts are throttled as well.
    */
-  async refreshUsage(maxAgeMs = 60_000): Promise<void> {
+  async refreshUsage(maxAgeMs = 60_000, signal?: AbortSignal): Promise<void> {
     if (!Number.isFinite(maxAgeMs) || maxAgeMs < 0) {
       throw new RangeError("usage refresh age must be a non-negative finite number");
     }
@@ -514,7 +536,7 @@ export class SubscriptionAccountSet {
       return;
     }
     this.#lastUsageProbeAt = now;
-    const probe = this.probe().finally(() => {
+    const probe = this.probe(signal).finally(() => {
       if (this.#usageProbe === probe) this.#usageProbe = undefined;
     });
     this.#usageProbe = probe;
@@ -523,7 +545,8 @@ export class SubscriptionAccountSet {
 
   async execute(
     model: string | undefined,
-    operation: (credential: SubscriptionCredential) => Promise<Response>
+    operation: (credential: SubscriptionCredential) => Promise<Response>,
+    signal?: AbortSignal
   ): Promise<Response> {
     if (this.#members.length === 0) throw new SubscriptionAccountSetExhaustedError(this.mode);
     const excluded = new Set<string>();
@@ -531,7 +554,7 @@ export class SubscriptionAccountSet {
     let transientFailovers = 0;
 
     while (excluded.size < this.#members.length) {
-      const lease = await this.#acquire(model, excluded);
+      const lease = await this.#acquire(model, excluded, signal);
       const member = lease.value;
       try {
         const response = await operation(member.credential);
@@ -619,7 +642,8 @@ export class SubscriptionAccountSet {
 
   async #acquire(
     model: string | undefined,
-    excluded: Set<string>
+    excluded: Set<string>,
+    signal?: AbortSignal
   ): Promise<CapacityLease<PoolMember>> {
     const now = Date.now() / 1000;
     for (const member of this.#members) {
@@ -651,15 +675,20 @@ export class SubscriptionAccountSet {
     }
     const lease = this.#capacityPool.acquire(model ?? "default", ineligible);
     const member = lease.value;
-    await this.#ensureFresh(member);
-    if (this.#activeId !== member.id) {
-      this.#activeId = member.id;
-      member.switchedAt = Date.now();
+    try {
+      await this.#ensureFresh(member, signal);
+      if (this.#activeId !== member.id) {
+        this.#activeId = member.id;
+        member.switchedAt = Date.now();
+      }
+      await this.#waitForRamp(member, signal);
+      member.inFlight += 1;
+      member.lastUsed = Date.now();
+      return lease;
+    } catch (error) {
+      lease.release();
+      throw error;
     }
-    await this.#waitForRamp(member);
-    member.inFlight += 1;
-    member.lastUsed = Date.now();
-    return lease;
   }
 
   #release(member: PoolMember): void {
@@ -733,7 +762,7 @@ export class SubscriptionAccountSet {
     if (this.#activeId === member.id) this.#activeId = undefined;
   }
 
-  async #ensureFresh(member: PoolMember): Promise<void> {
+  async #ensureFresh(member: PoolMember, signal?: AbortSignal): Promise<void> {
     const expiresAt = member.credential.expiresAt;
     if (
       expiresAt === undefined ||
@@ -744,7 +773,7 @@ export class SubscriptionAccountSet {
     const existing = this.#refreshes.get(member.id);
     if (existing !== undefined) return existing;
     const refresh = (async () => {
-      member.credential = await this.#provider.refresh(member.credential);
+      member.credential = await this.#provider.refresh(member.credential, signal);
       this.#tracker.resetAfterRefresh(member.id);
       delete member.coolingUntil;
     })().finally(() => this.#refreshes.delete(member.id));
@@ -752,13 +781,23 @@ export class SubscriptionAccountSet {
     return refresh;
   }
 
-  async #waitForRamp(member: PoolMember): Promise<void> {
+  async #waitForRamp(member: PoolMember, signal?: AbortSignal): Promise<void> {
     for (;;) {
       const elapsed = Date.now() - member.switchedAt;
       if (elapsed >= RAMP_WINDOW_MS) return;
       const cap = 1 + Math.floor(elapsed / RAMP_STEP_MS);
       if (member.inFlight < cap) return;
-      await new Promise((resolve) => setTimeout(resolve, RAMP_STEP_MS));
+      await new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(() => {
+          signal?.removeEventListener("abort", abort);
+          resolve();
+        }, RAMP_STEP_MS);
+        const abort = (): void => {
+          clearTimeout(timer);
+          reject(signal?.reason ?? new Error("account operation aborted"));
+        };
+        signal?.addEventListener("abort", abort, { once: true });
+      });
     }
   }
 

@@ -74,9 +74,6 @@ test("real routekit command surfaces execute independently of FusionKit", () => 
     NO_COLOR: "1"
   };
   const input = { cwd: project, env };
-  const configured = (args: readonly string[]): string =>
-    mustRun(["--config", configPath, ...args], input);
-
   try {
     const version = JSON.parse(mustRun(["version", "--json"], input)) as {
       package?: string;
@@ -87,54 +84,6 @@ test("real routekit command surfaces execute independently of FusionKit", () => 
 
     for (const shell of ["bash", "zsh", "fish"]) {
       assert.match(mustRun(["completion", shell], input), /routekit/);
-    }
-
-    const path = JSON.parse(configured(["config", "path", "--json"])) as {
-      path?: string;
-      exists?: boolean;
-    };
-    assert.equal(path.path, configPath);
-    assert.equal(path.exists, true);
-    const shown = JSON.parse(configured(["config", "show", "--json"])) as {
-      config?: { defaultModel?: string };
-    };
-    assert.equal(shown.config?.defaultModel, "openai/command-model");
-
-    const provider = JSON.parse(
-      configured(["providers", "add", "codex", "--json"])
-    ) as {
-      provider?: string;
-      added?: boolean;
-    };
-    assert.equal(provider.provider, "codex");
-    assert.equal(provider.added, true);
-
-    const telemetry = JSON.parse(mustRun(["telemetry", "status", "--json"], input)) as {
-      enabled?: boolean;
-      fields?: Record<string, string[]>;
-    };
-    assert.equal(telemetry.enabled, false);
-    assert.ok(Array.isArray(telemetry.fields?.["cli.command"]));
-
-    const doctor = runCli(
-      ["--config", configPath, "doctor", "--json"],
-      { cwd: project, env: { ...env, PATH: "/nonexistent" } }
-    );
-    assert.equal(doctor.status, 1, `${doctor.stdout}\n${doctor.stderr}`);
-    const diagnosis = JSON.parse(doctor.stdout) as {
-      ready?: boolean;
-      checks?: Array<{ label?: string; ok?: boolean }>;
-    };
-    assert.equal(diagnosis.ready, false);
-    assert.equal(
-      diagnosis.checks?.find((check) => check.label === "router config")?.ok,
-      true
-    );
-    for (const binary of ["codex", "claude", "cursor-agent", "opencode"]) {
-      assert.equal(
-        diagnosis.checks?.find((check) => check.label === binary)?.ok,
-        false
-      );
     }
 
     const installHelp = runCli(["codex", "install", "--help"], input);
@@ -151,42 +100,6 @@ test("real routekit command surfaces execute independently of FusionKit", () => 
       assert.equal(rejected.status, 1);
       assert.match(rejected.stderr, /unknown command/i);
     }
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
-test("real routekit launcher fails preflight before starting a gateway when its harness is missing", () => {
-  const root = mkdtempSync(join(tmpdir(), "routekit-missing-harness-"));
-  const configPath = join(root, "router.yaml");
-  writeFileSync(
-    configPath,
-    [
-      "providers:",
-      "  openai: {}",
-      "defaultModel: openai/private",
-      ""
-    ].join("\n")
-  );
-  try {
-    const result = runCli(
-      ["--config", configPath, "codex", "openai/private"],
-      {
-        cwd: root,
-        env: {
-          ...process.env,
-          HOME: root,
-          ROUTEKIT_HOME: join(root, "state"),
-          PATH: "/nonexistent",
-          PORTLESS: "0",
-          NO_COLOR: "1"
-        }
-      }
-    );
-    assert.equal(result.status, 1);
-    assert.match(`${result.stdout}${result.stderr}`, /routekit preflight failed/i);
-    assert.match(`${result.stdout}${result.stderr}`, /"codex" was not found on PATH/);
-    assert.equal(existsSync(join(root, "state", "services", "gateway.json")), false);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

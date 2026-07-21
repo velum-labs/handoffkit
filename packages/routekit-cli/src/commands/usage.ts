@@ -1,16 +1,9 @@
-import {
-  openLocalSubscriptionUsage,
-  SubscriptionProxyClient
-} from "@routekit/accounts";
-import type {
-  SubscriptionUsageResponse,
-  SubscriptionUsageSource
-} from "@routekit/accounts";
+import type { SubscriptionUsageResponse, SubscriptionUsageSource } from "@routekit/accounts";
 import { CliError, contextFor } from "@routekit/cli-core";
 import { renderErrorPanelLines, watch } from "@routekit/cli-ui";
 import type { Command } from "commander";
 
-import { readServiceRecord } from "../state.js";
+import { routekitClient } from "../client.js";
 import { renderUsageLines } from "../usage-format.js";
 
 const TRY_DOCTOR = "routekit doctor";
@@ -24,8 +17,8 @@ function unavailable(message: string): CliError {
   });
 }
 
-function prefetchedUsageSource(
-  client: SubscriptionProxyClient,
+function daemonUsageSource(
+  client: Awaited<ReturnType<typeof routekitClient>>,
   first: SubscriptionUsageResponse
 ): SubscriptionUsageSource {
   let prefetched: SubscriptionUsageResponse | undefined = first;
@@ -36,30 +29,17 @@ function prefetchedUsageSource(
         prefetched = undefined;
         return usage;
       }
-      return await client.usage();
+      return (await client.call("accounts.usage", {})) as SubscriptionUsageResponse;
     },
     close: async () => {}
   };
 }
 
 export async function openSubscriptionUsageSource(): Promise<SubscriptionUsageSource> {
-  for (const kind of ["gateway", "accounts"] as const) {
-    const record = readServiceRecord(kind);
-    if (record === undefined) continue;
-    const client = SubscriptionProxyClient.open({
-      baseUrl: record.url,
-      ...(record.authToken !== undefined ? { token: record.authToken } : {})
-    });
-    try {
-      return prefetchedUsageSource(client, await client.usage());
-    } catch {
-      // Old, unreachable, or unhealthy services do not make usage unavailable:
-      // try the next live service before opening the enrolled accounts locally.
-    }
-  }
-
   try {
-    return await openLocalSubscriptionUsage();
+    const client = await routekitClient();
+    const first = (await client.call("accounts.usage", {})) as SubscriptionUsageResponse;
+    return daemonUsageSource(client, first);
   } catch (error) {
     throw unavailable(
       `Could not open enrolled subscription accounts: ${

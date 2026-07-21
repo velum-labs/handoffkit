@@ -316,6 +316,8 @@ Product-neutral RouteKit gateway and router.
 
 - `export { startGateway } from "./server.js";`
 - `export type { Gateway, GatewayOptions, ProviderRelay, ProviderRelayDialect } from "./server.js";`
+- `export { startSwitchingGatewayProxy } from "./switching-proxy.js";`
+- `export type { SwitchingGatewayProxy } from "./switching-proxy.js";`
 - `export { joinPath, ModelRoutedBackend, OpenAiBackend } from "./backend.js";`
 - `export type { Backend, BackendModelRoute, BackendRequestOptions, ModelRoutedBackendOptions, OpenAiBackendOptions } from "./backend.js";`
 - `export { AnthropicBackend, CodexResponsesBackend, GoogleGenAiBackend } from "./provider-backends.js";`
@@ -450,12 +452,48 @@ No module JSDoc was found.
 - `export function projectRouterConfigPath(cwd: string ...`
 - `export function findProjectRouterConfig(cwd: string ...`
 - `export function routerConfigPaths(`
+- `export function parseRouterConfigDocument(`
+  Parse and validate an in-memory router YAML document without writing it.
 - `export function loadRouterConfig(`
 - `export function writeRouterConfig(path: string, config: RouterConfig | unknown): string ...`
 - `export function updateEffectiveRouterConfig(`
   Mutate only the selected raw config layer while validating the merged result.  This keeps project overlays sparse instead of materializing defaults or inherited global values into the project file.
 - `export function updateRouterConfig(`
 - `export const DEFAULT_ROUTER_CONFIG: RouterConfig ...`
+
+### `packages/routekit-control/src/index.ts`
+
+No module JSDoc was found.
+
+- `export const ROUTEKIT_CONTROL_CAPABILITY ...`
+- `export type RouteKitControlMethod ...`
+- `export type RouteKitControlParams ...`
+- `export type DaemonStatus ...`
+- `export type ConfigSnapshot ...`
+- `export type ModelInfo ...`
+- `export type LaunchPreparation ...`
+- `export type RouteKitControlResults ...`
+- `export type RouteKitMethodHandler<M extends RouteKitControlMethod> ...`
+- `export type RouteKitControlHandlers ...`
+- `export const MUTATING_ROUTEKIT_METHODS: ReadonlySet<RouteKitControlMethod> ...`
+- `export function validateRouteKitParams<M extends RouteKitControlMethod>(`
+  Validate method-specific structural invariants at the protocol edge. Domain parsers perform deeper validation (provider ids, router schema, credentials).
+- `export function createRouteKitControlHandler(`
+- `export class RouteKitControlClient ...`
+
+### `packages/routekit-daemon/src/index.ts`
+
+Singleton RouteKit daemon.
+
+One process owns a private authenticated control listener and one stable
+model-gateway front door. Router generations run on ephemeral loopback
+ports behind that front door; config/account reload builds a complete new
+generation before atomically switching new traffic and draining the old.
+
+- `export const ROUTEKIT_DAEMON_KIND ...`
+- `export const ROUTEKIT_PRODUCT ...`
+- `export type RouteKitDaemonOptions ...`
+- `export type RunningRouteKitDaemon ...`
 
 ### `packages/routekit-registry/src/index.ts`
 
@@ -539,11 +577,15 @@ No module JSDoc was found.
 - `export type { ExitInfo, Spawned, SuperviseSpawnOptions } from "./process.js";`
 - `export { createActivePortlessSession, createPortlessSession, detectPortlessProxy, reapPortlessProject, reapPortlessService } from "./portless.js";`
 - `export type { DetectedProxy, DiscoverOrSpawnInput, DiscoverOrSpawnResult, PortlessModule, PortlessOptions, PortlessSession, RouteMapping, RouteStoreLike, SpawnedService } from "./portless.js";`
-- `export { createServiceRecordStore, processAlive, SERVICE_SUPERVISOR_ENV, supervisorFromEnv } from "./service/records.js";`
+- `export { createServiceRecordStore, processAlive, processIdentity, SERVICE_SUPERVISOR_ENV, supervisorFromEnv } from "./service/records.js";`
 - `export type { ServiceRecord, ServiceRecordInput, ServiceRecordStore, ServiceSupervisorKind } from "./service/records.js";`
+- `export { CONTROL_BODY_LIMIT_BYTES, CONTROL_PROTOCOL_VERSION, ControlClient, ControlError, controlTokenMatches, generateControlToken, startControlServer } from "./service/control.js";`
+- `export type { ControlClientOptions, ControlErrorCode, ControlEvent, ControlFailure, ControlHandler, ControlHandlerContext, ControlRequest, ControlResponse, ControlSuccess, RunningControlServer } from "./service/control.js";`
+- `export { acquireLifecycleLock, nextServiceGeneration } from "./service/authority.js";`
+- `export type { LifecycleLock } from "./service/authority.js";`
 - `export { readLogTail, rotateLogFile, serviceLogPath, startDaemon, stopDaemonProcess, waitForProcessExit, waitForServiceReady } from "./service/daemon.js";`
 - `export type { ServiceDaemonSpec, StartDaemonOptions, StartDaemonResult, StopDaemonResult } from "./service/daemon.js";`
-- `export { detectSupervisor, launchdAgentPlist, launchdLabel, launchdPlistPath, supervisorController, systemdServiceUnit, systemdUnitName, systemdUnitPath } from "./service/supervisors.js";`
+- `export { detectSupervisor, launchdAgentPlist, launchdLabel, launchdPlistPath, supervisorController, supervisorOperationTimeoutMs, systemdServiceUnit, systemdUnitName, systemdUnitPath } from "./service/supervisors.js";`
 - `export type { CommandRunner, DetectSupervisorOptions, ServiceUnitSpec, SupervisorController, SupervisorStatus } from "./service/supervisors.js";`
 - `export { planUpgrade, upgradeDetachedDaemon } from "./service/upgrade.js";`
 - `export type { UpgradeDaemonInput, UpgradeDaemonResult, UpgradeStrategy } from "./service/upgrade.js";`

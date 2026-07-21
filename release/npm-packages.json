@@ -26,6 +26,10 @@
       "name": "@routekit/runtime"
     },
     {
+      "path": "packages/routekit-control",
+      "name": "@routekit/control"
+    },
+    {
       "path": "packages/routekit-tracing",
       "name": "@routekit/tracing"
     },
@@ -120,6 +124,10 @@
     {
       "path": "packages/routekit-router",
       "name": "@routekit/router"
+    },
+    {
+      "path": "packages/routekit-daemon",
+      "name": "@routekit/daemon"
     },
     {
       "path": "packages/ensemble",

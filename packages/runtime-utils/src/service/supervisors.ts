@@ -21,11 +21,14 @@ import { SERVICE_SUPERVISOR_ENV } from "./records.js";
 
 export type CommandRunner = (
   command: string,
-  args: readonly string[]
+  args: readonly string[],
+  options?: { timeoutMs?: number }
 ) => Promise<{ exitCode: number; stdout: string; stderr: string }>;
 
-const defaultRunner: CommandRunner = async (command, args) => {
-  const result = await runCliCapture(command, [...args], { timeoutMs: 30_000 });
+const defaultRunner: CommandRunner = async (command, args, options) => {
+  const result = await runCliCapture(command, [...args], {
+    timeoutMs: options?.timeoutMs ?? 30_000
+  });
   return { exitCode: result.exitCode, stdout: result.stdout, stderr: result.stderr };
 };
 
@@ -63,10 +66,10 @@ export type SupervisorController = {
   /** Write the unit, enable it, and start it now. */
   install(spec: ServiceUnitSpec): Promise<void>;
   /** Stop, disable, and remove the unit. Returns false when not installed. */
-  uninstall(): Promise<boolean>;
-  start(): Promise<void>;
-  stop(): Promise<void>;
-  restart(): Promise<void>;
+  uninstall(options?: { timeoutMs?: number }): Promise<boolean>;
+  start(options?: { timeoutMs?: number }): Promise<void>;
+  stop(options?: { timeoutMs?: number }): Promise<void>;
+  restart(options?: { timeoutMs?: number }): Promise<void>;
   status(): Promise<SupervisorStatus>;
 };
 
@@ -74,6 +77,10 @@ const STOP_MARGIN_MS = 10_000;
 
 function stopTimeoutSeconds(drainGraceMs: number | undefined): number {
   return Math.ceil(((drainGraceMs ?? 30_000) + STOP_MARGIN_MS) / 1000);
+}
+
+export function supervisorOperationTimeoutMs(drainGraceMs: number | undefined): number {
+  return (drainGraceMs ?? 30_000) + STOP_MARGIN_MS + 10_000;
 }
 
 // ---- systemd (Linux user unit) ----
@@ -147,8 +154,12 @@ function createSystemdController(input: {
   const unitName = systemdUnitName(input.product, input.kind);
   const unitPath = systemdUnitPath(input.product, input.kind, input.home);
   const runner = input.runner;
-  const systemctl = async (args: readonly string[], label: string): Promise<void> => {
-    const result = await runner("systemctl", ["--user", ...args]);
+  const systemctl = async (
+    args: readonly string[],
+    label: string,
+    options?: { timeoutMs?: number }
+  ): Promise<void> => {
+    const result = await runner("systemctl", ["--user", ...args], options);
     if (result.exitCode !== 0) throw runnerError(label, result);
   };
   return {
@@ -156,6 +167,9 @@ function createSystemdController(input: {
     unitName,
     unitPath,
     async install(spec) {
+      const prior = await runner("systemctl", ["--user", "is-active", unitName]);
+      const wasActive = prior.exitCode === 0 && prior.stdout.trim() === "active";
+      const timeoutMs = supervisorOperationTimeoutMs(spec.drainGraceMs);
       mkdirSync(join(unitPath, ".."), { recursive: true });
       writeFileAtomic(unitPath, systemdServiceUnit(spec), { mode: 0o600 });
       chmodSync(unitPath, 0o600);
@@ -165,23 +179,32 @@ function createSystemdController(input: {
       // require privileges on hardened hosts, and the service still runs for
       // the current session without it.
       await runner("loginctl", ["enable-linger", userInfo().username]);
-      await systemctl(["enable", "--now", unitName], `systemctl enable --now ${unitName}`);
+      await systemctl(["enable", unitName], `systemctl enable ${unitName}`);
+      await systemctl(
+        [wasActive ? "restart" : "start", unitName],
+        `systemctl ${wasActive ? "restart" : "start"} ${unitName}`,
+        { timeoutMs }
+      );
     },
-    async uninstall() {
+    async uninstall(options) {
       if (!existsSync(unitPath)) return false;
-      await runner("systemctl", ["--user", "disable", "--now", unitName]);
+      await systemctl(
+        ["disable", "--now", unitName],
+        `systemctl disable --now ${unitName}`,
+        options
+      );
       rmSync(unitPath, { force: true });
-      await runner("systemctl", ["--user", "daemon-reload"]);
+      await systemctl(["daemon-reload"], "systemctl daemon-reload");
       return true;
     },
-    async start() {
-      await systemctl(["start", unitName], `systemctl start ${unitName}`);
+    async start(options) {
+      await systemctl(["start", unitName], `systemctl start ${unitName}`, options);
     },
-    async stop() {
-      await systemctl(["stop", unitName], `systemctl stop ${unitName}`);
+    async stop(options) {
+      await systemctl(["stop", unitName], `systemctl stop ${unitName}`, options);
     },
-    async restart() {
-      await systemctl(["restart", unitName], `systemctl restart ${unitName}`);
+    async restart(options) {
+      await systemctl(["restart", unitName], `systemctl restart ${unitName}`, options);
     },
     async status() {
       const installed = existsSync(unitPath);
@@ -282,8 +305,12 @@ function createLaunchdController(input: {
   const domainTarget = `gui/${uid}`;
   const serviceTarget = `${domainTarget}/${label}`;
   const runner = input.runner;
-  const launchctl = async (args: readonly string[], label_: string): Promise<void> => {
-    const result = await runner("launchctl", args);
+  const launchctl = async (
+    args: readonly string[],
+    label_: string,
+    options?: { timeoutMs?: number }
+  ): Promise<void> => {
+    const result = await runner("launchctl", args, options);
     if (result.exitCode !== 0) throw runnerError(label_, result);
   };
   return {
@@ -301,22 +328,34 @@ function createLaunchdController(input: {
       await launchctl(["bootstrap", domainTarget, unitPath], `launchctl bootstrap ${label}`);
       await runner("launchctl", ["enable", serviceTarget]);
     },
-    async uninstall() {
+    async uninstall(options) {
       if (!existsSync(unitPath)) return false;
-      await runner("launchctl", ["bootout", serviceTarget]);
+      const active = await runner("launchctl", ["print", serviceTarget]);
+      if (active.exitCode === 0) {
+        await launchctl(
+          ["bootout", serviceTarget],
+          `launchctl bootout ${label}`,
+          options
+        );
+      }
       rmSync(unitPath, { force: true });
       return true;
     },
-    async start() {
-      await launchctl(["bootstrap", domainTarget, unitPath], `launchctl bootstrap ${label}`);
+    async start(options) {
+      await launchctl(["bootstrap", domainTarget, unitPath], `launchctl bootstrap ${label}`, options);
     },
-    async stop() {
+    async stop(options) {
       // bootout (not `stop`): KeepAlive would immediately restart a stopped
       // service, so a stop must unload it until the next bootstrap.
-      await launchctl(["bootout", serviceTarget], `launchctl bootout ${label}`);
+      await launchctl(["bootout", serviceTarget], `launchctl bootout ${label}`, options);
     },
-    async restart() {
-      await launchctl(["kickstart", "-k", serviceTarget], `launchctl kickstart ${label}`);
+    async restart(options) {
+      await launchctl(["bootout", serviceTarget], `launchctl bootout ${label}`, options);
+      await launchctl(
+        ["bootstrap", domainTarget, unitPath],
+        `launchctl bootstrap ${label}`,
+        options
+      );
     },
     async status() {
       const installed = existsSync(unitPath);

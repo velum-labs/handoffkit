@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -74,6 +74,11 @@ test("a record whose pid is gone is reaped on read", () => {
     });
     assert.equal(store.read("svc"), undefined);
     assert.equal(store.read("svc"), undefined);
+    assert.equal(
+      existsSync(store.path("svc")),
+      true,
+      "read-only liveness checks must not race-delete a replacement record"
+    );
   } finally {
     rmSync(home, { recursive: true, force: true });
   }
@@ -94,6 +99,8 @@ test("pid-guarded removal protects a successor's record", () => {
     store.remove("svc", { ifPid: process.pid + 1 });
     assert.equal(store.read("svc")?.pid, process.pid);
     store.remove("svc", { ifPid: process.pid });
+    assert.equal(store.read("svc")?.pid, process.pid);
+    store.remove("svc");
     assert.equal(store.read("svc"), undefined);
   } finally {
     rmSync(home, { recursive: true, force: true });
@@ -241,8 +248,10 @@ test("systemd controller install writes the unit and drives systemctl", async ()
       calls.filter((call) => call[0] === "systemctl").map((call) => call.slice(1)),
       [
         ["--user", "is-system-running"],
+        ["--user", "is-active", "routekit-gateway.service"],
         ["--user", "daemon-reload"],
-        ["--user", "enable", "--now", "routekit-gateway.service"]
+        ["--user", "enable", "routekit-gateway.service"],
+        ["--user", "restart", "routekit-gateway.service"]
       ]
     );
     assert.ok(calls.some((call) => call[0] === "loginctl" && call[1] === "enable-linger"));

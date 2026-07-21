@@ -47,10 +47,12 @@ function alive(pid: number): boolean {
   }
 }
 
-test("gateway service lifecycle: start, idempotency, upgrade, drain-on-stop", async () => {
+test("daemon lifecycle: start, idempotency, upgrade, drain-on-stop", async () => {
   const root = mkdtempSync(join(tmpdir(), "routekit-service-e2e-"));
   const project = join(root, "project");
+  const home = join(root, "home");
   const stateHome = join(root, "state");
+  mkdirSync(join(home, ".config", "routekit"), { recursive: true });
   mkdirSync(project, { recursive: true });
 
   // A mock upstream whose /slow completion takes 2.5s: long enough to still be
@@ -90,23 +92,25 @@ test("gateway service lifecycle: start, idempotency, upgrade, drain-on-stop", as
   await new Promise<void>((resolveListen) => upstream.listen(0, "127.0.0.1", resolveListen));
   const upstreamPort = (upstream.address() as AddressInfo).port;
 
-  const configPath = join(project, "router.yaml");
+  const configPath = join(home, ".config", "routekit", "router.yaml");
   writeFileSync(
     configPath,
     ["providers:", "  openai: {}", "defaultModel: openai/mock-model", ""].join("\n")
   );
   const env = {
     ...process.env,
+    HOME: home,
     ROUTEKIT_HOME: stateHome,
     OPENAI_API_KEY: "mock-secret",
     OPENAI_BASE_URL: `http://127.0.0.1:${upstreamPort}/v1`,
     PORTLESS: "0",
     ROUTEKIT_PORTLESS: "0",
+    ROUTEKIT_NO_SUPERVISOR: "1",
     NO_COLOR: "1"
   };
   const cli = { cwd: project, env };
-  const base = ["--config", configPath, "gateway"];
-  const recordPath = join(stateHome, "services", "gateway.json");
+  const base = ["daemon"];
+  const recordPath = join(stateHome, "services", "daemon.json");
   let daemonPid: number | undefined;
 
   try {
@@ -134,10 +138,14 @@ test("gateway service lifecycle: start, idempotency, upgrade, drain-on-stop", as
       version?: string;
       args?: string[];
       supervisor?: string;
+      authTokenFile?: string;
     };
     assert.equal(typeof record.version, "string");
     assert.equal(record.supervisor, "detached");
-    assert.ok(record.args?.includes("serve"));
+    assert.ok(record.args?.includes("run"));
+    assert.ok(record.authTokenFile !== undefined);
+    const dataToken = readFileSync(record.authTokenFile, "utf8").trim();
+    assert.equal(record.args?.join(" ").includes(dataToken), false);
 
     // upgrade without skew is a no-op; --force performs a drain-restart.
     const upToDate = json(await runCli([...base, "upgrade", "--json"], cli));
@@ -156,13 +164,16 @@ test("gateway service lifecycle: start, idempotency, upgrade, drain-on-stop", as
     // logs: the daemon's output landed in the shared log file.
     const logs = await runCli([...base, "logs", "-n", "50"], cli);
     assert.equal(logs.exitCode, 0);
-    assert.match(logs.stdout, /RouteKit gateway listening/);
+    assert.match(logs.stdout, /RouteKit daemon listening/);
 
     // Drain on stop: an in-flight (slow) completion finishes while the
     // gateway refuses new work and then shuts down.
     const inflight = fetch(`${upgradedUrl}/v1/chat/completions`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${dataToken}`
+      },
       body: JSON.stringify({
         model: "openai/mock-model",
         messages: [{ role: "user", content: "slow" }]
@@ -174,8 +185,14 @@ test("gateway service lifecycle: start, idempotency, upgrade, drain-on-stop", as
     assert.equal(inflightResponse.status, 200);
     assert.match(await inflightResponse.text(), /drained answer/);
     const stopped = json(await stopRun);
-    assert.equal((stopped.service as { stopped?: boolean }).stopped, true);
-    assert.equal(existsSync(recordPath), false);
+    assert.equal(stopped.stopped, true);
+    // Guarded cleanup intentionally leaves the dead generation record in
+    // place rather than risking deletion of a concurrently published
+    // successor; readers treat its dead pid as unavailable.
+    assert.equal(
+      (JSON.parse(readFileSync(recordPath, "utf8")) as { pid: number }).pid,
+      daemonPid
+    );
     const deadline = Date.now() + 5_000;
     while (alive(daemonPid) && Date.now() < deadline) {
       await new Promise((resolveWait) => setTimeout(resolveWait, 50));

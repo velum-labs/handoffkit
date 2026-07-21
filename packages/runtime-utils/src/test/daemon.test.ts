@@ -47,6 +47,9 @@ server.listen(0, "127.0.0.1", () => {
       url: "http://127.0.0.1:" + port,
       port,
       startedAt: new Date().toISOString(),
+      processIdentity: process.platform === "linux"
+        ? readFileSync("/proc/self/stat", "utf8").slice(readFileSync("/proc/self/stat", "utf8").lastIndexOf(")") + 2).split(" ")[19]
+        : undefined,
       supervisor: process.env.${SERVICE_SUPERVISOR_ENV}
     })
   );

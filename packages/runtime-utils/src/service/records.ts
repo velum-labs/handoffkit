@@ -10,6 +10,7 @@
  * own state home and product name (RouteKit, FusionKit, ...).
  */
 import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
+import { spawnSync } from "node:child_process";
 import { join } from "node:path";
 
 import { writeFileAtomic } from "../index.js";
@@ -53,6 +54,26 @@ export type ServiceRecord = {
   /** Working directory the daemon runs in (project config discovery). */
   cwd?: string;
   supervisor?: ServiceSupervisorKind;
+  /** Monotonic authority generation used by singleton control daemons. */
+  generation?: number;
+  /** Version of the private control protocol spoken by the daemon. */
+  protocolVersion?: string;
+  /** Random bearer credential for the private loopback control listener. */
+  controlToken?: string;
+  /** Public/data-plane URL exposed by a combined daemon. */
+  dataUrl?: string;
+  /** Data-plane port exposed by a combined daemon. */
+  dataPort?: number;
+  /** Public listener bind host. */
+  host?: string;
+  /** Whether the stable portless route is enabled. */
+  portless?: boolean;
+  /** Configured graceful-drain window. */
+  drainGraceMs?: number;
+  /** Private file containing the data-plane bearer token. */
+  authTokenFile?: string;
+  /** OS process birth identity used to reject PID reuse. */
+  processIdentity?: string;
 };
 
 export type ServiceRecordInput = Omit<ServiceRecord, "product" | "owner">;
@@ -70,10 +91,29 @@ export type ServiceRecordStore = {
   remove(kind: string, options?: { ifPid?: number }): void;
 };
 
-export function processAlive(pid: number): boolean {
+export function processIdentity(pid: number): string | undefined {
+  if (process.platform === "linux") try {
+    const stat = readFileSync(`/proc/${pid}/stat`, "utf8");
+    const close = stat.lastIndexOf(")");
+    const fields = stat.slice(close + 2).split(" ");
+    return fields[19];
+  } catch {
+    return undefined;
+  }
+  if (process.platform === "darwin") {
+    const result = spawnSync("ps", ["-o", "lstart=", "-p", String(pid)], {
+      encoding: "utf8"
+    });
+    const started = result.status === 0 ? result.stdout.trim() : "";
+    return started.length > 0 ? started : undefined;
+  }
+  return undefined;
+}
+
+export function processAlive(pid: number, identity?: string): boolean {
   try {
     process.kill(pid, 0);
-    return true;
+    return identity === undefined || processIdentity(pid) === identity;
   } catch (error) {
     return (error as NodeJS.ErrnoException).code === "EPERM";
   }
@@ -134,7 +174,29 @@ export function createServiceRecordStore(input: {
       ...(optionalString(parsed.binPath) !== undefined ? { binPath: parsed.binPath as string } : {}),
       ...(optionalArgs(parsed.args) !== undefined ? { args: optionalArgs(parsed.args) } : {}),
       ...(optionalString(parsed.cwd) !== undefined ? { cwd: parsed.cwd as string } : {}),
-      ...(supervisor !== undefined ? { supervisor } : {})
+      ...(supervisor !== undefined ? { supervisor } : {}),
+      ...(typeof parsed.generation === "number" && Number.isSafeInteger(parsed.generation)
+        ? { generation: parsed.generation }
+        : {}),
+      ...(optionalString(parsed.protocolVersion) !== undefined
+        ? { protocolVersion: parsed.protocolVersion as string }
+        : {}),
+      ...(optionalString(parsed.controlToken) !== undefined
+        ? { controlToken: parsed.controlToken as string }
+        : {}),
+      ...(optionalString(parsed.dataUrl) !== undefined
+        ? { dataUrl: parsed.dataUrl as string }
+        : {}),
+      ...(typeof parsed.dataPort === "number" ? { dataPort: parsed.dataPort } : {}),
+      ...(optionalString(parsed.host) !== undefined ? { host: parsed.host as string } : {}),
+      ...(typeof parsed.portless === "boolean" ? { portless: parsed.portless } : {}),
+      ...(typeof parsed.drainGraceMs === "number" ? { drainGraceMs: parsed.drainGraceMs } : {}),
+      ...(optionalString(parsed.authTokenFile) !== undefined
+        ? { authTokenFile: parsed.authTokenFile as string }
+        : {}),
+      ...(optionalString(parsed.processIdentity) !== undefined
+        ? { processIdentity: parsed.processIdentity as string }
+        : {})
     };
   };
 
@@ -144,10 +206,7 @@ export function createServiceRecordStore(input: {
     read(kind) {
       const record = readRaw(kind);
       if (record === undefined) return undefined;
-      if (!processAlive(record.pid)) {
-        rmSync(path(kind), { force: true });
-        return undefined;
-      }
+      if (!processAlive(record.pid, record.processIdentity)) return undefined;
       return record;
     },
     write(record) {
@@ -162,6 +221,11 @@ export function createServiceRecordStore(input: {
       if (options.ifPid !== undefined) {
         const record = readRaw(kind);
         if (record !== undefined && record.pid !== options.ifPid) return;
+        // A guarded caller cannot safely unlink with a compare-then-delete:
+        // a successor may atomically publish between those operations. Leave
+        // the matching record in place; once this process exits, reads treat
+        // it as stale and the successor overwrites it under lifecycle lock.
+        return;
       }
       rmSync(path(kind), { force: true });
     }

@@ -1,19 +1,15 @@
 import { contextFor } from "@routekit/cli-core";
 import {
-  isSubscriptionProvider,
   PROVIDER_IDS,
   splitNamespacedModel,
-  type ProviderId,
-  type RouterConfig
+  type ProviderId
 } from "@routekit/gateway";
-import { defaultKeyEnv } from "@routekit/registry";
 import type { Command } from "commander";
+import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 
-import { discoverCatalog } from "../catalog.js";
-import { updateEffectiveRouterConfig } from "../config.js";
-import { writeStateSnapshot } from "../state.js";
+import { routekitClient } from "../client.js";
 
-import { configOverride, loaded, numberOption } from "./context.js";
+import { numberOption } from "./context.js";
 
 function parseProvider(value: string): ProviderId {
   const normalized =
@@ -28,47 +24,6 @@ function rawProviders(value: unknown): Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : {};
-}
-
-export type ProviderStatus = {
-  provider: ProviderId;
-  configured: true;
-  ok: boolean;
-  credential: string;
-  models: readonly string[];
-  error?: string;
-};
-
-async function providerStatus(
-  provider: ProviderId,
-  config: RouterConfig
-): Promise<ProviderStatus> {
-  const providerConfig = {
-    providers: { [provider]: config.providers[provider] }
-  };
-  try {
-    const catalog = await discoverCatalog(providerConfig as RouterConfig);
-    return {
-      provider,
-      configured: true,
-      ok: true,
-      credential: isSubscriptionProvider(provider)
-        ? "managed accounts"
-        : (defaultKeyEnv(provider) ?? "registry managed"),
-      models: catalog.models.map((model) => model.id)
-    };
-  } catch (error) {
-    return {
-      provider,
-      configured: true,
-      ok: false,
-      credential: isSubscriptionProvider(provider)
-        ? "managed accounts"
-        : (defaultKeyEnv(provider) ?? "registry managed"),
-      models: [],
-      error: error instanceof Error ? error.message : String(error)
-    };
-  }
 }
 
 export function registerProviders(program: Command): void {
@@ -88,7 +43,7 @@ export function registerProviders(program: Command): void {
     .option("--fallback-cooldown <seconds>", "fallback cooldown")
     .option("--default-model <provider/model>", "set the namespaced default model")
     .action(
-      (
+      async (
         value: string,
         options: {
           strategy?: string;
@@ -150,21 +105,22 @@ export function registerProviders(program: Command): void {
               }
             : {})
         };
-        const updated = updateEffectiveRouterConfig(
-          { configPath: configOverride(command) },
-          (draft) => {
-            const current = rawProviders(draft.providers);
-            draft.providers = {
-              ...current,
-              [provider]: {
-                ...rawProviders(current[provider]),
-                ...policy
-              }
-            };
-            if (options.defaultModel !== undefined) {
-              draft.defaultModel = options.defaultModel;
-            }
+        const client = await routekitClient();
+        const current = await client.call("config.get", {});
+        const draft = (parseYaml(current.document) ?? {}) as Record<string, unknown>;
+        const configured = rawProviders(draft.providers);
+        draft.providers = {
+          ...configured,
+          [provider]: {
+            ...rawProviders(configured[provider]),
+            ...policy
           }
+        };
+        if (options.defaultModel !== undefined) draft.defaultModel = options.defaultModel;
+        const updated = await client.call(
+          "config.update",
+          { expectedRevision: current.revision, document: stringifyYaml(draft) },
+          { idempotencyKey: `provider-add-${provider}-${current.revision}` }
         );
         const ctx = contextFor(command);
         if (ctx.json) {
@@ -172,7 +128,7 @@ export function registerProviders(program: Command): void {
             path: updated.path,
             provider,
             added: true,
-            config: updated.config
+            revision: updated.revision
           });
         } else {
           ctx.presenter.success(`enabled ${provider} in ${updated.path}`);
@@ -183,28 +139,31 @@ export function registerProviders(program: Command): void {
   providers
     .command("remove <provider>")
     .description("disable a provider")
-    .action((value: string, _options: unknown, command: Command) => {
+    .action(async (value: string, _options: unknown, command: Command) => {
       const provider = parseProvider(value);
-      const current = loaded(command).config;
-      if (current.providers[provider] === undefined) {
+      const client = await routekitClient();
+      const current = await client.call("config.get", {});
+      const draft = (parseYaml(current.document) ?? {}) as Record<string, unknown>;
+      const configured = rawProviders(draft.providers);
+      if (configured[provider] === undefined) {
         throw new Error(`provider is not configured: ${provider}`);
       }
-      if (Object.keys(current.providers).length === 1) {
+      if (Object.keys(configured).length === 1) {
         throw new Error("cannot remove the only configured provider");
       }
-      const updated = updateEffectiveRouterConfig(
-        { configPath: configOverride(command) },
-        (draft) => {
-          const next = { ...rawProviders(draft.providers) };
-          delete next[provider];
-          draft.providers = next;
-          if (
-            typeof draft.defaultModel === "string" &&
-            draft.defaultModel.startsWith(`${provider}/`)
-          ) {
-            delete draft.defaultModel;
-          }
-        }
+      const next = { ...configured };
+      delete next[provider];
+      draft.providers = next;
+      if (
+        typeof draft.defaultModel === "string" &&
+        draft.defaultModel.startsWith(`${provider}/`)
+      ) {
+        delete draft.defaultModel;
+      }
+      const updated = await client.call(
+        "config.update",
+        { expectedRevision: current.revision, document: stringifyYaml(draft) },
+        { idempotencyKey: `provider-remove-${provider}-${current.revision}` }
       );
       const ctx = contextFor(command);
       if (ctx.json) {
@@ -212,7 +171,7 @@ export function registerProviders(program: Command): void {
           path: updated.path,
           provider,
           removed: true,
-          config: updated.config
+          revision: updated.revision
         });
       } else {
         ctx.presenter.success(`disabled ${provider} in ${updated.path}`);
@@ -228,41 +187,37 @@ export function registerProviders(program: Command): void {
         _options: unknown,
         command: Command
       ) => {
-        const config = loaded(command).config;
-        const selected =
-          value === undefined
-            ? PROVIDER_IDS.filter(
-                (provider) => config.providers[provider] !== undefined
-              )
-            : [parseProvider(value)];
-        if (
-          selected.length === 1 &&
-          config.providers[selected[0]!] === undefined
-        ) {
-          throw new Error(`provider is not configured: ${selected[0]}`);
-        }
-        const statuses = await Promise.all(
-          selected.map(async (provider) => await providerStatus(provider, config))
-        );
-        writeStateSnapshot("health", "providers", {
-          checkedAt: new Date().toISOString(),
-          providers: statuses
+        const response = await (await routekitClient()).call("providers.status", {
+          live: true
         });
+        const statuses =
+          value === undefined
+            ? response.providers
+            : response.providers.filter((entry) => entry.provider === parseProvider(value));
+        if (value !== undefined && statuses.length === 0) {
+          throw new Error(`provider is not configured: ${value}`);
+        }
         const ctx = contextFor(command);
         if (ctx.json) {
           ctx.emit({ providers: statuses });
         } else {
           for (const status of statuses) {
             ctx.presenter.status(
-              status.ok ? "ok" : "fail",
+              status.credentialAvailable && status.error === undefined ? "ok" : "fail",
               status.provider,
-              status.ok
-                ? `${status.models.length} live model(s); ${status.credential}`
-                : status.error
+              status.error ??
+                `${status.models?.length ?? 0} live model(s); ` +
+                  `${status.credentialAvailable ? "credential available" : "credential missing"}`
             );
           }
         }
-        if (statuses.some((status) => !status.ok)) process.exitCode = 1;
+        if (
+          statuses.some(
+            (status) => !status.credentialAvailable || status.error !== undefined
+          )
+        ) {
+          process.exitCode = 1;
+        }
       }
     );
 }

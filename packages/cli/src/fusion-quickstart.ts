@@ -17,7 +17,7 @@ import {
 } from "@routekit/config";
 import { resolveReasoningEffort } from "@routekit/contracts";
 import type { ModelReasoningCapabilities } from "@routekit/contracts";
-import { registerCleanup, trimTrailingSlashes } from "@routekit/runtime";
+import { commandOnPath, registerCleanup, trimTrailingSlashes } from "@routekit/runtime";
 import { createToolLaunchContext } from "@routekit/tools";
 import type { AgentProfile, ToolLaunchSpec } from "@routekit/tools";
 
@@ -346,11 +346,20 @@ export async function runFusion(
       ])
     )
   ];
-  const router = await resolveRouter(repo, options, routekitModelIds);
   const integration = tool === "serve" ? undefined : toolRegistry.get(tool);
   if (tool !== "serve" && integration === undefined) {
     throw new Error(`unknown fusion tool: ${tool}`);
   }
+  if (
+    integration?.binary !== undefined &&
+    !commandOnPath(integration.binary)
+  ) {
+    throw new Error(
+      `fusion preflight failed: "${integration.binary}" was not found on PATH — ` +
+        (integration.installHint ?? `install ${integration.binary}`)
+    );
+  }
+  const router = await resolveRouter(repo, options, routekitModelIds);
 
   const root = mkdtempSync(join(tmpdir(), "fusionkit-fusion-"));
   const logsDir = join(root, "logs");

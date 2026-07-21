@@ -9,11 +9,10 @@ import type { Command } from "commander";
 
 import { accountsStatus } from "../accounts.js";
 import type { AccountsStatus } from "../accounts.js";
+import { connectDaemon, readDaemonRecord } from "../client.js";
 import { readServiceRecord, readStateSnapshot, routekitVersion } from "../state.js";
 import type { RouteKitServiceRecord, ServiceKind } from "../state.js";
 import { limitsSummary } from "../usage-format.js";
-
-import { loaded } from "./context.js";
 
 type CachedProviderHealth = {
   checkedAt?: string;
@@ -240,10 +239,10 @@ export function renderOverviewLines(overview: RouteKitOverview): string[] {
   if (gateway?.versionSkew === true) {
     lines.push(
       "",
-      `→ gateway is running v${gateway.version} but the installed CLI is v${overview.cliVersion} — run: routekit gateway upgrade`
+      `→ daemon is running v${gateway.version} but the installed CLI is v${overview.cliVersion} — run: routekit daemon upgrade`
     );
   }
-  if (gateway?.running !== true) lines.push("", "→ try: routekit gateway start");
+  if (gateway?.running !== true) lines.push("", "→ try: routekit daemon start");
   if (
     overview.providers.some((provider) => !provider.credentialAvailable || provider.lastCheck?.ok === false)
   ) {
@@ -273,16 +272,191 @@ export function registerStatus(program: Command): void {
           message: "`status --watch` is a live human view and cannot be combined with --json"
         });
       }
-      const config = loaded(command).config;
-      const collect = async (): Promise<RouteKitOverview> => routeKitOverview(config);
+      const collect = async () => {
+        const connected = await connectDaemon();
+        if (connected === undefined) {
+          const record = readDaemonRecord();
+          const unhealthy = record !== undefined;
+          return {
+            observedAt: new Date().toISOString(),
+            cliVersion: routekitVersion(),
+            daemon: {
+              running: unhealthy,
+              healthy: false,
+              ...(record !== undefined ? { pid: record.pid } : {})
+            },
+            services: [
+              { kind: "gateway", running: unhealthy, reachable: false },
+              { kind: "accounts", running: unhealthy, reachable: false }
+            ],
+            providers: [],
+            accounts: { running: false, accounts: [] },
+            models: { count: 0, cached: false },
+            catalog: { models: [] }
+          };
+        }
+        const client = connected.client;
+        const [daemon, providers, accounts, models] = await Promise.all([
+          client.call("daemon.status", {}),
+          client.call("providers.status", {}),
+          client.call("accounts.status", {}),
+          client.call("models.list", {})
+        ]);
+        const observedAt = new Date().toISOString();
+        return {
+          observedAt,
+          cliVersion: daemon.packageVersion,
+          daemon,
+          services: [
+            {
+              kind: "gateway",
+              running: true,
+              url: daemon.dataUrl,
+              pid: daemon.pid,
+              startedAt: daemon.startedAt,
+              uptimeSeconds: Math.max(
+                0,
+                Math.round((Date.now() - Date.parse(daemon.startedAt)) / 1000)
+              ),
+              reachable: true,
+              version: daemon.packageVersion,
+              supervisor: daemon.supervisor
+            },
+            {
+              kind: "accounts",
+              running: true,
+              url: daemon.dataUrl,
+              pid: daemon.pid,
+              startedAt: daemon.startedAt,
+              uptimeSeconds: Math.max(
+                0,
+                Math.round((Date.now() - Date.parse(daemon.startedAt)) / 1000)
+              ),
+              reachable: true,
+              version: daemon.packageVersion,
+              supervisor: daemon.supervisor
+            }
+          ],
+          providers: providers.providers.map((provider) => ({
+            ...provider,
+            configured: true as const,
+            credential: provider.credentialAvailable
+              ? "available"
+              : "missing",
+            lastCheck: {
+              ok: provider.error === undefined,
+              ...(provider.error !== undefined ? { error: provider.error } : {}),
+              models: provider.models?.length ?? 0
+            }
+          })),
+          accounts: {
+            running: true,
+            url: daemon.dataUrl,
+            pid: daemon.pid,
+            accounts: accounts.accounts,
+            revision: accounts.revision
+          },
+          models: {
+            count: models.models.length,
+            ...(models.defaultModel !== undefined
+              ? { defaultModel: models.defaultModel }
+              : {}),
+            cached: false
+          },
+          catalog: models
+        };
+      };
       if (options.watch !== undefined) {
         await watch(ctx.presenter, interval(options.watch), async () =>
-          renderOverviewLines(await collect())
+          renderDaemonOverviewLines(await collect())
         );
         return;
       }
       const overview = await collect();
       if (ctx.json) ctx.emit(overview);
-      else for (const line of renderOverviewLines(overview)) ctx.presenter.line(line);
+      else for (const line of renderDaemonOverviewLines(overview)) ctx.presenter.line(line);
     });
+}
+
+function renderDaemonOverviewLines(
+  overview: {
+    daemon: {
+      running?: boolean;
+      healthy?: boolean;
+      pid?: number;
+      packageVersion?: string;
+      dataUrl?: string;
+      generation?: number;
+      configRevision?: number;
+    };
+    providers: Array<{
+        provider: string;
+        credentialAvailable: boolean;
+        models?: readonly string[];
+        error?: string;
+      }>;
+    accounts: {
+      accounts: Array<{
+        subscriptionKind: string;
+        label: string;
+        credentialValid: boolean;
+        configured?: boolean;
+        relayOpen?: boolean;
+      }>;
+    };
+    models: { count: number; defaultModel?: string };
+    catalog: { models: Array<{ id: string }>; defaultModel?: string };
+  }
+): string[] {
+  if (overview.daemon.running === false) {
+    return ["RouteKit status", "", `  ${stateMark(false)} daemon stopped`];
+  }
+  if (overview.daemon.healthy === false) {
+    return ["RouteKit status", "", `  ${stateMark(false)} daemon unhealthy`];
+  }
+  const lines = [
+    "RouteKit status",
+    "",
+    `  ${stateMark(true)} daemon v${overview.daemon.packageVersion} · pid ${overview.daemon.pid} · generation ${overview.daemon.generation}`,
+    `  ${stateMark(true)} gateway ${overview.daemon.dataUrl}`,
+    `  ${stateMark(true)} config revision ${overview.daemon.configRevision}`,
+    "",
+    "Providers"
+  ];
+  for (const provider of overview.providers) {
+    const ok = provider.credentialAvailable && provider.error === undefined;
+    lines.push(
+      `  ${stateMark(ok)} ${provider.provider} · ${
+        provider.error ??
+        `${provider.models?.length ?? 0} model(s) · ${
+          provider.credentialAvailable ? "credential ready" : "credential missing"
+        }`
+      }`
+    );
+  }
+  lines.push("", "Accounts");
+  if (overview.accounts.accounts.length === 0) lines.push("  no enrolled accounts");
+  for (const account of overview.accounts.accounts) {
+    lines.push(
+      `  ${stateMark(
+        account.credentialValid &&
+          account.configured !== false &&
+          account.relayOpen !== false
+      )} ${account.subscriptionKind}/${account.label}` +
+        (account.configured === false
+          ? " · routing disabled"
+          : account.relayOpen === false
+            ? " · relay unavailable or cooling"
+            : "")
+    );
+  }
+  lines.push(
+    "",
+    `Models`,
+    `  ${stateMark(overview.catalog.models.length > 0)} ${overview.catalog.models.length} live model(s)` +
+      (overview.catalog.defaultModel === undefined
+        ? ""
+        : ` · default ${overview.catalog.defaultModel}`)
+  );
+  return lines;
 }

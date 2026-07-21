@@ -52,14 +52,11 @@ configuration continue to use namespaced IDs.
 Reference the advertised namespaced ID from `.fusionkit/fusion.json`. Do not
 put account enrollment, provider policy, URLs, or keys in Fusion config.
 
-Normal `routekit gateway serve` and `routekit <tool>` paths use subscription backends
-in process. `routekit accounts serve` is advanced mode for exposing the pool as
-a separate authenticated proxy to an external consumer; it is not an
-enrollment or provider-activation step.
+The singleton daemon owns subscription backends and exposes them through its
+authenticated model gateway. There is no separate accounts-proxy lifecycle.
 
 `routekit usage` and `routekit usage --watch <seconds>` inspect the normal
-gateway's live pools when it is running, then fall back to enrolled accounts
-directly. They do not require the advanced accounts proxy.
+daemon's live pools.
 
 CLIProxyAPI remains an optional external provider with a separate lifecycle:
 

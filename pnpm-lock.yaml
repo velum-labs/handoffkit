@@ -480,6 +480,12 @@ importers:
       '@routekit/contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@routekit/control':
+        specifier: workspace:*
+        version: link:../routekit-control
+      '@routekit/daemon':
+        specifier: workspace:*
+        version: link:../routekit-daemon
       '@routekit/gateway':
         specifier: workspace:*
         version: link:../model-gateway
@@ -519,6 +525,42 @@ importers:
       '@routekit/runtime':
         specifier: workspace:*
         version: link:../runtime-utils
+      yaml:
+        specifier: 2.9.0
+        version: 2.9.0
+
+  packages/routekit-control:
+    dependencies:
+      '@routekit/runtime':
+        specifier: workspace:*
+        version: link:../runtime-utils
+
+  packages/routekit-daemon:
+    dependencies:
+      '@routekit/accounts':
+        specifier: workspace:*
+        version: link:../accounts
+      '@routekit/config':
+        specifier: workspace:*
+        version: link:../routekit-config
+      '@routekit/control':
+        specifier: workspace:*
+        version: link:../routekit-control
+      '@routekit/gateway':
+        specifier: workspace:*
+        version: link:../model-gateway
+      '@routekit/registry':
+        specifier: workspace:*
+        version: link:../routekit-registry
+      '@routekit/router':
+        specifier: workspace:*
+        version: link:../routekit-router
+      '@routekit/runtime':
+        specifier: workspace:*
+        version: link:../runtime-utils
+      '@routekit/telemetry-core':
+        specifier: workspace:*
+        version: link:../telemetry-core
       yaml:
         specifier: 2.9.0
         version: 2.9.0
