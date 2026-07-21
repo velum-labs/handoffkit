@@ -25,6 +25,7 @@ export function registerStart(program: Command): void {
   ).action(async (options: GatewayServeCliOptions, command: Command) => {
     const ctx = contextFor(command);
     const running = await ensureDaemon({
+      host: options.host,
       port: Number.parseInt(options.port, 10),
       ...(options.authToken !== undefined ? { authToken: options.authToken } : {}),
       ...(options.portless !== undefined ? { portless: options.portless } : {}),
@@ -83,9 +84,13 @@ export function registerRestart(program: Command): void {
         lock.release();
       }
       const restarted = await ensureDaemon({
+        ...(record.host !== undefined ? { host: record.host } : {}),
         port: record.dataPort ?? 8080,
+        ...(record.portless !== undefined ? { portless: record.portless } : {}),
         ...(record.authToken !== undefined ? { authToken: record.authToken } : {}),
-        drainGraceMs: drainGraceMs(options.drainGrace)
+        drainGraceMs: options.drainGrace === undefined
+          ? record.drainGraceMs
+          : drainGraceMs(options.drainGrace)
       });
       const status = await restarted.client.call("daemon.status", {});
       if (ctx.json) ctx.emit({ restarted: true, url: status.dataUrl, pid: status.pid });

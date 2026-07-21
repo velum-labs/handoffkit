@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { request as httpRequest } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -155,6 +155,28 @@ test("lifecycle lock serializes contenders and reaps dead owners", async () => {
       })
     );
     const recovered = await acquireLifecycleLock(path, { timeoutMs: 100 });
+    recovered.release();
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test("a freshly published partial lock is never stolen", async () => {
+  const home = mkdtempSync(join(tmpdir(), "lifecycle-partial-"));
+  const path = join(home, "daemon.lock");
+  try {
+    writeFileSync(path, "");
+    await assert.rejects(
+      acquireLifecycleLock(path, { timeoutMs: 100, pollMs: 10 }),
+      /timed out/
+    );
+    assert.equal(existsSync(path), true);
+    const old = new Date(Date.now() - 5_000);
+    utimesSync(path, old, old);
+    const recovered = await acquireLifecycleLock(path, {
+      timeoutMs: 500,
+      pollMs: 10
+    });
     recovered.release();
   } finally {
     rmSync(home, { recursive: true, force: true });

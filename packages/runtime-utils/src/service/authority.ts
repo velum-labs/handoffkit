@@ -13,6 +13,7 @@ import {
   openSync,
   readFileSync,
   rmSync,
+  statSync,
   writeFileSync
 } from "node:fs";
 import { dirname } from "node:path";
@@ -28,6 +29,7 @@ export type LifecycleLock = {
 };
 
 type LockRecord = { pid: number; nonce: string; acquiredAt: string };
+const LOCK_STABILIZE_MS = 2_000;
 
 function readLock(path: string): LockRecord | undefined {
   try {
@@ -93,17 +95,32 @@ export async function acquireLifecycleLock(
     const lock = tryAcquire(path);
     if (lock !== undefined) return lock;
     const current = readLock(path);
-    if (current === undefined || !processAlive(current.pid)) {
-      // Unknown/corrupt locks are safe to remove only when no parsable live
-      // owner exists. Atomic create on the next loop decides the winner.
-      rmSync(path, { force: true });
-      continue;
+    if (current === undefined) {
+      // `open("wx")` publishes the path just before the owner JSON is written.
+      // Never steal a fresh unreadable lock during that small publication gap.
+      let ageMs = 0;
+      try {
+        ageMs = Date.now() - statSync(path).mtimeMs;
+      } catch {
+        continue;
+      }
+      if (ageMs >= LOCK_STABILIZE_MS) {
+        rmSync(path, { force: true });
+        continue;
+      }
+    } else if (!processAlive(current.pid)) {
+      const acquiredAt = Date.parse(current.acquiredAt);
+      if (!Number.isFinite(acquiredAt) || Date.now() - acquiredAt >= LOCK_STABILIZE_MS) {
+        rmSync(path, { force: true });
+        continue;
+      }
     }
     const waitError = await options.onWait?.();
     if (waitError !== undefined) throw waitError;
     if (Date.now() >= deadline) {
       throw new Error(
-        `timed out waiting for lifecycle lock ${path} (owned by pid ${current.pid})`
+        `timed out waiting for lifecycle lock ${path}` +
+          (current === undefined ? "" : ` (owned by pid ${current.pid})`)
       );
     }
     await sleep(pollMs);

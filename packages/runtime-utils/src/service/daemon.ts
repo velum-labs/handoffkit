@@ -24,8 +24,9 @@ import { spawn } from "node:child_process";
 import { join } from "node:path";
 
 import { definedEnv } from "../environment.js";
-import { distillLog, sleep, tryAcquireFileLock } from "../index.js";
+import { distillLog, sleep } from "../index.js";
 
+import { acquireLifecycleLock } from "./authority.js";
 import { createServiceRecordStore, processAlive, SERVICE_SUPERVISOR_ENV } from "./records.js";
 import type { ServiceRecord, ServiceSupervisorKind } from "./records.js";
 
@@ -212,21 +213,18 @@ export async function startDaemon(
   mkdirSync(store.directory, { recursive: true, mode: 0o700 });
   const lockPath = join(store.directory, `${spec.kind}.lock`);
   const deadline = Date.now() + (options.readyTimeoutMs ?? DEFAULT_READY_TIMEOUT_MS);
-  let lock = tryAcquireFileLock(lockPath);
-  while (lock === undefined) {
-    // Another CLI is starting the same daemon: wait for its record instead of
-    // racing it, but reclaim the lock if that starter died mid-flight.
-    const record = store.read(spec.kind);
-    if (record !== undefined && record.pid !== options.previousPid) {
-      if (options.ready === undefined || (await options.ready(record))) {
-        return { alreadyRunning: true, record, logFile };
-      }
-    }
-    if (Date.now() >= deadline) {
-      throw new Error(`${label} start is locked by another process (${lockPath})`);
-    }
-    await sleep(READY_POLL_MS);
-    lock = tryAcquireFileLock(lockPath);
+  const lock = await acquireLifecycleLock(lockPath, {
+    timeoutMs: options.readyTimeoutMs ?? DEFAULT_READY_TIMEOUT_MS,
+    pollMs: READY_POLL_MS
+  });
+  const joined = store.read(spec.kind);
+  if (
+    joined !== undefined &&
+    joined.pid !== options.previousPid &&
+    (options.ready === undefined || (await options.ready(joined)))
+  ) {
+    lock.release();
+    return { alreadyRunning: true, record: joined, logFile };
   }
 
   try {

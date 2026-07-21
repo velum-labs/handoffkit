@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -74,6 +74,11 @@ test("a record whose pid is gone is reaped on read", () => {
     });
     assert.equal(store.read("svc"), undefined);
     assert.equal(store.read("svc"), undefined);
+    assert.equal(
+      existsSync(store.path("svc")),
+      true,
+      "read-only liveness checks must not race-delete a replacement record"
+    );
   } finally {
     rmSync(home, { recursive: true, force: true });
   }

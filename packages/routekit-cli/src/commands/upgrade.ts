@@ -82,7 +82,12 @@ export function registerUpgrade(program: Command): void {
         lock.release();
       }
       const replacement = await ensureDaemon({
+        ...(record.host !== undefined ? { host: record.host } : {}),
         port: record.dataPort ?? 8080,
+        ...(record.portless !== undefined ? { portless: record.portless } : {}),
+        ...(record.drainGraceMs !== undefined
+          ? { drainGraceMs: record.drainGraceMs }
+          : {}),
         ...(record.authToken !== undefined ? { authToken: record.authToken } : {})
       });
       const status = await replacement.client.call("daemon.status", {});

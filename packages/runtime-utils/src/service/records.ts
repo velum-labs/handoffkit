@@ -63,6 +63,14 @@ export type ServiceRecord = {
   dataUrl?: string;
   /** Data-plane port exposed by a combined daemon. */
   dataPort?: number;
+  /** Public listener bind host. */
+  host?: string;
+  /** Whether the stable portless route is enabled. */
+  portless?: boolean;
+  /** Configured graceful-drain window. */
+  drainGraceMs?: number;
+  /** Private file containing the data-plane bearer token. */
+  authTokenFile?: string;
 };
 
 export type ServiceRecordInput = Omit<ServiceRecord, "product" | "owner">;
@@ -157,7 +165,13 @@ export function createServiceRecordStore(input: {
       ...(optionalString(parsed.dataUrl) !== undefined
         ? { dataUrl: parsed.dataUrl as string }
         : {}),
-      ...(typeof parsed.dataPort === "number" ? { dataPort: parsed.dataPort } : {})
+      ...(typeof parsed.dataPort === "number" ? { dataPort: parsed.dataPort } : {}),
+      ...(optionalString(parsed.host) !== undefined ? { host: parsed.host as string } : {}),
+      ...(typeof parsed.portless === "boolean" ? { portless: parsed.portless } : {}),
+      ...(typeof parsed.drainGraceMs === "number" ? { drainGraceMs: parsed.drainGraceMs } : {}),
+      ...(optionalString(parsed.authTokenFile) !== undefined
+        ? { authTokenFile: parsed.authTokenFile as string }
+        : {})
     };
   };
 
@@ -167,10 +181,7 @@ export function createServiceRecordStore(input: {
     read(kind) {
       const record = readRaw(kind);
       if (record === undefined) return undefined;
-      if (!processAlive(record.pid)) {
-        rmSync(path(kind), { force: true });
-        return undefined;
-      }
+      if (!processAlive(record.pid)) return undefined;
       return record;
     },
     write(record) {

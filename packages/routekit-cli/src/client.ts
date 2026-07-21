@@ -107,6 +107,7 @@ export function canonicalConfigOrMigrationError(): string {
 
 export function daemonServeArgs(input: {
   configPath?: string;
+  host?: string;
   port?: number;
   authToken?: string;
   portless?: boolean;
@@ -117,6 +118,8 @@ export function daemonServeArgs(input: {
     "run",
     "--config-path",
     input.configPath ?? canonicalConfigOrMigrationError(),
+    "--host",
+    input.host ?? "127.0.0.1",
     "--port",
     String(input.port ?? defaultDaemonPort()),
     ...(input.authToken !== undefined ? ["--auth-token", input.authToken] : []),
@@ -129,6 +132,7 @@ export function daemonServeArgs(input: {
 
 export async function ensureDaemon(input: {
   configPath?: string;
+  host?: string;
   port?: number;
   authToken?: string;
   portless?: boolean;
@@ -140,6 +144,20 @@ export async function ensureDaemon(input: {
 }> {
   const current = readDaemonRecord();
   if (current !== undefined && (await daemonRecordHealthy(current))) {
+    if (
+      (input.host !== undefined && current.host !== input.host) ||
+      (input.port !== undefined &&
+        input.port !== 0 &&
+        current.dataPort !== input.port) ||
+      (input.portless !== undefined && current.portless !== input.portless) ||
+      (input.drainGraceMs !== undefined &&
+        current.drainGraceMs !== input.drainGraceMs)
+    ) {
+      throw new Error(
+        "RouteKit daemon is already running with different listener/lifecycle options; " +
+          "restart it with the requested configuration"
+      );
+    }
     if (current.version !== undefined && current.version !== routekitVersion()) {
       const entry = process.argv[1];
       if (
