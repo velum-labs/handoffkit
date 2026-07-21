@@ -270,7 +270,15 @@ export async function startRouteKitDaemon(
   let revisions = readRevisions(home);
   let currentDocument = canonicalConfigDocument(configPath);
   let currentConfig = parseConfigDocument(currentDocument);
-  let routerMutation = Promise.resolve();
+  let mutationTail: Promise<void> = Promise.resolve();
+  const serializeMutation = async <T>(operation: () => Promise<T>): Promise<T> => {
+    const result = mutationTail.then(operation);
+    mutationTail = result.then(
+      () => undefined,
+      () => undefined
+    );
+    return await result;
+  };
   const startedAt = new Date().toISOString();
 
   try {
@@ -325,29 +333,45 @@ export async function startRouteKitDaemon(
       nextDocument: string,
       input: { write: boolean; configRevision?: boolean; accountRevision?: boolean }
     ): Promise<void> => {
-      const operation = routerMutation.then(async () => {
-        const candidate = await startGeneration(nextConfig);
-        try {
-          if (input.write) writeRouterConfig(configPath, nextConfig);
-          const previousRouter = activeRouter;
-          proxy?.swapTarget(candidate.url);
-          activeRouter = candidate;
-          currentConfig = nextConfig;
-          currentDocument = input.write ? stringifyYaml(nextConfig) : nextDocument;
-          if (input.configRevision === true) revisions.config += 1;
-          if (input.accountRevision === true) revisions.accounts += 1;
-          writeRevisions(home, revisions);
-          if (previousRouter !== undefined) {
-            await previousRouter.gateway.drain(drainGraceMs);
-            await previousRouter.close();
-          }
-        } catch (error) {
-          await candidate.close();
-          throw error;
+      const candidate = await startGeneration(nextConfig);
+      const previousDocument = currentDocument;
+      const previousRevisions = { ...revisions };
+      const nextRevisions = { ...revisions };
+      if (input.configRevision === true) nextRevisions.config += 1;
+      if (input.accountRevision === true) nextRevisions.accounts += 1;
+      try {
+        if (input.write) writeRouterConfig(configPath, nextConfig);
+        writeRevisions(home, nextRevisions);
+      } catch (error) {
+        if (input.write) {
+          writeFileAtomic(configPath, previousDocument, { mode: 0o600 });
+          chmodSync(configPath, 0o600);
         }
-      });
-      routerMutation = operation.catch(() => undefined);
-      await operation;
+        revisions = previousRevisions;
+        writeRevisions(home, previousRevisions);
+        await candidate.close();
+        throw error;
+      }
+      const previousRouter = activeRouter;
+      // From this point the mutation is committed. `swapTarget` is synchronous
+      // and non-throwing; retirement failures must never close the candidate.
+      proxy?.swapTarget(candidate.url);
+      activeRouter = candidate;
+      currentConfig = nextConfig;
+      currentDocument = input.write ? readFileSync(configPath, "utf8") : nextDocument;
+      revisions = nextRevisions;
+      if (previousRouter !== undefined) {
+        try {
+          await previousRouter.gateway.drain(drainGraceMs);
+          await previousRouter.close();
+        } catch (error) {
+          process.stderr.write(
+            `routekit retired router cleanup failed: ${
+              error instanceof Error ? error.message : String(error)
+            }\n`
+          );
+        }
+      }
     };
 
     const configSnapshot = (): ConfigSnapshot => ({
@@ -379,16 +403,18 @@ export async function startRouteKitDaemon(
           draining
         }) satisfies DaemonStatus,
       "daemon.reload": async (params) => {
-        if (
-          params.expectedRevision !== undefined &&
-          params.expectedRevision !== revisions.config
-        ) {
-          revisionConflict(params.expectedRevision, revisions.config);
-        }
-        const document = canonicalConfigDocument(configPath);
-        await replaceRouter(parseConfigDocument(document), document, {
-          write: false,
-          configRevision: true
+        await serializeMutation(async () => {
+          if (
+            params.expectedRevision !== undefined &&
+            params.expectedRevision !== revisions.config
+          ) {
+            revisionConflict(params.expectedRevision, revisions.config);
+          }
+          const document = canonicalConfigDocument(configPath);
+          await replaceRouter(parseConfigDocument(document), document, {
+            write: false,
+            configRevision: true
+          });
         });
         return {
           reloaded: true,
@@ -403,24 +429,28 @@ export async function startRouteKitDaemon(
       },
       "config.get": async () => configSnapshot(),
       "config.update": async (params) => {
-        if (params.expectedRevision !== revisions.config) {
-          revisionConflict(params.expectedRevision, revisions.config);
-        }
-        const next = parseConfigDocument(params.document);
-        await replaceRouter(next, params.document, {
-          write: true,
-          configRevision: true
+        await serializeMutation(async () => {
+          if (params.expectedRevision !== revisions.config) {
+            revisionConflict(params.expectedRevision, revisions.config);
+          }
+          const next = parseConfigDocument(params.document);
+          await replaceRouter(next, params.document, {
+            write: true,
+            configRevision: true
+          });
         });
         return configSnapshot();
       },
       "config.import": async (params) => {
-        if (params.expectedRevision !== revisions.config) {
-          revisionConflict(params.expectedRevision, revisions.config);
-        }
-        const next = parseConfigDocument(params.document);
-        await replaceRouter(next, params.document, {
-          write: true,
-          configRevision: true
+        await serializeMutation(async () => {
+          if (params.expectedRevision !== revisions.config) {
+            revisionConflict(params.expectedRevision, revisions.config);
+          }
+          const next = parseConfigDocument(params.document);
+          await replaceRouter(next, params.document, {
+            write: true,
+            configRevision: true
+          });
         });
         return configSnapshot();
       },
@@ -455,20 +485,22 @@ export async function startRouteKitDaemon(
         return result;
       },
       "providers.set": async (params) => {
-        const raw = parseYaml(currentDocument) as Record<string, unknown>;
-        const providers =
-          typeof raw.providers === "object" &&
-          raw.providers !== null &&
-          !Array.isArray(raw.providers)
-            ? { ...(raw.providers as Record<string, unknown>) }
-            : {};
-        if (params.enabled) providers[params.provider] ??= {};
-        else delete providers[params.provider];
-        raw.providers = providers;
-        const document = stringifyYaml(raw);
-        await replaceRouter(parseConfigDocument(document), document, {
-          write: true,
-          configRevision: true
+        await serializeMutation(async () => {
+          const raw = parseYaml(currentDocument) as Record<string, unknown>;
+          const providers =
+            typeof raw.providers === "object" &&
+            raw.providers !== null &&
+            !Array.isArray(raw.providers)
+              ? { ...(raw.providers as Record<string, unknown>) }
+              : {};
+          if (params.enabled) providers[params.provider] ??= {};
+          else delete providers[params.provider];
+          raw.providers = providers;
+          const document = stringifyYaml(raw);
+          await replaceRouter(parseConfigDocument(document), document, {
+            write: true,
+            configRevision: true
+          });
         });
         return configSnapshot();
       },
@@ -525,44 +557,63 @@ export async function startRouteKitDaemon(
         revision: revisions.accounts
       }),
       "accounts.enroll": async (params) => {
-        const label = sanitizeSubscriptionLabel(params.label);
-        if (label !== params.label) {
-          throw new ControlError({
-            code: "bad_request",
-            message: "account label must already be normalized"
-          });
-        }
-        const directory = defaultSubscriptionAccountDirectory(params.kind);
-        mkdirSync(directory, { recursive: true, mode: 0o700 });
-        const path = join(directory, `${label}.json`);
-        const previous = existsSync(path) ? readFileSync(path) : undefined;
-        writeFileAtomic(
-          path,
-          `${JSON.stringify(safeCredentialBlob(params.kind, params.credential), null, 2)}\n`,
-          { mode: 0o600 }
-        );
-        chmodSync(path, 0o600);
-        try {
-          await replaceRouter(currentConfig, currentDocument, {
-            write: false,
-            accountRevision: true
-          });
-        } catch (error) {
-          if (previous === undefined) rmSync(path, { force: true });
-          else writeFileAtomic(path, previous.toString("utf8"));
-          throw error;
-        }
+        await serializeMutation(async () => {
+          const label = sanitizeSubscriptionLabel(params.label);
+          if (label !== params.label) {
+            throw new ControlError({
+              code: "bad_request",
+              message: "account label must already be normalized"
+            });
+          }
+          const directory = defaultSubscriptionAccountDirectory(params.kind);
+          mkdirSync(directory, { recursive: true, mode: 0o700 });
+          const path = join(directory, `${label}.json`);
+          const previous = existsSync(path) ? readFileSync(path) : undefined;
+          writeFileAtomic(
+            path,
+            `${JSON.stringify(safeCredentialBlob(params.kind, params.credential), null, 2)}\n`,
+            { mode: 0o600 }
+          );
+          chmodSync(path, 0o600);
+          try {
+            await replaceRouter(currentConfig, currentDocument, {
+              write: false,
+              accountRevision: true
+            });
+          } catch (error) {
+            if (previous === undefined) rmSync(path, { force: true });
+            else {
+              writeFileAtomic(path, previous.toString("utf8"), { mode: 0o600 });
+              chmodSync(path, 0o600);
+            }
+            throw error;
+          }
+        });
         return { enrolled: true, revision: revisions.accounts };
       },
       "accounts.remove": async (params) => {
-        const result = removeSubscriptionAccount(params.kind, params.label);
-        if (result.removed) {
-          await replaceRouter(currentConfig, currentDocument, {
-            write: false,
-            accountRevision: true
-          });
-        }
-        return { removed: result.removed, revision: revisions.accounts };
+        let removed = false;
+        await serializeMutation(async () => {
+          const directory = defaultSubscriptionAccountDirectory(params.kind);
+          const path = join(directory, `${params.label}.json`);
+          const previous = existsSync(path) ? readFileSync(path) : undefined;
+          const result = removeSubscriptionAccount(params.kind, params.label);
+          removed = result.removed;
+          if (!result.removed) return;
+          try {
+            await replaceRouter(currentConfig, currentDocument, {
+              write: false,
+              accountRevision: true
+            });
+          } catch (error) {
+            if (previous !== undefined) {
+              writeFileAtomic(path, previous.toString("utf8"), { mode: 0o600 });
+              chmodSync(path, 0o600);
+            }
+            throw error;
+          }
+        });
+        return { removed, revision: revisions.accounts };
       },
       "accounts.usage": async () => {
         const source = await openLocalSubscriptionUsage();
@@ -574,8 +625,10 @@ export async function startRouteKitDaemon(
       },
       "telemetry.get": async () => ({ enabled: telemetry.resolve().enabled }),
       "telemetry.set": async (params) => {
-        if (params.enabled) telemetry.enable();
-        else telemetry.disable();
+        await serializeMutation(async () => {
+          if (params.enabled) telemetry.enable();
+          else telemetry.disable();
+        });
         return { enabled: telemetry.resolve().enabled };
       },
       "doctor.run": async () => ({

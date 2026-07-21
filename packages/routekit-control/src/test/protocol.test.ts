@@ -61,8 +61,51 @@ test("dispatcher rejects unknown methods and deduplicates idempotent mutations",
   assert.deepEqual(second, first);
   assert.equal(calls, 1);
   await assert.rejects(
+    Promise.resolve(
+      dispatch(
+        "providers.set",
+        { provider: "anthropic", enabled: true },
+        context
+      )
+    ),
+    (error: unknown) =>
+      error instanceof ControlError &&
+      error.code === "conflict" &&
+      /different parameters/.test(error.message)
+  );
+  await assert.rejects(
     Promise.resolve().then(async () => await dispatch("unknown", {}, context)),
     (error: unknown) => error instanceof ControlError && error.code === "not_found"
   );
+});
+
+test("concurrent idempotent retries share one in-flight mutation", async () => {
+  let calls = 0;
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const handlers = new Proxy(
+    {},
+    {
+      get: () => async () => {
+        calls += 1;
+        await gate;
+        return { enabled: true };
+      }
+    }
+  ) as RouteKitControlHandlers;
+  const dispatch = createRouteKitControlHandler(handlers);
+  const context = {
+    signal: new AbortController().signal,
+    requestId: "concurrent",
+    idempotencyKey: "one-invocation"
+  };
+  const first = dispatch("telemetry.set", { enabled: true }, context);
+  const second = dispatch("telemetry.set", { enabled: true }, context);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(calls, 1);
+  release();
+  assert.deepEqual(await first, await second);
 });
 

@@ -153,6 +153,35 @@ test("singleton daemon exposes authenticated control and a stable reloadable dat
       (error: unknown) => error instanceof ControlError && error.code === "conflict"
     );
     assert.equal((await client.call("config.get", {})).revision, afterInflight.revision);
+    const concurrent = await Promise.allSettled([
+      client.call("config.update", {
+        expectedRevision: afterInflight.revision,
+        document:
+          "providers:\n  openai:\n    strategy: sticky\ndefaultModel: openai/mock-model\n"
+      }),
+      client.call("config.update", {
+        expectedRevision: afterInflight.revision,
+        document:
+          "providers:\n  openai:\n    strategy: capacity_weighted\ndefaultModel: openai/mock-model\n"
+      })
+    ]);
+    assert.equal(
+      concurrent.filter((result) => result.status === "fulfilled").length,
+      1
+    );
+    assert.equal(
+      concurrent.filter(
+        (result) =>
+          result.status === "rejected" &&
+          result.reason instanceof ControlError &&
+          result.reason.code === "conflict"
+      ).length,
+      1
+    );
+    assert.equal(
+      (await client.call("config.get", {})).revision,
+      afterInflight.revision + 1
+    );
 
     const enrolled = await client.call(
       "accounts.enroll",

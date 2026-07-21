@@ -1,4 +1,5 @@
 import { contextFor } from "@routekit/cli-core";
+import { randomId } from "@routekit/runtime";
 import type { Command } from "commander";
 
 import { routekitClient } from "../client.js";
@@ -26,7 +27,7 @@ export function registerTelemetry(program: Command): void {
     const result = await (await routekitClient()).call(
       "telemetry.set",
       { enabled: true },
-      { idempotencyKey: "telemetry-on" }
+      { idempotencyKey: `telemetry-on-${randomId(16)}` }
     );
     if (ctx.json) ctx.emit(result);
     else ctx.presenter.success("telemetry enabled");
@@ -36,7 +37,7 @@ export function registerTelemetry(program: Command): void {
     const result = await (await routekitClient()).call(
       "telemetry.set",
       { enabled: false },
-      { idempotencyKey: "telemetry-off" }
+      { idempotencyKey: `telemetry-off-${randomId(16)}` }
     );
     if (ctx.json) ctx.emit(result);
     else ctx.presenter.success("telemetry disabled");

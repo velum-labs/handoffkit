@@ -11,6 +11,7 @@ import {
   spawnCliproxy
 } from "@routekit/accounts";
 import { contextFor } from "@routekit/cli-core";
+import { randomId } from "@routekit/runtime";
 import type { Command } from "commander";
 import { readFileSync } from "node:fs";
 
@@ -26,7 +27,7 @@ async function activateAccount(subscriptionKind: "claude-code" | "codex"): Promi
   const updated = await client.call(
     "providers.set",
     { provider: subscriptionKind, enabled: true },
-    { idempotencyKey: `account-activate-${subscriptionKind}-${Date.now()}` }
+    { idempotencyKey: `account-activate-${subscriptionKind}-${randomId(16)}` }
   );
   return updated.path;
 }
@@ -171,7 +172,7 @@ export function registerAccounts(program: Command): void {
             label: result.label,
             credential: result.credential
           },
-          { idempotencyKey: `account-login-${result.subscriptionKind}-${result.label}` }
+          { idempotencyKey: `account-login-${randomId(16)}` }
         );
         const configPath = await activateAccount(result.subscriptionKind);
         ctx.presenter.success(
@@ -195,7 +196,7 @@ export function registerAccounts(program: Command): void {
       const enrolled = await client.call(
         "accounts.enroll",
         { kind, label, credential },
-        { idempotencyKey: `account-add-${kind}-${label}` }
+        { idempotencyKey: `account-add-${randomId(16)}` }
       );
       const configPath = await activateAccount(kind);
       const output = {
@@ -224,7 +225,7 @@ export function registerAccounts(program: Command): void {
       const result = await (await routekitClient()).call(
         "accounts.remove",
         { kind, label: name },
-        { idempotencyKey: `account-remove-${kind}-${name}` }
+        { idempotencyKey: `account-remove-${randomId(16)}` }
       );
       if (ctx.json) {
         ctx.emit({ ...result, subscriptionKind: kind, label: name });

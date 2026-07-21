@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 /**
  * Typed, versioned RouteKit daemon control protocol.
  *
@@ -267,10 +269,14 @@ export function validateRouteKitParams<M extends RouteKitControlMethod>(
 
 export function createRouteKitControlHandler(
   handlers: RouteKitControlHandlers,
-  options: { idempotencyCacheSize?: number } = {}
+  options: { idempotencyCacheSize?: number; idempotencyTtlMs?: number } = {}
 ): ControlHandler {
   const max = options.idempotencyCacheSize ?? 1024;
-  const completed = new Map<string, unknown>();
+  const ttlMs = options.idempotencyTtlMs ?? 5 * 60_000;
+  const operations = new Map<
+    string,
+    { fingerprint: string; promise: Promise<unknown>; completedAt?: number }
+  >();
   return async (rawMethod, params, context) => {
     if (!METHODS.has(rawMethod)) {
       throw new ControlError({
@@ -283,22 +289,47 @@ export function createRouteKitControlHandler(
       MUTATING_ROUTEKIT_METHODS.has(method) && context.idempotencyKey !== undefined
         ? `${method}:${context.idempotencyKey}`
         : undefined;
-    if (key !== undefined && completed.has(key)) return completed.get(key);
     const validated = validateRouteKitParams(method, params);
+    const fingerprint = createHash("sha256")
+      .update(JSON.stringify(validated))
+      .digest("hex");
+    if (key !== undefined) {
+      const existing = operations.get(key);
+      if (
+        existing !== undefined &&
+        (existing.completedAt === undefined || Date.now() - existing.completedAt <= ttlMs)
+      ) {
+        if (existing.fingerprint !== fingerprint) {
+          throw new ControlError({
+            code: "conflict",
+            message: "idempotency key was reused with different parameters"
+          });
+        }
+        return await existing.promise;
+      }
+      if (existing !== undefined) operations.delete(key);
+    }
     const handler = handlers[method] as (
       params: RouteKitControlParams[typeof method],
       context: ControlHandlerContext
     ) => unknown | Promise<unknown>;
-    const result = await handler(validated, context);
-    if (key !== undefined) {
-      completed.set(key, result);
-      while (completed.size > max) {
-        const oldest = completed.keys().next().value as string | undefined;
+    const promise = Promise.resolve(handler(validated, context));
+    if (key === undefined) return await promise;
+    const entry = { fingerprint, promise };
+    operations.set(key, entry);
+    try {
+      const result = await promise;
+      (entry as typeof entry & { completedAt?: number }).completedAt = Date.now();
+      while (operations.size > max) {
+        const oldest = operations.keys().next().value as string | undefined;
         if (oldest === undefined) break;
-        completed.delete(oldest);
+        operations.delete(oldest);
       }
+      return result;
+    } catch (error) {
+      if (operations.get(key) === entry) operations.delete(key);
+      throw error;
     }
-    return result;
   };
 }
 
