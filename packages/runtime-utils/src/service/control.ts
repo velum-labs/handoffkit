@@ -514,6 +514,21 @@ export class ControlClient {
       }
     );
     if (!response.ok || response.body === null) {
+      try {
+        const failure = (await response.json()) as ControlFailure;
+        if (failure.ok === false) {
+          throw new ControlError({
+            code: failure.error.code,
+            message: failure.error.message,
+            status: response.status,
+            ...(failure.error.details !== undefined
+              ? { details: failure.error.details }
+              : {})
+          });
+        }
+      } catch (error) {
+        if (error instanceof ControlError) throw error;
+      }
       throw new Error(`control stream failed (${response.status})`);
     }
     const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
@@ -524,15 +539,20 @@ export class ControlClient {
         const { done, value } = await reader.read();
         if (done) break;
         pending += value;
-        if (Buffer.byteLength(pending, "utf8") > CONTROL_BODY_LIMIT_BYTES) {
-          throw new Error("control stream event exceeds the size limit");
-        }
         for (;;) {
           const newline = pending.indexOf("\n");
-          if (newline < 0) break;
+          if (newline < 0) {
+            if (Buffer.byteLength(pending, "utf8") > CONTROL_BODY_LIMIT_BYTES) {
+              throw new Error("control stream event exceeds the size limit");
+            }
+            break;
+          }
           const line = pending.slice(0, newline);
           pending = pending.slice(newline + 1);
           if (line.length === 0) continue;
+          if (Buffer.byteLength(line, "utf8") > CONTROL_BODY_LIMIT_BYTES) {
+            throw new Error("control stream event exceeds the size limit");
+          }
           const event = JSON.parse(line) as ControlEvent;
           if (event.id !== id || event.protocol !== CONTROL_PROTOCOL_VERSION) {
             throw new Error("invalid control event");

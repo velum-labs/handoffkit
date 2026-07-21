@@ -87,7 +87,11 @@ async function pipe(res: ServerResponse, upstream: Response): Promise<void> {
       const { done, value } = await reader.read();
       if (done) break;
       if (value !== undefined && !res.write(Buffer.from(value))) {
-        await new Promise<void>((resolve) => res.once("drain", resolve));
+        await Promise.race([
+          new Promise<void>((resolve) => res.once("drain", resolve)),
+          new Promise<void>((resolve) => res.once("close", resolve))
+        ]);
+        if (res.destroyed) break;
       }
     }
   } finally {
@@ -204,7 +208,7 @@ export async function startSwitchingGatewayProxy(input: {
     return drainRun;
   };
   return {
-    url: () => `http://${host}:${port}`,
+    url: () => `http://${host.includes(":") ? `[${host}]` : host}:${port}`,
     port: () => port,
     target: () => active.url,
     swapTarget(next) {
