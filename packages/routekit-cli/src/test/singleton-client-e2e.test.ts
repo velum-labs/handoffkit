@@ -232,4 +232,3 @@ test("explicit external gateway launch neither boots local daemon nor leaks its 
     rmSync(root, { recursive: true, force: true });
   }
 });
-

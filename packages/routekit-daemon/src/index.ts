@@ -798,4 +798,3 @@ export async function startRouteKitDaemon(
     throw error;
   }
 }
-

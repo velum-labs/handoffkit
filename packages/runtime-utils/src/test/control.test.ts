@@ -207,4 +207,3 @@ test("a freshly published partial lock is never stolen", async () => {
     rmSync(home, { recursive: true, force: true });
   }
 });
-
