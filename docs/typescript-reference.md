@@ -320,7 +320,11 @@ Important exports include `initFusionTracing()`, `flushFusionTracing()`, `shutdo
 
 ## Governance and VM platform packages
 
-The packages in this section live under `legacy/packages/` and are outside the root pnpm workspace (`pnpm-workspace.yaml` covers `packages/*` and `examples/*` only). They remain in the repository and are still documented, but they are outside the current FusionKit ensemble product path unless a page explicitly describes a bridge.
+The packages in this section live under `legacy/packages/` and are outside the
+root pnpm workspace (`pnpm-workspace.yaml` covers `packages/*`, `examples/*`,
+and `apps/*`). They remain in the repository and are still documented, but
+they are outside the current FusionKit ensemble product path unless a page
+explicitly describes a bridge.
 
 `@fusionkit/plane` is the Warrant control plane. Its central exports are `Plane`, `startPlaneServer()`, `defaultPolicy()`, `evaluatePolicy()`, `ClaimTokenService`, `ContractService`, `ReceiptService`, `SqliteStore`, `SecretStore`, key provider types, `hashToken()`, `principalCan()`, `toPrincipal()`, `IdpVerifier`, `RateLimiter`, `createLogger()`, and `Metrics`. It owns contracts, policy decisions, approvals, secret release, receipt countersignature, rate limiting, audit export, retention, and control-plane HTTP serving.
 

@@ -35,6 +35,8 @@
     "portless": "0.15.1"
   },
   "scripts": {
+    "build": "tsc -b",
+    "clean": "tsc -b --clean",
     "test": "node --test \"dist/test/*.test.js\""
   }
 }

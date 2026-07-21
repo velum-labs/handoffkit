@@ -2,8 +2,8 @@
 
 ## Cursor Cloud specific instructions
 
-This repo is a dual-stack monorepo: a **pnpm/TypeScript** workspace
-(`packages/*`, `examples/*`) and a **uv/Python** workspace (`python/*`). The
+This repo is a dual-stack monorepo: a **pnpm/Turborepo Node** workspace
+(`packages/*`, `examples/*`, `apps/*`) and a **uv/Python** workspace (`python/*`). The
 shipped products are **RouteKit** (the independent `@routekit/cli` Node router)
 and **FusionKit** (the `@fusionkit/cli` Node front door + internal Python
 `fusionkit-sidecar` synthesis process). The `warrant` governance
@@ -27,11 +27,12 @@ node/pnpm. If you run a command in a bare non-login shell and hit
 
 ### Standard commands (authoritative source: `.github/workflows/ci.yml`)
 
-TypeScript workspace (`package.json` scripts):
+Node workspace (`package.json` scripts):
 - Install: `pnpm install --frozen-lockfile`
 - Lint/check: `pnpm check` (runs `scripts/check-repo.mjs`; regenerates protocol bindings)
-- Build: `pnpm build` (`tsc -b`); the `fusionkit` bin only links after a build
-- Test: `pnpm test` (Node test runner over built `dist/`, so build first)
+- Build: `pnpm build` (Turbo runs per-package `tsc -b` and both Next.js app builds)
+- Test: `pnpm test` (Turbo builds dependencies before package and app tests)
+- Filter: `pnpm exec turbo run build --filter=<package>...`
 
 Python workspace (`pyproject.toml`):
 - Sync: `uv sync --all-packages --extra aws` (keeps Hyperkit's AWS backend installed)

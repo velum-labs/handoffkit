@@ -19,5 +19,9 @@
     "@ai-sdk/provider": "4.0.2",
     "@routekit/registry": "workspace:*",
     "ai": "6.0.200"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "clean": "tsc -b --clean"
   }
 }

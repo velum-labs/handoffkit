@@ -30,7 +30,7 @@ The most important operational fact is the process boundary. Node owns harness U
 
 ## Top-level repository layout
 
-The root `package.json` is a private pnpm workspace named `fusionkit-monorepo`. Its `engines` field declares Node `>=22.0.0` and pnpm `>=10.33.4`, but the effective Node floor is `>=22.19.0`: `.npmrc` sets `engine-strict=true` and the pinned `undici` dependency requires Node `>=22.19.0`, so installs fail on older 22.x runtimes. Its scripts are the standard maintainer commands: `pnpm check` runs repository invariants, `pnpm build` compiles TypeScript project references, `pnpm test` runs compiled Node tests and demo smoke tests, and `pnpm verify` runs all three in order.
+The root `package.json` is a private pnpm workspace named `fusionkit-monorepo`. Its `engines` field declares Node `>=22.0.0` and pnpm `>=10.33.4`, but the effective Node floor is `>=22.19.0`: `.npmrc` sets `engine-strict=true` and the pinned `undici` dependency requires Node `>=22.19.0`, so installs fail on older 22.x runtimes. Turborepo orchestrates per-project builds and tests across `packages/*`, `examples/*`, and `apps/*`; `pnpm check` remains the repository invariant gate and `pnpm verify` runs check, build, and test in order.
 
 The root `pyproject.toml` is a virtual uv workspace. It is not a Python package by itself. It binds every package under `python/` into one lockfile and configures shared Ruff, Pyright, pytest, and coverage settings. `uv sync --all-packages` prepares the Python workspace, and `uv run pytest` runs the Python test suite.
 
@@ -38,7 +38,10 @@ The `packages/` directory contains the TypeScript workspace: the CLI, terminal U
 
 The `python/` directory contains the provider-neutral fusion engine and sidecar, optional MLX and evaluation tools, the RouteKit simulator testkit, the Hyperkit experiment platform, and UniRoute experiments. The PyPI package named `fusionkit` exposes only `fusionkit-sidecar`; the Node CLI invokes it through `uvx`.
 
-The `apps/` directory contains two standalone apps. `apps/docs` is the Fumadocs documentation site. `apps/scope` is the local observability UI for fusion traces and run inspection. These apps have their own package manifests and are not part of the root pnpm workspace.
+The `apps/` directory contains two private members of the root Node workspace.
+`apps/docs` is the Fumadocs documentation site. `apps/scope` is the local
+observability UI for fusion traces and run inspection. Both share the root
+pnpm lockfile and are built through Turbo.
 
 The `spec/` directory contains JSON Schemas, OpenAPI contracts, generated TypeScript and Python bindings, fixtures, fusion trace contracts, and dated design specifications. Schema changes should be treated as protocol changes and coordinated with generated code.
 
@@ -463,26 +466,28 @@ uv run --package uniroute-mlx uniroute-mlx --help
 
 ## Apps
 
-`apps/docs` is the public documentation site. It uses Next.js 15, React 19, Fumadocs, MDX content, a generated OpenAPI bridge, and a Mermaid component. Content lives under `apps/docs/content/docs/`. The site has its own `pnpm-workspace.yaml`, lockfile, scripts, and Vercel configuration.
+`apps/docs` is the public documentation site. It uses Next.js 15, React 19,
+Fumadocs, MDX content, a generated OpenAPI bridge, and a Mermaid component.
+Content lives under `apps/docs/content/docs/`. Its scripts and Vercel
+configuration use the root pnpm workspace and a filtered Turbo build.
 
 Relevant files include `source.config.ts`, `lib/source.ts`, `lib/openapi.ts`, `scripts/generate-openapi.ts`, `components/mermaid.tsx`, and `content/docs/meta.json`. When user-facing content overlaps with maintainer docs, the site should be considered canonical.
 
 Example:
 
 ```bash
-cd apps/docs
-pnpm install
-pnpm dev
+pnpm install --frozen-lockfile
+pnpm --filter fusionkit-docs dev
 ```
 
-`apps/scope` is the local observability companion. It is used to inspect fusion traces, sessions, judge flow, and run state. It is also standalone and should be installed and tested from its own directory.
+`apps/scope` is the local observability companion. It is used to inspect
+fusion traces, sessions, judge flow, and run state. It is a private workspace
+app whose production build is staged into the FusionKit CLI package.
 
 Example:
 
 ```bash
-cd apps/scope
-pnpm install
-pnpm test
+pnpm exec turbo run test --filter=scope
 ```
 
 ## Protocols, schemas, and generated code
@@ -573,11 +578,12 @@ uv run pyright
 uv run ruff check .
 ```
 
-The docs app and scope app are standalone and should be validated from their own directories when changed:
+The docs and Scope apps are workspace projects and should be validated with
+Turbo filters when changed:
 
 ```bash
-cd apps/docs && pnpm build
-cd apps/scope && pnpm test
+pnpm exec turbo run build --filter=fusionkit-docs
+pnpm exec turbo run test --filter=scope
 ```
 
 For documentation-only changes, `pnpm check` is the most relevant root command because it catches repository invariant drift. Building the docs app is relevant when content under `apps/docs/` changes. Full `pnpm verify` is useful when examples or package references changed in a way that could indicate code drift.
