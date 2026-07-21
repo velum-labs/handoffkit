@@ -428,6 +428,28 @@ export class SubscriptionAccountSet {
     };
   }
 
+  statusSnapshot(): SubscriptionAccountSetSnapshot {
+    const snapshot = this.snapshot();
+    return {
+      ...snapshot,
+      members: snapshot.members.map((status) => {
+        const member = this.#members.find((candidate) => candidate.id === status.id)!;
+        const credentialValid =
+          member.credential.accessToken.length > 0 &&
+          (member.credential.expiresAt === undefined ||
+            member.credential.expiresAt > Date.now() / 1000 ||
+            member.credential.refreshToken !== undefined);
+        return {
+          ...status,
+          credentialValid,
+          relayReady:
+            credentialValid &&
+            (member.coolingUntil === undefined || member.coolingUntil <= Date.now())
+        };
+      })
+    };
+  }
+
   async discoverModels(signal?: AbortSignal): Promise<readonly string[]> {
     this.#reasoning.clear();
     await Promise.allSettled(
@@ -600,11 +622,6 @@ export class SubscriptionAccountSet {
   }
 
   #memberStatus(member: PoolMember): SubscriptionMemberStatus {
-    const credentialValid =
-      member.credential.accessToken.length > 0 &&
-      (member.credential.expiresAt === undefined ||
-        member.credential.expiresAt > Date.now() / 1000 ||
-        member.credential.refreshToken !== undefined);
     return {
       id: member.id,
       mode: this.mode,
@@ -615,10 +632,6 @@ export class SubscriptionAccountSet {
         : {}),
       ...(member.coolingUntil !== undefined ? { coolingUntil: member.coolingUntil } : {}),
       active: member.id === this.#activeId,
-      credentialValid,
-      relayReady:
-        credentialValid &&
-        (member.coolingUntil === undefined || member.coolingUntil <= Date.now()),
       models: [...member.models],
       ...(this.#tracker.limits(member.id) !== undefined
         ? { limits: this.#tracker.limits(member.id) }
