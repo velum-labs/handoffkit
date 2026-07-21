@@ -348,7 +348,10 @@ export async function ensureDaemon(input: {
   const authTokenFile = ensureDaemonDataToken(input.authToken);
   const configPath = requestedConfigPath;
   const supervisor =
-    input.lifecycleLockHeld === true ? undefined : await detectSupervisor(PRODUCT, KIND);
+    input.lifecycleLockHeld === true ||
+    process.env.ROUTEKIT_NO_SUPERVISOR === "1"
+      ? undefined
+      : await detectSupervisor(PRODUCT, KIND);
   if (supervisor !== undefined) {
     const lock = await acquireLifecycleLock(daemonLifecycleLockPath(), {
       timeoutMs: START_TIMEOUT_MS

@@ -39,6 +39,7 @@ test("providers and models commands use the live namespaced catalog", async () =
   const previousBaseUrl = process.env.OPENAI_BASE_URL;
   const previousPortless = process.env.ROUTEKIT_PORTLESS;
   const previousDaemonPort = process.env.ROUTEKIT_DAEMON_PORT;
+  const previousNoSupervisor = process.env.ROUTEKIT_NO_SUPERVISOR;
   let providerHealthy = true;
   const server = createServer((request, response) => {
     assert.equal(request.headers.authorization, "Bearer test-key");
@@ -71,6 +72,7 @@ test("providers and models commands use the live namespaced catalog", async () =
   process.env.HOME = home;
   process.env.ROUTEKIT_PORTLESS = "0";
   process.env.ROUTEKIT_DAEMON_PORT = "0";
+  process.env.ROUTEKIT_NO_SUPERVISOR = "1";
   process.env.OPENAI_API_KEY = "test-key";
   process.env.OPENAI_BASE_URL = `http://127.0.0.1:${port}/v1`;
   try {
@@ -147,6 +149,8 @@ test("providers and models commands use the live namespaced catalog", async () =
     else process.env.ROUTEKIT_PORTLESS = previousPortless;
     if (previousDaemonPort === undefined) delete process.env.ROUTEKIT_DAEMON_PORT;
     else process.env.ROUTEKIT_DAEMON_PORT = previousDaemonPort;
+    if (previousNoSupervisor === undefined) delete process.env.ROUTEKIT_NO_SUPERVISOR;
+    else process.env.ROUTEKIT_NO_SUPERVISOR = previousNoSupervisor;
     await new Promise<void>((resolve, reject) =>
       server.close((error) => (error === undefined ? resolve() : reject(error)))
     );

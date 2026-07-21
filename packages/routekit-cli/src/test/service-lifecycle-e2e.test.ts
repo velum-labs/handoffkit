@@ -105,6 +105,7 @@ test("daemon lifecycle: start, idempotency, upgrade, drain-on-stop", async () =>
     OPENAI_BASE_URL: `http://127.0.0.1:${upstreamPort}/v1`,
     PORTLESS: "0",
     ROUTEKIT_PORTLESS: "0",
+    ROUTEKIT_NO_SUPERVISOR: "1",
     NO_COLOR: "1"
   };
   const cli = { cwd: project, env };

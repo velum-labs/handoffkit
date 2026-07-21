@@ -66,6 +66,7 @@ test("concurrent product commands auto-start exactly one daemon and all use its 
     HOME: home,
     ROUTEKIT_HOME: state,
     ROUTEKIT_PORTLESS: "0",
+    ROUTEKIT_NO_SUPERVISOR: "1",
     ROUTEKIT_DAEMON_PORT: "0",
     OPENAI_API_KEY: "test",
     OPENAI_BASE_URL: `http://127.0.0.1:${upstreamPort}/v1`,
