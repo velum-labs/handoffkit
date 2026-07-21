@@ -75,7 +75,25 @@ export function readDaemonRecord(): ServiceRecord | undefined {
 async function retireLegacyGateway(): Promise<void> {
   const store = daemonStore();
   const legacy = store.read("gateway");
-  if (legacy === undefined) return;
+  if (legacy === undefined) {
+    const kind =
+      process.platform === "linux"
+        ? "systemd"
+        : process.platform === "darwin"
+          ? "launchd"
+          : undefined;
+    if (kind !== undefined) {
+      try {
+        const controller = supervisorController(kind, PRODUCT, "gateway");
+        if ((await controller.status()).installed) {
+          await controller.uninstall();
+        }
+      } catch {
+        // No usable user supervisor in this environment.
+      }
+    }
+    return;
+  }
   const lock = await acquireLifecycleLock(daemonLifecycleLockPath());
   try {
     const current = store.read("gateway");
@@ -186,6 +204,7 @@ export async function ensureDaemon(input: {
   authToken?: string;
   portless?: boolean;
   drainGraceMs?: number;
+  lifecycleLockHeld?: boolean;
 } = {}): Promise<{
   client: RouteKitControlClient;
   record: ServiceRecord;
@@ -194,6 +213,23 @@ export async function ensureDaemon(input: {
   const requestedConfigPath = input.configPath ?? canonicalConfigOrMigrationError();
   await retireLegacyGateway();
   const current = readDaemonRecord();
+  if (
+    current !== undefined &&
+    (current.supervisor === "systemd" || current.supervisor === "launchd") &&
+    current.args?.includes("gateway") === true &&
+    current.args?.includes("serve") === true
+  ) {
+    const lock = await acquireLifecycleLock(daemonLifecycleLockPath());
+    try {
+      await supervisorController(current.supervisor, PRODUCT, "gateway").uninstall({
+        timeoutMs: supervisorOperationTimeoutMs(current.drainGraceMs)
+      });
+      daemonStore().remove(KIND);
+    } finally {
+      lock.release();
+    }
+    return await ensureDaemon(input);
+  }
   if (current !== undefined && (await daemonRecordHealthy(current))) {
     if (
       input.authToken !== undefined &&
@@ -301,7 +337,8 @@ export async function ensureDaemon(input: {
   const home = routekitHome();
   const authTokenFile = ensureDaemonDataToken(input.authToken);
   const configPath = requestedConfigPath;
-  const supervisor = await detectSupervisor(PRODUCT, KIND);
+  const supervisor =
+    input.lifecycleLockHeld === true ? undefined : await detectSupervisor(PRODUCT, KIND);
   if (supervisor !== undefined) {
     const lock = await acquireLifecycleLock(daemonLifecycleLockPath(), {
       timeoutMs: START_TIMEOUT_MS
@@ -363,7 +400,8 @@ export async function ensureDaemon(input: {
     },
     {
       readyTimeoutMs: START_TIMEOUT_MS,
-      ready: daemonRecordHealthy
+      ready: daemonRecordHealthy,
+      lockHeld: input.lifecycleLockHeld === true
     }
   );
   const client = controlClientForRecord(start.record);

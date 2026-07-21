@@ -62,6 +62,8 @@ export type StartDaemonOptions = {
   previousPid?: number;
   /** Product-specific readiness check; defaults to loopback GET /health. */
   ready?: (record: ServiceRecord) => Promise<boolean>;
+  /** Caller already holds `<kind>.lock` across a larger lifecycle transaction. */
+  lockHeld?: boolean;
 };
 
 export type StartDaemonResult = {
@@ -217,10 +219,12 @@ export async function startDaemon(
   mkdirSync(store.directory, { recursive: true, mode: 0o700 });
   const lockPath = join(store.directory, `${spec.kind}.lock`);
   const deadline = Date.now() + (options.readyTimeoutMs ?? DEFAULT_READY_TIMEOUT_MS);
-  const lock = await acquireLifecycleLock(lockPath, {
-    timeoutMs: options.readyTimeoutMs ?? DEFAULT_READY_TIMEOUT_MS,
-    pollMs: READY_POLL_MS
-  });
+  const lock = options.lockHeld
+    ? { release: () => {} }
+    : await acquireLifecycleLock(lockPath, {
+        timeoutMs: options.readyTimeoutMs ?? DEFAULT_READY_TIMEOUT_MS,
+        pollMs: READY_POLL_MS
+      });
   const joined = store.read(spec.kind);
   if (
     joined !== undefined &&
@@ -309,6 +313,9 @@ export async function stopDaemonProcess(
   options: { graceMs?: number } = {}
 ): Promise<StopDaemonResult> {
   const graceMs = options.graceMs ?? 35_000;
+  if (record.processIdentity === undefined) {
+    return { stopped: false, forced: false };
+  }
   if (
     record.pid === process.pid ||
     !processAlive(record.pid, record.processIdentity)

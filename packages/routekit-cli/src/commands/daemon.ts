@@ -31,7 +31,6 @@ function registerRun(group: Command): void {
     .requiredOption("--config-path <path>", "canonical global router config")
     .option("--host <host>", "data-plane bind host", "127.0.0.1")
     .option("--port <port>", "data-plane bind port", "8080")
-    .option("--auth-token <token>", "data-plane authentication token")
     .option("--auth-token-file <path>", "private data-plane token file")
     .option("--no-portless", "disable the stable local route")
     .option("--drain-grace-ms <ms>", "in-flight drain grace in milliseconds", "30000")
@@ -41,7 +40,6 @@ function registerRun(group: Command): void {
           configPath: string;
           host: string;
           port: string;
-          authToken?: string;
           authTokenFile?: string;
           portless?: boolean;
           drainGraceMs: string;
@@ -63,7 +61,6 @@ function registerRun(group: Command): void {
           configPath: options.configPath,
           host: options.host,
           port: parsePort(options.port, 8080),
-          ...(options.authToken !== undefined ? { authToken: options.authToken } : {}),
           ...(options.authTokenFile !== undefined
             ? { authTokenFile: options.authTokenFile }
             : {}),
@@ -98,8 +95,18 @@ function registerStatus(group: Command): void {
       const ctx = contextFor(command);
       const connected = await connectDaemon();
       if (connected === undefined) {
-        if (ctx.json) ctx.emit({ running: false });
-        else ctx.presenter.note("RouteKit daemon is stopped");
+        const record = readDaemonRecord();
+        if (ctx.json) {
+          ctx.emit({
+            running: record !== undefined,
+            healthy: false,
+            ...(record !== undefined ? { pid: record.pid } : {})
+          });
+        } else {
+          ctx.presenter.note(
+            record === undefined ? "RouteKit daemon is stopped" : "RouteKit daemon is unhealthy"
+          );
+        }
         return;
       }
       const status = await connected.client.call("daemon.status", {});
@@ -177,7 +184,8 @@ function registerStop(group: Command): void {
         }
         let stopped = await waitForProcessExit(
           record.pid,
-          supervisorOperationTimeoutMs(record.drainGraceMs)
+          supervisorOperationTimeoutMs(record.drainGraceMs),
+          record.processIdentity
         );
         if (!stopped && options.force === true) {
           await stopDaemonProcess(record, { graceMs: 0 });

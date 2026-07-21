@@ -42,7 +42,8 @@ export function registerStop(program: Command): void {
           }
           const stopped = await waitForProcessExit(
             record.pid,
-            supervisorOperationTimeoutMs(record.drainGraceMs)
+            supervisorOperationTimeoutMs(record.drainGraceMs),
+            record.processIdentity
           );
           if (!stopped) throw new Error(`RouteKit daemon pid ${record.pid} did not drain`);
           result = { stopped: true, pid: record.pid };

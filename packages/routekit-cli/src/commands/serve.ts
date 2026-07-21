@@ -23,14 +23,19 @@ export function registerServe(program: Command): void {
       ) => {
         const ctx = contextFor(command);
         const configPath = configOverride(command) ?? globalRouterConfigPath();
-        const running = await startRouteKitDaemon({
+        let running: Awaited<ReturnType<typeof startRouteKitDaemon>> | undefined;
+        const requestShutdown = (): void => {
+          setImmediate(() => void running?.close().finally(() => process.exit(0)));
+        };
+        running = await startRouteKitDaemon({
           packageVersion: routekitVersion(),
           configPath,
           host: options.host,
           port: parsePort(options.port, 8080),
           drainGraceMs: drainGraceMs(options.drainGrace),
           ...(options.authToken !== undefined ? { authToken: options.authToken } : {}),
-          ...(options.portless !== undefined ? { portless: options.portless } : {})
+          ...(options.portless !== undefined ? { portless: options.portless } : {}),
+          onShutdownRequested: requestShutdown
         });
         if (ctx.json) {
           ctx.emit({

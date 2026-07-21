@@ -20,7 +20,7 @@ import { dirname } from "node:path";
 
 import { randomId, sleep } from "../index.js";
 
-import { processAlive } from "./records.js";
+import { processAlive, processIdentity } from "./records.js";
 
 export type LifecycleLock = {
   path: string;
@@ -28,7 +28,12 @@ export type LifecycleLock = {
   release(): void;
 };
 
-type LockRecord = { pid: number; nonce: string; acquiredAt: string };
+type LockRecord = {
+  pid: number;
+  nonce: string;
+  acquiredAt: string;
+  processIdentity?: string;
+};
 const LOCK_STABILIZE_MS = 2_000;
 
 function readLock(path: string): LockRecord | undefined {
@@ -68,7 +73,10 @@ function tryAcquire(path: string, ignoreReaper = false): LifecycleLock | undefin
       `${JSON.stringify({
         pid: process.pid,
         nonce,
-        acquiredAt: new Date().toISOString()
+        acquiredAt: new Date().toISOString(),
+        ...(processIdentity(process.pid) !== undefined
+          ? { processIdentity: processIdentity(process.pid) }
+          : {})
       } satisfies LockRecord)}\n`
     );
   } finally {
@@ -89,12 +97,24 @@ function tryAcquire(path: string, ignoreReaper = false): LifecycleLock | undefin
 
 function tryReapAndAcquire(path: string): LifecycleLock | undefined {
   const reaperPath = `${path}.reap`;
+  const nonce = randomId(24);
   let reaper: number;
   try {
     reaper = openSync(reaperPath, "wx", 0o600);
   } catch {
     return undefined;
   }
+  writeFileSync(
+    reaper,
+    `${JSON.stringify({
+      pid: process.pid,
+      nonce,
+      acquiredAt: new Date().toISOString(),
+      ...(processIdentity(process.pid) !== undefined
+        ? { processIdentity: processIdentity(process.pid) }
+        : {})
+    } satisfies LockRecord)}\n`
+  );
   closeSync(reaper);
   try {
     const current = readLock(path);
@@ -108,14 +128,14 @@ function tryReapAndAcquire(path: string): LifecycleLock | undefined {
     } else {
       const acquiredAt = Date.parse(current.acquiredAt);
       stale =
-        !processAlive(current.pid) &&
+        !processAlive(current.pid, current.processIdentity) &&
         (!Number.isFinite(acquiredAt) || Date.now() - acquiredAt >= LOCK_STABILIZE_MS);
     }
     if (!stale) return undefined;
     rmSync(path, { force: true });
     return tryAcquire(path, true);
   } finally {
-    rmSync(reaperPath, { force: true });
+    if (readLock(reaperPath)?.nonce === nonce) rmSync(reaperPath, { force: true });
   }
 }
 
@@ -134,7 +154,12 @@ export async function acquireLifecycleLock(
   for (;;) {
     try {
       const reaperPath = `${path}.reap`;
-      if (Date.now() - statSync(reaperPath).mtimeMs >= LOCK_STABILIZE_MS) {
+      const reaper = readLock(reaperPath);
+      if (
+        reaper !== undefined &&
+        !processAlive(reaper.pid, reaper.processIdentity) &&
+        Date.now() - Date.parse(reaper.acquiredAt) >= LOCK_STABILIZE_MS
+      ) {
         rmSync(reaperPath, { force: true });
       }
     } catch {
@@ -156,7 +181,7 @@ export async function acquireLifecycleLock(
         const recovered = tryReapAndAcquire(path);
         if (recovered !== undefined) return recovered;
       }
-    } else if (!processAlive(current.pid)) {
+    } else if (!processAlive(current.pid, current.processIdentity)) {
       const acquiredAt = Date.parse(current.acquiredAt);
       if (!Number.isFinite(acquiredAt) || Date.now() - acquiredAt >= LOCK_STABILIZE_MS) {
         const recovered = tryReapAndAcquire(path);

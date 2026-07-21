@@ -103,7 +103,8 @@ function registerInstall(group: Command): void {
         if (
           !(await waitForProcessExit(
             previous.pid,
-            supervisorOperationTimeoutMs(previous.drainGraceMs)
+            supervisorOperationTimeoutMs(previous.drainGraceMs),
+            previous.processIdentity
           ))
         ) {
           throw new Error(`RouteKit daemon pid ${previous.pid} did not drain`);
@@ -178,10 +179,15 @@ function registerUninstall(group: Command): void {
             { reason: "stop" },
             { idempotencyKey: `service-uninstall-${record.generation ?? record.pid}` }
           );
-          stopped = true;
+          stopped = await waitForProcessExit(
+            record.pid,
+            supervisorOperationTimeoutMs(record.drainGraceMs),
+            record.processIdentity
+          );
+          if (!stopped) throw new Error(`RouteKit daemon pid ${record.pid} did not stop`);
         }
         const stopResult = { stopped, pid: record?.pid };
-        removeServiceEnvFile("daemon");
+        if (removed || stopped) removeServiceEnvFile("daemon");
         if (ctx.json) {
           ctx.emit({ uninstalled: removed, service: stopResult });
           return;
@@ -274,7 +280,7 @@ export function registerLogs(program: Command): void {
     .action(async (options: { lines: string; follow?: boolean }, command: Command) => {
       const ctx = contextFor(command);
       if (ctx.json) {
-        throw new CliError({ message: "`gateway logs` is a live human view and cannot be combined with --json" });
+        throw new CliError({ message: "`daemon logs` is a live human view and cannot be combined with --json" });
       }
       const lines = Number.parseInt(options.lines, 10);
       if (!Number.isInteger(lines) || lines <= 0) {

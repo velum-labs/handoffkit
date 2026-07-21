@@ -10,6 +10,7 @@
  * own state home and product name (RouteKit, FusionKit, ...).
  */
 import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
+import { spawnSync } from "node:child_process";
 import { join } from "node:path";
 
 import { writeFileAtomic } from "../index.js";
@@ -91,8 +92,7 @@ export type ServiceRecordStore = {
 };
 
 export function processIdentity(pid: number): string | undefined {
-  if (process.platform !== "linux") return undefined;
-  try {
+  if (process.platform === "linux") try {
     const stat = readFileSync(`/proc/${pid}/stat`, "utf8");
     const close = stat.lastIndexOf(")");
     const fields = stat.slice(close + 2).split(" ");
@@ -100,6 +100,14 @@ export function processIdentity(pid: number): string | undefined {
   } catch {
     return undefined;
   }
+  if (process.platform === "darwin") {
+    const result = spawnSync("ps", ["-o", "lstart=", "-p", String(pid)], {
+      encoding: "utf8"
+    });
+    const started = result.status === 0 ? result.stdout.trim() : "";
+    return started.length > 0 ? started : undefined;
+  }
+  return undefined;
 }
 
 export function processAlive(pid: number, identity?: string): boolean {
