@@ -185,7 +185,13 @@ test("gateway service lifecycle: start, idempotency, upgrade, drain-on-stop", as
     assert.match(await inflightResponse.text(), /drained answer/);
     const stopped = json(await stopRun);
     assert.equal((stopped.service as { stopped?: boolean }).stopped, true);
-    assert.equal(existsSync(recordPath), false);
+    // Guarded cleanup intentionally leaves the dead generation record in
+    // place rather than risking deletion of a concurrently published
+    // successor; readers treat its dead pid as unavailable.
+    assert.equal(
+      (JSON.parse(readFileSync(recordPath, "utf8")) as { pid: number }).pid,
+      daemonPid
+    );
     const deadline = Date.now() + 5_000;
     while (alive(daemonPid) && Date.now() < deadline) {
       await new Promise((resolveWait) => setTimeout(resolveWait, 50));
