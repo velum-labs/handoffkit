@@ -1,7 +1,7 @@
 import { resolve } from "node:path";
 
 import { contextFor } from "@routekit/cli-core";
-import { trimTrailingSlashes } from "@routekit/runtime";
+import { commandOnPath, trimTrailingSlashes } from "@routekit/runtime";
 import type { Command } from "commander";
 
 import { launchTool, routekitToolRegistry } from "../launch.js";
@@ -42,6 +42,15 @@ export function registerLaunchers(program: Command): void {
         if (contextFor(actionCommand).json) {
           throw new Error(
             `\`${integration.id}\` is interactive and does not support --json`
+          );
+        }
+        if (
+          integration.binary !== undefined &&
+          !commandOnPath(integration.binary)
+        ) {
+          throw new Error(
+            `routekit preflight failed: "${integration.binary}" was not found on PATH — ` +
+              (integration.installHint ?? `install ${integration.binary}`)
           );
         }
         const cwd = options.cwd !== undefined ? resolve(options.cwd) : process.cwd();

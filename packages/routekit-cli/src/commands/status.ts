@@ -9,7 +9,7 @@ import type { Command } from "commander";
 
 import { accountsStatus } from "../accounts.js";
 import type { AccountsStatus } from "../accounts.js";
-import { routekitClient } from "../client.js";
+import { connectDaemon } from "../client.js";
 import { readServiceRecord, readStateSnapshot, routekitVersion } from "../state.js";
 import type { RouteKitServiceRecord, ServiceKind } from "../state.js";
 import { limitsSummary } from "../usage-format.js";
@@ -273,7 +273,23 @@ export function registerStatus(program: Command): void {
         });
       }
       const collect = async () => {
-        const client = await routekitClient();
+        const connected = await connectDaemon();
+        if (connected === undefined) {
+          return {
+            observedAt: new Date().toISOString(),
+            cliVersion: routekitVersion(),
+            daemon: { running: false },
+            services: [
+              { kind: "gateway", running: false },
+              { kind: "accounts", running: false }
+            ],
+            providers: [],
+            accounts: { running: false, accounts: [] },
+            models: { count: 0, cached: false },
+            catalog: { models: [] }
+          };
+        }
+        const client = connected.client;
         const [daemon, providers, accounts, models] = await Promise.all([
           client.call("daemon.status", {}),
           client.call("providers.status", {}),
@@ -359,11 +375,12 @@ export function registerStatus(program: Command): void {
 function renderDaemonOverviewLines(
   overview: {
     daemon: {
-      pid: number;
-      packageVersion: string;
-      dataUrl: string;
-      generation: number;
-      configRevision: number;
+      running?: boolean;
+      pid?: number;
+      packageVersion?: string;
+      dataUrl?: string;
+      generation?: number;
+      configRevision?: number;
     };
     providers: Array<{
         provider: string;
@@ -378,6 +395,9 @@ function renderDaemonOverviewLines(
     catalog: { models: Array<{ id: string }>; defaultModel?: string };
   }
 ): string[] {
+  if (overview.daemon.running === false) {
+    return ["RouteKit status", "", `  ${stateMark(false)} daemon stopped`];
+  }
   const lines = [
     "RouteKit status",
     "",

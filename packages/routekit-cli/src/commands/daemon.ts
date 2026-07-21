@@ -14,6 +14,7 @@ import {
 
 import {
   controlClientForRecord,
+  connectDaemon,
   daemonLifecycleLockPath,
   daemonDataTokenPath,
   ensureDaemon,
@@ -93,8 +94,13 @@ function registerStatus(group: Command): void {
     .description("show singleton daemon and data-plane status")
     .action(async (_options: unknown, command: Command) => {
       const ctx = contextFor(command);
-      const { client } = await ensureDaemon();
-      const status = await client.call("daemon.status", {});
+      const connected = await connectDaemon();
+      if (connected === undefined) {
+        if (ctx.json) ctx.emit({ running: false });
+        else ctx.presenter.note("RouteKit daemon is stopped");
+        return;
+      }
+      const status = await connected.client.call("daemon.status", {});
       if (ctx.json) ctx.emit(status);
       else {
         ctx.presenter.success(

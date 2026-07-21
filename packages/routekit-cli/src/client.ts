@@ -337,6 +337,16 @@ export async function routekitClient(): Promise<RouteKitControlClient> {
   return (await ensureDaemon()).client;
 }
 
+export async function connectDaemon(): Promise<
+  { client: RouteKitControlClient; record: ServiceRecord } | undefined
+> {
+  const record = readDaemonRecord();
+  if (record === undefined || !(await daemonRecordHealthy(record))) return undefined;
+  const client = controlClientForRecord(record);
+  await client.hello();
+  return { client, record };
+}
+
 export function daemonLogPath(): string {
   return serviceLogPath(routekitHome(), KIND);
 }

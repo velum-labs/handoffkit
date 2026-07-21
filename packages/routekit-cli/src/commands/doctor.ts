@@ -1,9 +1,12 @@
+import { existsSync } from "node:fs";
+
 import { contextFor, probeBinaryVersion } from "@routekit/cli-core";
 import { commandOnPath } from "@routekit/runtime";
 import type { Command } from "commander";
 
 import { routekitClient } from "../client.js";
 import { routekitToolRegistry } from "../launch.js";
+import { configOverride, loaded } from "./context.js";
 
 function installCommand(binary: string): string {
   switch (binary) {
@@ -32,7 +35,23 @@ export function registerDoctor(program: Command): void {
         detail?: string;
         tryCommand?: string;
       }> = [];
-      try {
+      if (configOverride(command) !== undefined) {
+        const explicit = configOverride(command)!;
+        try {
+          const config = loaded(command);
+          checks.push({ label: "router config", ok: true, detail: config.path });
+        } catch (error) {
+          checks.push({
+            label: "router config",
+            ok: existsSync(explicit),
+            detail: existsSync(explicit)
+              ? `${explicit} (legacy/recovery config)`
+              : error instanceof Error
+                ? error.message
+                : String(error)
+          });
+        }
+      } else try {
         const client = await routekitClient();
         const daemon = await client.call("doctor.run", {});
         for (const check of daemon.checks) {
