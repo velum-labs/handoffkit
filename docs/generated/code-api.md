@@ -463,11 +463,7 @@ No module JSDoc was found.
 
 ### `packages/routekit-control/src/index.ts`
 
-Typed, versioned RouteKit daemon control protocol.
-
-This package defines product methods and validates their parameters. It is
-independent of Commander and UI rendering; the CLI and daemon can evolve
-independently as long as they negotiate the same protocol capability.
+No module JSDoc was found.
 
 - `export const ROUTEKIT_CONTROL_CAPABILITY ...`
 - `export type RouteKitControlMethod ...`
@@ -589,7 +585,7 @@ No module JSDoc was found.
 - `export type { LifecycleLock } from "./service/authority.js";`
 - `export { readLogTail, rotateLogFile, serviceLogPath, startDaemon, stopDaemonProcess, waitForProcessExit, waitForServiceReady } from "./service/daemon.js";`
 - `export type { ServiceDaemonSpec, StartDaemonOptions, StartDaemonResult, StopDaemonResult } from "./service/daemon.js";`
-- `export { detectSupervisor, launchdAgentPlist, launchdLabel, launchdPlistPath, supervisorController, systemdServiceUnit, systemdUnitName, systemdUnitPath } from "./service/supervisors.js";`
+- `export { detectSupervisor, launchdAgentPlist, launchdLabel, launchdPlistPath, supervisorController, supervisorOperationTimeoutMs, systemdServiceUnit, systemdUnitName, systemdUnitPath } from "./service/supervisors.js";`
 - `export type { CommandRunner, DetectSupervisorOptions, ServiceUnitSpec, SupervisorController, SupervisorStatus } from "./service/supervisors.js";`
 - `export { planUpgrade, upgradeDetachedDaemon } from "./service/upgrade.js";`
 - `export type { UpgradeDaemonInput, UpgradeDaemonResult, UpgradeStrategy } from "./service/upgrade.js";`
