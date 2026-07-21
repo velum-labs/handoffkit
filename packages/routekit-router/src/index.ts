@@ -160,7 +160,13 @@ export async function startRouter(options: StartRouterOptions): Promise<RunningR
       ...(options.port !== undefined ? { port: options.port } : {}),
       ...(options.authToken !== undefined ? { authToken: options.authToken } : {}),
       ...(Object.keys(relays).length > 0 ? { providerRelays: relays } : {}),
-      usage: async () => await collectSubscriptionUsage(accountSets)
+      usage: async () => {
+        const usage = await collectSubscriptionUsage(accountSets);
+        return {
+          ...usage,
+          accountSets: usage.accountSets.filter((set) => set.members.length > 0)
+        };
+      }
     });
   } catch (error) {
     await backend.close();
