@@ -16,6 +16,7 @@ export async function startCursorBridge(input: {
   models?: readonly CursorBridgeModelDescriptor[];
   logFile?: string;
   caCertPath?: string;
+  apiKey?: string;
   log: (line: string) => void;
 }): Promise<{ child: ChildProcess; port: number }> {
   // Hold the port until the bridge is about to bind it, so a concurrent picker
@@ -27,6 +28,7 @@ export async function startCursorBridge(input: {
     gatewayUrl: input.gatewayUrl,
     modelName: input.modelLabel,
     providerModel: input.modelLabel,
+    ...(input.apiKey !== undefined ? { apiKey: input.apiKey } : {}),
     ...(input.models !== undefined ? { models: input.models } : {}),
     ...(input.caCertPath !== undefined ? { caCertPath: input.caCertPath } : {})
   });

@@ -1,7 +1,7 @@
 import { resolve } from "node:path";
 
 import { contextFor } from "@routekit/cli-core";
-import { commandOnPath, trimTrailingSlashes } from "@routekit/runtime";
+import { commandOnPath, isLoopbackHost, trimTrailingSlashes } from "@routekit/runtime";
 import type { Command } from "commander";
 
 import { launchTool, routekitToolRegistry } from "../launch.js";
@@ -19,6 +19,7 @@ export function registerLaunchers(program: Command): void {
       .option("--gateway-url <url>", "connect to an existing RouteKit gateway")
       .option("--effort <id>", "opaque reasoning effort for the selected model")
       .option("--auth-token <token>", "gateway authentication token")
+      .option("--auth-token-env <name>", "read gateway authentication token from an environment variable")
       .option("--cwd <dir>", "tool working directory");
     if (integration.id === "cursor") {
       command.option("--ide", "launch the desktop integration");
@@ -33,6 +34,7 @@ export function registerLaunchers(program: Command): void {
         options: {
           gatewayUrl?: string;
           authToken?: string;
+          authTokenEnv?: string;
           cwd?: string;
           effort?: string;
           ide?: boolean;
@@ -54,6 +56,19 @@ export function registerLaunchers(program: Command): void {
           );
         }
         const cwd = options.cwd !== undefined ? resolve(options.cwd) : process.cwd();
+        const externalToken =
+          options.authTokenEnv !== undefined
+            ? process.env[options.authTokenEnv]
+            : options.authToken;
+        if (options.authTokenEnv !== undefined && externalToken === undefined) {
+          throw new Error(`credential environment variable is not set: ${options.authTokenEnv}`);
+        }
+        if (options.gatewayUrl !== undefined && externalToken !== undefined) {
+          const external = new URL(options.gatewayUrl);
+          if (external.protocol !== "https:" && !isLoopbackHost(external.hostname)) {
+            throw new Error("authenticated external gateways require HTTPS");
+          }
+        }
         const tool = integration.id as "codex" | "claude" | "cursor" | "opencode";
         const prepared =
           options.gatewayUrl === undefined
@@ -78,12 +93,12 @@ export function registerLaunchers(program: Command): void {
           args: toolArgs,
           cwd,
           ...((options.gatewayUrl !== undefined
-            ? options.authToken
+            ? externalToken
             : prepared?.authToken) !== undefined
             ? {
                 authToken:
                   options.gatewayUrl !== undefined
-                    ? options.authToken
+                    ? externalToken
                     : prepared?.authToken
               }
             : {}),

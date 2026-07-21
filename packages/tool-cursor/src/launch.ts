@@ -46,6 +46,9 @@ async function launchCursorCli(ctx: ToolLaunchContext): Promise<number> {
     gatewayUrl: ctx.spec.gatewayUrl,
     modelLabel: ctx.spec.defaultModel,
     models: bridgeModels(ctx),
+    ...(ctx.spec.auth?.token !== undefined
+      ? { apiKey: ctx.spec.auth.token }
+      : {}),
     ...(ctx.spec.logsDir !== undefined
       ? { logFile: join(ctx.spec.logsDir, "cursor-bridge.log") }
       : {}),

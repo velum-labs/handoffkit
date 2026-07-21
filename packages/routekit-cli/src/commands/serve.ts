@@ -39,7 +39,7 @@ export function registerServe(program: Command): void {
             controlUrl: running.controlUrl,
             port: running.record.dataPort,
             config: configPath,
-            authenticated: options.authToken !== undefined,
+            authenticated: true,
             pid: running.record.pid,
             generation: running.record.generation
           });

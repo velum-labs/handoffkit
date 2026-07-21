@@ -278,7 +278,7 @@ export function codexAgentRoleToml(profile: AgentProfile): string {
 }
 
 export function codexLaunchConfigToml(
-  spec: Pick<ToolLaunchSpec, "gatewayUrl" | "defaultModel" | "reasoning">,
+  spec: Pick<ToolLaunchSpec, "gatewayUrl" | "defaultModel" | "reasoning" | "auth">,
   modelCatalogPath?: string,
   roles: readonly CodexAgentRole[] = []
 ): string {
@@ -299,6 +299,9 @@ export function codexLaunchConfigToml(
     `base_url = ${JSON.stringify(`${trimTrailingSlashes(spec.gatewayUrl)}/v1`)}`,
     `wire_api = "responses"`,
     `requires_openai_auth = false`,
+    ...(spec.auth?.token !== undefined
+      ? [`env_key = "ROUTEKIT_GATEWAY_TOKEN"`]
+      : []),
     ""
   );
   if (roles.length > 0) {
@@ -318,13 +321,18 @@ export function codexLaunchConfigToml(
 function spawnCodex(
   args: readonly string[],
   home: string,
-  cwd: string | undefined
+  cwd: string | undefined,
+  token?: string
 ): Promise<{ code: number; stderr: string }> {
   return new Promise((resolve, reject) => {
     const child = spawn("codex", args, {
       stdio: ["inherit", "inherit", "pipe"],
       // env-spread-allowed: interactive user tool inherits the user's shell configuration
-      env: { ...process.env, CODEX_HOME: home },
+      env: {
+        ...process.env,
+        CODEX_HOME: home,
+        ...(token !== undefined ? { ROUTEKIT_GATEWAY_TOKEN: token } : {})
+      },
       ...(cwd !== undefined ? { cwd } : {})
     });
     let stderr = "";
@@ -370,14 +378,14 @@ export async function launchCodex(ctx: ToolLaunchContext): Promise<number> {
   };
   writeConfig(catalogPath, roles);
   ctx.prepareForPassthrough();
-  let result = await spawnCodex(spec.args, home, spec.cwd);
+  let result = await spawnCodex(spec.args, home, spec.cwd, spec.auth?.token);
   if (catalogPath !== undefined && isCodexConfigFailure(result.code, result.stderr)) {
     writeConfig(undefined, roles);
-    result = await spawnCodex(spec.args, home, spec.cwd);
+    result = await spawnCodex(spec.args, home, spec.cwd, spec.auth?.token);
   }
   if (roles.length > 0 && isCodexConfigFailure(result.code, result.stderr)) {
     writeConfig(undefined, []);
-    result = await spawnCodex(spec.args, home, spec.cwd);
+    result = await spawnCodex(spec.args, home, spec.cwd, spec.auth?.token);
   }
   return result.code;
 }
