@@ -70,7 +70,7 @@ test("independent command surface is complete and has no compatibility aliases",
     ["auth", "logs", "reload", "restart", "run", "service", "start", "status", "stop", "upgrade"]
   );
   assert.deepEqual(
-    command(program, "gateway")
+    command(program, "daemon")
       .commands.find((entry) => entry.name() === "service")
       ?.commands.map((entry) => entry.name())
       .sort(),
