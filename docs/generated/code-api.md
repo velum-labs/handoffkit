@@ -25,7 +25,7 @@ contract. Product CLIs can wrap this module without owning account logic.
 - `export { subscriptionProvider } from "./provider.js";`
 - `export type { AdminUsageCost, AdminUsageRange, SubscriptionProvider } from "./provider.js";`
 - `export { RateLimitTracker, SubscriptionAccountSet, SubscriptionAccountSetExhaustedError } from "./account-set.js";`
-- `export type { SubscriptionAccountSetOptions } from "./account-set.js";`
+- `export type { SubscriptionAccountSetOptions, SubscriptionExecutionObserver } from "./account-set.js";`
 - `export { SubscriptionAccountBackend } from "./backend.js";`
 - `export type { SubscriptionAccountBackendOptions } from "./backend.js";`
 - `export { CodexBackendRelay, codexRelayAuth } from "./codex-relay.js";`
@@ -127,7 +127,7 @@ No module JSDoc was found.
 - `export { canonicalize } from "./jcs.js";`
 - `export type { JsonValue } from "./jcs.js";`
 - `export { SHA256_PREFIX, artifactHash, hashCanonical, hashCanonicalSha256, requestHash, responseHash, schemaBundleHash, sha256Hex, sha256PrefixedHex } from "./hash.js";`
-- `export type { CapabilityStatus, ModelCallContract, ModelCallSideEffects, ModelCallStatus, ModelChatMessage, ModelChatRole, ModelEndpoint, ModelUsage, ProviderError, ProviderErrorKind, ProviderFailure, ProviderFailureCategory } from "./model.js";`
+- `export type { CapabilityStatus, ModelCallContract, ModelCallSideEffects, ModelCallStatus, ModelChatMessage, ModelChatRole, ModelEndpoint, ModelUsage, RequestAttribution, RequestBillingMode, ProviderError, ProviderErrorKind, ProviderFailure, ProviderFailureCategory } from "./model.js";`
 - `export { ProviderFailureError, classifyProviderFailure, isRetryableProviderFailure, parseRetryAfterSeconds } from "./model.js";`
 - `export type { ModelReasoningCapabilities, ReasoningCapabilityProvenance, ReasoningCapabilityStatus, ReasoningEffortOption, ReasoningSelection } from "./reasoning.js";`
 - `export { resolveReasoningEffort } from "./reasoning.js";`
@@ -476,6 +476,7 @@ No module JSDoc was found.
 - `export type ConfigSnapshot ...`
 - `export type ModelInfo ...`
 - `export type LaunchPreparation ...`
+- `export type RouteKitCallInspection ...`
 - `export type RouteKitControlResults ...`
 - `export type RouteKitMethodHandler<M extends RouteKitControlMethod> ...`
 - `export type RouteKitControlHandlers ...`

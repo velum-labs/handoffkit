@@ -8,7 +8,7 @@ Use it with the narrative references when you need to find the module that owns 
 
 ### `packages/accounts`
 
-- `packages/accounts/src/account-set.ts`: SubscriptionAccountSetOptions (type), RateLimitTracker (class), SubscriptionAccountSetExhaustedError (class), SubscriptionAccountSet (class)
+- `packages/accounts/src/account-set.ts`: SubscriptionAccountSetOptions (type), SubscriptionExecutionObserver (type), RateLimitTracker (class), SubscriptionAccountSetExhaustedError (class), SubscriptionAccountSet (class)
 - `packages/accounts/src/account-source.ts`: SubscriptionAccountSource (type), ResolvedSubscriptionAccounts (type), resolveSubscriptionAccounts (function)
 - `packages/accounts/src/backend.ts`: SubscriptionAccountBackendOptions (type), SubscriptionAccountBackend (class)
 - `packages/accounts/src/client.ts`: SubscriptionProxyClientOptions (type), SubscriptionProxyClient (class), SubscriptionProxyClientError (class)
@@ -107,7 +107,7 @@ Use it with the narrative references when you need to find the module that owns 
 - `packages/contracts/src/harness-event.ts`: HarnessApprovalDecision (type), HarnessRequestType (type), HarnessEventRaw (type), HarnessItemType (type), HarnessContentStream (type), HarnessTurnEndReason (type), HarnessTokenUsage (type), HarnessEvent (type), HarnessEventType (type)
 - `packages/contracts/src/hash.ts`: SHA256_PREFIX (const), sha256Hex (function), sha256PrefixedHex (function), hashCanonical (function), hashCanonicalSha256 (function), requestHash (function), responseHash (function), artifactHash (function), schemaBundleHash (function)
 - `packages/contracts/src/jcs.ts`: JsonValue (type), canonicalize (function)
-- `packages/contracts/src/model.ts`: CapabilityStatus (type), ModelCallStatus (type), ModelCallSideEffects (type), ModelChatRole (type), ModelChatMessage (type), ModelUsage (type), ProviderErrorKind (type), ProviderError (type), ProviderFailureCategory (type), ProviderFailure (type), ProviderFailureError (class), isRetryableProviderFailure (function), parseRetryAfterSeconds (function), classifyProviderFailure (function), ModelEndpoint (type), ModelCallContract (type)
+- `packages/contracts/src/model.ts`: CapabilityStatus (type), ModelCallStatus (type), ModelCallSideEffects (type), ModelChatRole (type), ModelChatMessage (type), ModelUsage (type), RequestBillingMode (type), RequestAttribution (type), ProviderErrorKind (type), ProviderError (type), ProviderFailureCategory (type), ProviderFailure (type), ProviderFailureError (class), isRetryableProviderFailure (function), parseRetryAfterSeconds (function), classifyProviderFailure (function), ModelEndpoint (type), ModelCallContract (type)
 - `packages/contracts/src/reasoning.ts`: ReasoningEffortOption (type), ReasoningCapabilityProvenance (type), ReasoningCapabilityStatus (type), ModelReasoningCapabilities (type), ReasoningSelection (type), resolveReasoningEffort (function)
 
 ### `packages/ensemble`
@@ -278,6 +278,7 @@ Use it with the narrative references when you need to find the module that owns 
 - `packages/routekit-cli/src/cli.ts`: routekitVersion (function), buildProgram (function)
 - `packages/routekit-cli/src/client.ts`: daemonDataTokenPath (function), ensureDaemonDataToken (function), daemonStore (function), readDaemonRecord (function), controlClientForRecord (function), daemonRecordHealthy (function), canonicalConfigOrMigrationError (function), daemonServeArgs (function), ensureDaemon (function), routekitClient (function), connectDaemon (function), daemonLogPath (function), daemonLifecycleLockPath (function)
 - `packages/routekit-cli/src/commands/accounts.ts`: registerAccounts (function)
+- `packages/routekit-cli/src/commands/calls.ts`: registerCalls (function)
 - `packages/routekit-cli/src/commands/config.ts`: configImportIdempotencyKey (function), registerConfig (function)
 - `packages/routekit-cli/src/commands/context.ts`: configOverride (function), loaded (function), numberOption (function)
 - `packages/routekit-cli/src/commands/daemon.ts`: registerDaemon (function)
@@ -311,11 +312,12 @@ Use it with the narrative references when you need to find the module that owns 
 
 ### `packages/routekit-control`
 
-- `packages/routekit-control/src/index.ts`: ROUTEKIT_CONTROL_CAPABILITY (const), RouteKitControlMethod (type), RouteKitControlParams (type), DaemonStatus (type), ConfigSnapshot (type), ModelInfo (type), LaunchPreparation (type), RouteKitControlResults (type), RouteKitMethodHandler (type), RouteKitControlHandlers (type), MUTATING_ROUTEKIT_METHODS (const), validateRouteKitParams (function), createRouteKitControlHandler (function), RouteKitControlClient (class)
+- `packages/routekit-control/src/index.ts`: ROUTEKIT_CONTROL_CAPABILITY (const), RouteKitControlMethod (type), RouteKitControlParams (type), DaemonStatus (type), ConfigSnapshot (type), ModelInfo (type), LaunchPreparation (type), RouteKitCallInspection (type), RouteKitControlResults (type), RouteKitMethodHandler (type), RouteKitControlHandlers (type), MUTATING_ROUTEKIT_METHODS (const), validateRouteKitParams (function), createRouteKitControlHandler (function), RouteKitControlClient (class)
 
 ### `packages/routekit-daemon`
 
 - `packages/routekit-daemon/src/account-transaction.ts`: PreparedAccountTransaction (type), AccountTransactionRecovery (type), prepareAccountTransaction (function), rollbackAccountTransaction (function), markAccountTransactionCommitted (function), cleanupAccountTransaction (function), recoverAccountTransactions (function)
+- `packages/routekit-daemon/src/call-attribution-store.ts`: DEFAULT_CALL_ATTRIBUTION_LIMIT (const), DEFAULT_CALL_ATTRIBUTION_TTL_MS (const), callInspection (function), CallAttributionStore (class)
 - `packages/routekit-daemon/src/cliproxy-sidecar.ts`: CliproxySidecar (type), cliproxyManagedLocally (function), createCliproxySidecar (function)
 - `packages/routekit-daemon/src/index.ts`: ROUTEKIT_DAEMON_KIND (const), ROUTEKIT_PRODUCT (const), RouteKitDaemonOptions (type), RunningRouteKitDaemon (type), startRouteKitDaemon (function)
 
