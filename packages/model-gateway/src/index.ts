@@ -14,6 +14,7 @@ export type {
   Backend,
   BackendModelRoute,
   BackendRequestOptions,
+  RequestAttributionUpdate,
   ModelRoutedBackendOptions,
   OpenAiBackendOptions
 } from "./backend.js";

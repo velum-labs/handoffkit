@@ -269,6 +269,33 @@ test("model info exhaustively classifies subscription and proxy billing", async 
   await backend.close();
 });
 
+test("cliproxy routes are attributed as subscription billing", async () => {
+  const backend = await CatalogBackend.create({
+    config: {
+      providers: { cliproxy: {} },
+      defaultModel: "cliproxy/gpt-test"
+    },
+    sources: {
+      cliproxy: fakeSource("cliproxy", [{ id: "gpt-test" }])
+    }
+  });
+  const updates: unknown[] = [];
+  const response = await backend.chat(
+    { model: "cliproxy/gpt-test", messages: [] },
+    undefined,
+    { onAttribution: (update) => updates.push(update) }
+  );
+  assert.equal(response.status, 200);
+  assert.deepEqual(updates, [
+    {
+      effective_model: "cliproxy/gpt-test",
+      native_model: "gpt-test",
+      provider: "cliproxy",
+      billing_mode: "subscription"
+    }
+  ]);
+});
+
 test("catalog applies configured opaque efforts and rejects unavailable values before egress", async () => {
   const calls: Array<{ source: string; model?: string }> = [];
   const backend = await CatalogBackend.create({

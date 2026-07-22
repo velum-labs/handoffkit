@@ -6,7 +6,11 @@ import { test } from "node:test";
 import { OpenAiBackend } from "../backend.js";
 import { MODEL_CALL_ID_HEADER } from "../provenance.js";
 import type { ModelCallRecord } from "../provenance.js";
-import { startGateway } from "../server.js";
+import {
+  collectAttribution,
+  initialAttribution,
+  startGateway
+} from "../server.js";
 
 /**
  * M1 coverage: the OpenAI chat surface against a mock upstream. No mlx process
@@ -137,6 +141,122 @@ test("injects the default model and pipes the completion back", async () => {
   } finally {
     await gateway.close();
     await mock.close();
+  }
+});
+
+test("compound provider operations are not counted as retries", () => {
+  const attribution = collectAttribution({
+    effective_model: "codex/gpt-test",
+    native_model: "gpt-test",
+    provider: "codex",
+    billing_mode: "subscription"
+  });
+  attribution.report({
+    accountAttempt: { operationId: "step-1", seat: "seat_a" }
+  });
+  attribution.report({
+    accountAttempt: { operationId: "step-2", seat: "seat_b" }
+  });
+  assert.deepEqual(attribution.snapshot(), {
+    effective_model: "codex/gpt-test",
+    native_model: "gpt-test",
+    provider: "codex",
+    billing_mode: "subscription",
+    account: { seat: "seat_b" },
+    attempts: 2,
+    retries: 0,
+    account_failovers: 0
+  });
+
+  attribution.report({
+    accountAttempt: { operationId: "step-2", seat: "seat_b" }
+  });
+  attribution.report({
+    accountAttempt: { operationId: "step-2", seat: "seat_c" }
+  });
+  assert.deepEqual(attribution.snapshot()?.retries, 2);
+  assert.deepEqual(attribution.snapshot()?.account_failovers, 1);
+});
+
+test("rejected bare native aliases retain subscription attribution", () => {
+  const backend = {
+    defaultModel: undefined,
+    resolveModelRoute: () => undefined,
+    chat: async () => new Response("{}"),
+    models: async () => new Response("{}"),
+    embeddings: async () => new Response("{}")
+  };
+  assert.deepEqual(
+    initialAttribution(backend, "missing-codex-model", "codex"),
+    {
+      effective_model: "missing-codex-model",
+      native_model: "missing-codex-model",
+      provider: "codex",
+      billing_mode: "subscription"
+    }
+  );
+  assert.deepEqual(
+    initialAttribution(backend, "missing-claude-model", "claude-code"),
+    {
+      effective_model: "missing-claude-model",
+      native_model: "missing-claude-model",
+      provider: "claude-code",
+      billing_mode: "subscription"
+    }
+  );
+});
+
+test("embeddings receive a call id and sanitized attribution record", async () => {
+  const records: ModelCallRecord[] = [];
+  const gateway = await startGateway({
+    backend: {
+      defaultModel: "openai/text-embedding-test",
+      resolveModelRoute: () => ({
+        publicId: "openai/text-embedding-test",
+        nativeId: "text-embedding-test",
+        provider: "openai"
+      }),
+      chat: async () => new Response("{}"),
+      models: async () => new Response("{}"),
+      embeddings: async (_body, _signal, options) => {
+        options?.onAttribution?.({
+          effective_model: "openai/text-embedding-test",
+          native_model: "text-embedding-test",
+          provider: "openai",
+          billing_mode: "api_key"
+        });
+        return Response.json({
+          data: [{ embedding: [0.1] }],
+          usage: { prompt_tokens: 3, total_tokens: 3 }
+        });
+      }
+    },
+    provenance: { onModelCall: (record) => records.push(record) }
+  });
+  try {
+    const response = await fetch(`${gateway.url()}/v1/embeddings`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        model: "openai/text-embedding-test",
+        input: "hello"
+      })
+    });
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get(MODEL_CALL_ID_HEADER), records[0]?.call_id);
+    assert.equal(records[0]?.metadata?.dialect, "openai-embeddings");
+    assert.equal(records[0]?.usage?.total_tokens, 3);
+    assert.deepEqual(records[0]?.metadata?.attribution, {
+      effective_model: "openai/text-embedding-test",
+      native_model: "text-embedding-test",
+      provider: "openai",
+      billing_mode: "api_key",
+      attempts: 1,
+      retries: 0,
+      account_failovers: 0
+    });
+  } finally {
+    await gateway.close();
   }
 });
 

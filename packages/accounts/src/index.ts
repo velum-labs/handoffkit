@@ -44,7 +44,10 @@ export {
   SubscriptionAccountSet,
   SubscriptionAccountSetExhaustedError
 } from "./account-set.js";
-export type { SubscriptionAccountSetOptions } from "./account-set.js";
+export type {
+  SubscriptionAccountSetOptions,
+  SubscriptionExecutionObserver
+} from "./account-set.js";
 
 // OpenAI-compatible backend over a subscription account set
 export { SubscriptionAccountBackend } from "./backend.js";

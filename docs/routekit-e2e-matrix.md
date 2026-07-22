@@ -38,6 +38,12 @@ It covers an actual child `SIGKILL`, daemon startup recovery, injected
 connector failure, idempotent replay, and transaction-journal redaction without
 copying provider credentials into artifacts.
 
+Per-request routing and billing inspection has a separate protocol and privacy
+record: [RouteKit request attribution evidence](routekit-request-attribution-evidence.md).
+It covers model-call correlation, effective/native model identity, provider and
+billing mode, subscription-seat attempts and failover, usage/cost state,
+bounded retention, human/JSON CLI output, and automated secret redaction.
+
 ## Live real-account mode
 
 Live calls are disabled unless explicitly authorized:

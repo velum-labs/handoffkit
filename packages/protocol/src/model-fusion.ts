@@ -536,7 +536,9 @@ export function assertModelCallRecordV1(value: unknown): asserts value is ModelC
   if (value.usage !== undefined) assertUsage(value.usage, "usage");
   assertOptionalString(value.output_text, "output_text");
   if (value.error !== undefined) assertError(value.error, "error");
-  if (value.metadata !== undefined) assertObject(value.metadata, "metadata");
+  if (value.metadata !== undefined) {
+    assertObject(value.metadata, "metadata");
+  }
 }
 
 export function assertHarnessRunRequestV1(

@@ -245,6 +245,8 @@ function stepsForCall(call: RawCall): CapturedStep[] {
   const body = asObject(call.requestBody);
   if (body === undefined) return [];
   switch (call.dialect) {
+    case "openai-embeddings":
+      return [];
     case "openai-chat":
       return fromOpenAiChat(asArray(body.messages));
     case "openai-responses":
@@ -354,6 +356,8 @@ function finalOutputFromSse(call: RawCall): string {
   const events = parseSseEvents(call.responseText);
   if (events.length === 0) return "";
   switch (call.dialect) {
+    case "openai-embeddings":
+      return "";
     case "openai-responses":
       return finalOutputFromResponsesSse(events);
     case "openai-chat":
@@ -456,8 +460,13 @@ function finalOutputForCall(call: RawCall): string {
  * the whole trajectory in one pass.
  */
 export function reconstructTrajectory(calls: readonly RawCall[]): CapturedTrajectory {
-  const successful = calls.filter((call) => call.statusCode >= 200 && call.statusCode < 300);
-  const source = successful.at(-1) ?? calls.at(-1);
+  const trajectoryCalls = calls.filter(
+    (call) => call.dialect !== "openai-embeddings"
+  );
+  const successful = trajectoryCalls.filter(
+    (call) => call.statusCode >= 200 && call.statusCode < 300
+  );
+  const source = successful.at(-1) ?? trajectoryCalls.at(-1);
   if (source === undefined) return { steps: [], finalOutput: "" };
   const steps = stepsForCall(source);
   const finalOutput = finalOutputForCall(source);
