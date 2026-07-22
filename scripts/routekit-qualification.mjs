@@ -55,7 +55,9 @@ export const ROUTE_CASES = Object.freeze([
     billingMode: "codex-subscription",
     aggregator: false,
     setupRestore: "required",
-    maxGatewayRequests: 1
+    maxGatewayRequests: 2,
+    additionalDoors: ["codex"],
+    manualEvidenceRequired: true
   },
   {
     routeId: "route-claude-code-subscription",
@@ -69,7 +71,9 @@ export const ROUTE_CASES = Object.freeze([
     billingMode: "claude-code-subscription",
     aggregator: false,
     setupRestore: "required",
-    maxGatewayRequests: 1
+    maxGatewayRequests: 2,
+    additionalDoors: ["claude", "pool"],
+    manualEvidenceRequired: true
   },
   {
     routeId: "route-cursor-ide",
@@ -84,21 +88,23 @@ export const ROUTE_CASES = Object.freeze([
     aggregator: false,
     setupRestore: "required",
     maxGatewayRequests: 1,
-    manual: true
+    manual: true,
+    manualEvidenceRequired: true
   },
   {
     routeId: "route-cursor-agent",
-    provider: "openai",
+    provider: "openrouter",
     door: "cursor",
     client: "cursor-agent",
     credentialMode: "cursor-login-plus-selected-route",
     credentialReference: "cursor-agent",
     protocolPath: "/v1/cursor/chat/completions",
-    egressHost: "api.openai.com",
+    egressHost: "openrouter.ai",
     billingMode: "selected-route",
-    aggregator: false,
+    aggregator: true,
     setupRestore: "required",
-    maxGatewayRequests: 2
+    maxGatewayRequests: 2,
+    manualEvidenceRequired: true
   }
 ]);
 
@@ -232,6 +238,7 @@ function passRequirements(route, input, protocol, behavior, setupRestore) {
       ? input.attributionBasis === "manual-custom-endpoint-observation"
       : input.attributionBasis === "namespaced-route-success";
   return (
+    route.manualEvidenceRequired !== true &&
     input.credentialAvailable === true &&
     modelPass &&
     safeIdentifier(input.clientVersion, SAFE_VERSION) !== "unavailable" &&

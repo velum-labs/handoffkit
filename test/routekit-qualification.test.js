@@ -23,6 +23,27 @@ test("qualification declares exactly the seven launch routes", () => {
     "route-cursor-ide",
     "route-cursor-agent"
   ]);
+  assert.deepEqual(
+    ROUTE_CASES.find((route) => route.routeId === "route-codex-subscription")
+      .additionalDoors,
+    ["codex"]
+  );
+  assert.deepEqual(
+    ROUTE_CASES.find(
+      (route) => route.routeId === "route-claude-code-subscription"
+    ).additionalDoors,
+    ["claude", "pool"]
+  );
+  assert.equal(
+    ROUTE_CASES.find((route) => route.routeId === "route-cursor-agent").provider,
+    "openrouter"
+  );
+  assert.deepEqual(
+    ROUTE_CASES.filter((route) => route.manualEvidenceRequired).map(
+      (route) => route.routeId
+    ),
+    ROUTE_IDS.slice(3)
+  );
   assert.throws(() => selectedRoutes(["route-not-offered"]), /unknown route filter/);
 });
 
@@ -110,12 +131,22 @@ test("budget reservation and completeness are strict", () => {
   );
   assert.deepEqual(qualificationCompleteness(routes), {
     complete: true,
-    allPassed: true,
+    allPassed: false,
     expectedRouteIds: ROUTE_IDS,
     missingRouteIds: [],
     duplicateRouteIds: [],
-    failedRouteIds: []
+    failedRouteIds: [
+      "route-codex-subscription",
+      "route-claude-code-subscription",
+      "route-cursor-ide",
+      "route-cursor-agent"
+    ]
   });
+  const automated = routes.slice(0, 3);
+  assert.equal(
+    qualificationCompleteness(automated, ROUTE_IDS.slice(0, 3)).allPassed,
+    true
+  );
   const incomplete = qualificationCompleteness(routes.slice(1));
   assert.equal(incomplete.complete, false);
   assert.deepEqual(incomplete.missingRouteIds, ["route-openai-api"]);

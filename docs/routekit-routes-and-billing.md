@@ -44,7 +44,7 @@ public labels can change.
 - **Evidence:** **L06 qualification Pass** for `openai/gpt-5.5`, RouteKit 0.8.0
   / `dad16c53` / 2026-07-22. One real-account request was observed; tools,
   streaming, reasoning, cancellation, failure propagation, and no RouteKit
-  fallback passed. Public status stays Planned until L06 closes. [Durable L06
+  fallback passed. Public status stays Planned until L06 closes. [Stable L05 mapping; canonical import pending
   evidence](routekit-l06-evidence.md#route-openai-api).
 
 <a id="route-anthropic-api"></a>
@@ -66,7 +66,7 @@ public labels can change.
   `anthropic/claude-sonnet-4-6`, RouteKit 0.8.0 / `dad16c53` / 2026-07-22.
   One real-account request was observed; tools, streaming, reasoning,
   cancellation, failure propagation, and no RouteKit fallback passed. Public
-  status stays Planned until L06 closes. [Durable L06
+  status stays Planned until L06 closes. [Stable L05 mapping; canonical import pending
   evidence](routekit-l06-evidence.md#route-anthropic-api).
 
 <a id="route-openrouter-api"></a>
@@ -91,7 +91,7 @@ public labels can change.
   One real-account request was observed; tools, streaming, reasoning,
   cancellation, failure propagation, and no RouteKit fallback passed.
   OpenRouter remains the upstream-routing aggregator. Public status stays
-  Planned until L06 closes. [Durable L06
+  Planned until L06 closes. [Stable L05 mapping; canonical import pending
   evidence](routekit-l06-evidence.md#route-openrouter-api).
 
 <a id="route-codex-subscription"></a>
@@ -115,7 +115,7 @@ public labels can change.
   / `dad16c53` / 2026-07-22. The worker had no enrolled Codex account or
   Codex client, so live streaming, billing attribution, setup, and restore were
   not observed. Deterministic tools, reasoning, cancellation, failure
-  propagation, and zero API-key fallback passed. [Durable L06
+  propagation, and zero API-key fallback passed. [Stable L05 mapping; canonical import pending
   evidence](routekit-l06-evidence.md#route-codex-subscription).
 
 <a id="route-claude-code-subscription"></a>
@@ -141,7 +141,7 @@ public labels can change.
   / `dad16c53` / 2026-07-22. The worker had no enrolled Claude Code
   account or Claude client, so live streaming, billing attribution, setup, and
   restore were not observed. Deterministic tools, reasoning, cancellation,
-  failure propagation, and zero API-key fallback passed. [Durable L06
+  failure propagation, and zero API-key fallback passed. [Stable L05 mapping; canonical import pending
   evidence](routekit-l06-evidence.md#route-claude-code-subscription).
 
 <a id="route-cursor-ide"></a>
@@ -166,7 +166,7 @@ public labels can change.
   RouteKit 0.8.0 / `dad16c53` / 2026-07-22. This Linux worker had no Cursor
   desktop and could not run Cursorkit's macOS-oriented IDE launcher. No
   authenticated traffic, billing attribution, setup, or restore was observed.
-  [Durable L06
+  [Stable L05 mapping; canonical import pending
   evidence](routekit-l06-evidence.md#route-cursor-ide).
 
 <a id="route-cursor-agent"></a>
@@ -190,7 +190,7 @@ public labels can change.
   / `dad16c53` / 2026-07-22. `cursor-agent` was not installed, so no
   authenticated traffic, billing attribution, setup, or restore was observed.
   Deterministic bridge-protocol tools, reasoning, cancellation, failure
-  propagation, and no RouteKit fallback passed. [Durable L06
+  propagation, and no RouteKit fallback passed. [Stable L05 mapping; canonical import pending
   evidence](routekit-l06-evidence.md#route-cursor-agent).
 
 ## Route explanation
@@ -215,3 +215,6 @@ maps every stable route anchor above to exact RouteKit revision, credential
 mode, client/provider version, evidence date, protocol behavior, billing
 attribution, failure behavior, and setup/restore results. Four rows are Fail,
 so all public labels stay conditional.
+The generated stable-map rows remain `pending` because this historical run
+predates the mapping digest and case IDs; they do not override the immutable
+ENG-679 report. A legacy importer must not fabricate modern case identities.

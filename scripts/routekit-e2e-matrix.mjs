@@ -146,8 +146,11 @@ function parseArgs(argv) {
       ...new Set(
         routes.flatMap((route) => {
           if (route.manual === true) return ["openai-chat"];
-          if (route.door === "cursor") return ["cursor", "openai-chat"];
-          return [route.door];
+          return [
+            route.door,
+            ...(route.additionalDoors ?? []),
+            ...(route.door === "cursor" ? ["openai-chat"] : [])
+          ];
         })
       )
     ];
@@ -180,7 +183,7 @@ function caseSelected(provider, door, options) {
     (route) =>
       route.manual !== true &&
       route.provider === provider &&
-      route.door === door
+      (route.door === door || (route.additionalDoors ?? []).includes(door))
   );
 }
 
@@ -190,7 +193,7 @@ function routeIdForCase(provider, door, options) {
     (route) =>
       route.manual !== true &&
       route.provider === provider &&
-      route.door === door
+      (route.door === door || (route.additionalDoors ?? []).includes(door))
   )?.routeId;
 }
 
@@ -1568,10 +1571,18 @@ function runPoolCoverage() {
 
 async function runLivePoolFailover(tempRoot) {
   const directory = defaultSubscriptionAccountDirectory("claude-code");
+  const sourceSnapshot = accountStoreSnapshot(directory);
+  const stagedDirectory = join(tempRoot, "live-pool-credentials");
+  mkdirSync(stagedDirectory, { recursive: true, mode: 0o700 });
   const paths = readdirSync(directory)
     .filter((name) => name.endsWith(".json") && !name.startsWith("."))
     .sort()
-    .map((name) => join(directory, name));
+    .map((name) => {
+      const target = join(stagedDirectory, name);
+      copyFileSync(join(directory, name), target);
+      chmodSync(target, 0o600);
+      return target;
+    });
   assert.ok(paths.length >= 2, "live pool failover needs at least two enrolled Claude accounts");
   const accounts = await SubscriptionAccountSet.open(
     subscriptionProvider("claude-code"),
@@ -1643,6 +1654,11 @@ async function runLivePoolFailover(tempRoot) {
     };
   } finally {
     await accounts.close();
+    assert.deepEqual(
+      accountStoreSnapshot(directory),
+      sourceSnapshot,
+      "live pool qualification mutated the enrolled Claude account store"
+    );
   }
 }
 
