@@ -250,6 +250,19 @@ test("accounts login rejects unknown kinds before contacting the daemon", async 
   );
 });
 
+test("accounts login rejects retained internal connectors before OAuth or daemon work", async () => {
+  await assert.rejects(
+    buildProgram().parseAsync([
+      "node",
+      "routekit",
+      "accounts",
+      "login",
+      "gemini"
+    ]),
+    /not offered at first launch.*claude-code, codex/
+  );
+});
+
 test("daemon enrollment rejects hidden and duplicate account labels before OAuth", async () => {
   await assert.rejects(
     captureLoginCredential("codex", ".hidden", {
@@ -270,5 +283,6 @@ test("one unified accounts surface: no connector subcommands leak to the CLI", (
   const login = accounts.commands.find((command) => command.name() === "login");
   assert.ok(login);
   assert.match(login.helpInformation(), /--no-browser/);
-  assert.match(login.description(), /gemini/);
+  assert.match(login.description(), /claude-code, codex/);
+  assert.doesNotMatch(login.description(), /gemini|grok|kimi|cliproxy/i);
 });

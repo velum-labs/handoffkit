@@ -144,12 +144,12 @@ export type AccountConnectorInfo = {
 export const ACCOUNT_CONNECTORS: Readonly<Record<string, AccountConnectorInfo>> =
   REGISTRY.connectors as Readonly<Record<string, AccountConnectorInfo>>;
 
-/** Canonical account kinds accepted by `routekit accounts login <kind>`. */
+/** Canonical account kinds known to the neutral registry (not a support contract). */
 export function accountKinds(): readonly string[] {
   return Object.keys(ACCOUNT_CONNECTORS);
 }
 
-/** Canonical account kinds plus every accepted user-facing alias. */
+/** Canonical registry kinds plus their aliases (not necessarily public CLI choices). */
 export function accountKindChoices(): readonly string[] {
   return [
     ...accountKinds(),

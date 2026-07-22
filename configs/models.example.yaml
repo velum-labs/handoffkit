@@ -7,12 +7,7 @@
 providers:
   openai: {}
   anthropic: {}
-  google: {}
   openrouter: {}
-
-  # Start CLIProxyAPI separately, then enable its live catalog with:
-  #   routekit providers add cliproxy
-  cliproxy: {}
 
   # Log in any number of named accounts through isolated official CLI profiles:
   #   routekit accounts login claude-code --name personal

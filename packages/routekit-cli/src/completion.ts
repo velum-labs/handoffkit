@@ -2,14 +2,16 @@ import { Command } from "commander";
 
 import { completionCandidates as coreCompletionCandidates } from "@routekit/cli-core";
 import { configuredProviderIds } from "@routekit/config";
-import { PROVIDER_IDS } from "@routekit/gateway";
-import {
-  accountKindChoices,
-  resolveAccountConnector
-} from "@routekit/registry";
+import { resolveAccountConnector } from "@routekit/registry";
 
 import { listAccounts } from "./accounts.js";
 import { globalRouterConfigPath, loadRouterConfig } from "./config.js";
+import {
+  isLaunchAccountKind,
+  isLaunchToolId,
+  LAUNCH_ACCOUNT_KIND_CHOICES,
+  LAUNCH_PROVIDER_IDS
+} from "./launch-support.js";
 import { readStateSnapshot } from "./state.js";
 
 function providerIds(): string[] {
@@ -62,28 +64,24 @@ function dynamicValues(
     argumentDepth === 0
   ) {
     const configured = new Set(providerIds());
-    return PROVIDER_IDS.filter((provider) => !configured.has(provider));
+    return LAUNCH_PROVIDER_IDS.filter((provider) => !configured.has(provider));
   }
   if (
-    (group === "codex" ||
-      group === "claude" ||
-      group === "cursor" ||
-      group === "opencode") &&
+    group !== undefined &&
+    isLaunchToolId(group) &&
     argumentDepth === 0
   ) {
     return modelIds();
   }
   if (group === "accounts" && subcommand === "add" && argumentDepth === 0) {
-    return accountKindChoices().filter(
-      (kind) => resolveAccountConnector(kind)?.info.connector === "native"
-    );
+    return [...LAUNCH_ACCOUNT_KIND_CHOICES];
   }
   if (
     group === "accounts" &&
     subcommand === "login" &&
     argumentDepth === 0
   ) {
-    return [...accountKindChoices()];
+    return [...LAUNCH_ACCOUNT_KIND_CHOICES];
   }
   if (
     group === "accounts" &&
@@ -92,8 +90,13 @@ function dynamicValues(
   ) {
     return [
       ...new Set([
-        ...accountKindChoices(),
-        ...listAccounts().map((entry) => entry.subscriptionKind)
+        ...LAUNCH_ACCOUNT_KIND_CHOICES,
+        ...listAccounts()
+          .map((entry) => entry.subscriptionKind)
+          .filter((kind) => {
+            const resolved = resolveAccountConnector(kind);
+            return isLaunchAccountKind(resolved?.kind ?? kind);
+          })
       ])
     ];
   }
@@ -101,6 +104,7 @@ function dynamicValues(
     const suppliedKind = positional[0] ?? "";
     const resolved = resolveAccountConnector(suppliedKind);
     const kind = resolved?.kind ?? suppliedKind;
+    if (!isLaunchAccountKind(kind)) return [];
     return listAccounts()
       .filter((entry) => {
         if (entry.subscriptionKind === kind) return true;

@@ -28,6 +28,19 @@ async function runJson(args: readonly string[]): Promise<Record<string, unknown>
   return JSON.parse(stdout) as Record<string, unknown>;
 }
 
+test("providers add rejects retained internal providers before daemon work", async () => {
+  await assert.rejects(
+    buildProgram().parseAsync([
+      "node",
+      "routekit",
+      "providers",
+      "add",
+      "google"
+    ]),
+    /not offered at first launch.*openai, anthropic, openrouter, codex, claude-code/
+  );
+});
+
 test("providers and models commands use the live namespaced catalog", async () => {
   const root = mkdtempSync(join(tmpdir(), "routekit-provider-command-"));
   const home = join(root, "home");

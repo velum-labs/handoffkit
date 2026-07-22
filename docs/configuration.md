@@ -99,11 +99,14 @@ providers:
 defaultModel: openai/gpt-5.5
 ```
 
-The supported provider IDs are `openai`, `anthropic`, `google`, `openrouter`,
-`cliproxy`, `codex`, and `claude-code`. API providers read registry-defined
-environment variables such as `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`,
-`GEMINI_API_KEY`, and `OPENROUTER_API_KEY`. Optional registry-defined base URL
-variables support compatible deployments without placing URLs in router YAML.
+The first-launch provider IDs are `openai`, `anthropic`, `openrouter`, `codex`,
+and `claude-code`. API providers read registry-defined environment variables
+such as `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, and `OPENROUTER_API_KEY`.
+Optional provider-specific base URL variables avoid placing URLs in router
+YAML; they do not expand the support contract beyond these named providers.
+The neutral registry may retain additional implementations for internal
+compatibility, but registry presence is non-contractual and does not make a
+provider part of RouteKit's public launch surface.
 
 Subscription providers are configured in the same map. Their policy controls
 selection across every enrolled account:

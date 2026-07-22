@@ -8,16 +8,35 @@ import type { Command } from "commander";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 
 import { routekitClient } from "../client.js";
+import {
+  isLaunchProviderId,
+  LAUNCH_PROVIDER_IDS,
+  type LaunchProviderId
+} from "../launch-support.js";
 
 import { numberOption } from "./context.js";
 
-function parseProvider(value: string): ProviderId {
-  const normalized =
-    value === "claude" || value === "claudeCode" ? "claude-code" : value;
+function normalizedProvider(value: string): string {
+  return value === "claude" || value === "claudeCode" ? "claude-code" : value;
+}
+
+function parseKnownProvider(value: string): ProviderId {
+  const normalized = normalizedProvider(value);
   if (!PROVIDER_IDS.includes(normalized as ProviderId)) {
     throw new Error(`provider must be one of: ${PROVIDER_IDS.join(", ")}`);
   }
   return normalized as ProviderId;
+}
+
+function parseLaunchProvider(value: string): LaunchProviderId {
+  const normalized = normalizedProvider(value);
+  if (!isLaunchProviderId(normalized)) {
+    throw new Error(
+      `provider ${JSON.stringify(value)} is not offered at first launch; ` +
+        `supported providers: ${LAUNCH_PROVIDER_IDS.join(", ")}`
+    );
+  }
+  return normalized;
 }
 
 function rawProviders(value: unknown): Record<string, unknown> {
@@ -54,7 +73,7 @@ export function registerProviders(program: Command): void {
         },
         command: Command
       ) => {
-        const provider = parseProvider(value);
+        const provider = parseLaunchProvider(value);
         if (
           options.strategy !== undefined &&
           !["sticky", "round_robin", "capacity_weighted"].includes(
@@ -140,7 +159,7 @@ export function registerProviders(program: Command): void {
     .command("remove <provider>")
     .description("disable a provider")
     .action(async (value: string, _options: unknown, command: Command) => {
-      const provider = parseProvider(value);
+      const provider = parseKnownProvider(value);
       const client = await routekitClient();
       const current = await client.call("config.get", {});
       const draft = (parseYaml(current.document) ?? {}) as Record<string, unknown>;
@@ -193,7 +212,9 @@ export function registerProviders(program: Command): void {
         const statuses =
           value === undefined
             ? response.providers
-            : response.providers.filter((entry) => entry.provider === parseProvider(value));
+            : response.providers.filter(
+                (entry) => entry.provider === parseKnownProvider(value)
+              );
         if (value !== undefined && statuses.length === 0) {
           throw new Error(`provider is not configured: ${value}`);
         }
