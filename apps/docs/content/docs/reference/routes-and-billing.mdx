@@ -40,7 +40,7 @@ availability still apply.
 - **Status and evidence:** Planned Supported until L06 closes. Qualification
   **Pass** at RouteKit 0.8.0 revision `dad16c53`, 2026-07-22, using
   `openai/gpt-5.5`; one real-account request and all required deterministic
-  behaviors passed.
+  behaviors passed. [Durable L06 evidence](https://github.com/velum-labs/handoffkit/blob/main/docs/routekit-l06-evidence.md#route-openai-api).
 - **Credential:** Your `OPENAI_API_KEY` from your OpenAI API account. An
   operator may explicitly set `OPENAI_BASE_URL`; RouteKit does not accept an
   inline key in router YAML.
@@ -67,7 +67,7 @@ availability still apply.
 - **Status and evidence:** Planned Supported until L06 closes. Qualification
   **Pass** at RouteKit 0.8.0 revision `dad16c53`, 2026-07-22, using
   `anthropic/claude-sonnet-4-6`; one real-account request and all required
-  deterministic behaviors passed.
+  deterministic behaviors passed. [Durable L06 evidence](https://github.com/velum-labs/handoffkit/blob/main/docs/routekit-l06-evidence.md#route-anthropic-api).
 - **Credential:** Your `ANTHROPIC_API_KEY` from the Anthropic API account.
   `ANTHROPIC_BASE_URL` is an explicit destination override. RouteKit does not
   currently use `ANTHROPIC_AUTH_TOKEN` for provider requests.
@@ -95,7 +95,7 @@ availability still apply.
 - **Status and evidence:** Planned Supported until L06 closes. Qualification
   **Pass** at RouteKit 0.8.0 revision `dad16c53`, 2026-07-22, using
   `openrouter/openai/gpt-4o-mini`; one real-account request and all required
-  deterministic behaviors passed.
+  deterministic behaviors passed. [Durable L06 evidence](https://github.com/velum-labs/handoffkit/blob/main/docs/routekit-l06-evidence.md#route-openrouter-api).
 - **Credential:** Your `OPENROUTER_API_KEY` from your OpenRouter account.
 - **Billing:** RouteKit treats this as an OpenRouter API-key/credit route, not a
   native subscription route. OpenRouter determines charges and credit usage;
@@ -125,6 +125,7 @@ availability still apply.
   **Fail — `account-unavailable`** at RouteKit 0.8.0 revision `dad16c53`,
   2026-07-22. No Codex client or enrolled account was available; live billing,
   setup, and restore were not observed.
+  [Durable L06 evidence](https://github.com/velum-labs/handoffkit/blob/main/docs/routekit-l06-evidence.md#route-codex-subscription).
 - **Credential:** Your Codex OAuth credential, captured with `routekit accounts
   login codex --name <label>` in an isolated temporary profile or imported
   from the official CLI with `accounts add`. RouteKit stores the enrolled copy
@@ -154,6 +155,7 @@ availability still apply.
   **Fail — `account-unavailable`** at RouteKit 0.8.0 revision `dad16c53`,
   2026-07-22. No Claude client or enrolled account was available; live
   billing, setup, and restore were not observed.
+  [Durable L06 evidence](https://github.com/velum-labs/handoffkit/blob/main/docs/routekit-l06-evidence.md#route-claude-code-subscription).
 - **Credential:** Your Claude Code OAuth credential, captured with `routekit
   accounts login claude-code --name <label>` in an isolated temporary profile
   or imported with `accounts add`. RouteKit stores the enrolled copy under
@@ -184,6 +186,7 @@ availability still apply.
   **Fail — `manual-evidence-unavailable`** at RouteKit 0.8.0 revision
   `dad16c53`, 2026-07-22. The Linux worker had no Cursor desktop and could not
   run the macOS-oriented IDE launcher.
+  [Durable L06 evidence](https://github.com/velum-labs/handoffkit/blob/main/docs/routekit-l06-evidence.md#route-cursor-ide).
 - **Credential:** A logged-in Cursor desktop account plus the local gateway
   token used by the isolated custom-endpoint profile. The selected RouteKit
   model separately uses the API or subscription credential disclosed in its
@@ -214,6 +217,7 @@ availability still apply.
   **Fail — `client-unavailable`** at RouteKit 0.8.0 revision `dad16c53`,
   2026-07-22. `cursor-agent` was not installed, so authenticated traffic,
   billing, setup, and restore were not observed.
+  [Durable L06 evidence](https://github.com/velum-labs/handoffkit/blob/main/docs/routekit-l06-evidence.md#route-cursor-agent).
 - **Credential:** A logged-in `cursor-agent` account plus its local endpoint
   connection. The selected RouteKit model separately uses the credential in
   its provider row.
@@ -235,6 +239,16 @@ availability still apply.
 - **Unlimited use:** RouteKit makes no unlimited-use claim for either the
   selected provider route or Cursor services.
 
+## Inspect the effective route
+
+Run `routekit models info <provider/model>` to inspect the live route's
+namespaced and native model IDs, provider, account class, billing mode, default
+status, capabilities, and reasoning metadata. API-key routes report
+`api-key` / `metered-api`; managed Codex and Claude Code routes report
+`subscription` / `subscription`. Unknown models fail instead of falling through
+to a default, and the response does not include credentials or sensitive
+account details.
+
 ## Qualification evidence
 
 The deterministic matrix and its interpretation are documented in the
@@ -244,3 +258,5 @@ records exact RouteKit revision, credential mode, client/provider version,
 evidence date, protocol behavior, billing attribution, failure behavior, and
 setup/restore for every anchor. Four rows are Fail, so all seven labels remain
 conditional.
+Route-explanation contract and redaction evidence is tracked in
+[`docs/routekit-route-info-evidence.md`](https://github.com/velum-labs/handoffkit/blob/main/docs/routekit-route-info-evidence.md).

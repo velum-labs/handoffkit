@@ -43,6 +43,7 @@ A page belongs in the public site when it helps a user install, run, configure, 
 | `configuration.md` | Reference | `.fusionkit/fusion.json` fields, precedence, default panels, prompts, and YAML export. |
 | `cli.md` | Reference | Complete CLI command surface and shared flags. |
 | `privacy.md` | Privacy and policy | Local session storage, retention, provider egress, failover expansion, and opt-in telemetry. |
+| `routekit-l06-evidence.md` | Privacy and policy evidence | Generated, sanitized qualification report sourced from `spec/routekit/l06-evidence.json`; do not edit by hand. |
 | `routekit-routes-and-billing.md` | Privacy and policy mirror | Maintainer mirror of the public per-route credential, billing, egress, fallback, limitations, and qualification disclosures. |
 | `model-catalog.md` | Reference | Provider matrix, default panels, local MLX, mixed panels, pricing, and budgets. |
 | `fusion-harness-gateway.md` | Concepts and architecture | Product gateway architecture, dialects, streaming, wiring, and front-door behavior. |

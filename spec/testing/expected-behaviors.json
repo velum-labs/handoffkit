@@ -546,6 +546,14 @@
       "anchor": "real routekit command surfaces execute independently"
     },
     {
+      "id": "cli.routekit-route-explanation",
+      "category": "model-exposure",
+      "expectation": "RouteKit model inspection reports the effective provider, native model, account class, billing mode, default status, capabilities, and reasoning metadata without exposing credentials, and rejects unknown models.",
+      "status": "required",
+      "testFile": "packages/routekit-cli/src/test/providers-command.test.ts",
+      "anchor": "providers and models commands use the live namespaced catalog"
+    },
+    {
       "id": "composition.routekit-model-ids",
       "category": "composition",
       "expectation": "Namespaced RouteKit model IDs cross the real embedded-router, Python-sidecar, and Fusion-gateway stack while provider credentials remain behind RouteKit.",

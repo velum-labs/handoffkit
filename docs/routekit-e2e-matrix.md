@@ -6,10 +6,10 @@ Run the credential-free matrix:
 pnpm test:e2e:matrix
 ```
 
-It exercises the configured provider classes (`openai`, `anthropic`,
+It exercises the five launch provider classes (`openai`, `anthropic`,
 `openrouter`, `codex`, and `claude-code`) through the OpenAI Chat, Anthropic
-Messages, and Responses HTTP
-boundaries. It also launches every installed coding-agent CLI through the real
+Messages, and Responses HTTP boundaries. It also launches every installed
+coding-agent CLI through the real
 `routekit` command in a tmux PTY. Each CLI case selects a non-default
 namespaced model, types a deterministic prompt, waits for a response, and
 checks the model that reached the gateway. Claude Code and Codex additionally
@@ -50,7 +50,7 @@ Live mode first reruns the deterministic matrix, then starts RouteKit with
 `.routekit/router.yaml`. Failure to discover any configured provider is a
 failure. An installed CLI that cannot complete is also a failure; a missing
 optional CLI is an explicit skip. Prompts and HTTP output limits are kept
-small. The default hard limit is 32 client-to-RouteKit model requests,
+small. The default hard limit is 48 client-to-RouteKit model requests,
 including extra agent turns such as a tool result or OpenCode title generation.
 This is not an invoice or provider-egress counter: a provider backend can make
 bounded internal retries or same-kind subscription rotations after one gateway
@@ -60,6 +60,13 @@ documented retry policy.
 Live mode repeats the native-picker assertions for configured Claude Code and
 Codex providers. Catalog checks do not issue model-generation requests and
 therefore add zero live model requests.
+
+Before generation cases, live mode also runs
+`routekit --json models info <provider/model>` for one discovered model from
+every configured provider. It writes the secret-free contract fields to
+`live-route-info.json`, verifies the native model and provider, and rejects any
+configured credential value in command output. This route-explanation check
+starts an isolated singleton daemon and adds zero model-generation calls.
 
 When `claude-code` and the `pool` door are selected, live mode also loads the
 real enrolled account set, injects a quota response for the first selected
@@ -189,12 +196,14 @@ pass. API-key routes correctly mark setup/restore as not applicable.
 Each run writes a timestamped `report.json` and sanitized PTY transcripts under
 `.artifacts/routekit-e2e/`. This directory is ignored by Git. The report has
 exact case and route pass/fail/skip counts, top-level failure count, per-case
-duration and gateway-request counts, and
-the total number of client-to-RouteKit model requests observed at the local
-counting proxy.
+duration and gateway-request counts, and the total number of client-to-RouteKit
+model requests observed at the local counting proxy. Every result has a stable
+`caseId` and the applicable L05 `routeIds`; cases for not-offered doors such as
+OpenCode deliberately have an empty `routeIds` list.
 Schema version 4 also records the exact Git SHA, RouteKit and client versions,
 authorized budget, selected route anchors, fixed reason codes, route
-capabilities, billing basis, setup/restore outcomes, and completeness.
+capabilities, billing basis, setup/restore outcomes, evidence-map digest, exact
+source revision and dirty state, and completeness.
 PTY cases isolate RouteKit and XDG runtime state and disable CLI auto-updaters
 so test runs cannot rewrite user-level executable links.
 
@@ -208,3 +217,24 @@ using a wider filter or increasing the call budget. `.artifacts` is diagnostic
 and must not be linked as durable L06 evidence. Publish only an allowlisted,
 reviewed report under `docs/evidence/`; never commit PTY transcripts, prompts,
 responses, authorization headers, account identifiers, or local paths.
+
+After a reviewed run, promote its sanitized results into the durable report:
+
+```bash
+node scripts/generate-routekit-l06-evidence.mjs \
+  --matrix-report .artifacts/routekit-e2e/<run>/report.json \
+  --revision <full-tested-sha> \
+  --manual-records <reviewed-manual-records.json>
+```
+
+The command rejects dirty, incomplete, stale-mapping, count-inconsistent, or
+identity-forged reports and credential-shaped content, then regenerates
+`docs/routekit-l06-evidence.{json,md}`. Cases absent from a filtered run and
+manual records not supplied with that promotion revert to `pending`; prior
+passes and revision-specific client, provider, and credential metadata are
+never carried to a new revision. Manual-record files must name the same full
+`testedRevision` as the matrix report plus an ISO `evidenceDate`. CI reruns the
+generator with `--check`, so a mapping change or hand-edited report fails
+closed. Promotion never changes a row to `qualified` unless the reviewed source
+also records passing evidence, exact versions, and outcomes for every required
+dimension.
