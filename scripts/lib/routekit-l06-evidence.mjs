@@ -38,6 +38,20 @@ export function caseIdFor({ phase, provider, door }) {
   return [phase, provider ?? "shared", door].join(".");
 }
 
+export function parseCaseId(caseId) {
+  assert.ok(typeof caseId === "string", "matrix caseId must be a string");
+  const parts = caseId.split(".");
+  assert.equal(parts.length, 3, `invalid matrix caseId ${caseId}`);
+  const [phase, providerPart, door] = parts;
+  assert.ok(["deterministic", "live"].includes(phase), `invalid matrix phase in ${caseId}`);
+  assert.ok(providerPart.length > 0 && door.length > 0, `invalid matrix caseId ${caseId}`);
+  return {
+    phase,
+    provider: providerPart === "shared" ? null : providerPart,
+    door
+  };
+}
+
 export function routeIdsForCase(mapping, { provider, door }) {
   if (mapping.excludedDoors.includes(door)) return [];
   const ids = [];
@@ -52,10 +66,33 @@ export function routeIdsForCase(mapping, { provider, door }) {
 }
 
 export function assertSanitized(value) {
+  const secretKey =
+    /^(?:authorization|proxy-authorization|x-api-key|api[_-]?key|apiKey|token|accessToken|refreshToken|secret|password)$/i;
+  const visit = (entry) => {
+    if (Array.isArray(entry)) {
+      for (const item of entry) visit(item);
+      return;
+    }
+    if (entry === null || typeof entry !== "object") return;
+    for (const [key, child] of Object.entries(entry)) {
+      if (
+        secretKey.test(key) &&
+        typeof child === "string" &&
+        child.length > 0 &&
+        child !== "[REDACTED]"
+      ) {
+        assert.fail(`L06 evidence contains unredacted secret field ${key}`);
+      }
+      visit(child);
+    }
+  };
+  visit(value);
   const serialized = JSON.stringify(value);
   for (const forbidden of [
     /Bearer\s+(?!\[REDACTED\])\S+/i,
+    /Basic\s+[A-Za-z0-9+/=]{8,}/i,
     /(?:authorization|x-api-key|api[_-]?key|token)\s*[:=]\s*(?!\[REDACTED\])\S+/i,
+    /"(?:authorization|proxy-authorization|x-api-key|api[_-]?key|apiKey|token|accessToken|refreshToken|secret|password)"\s*:\s*"(?!\[REDACTED\])[^"]+"/i,
     /\bsk-[A-Za-z0-9_-]{8,}\b/,
     /\b(?:sess|sk-ant)-[A-Za-z0-9_-]{8,}\b/
   ]) {
@@ -71,6 +108,7 @@ export function validateEvidence(mapping, source) {
   assert.ok(typeof source.routekitVersion === "string" && source.routekitVersion.length > 0);
 
   const expectedIds = mapping.routes.map((route) => route.id);
+  assert.equal(new Set(expectedIds).size, expectedIds.length, "L06 route IDs must be unique");
   assert.deepEqual(
     Object.keys(source.routes),
     expectedIds,
@@ -114,6 +152,10 @@ export function validateEvidence(mapping, source) {
     }
     for (const caseId of route.requiredCaseIds) {
       assert.ok(caseIds.has(caseId), `${route.id} is missing required case ${caseId}`);
+      assert.ok(
+        routeIdsForCase(mapping, parseCaseId(caseId)).includes(route.id),
+        `${caseId} does not map back to ${route.id}`
+      );
     }
     if (route.manualEvidenceRequired) {
       assert.ok(
@@ -129,6 +171,23 @@ export function validateEvidence(mapping, source) {
           ),
         `${route.id} cannot be qualified while evidence is pending or failed`
       );
+      assert.doesNotMatch(
+        evidence.clientProviderVersion,
+        /\b(?:pending|unknown|tbd|awaiting)\b/i,
+        `${route.id} cannot be qualified without exact client/provider versions`
+      );
+      assert.doesNotMatch(
+        evidence.credentialMode,
+        /\b(?:pending|unknown|tbd|awaiting)\b/i,
+        `${route.id} cannot be qualified without an exact credential mode`
+      );
+      for (const dimension of EVIDENCE_DIMENSIONS) {
+        assert.doesNotMatch(
+          evidence.outcomes[dimension].summary,
+          /\b(?:pending|unknown|tbd|awaiting)\b/i,
+          `${route.id} cannot be qualified with a provisional ${dimension} summary`
+        );
+      }
     }
   }
   assertSanitized(source);
@@ -182,10 +241,11 @@ export function renderEvidenceMarkdown(mapping, source) {
       "| --- | --- | --- | --- | --- |",
       ...row.evidence.map(
         (item) => {
-          const result =
+          const resultDetails =
             item.result === undefined
-              ? item.summary ?? "—"
+              ? undefined
               : `${item.result.phase}/${item.result.provider ?? "shared"}/${item.result.door}; ${item.result.durationMs} ms; ${item.result.billedCalls} billed calls${item.result.artifact === null ? "" : `; ${item.result.artifact}`}`;
+          const result = [resultDetails, item.summary].filter(Boolean).join("; ") || "—";
           return `| ${escapeCell(item.caseId ?? item.label)} | ${item.type} | ${item.status} | ${escapeCell(item.reference)} | ${escapeCell(result)} |`;
         }
       ),
@@ -205,6 +265,7 @@ export function renderEvidenceMarkdown(mapping, source) {
     `The mapping deliberately excludes: ${mapping.excludedRouteNames.map((name) => `\`${name}\``).join(", ")}.`,
     ""
   );
+  while (lines.at(-1) === "") lines.pop();
   return `${lines.join("\n")}\n`;
 }
 
@@ -216,19 +277,66 @@ export function promoteMatrixResults(mapping, source, matrixReport, revision) {
     "matrix report was produced with a stale L05 mapping"
   );
   assert.match(revision, /^[0-9a-f]{40}$/, "promotion revision must be a full SHA");
+  assert.equal(
+    matrixReport.sourceRevision,
+    revision,
+    "promotion revision must equal the matrix source revision"
+  );
+  assert.equal(matrixReport.sourceDirty, false, "refusing to promote a dirty-worktree matrix");
+  assert.equal(matrixReport.topLevelError, null, "refusing to promote an incomplete matrix report");
+  assert.ok(Array.isArray(matrixReport.results), "matrix report results must be an array");
   assertSanitized(matrixReport);
+  const counts = Object.fromEntries(
+    ["pass", "fail", "skip"].map((status) => [
+      status,
+      matrixReport.results.filter((result) => result.status === status).length
+    ])
+  );
+  assert.deepEqual(matrixReport.counts, counts, "matrix report counts do not match its results");
+  const byCaseId = new Map();
+  for (const result of matrixReport.results) {
+    assert.ok(["pass", "fail", "skip"].includes(result.status), "invalid matrix result status");
+    const identity = {
+      phase: result.phase,
+      provider: result.provider,
+      door: result.door
+    };
+    assert.equal(result.caseId, caseIdFor(identity), `forged matrix identity ${result.caseId}`);
+    assert.deepEqual(
+      result.routeIds,
+      routeIdsForCase(mapping, identity),
+      `${result.caseId} has forged route IDs`
+    );
+    assert.ok(!byCaseId.has(result.caseId), `duplicate matrix case ${result.caseId}`);
+    if (!matrixReport.liveAuthorized) {
+      assert.notEqual(result.phase, "live", "unauthorized report contains live results");
+    }
+    byCaseId.set(result.caseId, result);
+  }
   const next = structuredClone(source);
   next.testedRevision = revision;
   next.routekitVersion = matrixReport.routekitVersion;
   next.evidenceDate = matrixReport.finishedAt.slice(0, 10);
-  const byCaseId = new Map(matrixReport.results.map((result) => [result.caseId, result]));
   for (const route of mapping.routes) {
     const row = next.routes[route.id];
     row.evidence = row.evidence.map((item) => {
-      if (item.caseId === undefined) return item;
+      if (item.caseId === undefined) {
+        return {
+          ...item,
+          status: "pending",
+          summary: `Manual evidence must be reviewed for revision ${revision}.`
+        };
+      }
       const result = byCaseId.get(item.caseId);
-      if (result === undefined) return item;
-      assert.ok(result.routeIds.includes(route.id), `${item.caseId} does not map to ${route.id}`);
+      if (result === undefined) {
+        const { result: _staleResult, summary: _staleSummary, ...rest } = item;
+        return {
+          ...rest,
+          status: "pending",
+          reference: `matrix:${item.caseId}`,
+          summary: `Case was not present in the promoted report for revision ${revision}.`
+        };
+      }
       return {
         ...item,
         status: result.status === "skip" ? "pending" : result.status,
@@ -251,6 +359,16 @@ export function promoteMatrixResults(mapping, source, matrixReport, revision) {
             })
       };
     });
+    for (const dimension of EVIDENCE_DIMENSIONS) {
+      if (row.outcomes[dimension].status === "not-applicable") continue;
+      row.outcomes[dimension] = {
+        status: "pending",
+        summary: `Awaiting reviewed ${dimension} outcome for revision ${revision}.`
+      };
+    }
+    row.qualificationStatus = row.evidence.some((item) => item.status === "fail")
+      ? "failed"
+      : "pending";
   }
   validateEvidence(mapping, next);
   return next;

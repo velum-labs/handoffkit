@@ -86,7 +86,7 @@ sanitized record.
 | Evidence | Type | Status | Reference | Result details |
 | --- | --- | --- | --- | --- |
 | deterministic.codex.codex-responses | automated | pass | matrix:deterministic.codex.codex-responses | deterministic/codex/codex-responses; 95 ms; 0 billed calls |
-| deterministic.codex.codex | automated | pending | matrix:deterministic.codex.codex | deterministic/codex/codex; 0 ms; 0 billed calls |
+| deterministic.codex.codex | automated | pending | matrix:deterministic.codex.codex | deterministic/codex/codex; 0 ms; 0 billed calls; Skipped; qualification remains pending: codex is not installed |
 | live.codex.codex-responses | automated | pending | ENG-679 real-account matrix | — |
 | live.codex.codex | automated | pending | ENG-679 real-account matrix | — |
 | Codex setup and restore review | manual | pending | https://linear.app/velum-labs/issue/ENG-679 | — |
@@ -110,7 +110,7 @@ sanitized record.
 | --- | --- | --- | --- | --- |
 | deterministic.claude-code.anthropic-messages | automated | pass | matrix:deterministic.claude-code.anthropic-messages | deterministic/claude-code/anthropic-messages; 90 ms; 0 billed calls |
 | deterministic.claude-code.anthropic-thinking | automated | pass | matrix:deterministic.claude-code.anthropic-thinking | deterministic/claude-code/anthropic-thinking; 151 ms; 0 billed calls |
-| deterministic.claude-code.claude | automated | pending | matrix:deterministic.claude-code.claude | deterministic/claude-code/claude; 0 ms; 0 billed calls |
+| deterministic.claude-code.claude | automated | pending | matrix:deterministic.claude-code.claude | deterministic/claude-code/claude; 0 ms; 0 billed calls; Skipped; qualification remains pending: claude is not installed |
 | live.claude-code.anthropic-messages | automated | pending | ENG-679 real-account matrix | — |
 | live.claude-code.claude | automated | pending | ENG-679 real-account matrix | — |
 | live.claude-code.pool | automated | pending | ENG-679 real-account matrix | — |
@@ -152,7 +152,7 @@ sanitized record.
 
 | Evidence | Type | Status | Reference | Result details |
 | --- | --- | --- | --- | --- |
-| deterministic.openrouter.cursor | automated | pending | matrix:deterministic.openrouter.cursor | deterministic/openrouter/cursor; 0 ms; 0 billed calls |
+| deterministic.openrouter.cursor | automated | pending | matrix:deterministic.openrouter.cursor | deterministic/openrouter/cursor; 0 ms; 0 billed calls; Skipped; qualification remains pending: cursor-agent is not installed |
 | live.openrouter.cursor | automated | pending | ENG-679 real-account matrix | — |
 | Authenticated cursor-agent setup and restore review | manual | pending | https://linear.app/velum-labs/issue/ENG-679 | — |
 
@@ -166,4 +166,3 @@ sanitized record.
 ## Excluded from launch qualification
 
 The mapping deliberately excludes: `google`, `gemini`, `grok`, `kimi`, `cliproxy`, `opencode`.
-

@@ -49,7 +49,7 @@ Live mode first reruns the deterministic matrix, then starts RouteKit with
 `.routekit/router.yaml`. Failure to discover any configured provider is a
 failure. An installed CLI that cannot complete is also a failure; a missing
 optional CLI is an explicit skip. Prompts and HTTP output limits are kept
-small. The default hard budget is 32 provider requests, including extra agent
+small. The default hard budget is 48 provider requests, including extra agent
 turns such as a tool result or OpenCode title generation.
 
 Live mode repeats the native-picker assertions for configured Claude Code and
@@ -86,6 +86,8 @@ exact pass/fail/skip counts, per-case duration and billed-call counts, and the
 total number of live model requests observed at the local counting proxy. Every
 result has a stable `caseId` and the applicable L05 `routeIds`; cases for
 not-offered doors such as OpenCode deliberately have an empty `routeIds` list.
+The report also records the exact Git revision and whether its worktree was
+dirty.
 PTY cases isolate RouteKit and XDG runtime state and disable CLI auto-updaters
 so test runs cannot rewrite user-level executable links.
 
@@ -106,8 +108,11 @@ node scripts/generate-routekit-l06-evidence.mjs \
   --manual-records <reviewed-manual-records.json>
 ```
 
-The command validates the exact stable-row mapping, rejects credential-shaped
-content, and regenerates `docs/routekit-l06-evidence.{json,md}`. CI reruns the
-generator with `--check`, so a mapping change or hand-edited report fails
-closed. Promotion never changes a row to `qualified` unless the reviewed source
-also records passing evidence and outcomes for every required dimension.
+The command rejects dirty, incomplete, stale-mapping, count-inconsistent, or
+identity-forged reports and credential-shaped content, then regenerates
+`docs/routekit-l06-evidence.{json,md}`. Cases absent from a filtered run and
+manual records not supplied with that promotion revert to `pending`; prior
+passes are never carried to a new revision. CI reruns the generator with
+`--check`, so a mapping change or hand-edited report fails closed. Promotion
+never changes a row to `qualified` unless the reviewed source also records
+passing evidence, exact versions, and outcomes for every required dimension.

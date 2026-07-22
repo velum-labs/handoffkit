@@ -71,7 +71,7 @@ function parseArgs(argv) {
     providers: undefined,
     doors: undefined,
     timeoutMs: Number(process.env.ROUTEKIT_E2E_TIMEOUT_MS ?? 120_000),
-    maxLiveCalls: Number(process.env.ROUTEKIT_E2E_MAX_LIVE_CALLS ?? 32),
+    maxLiveCalls: Number(process.env.ROUTEKIT_E2E_MAX_LIVE_CALLS ?? 48),
     models: {}
   };
   for (let index = 0; index < argv.length; index += 1) {
@@ -171,8 +171,13 @@ function sanitize(raw) {
     .replace(/\u001b\[[0-?]*[ -/]*[@-~]/g, "")
     .replace(/\r/g, "")
     .replaceAll(process.env.HOME ?? "\0", "~")
+    .replace(
+      /("(?:authorization|proxy-authorization|x-api-key|api[_-]?key|apiKey|token|accessToken|refreshToken|secret|password)"\s*:\s*")([^"]*)(")/gi,
+      "$1[REDACTED]$3"
+    )
     .replace(/(authorization|x-api-key|api[_-]?key|token)\s*[:=]\s*\S+/gi, "$1=[REDACTED]")
-    .replace(/Bearer\s+\S+/gi, "Bearer [REDACTED]");
+    .replace(/Bearer\s+\S+/gi, "Bearer [REDACTED]")
+    .replace(/Basic\s+[A-Za-z0-9+/=]{8,}/gi, "Basic [REDACTED]");
 }
 
 function commandAvailable(binary) {
@@ -1270,6 +1275,25 @@ function skipCase(results, input, reason) {
   process.stdout.write(`SKIP ${input.phase} ${input.provider ?? "-"} ${input.door}: ${reason}\n`);
 }
 
+function gitSourceState() {
+  const revision = spawnSync("git", ["rev-parse", "HEAD"], {
+    cwd: ROOT,
+    encoding: "utf8"
+  });
+  if (revision.status !== 0 || !/^[0-9a-f]{40}$/.test(revision.stdout.trim())) {
+    throw new Error("cannot determine the matrix source revision");
+  }
+  const status = spawnSync("git", ["status", "--porcelain"], {
+    cwd: ROOT,
+    encoding: "utf8"
+  });
+  if (status.status !== 0) throw new Error("cannot determine whether matrix sources are clean");
+  return {
+    revision: revision.stdout.trim(),
+    dirty: status.stdout.trim().length > 0
+  };
+}
+
 async function runDeterministic(options, results, artifactDir, tempRoot) {
   const stack = await startDeterministicStack(tempRoot);
   try {
@@ -1575,6 +1599,7 @@ async function runLive(options, results, artifactDir, tempRoot) {
 
 async function main() {
   const options = parseArgs(process.argv.slice(2));
+  const sourceState = gitSourceState();
   if (!existsSync(ROUTEKIT_ENTRY)) {
     throw new Error("RouteKit is not built; run pnpm build:routekit");
   }
@@ -1624,6 +1649,8 @@ async function main() {
     routekitVersion: ROUTEKIT_VERSION,
     evidenceMappingSchemaVersion: EVIDENCE_MAP.schemaVersion,
     evidenceMappingDigest: mappingDigest(EVIDENCE_MAP),
+    sourceRevision: sourceState.revision,
+    sourceDirty: sourceState.dirty,
     startedAt,
     finishedAt: new Date().toISOString(),
     liveAuthorized: options.live,
