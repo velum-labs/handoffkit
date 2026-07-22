@@ -85,13 +85,16 @@ if (!routeHelp.stdout.startsWith("Usage: routekit ")) {
   fail("RouteKit help does not identify the routekit executable");
 }
 for (const command of [
-  "gateway",
-  "daemon",
+  "start",
+  "status",
+  "stop",
   "codex",
   "claude",
   "cursor",
   "opencode",
   "accounts",
+  "providers",
+  "usage",
   "models",
   "config",
   "doctor",
@@ -101,6 +104,11 @@ for (const command of [
 ]) {
   if (!helpHasCommand(routeHelp.stdout, command)) {
     fail(`RouteKit help is missing command "${command}"`);
+  }
+}
+for (const advanced of ["gateway", "daemon"]) {
+  if (helpHasCommand(routeHelp.stdout, advanced)) {
+    fail(`RouteKit help exposes advanced lifecycle surface "${advanced}"`);
   }
 }
 const gatewayHelp = runCli(ROUTE_CLI, ["gateway", "--help"]);

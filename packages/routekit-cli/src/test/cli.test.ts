@@ -41,6 +41,8 @@ test("independent command surface is complete and has no compatibility aliases",
   const expected = [
     "gateway",
     "daemon",
+    "start",
+    "stop",
     "codex",
     "claude",
     "cursor",
@@ -102,6 +104,15 @@ test("independent command surface is complete and has no compatibility aliases",
     ["edit", "import", "init", "migrate", "path", "show"]
   );
   assert.equal(program.commands.some((entry) => entry.aliases().length > 0), false);
+});
+
+test("top-level help presents one public RouteKit lifecycle", () => {
+  const help = buildProgram().helpInformation();
+  assert.match(help, /^\s+start\b/m);
+  assert.match(help, /^\s+status\b/m);
+  assert.match(help, /^\s+stop\b/m);
+  assert.doesNotMatch(help, /^\s+daemon\b/m);
+  assert.doesNotMatch(help, /^\s+gateway\b/m);
 });
 
 test("dynamic completion follows the command tree", () => {

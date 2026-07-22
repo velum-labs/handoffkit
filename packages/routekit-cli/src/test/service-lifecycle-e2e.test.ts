@@ -109,14 +109,13 @@ test("daemon lifecycle: start, idempotency, upgrade, drain-on-stop", async () =>
     NO_COLOR: "1"
   };
   const cli = { cwd: project, env };
-  const base = ["daemon"];
   const recordPath = join(stateHome, "services", "daemon.json");
   let daemonPid: number | undefined;
 
   try {
     // start: detached daemon, readiness-verified, record written.
     const started = json(
-      await runCli([...base, "start", "--port", "0", "--no-portless", "--drain-grace", "5", "--json"], cli)
+      await runCli(["start", "--port", "0", "--no-portless", "--drain-grace", "5", "--json"], cli)
     );
     assert.equal(started.alreadyRunning, false);
     assert.equal(started.supervisor, "detached");
@@ -128,7 +127,7 @@ test("daemon lifecycle: start, idempotency, upgrade, drain-on-stop", async () =>
 
     // start again: idempotent, same daemon.
     const again = json(
-      await runCli([...base, "start", "--port", "0", "--no-portless", "--json"], cli)
+      await runCli(["start", "--port", "0", "--no-portless", "--json"], cli)
     );
     assert.equal(again.alreadyRunning, true);
     assert.equal(again.pid, daemonPid);
@@ -148,10 +147,10 @@ test("daemon lifecycle: start, idempotency, upgrade, drain-on-stop", async () =>
     assert.equal(record.args?.join(" ").includes(dataToken), false);
 
     // upgrade without skew is a no-op; --force performs a drain-restart.
-    const upToDate = json(await runCli([...base, "upgrade", "--json"], cli));
+    const upToDate = json(await runCli(["daemon", "upgrade", "--json"], cli));
     assert.equal(upToDate.action, "up-to-date");
     const upgraded = json(
-      await runCli([...base, "upgrade", "--force", "--drain-grace", "5", "--json"], cli)
+      await runCli(["daemon", "upgrade", "--force", "--drain-grace", "5", "--json"], cli)
     );
     assert.equal(upgraded.action, "drain-restart");
     assert.equal(upgraded.previousPid, daemonPid);
@@ -162,7 +161,7 @@ test("daemon lifecycle: start, idempotency, upgrade, drain-on-stop", async () =>
     assert.equal((await fetch(`${upgradedUrl}/health`)).status, 200);
 
     // logs: the daemon's output landed in the shared log file.
-    const logs = await runCli([...base, "logs", "-n", "50"], cli);
+    const logs = await runCli(["daemon", "logs", "-n", "50"], cli);
     assert.equal(logs.exitCode, 0);
     assert.match(logs.stdout, /RouteKit daemon listening/);
 
@@ -180,7 +179,7 @@ test("daemon lifecycle: start, idempotency, upgrade, drain-on-stop", async () =>
       })
     });
     await new Promise((resolveWait) => setTimeout(resolveWait, 300));
-    const stopRun = runCli([...base, "stop", "--json"], cli);
+    const stopRun = runCli(["stop", "--json"], cli);
     const inflightResponse = await inflight;
     assert.equal(inflightResponse.status, 200);
     assert.match(await inflightResponse.text(), /drained answer/);
@@ -199,6 +198,8 @@ test("daemon lifecycle: start, idempotency, upgrade, drain-on-stop", async () =>
     }
     assert.equal(alive(daemonPid), false);
     daemonPid = undefined;
+    const stoppedAgain = json(await runCli(["stop", "--json"], cli));
+    assert.equal(stoppedAgain.stopped, false);
   } finally {
     if (daemonPid !== undefined && alive(daemonPid)) {
       try {
