@@ -49,26 +49,29 @@ export function registerCalls(program: Command): void {
         ctx.emit(call);
         return;
       }
-      ctx.presenter.heading(call.callId);
-      ctx.presenter.keyValue([
-        { label: "status", value: call.status },
-        { label: "effective model", value: call.effectiveModel },
+      const lines = [
+        ["call", call.callId],
+        ["status", call.status],
+        ["effective model", call.effectiveModel],
         ...(call.nativeModel !== undefined
-          ? [{ label: "native model", value: call.nativeModel }]
+          ? [["native model", call.nativeModel]]
           : []),
-        { label: "provider", value: call.provider },
-        { label: "account / seat", value: call.account?.label ?? "not applicable" },
-        { label: "billing mode", value: call.billingMode },
-        {
-          label: "retries",
-          value: `${call.retries.total} (${call.retries.accountFailovers} account failovers, ${call.retries.attempts} attempts)`
-        },
-        { label: "usage", value: usageText(call) || "not reported" },
-        { label: "cost", value: costText(call) },
-        { label: "started", value: call.timing.startedAt },
+        ["provider", call.provider],
+        ["account / seat", call.account?.label ?? "not applicable"],
+        ["billing mode", call.billingMode],
+        [
+          "retries",
+          `${call.retries.total} (${call.retries.accountFailovers} account failovers, ${call.retries.attempts} attempts)`
+        ],
+        ["usage", usageText(call) || "not reported"],
+        ["cost", costText(call)],
+        ["started", call.timing.startedAt],
         ...(call.timing.finishedAt !== undefined
-          ? [{ label: "finished", value: call.timing.finishedAt }]
+          ? [["finished", call.timing.finishedAt]]
           : [])
-      ]);
+      ];
+      for (const [label, value] of lines) {
+        ctx.presenter.line(`${label}: ${value}`);
+      }
     });
 }

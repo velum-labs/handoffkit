@@ -164,8 +164,8 @@ test("concurrent product commands auto-start exactly one daemon and all use its 
       env
     );
     assert.equal(attributedHuman.code, 0, attributedHuman.stderr);
-    assert.match(attributedHuman.stdout, /effective model\s+openai\/mock-model/);
-    assert.match(attributedHuman.stdout, /billing mode\s+api_key/);
+    assert.match(attributedHuman.stderr, /effective model: openai\/mock-model/);
+    assert.match(attributedHuman.stderr, /billing mode: api_key/);
     const status = await run(["daemon", "status", "--json"], project, env);
     assert.equal(status.code, 0, status.stderr);
     assert.equal((JSON.parse(status.stdout) as { pid?: number }).pid, pid);
