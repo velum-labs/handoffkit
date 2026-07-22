@@ -1,8 +1,9 @@
 # @routekit/accounts
 
 Provider-neutral subscription account pooling, credential sources, quota
-tracking, relays, typed proxy clients, account connectors, and the managed
-CLIProxyAPI lifecycle.
+tracking, relays, and account connectors. Some connector internals are retained
+for compatibility and development; only the first-launch set below is public
+RouteKit support.
 
 Account selection uses RouteKit provider policy, including sticky,
 round-robin, capacity-weighted, health, quota, and cooldown behavior. Discovery

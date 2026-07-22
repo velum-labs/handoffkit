@@ -69,11 +69,13 @@ API providers read the registry-defined environment variable:
 export OPENAI_API_KEY=...
 ```
 
-Subscription providers use named accounts enrolled with
-`routekit accounts add <kind> --name <label>`. FusionKit v4 stores only live
-namespaced RouteKit model IDs and never reads provider credentials. This
-repository's committed router uses `OPENROUTER_API_KEY`. `fusionkit doctor`
-reports missing model IDs; `routekit doctor` owns provider credential checks.
+The first-launch subscription providers are `claude-code` and `codex`. Enroll
+one with `routekit accounts login claude-code --name <label>` or `routekit
+accounts login codex --name <label>`, or use `accounts add` to import that
+official CLI's current login. FusionKit v4 stores only live namespaced RouteKit
+model IDs and never reads provider credentials. This repository's committed
+router uses `OPENROUTER_API_KEY`. `fusionkit doctor` reports missing model IDs;
+`routekit doctor` owns provider credential checks.
 
 ### A git repository (required)
 

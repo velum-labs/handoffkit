@@ -13,9 +13,11 @@ package, and the PyPI FusionKit sidecar package set. Release tags are named
   non-contractual.
 - Added provider-discovered, per-model reasoning capabilities with opaque effort
   IDs, declarative overrides, route-aware validation, and capability-driven
-  OpenAI, OpenRouter, Anthropic, Google, and Codex egress. RouteKit tool
-  selectors and harness drivers now forward the same validated selection;
-  unknown models no longer receive fabricated effort tiers.
+  OpenAI, OpenRouter, Anthropic, and Codex egress. The retained internal Google
+  backend propagates the same metadata but remains outside RouteKit's public
+  support contract. RouteKit tool selectors and harness drivers now forward the
+  same validated selection; unknown models no longer receive fabricated effort
+  tiers.
 - Fixed the Codex `/model` picker dropping non-Codex (e.g. Anthropic) gateway
   models: every launcher catalog entry now serializes the
   `supported_reasoning_levels` field Codex requires (empty when undiscovered).

@@ -54,6 +54,7 @@ test("public RouteKit docs contain no not-offered onboarding commands", () => {
     "docs/configuration.md",
     "docs/subscription-pooling.md",
     "apps/docs/content/docs/guides/subscription-pooling.mdx",
+    "apps/docs/content/docs/getting-started/installation.mdx",
     "configs/models.example.yaml"
   ]) {
     const source = readFileSync(join(root, path), "utf8");
@@ -61,6 +62,40 @@ test("public RouteKit docs contain no not-offered onboarding commands", () => {
       source,
       /\broutekit\s+(?:opencode\b|accounts\s+login\s+(?:gemini|grok|kimi)\b|providers\s+add\s+(?:google|cliproxy)\b)/i,
       `${path} advertises a route that is not offered at first launch`
+    );
+  }
+});
+
+test("retained implementation references are explicitly non-contractual", () => {
+  for (const path of [
+    "packages/accounts/README.md",
+    "apps/docs/content/docs/reference/packages.mdx",
+    "docs/packages.md",
+    "configs/benchmark-router.example.yaml",
+    "docs/routekit-account-activation-evidence.md"
+  ]) {
+    const source = readFileSync(join(root, path), "utf8");
+    assert.match(
+      source,
+      /non-contractual|not first-launch qualification|does not add them to RouteKit's launch support/i,
+      `${path} does not label retained implementation details as non-contractual`
+    );
+  }
+
+  const installation = readFileSync(
+    join(root, "apps/docs/content/docs/getting-started/installation.mdx"),
+    "utf8"
+  );
+  assert.match(installation, /accounts login claude-code/);
+  assert.match(installation, /accounts login codex/);
+  assert.doesNotMatch(installation, /accounts add <kind>/);
+
+  for (const path of ["CHANGELOG.md", "apps/docs/content/docs/changelog.mdx"]) {
+    const source = readFileSync(join(root, path), "utf8");
+    assert.match(
+      source,
+      /retained internal Google[\s\S]{0,120}outside RouteKit's public\s+support contract/i,
+      `${path} does not distinguish the retained Google backend from public support`
     );
   }
 });

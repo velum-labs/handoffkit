@@ -29,6 +29,14 @@ async function runJson(args: readonly string[]): Promise<Record<string, unknown>
 }
 
 test("providers add rejects retained internal providers before daemon work", async () => {
+  const providers = buildProgram().commands.find(
+    (command) => command.name() === "providers"
+  );
+  const add = providers?.commands.find((command) => command.name() === "add");
+  assert.ok(add);
+  assert.match(add.description(), /first-launch supported provider/);
+  assert.doesNotMatch(add.description(), /registry/i);
+
   await assert.rejects(
     buildProgram().parseAsync([
       "node",
@@ -38,6 +46,22 @@ test("providers add rejects retained internal providers before daemon work", asy
       "google"
     ]),
     /not offered at first launch.*openai, anthropic, openrouter, codex, claude-code/
+  );
+
+  await assert.rejects(
+    buildProgram().parseAsync([
+      "node",
+      "routekit",
+      "providers",
+      "remove",
+      "not-a-provider"
+    ]),
+    (error: unknown) => {
+      const message = error instanceof Error ? error.message : String(error);
+      assert.match(message, /unknown provider.*first-launch providers/);
+      assert.doesNotMatch(message, /google|cliproxy/i);
+      return true;
+    }
   );
 });
 

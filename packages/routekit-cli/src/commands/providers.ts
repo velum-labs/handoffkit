@@ -23,7 +23,10 @@ function normalizedProvider(value: string): string {
 function parseKnownProvider(value: string): ProviderId {
   const normalized = normalizedProvider(value);
   if (!PROVIDER_IDS.includes(normalized as ProviderId)) {
-    throw new Error(`provider must be one of: ${PROVIDER_IDS.join(", ")}`);
+    throw new Error(
+      `unknown provider ${JSON.stringify(value)}; first-launch providers: ` +
+        LAUNCH_PROVIDER_IDS.join(", ")
+    );
   }
   return normalized as ProviderId;
 }
@@ -52,7 +55,7 @@ export function registerProviders(program: Command): void {
 
   providers
     .command("add <provider>")
-    .description("enable a provider from the RouteKit registry")
+    .description("enable a first-launch supported provider")
     .option(
       "--strategy <strategy>",
       "sticky | round_robin | capacity_weighted"

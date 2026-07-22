@@ -237,7 +237,7 @@ export function registerAccounts(program: Command): void {
           connector === "cliproxy"
             ? !accounts.some((entry) => isCliproxyAccount(entry))
             : accounts.every((entry) => entry.subscriptionKind !== kind);
-        if (shouldSuggestProviderRemove) {
+        if (shouldSuggestProviderRemove && isLaunchAccountKind(kind)) {
           ctx.presenter.note(
             `run \`routekit providers remove ${routerProvider}\` to stop subscription routing`
           );
