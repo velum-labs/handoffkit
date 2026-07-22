@@ -86,6 +86,7 @@ test("public RouteKit lifecycle: start, idempotency, upgrade, drain-on-stop", as
   const slowResponseReleased = new Promise<void>((resolveReleased) => {
     releaseSlowResponse = resolveReleased;
   });
+  const drainObservationTimeoutMs = 10_000;
   const upstream = createServer((request, response) => {
     if (request.url === "/v1/models") {
       response.setHeader("content-type", "application/json");
@@ -213,7 +214,7 @@ test("public RouteKit lifecycle: start, idempotency, upgrade, drain-on-stop", as
     let healthStatus = 200;
     // Starting a fresh Node CLI can take several seconds when the workspace
     // test matrix saturates a small CI runner.
-    const drainDeadline = Date.now() + 10_000;
+    const drainDeadline = Date.now() + drainObservationTimeoutMs;
     while (healthStatus !== 503 && Date.now() < drainDeadline) {
       await new Promise((resolveWait) => setTimeout(resolveWait, 20));
       try {
