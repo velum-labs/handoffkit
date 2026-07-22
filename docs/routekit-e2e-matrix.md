@@ -31,6 +31,12 @@ opaque effort IDs and config provenance survive model discovery, that a
 supported value reaches OpenRouter egress, and that an unavailable value is
 rejected with `400` before provider transport.
 
+Transactional account activation has a separate process-interruption record:
+[RouteKit transactional account activation evidence](routekit-account-activation-evidence.md).
+It covers an actual child `SIGKILL`, daemon startup recovery, injected
+connector failure, idempotent replay, and transaction-journal redaction without
+copying provider credentials into artifacts.
+
 ## Live, billed mode
 
 Live calls are disabled unless explicitly authorized:
