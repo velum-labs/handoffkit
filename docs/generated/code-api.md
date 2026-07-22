@@ -42,8 +42,8 @@ contract. Product CLIs can wrap this module without owning account logic.
 - `export type { SubscriptionUsageSource } from "./usage.js";`
 - `export { CLIPROXY_API_KEY_ENV, CLIPROXY_BASE_URL_ENV, CLIPROXY_HOME_ENV, CLIPROXY_PINNED_VERSION, cliproxyAssetName, cliproxyApiKey, cliproxyBaseUrl, cliproxyBinaryPath, cliproxyConfigPath, cliproxyHome, cliproxyManagedPort, cliproxyStatus, ensureCliproxyConfig, installCliproxy, spawnCliproxy } from "./cliproxy.js";`
 - `export type { CliproxyInstallResult, CliproxyStatus } from "./cliproxy.js";`
-- `export { cliproxyAccountEntries, cliproxyAccountMatchesKind, loginCliproxyAccount, removeCliproxyAccount, resolveAccountKind } from "./connector.js";`
-- `export type { CliproxyAccountEntry, CliproxyLoginInvocation, CliproxyLoginOptions, ResolvedAccountKind } from "./connector.js";`
+- `export { accountStoreEntries, cliproxyAccountEntries, cliproxyAccountMatchesKind, loginCliproxyAccount, removeCliproxyAccount, resolveAccountKind } from "./connector.js";`
+- `export type { AccountStoreEntry, CliproxyAccountEntry, CliproxyLoginInvocation, CliproxyLoginOptions, ResolvedAccountKind } from "./connector.js";`
 - `export { captureLoginCredential, claudeProfileKeychainService, parseAccountMode } from "./managed-login.js";`
 - `export type { ManagedAccountLoginInvocation, ManagedAccountLoginOptions, ManagedLoginKeychain } from "./managed-login.js";`
 - `export { snapshotsToUsage, SUBSCRIPTION_USAGE_PATH, subscriptionUsageResponseSchema } from "./wire.js";`
@@ -532,6 +532,8 @@ panel presets are deliberately excluded.
 - `export const ACCOUNT_CONNECTORS: Readonly<Record<string, AccountConnectorInfo>> ...`
 - `export function accountKinds(): readonly string[] ...`
   Canonical account kinds accepted by `routekit accounts login <kind>`.
+- `export function accountKindChoices(): readonly string[] ...`
+  Canonical account kinds plus every accepted user-facing alias.
 - `export function resolveAccountConnector(`
   Resolve a user-supplied account kind (canonical name or alias) to its canonical kind and connector metadata.
 - `export function accountKindForCliproxyAuthType(type: string): string | undefined ...`
