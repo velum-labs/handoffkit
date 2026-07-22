@@ -135,6 +135,12 @@ async function main(): Promise<void> {
   // is mid-flush when a signal lands), this returns the same single-flight
   // promise, so the registry waits for the flush instead of racing it.
   registerCleanup(() => settleTelemetry("interrupted"));
+  // Tests that exercise the real signal path launch the CLI with an IPC
+  // channel. A readiness message makes their SIGINT deterministic under CI
+  // load without adding timing sleeps or affecting ordinary CLI processes.
+  if (typeof process.send === "function") {
+    process.send({ type: "fusionkit.cli.signal-ready" });
+  }
 
   const program = buildProgram();
   program.exitOverride();
