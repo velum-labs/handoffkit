@@ -122,7 +122,7 @@ function makeBackend(
       return [candidate("sonnet")];
     },
     defaultModel: "fusion-panel",
-    passthrough: [{ modelId: "gpt-5.5", endpointId: "gpt", endpointUrl: router.url }],
+    passthrough: [{ routekitModelId: "openai/gpt-5.5", routekitUrl: router.url }],
     ...(onRateLimit !== undefined ? { onRateLimit } : {})
   });
 }
@@ -132,7 +132,7 @@ test("non-streaming vendor 429 (quota) reroutes the turn to the ensemble", async
   const panelInputs: PanelRunInput[] = [];
   try {
     const backend = makeBackend(router, undefined, panelInputs);
-    const res = await backend.chat({ ...userTurn, model: "gpt-5.5", stream: false });
+    const res = await backend.chat({ ...userTurn, model: "openai/gpt-5.5", stream: false });
 
     assert.equal(res.status, 200);
     const body = (await res.json()) as { choices: Array<{ message: { content: string } }> };
@@ -143,7 +143,7 @@ test("non-streaming vendor 429 (quota) reroutes the turn to the ensemble", async
     assert.equal(panelInputs.length, 1, "the panel ran for the failover turn");
     assert.deepEqual(
       panelInputs[0]?.excludeModelIds,
-      ["gpt"],
+      ["openai/gpt-5.5"],
       "the throttled vendor is excluded from the failover panel"
     );
   } finally {
@@ -156,7 +156,7 @@ test("non-streaming auth-permanent failure fails fast (verbatim, no failover)", 
   const panelInputs: PanelRunInput[] = [];
   try {
     const backend = makeBackend(router, undefined, panelInputs);
-    const res = await backend.chat({ ...userTurn, model: "gpt-5.5", stream: false });
+    const res = await backend.chat({ ...userTurn, model: "openai/gpt-5.5", stream: false });
 
     assert.equal(res.status, 401, "the vendor auth error is surfaced verbatim");
     const body = (await res.json()) as { error?: { error_category?: string } };
@@ -173,7 +173,7 @@ test("streaming pre-stream 429 reroutes and streams the fused answer", async () 
   const panelInputs: PanelRunInput[] = [];
   try {
     const backend = makeBackend(router, undefined, panelInputs);
-    const res = await backend.chat({ ...userTurn, model: "gpt-5.5", stream: true });
+    const res = await backend.chat({ ...userTurn, model: "openai/gpt-5.5", stream: true });
 
     assert.equal(res.status, 200);
     assert.match(res.headers.get("content-type") ?? "", /text\/event-stream/);
@@ -182,7 +182,7 @@ test("streaming pre-stream 429 reroutes and streams the fused answer", async () 
     assert.match(text, /fused answer/, "the fused answer is streamed");
     assert.match(text, /\[DONE\]/);
     assert.equal(panelInputs.length, 1, "the panel ran for the streamed failover");
-    assert.deepEqual(panelInputs[0]?.excludeModelIds, ["gpt"]);
+    assert.deepEqual(panelInputs[0]?.excludeModelIds, ["openai/gpt-5.5"]);
   } finally {
     await router.close();
   }
@@ -193,7 +193,7 @@ test("streaming mid-stream failure emits a one-tap resume notice (no transparent
   const panelInputs: PanelRunInput[] = [];
   try {
     const backend = makeBackend(router, undefined, panelInputs);
-    const res = await backend.chat({ ...userTurn, model: "gpt-5.5", stream: true });
+    const res = await backend.chat({ ...userTurn, model: "openai/gpt-5.5", stream: true });
 
     assert.equal(res.status, 200);
     const text = await res.text();
@@ -213,7 +213,7 @@ test("--on-rate-limit passthrough returns the vendor 429 verbatim", async () => 
   const panelInputs: PanelRunInput[] = [];
   try {
     const backend = makeBackend(router, "passthrough", panelInputs);
-    const res = await backend.chat({ ...userTurn, model: "gpt-5.5", stream: false });
+    const res = await backend.chat({ ...userTurn, model: "openai/gpt-5.5", stream: false });
 
     assert.equal(res.status, 429, "the vendor response is returned untouched");
     assert.equal(router.stepCalls(), 0);
@@ -228,7 +228,7 @@ test("--on-rate-limit fail surfaces a clear gateway error instead of failing ove
   const panelInputs: PanelRunInput[] = [];
   try {
     const backend = makeBackend(router, "fail", panelInputs);
-    const res = await backend.chat({ ...userTurn, model: "gpt-5.5", stream: false });
+    const res = await backend.chat({ ...userTurn, model: "openai/gpt-5.5", stream: false });
 
     assert.equal(res.status, 429);
     const body = (await res.json()) as { error?: { message?: string } };
@@ -248,7 +248,7 @@ test("a successful vendor passthrough is untouched (no failover machinery)", asy
   const panelInputs: PanelRunInput[] = [];
   try {
     const backend = makeBackend(router, undefined, panelInputs);
-    const res = await backend.chat({ ...userTurn, model: "gpt-5.5", stream: false });
+    const res = await backend.chat({ ...userTurn, model: "openai/gpt-5.5", stream: false });
 
     assert.equal(res.status, 200);
     const body = (await res.json()) as { choices: Array<{ message: { content: string } }> };

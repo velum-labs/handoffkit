@@ -144,9 +144,12 @@ function runSet(
   const { root, inRepo } = repoRootFor(options);
   if (!inRepo) fail("not inside a git repository");
   const shape = persistedShape(loadConfigOrFail(root, context.presenter));
-  writePath(shape, path, parseValue(raw));
+  const value = parseValue(raw);
+  writePath(shape, path, value);
+  if (path === "router.config") writePath(shape, "router.url", undefined);
+  if (path === "router.url") writePath(shape, "router.config", undefined);
   validateAndWrite(root, shape);
-  if (context.json) context.emit({ path, value: parseValue(raw) });
+  if (context.json) context.emit({ path, value });
   else context.presenter.success(`updated ${path}`);
   return 0;
 }

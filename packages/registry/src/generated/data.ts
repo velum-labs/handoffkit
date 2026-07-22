@@ -17,17 +17,17 @@ export const FUSION_REGISTRY = {
     "gatewayApiKeyEnv": "FUSIONKIT_GATEWAY_API_KEY",
     "defaultCloudPanel": [
       {
-        "id": "gpt",
+        "id": "openai/gpt-5.5",
         "model": "gpt-5.5",
         "provider": "openai"
       },
       {
-        "id": "sonnet",
+        "id": "anthropic/claude-sonnet-4-6",
         "model": "claude-sonnet-4-6",
         "provider": "anthropic"
       },
       {
-        "id": "gemini",
+        "id": "google/gemini-2.5-pro",
         "model": "gemini-2.5-pro",
         "provider": "google"
       }

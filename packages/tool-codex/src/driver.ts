@@ -1,7 +1,10 @@
+import { rmSync } from "node:fs";
+
 import { z } from "zod";
 
 import { Codex } from "@openai/codex-sdk";
 import type {
+  ModelReasoningEffort,
   CodexOptions,
   ThreadEvent,
   ThreadItem,
@@ -29,9 +32,35 @@ import type {
   SessionTurnInput,
   StartSessionOptions
 } from "@routekit/harness-core";
+import { registerCleanup } from "@routekit/runtime";
+
+import { createIsolatedCodexHome } from "./launch.js";
 
 const RESUME_CURSOR_VERSION = 1;
 const DEFAULT_COMMAND = "codex";
+
+/**
+ * Gateway-routed sessions run in an isolated `CODEX_HOME`: the user's own
+ * `~/.codex/config.toml` (model, reasoning effort, MCP servers, profiles) must
+ * not leak into requests routed through the gateway, and codex must not
+ * overwrite the user's real models cache with gateway catalog entries. The
+ * home is shared per process (not per instance) because codex thread rollouts
+ * live inside it and resume cursors must survive across panel turns, each of
+ * which builds a fresh driver instance.
+ */
+let sharedIsolatedHome: string | undefined;
+
+function isolatedCodexHome(env: Record<string, string | undefined>): string {
+  if (sharedIsolatedHome === undefined) {
+    const home = createIsolatedCodexHome("routekit-codex-driver-", env);
+    sharedIsolatedHome = home;
+    registerCleanup(() => {
+      rmSync(home, { recursive: true, force: true });
+      if (sharedIsolatedHome === home) sharedIsolatedHome = undefined;
+    });
+  }
+  return sharedIsolatedHome;
+}
 
 const providerSchema = z.object({
   /** OpenAI-compatible base URL the codex model calls go to (e.g. the gateway). */
@@ -102,7 +131,8 @@ function itemText(item: ThreadItem): string | undefined {
 /** Build the codex-sdk options from the driver config and its allowlisted env. */
 function codexOptionsFor(
   config: CodexDriverConfig,
-  context: DriverContext | undefined
+  context: DriverContext | undefined,
+  isolatedHome: string | undefined
 ): CodexOptions {
   const sourceEnv = resolveDriverEnv(context);
   const apiKey =
@@ -120,9 +150,25 @@ function codexOptionsFor(
       "OPENAI_API_KEY"
     ]
   });
+  if (isolatedHome !== undefined) childEnv.CODEX_HOME = isolatedHome;
   return {
     codexPathOverride: config.command,
-    ...(config.provider.baseUrl !== undefined ? { baseUrl: config.provider.baseUrl } : {}),
+    ...(config.provider.baseUrl !== undefined
+      ? {
+          config: {
+            model_provider: "routekit",
+            model_providers: {
+              routekit: {
+                name: "RouteKit gateway",
+                base_url: config.provider.baseUrl,
+                wire_api: "responses",
+                requires_openai_auth: false,
+                supports_websockets: false
+              }
+            }
+          }
+        }
+      : {}),
     ...(apiKey !== undefined ? { apiKey } : {}),
     env: childEnv
   };
@@ -132,12 +178,18 @@ class CodexSession implements SessionHandle {
   #sessionId: string;
   readonly #thread: Thread;
   readonly #kind = "codex" as const;
+  readonly #reasoning: StartSessionOptions["reasoning"];
 
-  constructor(thread: Thread, resumedThreadId: string | undefined) {
+  constructor(
+    thread: Thread,
+    resumedThreadId: string | undefined,
+    reasoning?: StartSessionOptions["reasoning"]
+  ) {
     this.#thread = thread;
     // Codex assigns the real thread id on the first turn; until then we track
     // a resumed id if we have one, else a placeholder that firms up on start.
     this.#sessionId = resumedThreadId ?? "codex:pending";
+    this.#reasoning = reasoning;
   }
 
   get sessionId(): string {
@@ -145,6 +197,15 @@ class CodexSession implements SessionHandle {
   }
 
   async *sendTurn(input: SessionTurnInput): AsyncIterable<HarnessEvent> {
+    if (
+      input.reasoning !== undefined &&
+      JSON.stringify(input.reasoning) !== JSON.stringify(this.#reasoning)
+    ) {
+      throw new HarnessError(
+        "invalid_config",
+        "Codex SDK reasoning must be selected before the session starts"
+      );
+    }
     const base = { kind: this.#kind, sessionId: this.#sessionId, at: nowIso() };
     let turnId: string | undefined;
     let streamed;
@@ -363,8 +424,26 @@ class CodexInstance implements HarnessInstance {
     return this.#status;
   }
 
+  /** An explicit `CODEX_HOME` in the driver env wins over the isolation. */
+  #homeFor(): string | undefined {
+    if (this.#config.provider.baseUrl === undefined) return undefined;
+    const env = resolveDriverEnv(this.#context);
+    if (env.CODEX_HOME !== undefined) return undefined;
+    return isolatedCodexHome(env);
+  }
+
   async startSession(options: StartSessionOptions): Promise<SessionHandle> {
-    const codex = new Codex(codexOptionsFor(this.#config, this.#context));
+    if (
+      options.reasoning !== undefined &&
+      options.reasoning.mode !== "auto" &&
+      options.reasoning.mode !== "effort"
+    ) {
+      throw new HarnessError(
+        "invalid_config",
+        `Codex SDK cannot represent reasoning mode "${options.reasoning.mode}"`
+      );
+    }
+    const codex = new Codex(codexOptionsFor(this.#config, this.#context, this.#homeFor()));
     const threadOptions: ThreadOptions = {
       sandboxMode: this.#config.sandboxMode,
       approvalPolicy: this.#config.approvalPolicy,
@@ -372,6 +451,12 @@ class CodexInstance implements HarnessInstance {
       skipGitRepoCheck: true,
       ...(options.model ?? this.#config.model !== undefined
         ? { model: options.model ?? this.#config.model }
+        : {}),
+      ...(options.reasoning?.mode === "effort"
+        ? {
+            modelReasoningEffort:
+              options.reasoning.effort as ModelReasoningEffort
+          }
         : {})
     };
     const resumedId = resumeThreadId(options.resume);
@@ -379,12 +464,12 @@ class CodexInstance implements HarnessInstance {
       resumedId !== undefined
         ? codex.resumeThread(resumedId, threadOptions)
         : codex.startThread(threadOptions);
-    return new CodexSession(thread, resumedId);
+    return new CodexSession(thread, resumedId, options.reasoning);
   }
 
   async dispose(): Promise<void> {
-    // Sessions own their (short-lived) child processes; nothing instance-wide
-    // to release.
+    // Sessions own their (short-lived) child processes; the shared isolated
+    // home outlives the instance so resumable thread rollouts stay available.
   }
 }
 

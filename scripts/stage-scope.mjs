@@ -1,6 +1,7 @@
 // Stage the observability dashboard (apps/scope) Next.js standalone build into
 // the @fusionkit/cli package so `fusionkit --observe` works for npm-installed
-// users with no separate install. Run AFTER `pnpm build` inside apps/scope.
+// users with no separate install. Run AFTER
+// `pnpm exec turbo run build --filter=scope` at the workspace root.
 //
 // The Next standalone output is a self-contained server (a minimal Node server
 // + only the traced, pure-JS node_modules). We assemble the canonical
@@ -26,7 +27,7 @@ const dest = join(repoRoot, "packages", "cli", "scope");
 if (!existsSync(join(standaloneDir, "server.js"))) {
   console.error(
     "stage-scope: missing apps/scope/.next/standalone/server.js\n" +
-      "  Build the dashboard first: cd apps/scope && pnpm install && pnpm build"
+      "  Build the dashboard first: pnpm exec turbo run build --filter=scope"
   );
   process.exit(1);
 }

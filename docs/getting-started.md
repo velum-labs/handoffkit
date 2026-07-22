@@ -19,8 +19,8 @@ the repository but are out of product scope; see [Product scope](scope.md).
 - pnpm `>=10.33.4`, normally activated through Corepack from the root
   `packageManager` field.
 - `uv` for the Python workspace and for exercising the Python fusion endpoint.
-- Provider keys referenced by `.routekit/router.yaml` when you run cloud
-  endpoints. This checkout uses OpenRouter and therefore needs
+- Registry-defined provider keys for each API provider enabled in
+  `.routekit/router.yaml`. This checkout uses OpenRouter and therefore needs
   `OPENROUTER_API_KEY`; FusionKit itself does not read provider credentials.
 - A coding harness CLI (`codex`, `claude`, or `cursor-agent`) when testing the
   harness-backed product path.
@@ -72,7 +72,7 @@ uv run pytest python -q
 ```
 
 To exercise the internal synthesis sidecar during development, use a config
-that names the RouteKit URL and opaque endpoint IDs:
+that names the RouteKit URL and namespaced `provider/model` IDs:
 
 ```sh
 uv run --package fusionkit fusionkit-sidecar serve \
@@ -86,17 +86,18 @@ remain on the Node gateway started by `fusionkit serve`.
 ## Product quick checks
 
 ```sh
-fusionkit doctor
 fusionkit init
+fusionkit doctor
 fusionkit config show
 fusionkit codex      # or: fusionkit claude | cursor | opencode
 fusionkit serve      # gateway/raw endpoint path
 ```
 
 The committed `.fusionkit/fusion.json` v4 file contains only ensembles of
-opaque RouteKit endpoint IDs and Fusion policy. Provider models, URLs, and key
-environment references live in `.routekit/router.yaml`; prompt overrides remain
-in `.fusionkit/prompts/*.md`.
+namespaced RouteKit model IDs and Fusion policy. Explicit providers and pooling
+policy live in `.routekit/router.yaml`; RouteKit obtains API connection
+metadata from its registry and subscription credentials from private account
+state. Prompt overrides remain in `.fusionkit/prompts/*.md`.
 
 ## Portless (stable named URLs)
 

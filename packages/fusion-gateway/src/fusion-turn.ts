@@ -305,14 +305,19 @@ export class FusionTurnAssembler {
     };
     if (req.chat.tools !== undefined) stepBody.tools = req.chat.tools;
     if (req.chat.tool_choice !== undefined) stepBody.tool_choice = req.chat.tool_choice;
+    if (req.chat.reasoning_effort !== undefined) {
+      stepBody.reasoning_effort = req.chat.reasoning_effort;
+    }
     const route = this.#routeFor(req);
     // Finite k fuses receding-horizon step proposals (candidates end in a
     // proposed tool-call batch); the router selects step-mode judge/synth
     // prompts. Absent field = trajectory mode (back-compat).
     if (isFiniteK(route?.k)) stepBody.panel_mode = panelModeForK(route.k);
-    const judgeModel = route?.judgeEndpointId ?? this.#judgeModel;
+    const judgeModel = route?.judgeRoutekitModelId ?? this.#judgeModel;
     if (judgeModel !== undefined) stepBody.judge_model = judgeModel;
-    if (route?.synthesizerEndpointId !== undefined) stepBody.synthesizer_model = route.synthesizerEndpointId;
+    if (route?.synthesizerRoutekitModelId !== undefined) {
+      stepBody.synthesizer_model = route.synthesizerRoutekitModelId;
+    }
     if (route?.prompts !== undefined && Object.keys(route.prompts).length > 0) stepBody.prompts = route.prompts;
     return JSON.stringify(stepBody);
   }

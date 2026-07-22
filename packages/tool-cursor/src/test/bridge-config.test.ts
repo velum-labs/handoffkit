@@ -3,22 +3,45 @@ import { test } from "node:test";
 
 import { cursorBridgeEnv, cursorIdeModelsJson } from "../bridge-config.js";
 
-type IdeModelEntry = { id: string; providerModel: string; baseUrl: string };
+type IdeModelEntry = {
+  id: string;
+  providerModel: string;
+  baseUrl: string;
+  reasoning?: { efforts?: Array<{ id: string }> };
+};
+type IdeModelEnvelope = { version: number; models: IdeModelEntry[] };
 
 test("cursorIdeModelsJson preserves opaque model order and removes duplicates", () => {
   const parsed = JSON.parse(
     cursorIdeModelsJson({
       gatewayUrl: "http://127.0.0.1:9999",
       modelLabel: "opaque-primary",
-      models: ["opaque-primary", "opaque-secondary", "native-model", "opaque-secondary"]
+      models: [
+        {
+          id: "opaque-primary",
+          reasoning: {
+            status: "supported",
+            efforts: [{ id: "quick" }, { id: "deep" }],
+            provenance: "provider"
+          }
+        },
+        { id: "opaque-secondary" },
+        { id: "native-model" },
+        { id: "opaque-secondary" }
+      ]
     })
-  ) as IdeModelEntry[];
+  ) as IdeModelEnvelope;
+  assert.equal(parsed.version, 2);
   assert.deepEqual(
-    parsed.map((entry) => entry.id),
+    parsed.models.map((entry) => entry.id),
     ["opaque-primary", "opaque-secondary", "native-model"]
   );
-  assert.ok(parsed.every((entry) => entry.baseUrl.startsWith("http://127.0.0.1:9999")));
-  assert.ok(parsed.every((entry) => entry.providerModel === entry.id));
+  assert.ok(parsed.models.every((entry) => entry.baseUrl.startsWith("http://127.0.0.1:9999")));
+  assert.ok(parsed.models.every((entry) => entry.providerModel === entry.id));
+  assert.deepEqual(parsed.models[0]?.reasoning?.efforts, [
+    { id: "quick" },
+    { id: "deep" }
+  ]);
 });
 
 test("cursorBridgeEnv seeds BRIDGE_MODELS_JSON for multiple opaque models", () => {
@@ -26,7 +49,11 @@ test("cursorBridgeEnv seeds BRIDGE_MODELS_JSON for multiple opaque models", () =
     port: 4321,
     gatewayUrl: "http://127.0.0.1:9999",
     modelName: "opaque-primary",
-    models: ["opaque-primary", "opaque-secondary", "native-model"],
+    models: [
+      { id: "opaque-primary" },
+      { id: "opaque-secondary" },
+      { id: "native-model" }
+    ],
     baseEnv: {}
   });
   // MODEL_NAME stays the session default for single-model bridges.
@@ -43,7 +70,7 @@ test("cursorBridgeEnv omits BRIDGE_MODELS_JSON for one model", () => {
     port: 4321,
     gatewayUrl: "http://127.0.0.1:9999",
     modelName: "opaque-primary",
-    models: ["opaque-primary"],
+    models: [{ id: "opaque-primary" }],
     baseEnv: {}
   });
   assert.equal(env.BRIDGE_MODELS_JSON, undefined);

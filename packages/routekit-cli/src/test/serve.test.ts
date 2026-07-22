@@ -19,7 +19,12 @@ async function upstream(): Promise<{ url: string; close(): Promise<void> }> {
   const server = createServer((request, response) => {
     if (request.url?.endsWith("/models") === true) {
       response.setHeader("content-type", "application/json");
-      response.end(JSON.stringify({ object: "list", data: [] }));
+      response.end(
+        JSON.stringify({
+          object: "list",
+          data: [{ id: "upstream-model", object: "model" }]
+        })
+      );
       return;
     }
     response.setHeader("content-type", "application/json");
@@ -53,25 +58,30 @@ async function upstream(): Promise<{ url: string; close(): Promise<void> }> {
 test("serve exposes OpenAI, Anthropic, Responses, and Cursor dialects", async () => {
   const provider = await upstream();
   const config = parseRouterConfig({
-    endpoints: [
-      {
-        endpointId: "opaque",
-        model: "upstream-model",
-        baseUrl: provider.url,
-        dialect: "openai"
-      }
-    ]
+    providers: { openai: {} },
+    defaultModel: "openai/upstream-model"
   });
-  const router = await startRouter({ config, port: 0, register: false });
+  const router = await startRouter({
+    config,
+    port: 0,
+    register: false,
+    env: {
+      OPENAI_API_KEY: "test",
+      OPENAI_BASE_URL: provider.url
+    }
+  });
   try {
     const models = await fetch(`${router.url}/v1/models`);
     assert.equal(models.status, 200);
-    assert.match(await models.text(), /opaque/);
+    assert.match(await models.text(), /openai\/upstream-model/);
 
     const openai = await fetch(`${router.url}/v1/chat/completions`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ model: "opaque", messages: [{ role: "user", content: "hi" }] })
+      body: JSON.stringify({
+        model: "openai/upstream-model",
+        messages: [{ role: "user", content: "hi" }]
+      })
     });
     assert.equal(openai.status, 200);
 
@@ -79,7 +89,7 @@ test("serve exposes OpenAI, Anthropic, Responses, and Cursor dialects", async ()
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        model: "opaque",
+        model: "openai/upstream-model",
         max_tokens: 32,
         messages: [{ role: "user", content: "hi" }]
       })
@@ -90,14 +100,14 @@ test("serve exposes OpenAI, Anthropic, Responses, and Cursor dialects", async ()
     const responses = await fetch(`${router.url}/v1/responses`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ model: "opaque", input: "hi" })
+      body: JSON.stringify({ model: "openai/upstream-model", input: "hi" })
     });
     assert.equal(responses.status, 200);
 
     const cursor = await fetch(`${router.url}/v1/cursor/chat/completions`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ model: "opaque", input: "hi" })
+      body: JSON.stringify({ model: "openai/upstream-model", input: "hi" })
     });
     assert.equal(cursor.status, 200);
   } finally {
@@ -116,6 +126,12 @@ test("serve resolves the managed cliproxy credential without printing or exporti
   const server = createServer((request, response) => {
     authorization = request.headers.authorization;
     response.setHeader("content-type", "application/json");
+    if (request.url === "/v1/models") {
+      response.end(
+        JSON.stringify({ object: "list", data: [{ id: "upstream" }] })
+      );
+      return;
+    }
     response.end(JSON.stringify({
       id: "managed",
       object: "chat.completion",
@@ -133,22 +149,24 @@ test("serve resolves the managed cliproxy credential without printing or exporti
   ensureCliproxyConfig();
   const expected = cliproxyApiKey();
   const config = parseRouterConfig({
-    endpoints: [
-      {
-        endpointId: "managed",
-        model: "upstream",
-        baseUrl: `http://127.0.0.1:${port}/v1`,
-        apiKeyEnv: CLIPROXY_API_KEY_ENV
-      }
-    ]
+    providers: { cliproxy: {} },
+    defaultModel: "cliproxy/upstream"
   });
-  const router = await startRouter({ config, port: 0, register: false });
+  const router = await startRouter({
+    config,
+    port: 0,
+    register: false,
+    env: {
+      ROUTEKIT_HOME: stateHome,
+      ROUTEKIT_CLIPROXY_BASE_URL: `http://127.0.0.1:${port}`
+    }
+  });
   try {
     await fetch(`${router.url}/v1/chat/completions`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        model: "managed",
+        model: "cliproxy/upstream",
         messages: [{ role: "user", content: "hi" }]
       })
     });

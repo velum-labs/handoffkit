@@ -20,7 +20,10 @@
       "default": "./dist/testing.js"
     }
   },
-  "files": ["dist", "LICENSE"],
+  "files": [
+    "dist",
+    "LICENSE"
+  ],
   "publishConfig": {
     "registry": "https://registry.npmjs.org",
     "access": "public",
@@ -30,8 +33,15 @@
     "@routekit/cli-ui": "workspace:*",
     "commander": "14.0.3"
   },
-  "keywords": ["routekit", "cli", "commander", "terminal"],
+  "keywords": [
+    "routekit",
+    "cli",
+    "commander",
+    "terminal"
+  ],
   "scripts": {
+    "build": "tsc -b",
+    "clean": "tsc -b --clean",
     "test": "node --test \"dist/test/*.test.js\""
   }
 }

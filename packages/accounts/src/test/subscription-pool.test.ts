@@ -20,11 +20,23 @@ type FakeCredentialFile = {
   expiresAt?: number;
 };
 
-function fakeProvider(state: { refreshes: number }): SubscriptionProvider {
+type FakeProviderState = {
+  refreshes: number;
+  usageCalls?: number;
+  failUsage?: boolean;
+};
+
+function fakeProvider(
+  state: FakeProviderState,
+  modelsByToken: Readonly<Record<string, readonly string[]>> = {}
+): SubscriptionProvider {
   return {
     mode: "codex",
     upstreamBaseUrl: "https://example.invalid",
     requestPath: "/responses",
+    async discoverModels(credential) {
+      return modelsByToken[credential.accessToken] ?? ["gpt-5.3-codex"];
+    },
     async loadCredential(path) {
       const raw = JSON.parse(await readFile(path, "utf8")) as FakeCredentialFile;
       return {
@@ -41,7 +53,14 @@ function fakeProvider(state: { refreshes: number }): SubscriptionProvider {
       return { ...credential, accessToken: `${credential.accessToken}-refreshed`, expiresAt: Date.now() / 1000 + 3600 };
     },
     async fetchUsage() {
-      return { windows: {}, observedAt: Date.now() / 1000, source: "usage" };
+      state.usageCalls = (state.usageCalls ?? 0) + 1;
+      if (state.failUsage === true) throw new Error("usage unavailable");
+      return {
+        windows: {},
+        observedAt: Date.now() / 1000,
+        source: "usage",
+        completeness: "snapshot"
+      };
     },
     async fetchAdminUsageCost() {
       return { usage: {}, cost: {} };
@@ -49,10 +68,18 @@ function fakeProvider(state: { refreshes: number }): SubscriptionProvider {
     parseLimits(headers) {
       const value = headers.get("x-test-utilization");
       if (value === null) return undefined;
+      const observedAt = Date.now() / 1000;
       const limits: AccountLimits = {
-        windows: { primary: { utilization: Number(value) } },
-        observedAt: Date.now() / 1000,
-        source: "headers"
+        windows: {
+          primary: {
+            utilization: Number(value),
+            observedAt,
+            source: "headers"
+          }
+        },
+        observedAt,
+        source: "headers",
+        completeness: "partial"
       };
       return limits;
     },
@@ -138,7 +165,7 @@ test("pool proactively moves away from a member over the utilization threshold",
   }
 });
 
-test("pool absorbs a short throttle on the same account instead of rotating the burst", async () => {
+test("pool retries a short throttle locally, then tries only one alternate account", async () => {
   const directory = mkdtempSync(join(tmpdir(), "routekit-pool-"));
   writeMember(directory, "a", { accessToken: "token-a" });
   writeMember(directory, "b", { accessToken: "token-b" });
@@ -158,7 +185,37 @@ test("pool absorbs a short throttle on the same account instead of rotating the 
       );
     });
     assert.equal(response.status, 429);
-    assert.deepEqual(seen, ["token-a", "token-a"]);
+    assert.deepEqual(seen, ["token-a", "token-a", "token-b", "token-b"]);
+  } finally {
+    await pool.close();
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("pool recovers from a persistent account-local throttle on one alternate", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "routekit-pool-"));
+  writeMember(directory, "a", { accessToken: "token-a" });
+  writeMember(directory, "b", { accessToken: "token-b" });
+  const pool = await SubscriptionAccountSet.open(fakeProvider({ refreshes: 0 }), {
+    mode: "codex",
+    source: { kind: "directory", path: directory }
+  });
+  const seen: string[] = [];
+  try {
+    const response = await pool.execute("gpt-5.3-codex", (credential) => {
+      seen.push(credential.accessToken);
+      return Promise.resolve(
+        credential.accessToken === "token-b"
+          ? new Response("recovered")
+          : new Response(JSON.stringify({ quota: false }), {
+              status: 429,
+              headers: { "content-type": "application/json" }
+            })
+      );
+    });
+    assert.equal(response.status, 200);
+    assert.equal(await response.text(), "recovered");
+    assert.deepEqual(seen, ["token-a", "token-a", "token-b"]);
   } finally {
     await pool.close();
     rmSync(directory, { recursive: true, force: true });
@@ -183,6 +240,55 @@ test("pool coalesces near-expiry credential refresh before serving", async () =>
     );
     assert.equal(await response.text(), "token-a-refreshed");
     assert.equal(state.refreshes, 1);
+  } finally {
+    await pool.close();
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("pool unions heterogeneous member catalogs and routes only eligible accounts", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "routekit-pool-models-"));
+  writeMember(directory, "personal", { accessToken: "token-personal" });
+  writeMember(directory, "work", { accessToken: "token-work" });
+  const pool = await SubscriptionAccountSet.open(
+    fakeProvider(
+      { refreshes: 0 },
+      {
+        "token-personal": ["gpt-shared", "gpt-personal"],
+        "token-work": ["gpt-shared", "gpt-work"]
+      }
+    ),
+    {
+      mode: "codex",
+      source: { kind: "directory", path: directory },
+      strategy: "round_robin"
+    }
+  );
+  try {
+    assert.deepEqual(await pool.discoverModels(), [
+      "gpt-shared",
+      "gpt-personal",
+      "gpt-work"
+    ]);
+    const personal = await pool.execute("gpt-personal", (credential) =>
+      Promise.resolve(new Response(credential.accessToken))
+    );
+    const work = await pool.execute("gpt-work", (credential) =>
+      Promise.resolve(new Response(credential.accessToken))
+    );
+    assert.equal(await personal.text(), "token-personal");
+    assert.equal(await work.text(), "token-work");
+    assert.deepEqual(
+      pool.snapshot().members.map((member) => [member.id, member.models]),
+      [
+        ["personal", ["gpt-shared", "gpt-personal"]],
+        ["work", ["gpt-shared", "gpt-work"]]
+      ]
+    );
+    await assert.rejects(
+      pool.execute("gpt-unknown", () => Promise.resolve(new Response("wrong"))),
+      /all codex subscription pool members are unavailable/
+    );
   } finally {
     await pool.close();
     rmSync(directory, { recursive: true, force: true });
@@ -217,6 +323,174 @@ test("tracker safely migrates hostile object keys into map-backed state", async 
     );
     assert.equal(({} as { polluted?: unknown }).polluted, undefined);
   } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("tracker migrates legacy partial observations to canonical windows", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "routekit-pool-window-state-"));
+  const statePath = join(directory, ".state.json");
+  writeFileSync(
+    statePath,
+    JSON.stringify({
+      members: [{
+        id: "primary",
+        limits: {
+          windows: {
+            "5h": { utilization: 0.4 },
+            five_hour: { utilization: 0.2 },
+            "7d-sonnet": { utilization: 0.6 }
+          },
+          observedAt: Date.now() / 1000,
+          source: "headers"
+        }
+      }]
+    })
+  );
+  const tracker = new RateLimitTracker(statePath, "claude-code");
+  try {
+    assert.deepEqual(Object.keys(tracker.limits("primary")?.windows ?? {}), [
+      "five_hour",
+      "seven_day_sonnet"
+    ]);
+    assert.equal(tracker.limits("primary")?.windows.five_hour?.utilization, 0.2);
+    assert.equal(tracker.limits("primary")?.completeness, "partial");
+
+    const persisted = JSON.parse(await readFile(statePath, "utf8")) as {
+      members: Array<{ limits?: { windows: Record<string, unknown> } }>;
+    };
+    assert.deepEqual(Object.keys(persisted.members[0]?.limits?.windows ?? {}), [
+      "five_hour",
+      "seven_day_sonnet"
+    ]);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("tracker discards ambiguous legacy usage aggregates", () => {
+  const directory = mkdtempSync(join(tmpdir(), "routekit-pool-legacy-usage-"));
+  const statePath = join(directory, ".state.json");
+  writeFileSync(
+    statePath,
+    JSON.stringify({
+      members: [{
+        id: "primary",
+        limits: {
+          windows: {
+            "5h": { utilization: 0.4 },
+            five_hour: { utilization: 0.2 }
+          },
+          observedAt: Date.now() / 1000,
+          source: "usage"
+        }
+      }]
+    })
+  );
+  try {
+    const tracker = new RateLimitTracker(statePath, "claude-code");
+    assert.equal(tracker.limits("primary"), undefined);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("authoritative usage snapshots replace partial header windows", () => {
+  const directory = mkdtempSync(join(tmpdir(), "routekit-pool-snapshot-"));
+  const statePath = join(directory, ".state.json");
+  const tracker = new RateLimitTracker(statePath, "claude-code");
+  const headerObservedAt = Date.now() / 1000 - 60;
+  const usageObservedAt = Date.now() / 1000;
+  try {
+    tracker.update("primary", {
+      windows: {
+        "5h": {
+          utilization: 0.4,
+          observedAt: headerObservedAt,
+          source: "headers"
+        },
+        "7d-opus": {
+          utilization: 0.8,
+          observedAt: headerObservedAt,
+          source: "headers"
+        }
+      },
+      observedAt: headerObservedAt,
+      source: "headers",
+      completeness: "partial"
+    });
+    tracker.update("primary", {
+      windows: {
+        five_hour: {
+          utilization: 0.2,
+          observedAt: usageObservedAt,
+          source: "usage"
+        }
+      },
+      observedAt: usageObservedAt,
+      source: "usage",
+      completeness: "snapshot"
+    });
+
+    const limits = tracker.limits("primary");
+    assert.deepEqual(Object.keys(limits?.windows ?? {}), ["five_hour"]);
+    assert.equal(limits?.windows.five_hour?.utilization, 0.2);
+    assert.equal(limits?.completeness, "snapshot");
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("a recent partial observation does not suppress an authoritative probe", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "routekit-pool-partial-probe-"));
+  writeMember(directory, "a", { accessToken: "token-a" });
+  const state: FakeProviderState = { refreshes: 0, usageCalls: 0 };
+  const pool = await SubscriptionAccountSet.open(fakeProvider(state), {
+    mode: "codex",
+    source: { kind: "directory", path: directory }
+  });
+  try {
+    await pool.execute("gpt-5.3-codex", () =>
+      Promise.resolve(new Response("ok", {
+        headers: { "x-test-utilization": "0.4" }
+      }))
+    );
+    assert.equal(pool.snapshot().members[0]?.limits?.completeness, "partial");
+
+    await pool.refreshUsage();
+    assert.equal(state.usageCalls, 1);
+    assert.equal(pool.snapshot().members[0]?.limits?.completeness, "snapshot");
+    assert.deepEqual(
+      Object.keys(pool.snapshot().members[0]?.limits?.windows ?? {}),
+      []
+    );
+  } finally {
+    await pool.close();
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("usage refresh throttles failed provider probes", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "routekit-pool-usage-"));
+  writeMember(directory, "a", { accessToken: "token-a" });
+  const state: FakeProviderState = {
+    refreshes: 0,
+    usageCalls: 0,
+    failUsage: true
+  };
+  const pool = await SubscriptionAccountSet.open(fakeProvider(state), {
+    mode: "codex",
+    source: { kind: "directory", path: directory }
+  });
+  try {
+    await pool.refreshUsage();
+    await pool.refreshUsage();
+    assert.equal(state.usageCalls, 1);
+
+    await pool.refreshUsage(0);
+    assert.equal(state.usageCalls, 2);
+  } finally {
+    await pool.close();
     rmSync(directory, { recursive: true, force: true });
   }
 });

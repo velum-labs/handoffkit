@@ -60,7 +60,7 @@ test("onRateLimit=fusion: a throttled vendor passthrough fails over to the fused
     ]);
 
     const response = await stack.door.chat({
-      model: "alpha",
+      model: "openai/gpt-panel-a",
       messages: [{ role: "user", content: "vendor turn that gets throttled" }]
     });
     assert.equal(response.status, 200, await stack.sim.describeJournal());
@@ -70,18 +70,18 @@ test("onRateLimit=fusion: a throttled vendor passthrough fails over to the fused
     // The wire shows the storm on the throttled vendor, and the failover
     // panel excluded it (WS5): only the healthy member fanned out.
     const throttled = await stack.sim.calls({ model: "gpt-panel-a", status: 429 });
-    assert.ok(throttled.length >= 1, "RouteKit reached the throttled endpoint before failover");
+    assert.ok(throttled.length >= 1, "RouteKit reached the throttled provider before failover");
     assert.equal((await stack.sim.calls({ model: "gpt-panel-a", status: 200 })).length, 0);
     assert.equal((await stack.sim.calls({ model: "claude-panel-b" })).length, 1);
     assert.equal((await stack.sim.calls({ model: "gpt-judge" })).length, 2);
   });
 });
 
-test("onRateLimit=passthrough: RouteKit's native endpoint failure surfaces verbatim", { skip: SKIP }, async () => {
+test("onRateLimit=passthrough: RouteKit's native provider failure surfaces verbatim", { skip: SKIP }, async () => {
   await withStack({ members: [...MEMBERS], judgeId: "judge", onRateLimit: "passthrough" }, async (stack) => {
     await queueRateLimitStorm(stack, "gpt-panel-a");
     const response = await stack.door.chat({
-      model: "alpha",
+      model: "openai/gpt-panel-a",
       messages: [{ role: "user", content: "vendor turn that gets throttled" }]
     });
     assert.equal(response.status, 429, await stack.sim.describeJournal());
@@ -90,7 +90,7 @@ test("onRateLimit=passthrough: RouteKit's native endpoint failure surfaces verba
     };
     assert.equal(body.error?.code, "rate_limit_exceeded");
     assert.equal(body.error?.type, "rate_limit_error");
-    // RouteKit owns endpoint retry/cooldown behavior; Fusion does not run.
+    // RouteKit owns provider retry/cooldown behavior; Fusion does not run.
     assert.ok((await stack.sim.calls({ model: "gpt-panel-a", status: 429 })).length >= 1);
     assert.equal((await stack.sim.calls({ model: "gpt-judge" })).length, 0);
   });
@@ -105,7 +105,7 @@ test(
       async (stack) => {
         await queueRateLimitStorm(stack, "gpt-panel-a");
         const response = await stack.door.chat({
-          model: "alpha",
+          model: "openai/gpt-panel-a",
           messages: [{ role: "user", content: "fail instead of failing over" }]
         });
         assert.equal(response.status, 429, await stack.sim.describeJournal());
@@ -141,7 +141,7 @@ test("fused-turn member throttling degrades to the surviving members (no failove
 
 // --- WS7: budget caps ---------------------------------------------------------------
 
-test("budgetUsd: an exhausted budget is refused before any RouteKit endpoint call", { skip: SKIP }, async () => {
+test("budgetUsd: an exhausted budget is refused before any RouteKit model call", { skip: SKIP }, async () => {
   await withStack(
     {
       members: [...MEMBERS],

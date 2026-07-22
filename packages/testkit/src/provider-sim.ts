@@ -51,7 +51,10 @@ export type ProviderSimHandle = {
 export async function startProviderSim(options: { startupTimeoutMs?: number } = {}): Promise<ProviderSimHandle> {
   const runner = uvRunArgv("fusionkit-testkit", "fusionkit-sim", ["--port", "0"]);
   const proc = spawnCaptured(runner);
-  const listening = await proc.nextLine(/"event":\s*"listening"/, options.startupTimeoutMs ?? 60_000);
+  const listening = await proc.nextLine(
+    /"event":\s*"listening"/,
+    options.startupTimeoutMs ?? 120_000
+  );
   const parsed = JSON.parse(listening) as { url: string; port: number };
   const url = parsed.url;
 

@@ -99,7 +99,7 @@ Used when a tool picker selects a native panel model.
 
 Must preserve:
 
-- endpoint-id routing;
+- namespaced-model routing;
 - model discovery/listing;
 - streaming;
 - provider failure normalization;

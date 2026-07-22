@@ -9,13 +9,13 @@ FusionKit is a pnpm + TypeScript workspace plus a uv + Python workspace. The pac
 
 | Source directory | Published package | Responsibility |
 | --- | --- | --- |
-| `packages/routekit-cli` | `@routekit/cli` | Independent `routekit` executable for router config, endpoint/account management, gateway serving, and coding-tool launch. |
-| `packages/routekit-config` | `@routekit/config` | RouterConfig discovery, layered loading, validation, atomic writes, and endpoint-ID selection/check helpers. |
+| `packages/routekit-cli` | `@routekit/cli` | Independent `routekit` executable for provider/catalog/account management, gateway serving, and coding-tool launch. |
+| `packages/routekit-config` | `@routekit/config` | RouterConfig discovery, layered loading, validation, atomic writes, and live-model selection/check helpers. |
 | `packages/routekit-router` | `@routekit/router` | Reusable embedded router composition and lifecycle. |
-| `packages/fusion-config` | `@fusionkit/config` | Fusion-only v4 schema, endpoint-ID ensembles, prompt loading, and atomic writes. |
+| `packages/fusion-config` | `@fusionkit/config` | Fusion-only v4 schema, namespaced-model ensembles, prompt loading, and atomic writes. |
 | `packages/cli` | `@fusionkit/cli` | Fusion-only command line. It composes RouteKit SDKs but never depends on `@routekit/cli`; release tarballs also contain the staged Scope server. |
-| `packages/model-gateway` | `@routekit/gateway` | Product-neutral HTTP gateway, wire dialects, provider egress, endpoint catalogs, pooling, and single-call provenance. |
-| `packages/accounts` | `@routekit/accounts` | Subscription credentials, account pools, provider relays, proxy clients, and managed CLIProxyAPI lifecycle. |
+| `packages/model-gateway` | `@routekit/gateway` | Product-neutral HTTP gateway, wire dialects, live provider catalogs, namespaced dispatch, and single-call provenance. |
+| `packages/accounts` | `@routekit/accounts` | Subscription credentials, multi-account provider pools, per-model eligibility, quota-aware relays, proxy clients, and managed CLIProxyAPI lifecycle. |
 | `packages/fusion-gateway` | `@fusionkit/gateway` | Fusion front-door orchestration, sessions, aggregate cost accounting, trajectories, and managed local-model lifecycle. |
 | `packages/ensemble` | `@fusionkit/ensemble` | Panel orchestration, worktrees, runtime-kernel workflows, judge adapters, and advanced harness tooling. |
 | `packages/runtime-utils` | `@routekit/runtime` | Process/environment/URL safety, cleanup, atomic files, ports, and optional portless service lifecycle. |

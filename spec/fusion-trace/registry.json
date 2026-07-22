@@ -17,7 +17,7 @@
     "fusion.status": { "type": "string", "sensitivity": "exportable", "description": "Terminal status of the unit: succeeded, failed, skipped." },
     "fusion.repo": { "type": "string", "sensitivity": "local", "description": "Absolute path of the coding workspace the panel fuses over." },
     "fusion.prompt_preview": { "type": "string", "sensitivity": "local", "description": "Leading slice of the user prompt." },
-    "fusion.environment": { "type": "string", "sensitivity": "local", "description": "JSON environment snapshot: repo, harnesses, judge_model, models[{id,model,endpoint_id,provider}], model_endpoints, fusion_backend_url." },
+    "fusion.environment": { "type": "string", "sensitivity": "local", "description": "JSON environment snapshot: repo, harnesses, judge_model, namespaced RouteKit model ids, routekit_url, and fusion_backend_url." },
     "fusion.evidence": { "type": "string", "sensitivity": "local", "description": "JSON array of run evidence strings." },
     "fusion.run_id": { "type": "string", "sensitivity": "exportable", "description": "Run-store run id, when the unit corresponds to a persisted run." },
     "fusion.session_id": { "type": "string", "sensitivity": "exportable", "description": "Gateway session key the unit belongs to." },
@@ -61,7 +61,7 @@
     "fusion.judge.degraded": { "type": "string", "sensitivity": "exportable", "description": "Failure category when judge analysis degraded (provider error, parse failure)." },
     "fusion.terminal": { "type": "boolean", "sensitivity": "exportable", "description": "True when a judge step is the turn's terminal step (no pending tool calls)." },
     "fusion.fusion_unit": { "type": "string", "sensitivity": "exportable", "description": "What the judge fused: trajectory or trajectory_step." },
-    "fusion.endpoint_id": { "type": "string", "sensitivity": "exportable", "description": "Router endpoint id serving a model call or passthrough." },
+    "fusion.routekit.model_id": { "type": "string", "sensitivity": "exportable", "description": "Stable namespaced RouteKit model id serving a model call or passthrough." },
     "fusion.usage": { "type": "string", "sensitivity": "local", "description": "JSON usage blob: prompt_tokens, completion_tokens, total_tokens, latency_s, model_id." },
     "fusion.cost.stage": { "type": "string", "sensitivity": "exportable", "description": "Cost meter stage: panel, judge_synth, passthrough." },
     "fusion.cost.model": { "type": "string", "sensitivity": "exportable", "description": "Model the cost entry was priced against." },
@@ -121,13 +121,13 @@
       "kind": "span",
       "component": "panel-model",
       "description": "One GenAI model invocation, named '{gen_ai.operation.name} {gen_ai.request.model}' per the OTel GenAI semantic conventions so GenAI-aware backends ingest it natively.",
-      "attributes": ["gen_ai.operation.name", "gen_ai.provider.name", "gen_ai.request.model", "gen_ai.response.finish_reasons", "gen_ai.usage.input_tokens", "gen_ai.usage.output_tokens", "fusion.candidate.id", "fusion.trajectory.id", "fusion.model.id", "fusion.turn", "fusion.endpoint_id", "fusion.message_count", "fusion.tool_count", "fusion.tool_call_count", "fusion.final_output", "fusion.content", "fusion.usage", "fusion.error", "error.type"]
+      "attributes": ["gen_ai.operation.name", "gen_ai.provider.name", "gen_ai.request.model", "gen_ai.response.finish_reasons", "gen_ai.usage.input_tokens", "gen_ai.usage.output_tokens", "fusion.candidate.id", "fusion.trajectory.id", "fusion.model.id", "fusion.turn", "fusion.routekit.model_id", "fusion.message_count", "fusion.tool_count", "fusion.tool_call_count", "fusion.final_output", "fusion.content", "fusion.usage", "fusion.error", "error.type"]
     },
     "fusion.passthrough": {
       "kind": "span",
       "component": "gateway",
       "description": "A native vendor passthrough request proxied by the gateway. Root of its own trace.",
-      "attributes": ["fusion.dialect", "gen_ai.request.model", "fusion.model.id", "fusion.endpoint_id", "fusion.status", "http.response.status_code"]
+      "attributes": ["fusion.dialect", "gen_ai.request.model", "fusion.model.id", "fusion.routekit.model_id", "fusion.status", "http.response.status_code"]
     },
     "fusion.turn.info": {
       "kind": "event",

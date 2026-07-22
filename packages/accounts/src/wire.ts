@@ -15,7 +15,9 @@ const rateLimitWindowSchema = z.object({
   status: z.string().optional(),
   resetsAt: z.number().optional(),
   windowSeconds: z.number().optional(),
-  limitName: z.string().optional()
+  limitName: z.string().optional(),
+  observedAt: z.number(),
+  source: z.enum(["headers", "response", "usage", "stream"])
 });
 
 const creditSnapshotSchema = z.object({
@@ -29,7 +31,8 @@ const accountLimitsSchema = z.object({
   planType: z.string().optional(),
   credits: creditSnapshotSchema.optional(),
   observedAt: z.number(),
-  source: z.enum(["headers", "usage", "stream"])
+  source: z.enum(["headers", "response", "usage", "stream"]),
+  completeness: z.enum(["snapshot", "partial"])
 });
 
 const memberStatusSchema = z.object({
@@ -40,6 +43,7 @@ const memberStatusSchema = z.object({
   expiresAt: z.number().optional(),
   coolingUntil: z.number().optional(),
   active: z.boolean(),
+  models: z.array(z.string()),
   limits: accountLimitsSchema.optional()
 });
 

@@ -79,19 +79,19 @@ def _scripted_sidecar(
     judge: _ScriptedClient,
     synth: _ScriptedClient | None = None,
 ) -> TestClient:
-    clients: dict[str, ChatClient] = {"judge": judge}
-    endpoint_ids = ["judge"]
+    clients: dict[str, ChatClient] = {"test/judge": judge}
+    routekit_model_ids = ["test/judge"]
     if synth is not None:
-        clients["synth"] = synth
-        endpoint_ids.append("synth")
+        clients["test/synth"] = synth
+        routekit_model_ids.append("test/synth")
     return TestClient(
         create_app(
             FusionConfig(
                 routekit_url="http://routekit.test",
-                endpoint_ids=endpoint_ids,
-                default_model="judge",
-                judge_model="judge",
-                synthesizer_model="synth" if synth is not None else "judge",
+                routekit_model_ids=routekit_model_ids,
+                default_model="test/judge",
+                judge_model="test/judge",
+                synthesizer_model="test/synth" if synth is not None else "test/judge",
             ),
             clients=clients,
         )
@@ -101,15 +101,15 @@ def _scripted_sidecar(
 def test_internal_trajectory_fuse_returns_synthesis_extension() -> None:
     config = FusionConfig(
         routekit_url="http://routekit.test",
-        endpoint_ids=["judge"],
-        default_model="judge",
+        routekit_model_ids=["test/judge"],
+        default_model="test/judge",
     )
     client = TestClient(
         create_app(
             config,
             clients={
-                "judge": FakeModelClient(
-                    "judge",
+                "test/judge": FakeModelClient(
+                    "test/judge",
                     [
                         '{"consensus":["ok"],"contradictions":[],"unique_insights":[],'
                         '"coverage_gaps":[],"likely_errors":[],'

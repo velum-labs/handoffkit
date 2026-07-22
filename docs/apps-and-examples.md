@@ -1,14 +1,16 @@
 # Apps and examples
 
-This page documents the standalone apps and every example package in the repository. Use it when you need a runnable scenario, a local UI, a docs-site entry point, or a demo that proves a specific platform behavior.
+This page documents the Node workspace apps and every example package in the repository. Use it when you need a runnable scenario, a local UI, a docs-site entry point, or a demo that proves a specific platform behavior.
 
 Only the packages under `examples/` are product examples: `examples/runtime-kernel` and the `examples/mlx` infra tools. The 17 legacy examples under `legacy/examples/` demonstrate Warrant governance, sandbox, receipt, and handoff behavior retained for compatibility and release reasons; they are not listed in `examples/manifest.json` and are not selectable through `pnpm demo`.
 
-## Standalone apps
+## Applications
 
 ### `apps/docs`
 
-`apps/docs` is the public documentation site. It uses Next.js, React, Fumadocs, MDX, a generated OpenAPI bridge, and a Mermaid component. It is not part of the root pnpm workspace, so install and build it from its own directory.
+`apps/docs` is the public documentation site. It uses Next.js, React,
+Fumadocs, MDX, a generated OpenAPI bridge, and a Mermaid component. It is part
+of the root pnpm/Turborepo workspace and shares the root lockfile.
 
 Important files:
 
@@ -26,16 +28,14 @@ Important files:
 Run it locally:
 
 ```bash
-cd apps/docs
-pnpm install
-pnpm dev
+pnpm install --frozen-lockfile
+pnpm --filter fusionkit-docs dev
 ```
 
 Build it:
 
 ```bash
-cd apps/docs
-pnpm build
+pnpm exec turbo run build --filter=fusionkit-docs
 ```
 
 Update this app when public user-facing behavior changes, especially installation, quickstarts, CLI flags, concepts, self-hosting, or API contracts.
@@ -43,25 +43,22 @@ Update this app when public user-facing behavior changes, especially installatio
 ### `apps/scope`
 
 `apps/scope` is the local observability companion for FusionKit traces,
-sessions, judge flow, and run inspection. It is outside the root pnpm
+sessions, judge flow, and run inspection. It is part of the root Node
 workspace, but it is not a separately installed user product: release builds
 stage its Next standalone output into `packages/cli/scope`, which
 `@fusionkit/cli` publishes.
 
-Run or test it from its own directory:
+Run or test it through the workspace:
 
 ```bash
-cd apps/scope
-pnpm install
-pnpm test
+pnpm --filter scope dev
+pnpm exec turbo run test --filter=scope
 ```
 
 Build and stage the exact release layout:
 
 ```bash
-cd apps/scope
-pnpm build
-cd ../..
+pnpm exec turbo run build --filter=scope
 node scripts/stage-scope.mjs
 node scripts/check-fusionkit-cli-pack.mjs --require-scope
 ```

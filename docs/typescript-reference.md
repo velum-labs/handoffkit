@@ -32,7 +32,7 @@ flowchart LR
   Ensemble --> Tools
 ```
 
-The FusionKit product path starts in `@fusionkit/cli`. The CLI imports the canonical RouteKit tool registry, composes it with the ensemble's generic driver-registry setter, resolves Fusion and RouteKit configuration, starts the Node Fusion gateway and internal Python synthesis sidecar, and launches the selected harness. `@routekit/gateway` owns neutral wire translation, endpoint routing, provider egress, and per-call provenance; `@fusionkit/gateway` owns the Fusion front door, durable sessions, and aggregate budgets. The ensemble package owns panel execution, worktrees, judge adapters, and runtime-kernel workflows.
+The FusionKit product path starts in `@fusionkit/cli`. The CLI imports the canonical RouteKit tool registry, composes it with the ensemble's generic driver-registry setter, resolves Fusion and RouteKit configuration, starts the Node Fusion gateway and internal Python synthesis sidecar, and launches the selected harness. `@routekit/gateway` owns neutral wire translation, live provider discovery, namespaced model dispatch, and per-call provenance; `@fusionkit/gateway` owns the Fusion front door, durable sessions, and aggregate budgets. The ensemble package owns panel execution, worktrees, judge adapters, and runtime-kernel workflows.
 
 ## `@fusionkit/cli`
 
@@ -54,7 +54,7 @@ Relevant files:
 | --- | --- |
 | `packages/cli/src/index.ts` | Binary entry point, help behavior, top-level error mapping. |
 | `packages/cli/src/cli.ts` | Commander program construction and registration order. |
-| `packages/cli/src/commands/fusion.ts` | Fusion-only launchers for configured endpoint-ID ensembles across Codex, Claude Code, Cursor, OpenCode, and serve. |
+| `packages/cli/src/commands/fusion.ts` | Fusion-only launchers for configured namespaced-model ensembles across Codex, Claude Code, Cursor, OpenCode, and serve. |
 | `packages/cli/src/local.ts` | Fusion-owned local-model lifecycle support. |
 | `packages/cli/src/commands/models.ts` | Local model cache commands. |
 | `packages/cli/src/commands/sessions.ts` | Session list, show, and removal commands. |
@@ -117,22 +117,18 @@ console.log(result.summary.status);
 
 `@routekit/gateway` is the neutral HTTP router. It owns `Backend`,
 `startGateway()`, Chat/Responses/Anthropic/Cursor dialect adapters, SSE, ACP,
-single-call cost/provenance records, `RouterConfig`, `CatalogBackend`,
-`EndpointPool`, `CapacityPool`, and OpenAI-compatible, Anthropic, Google GenAI,
-and Codex Responses egress. Endpoint IDs are opaque and endpoint instances are
-balanced without managing local server processes.
+single-call cost/provenance records, `RouterConfig`, `CatalogBackend`, provider
+sources, and OpenAI-compatible, Anthropic, Google GenAI, and Codex Responses
+egress. Explicitly enabled providers discover models at startup and publish
+source-qualified `provider/model` IDs.
 
 ```ts
 import { CatalogBackend, startGateway } from "@routekit/gateway";
 
-const backend = new CatalogBackend({
+const backend = await CatalogBackend.create({
   config: {
-    endpoints: [{
-      endpointId: "primary",
-      model: "provider-model",
-      baseUrl: "https://provider.example/v1",
-      dialect: "openai"
-    }]
+    providers: { openai: {} },
+    defaultModel: "openai/gpt-5.5"
   }
 });
 const gateway = await startGateway({ backend });
@@ -141,8 +137,9 @@ const gateway = await startGateway({ backend });
 ## `@routekit/accounts`
 
 `@routekit/accounts` owns subscription credentials, account sources, quota
-tracking, account pools, provider relays, and proxy/client wire contracts. Its
-selection policies reuse RouteKit's generic `CapacityPool`.
+tracking, multi-account provider pools, per-model eligibility, provider relays,
+and proxy/client wire contracts. Selection supports sticky, round-robin, and
+capacity-weighted policies.
 
 ## `@fusionkit/gateway`
 
@@ -323,7 +320,11 @@ Important exports include `initFusionTracing()`, `flushFusionTracing()`, `shutdo
 
 ## Governance and VM platform packages
 
-The packages in this section live under `legacy/packages/` and are outside the root pnpm workspace (`pnpm-workspace.yaml` covers `packages/*` and `examples/*` only). They remain in the repository and are still documented, but they are outside the current FusionKit ensemble product path unless a page explicitly describes a bridge.
+The packages in this section live under `legacy/packages/` and are outside the
+root pnpm workspace (`pnpm-workspace.yaml` covers `packages/*`, `examples/*`,
+and `apps/*`). They remain in the repository and are still documented, but
+they are outside the current FusionKit ensemble product path unless a page
+explicitly describes a bridge.
 
 `@fusionkit/plane` is the Warrant control plane. Its central exports are `Plane`, `startPlaneServer()`, `defaultPolicy()`, `evaluatePolicy()`, `ClaimTokenService`, `ContractService`, `ReceiptService`, `SqliteStore`, `SecretStore`, key provider types, `hashToken()`, `principalCan()`, `toPrincipal()`, `IdpVerifier`, `RateLimiter`, `createLogger()`, and `Metrics`. It owns contracts, policy decisions, approvals, secret release, receipt countersignature, rate limiting, audit export, retention, and control-plane HTTP serving.
 

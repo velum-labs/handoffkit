@@ -26,21 +26,25 @@ contract. Product CLIs can wrap this module without owning account logic.
 - `export type { AdminUsageCost, AdminUsageRange, SubscriptionProvider } from "./provider.js";`
 - `export { RateLimitTracker, SubscriptionAccountSet, SubscriptionAccountSetExhaustedError } from "./account-set.js";`
 - `export type { SubscriptionAccountSetOptions } from "./account-set.js";`
+- `export { SubscriptionAccountBackend } from "./backend.js";`
+- `export type { SubscriptionAccountBackendOptions } from "./backend.js";`
 - `export { CodexBackendRelay, codexRelayAuth } from "./codex-relay.js";`
 - `export type { CodexCatalogEntry, CodexRelayAuth, CodexRelayAuthSource, CodexRelayOptions, ProviderRelayLogger, CodexStockEntry } from "./codex-relay.js";`
 - `export { AnthropicBackendRelay, forwardRelayHeaders, RelayOnlyBackend } from "./relay.js";`
 - `export type { AnthropicRelayOptions, SubscriptionRelay, SubscriptionRelayDialect } from "./relay.js";`
-- `export { openSubscriptionRelays } from "./gateway.js";`
-- `export type { OpenSubscriptionRelaysOptions, OpenSubscriptionRelaysResult, SubscriptionAccountConfigs } from "./gateway.js";`
+- `export { openSubscriptionAccountSets, openSubscriptionRelays, subscriptionRelaysFromAccountSets } from "./gateway.js";`
+- `export type { OpenSubscriptionRelaysOptions, OpenSubscriptionRelaysResult, SubscriptionAccountConfigs, SubscriptionAccountSets } from "./gateway.js";`
 - `export { NoSubscriptionAccountsError, startSubscriptionProxy } from "./proxy.js";`
 - `export type { StartSubscriptionProxyOptions, SubscriptionProxy } from "./proxy.js";`
 - `export { SubscriptionProxyClient, SubscriptionProxyClientError } from "./client.js";`
 - `export type { SubscriptionProxyClientOptions } from "./client.js";`
+- `export { collectSubscriptionUsage, DEFAULT_SUBSCRIPTION_USAGE_REFRESH_MS, openLocalSubscriptionUsage } from "./usage.js";`
+- `export type { SubscriptionUsageSource } from "./usage.js";`
 - `export { CLIPROXY_API_KEY_ENV, CLIPROXY_BASE_URL_ENV, CLIPROXY_HOME_ENV, CLIPROXY_LOGIN_FLAGS, CLIPROXY_PINNED_VERSION, cliproxyAssetName, cliproxyApiKey, cliproxyBaseUrl, cliproxyBinaryPath, cliproxyConfigPath, cliproxyHome, cliproxyStatus, ensureCliproxyConfig, installCliproxy, runCliproxyLogin, spawnCliproxy } from "./cliproxy.js";`
 - `export type { CliproxyInstallResult, CliproxyStatus } from "./cliproxy.js";`
 - `export { snapshotsToUsage, SUBSCRIPTION_USAGE_PATH, subscriptionUsageResponseSchema } from "./wire.js";`
 - `export type { SubscriptionUsageResponse } from "./wire.js";`
-- `export type { AccountLimits, CreditSnapshot, RateLimitWindow, SubscriptionAccountSetSnapshot, SubscriptionCredential, SubscriptionFailure, SubscriptionMemberStatus, SubscriptionSelectionStrategy } from "./types.js";`
+- `export type { AccountLimits, CreditSnapshot, RateLimitObservationSource, RateLimitWindow, SubscriptionAccountSetSnapshot, SubscriptionCredential, SubscriptionFailure, SubscriptionMemberStatus, SubscriptionSelectionStrategy } from "./types.js";`
 
 ### `packages/adapter-ai-sdk/src/index.ts`
 
@@ -121,6 +125,8 @@ No module JSDoc was found.
 - `export { SHA256_PREFIX, artifactHash, hashCanonical, hashCanonicalSha256, requestHash, responseHash, schemaBundleHash, sha256Hex, sha256PrefixedHex } from "./hash.js";`
 - `export type { CapabilityStatus, ModelCallContract, ModelCallSideEffects, ModelCallStatus, ModelChatMessage, ModelChatRole, ModelEndpoint, ModelUsage, ProviderError, ProviderErrorKind, ProviderFailure, ProviderFailureCategory } from "./model.js";`
 - `export { ProviderFailureError, classifyProviderFailure, isRetryableProviderFailure, parseRetryAfterSeconds } from "./model.js";`
+- `export type { ModelReasoningCapabilities, ReasoningCapabilityProvenance, ReasoningCapabilityStatus, ReasoningEffortOption, ReasoningSelection } from "./reasoning.js";`
+- `export { resolveReasoningEffort } from "./reasoning.js";`
 - `export type { HarnessApprovalDecision, HarnessContentStream, HarnessEvent, HarnessEventRaw, HarnessEventType, HarnessItemType, HarnessRequestType, HarnessTokenUsage, HarnessTurnEndReason } from "./harness-event.js";`
 
 ### `packages/ensemble/src/index.ts`
@@ -310,14 +316,18 @@ Product-neutral RouteKit gateway and router.
 
 - `export { startGateway } from "./server.js";`
 - `export type { Gateway, GatewayOptions, ProviderRelay, ProviderRelayDialect } from "./server.js";`
+- `export { startSwitchingGatewayProxy } from "./switching-proxy.js";`
+- `export type { SwitchingGatewayProxy } from "./switching-proxy.js";`
 - `export { joinPath, ModelRoutedBackend, OpenAiBackend } from "./backend.js";`
-- `export type { Backend, BackendRequestOptions, ModelRoutedBackendOptions, OpenAiBackendOptions } from "./backend.js";`
+- `export type { Backend, BackendModelRoute, BackendRequestOptions, ModelRoutedBackendOptions, OpenAiBackendOptions } from "./backend.js";`
 - `export { AnthropicBackend, CodexResponsesBackend, GoogleGenAiBackend } from "./provider-backends.js";`
-- `export type { ProviderBackendOptions } from "./provider-backends.js";`
-- `export { CatalogBackend, EndpointPool, modelEndpointSchema, parseRouterConfig, providerBackend, routerConfigSchema } from "./router.js";`
-- `export type { CatalogBackendOptions, EndpointPoolOptions, ModelEndpointConfig, RouterConfig } from "./router.js";`
+- `export type { ProviderBackendOptions, ProviderTransport } from "./provider-backends.js";`
+- `export { CatalogBackend, isSubscriptionProvider, normalizeRouterConfigAliases, parseRouterConfig, routerConfigSchema, splitNamespacedModel, UnknownModelError } from "./router.js";`
+- `export type { CatalogBackendOptions, ProviderPolicy, RouterConfig, } from "./router.js";`
+- `export { API_PROVIDER_IDS, ApiProviderSource, parseDiscoveredModels, parseReasoningCapabilities, PROVIDER_IDS, SUBSCRIPTION_PROVIDER_IDS } from "./provider-source.js";`
+- `export type { ApiProviderId, ApiProviderSourceOptions, DiscoveredModel, ProviderId, ProviderSource, ProviderSourceTransport, SubscriptionProviderId } from "./provider-source.js";`
 - `export { endpointHealthProbe, probeEndpointHealth, providerAuthHeaders } from "./endpoint-health.js";`
-- `export type { EndpointHealthProbe, EndpointHealthProbePlan, EndpointHealthResult } from "./endpoint-health.js";`
+- `export type { AccountEndpointConfig, EndpointHealthProbe, EndpointHealthProbePlan, EndpointHealthResult, ModelEndpointConfig, UrlEndpointConfig } from "./endpoint-health.js";`
 - `export { CapacityPool } from "./capacity-pool.js";`
 - `export type { CapacityLease, CapacityPoolMember, CapacityPoolOptions, CapacityPoolStrategy } from "./capacity-pool.js";`
 - `export { effectiveModel, isStream, withDefaultModel } from "./adapters/chat.js";`
@@ -426,25 +436,64 @@ No module JSDoc was found.
 - `export type RouterConfigSource ...`
 - `export type LoadedRouterConfig ...`
 - `export type RouterConfigPaths ...`
-- `export function configuredEndpointIds(config: RouterConfig): string[] ...`
-  Unique configured endpoint ids in declaration order.
-- `export function missingEndpointIds(`
-  Required endpoint ids absent from the configured/advertised set.
-- `export function assertEndpointIdsConfigured(`
-  Reject when any required endpoint id is absent.
-- `export function resolveEndpointId(config: RouterConfig, requested?: string): string ...`
-  Resolve an explicit endpoint, or the configured default/first endpoint.
-- `export const selectEndpointId ...`
-  Alias retained for callers that describe endpoint resolution as selection.
+- `export type UpdateRouterConfigInput ...`
+- `export function configuredProviderIds(config: RouterConfig): string[] ...`
+  Explicit provider ids in schema declaration order.
+- `export function missingModelIds(`
+  Required namespaced model ids absent from a live catalog.
+- `export function assertModelsAvailable(`
+  Reject when any required namespaced model id is absent from a live catalog.
+- `export function resolveModelId(`
+  Resolve an explicit model, or the configured default/first live model.
+- `export const selectModelId ...`
+  Alias retained for callers that describe model resolution as selection.
 - `export function routekitHome(env: NodeJS.ProcessEnv ...`
 - `export function globalRouterConfigPath(home: string ...`
 - `export function projectRouterConfigPath(cwd: string ...`
 - `export function findProjectRouterConfig(cwd: string ...`
 - `export function routerConfigPaths(`
+- `export function parseRouterConfigDocument(`
+  Parse and validate an in-memory router YAML document without writing it.
 - `export function loadRouterConfig(`
 - `export function writeRouterConfig(path: string, config: RouterConfig | unknown): string ...`
+- `export function updateEffectiveRouterConfig(`
+  Mutate only the selected raw config layer while validating the merged result.  This keeps project overlays sparse instead of materializing defaults or inherited global values into the project file.
 - `export function updateRouterConfig(`
 - `export const DEFAULT_ROUTER_CONFIG: RouterConfig ...`
+
+### `packages/routekit-control/src/index.ts`
+
+No module JSDoc was found.
+
+- `export const ROUTEKIT_CONTROL_CAPABILITY ...`
+- `export type RouteKitControlMethod ...`
+- `export type RouteKitControlParams ...`
+- `export type DaemonStatus ...`
+- `export type ConfigSnapshot ...`
+- `export type ModelInfo ...`
+- `export type LaunchPreparation ...`
+- `export type RouteKitControlResults ...`
+- `export type RouteKitMethodHandler<M extends RouteKitControlMethod> ...`
+- `export type RouteKitControlHandlers ...`
+- `export const MUTATING_ROUTEKIT_METHODS: ReadonlySet<RouteKitControlMethod> ...`
+- `export function validateRouteKitParams<M extends RouteKitControlMethod>(`
+  Validate method-specific structural invariants at the protocol edge. Domain parsers perform deeper validation (provider ids, router schema, credentials).
+- `export function createRouteKitControlHandler(`
+- `export class RouteKitControlClient ...`
+
+### `packages/routekit-daemon/src/index.ts`
+
+Singleton RouteKit daemon.
+
+One process owns a private authenticated control listener and one stable
+model-gateway front door. Router generations run on ephemeral loopback
+ports behind that front door; config/account reload builds a complete new
+generation before atomically switching new traffic and draining the old.
+
+- `export const ROUTEKIT_DAEMON_KIND ...`
+- `export const ROUTEKIT_PRODUCT ...`
+- `export type RouteKitDaemonOptions ...`
+- `export type RunningRouteKitDaemon ...`
 
 ### `packages/routekit-registry/src/index.ts`
 
@@ -457,6 +506,9 @@ panel presets are deliberately excluded.
 - `export type ProviderAuthStyle ...`
 - `export type ProviderKeyProbe ...`
 - `export type ProviderDiscovery ...`
+- `export type ProviderDiscoveryResponseShape ...`
+- `export type ProviderWireProtocol ...`
+- `export type ProviderWire ...`
 - `export type ProviderInfo ...`
 - `export const PROVIDERS: Readonly<Record<string, ProviderInfo>> ...`
 - `export function providerDefaultBaseUrl(provider: string): string | undefined ...`
@@ -518,13 +570,25 @@ No module JSDoc was found.
 
 No module JSDoc was found.
 
-- `export { registerCleanup, runCleanups } from "./cleanup.js";`
+- `export { extendCleanupGrace, registerCleanup, runCleanups } from "./cleanup.js";`
 - `export { buildChildEnv, commandOnPath, DEFAULT_BRIDGE_SCRUB_PREFIXES, definedEnv, scrubBridgeEnv } from "./environment.js";`
 - `export type { BuildChildEnvInput } from "./environment.js";`
 - `export { superviseSpawn, terminateGroup } from "./process.js";`
 - `export type { ExitInfo, Spawned, SuperviseSpawnOptions } from "./process.js";`
 - `export { createActivePortlessSession, createPortlessSession, detectPortlessProxy, reapPortlessProject, reapPortlessService } from "./portless.js";`
 - `export type { DetectedProxy, DiscoverOrSpawnInput, DiscoverOrSpawnResult, PortlessModule, PortlessOptions, PortlessSession, RouteMapping, RouteStoreLike, SpawnedService } from "./portless.js";`
+- `export { createServiceRecordStore, processAlive, processIdentity, SERVICE_SUPERVISOR_ENV, supervisorFromEnv } from "./service/records.js";`
+- `export type { ServiceRecord, ServiceRecordInput, ServiceRecordStore, ServiceSupervisorKind } from "./service/records.js";`
+- `export { CONTROL_BODY_LIMIT_BYTES, CONTROL_PROTOCOL_VERSION, ControlClient, ControlError, controlTokenMatches, generateControlToken, startControlServer } from "./service/control.js";`
+- `export type { ControlClientOptions, ControlErrorCode, ControlEvent, ControlFailure, ControlHandler, ControlHandlerContext, ControlRequest, ControlResponse, ControlSuccess, RunningControlServer } from "./service/control.js";`
+- `export { acquireLifecycleLock, nextServiceGeneration } from "./service/authority.js";`
+- `export type { LifecycleLock } from "./service/authority.js";`
+- `export { readLogTail, rotateLogFile, serviceLogPath, startDaemon, stopDaemonProcess, waitForProcessExit, waitForServiceReady } from "./service/daemon.js";`
+- `export type { ServiceDaemonSpec, StartDaemonOptions, StartDaemonResult, StopDaemonResult } from "./service/daemon.js";`
+- `export { detectSupervisor, launchdAgentPlist, launchdLabel, launchdPlistPath, supervisorController, supervisorOperationTimeoutMs, systemdServiceUnit, systemdUnitName, systemdUnitPath } from "./service/supervisors.js";`
+- `export type { CommandRunner, DetectSupervisorOptions, ServiceUnitSpec, SupervisorController, SupervisorStatus } from "./service/supervisors.js";`
+- `export { planUpgrade, upgradeDetachedDaemon } from "./service/upgrade.js";`
+- `export type { UpgradeDaemonInput, UpgradeDaemonResult, UpgradeStrategy } from "./service/upgrade.js";`
 - `export { assertAuthenticatedBind, isLoopbackHost, normalizeApiBaseUrl, trimSurroundingSlashes, trimTrailingSlashes } from "./url.js";`
 - `export const DEFAULT_RUNTIME_TIMEOUTS ...`
 - `export function defineTimeouts<const T extends Record<string, number>>(timeouts: T): Readonly<T> ...`
@@ -590,8 +654,8 @@ Composable layers for realistic end-to-end tests (see docs/testing.md):
 - {@link startProviderSim}: the scriptable provider simulator
   (python/fusionkit-testkit) as a child process, driven over its HTTP
   control plane and observed through its wire journal.
-- {@link simSidecarConfigYaml}: production-shaped sidecar config over opaque
-  simulator endpoint IDs.
+- {@link simSidecarConfigYaml}: production-shaped sidecar config over stable
+  namespaced RouteKit model IDs.
 - {@link startEngine}: the internal Python synthesis sidecar as a child
   process — the same entrypoint the production CLI spawns.
 - {@link parseSse} / {@link sseText}: structured SSE observation.
@@ -613,7 +677,7 @@ Composable layers for realistic end-to-end tests (see docs/testing.md):
 - `export { detectStackTooling, repoRoot, stackToolingSkip, uvRunArgv } from "./python.js";`
 - `export type { StackTooling } from "./python.js";`
 - `export { CODEX_TEST_TOKEN_ENV, simSidecarConfigYaml } from "./router-config.js";`
-- `export type { SimEndpointSpec } from "./router-config.js";`
+- `export type { SimModelSpec } from "./router-config.js";`
 - `export { judgeAnalysis, scriptFusedTurn } from "./scenarios.js";`
 - `export type { FusedTurnScript } from "./scenarios.js";`
 - `export { parseSse, sseDone, sseReasoning, sseText } from "./sse.js";`

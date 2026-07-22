@@ -20,9 +20,9 @@ flowchart LR
 - `@routekit/router` composes an embedded gateway. RouteKit owns provider
   dialects, credentials, account relays, and single-model routing.
 - `@fusionkit/config` v4 owns ensembles and Fusion policy. It contains only
-  opaque RouteKit endpoint IDs.
+  live namespaced RouteKit model IDs.
 - `@fusionkit/gateway` owns fused front-door protocols and durable sessions.
-- The Python sidecar receives endpoint IDs and the RouteKit URL; it receives no
+- The Python sidecar receives namespaced model IDs and the RouteKit URL; it receives no
   provider credentials.
 
 RouteKit never receives ensemble definitions.
@@ -50,7 +50,7 @@ The default ensemble is exposed as `fusion-panel`; other names are
    embedded RouterConfig or external RouteKit `/v1/models`.
 2. Embedded mode starts an owned RouteKit SDK router. External mode only stores
    the URL and optional token resolved from `router.authEnv`.
-3. Panel drivers call opaque endpoint IDs through RouteKit.
+3. Panel drivers call namespaced model IDs through RouteKit.
 4. The Python sidecar performs judge/synthesizer calls through the same RouteKit
    gateway.
 5. The Fusion gateway translates the synthesized result back to the caller's
@@ -76,6 +76,7 @@ not block fusion.
 
 ## Removed surfaces
 
-FusionKit no longer contains proxy/account/CLIProxy management,
-`install|uninstall codex`, provider/model/key launch flags, or `--direct`.
-Install the independent `@routekit/cli` for those RouteKit responsibilities.
+FusionKit no longer contains proxy/account/CLIProxy management, Codex
+install/uninstall (`routekit codex install|uninstall`), provider/model/key
+launch flags, or `--direct`. Install the independent `@routekit/cli` for those
+RouteKit responsibilities.

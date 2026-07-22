@@ -3,6 +3,7 @@ import type { ChildProcess } from "node:child_process";
 import { reservePort, spawnLogged, terminate, waitForOutput } from "@routekit/runtime";
 
 import { cursorBridgeEnv } from "./bridge-config.js";
+import type { CursorBridgeModelDescriptor } from "./bridge-config.js";
 import { resolveCursorkitCli } from "./cursorkit-path.js";
 
 /**
@@ -12,9 +13,10 @@ import { resolveCursorkitCli } from "./cursorkit-path.js";
 export async function startCursorBridge(input: {
   gatewayUrl: string;
   modelLabel: string;
-  models?: readonly string[];
+  models?: readonly CursorBridgeModelDescriptor[];
   logFile?: string;
   caCertPath?: string;
+  apiKey?: string;
   log: (line: string) => void;
 }): Promise<{ child: ChildProcess; port: number }> {
   // Hold the port until the bridge is about to bind it, so a concurrent picker
@@ -26,6 +28,7 @@ export async function startCursorBridge(input: {
     gatewayUrl: input.gatewayUrl,
     modelName: input.modelLabel,
     providerModel: input.modelLabel,
+    ...(input.apiKey !== undefined ? { apiKey: input.apiKey } : {}),
     ...(input.models !== undefined ? { models: input.models } : {}),
     ...(input.caCertPath !== undefined ? { caCertPath: input.caCertPath } : {})
   });

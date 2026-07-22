@@ -1,0 +1,41 @@
+{
+  "name": "@routekit/daemon",
+  "private": false,
+  "version": "0.8.0",
+  "description": "Singleton RouteKit control daemon and stable model gateway.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/velum-labs/handoffkit.git",
+    "directory": "packages/routekit-daemon"
+  },
+  "license": "Apache-2.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": ["dist", "README.md", "LICENSE"],
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org",
+    "access": "public",
+    "provenance": true
+  },
+  "keywords": ["routekit", "daemon", "model-gateway", "service"],
+  "dependencies": {
+    "@routekit/accounts": "workspace:*",
+    "@routekit/config": "workspace:*",
+    "@routekit/control": "workspace:*",
+    "@routekit/gateway": "workspace:*",
+    "@routekit/registry": "workspace:*",
+    "@routekit/router": "workspace:*",
+    "@routekit/runtime": "workspace:*",
+    "@routekit/telemetry-core": "workspace:*",
+    "yaml": "2.9.0"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "test": "node --test \"dist/test/*.test.js\""
+  }
+}

@@ -27,6 +27,7 @@ export type RunFusionOptions = {
   repo?: string;
   observe?: boolean;
   reasoning?: boolean;
+  effort?: string;
   yes?: boolean;
   subagents?: boolean;
   authToken?: string;
@@ -39,6 +40,7 @@ export type RunFusionOptions = {
   k?: number;
   resume?: string;
   continueLatest?: boolean;
+  json?: boolean;
   log?: (line: string) => void;
 };
 

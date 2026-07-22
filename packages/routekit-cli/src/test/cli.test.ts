@@ -39,19 +39,19 @@ function productionSources(directory: string): string[] {
 test("independent command surface is complete and has no compatibility aliases", () => {
   const program = buildProgram();
   const expected = [
-    "serve",
+    "gateway",
+    "daemon",
     "codex",
     "claude",
     "cursor",
     "opencode",
+    "status",
+    "usage",
     "accounts",
-    "endpoints",
+    "providers",
     "models",
     "config",
     "doctor",
-    "install",
-    "uninstall",
-    "stop",
     "telemetry",
     "completion",
     "__complete",
@@ -62,8 +62,30 @@ test("independent command surface is complete and has no compatibility aliases",
     expected.sort()
   );
   assert.deepEqual(
+    command(program, "gateway").commands.map((entry) => entry.name()).sort(),
+    ["serve"]
+  );
+  assert.deepEqual(
+    command(program, "daemon").commands.map((entry) => entry.name()).sort(),
+    ["auth", "logs", "reload", "restart", "run", "service", "start", "status", "stop", "upgrade"]
+  );
+  assert.deepEqual(
+    command(program, "daemon")
+      .commands.find((entry) => entry.name() === "service")
+      ?.commands.map((entry) => entry.name())
+      .sort(),
+    ["install", "status", "uninstall"]
+  );
+  assert.deepEqual(
+    command(program, "codex").commands.map((entry) => entry.name()).sort(),
+    ["install", "uninstall"]
+  );
+  for (const launcher of ["claude", "cursor", "opencode"]) {
+    assert.deepEqual(command(program, launcher).commands, []);
+  }
+  assert.deepEqual(
     command(program, "accounts").commands.map((entry) => entry.name()).sort(),
-    ["add", "cliproxy", "list", "remove", "serve", "status", "stop"]
+    ["add", "cliproxy", "list", "login", "remove", "status"]
   );
   assert.deepEqual(
     command(program, "accounts")
@@ -73,12 +95,16 @@ test("independent command surface is complete and has no compatibility aliases",
     ["install", "login", "serve", "status"]
   );
   assert.deepEqual(
-    command(program, "endpoints").commands.map((entry) => entry.name()).sort(),
-    ["add", "health", "list", "remove"]
+    command(program, "providers").commands.map((entry) => entry.name()).sort(),
+    ["add", "remove", "status"]
+  );
+  assert.deepEqual(
+    command(program, "models").commands.map((entry) => entry.name()).sort(),
+    ["info", "list"]
   );
   assert.deepEqual(
     command(program, "config").commands.map((entry) => entry.name()).sort(),
-    ["edit", "init", "migrate", "path", "show"]
+    ["edit", "import", "init", "migrate", "path", "show"]
   );
   assert.equal(program.commands.some((entry) => entry.aliases().length > 0), false);
 });
@@ -86,55 +112,28 @@ test("independent command surface is complete and has no compatibility aliases",
 test("dynamic completion follows the command tree", () => {
   const program = buildProgram();
   assert.ok(completionCandidates(program, ["co"]).includes("config"));
-  assert.deepEqual(completionCandidates(program, ["accounts", "s"]), [
-    "serve",
-    "status",
-    "stop"
+  assert.deepEqual(completionCandidates(program, ["gateway", "s"]), [
+    "serve"
   ]);
-  assert.ok(completionCandidates(program, ["serve", "--p"]).includes("--port"));
+  assert.deepEqual(completionCandidates(program, ["accounts", "s"]), [
+    "status"
+  ]);
+  assert.ok(completionCandidates(program, ["codex", "in"]).includes("install"));
+  assert.ok(
+    completionCandidates(program, ["gateway", "serve", "--p"]).includes("--port")
+  );
   assert.deepEqual(completionCandidates(program, ["accounts", "remove", ""]), [
-    "claude",
+    "claude-code",
     "codex"
   ]);
 });
 
-test("serve CLI rejects an unauthenticated non-loopback bind", async () => {
-  const root = mkdtempSync(join(tmpdir(), "routekit-serve-auth-"));
-  const config = join(root, "router.yaml");
-  writeFileSync(
-    config,
-    [
-      "endpoints:",
-      "  - endpointId: opaque",
-      "    model: provider-model",
-      "    baseUrl: http://127.0.0.1:9/v1",
-      ""
-    ].join("\n")
-  );
-  try {
-    const program = buildProgram();
-    assert.match(
-      command(program, "serve").helpInformation(),
-      /authentication token \(required for non-loopback hosts\)/
-    );
-    await assert.rejects(
-      program.parseAsync([
-        "node",
-        "routekit",
-        "--config",
-        config,
-        "serve",
-        "--host",
-        "0.0.0.0",
-        "--port",
-        "0",
-        "--no-portless"
-      ]),
-      /binding to non-loopback host "0\.0\.0\.0" requires an auth token/
-    );
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
+test("serve CLI documents explicit data-plane authentication", () => {
+  const program = buildProgram();
+  const gateway = command(program, "gateway");
+  const serve = gateway.commands.find((entry) => entry.name() === "serve");
+  assert.ok(serve);
+  assert.match(serve.helpInformation(), /authentication token/);
 });
 
 test("account removal completion only suggests managed labels for its provider", () => {

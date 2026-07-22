@@ -146,7 +146,7 @@ def tiny_bench(
             mode=mode,
             tasks=load_tiny_tasks(),
             model_versions={
-                endpoint_id: endpoint_id for endpoint_id in fusion_config.endpoint_ids
+                model_id: model_id for model_id in fusion_config.routekit_model_ids
             },
         )
     )
@@ -195,7 +195,7 @@ def fusion_bench(
         config_id=config_id,
         mode=mode,
         model_versions={
-            endpoint_id: endpoint_id for endpoint_id in fusion_config.endpoint_ids
+            model_id: model_id for model_id in fusion_config.routekit_model_ids
         },
         handoff_executor=(
             CommandHandoffKitExecutor(
@@ -384,7 +384,8 @@ def tune_prompts(
         int, typer.Option("--bank-max-tests", help="cap tests/task when building the bank (0=all)")
     ] = 0,
     optimizer_model: Annotated[
-        str | None, typer.Option("--optimizer-model", help="endpoint id (default: judge)")
+        str | None,
+        typer.Option("--optimizer-model", help="namespaced RouteKit model id (default: judge)"),
     ] = None,
     max_iterations: Annotated[int, typer.Option("--max-iterations", min=1)] = 8,
     patience: Annotated[int, typer.Option("--patience", min=1)] = 3,
@@ -757,11 +758,11 @@ def fusion_hillclimb_polyglot(
         candidate_bank = load_bank(bank)
     else:
         exercises = load_polyglot_exercises(root, languages=language_list, subset=subset)
-        endpoints_sig = sorted(fusion_config.endpoint_ids)
+        models_sig = sorted(fusion_config.routekit_model_ids)
         signature = hashlib.sha256(
             json.dumps(
                 {
-                    "endpoints": endpoints_sig,
+                "models": models_sig,
                     "panel": sorted(fusion_config.panel_models),
                     "languages": sorted(language_list),
                     "subset": subset,

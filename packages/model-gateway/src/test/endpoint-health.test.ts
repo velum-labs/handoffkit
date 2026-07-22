@@ -5,13 +5,13 @@ import {
   endpointHealthProbe,
   probeEndpointHealth
 } from "../endpoint-health.js";
-import type { ModelEndpointConfig } from "../router.js";
+import type { UrlEndpointConfig } from "../endpoint-health.js";
 
 function endpoint(
   provider: string,
-  dialect: ModelEndpointConfig["dialect"],
+  dialect: UrlEndpointConfig["dialect"],
   baseUrl: string
-): ModelEndpointConfig {
+): UrlEndpointConfig {
   return {
     endpointId: `${provider}-endpoint`,
     model: `${provider}-model`,

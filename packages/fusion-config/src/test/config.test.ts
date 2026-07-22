@@ -7,23 +7,43 @@ import {
   parseFusionConfig
 } from "../index.js";
 
-test("v4 accepts only opaque RouteKit endpoint ids", () => {
+test("v4 accepts namespaced RouteKit model ids", () => {
   const config = parseFusionConfig(
     {
       version: FUSION_CONFIG_VERSION,
       router: { config: ".routekit/router.yaml" },
       ensembles: {
         default: {
-          members: ["fast", "deep"],
-          judge: "deep",
-          synthesizer: "deep"
+          members: ["openai/fast", "anthropic/deep"],
+          judge: "anthropic/deep",
+          synthesizer: "anthropic/deep"
         }
       }
     },
     "fusion.json"
   );
-  assert.deepEqual(config.ensembles.default?.members, ["fast", "deep"]);
-  assert.equal(config.ensembles.default?.judge, "deep");
+  assert.deepEqual(config.ensembles.default?.members, ["openai/fast", "anthropic/deep"]);
+  assert.equal(config.ensembles.default?.judge, "anthropic/deep");
+});
+
+test("v4 rejects unqualified model ids", () => {
+  assert.throws(
+    () =>
+      parseFusionConfig(
+        {
+          version: FUSION_CONFIG_VERSION,
+          router: { url: "http://127.0.0.1:8080" },
+          ensembles: {
+            default: {
+              members: ["fast"],
+              judge: "fast"
+            }
+          }
+        },
+        "fusion.json"
+      ),
+    /namespaced RouteKit model ids/
+  );
 });
 
 test("v3 returns actionable RouteKit migration guidance", () => {
@@ -38,7 +58,8 @@ test("v3 returns actionable RouteKit migration guidance", () => {
       ),
     (error: unknown) =>
       error instanceof FusionConfigError &&
-      error.message.includes("move provider/baseUrl/keyEnv/account settings") &&
+      error.message.includes("move provider settings") &&
+      error.message.includes("provider/model") &&
       error.message.includes(".routekit/router.yaml")
   );
 });
@@ -52,8 +73,8 @@ test("v4 rejects provider configuration on ensembles", () => {
           router: { url: "http://127.0.0.1:8080" },
           ensembles: {
             default: {
-              members: ["gpt"],
-              judge: "gpt",
+              members: ["openai/gpt"],
+              judge: "openai/gpt",
               provider: "openai"
             }
           }

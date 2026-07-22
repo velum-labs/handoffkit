@@ -1,7 +1,7 @@
 /**
  * Multi-ensemble routing: each named ensemble is advertised as its own fused
  * model id; a request to it fans out only that ensemble's members and carries
- * its judge/synthesizer endpoint ids + prompt overrides on the fuse step.
+ * its judge/synthesizer RouteKit model ids + prompt overrides on the fuse step.
  */
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
@@ -53,17 +53,17 @@ const ROUTES: FusedModelRoute[] = [
   {
     modelId: "fusion-panel",
     name: "default",
-    memberEndpointIds: ["gpt", "sonnet"],
-    judgeEndpointId: "gpt",
+    memberRoutekitModelIds: ["openai/gpt", "anthropic/sonnet"],
+    judgeRoutekitModelId: "openai/gpt",
     judgeModelName: "gpt-5.5"
   },
   {
     modelId: "fusion-deep",
     name: "deep",
-    memberEndpointIds: ["opus", "gpt"],
-    judgeEndpointId: "opus",
+    memberRoutekitModelIds: ["anthropic/opus", "openai/gpt"],
+    judgeRoutekitModelId: "anthropic/opus",
     judgeModelName: "claude-opus-4-8",
-    synthesizerEndpointId: "opus",
+    synthesizerRoutekitModelId: "anthropic/opus",
     prompts: { judge_system: "DEEP JUDGE", synthesizer_system: "DEEP SYNTH" }
   }
 ];
@@ -77,13 +77,13 @@ function makeBackend(stepUrl: string, runs: PanelRunInput[]): FusionBackend {
     },
     defaultModel: "fusion-panel",
     fusedModels: ROUTES,
-    passthrough: [{ modelId: "gpt-5.5", endpointId: "gpt", endpointUrl: "http://127.0.0.1:1" }]
+    passthrough: [{ routekitModelId: "openai/gpt-5.5", routekitUrl: "http://127.0.0.1:1" }]
   });
 }
 
 test("listModelIds advertises the default fused model, other ensembles, then natives", () => {
   const backend = makeBackend("http://127.0.0.1:1/step", []);
-  assert.deepEqual(backend.listModelIds(), ["fusion-panel", "fusion-deep", "gpt-5.5"]);
+  assert.deepEqual(backend.listModelIds(), ["fusion-panel", "fusion-deep", "openai/gpt-5.5"]);
 });
 
 test("resolveModel routes fused ids to themselves and unknown ids to the default", () => {
@@ -92,7 +92,7 @@ test("resolveModel routes fused ids to themselves and unknown ids to the default
   // Claude Code's picker sends the claude-prefixed alias; it maps back.
   assert.equal(backend.resolveModel("claude-fusion-deep"), "fusion-deep");
   assert.equal(backend.resolveModel("fusion-panel"), "fusion-panel");
-  assert.equal(backend.resolveModel("gpt-5.5"), "gpt-5.5", "natives still proxy");
+  assert.equal(backend.resolveModel("openai/gpt-5.5"), "openai/gpt-5.5", "RouteKit models still proxy");
   assert.equal(backend.resolveModel("something-else"), "fusion-panel");
   assert.equal(backend.resolveModel(undefined), "fusion-panel");
 });
@@ -107,10 +107,10 @@ test("a named ensemble's turn carries its members, judge, synthesizer, and promp
     // The panel runner was told which ensemble fans out.
     assert.equal(runs.length, 1);
     assert.equal(runs[0]?.ensembleModelId, "fusion-deep");
-    // The fuse step routes by the ensemble's endpoint ids and carries its prompts.
+    // The fuse step routes by the ensemble's namespaced model ids and carries its prompts.
     const body = step.bodies()[0] as Record<string, unknown>;
-    assert.equal(body.judge_model, "opus");
-    assert.equal(body.synthesizer_model, "opus");
+    assert.equal(body.judge_model, "anthropic/opus");
+    assert.equal(body.synthesizer_model, "anthropic/opus");
     assert.deepEqual(body.prompts, { judge_system: "DEEP JUDGE", synthesizer_system: "DEEP SYNTH" });
   } finally {
     await step.close();
@@ -126,7 +126,7 @@ test("the default ensemble's turn carries its own judge and no prompts", async (
     assert.equal(res.status, 200);
     assert.equal(runs[0]?.ensembleModelId, "fusion-panel");
     const body = step.bodies()[0] as Record<string, unknown>;
-    assert.equal(body.judge_model, "gpt");
+    assert.equal(body.judge_model, "openai/gpt");
     assert.equal(body.synthesizer_model, undefined);
     assert.equal(body.prompts, undefined);
   } finally {
@@ -157,7 +157,7 @@ test("gateway discovery lists every ensemble; Claude discovery aliases them", as
     };
     assert.deepEqual(
       openai.data.map((entry) => entry.id),
-      ["fusion-panel", "fusion-deep", "gpt-5.5"]
+      ["fusion-panel", "fusion-deep", "openai/gpt-5.5"]
     );
     // Anthropic-shaped discovery (Claude Code's /model picker): non-Anthropic
     // ids are aliased with a claude- prefix, real id in display_name.

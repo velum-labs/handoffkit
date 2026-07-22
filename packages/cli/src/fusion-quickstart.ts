@@ -12,11 +12,12 @@ import { fusionModelId } from "@fusionkit/registry";
 import { shutdownFusionTracing } from "@fusionkit/tracing";
 import type { HarnessKind } from "@routekit/harness-core";
 import {
-  assertEndpointIdsConfigured,
-  configuredEndpointIds,
+  assertModelsAvailable,
   loadRouterConfig
 } from "@routekit/config";
-import { registerCleanup, trimTrailingSlashes } from "@routekit/runtime";
+import { resolveReasoningEffort } from "@routekit/contracts";
+import type { ModelReasoningCapabilities } from "@routekit/contracts";
+import { commandOnPath, registerCleanup, trimTrailingSlashes } from "@routekit/runtime";
 import { createToolLaunchContext } from "@routekit/tools";
 import type { AgentProfile, ToolLaunchSpec } from "@routekit/tools";
 
@@ -88,21 +89,51 @@ export function fusionToolLaunchSpec(input: {
   args: readonly string[];
   cwd: string;
   authToken?: string;
+  effort?: string;
+  reasoningByEnsemble?: Readonly<
+    Record<string, ModelReasoningCapabilities | undefined>
+  >;
   subagents?: boolean;
   ide?: boolean;
   logsDir?: string;
 }): ToolLaunchSpec {
+  const defaultModel = fusionModelId(input.defaultEnsemble);
+  const models = input.ensembles.map((ensemble) => ({
+    id: fusionModelId(ensemble.name),
+    label: `${ensemble.name} (fusion)`,
+    ...(input.reasoningByEnsemble?.[ensemble.name] !== undefined
+      ? { reasoning: input.reasoningByEnsemble[ensemble.name] }
+      : {})
+  }));
+  const selectedReasoning = models.find(
+    (model) => model.id === defaultModel
+  )?.reasoning;
+  const effort =
+    input.effort === undefined
+      ? undefined
+      : selectedReasoning?.status !== "supported"
+        ? (() => {
+            throw new Error(
+              `model "${defaultModel}" has no discovered reasoning effort controls`
+            );
+          })()
+        : resolveReasoningEffort(selectedReasoning, input.effort);
+  if (input.effort !== undefined && effort === undefined) {
+    throw new Error(
+      `reasoning effort "${input.effort}" is not supported by model "${defaultModel}"`
+    );
+  }
   return {
     gatewayUrl: input.gatewayUrl,
-    defaultModel: fusionModelId(input.defaultEnsemble),
-    models: input.ensembles.map((ensemble) => ({
-      id: fusionModelId(ensemble.name),
-      label: `${ensemble.name} (fusion)`
-    })),
+    defaultModel,
+    models,
     ...(input.subagents === false
       ? {}
       : { agentProfiles: fusionAgentProfiles(input.ensembles) }),
     args: input.args,
+    ...(effort !== undefined
+      ? { reasoning: { mode: "effort", effort } }
+      : {}),
     cwd: input.cwd,
     ...(input.authToken !== undefined
       ? { auth: { token: input.authToken } }
@@ -112,7 +143,111 @@ export function fusionToolLaunchSpec(input: {
   };
 }
 
-async function externalEndpointIds(
+function sharedEffortCapability(
+  members: readonly ModelReasoningCapabilities[]
+): ModelReasoningCapabilities | undefined {
+  if (
+    members.length === 0 ||
+    members.some((capability) => capability.status !== "supported")
+  ) {
+    return undefined;
+  }
+  const efforts = (members[0]?.efforts ?? []).flatMap((effort) => {
+    if (
+      !members
+        .slice(1)
+        .every((capability) =>
+          (capability.efforts ?? []).some(
+            (candidate) => candidate.id === effort.id
+          )
+        )
+    ) {
+      return [];
+    }
+    const aliases = (effort.aliases ?? []).filter((alias) =>
+      members
+        .slice(1)
+        .every(
+          (capability) =>
+            resolveReasoningEffort(capability, alias) === effort.id
+        )
+    );
+    return [
+      {
+        ...effort,
+        ...(aliases.length > 0 ? { aliases } : { aliases: undefined })
+      }
+    ];
+  });
+  if (efforts.length === 0) return undefined;
+  const defaultEffort = members[0]?.defaultEffort;
+  const provenance = members.some(
+    (capability) => capability.provenance === "config"
+  )
+    ? "config"
+    : members.every((capability) => capability.provenance === "provider")
+      ? "provider"
+      : "unknown";
+  return {
+    status: "supported",
+    efforts,
+    ...(defaultEffort !== undefined &&
+    efforts.some((effort) => effort.id === defaultEffort) &&
+    members.every(
+      (capability) => capability.defaultEffort === defaultEffort
+    )
+      ? { defaultEffort }
+      : {}),
+    provenance
+  };
+}
+
+async function fusionReasoningCatalog(
+  url: string,
+  ensembles: readonly EnsembleRunSpec[],
+  token?: string
+): Promise<Record<string, ModelReasoningCapabilities | undefined>> {
+  const root = trimTrailingSlashes(url.replace(/\/v1\/?$/, ""));
+  const response = await fetch(`${root}/v1/models`, {
+    headers:
+      token !== undefined ? { authorization: `Bearer ${token}` } : undefined,
+    signal: AbortSignal.timeout(5000)
+  });
+  if (!response.ok) {
+    throw new Error(
+      `RouteKit gateway returned HTTP ${response.status} from /v1/models`
+    );
+  }
+  const body = (await response.json()) as {
+    data?: Array<{
+      id?: unknown;
+      reasoning?: ModelReasoningCapabilities;
+    }>;
+  };
+  const byModel = new Map(
+    (body.data ?? []).flatMap((entry) =>
+      typeof entry.id === "string" && entry.reasoning !== undefined
+        ? [[entry.id, entry.reasoning] as const]
+        : []
+    )
+  );
+  return Object.fromEntries(
+    ensembles.map((ensemble) => {
+      const capabilities = ensemble.members.flatMap((model) => {
+        const capability = byModel.get(model);
+        return capability === undefined ? [] : [capability];
+      });
+      return [
+        ensemble.name,
+        capabilities.length === ensemble.members.length
+          ? sharedEffortCapability(capabilities)
+          : undefined
+      ];
+    })
+  );
+}
+
+async function externalModelIds(
   url: string,
   token?: string
 ): Promise<Set<string>> {
@@ -147,11 +282,6 @@ async function resolveRouter(
   if (typeof router.config === "string") {
     const path = resolveRouterConfigPath(repo, router.config);
     const loaded = loadRouterConfig({ configPath: path });
-    assertEndpointIdsConfigured(
-      required,
-      configuredEndpointIds(loaded.config),
-      `Fusion ensemble references RouteKit endpoint ids not present in ${path}`
-    );
     return { kind: "embedded", config: loaded.config };
   }
   const authToken =
@@ -161,11 +291,11 @@ async function resolveRouter(
       `external RouteKit authentication environment variable is not set: ${router.authEnv}`
     );
   }
-  const available = await externalEndpointIds(router.url, authToken);
-  assertEndpointIdsConfigured(
+  const available = await externalModelIds(router.url, authToken);
+  assertModelsAvailable(
     required,
     available,
-    "Fusion ensemble references endpoint ids not advertised by external RouteKit"
+    "Fusion ensemble references models not advertised by external RouteKit"
   );
   return {
     kind: "external",
@@ -188,7 +318,7 @@ export async function runFusion(
   }
   if (options.ensembles === undefined || options.ensembles.length === 0) {
     throw new Error(
-      "no fusion ensembles configured; run `fusionkit init` and select RouteKit endpoint ids"
+      "no fusion ensembles configured; run `fusionkit init` and select namespaced RouteKit model ids"
     );
   }
   const selectedName = options.ensemble ?? options.ensembles[0]!.name;
@@ -207,7 +337,7 @@ export async function runFusion(
   if (selectedIndex > 0) ensembles.unshift(...ensembles.splice(selectedIndex, 1));
   if (options.k !== undefined) ensembles[0]!.k = options.k;
 
-  const endpointIds = [
+  const routekitModelIds = [
     ...new Set(
       ensembles.flatMap((ensemble) => [
         ...ensemble.members,
@@ -216,11 +346,20 @@ export async function runFusion(
       ])
     )
   ];
-  const router = await resolveRouter(repo, options, endpointIds);
   const integration = tool === "serve" ? undefined : toolRegistry.get(tool);
   if (tool !== "serve" && integration === undefined) {
     throw new Error(`unknown fusion tool: ${tool}`);
   }
+  if (
+    integration?.binary !== undefined &&
+    !commandOnPath(integration.binary)
+  ) {
+    throw new Error(
+      `fusion preflight failed: "${integration.binary}" was not found on PATH — ` +
+        (integration.installHint ?? `install ${integration.binary}`)
+    );
+  }
+  const router = await resolveRouter(repo, options, routekitModelIds);
 
   const root = mkdtempSync(join(tmpdir(), "fusionkit-fusion-"));
   const logsDir = join(root, "logs");
@@ -343,18 +482,36 @@ export async function runFusion(
       `fusion: ready at ${stack.fusionUrl} (${stack.embeddedRouter ? "embedded RouteKit" : "external RouteKit"})`
     );
     if (tool === "serve") {
-      process.stdout.write(
-        `${gatewaySetupSnippets(stack.fusionUrl, "", fusionModelId(ensembles[0]!.name))}\n`
-      );
+      if (options.json === true) {
+        process.stdout.write(
+          `${JSON.stringify({
+            ready: true,
+            url: stack.fusionUrl,
+            model: fusionModelId(ensembles[0]!.name),
+            router: stack.embeddedRouter ? "embedded" : "external"
+          })}\n`
+        );
+      } else {
+        process.stdout.write(
+          `${gatewaySetupSnippets(stack.fusionUrl, "", fusionModelId(ensembles[0]!.name))}\n`
+        );
+      }
       await new Promise<void>(() => undefined);
       return 0;
     }
+    const reasoningByEnsemble = await fusionReasoningCatalog(
+      stack.routekitUrl,
+      ensembles,
+      router.kind === "external" ? router.authToken : undefined
+    );
     const launch = createToolLaunchContext({
       spec: fusionToolLaunchSpec({
         gatewayUrl: stack.fusionUrl,
         defaultEnsemble: ensembles[0]!.name,
         ensembles,
         args: toolArgs,
+        ...(options.effort !== undefined ? { effort: options.effort } : {}),
+        reasoningByEnsemble,
         cwd: repo,
         ...(options.authToken !== undefined
           ? { authToken: options.authToken }

@@ -164,7 +164,7 @@ export class FusionBackend implements Backend {
       if (!ids.includes(route.modelId)) ids.push(route.modelId);
     }
     for (const entry of this.#passthrough) {
-      if (!ids.includes(entry.modelId)) ids.push(entry.modelId);
+      if (!ids.includes(entry.routekitModelId)) ids.push(entry.routekitModelId);
     }
     return ids;
   }
@@ -173,7 +173,7 @@ export class FusionBackend implements Backend {
     const fused = this.#fusedFor(requested);
     if (fused !== undefined) return fused.modelId;
     const native = this.#passthroughFor(requested);
-    if (native !== undefined) return native.modelId;
+    if (native !== undefined) return native.routekitModelId;
     return this.defaultModel;
   }
 
@@ -284,6 +284,9 @@ export class FusionBackend implements Backend {
       // `runPanelRound`, not re-encoded here.
       ...(req.chat.tools !== undefined ? { tools: req.chat.tools } : {}),
       ...(req.chat.tool_choice !== undefined ? { toolChoice: req.chat.tool_choice } : {}),
+      ...(req.chat.reasoning_effort !== undefined
+        ? { reasoningEffort: req.chat.reasoning_effort }
+        : {}),
       ...(isFiniteK(route?.k) ? { k: route.k } : {}),
       ...(signal !== undefined ? { signal } : {})
     });
@@ -342,13 +345,13 @@ export class FusionBackend implements Backend {
     if (requested === undefined || requested.length === 0) return undefined;
     if (this.#fusedFor(requested) !== undefined) return undefined;
     const direct = this.#passthrough.find(
-      (entry) => entry.modelId === requested || entry.endpointId === requested
+      (entry) => entry.routekitModelId === requested
     );
     if (direct !== undefined) return direct;
     if (requested.startsWith(CLAUDE_ALIAS_PREFIX)) {
       const stripped = requested.slice(CLAUDE_ALIAS_PREFIX.length);
       return this.#passthrough.find(
-        (entry) => entry.modelId === stripped || entry.endpointId === stripped
+        (entry) => entry.routekitModelId === stripped
       );
     }
     return undefined;

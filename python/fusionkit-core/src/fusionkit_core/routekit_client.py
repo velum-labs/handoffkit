@@ -137,12 +137,12 @@ class RouteKitClient:
     def __init__(
         self,
         gateway_url: str,
-        endpoint_id: str,
+        model_id: str,
         *,
         timeout_s: float = 120.0,
         http_client: httpx.AsyncClient | None = None,
     ) -> None:
-        self.model_id = endpoint_id
+        self.model_id = model_id
         self.max_context: int | None = None
         self._url = _chat_url(gateway_url)
         self._client = http_client or httpx.AsyncClient(timeout=timeout_s)

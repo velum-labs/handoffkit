@@ -46,8 +46,8 @@ import { toolRegistry } from "./tools.js";
 
 /**
  * One named ensemble as the gateway routes it: the advertised fused model id,
- * the panel members that fan out for it, the judge/synthesizer router endpoint
- * ids sent on the fuse step, the judge's model name (WS7 cost attribution),
+ * the panel members that fan out for it, the judge/synthesizer namespaced
+ * RouteKit model ids sent on the fuse step, the judge's model name (WS7 cost attribution),
  * and its prompt overrides.
  */
 export type GatewayEnsembleConfig = {
@@ -55,11 +55,11 @@ export type GatewayEnsembleConfig = {
   /** Advertised gateway model id (`fusion-panel` / `fusion-<name>`). */
   modelId: string;
   models: EnsembleModel[];
-  /** Router endpoint id the fuse step's `judge_model` routes to. */
-  judgeEndpointId: string;
+  /** Namespaced RouteKit model id the fuse step's `judge_model` routes to. */
+  judgeRoutekitModelId: string;
   /** The judge's provider model name (cost attribution + narration). */
   judgeModelName: string;
-  synthesizerEndpointId?: string;
+  synthesizerRoutekitModelId?: string;
   /**
    * Step boundaries per panel member before aggregation: 1 = single-completion
    * proposers over the caller's messages+tools (no managed harness); finite
@@ -98,7 +98,8 @@ export type GatewayRunnerConfig = {
    */
   stragglerGraceMs?: number;
   judgeModel?: string;
-  modelEndpoints?: Record<string, string>;
+  /** One RouteKit gateway URL shared by every namespaced panel model. */
+  routekitUrl?: string;
   /** WS5 rate-limit / credit failover policy for vendor passthrough models. */
   onRateLimit?: OnRateLimitPolicy;
   /** WS7 budget cap (USD) for the session's gateway-observed cost. */
@@ -123,7 +124,7 @@ export type GatewayRunnerConfig = {
   panelTrust?: PanelTrust;
   /**
    * Enable same-model sub-agents inside panel members (a member may
-   * parallelize its own work; children reuse its model/endpoint). Default on;
+   * parallelize its own work; children reuse its RouteKit model). Default on;
    * `--no-subagents` / `subagents: false` turns it off.
    */
   subagents?: boolean;
@@ -330,8 +331,8 @@ export async function startFusionStepGateway(input: {
       ensembleModelId !== undefined
         ? (ensemblesByModelId.get(ensembleModelId)?.models ?? config.models)
         : config.models;
-    // WS5 failover excludes the throttled vendor (by router endpoint id == panel
-    // model id) so the ensemble fuses over the healthy survivors this turn.
+    // WS5 failover excludes the throttled namespaced RouteKit model so the
+    // ensemble fuses over the healthy survivors this turn.
     const panelModels =
       excludeModelIds === undefined || excludeModelIds.length === 0
         ? ensembleModels
@@ -354,9 +355,9 @@ export async function startFusionStepGateway(input: {
         models: panelModels.map((model) => ({
           id: model.id,
           model: model.model,
-          ...(model.endpointId !== undefined ? { endpoint_id: model.endpointId } : {})
+          routekit_model_id: model.id
         })),
-        ...(config.modelEndpoints !== undefined ? { model_endpoints: config.modelEndpoints } : {})
+        ...(config.routekitUrl !== undefined ? { routekit_url: config.routekitUrl } : {})
       })
     });
     logTurnStart({
@@ -388,7 +389,13 @@ export async function startFusionStepGateway(input: {
         ...(tools !== undefined ? { tools } : {}),
         ...(toolChoice !== undefined ? { toolChoice } : {}),
         ...(k !== undefined ? { k } : {}),
-        ...(config.modelEndpoints !== undefined ? { modelEndpoints: config.modelEndpoints } : {}),
+        ...(config.routekitUrl !== undefined
+          ? {
+              modelEndpoints: Object.fromEntries(
+                panelModels.map((model) => [model.id, config.routekitUrl as string])
+              )
+            }
+          : {}),
         ...(config.timeoutMs !== undefined ? { timeoutMs: config.timeoutMs } : {}),
         ...(signal !== undefined ? { signal } : {}),
         stragglerGraceMs: config.stragglerGraceMs ?? DEFAULT_STRAGGLER_GRACE_MS,
@@ -428,31 +435,29 @@ export async function startFusionStepGateway(input: {
     }
   };
 
-  // Expose every opaque endpoint id as passthrough alongside fused models.
-  // RouteKit remains the only owner of provider models and credentials.
+  // Expose every namespaced RouteKit model id as passthrough alongside fused models.
+  // RouteKit remains the only owner of provider details and credentials.
   const passthrough: PassthroughModel[] =
-    config.modelEndpoints === undefined
+    config.routekitUrl === undefined
       ? []
-      : config.models.flatMap((model) => {
-          const endpointUrl = config.modelEndpoints?.[model.id];
-          return endpointUrl === undefined
-            ? []
-            : [{ modelId: model.model, endpointId: model.id, endpointUrl }];
-        });
+      : config.models.map((model) => ({
+          routekitModelId: model.id,
+          routekitUrl: config.routekitUrl as string
+        }));
 
   // Each named ensemble is advertised as its own fused model. The route carries
   // what a fused turn for it needs: which members fan out (checked by the panel
-  // runner above), the judge/synthesizer router endpoint ids for the fuse step,
+  // runner above), the judge/synthesizer RouteKit model ids for the fuse step,
   // the judge model name for cost/narration, and its prompt overrides (wire keys
   // per PROMPT_CONFIG_KEY, ready to POST).
   const fusedModels = ensembles.map((ensemble) => ({
     modelId: ensemble.modelId,
     name: ensemble.name,
-    memberEndpointIds: ensemble.models.map((model) => model.id),
-    judgeEndpointId: ensemble.judgeEndpointId,
+    memberRoutekitModelIds: ensemble.models.map((model) => model.id),
+    judgeRoutekitModelId: ensemble.judgeRoutekitModelId,
     judgeModelName: ensemble.judgeModelName,
-    ...(ensemble.synthesizerEndpointId !== undefined
-      ? { synthesizerEndpointId: ensemble.synthesizerEndpointId }
+    ...(ensemble.synthesizerRoutekitModelId !== undefined
+      ? { synthesizerRoutekitModelId: ensemble.synthesizerRoutekitModelId }
       : {}),
     ...(ensemble.k !== undefined ? { k: ensemble.k } : {}),
     ...(ensemble.prompts !== undefined
@@ -496,8 +501,8 @@ export async function startFusionStepGateway(input: {
     // CLI's timestamped request log instead of the engine's flat stderr default.
     logger: requestLogGatewayLogger
     // judge_model is intentionally NOT forwarded here: `config.judgeModel` is the
-    // provider model name, but the router (and trajectories:fuse) route by endpoint
-    // id. The Python fuse path already resolves the configured judge endpoint via
+    // display/cost model name, while trajectories:fuse routes by the stable
+    // namespaced RouteKit model id. The Python fuse path resolves that configured id via
     // config.resolved_judge_model, so omitting this keeps routing correct while
     // the judge gap-analysis still runs on the configured judge.
   });

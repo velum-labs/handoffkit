@@ -21,6 +21,7 @@ type FusionOpts = {
   repo?: string;
   observe?: boolean;
   reasoning?: boolean;
+  effort?: string;
   subagents?: boolean;
   authToken?: string;
   port?: string;
@@ -68,6 +69,7 @@ function resolveContext(options: FusionOpts): RunFusionOptions {
     ensemble: options.ensemble ?? config.defaultEnsemble,
     observe: options.observe ?? config.observe,
     reasoning: options.reasoning ?? config.reasoning,
+    ...(options.effort !== undefined ? { effort: options.effort } : {}),
     subagents: options.subagents ?? config.subagents,
     portless: options.portless ?? config.portless,
     onRateLimit: parseOnRateLimit(options.onRateLimit) ?? config.onRateLimit,
@@ -101,6 +103,7 @@ function applyFusionOptions(command: Command): Command {
     .option("--no-observe", "disable the observability dashboard")
     .option("--reasoning", "stream fusion reasoning progress")
     .option("--no-reasoning", "disable reasoning progress")
+    .option("--effort <id>", "opaque reasoning effort forwarded to panel calls")
     .option("--subagents", "create one generic agent profile per ensemble")
     .option("--no-subagents", "do not create agent profiles")
     .option("--auth-token <token>", "require authentication on the Fusion gateway")
@@ -113,9 +116,7 @@ function applyFusionOptions(command: Command): Command {
     .option("--panel-trust <level>", "full | guarded")
     .option("--k <n>", "step boundaries per panel member")
     .option("--resume <id>", "resume a Fusion session")
-    .option("--continue", "resume the latest Fusion session")
-    .allowUnknownOption()
-    .passThroughOptions();
+    .option("--continue", "resume the latest Fusion session");
 }
 
 export function registerFusion(program: Command): void {
@@ -138,17 +139,25 @@ export function registerFusion(program: Command): void {
         )
         .argument("[args...]", `arguments forwarded to ${tool}`)
     ).action(async (args: string[], _opts: FusionOpts, command: Command) => {
+      if (tool === "serve" && args.length > 0) {
+        fail("fusionkit serve does not accept passthrough arguments");
+      }
+      if (tool !== "serve" && contextFor(command).json) {
+        fail(`\`${tool}\` is interactive and does not support --json`);
+      }
       const options = command.optsWithGlobals<FusionOpts>();
+      const runOptions = resolveContext(options);
+      if (contextFor(command).json) runOptions.json = true;
       process.exitCode = await runFusion(
         tool as FusionTool,
         args,
-        resolveContext(options)
+        runOptions
       );
     });
   }
   program
     .command("init")
-    .description("scaffold .fusionkit/fusion.json from RouteKit endpoint ids")
+    .description("scaffold .fusionkit/fusion.json from namespaced RouteKit model ids")
     .option("--repo <dir>", "repository root")
     .option("--force", "replace an existing Fusion config")
     .action(async (options: FusionOpts) => {

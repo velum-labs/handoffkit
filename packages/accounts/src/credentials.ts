@@ -24,8 +24,11 @@ import type { SubscriptionCredential } from "./types.js";
 
 const execFileAsync = promisify(execFile);
 
-function expandHome(path: string): string {
-  return path.startsWith("~/") ? join(homedir(), path.slice(2)) : path;
+function expandHome(
+  path: string,
+  env: Readonly<Record<string, string | undefined>> = process.env
+): string {
+  return path.startsWith("~/") ? join(env.HOME ?? homedir(), path.slice(2)) : path;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -80,7 +83,11 @@ async function credentialBlob(
 ): Promise<Record<string, unknown>> {
   let text: string | undefined;
   if (existsSync(path)) text = readFileSync(path, "utf8");
-  if (text === undefined && mode === "claude-code") {
+  if (
+    text === undefined &&
+    mode === "claude-code" &&
+    resolve(path) === resolve(defaultSubscriptionCredentialPath(mode))
+  ) {
     const service = subscriptionInfo(mode).keychainService;
     if (service !== undefined) text = await readMacosKeychain(service);
   }
@@ -92,9 +99,12 @@ async function credentialBlob(
   return parsed;
 }
 
-export function defaultSubscriptionAccountDirectory(mode: SubscriptionMode): string {
+export function defaultSubscriptionAccountDirectory(
+  mode: SubscriptionMode,
+  env: Readonly<Record<string, string | undefined>> = process.env
+): string {
   const configured = subscriptionInfo(mode).accountsDirectory;
-  const stateHome = process.env.ROUTEKIT_HOME;
+  const stateHome = env.ROUTEKIT_HOME;
   if (
     stateHome !== undefined &&
     stateHome.length > 0 &&
@@ -102,11 +112,14 @@ export function defaultSubscriptionAccountDirectory(mode: SubscriptionMode): str
   ) {
     return join(stateHome, configured.slice("~/.routekit/".length));
   }
-  return expandHome(configured);
+  return expandHome(configured, env);
 }
 
-export function defaultSubscriptionCredentialPath(mode: SubscriptionMode): string {
-  return expandHome(subscriptionInfo(mode).credentialsPath);
+export function defaultSubscriptionCredentialPath(
+  mode: SubscriptionMode,
+  env: Readonly<Record<string, string | undefined>> = process.env
+): string {
+  return expandHome(subscriptionInfo(mode).credentialsPath, env);
 }
 
 export async function loadSubscriptionCredential(
@@ -338,9 +351,7 @@ export function removeSubscriptionAccount(
   if (directoryStat.isSymbolicLink() || !directoryStat.isDirectory()) {
     throw new Error(`managed account directory is not a real directory: ${managedDirectory}`);
   }
-  if (realpathSync(managedDirectory) !== managedDirectory) {
-    throw new Error(`managed account directory contains a symbolic link: ${managedDirectory}`);
-  }
+  const canonicalDirectory = realpathSync(managedDirectory);
   chmodSync(managedDirectory, 0o700);
 
   let targetStat: ReturnType<typeof lstatSync>;
@@ -353,7 +364,7 @@ export function removeSubscriptionAccount(
   if (targetStat.isSymbolicLink() || !targetStat.isFile()) {
     throw new Error(`managed account is not a regular file: ${target}`);
   }
-  if (dirname(realpathSync(target)) !== managedDirectory) {
+  if (dirname(realpathSync(target)) !== canonicalDirectory) {
     throw new Error("account resolves outside the managed account directory");
   }
   chmodSync(target, 0o600);

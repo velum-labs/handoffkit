@@ -1,24 +1,8 @@
-endpoints:
-  - endpointId: kimi
-    model: moonshotai/kimi-k2-thinking
-    provider: openrouter
-    baseUrl: https://openrouter.ai/api/v1
-    dialect: openai
-    apiKeyEnv: OPENROUTER_API_KEY
-    capabilities:
-      streaming: supported
-      tools: supported
-      images: unknown
-      reasoning_controls: supported
-  - endpointId: qwen3
-    model: qwen/qwen3-coder
-    provider: openrouter
-    baseUrl: https://openrouter.ai/api/v1
-    dialect: openai
-    apiKeyEnv: OPENROUTER_API_KEY
-    capabilities:
-      streaming: supported
-      tools: supported
-      images: unknown
-      reasoning_controls: supported
-defaultEndpointId: kimi
+providers:
+  codex:
+    strategy: capacity_weighted
+    switchThreshold: 0.9
+  claude-code:
+    strategy: capacity_weighted
+    switchThreshold: 0.9
+defaultModel: codex/gpt-5.5

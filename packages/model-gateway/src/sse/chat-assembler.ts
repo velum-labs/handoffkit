@@ -10,12 +10,17 @@
  * swallowed malformed JSON.
  */
 import { SseParseError, type SseEvent } from "./parse.js";
+import {
+  anthropicReasoningDetailsOf,
+  type AnthropicReasoningDetail
+} from "../adapters/openai-chat-wire.js";
 
 export type AssembledToolCall = { id?: string; name?: string; arguments: string };
 
 export type AssembledTurn = {
   content: string;
   reasoning: string;
+  reasoningDetails: AnthropicReasoningDetail[];
   toolCalls: AssembledToolCall[];
   finishReason?: string;
   usage?: unknown;
@@ -42,6 +47,7 @@ type OpenCall = { id?: string; name?: string; arguments: string };
 export class ChatStreamAssembler {
   #content = "";
   #reasoning = "";
+  readonly #reasoningDetails = new Map<number, AnthropicReasoningDetail>();
   readonly #toolCalls: OpenCall[] = [];
   readonly #byIndex = new Map<number, OpenCall>();
   readonly #byId = new Map<string, OpenCall>();
@@ -83,6 +89,9 @@ export class ChatStreamAssembler {
     return {
       content: this.#content,
       reasoning: this.#reasoning,
+      reasoningDetails: [...this.#reasoningDetails.values()].sort(
+        (a, b) => a.index - b.index
+      ),
       toolCalls: this.#toolCalls.map((call) => ({
         ...(call.id !== undefined ? { id: call.id } : {}),
         ...(call.name !== undefined ? { name: call.name } : {}),
@@ -100,7 +109,33 @@ export class ChatStreamAssembler {
   }
 
   #merge(chunk: RawChunk): void {
-    if (chunk.usage !== undefined && chunk.usage !== null) this.#usage = chunk.usage;
+    if (chunk.usage !== undefined && chunk.usage !== null) {
+      if (
+        this.#usage !== null &&
+        typeof this.#usage === "object" &&
+        !Array.isArray(this.#usage) &&
+        typeof chunk.usage === "object" &&
+        !Array.isArray(chunk.usage)
+      ) {
+        const previous = this.#usage as Record<string, unknown>;
+        const incoming = chunk.usage as Record<string, unknown>;
+        const prompt = incoming.prompt_tokens ?? incoming.input_tokens ??
+          previous.prompt_tokens ?? previous.input_tokens;
+        const completion = incoming.completion_tokens ?? incoming.output_tokens ??
+          previous.completion_tokens ?? previous.output_tokens;
+        this.#usage = {
+          ...previous,
+          ...incoming,
+          ...(prompt !== undefined ? { prompt_tokens: prompt } : {}),
+          ...(completion !== undefined ? { completion_tokens: completion } : {}),
+          ...(typeof prompt === "number" && typeof completion === "number"
+            ? { total_tokens: prompt + completion }
+            : {})
+        };
+      } else {
+        this.#usage = chunk.usage;
+      }
+    }
     for (const [key, value] of Object.entries(chunk)) {
       if (key !== "choices" && key !== "usage" && value !== undefined && value !== null) {
         this.#extensions[key] = value;
@@ -114,6 +149,12 @@ export class ChatStreamAssembler {
     // both count as reasoning for reconstruction purposes.
     if (typeof delta.reasoning === "string") this.#reasoning += delta.reasoning;
     if (typeof delta.reasoning_content === "string") this.#reasoning += delta.reasoning_content;
+    for (const detail of anthropicReasoningDetailsOf(
+      delta.reasoning_details,
+      "stream"
+    )) {
+      this.#mergeReasoningDetail(detail);
+    }
     if (Array.isArray(delta.tool_calls)) {
       for (const call of delta.tool_calls) this.#mergeToolCall(call as RawToolCall);
     }
@@ -121,6 +162,35 @@ export class ChatStreamAssembler {
       this.#finishReason = choice.finish_reason;
       this.#truncated = false;
     }
+  }
+
+  #mergeReasoningDetail(detail: AnthropicReasoningDetail): void {
+    if (detail.type === "redacted_thinking") {
+      this.#reasoningDetails.set(detail.index, {
+        type: "redacted_thinking",
+        index: detail.index,
+        data: detail.data
+      });
+      return;
+    }
+    const existing = this.#reasoningDetails.get(detail.index);
+    const thinking =
+      existing?.type === "thinking"
+        ? existing
+        : {
+            type: "thinking" as const,
+            index: detail.index,
+            thinking: "",
+            signature: ""
+          };
+    if (detail.phase === "delta" && typeof detail.thinking === "string") {
+      thinking.thinking = `${thinking.thinking ?? ""}${detail.thinking}`;
+    } else if (detail.phase === undefined && typeof detail.thinking === "string") {
+      thinking.thinking = detail.thinking;
+    }
+    if (typeof detail.signature === "string") thinking.signature = detail.signature;
+    delete thinking.phase;
+    this.#reasoningDetails.set(detail.index, thinking);
   }
 
   #mergeToolCall(raw: RawToolCall): void {

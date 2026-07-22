@@ -40,7 +40,12 @@ const MEMBERS = [
 ] as const;
 
 const PANEL_MODELS = ["gpt-panel-a", "claude-panel-b", "gemini-panel-c", "gpt-codex-panel-d"];
-const PANEL_ENDPOINT_IDS = ["alpha", "beta", "gamma", "delta"];
+const PANEL_MODEL_IDS = [
+  "openai/gpt-panel-a",
+  "anthropic/claude-panel-b",
+  "google/gemini-panel-c",
+  "codex/gpt-codex-panel-d"
+];
 
 const CANDIDATES = Object.fromEntries(
   PANEL_MODELS.map((model) => [model, `candidate from ${model}`])
@@ -207,23 +212,23 @@ for (const door of DOOR_PROFILES) {
 
 // --- cross-door invariants: per-provider vendor passthrough -----------------------------
 
-test("RouteKit endpoint passthrough routes each opaque id to its provider dialect", { skip: SKIP }, async () => {
+test("RouteKit model passthrough routes each namespaced id to its provider dialect", { skip: SKIP }, async () => {
   await stack.sim.reset();
   const expected: Array<[string, string, string]> = [
-    ["alpha", "gpt-panel-a", "openai-chat"],
-    ["beta", "claude-panel-b", "anthropic-messages"],
-    ["gamma", "gemini-panel-c", "google-generate"],
-    ["delta", "gpt-codex-panel-d", "openai-responses"]
+    ["openai/gpt-panel-a", "gpt-panel-a", "openai-chat"],
+    ["anthropic/claude-panel-b", "claude-panel-b", "anthropic-messages"],
+    ["google/gemini-panel-c", "gemini-panel-c", "google-generate"],
+    ["codex/gpt-codex-panel-d", "gpt-codex-panel-d", "openai-responses"]
   ];
   for (const [, providerModel] of expected) {
     await stack.sim.queue(providerModel, [`${providerModel} passthrough`]);
   }
-  for (const [endpointId, providerModel, dialect] of expected) {
+  for (const [modelId, providerModel, dialect] of expected) {
     const response = await stack.door.chat({
-      model: endpointId,
-      messages: [{ role: "user", content: `direct to ${endpointId}` }]
+      model: modelId,
+      messages: [{ role: "user", content: `direct to ${modelId}` }]
     });
-    assert.equal(response.status, 200, `${endpointId} passthrough must succeed`);
+    assert.equal(response.status, 200, `${modelId} passthrough must succeed`);
     const body = (await response.json()) as { choices: Array<{ message: { content: string } }> };
     assert.match(body.choices[0]?.message.content ?? "", new RegExp(`${providerModel} passthrough`));
     const calls = await stack.sim.calls({ model: providerModel });
@@ -238,8 +243,8 @@ test("model discovery doors advertise the fused model and every member", { skip:
   const models = (await (await stack.door.models()).json()) as { data: Array<{ id: string }> };
   const ids = new Set(models.data.map((entry) => entry.id));
   assert.ok(ids.has("fusion-panel"), "fused ensemble model must be advertised");
-  for (const endpointId of PANEL_ENDPOINT_IDS) {
-    assert.ok(ids.has(endpointId), `${endpointId} must be advertised as a passthrough`);
+  for (const modelId of PANEL_MODEL_IDS) {
+    assert.ok(ids.has(modelId), `${modelId} must be advertised as a passthrough`);
   }
   assert.ok(PANEL_MODELS.every((model) => !ids.has(model)), "provider model names stay behind RouteKit");
 

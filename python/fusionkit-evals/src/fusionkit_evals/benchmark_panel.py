@@ -39,6 +39,11 @@ class BenchmarkPanelMember(BaseModel):
 
     id: str
     model: str
+    provider: str
+
+    @property
+    def routekit_model_id(self) -> str:
+        return f"{self.provider}/{self.model}"
 
 
 class BenchmarkPanel(BaseModel):
@@ -89,16 +94,19 @@ class BenchmarkPanel(BaseModel):
         routekit_url: str = "http://127.0.0.1:8787",
         sampling: SamplingConfig | None = None,
     ) -> FusionConfig:
-        """Render this panel as an opaque-id sidecar :class:`FusionConfig`."""
+        """Render this panel as a namespaced-model sidecar :class:`FusionConfig`."""
 
+        routekit_model_ids = [member.routekit_model_id for member in self.members]
         return FusionConfig(
             routekit_url=routekit_url,
-            endpoint_ids=self.member_ids,
-            default_model=self.members[0].id,
-            judge_model=self.judge_id,
-            synthesizer_model=self.resolved_synthesizer_id,
+            routekit_model_ids=routekit_model_ids,
+            default_model=routekit_model_ids[0],
+            judge_model=self.member_for(self.judge_id).routekit_model_id,
+            synthesizer_model=self.member_for(
+                self.resolved_synthesizer_id
+            ).routekit_model_id,
             default_mode="panel",
-            panel_models=self.member_ids,
+            panel_models=routekit_model_ids,
             sampling=sampling or SamplingConfig(),
         )
 
@@ -184,6 +192,7 @@ def _panel_from_registry(preset: Mapping[str, Any]) -> BenchmarkPanel:
             BenchmarkPanelMember(
                 id=str(member["id"]),
                 model=str(member["model"]),
+                provider=str(member["provider"]),
             )
             for member in cast(list[Mapping[str, Any]], preset["members"])
         ],

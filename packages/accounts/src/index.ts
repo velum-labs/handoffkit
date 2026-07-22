@@ -46,6 +46,10 @@ export {
 } from "./account-set.js";
 export type { SubscriptionAccountSetOptions } from "./account-set.js";
 
+// OpenAI-compatible backend over a subscription account set
+export { SubscriptionAccountBackend } from "./backend.js";
+export type { SubscriptionAccountBackendOptions } from "./backend.js";
+
 // Relays (provider-native forwarding)
 export { CodexBackendRelay, codexRelayAuth } from "./codex-relay.js";
 export type {
@@ -68,11 +72,16 @@ export type {
 } from "./relay.js";
 
 // Gateway relay construction
-export { openSubscriptionRelays } from "./gateway.js";
+export {
+  openSubscriptionAccountSets,
+  openSubscriptionRelays,
+  subscriptionRelaysFromAccountSets
+} from "./gateway.js";
 export type {
   OpenSubscriptionRelaysOptions,
   OpenSubscriptionRelaysResult,
-  SubscriptionAccountConfigs
+  SubscriptionAccountConfigs,
+  SubscriptionAccountSets
 } from "./gateway.js";
 
 // Programmatic proxy + typed client
@@ -83,6 +92,14 @@ export type {
 } from "./proxy.js";
 export { SubscriptionProxyClient, SubscriptionProxyClientError } from "./client.js";
 export type { SubscriptionProxyClientOptions } from "./client.js";
+
+// Fresh usage collection over live or locally opened account sets
+export {
+  collectSubscriptionUsage,
+  DEFAULT_SUBSCRIPTION_USAGE_REFRESH_MS,
+  openLocalSubscriptionUsage
+} from "./usage.js";
+export type { SubscriptionUsageSource } from "./usage.js";
 
 // Managed CLIProxyAPI lifecycle
 export {
@@ -117,6 +134,7 @@ export type { SubscriptionUsageResponse } from "./wire.js";
 export type {
   AccountLimits,
   CreditSnapshot,
+  RateLimitObservationSource,
   RateLimitWindow,
   SubscriptionAccountSetSnapshot,
   SubscriptionCredential,

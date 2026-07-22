@@ -8,14 +8,15 @@ description: Fusion-only commands and neutral RouteKit composition.
 FusionKit composes `@routekit/config`, `@routekit/router`, gateway, and tool SDK
 packages. It does not install or invoke the `routekit` executable.
 
-Install `@routekit/cli` separately for endpoint/account/proxy management and
+Install `@routekit/cli` separately for provider/catalog/account/proxy management and
 single-model launches:
 
 ```bash
 npm install -g @routekit/cli
-routekit endpoints list
-routekit serve
-routekit codex opaque-endpoint-id
+routekit providers status
+routekit models list
+routekit gateway serve
+routekit codex openai/gpt-5.5
 ```
 
 There are no FusionKit forwarding aliases.
@@ -40,18 +41,18 @@ a generic agent profile and `fusion-<name>` model; the default uses
 | --- | --- |
 | `fusionkit init` | Scaffold Fusion v4 and safe RouteKit config. |
 | `fusionkit setup` | Warm the pinned Python synthesis engine. |
-| `fusionkit doctor` | Validate git, Fusion/RouteKit config, endpoints, uv, and tools. |
+| `fusionkit doctor` | Validate git, Fusion/RouteKit config, live models, uv, and tools. |
 | `fusionkit config show\|path\|get\|set\|unset\|edit` | Inspect and edit Fusion v4. |
-| `fusionkit ensemble list\|add\|edit\|remove\|rename` | Manage endpoint-ID ensembles. |
+| `fusionkit ensemble list\|add\|edit\|remove\|rename` | Manage namespaced-model ensembles. |
 | `fusionkit prompts list\|edit\|reset` | Manage judge/synthesizer prompts. |
 | `fusionkit sessions list\|show\|rm` | Manage durable Fusion sessions. |
 | `fusionkit models list\|download\|rm` | Manage the Fusion-owned local MLX cache. |
 | `fusionkit stop` | Stop only Fusion-owned processes and portless routes. |
 | `fusionkit telemetry`, `completion`, `version` | Telemetry, shell completion, and versions. |
 
-Removed surfaces include `fusionkit proxy`, account/CLIProxy management,
-`install|uninstall codex`, `--direct`, and direct/single-model mode. Use
-RouteKit for those responsibilities.
+Removed surfaces include `fusionkit proxy`, account/CLIProxy management, Codex
+install/uninstall (`routekit codex install|uninstall`), `--direct`, and
+direct/single-model mode. Use RouteKit for those responsibilities.
 
 ## Launch flags
 

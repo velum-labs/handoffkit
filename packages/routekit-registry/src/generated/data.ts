@@ -7,6 +7,10 @@ export const REGISTRY = {
       "keyEnv": "OPENAI_API_KEY",
       "baseUrlEnv": "OPENAI_BASE_URL",
       "apiCompatibility": "openai-chat-completions",
+      "wire": {
+        "protocol": "openai",
+        "basePath": "/v1"
+      },
       "keyProbe": {
         "path": "/v1/models",
         "auth": "bearer",
@@ -27,6 +31,10 @@ export const REGISTRY = {
       "authTokenEnv": "ANTHROPIC_AUTH_TOKEN",
       "baseUrlEnv": "ANTHROPIC_BASE_URL",
       "apiCompatibility": "custom",
+      "wire": {
+        "protocol": "anthropic",
+        "basePath": "/v1"
+      },
       "keyProbe": {
         "path": "/v1/models",
         "auth": "x-api-key",
@@ -51,6 +59,10 @@ export const REGISTRY = {
       "baseUrl": "https://generativelanguage.googleapis.com",
       "keyEnv": "GEMINI_API_KEY",
       "apiCompatibility": "custom",
+      "wire": {
+        "protocol": "google",
+        "basePath": "/v1beta"
+      },
       "keyProbe": {
         "path": "/v1beta/models",
         "auth": "x-goog-api-key",
@@ -70,6 +82,10 @@ export const REGISTRY = {
       "baseUrl": "https://openrouter.ai/api",
       "keyEnv": "OPENROUTER_API_KEY",
       "apiCompatibility": "openai-chat-completions",
+      "wire": {
+        "protocol": "openai",
+        "basePath": "/v1"
+      },
       "attributionHeaders": {
         "HTTP-Referer": "https://github.com/velum-labs/handoffkit",
         "X-Title": "RouteKit"
@@ -99,6 +115,10 @@ export const REGISTRY = {
       "keyEnv": "ROUTEKIT_CLIPROXY_API_KEY",
       "baseUrlEnv": "ROUTEKIT_CLIPROXY_BASE_URL",
       "apiCompatibility": "openai-chat-completions",
+      "wire": {
+        "protocol": "openai",
+        "basePath": "/v1"
+      },
       "keyProbe": {
         "path": "/v1/models",
         "auth": "bearer",
@@ -119,7 +139,16 @@ export const REGISTRY = {
       "credentialEnvNames": [
         "CODEX_API_KEY",
         "OPENAI_API_KEY"
-      ]
+      ],
+      "wire": {
+        "protocol": "codex",
+        "basePath": ""
+      },
+      "discovery": {
+        "path": "/models",
+        "auth": "bearer",
+        "responseShape": "codex"
+      }
     },
     "ai-gateway": {
       "baseUrl": "https://ai-gateway.vercel.sh",
@@ -147,6 +176,17 @@ export const REGISTRY = {
       "defaultModel": "claude-sonnet-4-5",
       "oauthBetaHeader": "oauth-2025-04-20",
       "spoofSystemPrompt": "You are Claude Code, Anthropic's official CLI for Claude.",
+      "wire": {
+        "protocol": "anthropic",
+        "basePath": "/v1"
+      },
+      "discovery": {
+        "path": "/v1/models",
+        "responseShape": "anthropic",
+        "extraHeaders": {
+          "anthropic-version": "2023-06-01"
+        }
+      },
       "oauth": {
         "tokenEndpoint": "https://console.anthropic.com/v1/oauth/token",
         "clientId": "9d1c250a-e61b-44d9-88ed-5944d1962f5e",
@@ -172,6 +212,19 @@ export const REGISTRY = {
       "authFileName": "auth.json",
       "defaultModel": "gpt-5.5",
       "defaultInstructions": "You are a helpful assistant.",
+      "wire": {
+        "protocol": "codex",
+        "basePath": ""
+      },
+      "discovery": {
+        "path": "/models",
+        "responseShape": "codex",
+        "cacheFallback": true,
+        "extraHeaders": {
+          "OpenAI-Beta": "responses=v1",
+          "originator": "routekit"
+        }
+      },
       "defaultHeaders": {
         "OpenAI-Beta": "responses=v1",
         "originator": "routekit"

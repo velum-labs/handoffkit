@@ -12,14 +12,17 @@ BENCHMARK_REGISTRY: Final[dict[str, Any]] = {
                 {
                     "id": "gpt",
                     "model": "gpt-5.5",
+                    "provider": "openai",
                 },
                 {
                     "id": "opus",
                     "model": "claude-opus-4.8",
+                    "provider": "anthropic",
                 },
                 {
                     "id": "gemini",
                     "model": "gemini-3-pro",
+                    "provider": "google",
                 },
             ],
             "judgeId": "gpt",
@@ -32,10 +35,12 @@ BENCHMARK_REGISTRY: Final[dict[str, Any]] = {
                 {
                     "id": "gpt",
                     "model": "gpt-5.5",
+                    "provider": "openai",
                 },
                 {
                     "id": "sonnet",
                     "model": "claude-sonnet-4-6",
+                    "provider": "anthropic",
                 },
             ],
             "judgeId": "gpt",
@@ -48,10 +53,12 @@ BENCHMARK_REGISTRY: Final[dict[str, Any]] = {
                 {
                     "id": "gpt",
                     "model": "gpt-5.5",
+                    "provider": "openai",
                 },
                 {
                     "id": "opus",
                     "model": "claude-opus-4-8",
+                    "provider": "anthropic",
                 },
             ],
             "judgeId": "gpt",

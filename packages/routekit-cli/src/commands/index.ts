@@ -8,27 +8,36 @@ import { registerDynamicCompletion } from "../completion.js";
 
 import { registerAccounts } from "./accounts.js";
 import { registerConfig } from "./config.js";
+import { registerDaemon } from "./daemon.js";
 import { registerDoctor } from "./doctor.js";
-import { registerEndpoints } from "./endpoints.js";
-import { registerInstall } from "./install.js";
+import { registerGateway } from "./gateway.js";
 import { registerLaunchers } from "./launchers.js";
 import { registerModels } from "./models.js";
-import { registerServe } from "./serve.js";
-import { registerStop } from "./stop.js";
+import { registerProviders } from "./providers.js";
+import { registerStatus } from "./status.js";
 import { registerTelemetry } from "./telemetry.js";
+import { registerUsage } from "./usage.js";
 
 export function registerCommands(program: Command): void {
   attachGlobalFlags(program);
   program.option("--config <path>", "router config path (overrides project and global config)");
-  registerServe(program);
-  registerLaunchers(program);
+  program.commandsGroup("Setup");
   registerAccounts(program);
-  registerEndpoints(program);
-  registerModels(program);
+  registerProviders(program);
   registerConfig(program);
+
+  program.commandsGroup("Run");
+  registerDaemon(program);
+  registerGateway(program);
+  registerLaunchers(program);
+
+  program.commandsGroup("Inspect");
+  registerStatus(program);
+  registerUsage(program);
+  registerModels(program);
   registerDoctor(program);
-  registerInstall(program);
-  registerStop(program);
+
+  program.commandsGroup("Maintain");
   registerTelemetry(program);
   registerCompletion(program, "routekit");
   registerDynamicCompletion(program);

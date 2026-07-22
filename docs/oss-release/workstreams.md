@@ -377,8 +377,9 @@ Scope:
    a clean machine (the ultimate DX gate).
 
 Acceptance: public repo shows only the cleaned `main` (+ release tags per D3),
-all checks green, fresh-clone `npm i -g @fusionkit/cli && fusionkit codex`
-walkthrough succeeds as documented.
+all checks green, and the documented fresh-clone walkthrough (`npm i -g
+@fusionkit/cli`, `fusionkit setup`, `fusionkit init`, `fusionkit doctor`,
+`fusionkit codex`) succeeds.
 
 ---
 

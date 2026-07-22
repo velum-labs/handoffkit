@@ -11,13 +11,13 @@ import {
 const ENSEMBLES = [
   {
     name: "default",
-    members: ["route-fast", "route-deep"],
-    judge: "route-deep"
+    members: ["openai/route-fast", "anthropic/route-deep"],
+    judge: "anthropic/route-deep"
   },
   {
     name: "review",
-    members: ["route-deep"],
-    judge: "route-deep"
+    members: ["anthropic/route-deep"],
+    judge: "anthropic/route-deep"
   }
 ];
 
@@ -35,20 +35,20 @@ test("quickstart exposes all four tool launchers and serve", () => {
   );
 });
 
-test("quickstart creates generic profiles from opaque endpoint-id ensembles", () => {
+test("quickstart creates generic profiles from namespaced-model ensembles", () => {
   assert.deepEqual(fusionAgentProfiles(ENSEMBLES), [
     {
       id: "fusion-panel",
       model: "fusion-panel",
       description:
-        'Delegate a task to the "default" compound (route-fast, route-deep).',
+        'Delegate a task to the "default" compound (openai/route-fast, anthropic/route-deep).',
       instructions:
         'Answer the delegated task directly using the "default" compound.'
     },
     {
       id: "fusion-review",
       model: "fusion-review",
-      description: 'Delegate a task to the "review" compound (route-deep).',
+      description: 'Delegate a task to the "review" compound (anthropic/route-deep).',
       instructions:
         'Answer the delegated task directly using the "review" compound.'
     }
@@ -87,5 +87,30 @@ test("quickstart auth remains scoped to the public Fusion gateway", () => {
   assert.ok(
     JSON.stringify(spec).includes("fusion-frontdoor-token"),
     "the public tool launch spec carries only the Fusion gateway token"
+  );
+});
+
+test("quickstart validates effort against the selected compound capability", () => {
+  const input = {
+    gatewayUrl: "http://127.0.0.1:9000",
+    defaultEnsemble: "default",
+    ensembles: ENSEMBLES,
+    args: [],
+    cwd: "/tmp/repo",
+    reasoningByEnsemble: {
+      default: {
+        status: "supported" as const,
+        efforts: [{ id: "balanced", aliases: ["normal"] }],
+        provenance: "provider" as const
+      }
+    }
+  };
+  assert.deepEqual(
+    fusionToolLaunchSpec({ ...input, effort: "normal" }).reasoning,
+    { mode: "effort", effort: "balanced" }
+  );
+  assert.throws(
+    () => fusionToolLaunchSpec({ ...input, effort: "maximum" }),
+    /not supported/
   );
 });

@@ -84,7 +84,7 @@ def panel_signature(engine: FusionEngine, max_tests: int) -> str:
 
     config = engine.config
     payload = {
-        "endpoint_ids": sorted(config.endpoint_ids),
+        "routekit_model_ids": sorted(config.routekit_model_ids),
         "judge": config.resolved_judge_model,
         "synthesizer": config.resolved_synthesizer_model,
         "panel_models": sorted(config.panel_models),
@@ -311,7 +311,7 @@ async def main() -> None:
         "tasks": rows,
         "provenance": build_provenance(
             prompt_template=PROMPT_SUFFIX,
-            model_versions={endpoint_id: endpoint_id for endpoint_id in config.endpoint_ids},
+            model_versions={model_id: model_id for model_id in config.routekit_model_ids},
             dataset_revision=os.environ.get("LCB_VERSION", "release_v6"),
             extra={
                 "checker_mode": checker_mode,

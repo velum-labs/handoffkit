@@ -16,6 +16,10 @@
  */
 
 import { droppedField } from "./dropped.js";
+import {
+  attachReasoningSelection,
+  attachReasoningSelectionError
+} from "./openai-chat-wire.js";
 
 type JsonObject = Record<string, unknown>;
 
@@ -245,13 +249,24 @@ function translateSampling(body: JsonObject, translated: JsonObject): void {
 
 function translateReasoning(body: JsonObject, translated: JsonObject): void {
   const reasoning = body.reasoning;
-  if (!isObject(reasoning)) return;
-  const effort = reasoning.effort;
-  if (effort === "low" || effort === "medium" || effort === "high") {
-    translated.reasoning_effort = effort;
+  if (reasoning === undefined || reasoning === null) return;
+  if (!isObject(reasoning)) {
+    attachReasoningSelectionError(
+      translated,
+      "reasoning must contain a non-empty effort string"
+    );
     return;
   }
-  droppedField("cursor", "reasoning");
+  const effort = reasoning.effort;
+  if (typeof effort === "string" && effort.length > 0) {
+    translated.reasoning_effort = effort;
+    attachReasoningSelection(translated, { mode: "effort", effort });
+    return;
+  }
+  attachReasoningSelectionError(
+    translated,
+    "reasoning.effort must be a non-empty string"
+  );
 }
 
 function translateTextFormat(body: JsonObject, translated: JsonObject): void {

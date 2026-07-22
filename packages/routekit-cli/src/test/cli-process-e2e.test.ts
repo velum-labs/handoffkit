@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdtempSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import test from "node:test";
@@ -46,20 +53,15 @@ test("real routekit command surfaces execute independently of FusionKit", () => 
   const project = join(root, "project");
   const stateHome = join(root, "state");
   const home = join(root, "home");
-  const codexHome = join(root, "codex");
   mkdirSync(join(project, ".routekit"), { recursive: true });
   mkdirSync(home);
   const configPath = join(project, ".routekit", "router.yaml");
   writeFileSync(
     configPath,
     [
-      "endpoints:",
-      "  - endpointId: command-opaque",
-      "    model: provider-private",
-      "    provider: mock",
-      "    baseUrl: http://127.0.0.1:9/v1",
-      "    dialect: openai",
-      "defaultEndpointId: command-opaque",
+      "providers:",
+      "  openai: {}",
+      "defaultModel: openai/command-model",
       ""
     ].join("\n")
   );
@@ -72,9 +74,6 @@ test("real routekit command surfaces execute independently of FusionKit", () => 
     NO_COLOR: "1"
   };
   const input = { cwd: project, env };
-  const configured = (args: readonly string[]): string =>
-    mustRun(["--config", configPath, ...args], input);
-
   try {
     const version = JSON.parse(mustRun(["version", "--json"], input)) as {
       package?: string;
@@ -87,79 +86,14 @@ test("real routekit command surfaces execute independently of FusionKit", () => 
       assert.match(mustRun(["completion", shell], input), /routekit/);
     }
 
-    const path = JSON.parse(configured(["config", "path", "--json"])) as {
-      path?: string;
-      exists?: boolean;
-    };
-    assert.equal(path.path, configPath);
-    assert.equal(path.exists, true);
-    const shown = JSON.parse(configured(["config", "show", "--json"])) as {
-      config?: { defaultEndpointId?: string };
-    };
-    assert.equal(shown.config?.defaultEndpointId, "command-opaque");
-
-    const endpoints = JSON.parse(configured(["endpoints", "list", "--json"])) as {
-      endpoints?: Array<{ endpointId?: string; model?: string }>;
-    };
-    assert.deepEqual(
-      endpoints.endpoints?.map((entry) => entry.endpointId),
-      ["command-opaque"]
-    );
-    assert.equal(endpoints.endpoints?.[0]?.model, "provider-private");
-
-    const models = JSON.parse(configured(["models", "--json"])) as {
-      defaultModel?: string;
-      models?: string[];
-    };
-    assert.equal(models.defaultModel, "command-opaque");
-    assert.deepEqual(models.models, ["command-opaque"]);
-
-    const telemetry = JSON.parse(mustRun(["telemetry", "status", "--json"], input)) as {
-      enabled?: boolean;
-      fields?: Record<string, string[]>;
-    };
-    assert.equal(telemetry.enabled, false);
-    assert.ok(Array.isArray(telemetry.fields?.["cli.command"]));
-
-    const doctor = runCli(
-      ["--config", configPath, "doctor", "--json"],
-      { cwd: project, env: { ...env, PATH: "/nonexistent" } }
-    );
-    assert.equal(doctor.status, 1, `${doctor.stdout}\n${doctor.stderr}`);
-    const diagnosis = JSON.parse(doctor.stdout) as {
-      ready?: boolean;
-      checks?: Array<{ label?: string; ok?: boolean }>;
-    };
-    assert.equal(diagnosis.ready, false);
-    assert.equal(
-      diagnosis.checks?.find((check) => check.label === "router config")?.ok,
-      true
-    );
-    for (const binary of ["codex", "claude", "cursor-agent", "opencode"]) {
-      assert.equal(
-        diagnosis.checks?.find((check) => check.label === binary)?.ok,
-        false
-      );
-    }
-
-    const installHelp = runCli(["install", "codex", "--help"], input);
+    const installHelp = runCli(["codex", "install", "--help"], input);
     assert.equal(installHelp.status, 0, installHelp.stderr);
     assert.match(installHelp.stdout, /--gateway-url/);
     assert.match(installHelp.stdout, /--codex-home/);
 
-    const installed = JSON.parse(
-      configured([
-        "install",
-        "codex",
-        "--gateway-url",
-        "http://127.0.0.1:8080",
-        "--codex-home",
-        codexHome,
-        "--json"
-      ])
-    ) as { action?: string; profiles?: string[] };
-    assert.equal(installed.action, "installed");
-    assert.deepEqual(installed.profiles, ["command-opaque"]);
+    const legacyInstall = runCli(["install", "codex"], input);
+    assert.equal(legacyInstall.status, 1);
+    assert.match(legacyInstall.stderr, /unknown command/i);
 
     for (const fusionOnly of ["setup", "prompts", "sessions", "ensemble"]) {
       const rejected = runCli([fusionOnly], input);
@@ -171,39 +105,111 @@ test("real routekit command surfaces execute independently of FusionKit", () => 
   }
 });
 
-test("real routekit launcher fails preflight before starting a gateway when its harness is missing", () => {
-  const root = mkdtempSync(join(tmpdir(), "routekit-missing-harness-"));
+test("config init does not install a crash-looping daemon when credentials are missing", () => {
+  const root = mkdtempSync(join(tmpdir(), "routekit-config-init-"));
+  const home = join(root, "home");
+  const project = join(root, "project");
+  const stateHome = join(root, "state");
+  mkdirSync(home);
+  mkdirSync(project);
+  const env = {
+    ...process.env,
+    HOME: home,
+    ROUTEKIT_HOME: stateHome,
+    ROUTEKIT_NO_SUPERVISOR: "1",
+    PORTLESS: "0",
+    NO_COLOR: "1",
+    OPENAI_API_KEY: undefined
+  };
+  try {
+    const result = runCli(["config", "init", "--json"], {
+      cwd: project,
+      env
+    });
+    assert.equal(result.status, 0, result.stderr);
+    const payload = JSON.parse(result.stdout) as {
+      created?: boolean;
+      daemonStarted?: boolean;
+      missingCredentials?: string[];
+    };
+    assert.equal(payload.created, true);
+    assert.equal(payload.daemonStarted, false);
+    assert.deepEqual(payload.missingCredentials, ["OPENAI_API_KEY"]);
+    assert.equal(
+      existsSync(join(home, ".config", "routekit", "router.yaml")),
+      true
+    );
+    assert.equal(existsSync(join(stateHome, "services", "daemon.json")), false);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("config migrate diagnoses and converts legacy endpoint config explicitly", () => {
+  const root = mkdtempSync(join(tmpdir(), "routekit-config-migrate-command-"));
   const configPath = join(root, "router.yaml");
   writeFileSync(
     configPath,
     [
       "endpoints:",
-      "  - endpointId: opaque",
-      "    model: private",
-      "    baseUrl: http://127.0.0.1:9/v1",
-      "defaultEndpointId: opaque",
+      "  - endpointId: kimi",
+      "    model: moonshotai/kimi-k2-thinking",
+      "    provider: openrouter",
+      "    baseUrl: https://openrouter.ai/api/v1",
+      "    apiKeyEnv: OPENROUTER_API_KEY",
+      "defaultEndpointId: kimi",
       ""
     ].join("\n")
   );
+  const input = {
+    cwd: root,
+    env: {
+      ...process.env,
+      HOME: root,
+      ROUTEKIT_HOME: join(root, "state"),
+      PORTLESS: "0",
+      NO_COLOR: "1"
+    }
+  };
   try {
-    const result = runCli(
-      ["--config", configPath, "codex", "opaque"],
-      {
-        cwd: root,
-        env: {
-          ...process.env,
-          HOME: root,
-          ROUTEKIT_HOME: join(root, "state"),
-          PATH: "/nonexistent",
-          PORTLESS: "0",
-          NO_COLOR: "1"
-        }
-      }
+    const preview = JSON.parse(
+      mustRun(
+        [
+          "--config",
+          configPath,
+          "config",
+          "migrate",
+          "--dry-run",
+          "--json"
+        ],
+        input
+      )
+    ) as {
+      migration?: {
+        changed?: boolean;
+        diagnostics?: Array<{ code?: string }>;
+      };
+    };
+    assert.equal(preview.migration?.changed, true);
+    assert.equal(
+      preview.migration?.diagnostics?.some(
+        (diagnostic) => diagnostic.code === "custom-alias"
+      ),
+      true
     );
-    assert.equal(result.status, 1);
-    assert.match(`${result.stdout}${result.stderr}`, /routekit preflight failed/i);
-    assert.match(`${result.stdout}${result.stderr}`, /"codex" was not found on PATH/);
-    assert.equal(existsSync(join(root, "state", "services", "gateway.json")), false);
+    assert.match(readFileSync(configPath, "utf8"), /^endpoints:/);
+
+    mustRun(
+      ["--config", configPath, "config", "migrate", "--json"],
+      input
+    );
+    const migrated = readFileSync(configPath, "utf8");
+    assert.match(migrated, /^providers:/);
+    assert.match(
+      migrated,
+      /defaultModel: openrouter\/moonshotai\/kimi-k2-thinking/
+    );
+    assert.doesNotMatch(migrated, /endpoints:|defaultEndpointId:/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

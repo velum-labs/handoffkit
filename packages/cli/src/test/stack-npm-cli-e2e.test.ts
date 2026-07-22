@@ -3,8 +3,8 @@
  * entrypoint) booting its production stack — v4 Fusion/RouteKit config loading,
  * the credential-free Python sidecar
  * spawned through the real dev override (`uv run --package fusionkit`), the
- * in-process gateway, and the printed setup snippets — with every provider
- * RouteKit endpoint pointed at the scripted simulator. A fused turn is then driven
+ * in-process gateway, and the printed setup snippets — with every RouteKit
+ * provider pointed at the scripted simulator. A fused turn is then driven
  * through the gateway the CLI itself booted.
  *
  * This is the orchestration path production users run (`fusion-quickstart` ->
@@ -35,7 +35,7 @@ let cli: ChildProcess | undefined;
 let cliOutput = "";
 let gatewayUrl: string | undefined;
 
-function makeConfiguredRepo(simUrl: string): string {
+function makeConfiguredRepo(): string {
   const dir = mkdtempSync(join(tmpdir(), "fusionkit-npm-cli-"));
   execFileSync("git", ["init", "-q", "-b", "main"], { cwd: dir });
   execFileSync(
@@ -57,8 +57,8 @@ function makeConfiguredRepo(simUrl: string): string {
             // k=1 proposal mode keeps provider scripting deterministic; the
             // rollout path is covered by gateway-e2e's worktree suite.
             k: 1,
-            members: ["alpha", "beta"],
-            judge: "alpha"
+            members: ["openai/gpt-real-a", "anthropic/claude-real-b"],
+            judge: "openai/gpt-real-a"
           }
         }
       },
@@ -69,18 +69,10 @@ function makeConfiguredRepo(simUrl: string): string {
   writeFileSync(
     join(dir, ".routekit", "router.yaml"),
     [
-      "endpoints:",
-      "  - endpointId: alpha",
-      "    model: gpt-real-a",
-      "    provider: simulator",
-      `    baseUrl: ${simUrl}/v1`,
-      "    dialect: openai",
-      "  - endpointId: beta",
-      "    model: claude-real-b",
-      "    provider: simulator",
-      `    baseUrl: ${simUrl}/v1`,
-      "    dialect: anthropic",
-      "defaultEndpointId: alpha",
+      "providers:",
+      "  openai: {}",
+      "  anthropic: {}",
+      "defaultModel: openai/gpt-real-a",
       ""
     ].join("\n")
   );
@@ -90,7 +82,9 @@ function makeConfiguredRepo(simUrl: string): string {
 before(async function () {
   if (SKIP !== false) return;
   sim = await startProviderSim();
-  repo = makeConfiguredRepo(sim.url);
+  await sim.queue("gpt-real-a", ["catalog seed"]);
+  await sim.queue("claude-real-b", ["catalog seed"]);
+  repo = makeConfiguredRepo();
   cli = spawn(
     process.execPath,
     [
@@ -102,13 +96,21 @@ before(async function () {
       repo,
       "--no-reasoning",
       "--no-observe",
-      "--no-subagents",
-      "--yes"
+      "--no-subagents"
     ],
     {
       cwd: repo,
       // env-spread-allowed: the CLI under test is this repo's own product entrypoint
-      env: { ...process.env, PORTLESS: "0", FUSIONKIT_TELEMETRY: "0", NO_COLOR: "1" },
+      env: {
+        ...process.env,
+        PORTLESS: "0",
+        FUSIONKIT_TELEMETRY: "0",
+        NO_COLOR: "1",
+        OPENAI_API_KEY: "test-openai",
+        OPENAI_BASE_URL: sim.url,
+        ANTHROPIC_API_KEY: "test-anthropic",
+        ANTHROPIC_BASE_URL: sim.url
+      },
       stdio: ["ignore", "pipe", "pipe"]
     }
   );
@@ -150,9 +152,12 @@ test("the CLI-booted gateway advertises the fused model", { skip: SKIP }, async 
   };
   const ids = new Set(models.data.map((entry) => entry.id));
   assert.ok(ids.has("fusion-panel"));
-  assert.ok(ids.has("alpha"), "opaque RouteKit endpoints are advertised as passthroughs");
-  assert.ok(ids.has("beta"), "opaque RouteKit endpoints are advertised as passthroughs");
-  assert.ok(!ids.has("gpt-real-a"), "provider model names stay behind RouteKit");
+  assert.ok(ids.has("openai/gpt-real-a"), "namespaced RouteKit models must be advertised");
+  assert.ok(
+    ids.has("anthropic/claude-real-b"),
+    "namespaced RouteKit models must be advertised"
+  );
+  assert.ok(!ids.has("gpt-real-a"), "unnamespaced provider model names stay behind RouteKit");
 });
 
 test("a fused turn flows through the CLI-booted stack end to end", { skip: SKIP }, async () => {

@@ -10,9 +10,12 @@ export function claudeEnv(gatewayUrl: string, authToken?: string): Record<string
 }
 
 function claudeModelId(modelId: string): string {
-  return modelId.startsWith("claude") || modelId.startsWith("anthropic")
-    ? modelId
-    : `claude-${modelId}`;
+  const pickerId = modelId.startsWith("claude-code/")
+    ? modelId.slice("claude-code/".length)
+    : modelId;
+  return pickerId.startsWith("claude") || pickerId.startsWith("anthropic")
+    ? pickerId
+    : `claude-${pickerId}`;
 }
 
 /** Serialize host-authored profiles once into Claude's session agent format. */
@@ -35,8 +38,15 @@ function hasAgentsArg(args: readonly string[]): boolean {
   return args.some((arg) => arg === "--agents" || arg.startsWith("--agents="));
 }
 
+function hasModelArg(args: readonly string[]): boolean {
+  return args.some((arg) => arg === "--model" || arg.startsWith("--model="));
+}
+
 export function claudeLaunchArgs(ctx: ToolLaunchContext): string[] {
   const args = [...ctx.spec.args];
+  if (!hasModelArg(args)) {
+    args.unshift("--model", claudeModelId(ctx.spec.defaultModel));
+  }
   const profiles = ctx.spec.agentProfiles ?? [];
   if (profiles.length > 0 && !hasAgentsArg(args)) {
     args.push("--agents", claudeAgentsJson(profiles));

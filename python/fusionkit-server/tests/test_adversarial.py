@@ -44,10 +44,10 @@ class _NeverCalledClient:
 def client() -> TestClient:
     config = FusionConfig(
         routekit_url="http://routekit.test",
-        endpoint_ids=["judge"],
-        default_model="judge",
+        routekit_model_ids=["test/judge"],
+        default_model="test/judge",
     )
-    return TestClient(create_app(config, clients={"judge": _NeverCalledClient()}))
+    return TestClient(create_app(config, clients={"test/judge": _NeverCalledClient()}))
 
 
 @pytest.mark.parametrize(
@@ -121,7 +121,7 @@ def test_seeded_random_internal_bodies_never_escape_validation(
         assert "Traceback" not in response.text
 
 
-def test_unknown_endpoint_is_stable_and_does_not_reach_routekit(
+def test_unknown_model_is_stable_and_does_not_reach_routekit(
     client: TestClient,
 ) -> None:
     response = client.post(
@@ -136,13 +136,13 @@ def test_unknown_endpoint_is_stable_and_does_not_reach_routekit(
                     "final_output": "candidate",
                 }
             ],
-            "judge_model": "not-configured",
+            "judge_model": "test/not-configured",
         },
     )
 
     assert response.status_code == 400
     assert response.json()["error"] == {
-        "message": "Unknown RouteKit endpoint 'not-configured'.",
+        "message": "Unknown RouteKit model 'test/not-configured'.",
         "type": "sidecar_error",
-        "code": "unknown_endpoint",
+        "code": "unknown_model",
     }

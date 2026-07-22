@@ -103,7 +103,7 @@ test("RouteKit process and authenticated bridge behaviors remain required", () =
   for (const id of [
     "process.routekit-cli-serve",
     "cli.routekit-command-surfaces",
-    "composition.routekit-endpoint-ids",
+    "composition.routekit-model-ids",
     "composition.routekit-authenticated-cli-bridge"
   ]) {
     assert.equal(byId.get(id)?.status, "required", `${id} must remain required`);

@@ -99,7 +99,7 @@ node packages/cli/dist/index.js codex --observe --fusionkit-dir .
 ```
 
 Provider keys are resolved by RouteKit from the `apiKeyEnv` references in its
-router config; FusionKit receives endpoint IDs only.
+router config; FusionKit receives namespaced model IDs only.
 
 ### Automated end-to-end drivers
 

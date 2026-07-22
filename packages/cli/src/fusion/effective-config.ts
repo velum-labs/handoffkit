@@ -39,6 +39,7 @@ export type EffectiveOverrides = {
 };
 
 export type EffectiveFusionConfig = {
+  router: Provenance<FusionConfig["router"]>;
   tool: Provenance<FusionTool>;
   ensembles: Provenance<EffectiveEnsemble[]>;
   defaultEnsemble: Provenance<string>;
@@ -46,6 +47,11 @@ export type EffectiveFusionConfig = {
   onRateLimit: Provenance<OnRateLimitPolicy>;
   portless: Provenance<boolean>;
   reasoning: Provenance<boolean>;
+  budgetUsd: Provenance<number | undefined>;
+  panelTrust: Provenance<FusionConfig["panelTrust"]>;
+  subagents: Provenance<boolean>;
+  port: Provenance<number | null | undefined>;
+  k: Provenance<number | undefined>;
   prompts: Provenance<PromptOverrides>;
 };
 
@@ -111,6 +117,7 @@ export function resolveEffectiveConfig(
   );
   const selected = ensembles[0] as EffectiveEnsemble;
   return {
+    router: { value: config.router, source: "config" },
     tool: resolveLayer(overrides.tool, config.tool, DEFAULT_TOOL),
     ensembles: { value: ensembles, source: "config" },
     defaultEnsemble: defaultName,
@@ -130,6 +137,23 @@ export function resolveEffectiveConfig(
       config.reasoning,
       DEFAULT_REASONING
     ),
+    budgetUsd: {
+      value: config.budgetUsd,
+      source: config.budgetUsd === undefined ? "default" : "config"
+    },
+    panelTrust: {
+      value: config.panelTrust,
+      source: config.panelTrust === undefined ? "default" : "config"
+    },
+    subagents: resolveLayer(undefined, config.subagents, false),
+    port: {
+      value: config.port,
+      source: config.port === undefined ? "default" : "config"
+    },
+    k: {
+      value: config.k,
+      source: config.k === undefined ? "default" : "config"
+    },
     prompts: {
       value: selected.prompts,
       source: Object.keys(selected.prompts).length > 0 ? "config" : "default"

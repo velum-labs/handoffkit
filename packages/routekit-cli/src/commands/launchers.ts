@@ -1,27 +1,31 @@
 import { resolve } from "node:path";
 
-import { parsePort } from "@routekit/cli-core";
-import { trimTrailingSlashes } from "@routekit/runtime";
+import { contextFor } from "@routekit/cli-core";
+import { commandOnPath, isLoopbackHost, trimTrailingSlashes } from "@routekit/runtime";
 import type { Command } from "commander";
 
 import { launchTool, routekitToolRegistry } from "../launch.js";
+import { routekitClient } from "../client.js";
 
-import { loaded } from "./context.js";
+import { registerCodexIntegration } from "./install.js";
 
 export function registerLaunchers(program: Command): void {
   for (const integration of routekitToolRegistry.list()) {
     const command = program
       .command(integration.id)
       .description(`launch ${integration.displayName} through RouteKit`)
-      .argument("[model]", "configured endpoint id")
+      .argument("[model]", "live namespaced provider/model id")
       .argument("[toolArgs...]", `arguments passed to ${integration.displayName}`)
       .option("--gateway-url <url>", "connect to an existing RouteKit gateway")
-      .option("--host <host>", "embedded gateway bind host", "127.0.0.1")
-      .option("--port <port>", "embedded gateway bind port", "0")
+      .option("--effort <id>", "opaque reasoning effort for the selected model")
       .option("--auth-token <token>", "gateway authentication token")
+      .option("--auth-token-env <name>", "read gateway authentication token from an environment variable")
       .option("--cwd <dir>", "tool working directory");
     if (integration.id === "cursor") {
       command.option("--ide", "launch the desktop integration");
+    }
+    if (integration.id === "codex") {
+      registerCodexIntegration(command);
     }
     command.action(
       async (
@@ -29,27 +33,75 @@ export function registerLaunchers(program: Command): void {
         toolArgs: string[],
         options: {
           gatewayUrl?: string;
-          host: string;
-          port: string;
           authToken?: string;
+          authTokenEnv?: string;
           cwd?: string;
+          effort?: string;
           ide?: boolean;
         },
         actionCommand: Command
       ) => {
-        const config = loaded(actionCommand).config;
+        if (contextFor(actionCommand).json) {
+          throw new Error(
+            `\`${integration.id}\` is interactive and does not support --json`
+          );
+        }
+        if (
+          integration.binary !== undefined &&
+          !commandOnPath(integration.binary)
+        ) {
+          throw new Error(
+            `routekit preflight failed: "${integration.binary}" was not found on PATH — ` +
+              (integration.installHint ?? `install ${integration.binary}`)
+          );
+        }
+        const cwd = options.cwd !== undefined ? resolve(options.cwd) : process.cwd();
+        const externalToken =
+          options.authTokenEnv !== undefined
+            ? process.env[options.authTokenEnv]
+            : options.authToken;
+        if (options.authTokenEnv !== undefined && externalToken === undefined) {
+          throw new Error(`credential environment variable is not set: ${options.authTokenEnv}`);
+        }
+        if (options.gatewayUrl !== undefined && externalToken !== undefined) {
+          const external = new URL(options.gatewayUrl);
+          if (external.protocol !== "https:" && !isLoopbackHost(external.hostname)) {
+            throw new Error("authenticated external gateways require HTTPS");
+          }
+        }
+        const tool = integration.id as "codex" | "claude" | "cursor" | "opencode";
+        const prepared =
+          options.gatewayUrl === undefined
+            ? await (await routekitClient()).call("launcher.prepare", {
+                tool,
+                ...(model !== undefined ? { model } : {}),
+                cwd
+              })
+            : undefined;
         process.exitCode = await launchTool({
           tool: integration.id,
-          config,
-          ...(options.gatewayUrl !== undefined
-            ? { gatewayUrl: trimTrailingSlashes(options.gatewayUrl) }
-            : {}),
-          ...(model !== undefined ? { model } : {}),
+          gatewayUrl:
+            options.gatewayUrl !== undefined
+              ? trimTrailingSlashes(options.gatewayUrl)
+              : prepared!.gatewayUrl,
+          ...(prepared?.model !== undefined
+            ? { model: prepared.model }
+            : model !== undefined
+              ? { model }
+              : {}),
+          ...(options.effort !== undefined ? { effort: options.effort } : {}),
           args: toolArgs,
-          ...(options.cwd !== undefined ? { cwd: resolve(options.cwd) } : {}),
-          ...(options.authToken !== undefined ? { authToken: options.authToken } : {}),
-          host: options.host,
-          port: parsePort(options.port, 0),
+          cwd,
+          ...((options.gatewayUrl !== undefined
+            ? externalToken
+            : prepared?.authToken) !== undefined
+            ? {
+                authToken:
+                  options.gatewayUrl !== undefined
+                    ? externalToken
+                    : prepared?.authToken
+              }
+            : {}),
           ...(integration.id === "cursor" && options.ide !== undefined
             ? { ide: options.ide }
             : {})

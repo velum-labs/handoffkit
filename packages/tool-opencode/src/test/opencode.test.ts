@@ -8,7 +8,15 @@ test("opencodeConfig serializes neutral models and profiles", () => {
     gatewayUrl: "http://127.0.0.1:9999",
     defaultModel: "primary",
     models: [
-      { id: "primary", aliases: ["primary-alias"] },
+      {
+        id: "primary",
+        aliases: ["primary-alias"],
+        reasoning: {
+          status: "supported",
+          efforts: [{ id: "quick" }, { id: "deep" }],
+          provenance: "provider"
+        }
+      },
       { id: "secondary", label: "Secondary" }
     ],
     agentProfiles: [
@@ -30,8 +38,20 @@ test("opencodeConfig serializes neutral models and profiles", () => {
     apiKey: "gateway-token"
   });
   assert.deepEqual(entry.models, {
-    primary: { name: "primary" },
-    "primary-alias": { name: "primary-alias" },
+    primary: {
+      name: "primary",
+      variants: {
+        quick: { reasoningEffort: "quick" },
+        deep: { reasoningEffort: "deep" }
+      }
+    },
+    "primary-alias": {
+      name: "primary-alias",
+      variants: {
+        quick: { reasoningEffort: "quick" },
+        deep: { reasoningEffort: "deep" }
+      }
+    },
     secondary: { name: "Secondary" }
   });
   assert.deepEqual(config.agent, {

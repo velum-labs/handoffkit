@@ -60,7 +60,7 @@ function ensembleFromOptions(
   const judge = options.judge ?? current?.judge ?? members?.[0];
   if (members === undefined || members.length === 0 || judge === undefined) {
     fail(
-      "an ensemble needs --member <routekit-endpoint-id> (repeatable) and --judge <routekit-endpoint-id>"
+      "an ensemble needs --member <provider/model> (repeatable) and --judge <provider/model>"
     );
   }
   return {
@@ -155,14 +155,14 @@ function rename(
 function addDefinitionOptions(command: Command): Command {
   return command
     .option(
-      "--member <endpoint-id>",
-      "opaque RouteKit endpoint id (repeatable)",
+      "--member <model-id>",
+      "namespaced RouteKit model id (repeatable)",
       collect
     )
-    .option("--judge <endpoint-id>", "opaque RouteKit judge endpoint id")
+    .option("--judge <model-id>", "namespaced RouteKit judge model id")
     .option(
-      "--synthesizer <endpoint-id>",
-      "opaque RouteKit synthesizer endpoint id"
+      "--synthesizer <model-id>",
+      "namespaced RouteKit synthesizer model id"
     )
     .option("--repo <dir>")
     .option("--json");

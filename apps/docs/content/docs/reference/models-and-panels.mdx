@@ -1,30 +1,42 @@
 ---
 title: Models and ensembles
-description: RouteKit endpoints and FusionKit v4 ensembles.
+description: RouteKit live provider catalogs and FusionKit v4 ensembles.
 ---
 
 RouteKit owns models; FusionKit owns ensembles.
 
-Define provider-facing details once:
+Enable provider sources once:
 
 ```yaml
 # .routekit/router.yaml
-endpoints:
-  - endpointId: fast
-    model: provider-fast-model
-    provider: openai-compatible
-    baseUrl: https://provider.example/v1
-    dialect: openai
-    apiKeyEnv: PROVIDER_API_KEY
-  - endpointId: deep
-    model: provider-deep-model
-    provider: openai-compatible
-    baseUrl: https://provider.example/v1
-    dialect: openai
-    apiKeyEnv: PROVIDER_API_KEY
+providers:
+  openai: {}
+  anthropic: {}
+defaultModel: openai/gpt-5.5
 ```
 
-Compose only opaque IDs in Fusion:
+For subscription logins, enable the provider and pool any number of named
+accounts:
+
+```yaml
+# .routekit/router.yaml
+providers:
+  codex:
+    strategy: capacity_weighted
+    switchThreshold: 0.9
+```
+
+```bash
+routekit accounts login codex --name personal
+routekit accounts login codex --name work
+routekit providers status codex
+routekit models list
+```
+
+RouteKit authenticates every configured provider at startup and publishes a
+namespaced live catalog. Subscription providers union the models discovered
+from healthy members and route only to accounts eligible for the requested
+model. Compose only those `provider/model` IDs in Fusion:
 
 ```json
 {
@@ -32,9 +44,9 @@ Compose only opaque IDs in Fusion:
   "router": { "config": ".routekit/router.yaml" },
   "ensembles": {
     "default": {
-      "members": ["fast", "deep"],
-      "judge": "deep",
-      "synthesizer": "deep"
+      "members": ["openai/gpt-5.5", "anthropic/claude-sonnet-4-5"],
+      "judge": "anthropic/claude-sonnet-4-5",
+      "synthesizer": "anthropic/claude-sonnet-4-5"
     }
   }
 }
@@ -45,13 +57,23 @@ The default ensemble is advertised as `fusion-panel`; other names become
 
 ```bash
 fusionkit ensemble add review \
-  --member fast --member deep --judge deep --synthesizer deep
+  --member openai/gpt-5.5 \
+  --member anthropic/claude-sonnet-4-5 \
+  --judge anthropic/claude-sonnet-4-5
 fusionkit config set defaultEnsemble review
 ```
 
-Use `routekit <tool> <endpoint-id>` for a single-model session. FusionKit has no
+Use `routekit <tool> <provider/model>` for a single-model session. FusionKit has no
 direct mode or provider/model/key launch flags.
 
+An explicit unknown or unnamespaced model fails instead of using the router
+default.
+
+Claude Code and Codex are the one presentation exception: each native picker
+shows its matching subscription models under bare provider-native names. Those
+aliases are accepted only on that native protocol boundary and resolve to the
+same namespaced RouteKit model and managed account pool.
+
 `fusionkit models` remains the lifecycle command for the Fusion-owned local MLX
-cache; local endpoints still need to be exposed through RouteKit before an
-ensemble can reference them.
+cache. It is separate from `routekit models list`, which performs live provider
+discovery.

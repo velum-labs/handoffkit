@@ -926,7 +926,7 @@ class FusionRunManager:
         elif selected_mode == "panel":
             candidate_count = len(request.requested_models or self.engine.config.panel_models)
             if candidate_count == 0:
-                candidate_count = len(self.engine.config.endpoint_ids)
+                candidate_count = len(self.engine.config.routekit_model_ids)
         else:
             candidate_count = request.sample_count or self.engine.config.sample_count
         if candidate_count <= budget.max_candidates:
@@ -1039,7 +1039,7 @@ def _model_call_record(
     usage = trajectory.metadata.get("usage")
     latency_ms = latency_s * 1000 if isinstance(latency_s, int | float) else None
     metadata = {
-        "endpoint_id": trajectory.model_id,
+        "routekit_model_id": trajectory.model_id,
         "unknown_usage": not isinstance(usage, dict),
         "finish_reason": trajectory.metadata.get("finish_reason"),
         "role": "panel",
@@ -1092,7 +1092,7 @@ def _response_call_record(
     """A ``model-call-record.v1`` for a judge/synthesizer model turn."""
     latency_ms = response.latency_s * 1000 if response.latency_s > 0 else None
     metadata = {
-        "endpoint_id": response.model_id,
+        "routekit_model_id": response.model_id,
         "unknown_usage": all(
             value is None
             for value in (

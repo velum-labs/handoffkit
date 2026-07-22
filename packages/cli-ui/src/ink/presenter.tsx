@@ -16,6 +16,8 @@ import { formatBytes } from "../format.js";
 import { PlainPresenter } from "../plain.js";
 import type {
   ChecklistController,
+  LiveFrameContent,
+  LiveFrameController,
   ProgressController,
   ProgressUpdate,
   StepInput,
@@ -25,8 +27,14 @@ import type {
 import { uiStream } from "../runtime.js";
 import { cyan, dim, glyph, gray, green, red, yellow } from "../theme.js";
 
-import { ChecklistView, ProgressView, TaskView } from "./components.js";
-import type { ChecklistState, ChecklistStep, ProgressState, TaskState } from "./components.js";
+import { ChecklistView, LiveFrameView, ProgressView, TaskView } from "./components.js";
+import type {
+  ChecklistState,
+  ChecklistStep,
+  LiveFrameState,
+  ProgressState,
+  TaskState
+} from "./components.js";
 import { Store } from "./store.js";
 
 /** Mount a bounded Ink app on stderr (stdout stays reserved for payloads). */
@@ -235,6 +243,27 @@ class InkProgress implements ProgressController {
   }
 }
 
+class InkLiveFrame implements LiveFrameController {
+  private readonly store = new Store<LiveFrameState>({ lines: [] });
+  private readonly instance = mountInk(<LiveFrameView store={this.store} />);
+  private readonly stream = uiStream();
+  private settled = false;
+
+  render(content: LiveFrameContent): void {
+    if (this.settled) return;
+    const lines = [...(typeof content === "function" ? content() : content)];
+    this.store.set(() => ({ lines }));
+  }
+
+  stop(): void {
+    if (this.settled) return;
+    this.settled = true;
+    settleInk(this.instance);
+    const lines = this.store.get().lines;
+    if (lines.length > 0) this.stream.write(`${lines.join("\n")}\n`);
+  }
+}
+
 /**
  * Rich presenter. Extends the plain presenter for static output (identical
  * line rendering) and swaps the live surfaces for Ink-mounted components.
@@ -250,5 +279,8 @@ export class InkPresenter extends PlainPresenter {
   }
   override progress(label: string): ProgressController {
     return new InkProgress(label);
+  }
+  override liveFrame(): LiveFrameController {
+    return new InkLiveFrame();
   }
 }

@@ -100,12 +100,19 @@ test("launchCursor --ide drives the desktop launcher with the gateway-wired mode
       assert.equal(invocation.caCerts, "/tmp/portless-ca.pem");
       // A parent's BRIDGE_* env is scrubbed; only our seeded models flow through.
       assert.equal(invocation.leakedBridge, undefined);
-      const models = JSON.parse(invocation.models ?? "[]") as Array<{ id: string; baseUrl: string }>;
+      const models = JSON.parse(invocation.models ?? "[]") as Array<{
+        id: string;
+        baseUrl: string;
+      }>;
       assert.deepEqual(
         models.map((entry) => entry.id),
         ["primary", "primary-alias", "gpt", "sonnet"]
       );
-      assert.ok(models.every((entry) => entry.baseUrl === "http://127.0.0.1:9999/v1"));
+      assert.ok(
+        models.every(
+          (entry) => entry.baseUrl === "http://127.0.0.1:9999/v1"
+        )
+      );
     } finally {
       // Always tear the desktop launcher down so the launch promise resolves and
       // the test process can exit even when an assertion fails.

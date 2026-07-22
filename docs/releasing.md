@@ -132,7 +132,7 @@ Separate from releasing, for day-to-day iteration:
 
 ```bash
 node scripts/monorepo.mjs graph             # @routekit/* + @fusionkit/* graph/order check
-node scripts/monorepo.mjs affected origin/main   # scoped build + test for changed packages
+node scripts/monorepo.mjs affected origin/main   # Turbo build + test for changed projects/dependents
 node scripts/monorepo.mjs clean             # purge stale release-artifacts tarballs
 ```
 

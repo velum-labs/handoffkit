@@ -1,37 +1,107 @@
+import { existsSync, readFileSync } from "node:fs";
+import { parse as parseYaml } from "yaml";
+
 import { contextFor, probeBinaryVersion } from "@routekit/cli-core";
 import { commandOnPath } from "@routekit/runtime";
 import type { Command } from "commander";
 
+import { routekitClient } from "../client.js";
+import { migrateLegacyRouterConfig } from "../config.js";
 import { routekitToolRegistry } from "../launch.js";
+import { configOverride, loaded } from "./context.js";
 
-import { loaded } from "./context.js";
+function installCommand(binary: string): string {
+  switch (binary) {
+    case "codex":
+      return "npm install -g @openai/codex";
+    case "claude":
+      return "npm install -g @anthropic-ai/claude-code";
+    case "cursor-agent":
+      return "curl https://cursor.com/install -fsS | bash";
+    case "opencode":
+      return "npm install -g opencode-ai";
+    default:
+      return `command -v ${binary}`;
+  }
+}
 
 export function registerDoctor(program: Command): void {
   program
     .command("doctor")
     .description("check config, credentials, and coding-agent binaries")
-    .action((_options: unknown, command: Command) => {
+    .action(async (_options: unknown, command: Command) => {
       const ctx = contextFor(command);
-      const checks: Array<{ label: string; ok: boolean; detail?: string }> = [];
-      try {
-        const result = loaded(command);
-        checks.push({ label: "router config", ok: true, detail: result.path });
-        for (const name of new Set(
-          result.config.endpoints
-            .map((entry) => entry.apiKeyEnv)
-            .filter((entry): entry is string => entry !== undefined)
-        )) {
+      const checks: Array<{
+        label: string;
+        ok: boolean;
+        detail?: string;
+        tryCommand?: string;
+      }> = [];
+      const explicitConfig =
+        configOverride(command) ?? process.env.ROUTEKIT_CONFIG;
+      if (explicitConfig !== undefined) {
+        const explicit = explicitConfig;
+        try {
+          const config = loaded(command);
+          checks.push({ label: "router config", ok: true, detail: config.path });
+        } catch (error) {
+          const migration = existsSync(explicit)
+            ? migrateLegacyRouterConfig(explicit, { write: false })
+            : undefined;
+          let legacyShape = false;
+          if (existsSync(explicit)) {
+            try {
+              const parsed = parseYaml(readFileSync(explicit, "utf8")) as unknown;
+              legacyShape =
+                typeof parsed === "object" &&
+                parsed !== null &&
+                Array.isArray((parsed as { endpoints?: unknown }).endpoints);
+            } catch {
+              legacyShape = false;
+            }
+          }
+          const validLegacy =
+            legacyShape ||
+            (migration?.legacy === true &&
+              migration.changed &&
+              !migration.diagnostics.some((diagnostic) => diagnostic.level === "error"));
           checks.push({
-            label: name,
-            ok: process.env[name] !== undefined && process.env[name]!.length > 0,
-            detail: process.env[name] !== undefined ? "set" : "not set"
+            label: "router config",
+            ok: validLegacy,
+            detail: validLegacy
+              ? `${explicit} (legacy/recovery config)`
+              : error instanceof Error
+                ? error.message
+                : String(error)
+          });
+        }
+      } else try {
+        const client = await routekitClient();
+        const daemon = await client.call("doctor.run", {});
+        for (const check of daemon.checks) {
+          checks.push({
+            label: check.name,
+            ok: check.ok,
+            ...(check.detail !== undefined ? { detail: check.detail } : {})
+          });
+        }
+        const providers = await client.call("providers.status", { live: true });
+        for (const provider of providers.providers) {
+          checks.push({
+            label: `${provider.provider} provider`,
+            ok: provider.credentialAvailable && provider.error === undefined,
+            detail:
+              provider.error ??
+              `${provider.models?.length ?? 0} model(s); ` +
+                (provider.credentialAvailable ? "credential available" : "credential missing")
           });
         }
       } catch (error) {
         checks.push({
-          label: "router config",
+          label: "RouteKit daemon",
           ok: false,
-          detail: error instanceof Error ? error.message : String(error)
+          detail: error instanceof Error ? error.message : String(error),
+          tryCommand: "routekit daemon status"
         });
       }
       for (const tool of routekitToolRegistry.list()) {
@@ -40,14 +110,40 @@ export function registerDoctor(program: Command): void {
         checks.push({
           label: tool.binary,
           ok,
-          ...(ok ? { detail: probeBinaryVersion(tool.binary) ?? "installed" } : {})
+          ...(ok
+            ? { detail: probeBinaryVersion(tool.binary) ?? "installed" }
+            : { tryCommand: installCommand(tool.binary) })
         });
       }
-      if (ctx.json) ctx.emit({ ready: checks.every((check) => check.ok), checks });
+      for (const check of checks) {
+        if (!check.ok && check.tryCommand === undefined) {
+          check.tryCommand = check.label === "router config"
+            ? "routekit config init"
+            : check.label.endsWith("_API_KEY")
+              ? `export ${check.label}='your-key'`
+              : "routekit doctor";
+        }
+      }
+      const summary = {
+        ok: checks.filter((check) => check.ok).length,
+        warn: 0,
+        fail: checks.filter((check) => !check.ok).length
+      };
+      if (ctx.json) ctx.emit({ ready: summary.fail === 0, summary, checks });
       else {
         for (const check of checks) {
           ctx.presenter.status(check.ok ? "ok" : "fail", check.label, check.detail);
+          if (!check.ok) {
+            ctx.presenter.errorPanel({
+              title: check.label,
+              message: check.detail ?? `${check.label} failed`,
+              tryCommand: check.tryCommand
+            });
+          }
         }
+        ctx.presenter.box("doctor summary", [
+          `${summary.ok} ok · ${summary.warn} warn · ${summary.fail} fail`
+        ]);
       }
       if (checks.some((check) => !check.ok)) process.exitCode = 1;
     });

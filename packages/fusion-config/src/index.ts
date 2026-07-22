@@ -37,11 +37,11 @@ export type ExternalRouterConfig = {
 export type FusionRouterConfig = EmbeddedRouterConfig | ExternalRouterConfig;
 
 export type EnsembleConfig = {
-  /** Opaque RouteKit endpoint ids. */
+  /** Stable namespaced RouteKit model ids (`provider/model`). */
   members: string[];
-  /** Opaque RouteKit endpoint id. */
+  /** Stable namespaced RouteKit model id (`provider/model`). */
   judge: string;
-  /** Opaque RouteKit endpoint id; defaults to judge. */
+  /** Stable namespaced RouteKit model id; defaults to judge. */
   synthesizer?: string;
   k?: number;
   prompts?: PromptOverrides;
@@ -131,6 +131,18 @@ function nonEmptyString(value: unknown, path: string): string {
   return value;
 }
 
+const ROUTEKIT_MODEL_ID_PATTERN = /^[a-z0-9][a-z0-9-]*\/[^/\s][^\s]*$/;
+
+function routekitModelId(value: unknown, path: string): string {
+  const modelId = nonEmptyString(value, path);
+  if (!ROUTEKIT_MODEL_ID_PATTERN.test(modelId)) {
+    throw new FusionConfigError(
+      `${path} must be a namespaced RouteKit model id (provider/model)`
+    );
+  }
+  return modelId;
+}
+
 function optionalBoolean(value: unknown, path: string): boolean | undefined {
   if (value === undefined) return undefined;
   if (typeof value !== "boolean") throw new FusionConfigError(`${path} must be a boolean`);
@@ -188,20 +200,22 @@ function parseEnsemble(name: string, value: unknown, source: string): EnsembleCo
   if (
     !Array.isArray(value.members) ||
     value.members.length === 0 ||
-    !value.members.every((member) => typeof member === "string" && member.length > 0)
+    !value.members.every(
+      (member) => typeof member === "string" && ROUTEKIT_MODEL_ID_PATTERN.test(member)
+    )
   ) {
     throw new FusionConfigError(
-      `${source}: ensembles.${name}.members must be a non-empty array of RouteKit endpoint ids`
+      `${source}: ensembles.${name}.members must be a non-empty array of namespaced RouteKit model ids (provider/model)`
     );
   }
   if (new Set(value.members).size !== value.members.length) {
     throw new FusionConfigError(`${source}: ensembles.${name}.members must not contain duplicates`);
   }
-  const judge = nonEmptyString(value.judge, `${source}: ensembles.${name}.judge`);
+  const judge = routekitModelId(value.judge, `${source}: ensembles.${name}.judge`);
   const synthesizer =
     value.synthesizer === undefined
       ? undefined
-      : nonEmptyString(value.synthesizer, `${source}: ensembles.${name}.synthesizer`);
+      : routekitModelId(value.synthesizer, `${source}: ensembles.${name}.synthesizer`);
   const k = optionalK(value.k, `${source}: ensembles.${name}.k`);
   return {
     members: [...value.members],
@@ -216,7 +230,7 @@ export function parseFusionConfig(raw: unknown, source: string): FusionConfig {
   if (raw.version !== FUSION_CONFIG_VERSION) {
     const migration =
       typeof raw.version === "string" && /^fusionkit\.fusion\.v[123]$/.test(raw.version)
-        ? " v4 uses opaque RouteKit endpoint ids: move provider/baseUrl/keyEnv/account settings to .routekit/router.yaml, then replace each panel with members, judge, and synthesizer endpoint ids."
+        ? " v4 uses namespaced RouteKit model ids: move provider settings to .routekit/router.yaml, then replace each panel with provider/model members, judge, and synthesizer ids."
         : "";
     throw new FusionConfigError(
       `${source}: unsupported version ${JSON.stringify(raw.version)}; expected ${FUSION_CONFIG_VERSION}.${migration}`

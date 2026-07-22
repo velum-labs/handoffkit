@@ -15,6 +15,7 @@ import {
   writeRouterConfig
 } from "@routekit/config";
 import { canPromptInteractively, confirm, done, note, select } from "@routekit/cli-ui";
+import { startRouter } from "@routekit/router";
 
 import { toolSelectOptions } from "./fusion-quickstart.js";
 
@@ -62,22 +63,43 @@ export async function runFusionInit(input: {
   }
 
   const routerPath = join(input.repoRoot, ".routekit", "router.yaml");
-  if (!existsSync(routerPath)) {
+  const createdRouter = !existsSync(routerPath);
+  if (createdRouter) {
     writeRouterConfig(routerPath, DEFAULT_ROUTER_CONFIG);
     note(
-      `created ${routerPath}; edit its placeholder endpoint or use \`routekit endpoints add\``
+      `created ${routerPath}; verify the provider and live model before launching`
     );
   }
   const loaded = loadRouterConfig({ configPath: routerPath });
-  const endpointIds = [
-    ...new Set(loaded.config.endpoints.map((endpoint) => endpoint.endpointId))
-  ];
-  if (endpointIds.length === 0) {
-    process.stderr.write(
-      `error: ${routerPath} has no endpoints; configure RouteKit first\n`
-    );
+  let routekitModelIds: string[];
+  if (createdRouter && loaded.config.defaultModel !== undefined) {
+    routekitModelIds = [loaded.config.defaultModel];
+  } else {
+    const router = await startRouter({
+      config: loaded.config,
+      host: "127.0.0.1",
+      port: 0
+    });
+    try {
+      const response = await fetch(`${router.url}/v1/models`, {
+        signal: AbortSignal.timeout(5_000)
+      });
+      if (!response.ok) {
+        throw new Error(`RouteKit model discovery returned HTTP ${response.status}`);
+      }
+      const catalog = (await response.json()) as { data?: Array<{ id?: unknown }> };
+      routekitModelIds = (catalog.data ?? []).flatMap((entry) =>
+        typeof entry.id === "string" ? [entry.id] : []
+      );
+    } finally {
+      await router.close();
+    }
+  }
+  if (routekitModelIds.length === 0) {
+    process.stderr.write(`error: ${routerPath} providers discovered no models\n`);
     return 1;
   }
+  const defaultModel = loaded.config.defaultModel ?? routekitModelIds[0]!;
   const tool = canPromptInteractively()
     ? await select<FusionTool>({
         message: "Default coding agent",
@@ -91,8 +113,8 @@ export async function runFusionInit(input: {
     tool,
     ensembles: {
       [DEFAULT_ENSEMBLE_NAME]: {
-        members: endpointIds,
-        judge: endpointIds[0] as string
+        members: [defaultModel],
+        judge: defaultModel
       }
     }
   };
@@ -107,7 +129,7 @@ export async function runFusionInit(input: {
   }
   done(`wrote ${configPath}`);
   note(
-    "FusionKit stores only opaque endpoint ids; provider credentials stay in .routekit/router.yaml"
+    "FusionKit stores only namespaced RouteKit model ids; provider credentials stay in RouteKit"
   );
   return 0;
 }

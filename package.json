@@ -12,18 +12,21 @@
   },
   "scripts": {
     "check": "node scripts/check-repo.mjs",
-    "build": "tsc -b tsconfig.json",
-    "build:cli": "tsc -b packages/cli",
-    "build:routekit": "tsc -b packages/routekit-cli",
-    "clean": "tsc -b tsconfig.json --clean",
-    "test": "PORTLESS=0 pnpm --recursive --if-present run test && pnpm run test:root",
+    "build": "turbo run build",
+    "build:cli": "turbo run build --filter=@fusionkit/cli...",
+    "build:routekit": "turbo run build --filter=@routekit/cli...",
+    "clean": "turbo run clean",
+    "test": "PORTLESS=0 turbo run test && pnpm run test:root",
     "test:root": "PORTLESS=0 node --test \"test/*.test.js\"",
     "test:routekit-pack": "node scripts/check-routekit-cli-pack.mjs",
     "test:fusionkit-pack": "node scripts/check-fusionkit-cli-pack.mjs",
     "test:dual-cli-pack": "node scripts/check-dual-cli-pack.mjs",
+    "test:e2e:matrix": "pnpm build:routekit && node scripts/routekit-e2e-matrix.mjs",
     "demo": "node scripts/demo.mjs",
     "dev:link-cli": "node scripts/link-fusionkit-dev.mjs",
     "dev:run-cli": "node scripts/fusionkit-dev.mjs",
+    "dev:link-routekit": "node scripts/link-routekit-dev.mjs",
+    "dev:run-routekit": "node scripts/routekit-dev.mjs",
     "docs:generate-code": "node scripts/generate-code-docs.mjs",
     "docs:check-code": "node scripts/generate-code-docs.mjs --check",
     "docs:generate-behaviors": "node scripts/generate-expected-behaviors.mjs",
@@ -40,11 +43,7 @@
   "devDependencies": {
     "@types/node": "22.19.20",
     "@velum-labs/model-fusion-protocol": "file:spec/model-fusion-contract",
+    "turbo": "2.10.5",
     "typescript": "6.0.3"
-  },
-  "pnpm": {
-    "overrides": {
-      "undici@>=7.0.0 <7.28.0": ">=7.28.0 <8"
-    }
   }
 }

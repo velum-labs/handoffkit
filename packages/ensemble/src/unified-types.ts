@@ -1,6 +1,7 @@
 import type { ModelFusionStatus } from "@fusionkit/protocol";
 import type { JsonValue } from "@routekit/contracts";
 import type { ResumeCursor } from "@routekit/harness-core";
+import type { ReasoningSelection } from "@routekit/contracts";
 import type { ToolRegistry } from "@routekit/tools";
 import type { FusionTraceCarrier } from "@fusionkit/tracing";
 import type { EnsembleModel, EnsembleRunResult } from "./harness.js";
@@ -65,7 +66,7 @@ export type ToolHarnessResolveOptions = {
   /**
    * Per-model router endpoints keyed by `EnsembleModel.id`. When a candidate's
    * model id is present, its harness is pointed at that endpoint (and requests
-   * the endpoint id as its model) instead of the shared `fusionBackendUrl`, so
+   * the namespaced model id as its model) instead of the shared `fusionBackendUrl`, so
    * each panel model backs its own routed candidate through the one launched
    * harness.
    */
@@ -77,6 +78,7 @@ export type ToolHarnessResolveOptions = {
    */
   trace?: FusionTraceCarrier;
   turn?: number;
+  reasoning?: ReasoningSelection;
   /** When true, the tool harness tells its model which panel member it is. */
   panelIdentity?: boolean;
   /** Panel candidate trust level; unset means `full` (maximum autonomy). */
@@ -153,6 +155,7 @@ export type UnifiedHarnessE2EOptions = {
   repo: string;
   outputRoot: string;
   prompt: string;
+  reasoning?: ReasoningSelection;
   harnesses: UnifiedHarnessKind[];
   models: EnsembleModel[];
   command?: string;

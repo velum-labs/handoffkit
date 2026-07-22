@@ -13,6 +13,9 @@
  */
 import { brandBanner, canPromptInteractively, fuzzySelect, isInteractive, uiStream } from "@routekit/cli-ui";
 
+import { loadFusionConfig } from "../fusion-config.js";
+import { gitToplevel } from "../fusion-quickstart.js";
+
 export type PaletteAction = {
   /** The human phrasing of the action, e.g. "Check my environment". */
   label: string;
@@ -34,6 +37,15 @@ export function registerPaletteAction(...actions: readonly PaletteAction[]): voi
 /** Every registered action, in registration order, plus the help escape hatch. */
 export function paletteActions(): PaletteAction[] {
   return [...registry.values(), { label: "Show help", hint: "fusionkit --help", argv: undefined }];
+}
+
+export function configuredDefaultToolArgv(
+  cwd: string = process.cwd()
+): string[] | undefined {
+  const root = gitToplevel(cwd);
+  if (root === undefined) return undefined;
+  const tool = loadFusionConfig(root)?.tool;
+  return tool === undefined ? undefined : [tool];
 }
 
 /**

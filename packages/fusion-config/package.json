@@ -16,7 +16,10 @@
       "default": "./dist/index.js"
     }
   },
-  "files": ["dist", "LICENSE"],
+  "files": [
+    "dist",
+    "LICENSE"
+  ],
   "publishConfig": {
     "registry": "https://registry.npmjs.org",
     "access": "public",
@@ -26,8 +29,15 @@
     "@routekit/config-core": "workspace:*",
     "@routekit/runtime": "workspace:*"
   },
-  "keywords": ["fusionkit", "fusion", "ensemble", "configuration"],
+  "keywords": [
+    "fusionkit",
+    "fusion",
+    "ensemble",
+    "configuration"
+  ],
   "scripts": {
+    "build": "tsc -b",
+    "clean": "tsc -b --clean",
     "test": "node --test \"dist/test/*.test.js\""
   }
 }

@@ -64,7 +64,8 @@ for (const required of [
   "contents: read",
   "id-token: write",
   "corepack pnpm check",
-  "corepack pnpm build",
+  "corepack pnpm exec turbo run build --filter='./packages/*' --filter='./examples/*'",
+  "corepack pnpm exec turbo run build --filter=scope",
   "scripts/check-routekit-cli-pack.mjs",
   "scripts/stage-scope.mjs",
   "scripts/check-fusionkit-cli-pack.mjs --require-scope",
@@ -74,10 +75,12 @@ for (const required of [
   if (!workflow.includes(required)) fail(`release workflow missing: ${required}`);
 }
 if (
+  workflow.indexOf("corepack pnpm exec turbo run build --filter=scope") >
+    workflow.indexOf("scripts/stage-scope.mjs") ||
   workflow.indexOf("scripts/stage-scope.mjs") >
   workflow.indexOf("scripts/check-fusionkit-cli-pack.mjs --require-scope")
 ) {
-  fail("release workflow must stage Scope before validating the FusionKit tarball");
+  fail("release workflow must build and stage Scope before validating the FusionKit tarball");
 }
 
 const openApiHash = `sha256:${createHash("sha256")

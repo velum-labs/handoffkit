@@ -6,18 +6,36 @@
 `@routekit/config`, `@routekit/router`, gateway, and tool-launcher SDK packages;
 it does not depend on `@routekit/cli` or invoke the `routekit` executable.
 
-Install `@routekit/cli` separately when you want RouteKit's endpoint, account,
-proxy, or single-model command surfaces:
+Install `@routekit/cli` separately when you want RouteKit's provider, account,
+live-catalog, proxy, or single-model command surfaces:
 
 ```sh
 npm install -g @routekit/cli
 routekit config init
-routekit endpoints list
-routekit serve
-routekit codex opaque-endpoint-id
+routekit providers status
+routekit models list
+routekit gateway serve
+routekit codex openai/gpt-5.5
 ```
 
 FusionKit has no forwarding aliases for those commands.
+
+RouteKit is a thin client of one singleton daemon per `ROUTEKIT_HOME`. The
+daemon owns a private authenticated `control.v1` listener, the stable model
+gateway, provider/catalog state, subscription pools, usage, and canonical
+global config. Every product command negotiates with it; help/version/shell
+completion, terminal interaction, OAuth/editor subprocesses, and coding-tool
+spawning stay local. Concurrent first calls race-safely start exactly one
+daemon, using a persistent systemd user unit / launchd agent when available
+and a clearly reported detached fallback otherwise.
+
+`routekit daemon start|status|reload|restart|upgrade|stop|logs` and `daemon
+service install|uninstall|status` are the lifecycle surface. Config/account
+reloads atomically switch router generations while
+old in-flight streams drain; binary upgrade drains and restarts the combined
+daemon, then the initiating client reconnects and retries.
+See the [`@routekit/cli` README](../packages/routekit-cli/README.md) for the
+full service runbook.
 
 ## Fusion launchers
 
@@ -62,9 +80,9 @@ RouteKit for single-model launches and edit `.routekit/router.yaml` for routing.
 | --- | --- |
 | `init` | Scaffold Fusion v4 config and, when absent, safe RouteKit router config. |
 | `setup` | Warm the pinned Python synthesis engine. |
-| `doctor` | Check git, Fusion/RouteKit config, endpoint IDs, uv, and tool binaries. |
+| `doctor` | Check git, Fusion/RouteKit config, live model IDs, uv, and tool binaries. |
 | `config show\|path\|get\|set\|unset\|edit` | Inspect or atomically edit Fusion v4 settings. |
-| `ensemble list\|add\|edit\|remove\|rename` | Manage ensembles of opaque RouteKit endpoint IDs. |
+| `ensemble list\|add\|edit\|remove\|rename` | Manage ensembles of namespaced RouteKit model IDs. |
 | `prompts list\|edit\|reset` | Manage judge/synthesizer prompt files. |
 | `sessions list\|show\|rm` | Manage durable Fusion sessions in `@fusionkit/gateway`. |
 | `models list\|download\|rm` | Manage the Fusion-owned local MLX cache. |
@@ -75,9 +93,9 @@ RouteKit for single-model launches and edit `.routekit/router.yaml` for routing.
 `fusionkit stop` never stops an external RouteKit daemon. An embedded RouteKit
 router is owned by the launching Fusion process and closes with that process.
 
-Removed Fusion commands include `proxy`, account/CLIProxy management,
-`install|uninstall codex`, and direct/single-model mode. Their equivalents live
-in RouteKit.
+Removed Fusion commands include `proxy`, account/CLIProxy management, Codex
+install/uninstall, and direct/single-model mode. Their equivalents live in
+RouteKit (for example `routekit codex install|uninstall`).
 
 ## Configuration
 
@@ -85,13 +103,16 @@ in RouteKit.
 fusionkit init
 fusionkit config show
 fusionkit ensemble add deep \
-  --member fast --member deep --judge deep --synthesizer deep
+  --member openai/gpt-5.5 \
+  --member anthropic/claude-sonnet-4-5 \
+  --judge anthropic/claude-sonnet-4-5
 fusionkit config set defaultEnsemble deep
 ```
 
-`.fusionkit/fusion.json` v4 contains only fusion policy and endpoint IDs.
-Provider credentials and routing live in `.routekit/router.yaml`. See
-[Configuration](configuration.md).
+`.fusionkit/fusion.json` v4 contains only fusion policy and namespaced model
+IDs. Explicit providers and routing policy live in `.routekit/router.yaml`;
+credentials remain in registry-defined environment variables or RouteKit's
+private subscription store. See [Configuration](configuration.md).
 
 ## Environment variables
 

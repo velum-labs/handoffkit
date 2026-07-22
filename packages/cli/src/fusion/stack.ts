@@ -10,7 +10,13 @@ import type {
 } from "@fusionkit/gateway";
 import { fusionModelId } from "@fusionkit/registry";
 import { OpenAiBackend, startGateway } from "@routekit/gateway";
-import type { Gateway, RouterConfig } from "@routekit/gateway";
+import type {
+  Gateway,
+  ProviderId,
+  ProviderSource,
+  RouterConfig
+} from "@routekit/gateway";
+import { assertModelsAvailable } from "@routekit/config";
 import { startRouter as startRouteKitRouter } from "@routekit/router";
 import type { RunningRouter } from "@routekit/router";
 import {
@@ -32,13 +38,17 @@ import type { PortlessSession } from "../shared/portless.js";
 import { createPortlessSession } from "../shared/portless.js";
 
 export type RouteKitConnection =
-  | { kind: "embedded"; config: RouterConfig }
+  | {
+      kind: "embedded";
+      config: RouterConfig;
+      sources?: Partial<Record<ProviderId, ProviderSource>>;
+    }
   | { kind: "external"; url: string; authToken?: string };
 
 export type FusionStack = {
   fusionUrl: string;
   gatewayPort: number;
-  endpoints: Record<string, string>;
+  routekitUrl: string;
   embeddedRouter: boolean;
   reusedRouter: false;
   close: () => Promise<void>;
@@ -96,7 +106,7 @@ export function describeServerCrash(input: {
   return `${input.label} crashed mid-run (${cause}); ${consequence}.${logHint}`;
 }
 
-function uniqueEndpointIds(ensembles: readonly EnsembleRunSpec[]): string[] {
+function uniqueRoutekitModelIds(ensembles: readonly EnsembleRunSpec[]): string[] {
   return [
     ...new Set(
       ensembles.flatMap((ensemble) => [
@@ -114,11 +124,11 @@ export function gatewayEnsembleConfigs(
   return ensembles.map((ensemble) => ({
     name: ensemble.name,
     modelId: fusionModelId(ensemble.name),
-    models: ensemble.members.map((id) => ({ id, model: id, endpointId: id })),
-    judgeEndpointId: ensemble.judge,
+    models: ensemble.members.map((id) => ({ id, model: id })),
+    judgeRoutekitModelId: ensemble.judge,
     judgeModelName: ensemble.judge,
     ...(ensemble.synthesizer !== undefined
-      ? { synthesizerEndpointId: ensemble.synthesizer }
+      ? { synthesizerRoutekitModelId: ensemble.synthesizer }
       : {}),
     ...(ensemble.k !== undefined ? { k: ensemble.k } : {}),
     ...(ensemble.prompts !== undefined ? { prompts: ensemble.prompts } : {})
@@ -126,13 +136,12 @@ export function gatewayEnsembleConfigs(
 }
 
 /**
- * Build the Python synthesis sidecar config. Every endpoint points only at the
- * RouteKit gateway and is addressed by its opaque endpoint id. Provider names,
- * provider URLs, key env names, pricing, and account state never cross this
- * boundary.
+ * Build the Python synthesis sidecar config. Every stable namespaced model id
+ * is sent through the same RouteKit gateway. Provider URLs, credentials,
+ * pricing, and account state never cross this boundary.
  */
 export function sidecarConfigYaml(input: {
-  endpointIds: readonly string[];
+  routekitModelIds: readonly string[];
   routekitUrl: string;
   judge: string;
   synthesizer?: string;
@@ -142,7 +151,7 @@ export function sidecarConfigYaml(input: {
   return (
     stringify({
       routekit_url: routekitUrl,
-      endpoint_ids: input.endpointIds,
+      routekit_model_ids: input.routekitModelIds,
       default_model: input.judge,
       judge_model: input.judge,
       synthesizer_model: input.synthesizer ?? input.judge,
@@ -160,7 +169,7 @@ export function sidecarEnvironment(
 }
 
 async function startSynthesisSidecar(input: {
-  endpointIds: readonly string[];
+  routekitModelIds: readonly string[];
   routekitUrl: string;
   judge: string;
   synthesizer?: string;
@@ -173,7 +182,7 @@ async function startSynthesisSidecar(input: {
   writeFileSync(
     configPath,
     sidecarConfigYaml({
-      endpointIds: input.endpointIds,
+      routekitModelIds: input.routekitModelIds,
       routekitUrl: input.routekitUrl,
       judge: input.judge,
       ...(input.synthesizer !== undefined ? { synthesizer: input.synthesizer } : {}),
@@ -259,7 +268,10 @@ export async function startFusionStack(
         ? await startRouteKitRouter({
             config: options.router.config,
             host: "127.0.0.1",
-            port: 0
+            port: 0,
+            ...(options.router.sources !== undefined
+              ? { sources: options.router.sources }
+              : {})
           })
         : undefined;
     const upstreamRouteKitUrl =
@@ -288,9 +300,27 @@ export async function startFusionStack(
 
     const selected = options.ensembles[0];
     if (selected === undefined) throw new Error("at least one ensemble is required");
-    const endpointIds = uniqueEndpointIds(options.ensembles);
+    const routekitModelIds = uniqueRoutekitModelIds(options.ensembles);
+    const catalogResponse = await fetch(`${trimTrailingSlashes(routekitUrl)}/v1/models`, {
+      signal: AbortSignal.timeout(5_000)
+    });
+    if (!catalogResponse.ok) {
+      throw new Error(
+        `RouteKit model discovery failed with HTTP ${catalogResponse.status}`
+      );
+    }
+    const catalog = (await catalogResponse.json()) as {
+      data?: Array<{ id?: unknown }>;
+    };
+    assertModelsAvailable(
+      routekitModelIds,
+      (catalog.data ?? []).flatMap((entry) =>
+        typeof entry.id === "string" ? [entry.id] : []
+      ),
+      "Fusion ensemble references models not advertised by RouteKit"
+    );
     sidecar = await startSynthesisSidecar({
-      endpointIds,
+      routekitModelIds,
       routekitUrl,
       judge: selected.judge,
       ...(selected.synthesizer !== undefined
@@ -314,14 +344,10 @@ export async function startFusionStack(
       ...(options.logsDir !== undefined ? { logsDir: options.logsDir } : {})
     });
 
-    const models: EnsembleModel[] = endpointIds.map((id) => ({
+    const models: EnsembleModel[] = routekitModelIds.map((id) => ({
       id,
-      model: id,
-      endpointId: id
+      model: id
     }));
-    const modelEndpoints = Object.fromEntries(
-      endpointIds.map((id) => [id, routekitUrl])
-    );
     const gatewayConfig: GatewayRunnerConfig = {
       fusionBackendUrl: sidecar.url,
       repo: options.repo,
@@ -330,7 +356,7 @@ export async function startFusionStack(
       models,
       ensembles: gatewayEnsembleConfigs(options.ensembles),
       judgeModel: selected.judge,
-      modelEndpoints,
+      routekitUrl,
       ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),
       ...(options.panelTimeoutMs !== undefined
         ? { panelTimeoutMs: options.panelTimeoutMs }
@@ -369,7 +395,7 @@ export async function startFusionStack(
     return {
       fusionUrl,
       gatewayPort: gateway.port(),
-      endpoints: modelEndpoints,
+      routekitUrl,
       embeddedRouter: embedded !== undefined,
       reusedRouter: false,
       close: async () => {

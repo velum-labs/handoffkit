@@ -48,6 +48,16 @@ export function forwardRelayHeaders(headers: IncomingHttpHeaders): Record<string
   return forwarded;
 }
 
+function mergeHeaderTokens(current: string | undefined, required: string): string {
+  const tokens = new Set(
+    [current, required]
+      .flatMap((value) => value?.split(",") ?? [])
+      .map((value) => value.trim())
+      .filter((value) => value.length > 0)
+  );
+  return [...tokens].join(",");
+}
+
 export type AnthropicRelayOptions = {
   accounts: SubscriptionAccountSet;
   backendUrl?: string;
@@ -145,9 +155,10 @@ export class AnthropicBackendRelay implements SubscriptionRelay {
     signal?: AbortSignal
   ): Promise<Response> {
     return this.#accounts.execute(body.model, (credential) => {
+      const upstreamHeaders = this.#upstreamHeaders(headers, credential.accessToken);
       return fetch(`${this.#backendUrl}/v1/messages`, {
         method: "POST",
-        headers: this.#upstreamHeaders(headers, credential.accessToken),
+        headers: upstreamHeaders,
         body: JSON.stringify(withAnthropicAccount(body, credential.accountId)),
         ...(signal !== undefined ? { signal } : {})
       });
@@ -198,9 +209,14 @@ export class AnthropicBackendRelay implements SubscriptionRelay {
     delete forwarded.authorization;
     delete forwarded.Authorization;
     delete forwarded["x-api-key"];
+    const oauthBeta =
+      subscriptionInfo("claude-code").oauthBetaHeader ?? "oauth-2025-04-20";
     Object.assign(forwarded, {
       authorization: `Bearer ${accessToken}`,
-      "anthropic-beta": subscriptionInfo("claude-code").oauthBetaHeader ?? "oauth-2025-04-20",
+      "anthropic-beta": mergeHeaderTokens(
+        forwarded["anthropic-beta"],
+        oauthBeta
+      ),
       "content-type": "application/json"
     });
     return forwarded;

@@ -6,7 +6,7 @@ import { providerDefaultBaseUrl } from "@routekit/registry";
 import { trimTrailingSlashes } from "@routekit/runtime";
 
 import type { SubscriptionAccountSet } from "./account-set.js";
-import { subscriptionProvider } from "./provider.js";
+import { codexModelsSearch, subscriptionProvider } from "./provider.js";
 import { forwardRelayHeaders } from "./relay.js";
 import type { SubscriptionRelay } from "./relay.js";
 import type { SubscriptionAccountSetSnapshot } from "./types.js";
@@ -182,7 +182,7 @@ export class CodexBackendRelay implements SubscriptionRelay {
         delete forwarded["chatgpt-account-id"];
         Object.assign(forwarded, injected);
       }
-      return fetch(`${this.#backendUrl}/models${search}`, {
+      return fetch(`${this.#backendUrl}/models${codexModelsSearch(search)}`, {
         method: "GET",
         headers: forwarded,
         signal: AbortSignal.timeout(this.#timeoutMs)

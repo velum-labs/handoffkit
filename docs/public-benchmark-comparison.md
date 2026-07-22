@@ -32,8 +32,9 @@ Historical two-member product defaults were lopsided: one member was far stronge
 so the oracle ceiling barely exceeded the best single model. Benchmark fusion with
 a decorrelated peer panel instead (the `decorrelated-peers` registry preset:
 gpt-5.5 + claude-opus-4.8 + gemini-3-pro). See
-`configs/benchmark-panel.example.yaml` (which spells the Anthropic model id
-`claude-opus-4-8`; copy the id from the artifact you use).
+`configs/benchmark-panel.example.yaml` for the namespaced-model-only internal eval
+config and `configs/benchmark-router.example.yaml` for the RouteKit model and
+provider definitions.
 
 ## Suites
 
@@ -64,7 +65,14 @@ maintainer-only `fusionkit-bench` entrypoint; env setup mirrors the
 LiveCodeBench commands under `uv run --with 'datasets<4'`.
 
 ```bash
-fusionkit serve &
+routekit --config configs/benchmark-router.example.yaml \
+  serve --no-portless --port 8787
+```
+
+In another shell:
+
+```bash
+export FUSIONKIT_BENCH_CONFIG=configs/benchmark-panel.example.yaml
 uv run --package fusionkit-evals fusionkit-bench public \
   --suite aider-polyglot \
   --panel decorrelated-peers \

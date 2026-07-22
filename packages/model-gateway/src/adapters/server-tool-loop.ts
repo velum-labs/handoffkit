@@ -29,6 +29,12 @@ import { randomId } from "@routekit/runtime";
 import { SseDecoder } from "../sse/parse.js";
 import { ChatStreamAssembler } from "../sse/chat-assembler.js";
 import type { AssembledToolCall } from "../sse/chat-assembler.js";
+import {
+  ANTHROPIC_MESSAGE_CONTENT,
+  anthropicReasoningDetailsOf,
+  type AnthropicNativeContentBlock,
+  type AnthropicReasoningDetail
+} from "./openai-chat-wire.js";
 import { MAX_WEB_SEARCHES_PER_TURN } from "./web-search.js";
 import type { WebSearchExecutor, WebSearchOutcome } from "./web-search.js";
 
@@ -64,6 +70,10 @@ export type ExecutedSearch = {
   status: "completed" | "failed";
   outcome?: WebSearchOutcome;
 };
+
+export type ServerToolLoopEvent =
+  | { kind: "reasoning"; details: AnthropicReasoningDetail[] }
+  | { kind: "search"; search: ExecutedSearch };
 
 export type ServerToolLoopOptions = {
   /** The translated chat body; the loop appends search exchanges to `messages`. */
@@ -125,6 +135,7 @@ async function executeServerCalls(input: {
   options: ServerToolLoopOptions;
   calls: readonly { id?: string; name?: string; arguments?: string }[];
   stepContent: string | undefined;
+  reasoningDetails?: readonly AnthropicReasoningDetail[];
   searches: ExecutedSearch[];
   onSearchStart?: (search: { itemId: string; query: string }) => void;
   onSearchDone?: (search: ExecutedSearch) => void;
@@ -137,11 +148,57 @@ async function executeServerCalls(input: {
     type: "function",
     function: { name: call.name ?? "web_search", arguments: call.arguments ?? "" }
   }));
-  messages.push({
+  const assistant: Record<string, unknown> = {
     role: "assistant",
     content: typeof input.stepContent === "string" && input.stepContent.length > 0 ? input.stepContent : null,
     tool_calls: toolCalls
-  });
+  };
+  const nativeReasoning = anthropicReasoningDetailsOf(
+    input.reasoningDetails,
+    "message"
+  )
+    .filter(
+      (detail) =>
+        detail.type === "redacted_thinking" ||
+        (detail.type === "thinking" &&
+          typeof detail.signature === "string" &&
+          detail.signature.length > 0)
+    )
+    .sort((a, b) => a.index - b.index);
+  if (nativeReasoning.length > 0) {
+    const nativeContent: AnthropicNativeContentBlock[] = nativeReasoning.map(
+      (detail): AnthropicNativeContentBlock =>
+        detail.type === "redacted_thinking"
+          ? { type: "redacted_thinking", data: detail.data }
+          : {
+              type: "thinking",
+              thinking: detail.thinking ?? "",
+              signature: detail.signature ?? ""
+            }
+    );
+    if (typeof input.stepContent === "string" && input.stepContent.length > 0) {
+      nativeContent.push({ type: "text", text: input.stepContent });
+    }
+    for (const call of toolCalls) {
+      let toolInput: unknown = {};
+      try {
+        toolInput = JSON.parse(call.function.arguments);
+      } catch {
+        toolInput = { raw: call.function.arguments };
+      }
+      nativeContent.push({
+        type: "tool_use",
+        id: call.id,
+        name: call.function.name,
+        input: toolInput
+      });
+    }
+    Object.defineProperty(assistant, ANTHROPIC_MESSAGE_CONTENT, {
+      value: nativeContent,
+      enumerable: true
+    });
+  }
+  messages.push(assistant);
   for (let i = 0; i < calls.length; i += 1) {
     const call = calls[i];
     if (call === undefined) continue;
@@ -174,7 +231,12 @@ async function executeServerCalls(input: {
 // ---- buffered mode ----
 
 export type BufferedLoopOutcome =
-  | { kind: "openai"; openai: Record<string, unknown>; searches: ExecutedSearch[] }
+  | {
+      kind: "openai";
+      openai: Record<string, unknown>;
+      searches: ExecutedSearch[];
+      events: ServerToolLoopEvent[];
+    }
   | { kind: "upstream_error"; response: Response };
 
 /**
@@ -188,33 +250,56 @@ export async function runBufferedServerToolLoop(
   options: ServerToolLoopOptions & { firstStep: Response }
 ): Promise<BufferedLoopOutcome> {
   const searches: ExecutedSearch[] = [];
+  const events: ServerToolLoopEvent[] = [];
   for (let step = 0; step < MAX_LOOP_STEPS; step += 1) {
     const upstream = step === 0 ? options.firstStep : await options.runStep(options.chat);
     if (!upstream.ok) return { kind: "upstream_error", response: upstream };
     const openai = (await upstream.json()) as Record<string, unknown>;
     const choice = (Array.isArray(openai.choices) ? openai.choices[0] : undefined) as
-      | { message?: { content?: unknown; tool_calls?: unknown }; finish_reason?: unknown }
+      | {
+          message?: {
+            content?: unknown;
+            reasoning_details?: AnthropicReasoningDetail[];
+            tool_calls?: unknown;
+          };
+          finish_reason?: unknown;
+        }
       | undefined;
     const message = choice?.message;
     const calls = (Array.isArray(message?.tool_calls) ? message.tool_calls : []) as RawToolCall[];
     const server = calls.filter((call) => options.serverToolNames.has(callName(call)));
     const client = calls.filter((call) => !options.serverToolNames.has(callName(call)));
-    if (server.length === 0) return { kind: "openai", openai, searches };
+    if (server.length === 0) return { kind: "openai", openai, searches, events };
     if (client.length > 0 || typeof choice?.finish_reason !== "string") {
       // Mixed batch (or truncated step): surface what the caller can handle;
       // the un-executable server calls are dropped, the model can re-search
       // next turn.
       if (message !== undefined) message.tool_calls = client;
-      return { kind: "openai", openai, searches };
+      return { kind: "openai", openai, searches, events };
     }
     // Past the search budget, executeServerCalls answers each call with a
     // limit notice instead of executing — the model gets one more step to
     // answer from what it has (MAX_LOOP_STEPS bounds a model that will not).
+    const stepReasoning = anthropicReasoningDetailsOf(
+      message?.reasoning_details,
+      "message"
+    ).filter(
+      (detail) =>
+        detail.type === "redacted_thinking" ||
+        (detail.type === "thinking" &&
+          typeof detail.signature === "string" &&
+          detail.signature.length > 0)
+    );
+    if (stepReasoning.length > 0) {
+      events.push({ kind: "reasoning", details: stepReasoning });
+    }
     await executeServerCalls({
       options,
       calls: server.map((call) => ({ id: call.id, name: call.function?.name, arguments: call.function?.arguments })),
       stepContent: typeof message?.content === "string" ? message.content : undefined,
-      searches
+      reasoningDetails: message?.reasoning_details,
+      searches,
+      onSearchDone: (search) => events.push({ kind: "search", search })
     });
   }
   return {
@@ -224,7 +309,8 @@ export async function runBufferedServerToolLoop(
         { index: 0, message: { role: "assistant", content: LIMIT_MESSAGE }, finish_reason: "stop" }
       ]
     },
-    searches
+    searches,
+    events
   };
 }
 
@@ -460,6 +546,7 @@ export function composeServerToolStream(
       options,
       calls: server.map((call) => ({ id: call.id, name: call.name, arguments: call.arguments })),
       stepContent: stepContent.length > 0 ? stepContent : undefined,
+      reasoningDetails: turn.reasoningDetails,
       searches,
       onSearchStart: (search) => {
         controller.enqueue(

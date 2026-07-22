@@ -40,6 +40,12 @@ test("neutral pricing and provider metadata remain available", () => {
   const discovery = providerDiscovery("openrouter");
   assert.equal(discovery?.path, "/v1/models");
   assert.equal(discovery?.pickerDefaultSource, "curated");
+  assert.equal(REGISTRY.providers.openai.wire.protocol, "openai");
+  assert.equal(REGISTRY.providers.anthropic.wire.protocol, "anthropic");
+  assert.equal(REGISTRY.providers.google.wire.protocol, "google");
+  assert.equal(REGISTRY.providers.codex.discovery.responseShape, "codex");
+  assert.equal(REGISTRY.subscriptions["claude-code"].discovery.path, "/v1/models");
+  assert.equal(REGISTRY.subscriptions.codex.discovery.cacheFallback, true);
   assert.equal(REGISTRY.providers.openrouter.attributionHeaders["X-Title"], "RouteKit");
   assert.equal(REGISTRY.providers.openrouter.discovery.extraHeaders["X-Title"], "RouteKit");
   assert.equal(REGISTRY.subscriptions.codex.defaultHeaders.originator, "routekit");

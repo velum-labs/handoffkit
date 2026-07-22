@@ -16,9 +16,9 @@ import {
 const ensembles = [
   {
     name: "default",
-    members: ["fast", "deep"],
-    judge: "deep",
-    synthesizer: "deep"
+    members: ["openai/fast", "anthropic/deep"],
+    judge: "anthropic/deep",
+    synthesizer: "anthropic/deep"
   }
 ];
 
@@ -78,21 +78,21 @@ test("all launchers receive one neutral ToolLaunchSpec", () => {
   assert.deepEqual(spec.models.map((model) => model.id), ["fusion-panel"]);
 });
 
-test("Python sidecar receives RouteKit endpoint ids without provider credentials", () => {
+test("Python sidecar receives namespaced RouteKit model ids without provider credentials", () => {
   const secret = "external-router-secret-value";
   const yaml = sidecarConfigYaml({
-    endpointIds: ["fast", "deep"],
+    routekitModelIds: ["openai/fast", "anthropic/deep"],
     routekitUrl: "http://127.0.0.1:8787/v1",
-    judge: "deep"
+    judge: "anthropic/deep"
   });
   const document = parse(yaml) as {
     routekit_url: string;
-    endpoint_ids: string[];
+    routekit_model_ids: string[];
   };
   assert.deepEqual(credentialFieldNames(document), []);
   assert.doesNotMatch(yaml, new RegExp(secret));
   assert.equal(document.routekit_url, "http://127.0.0.1:8787/v1");
-  assert.deepEqual(document.endpoint_ids, ["fast", "deep"]);
+  assert.deepEqual(document.routekit_model_ids, ["openai/fast", "anthropic/deep"]);
 });
 
 test("Python sidecar environment excludes router and provider credentials", () => {

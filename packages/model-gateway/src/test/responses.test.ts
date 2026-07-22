@@ -5,6 +5,7 @@ import { test } from "node:test";
 
 import { OpenAiBackend } from "../backend.js";
 import { MODEL_CALL_ID_HEADER } from "../provenance.js";
+import { CatalogBackend } from "../router.js";
 import {
   chatToResponses,
   customToolNames,
@@ -13,6 +14,7 @@ import {
   responsesToolRegistry
 } from "../adapters/responses.js";
 import { startGateway } from "../server.js";
+import type { ProviderRelay } from "../server.js";
 
 /**
  * M3 coverage: the OpenAI Responses adapter (Codex) against a mock OpenAI
@@ -208,6 +210,14 @@ test("responsesToChat tolerates reasoning: null and text: null (Codex custom-pro
   assert.equal(chat.model, "grok-4");
   assert.equal(chat.reasoning_effort, undefined);
   assert.equal(chat.response_format, undefined);
+});
+
+test("responsesToChat treats Codex reasoning effort null as absent", () => {
+  const chat = responsesToChat(
+    { model: "gpt-5.5", input: "say OK", reasoning: { effort: null } },
+    "gpt-5.5"
+  );
+  assert.equal(chat.reasoning_effort, undefined);
 });
 
 test("responsesToChat still maps a real reasoning effort", () => {
@@ -700,5 +710,178 @@ test("translates a streamed Responses event sequence", async () => {
   } finally {
     await gateway.close();
     await mock.close();
+  }
+});
+
+test("Codex picker aliases use the canonical catalog and pooled native relay", async () => {
+  const sourceCalls: string[] = [];
+  const sourceBodies: Array<Record<string, unknown>> = [];
+  const source = (sourceId: "codex" | "claude-code") => ({
+    sourceId,
+    discoverModels: async () => [
+      {
+        id:
+          sourceId === "codex"
+            ? "gpt-5.5"
+            : "claude-sonnet-4-6"
+      }
+    ],
+    chat: async (body: unknown) => {
+      const request = body as Record<string, unknown> & { model: string };
+      sourceCalls.push(request.model);
+      sourceBodies.push(request);
+      return Response.json({
+        id: "chatcmpl_cross_provider",
+        choices: [
+          {
+            index: 0,
+            message: { role: "assistant", content: "CROSS_PROVIDER_OK" },
+            finish_reason: "stop"
+          }
+        ],
+        usage: { prompt_tokens: 1, completion_tokens: 1 }
+      });
+    },
+    embeddings: async () => Response.json({})
+  });
+  const backend = await CatalogBackend.create({
+    config: {
+      providers: { codex: {}, "claude-code": {} },
+      defaultModel: "codex/gpt-5.5"
+    },
+    sources: {
+      codex: source("codex"),
+      "claude-code": source("claude-code")
+    }
+  });
+  const relayedBodies: Array<Record<string, unknown>> = [];
+  const relay: ProviderRelay = {
+    dialect: "codex",
+    shouldRelay: () => false,
+    relay: async (_headers, body) => {
+      relayedBodies.push(body as Record<string, unknown>);
+      return Response.json({
+        id: "resp_native",
+        object: "response",
+        status: "completed",
+        model: (body as { model: string }).model,
+        output: [],
+        usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 }
+      });
+    },
+    mergedCatalog: async () => ({
+      models: [
+        {
+          slug: "gpt-5.5",
+          display_name: "GPT-5.5",
+          description: "Native Codex model",
+          visibility: "list",
+          priority: 7
+        }
+      ],
+      etag: 'W/"upstream-catalog"'
+    })
+  };
+  const gateway = await startGateway({
+    backend,
+    providerRelays: { codex: relay }
+  });
+  try {
+    const catalogResponse = await fetch(
+      `${gateway.url()}/v1/models?client_version=1.0.0`
+    );
+    assert.equal(
+      catalogResponse.headers.get("etag"),
+      null,
+      "a projected managed catalog must not reuse the upstream ETag"
+    );
+    const catalog = (await catalogResponse.json()) as {
+      data: Array<{ id: string }>;
+      models: Array<{ slug: string; display_name: string }>;
+    };
+    assert.deepEqual(
+      catalog.data.map((model) => model.id),
+      ["codex/gpt-5.5", "claude-code/claude-sonnet-4-6"]
+    );
+    assert.deepEqual(
+      catalog.models.map(({ slug, display_name }) => [slug, display_name]),
+      [
+        ["gpt-5.5", "GPT-5.5"],
+        [
+          "claude-code/claude-sonnet-4-6",
+          "claude-code/claude-sonnet-4-6"
+        ]
+      ]
+    );
+
+    for (const model of ["gpt-5.5", "codex/gpt-5.5"]) {
+      const response = await fetch(`${gateway.url()}/v1/responses`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          model,
+          instructions: "You are Codex, a coding agent based on GPT-5.",
+          input: "hi",
+          store: false,
+          reasoning: { effort: "high" }
+        })
+      });
+      assert.equal(response.status, 200);
+      assert.equal(
+        ((await response.json()) as { model: string }).model,
+        "gpt-5.5"
+      );
+    }
+    assert.deepEqual(
+      relayedBodies.map((body) => body.model),
+      ["gpt-5.5", "gpt-5.5"]
+    );
+    assert.ok(relayedBodies.every((body) => body.store === false));
+    assert.ok(
+      relayedBodies.every(
+        (body) =>
+          (body.reasoning as { effort?: string } | undefined)?.effort ===
+          "high"
+      )
+    );
+    assert.ok(
+      relayedBodies.every(
+        (body) =>
+          body.instructions ===
+          "You are Codex, a coding agent based on GPT-5."
+      ),
+      "native Codex routes preserve the stock instructions verbatim"
+    );
+    assert.deepEqual(sourceCalls, []);
+
+    const foreign = await fetch(`${gateway.url()}/v1/responses`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        model: "claude-code/claude-sonnet-4-6",
+        instructions: "You are Codex, a coding agent based on GPT-5.",
+        input: "hi"
+      })
+    });
+    assert.equal(foreign.status, 200);
+    assert.deepEqual(sourceCalls, ["claude-sonnet-4-6"]);
+    assert.ok(
+      !JSON.stringify(sourceBodies[0]?.messages).includes("based on GPT-5"),
+      "a stale startup-model identity must not cross into a foreign provider"
+    );
+
+    const unknown = await fetch(`${gateway.url()}/v1/responses`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ model: "gpt-not-real", input: "hi" })
+    });
+    assert.equal(unknown.status, 400);
+    assert.match(await unknown.text(), /unknown model/);
+    assert.deepEqual(
+      relayedBodies.map((body) => body.model),
+      ["gpt-5.5", "gpt-5.5"]
+    );
+  } finally {
+    await gateway.close();
   }
 });

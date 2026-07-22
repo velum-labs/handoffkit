@@ -20,7 +20,15 @@ def error_body(behavior: Behavior) -> dict[str, Any]:
 def _content_blocks(behavior: Behavior) -> list[dict[str, Any]]:
     blocks: list[dict[str, Any]] = []
     if behavior.reasoning is not None:
-        blocks.append({"type": "thinking", "thinking": behavior.reasoning, "signature": "sim"})
+        blocks.append(
+            {
+                "type": "thinking",
+                "thinking": behavior.reasoning,
+                "signature": behavior.reasoning_signature or "",
+            }
+        )
+    if behavior.redacted_thinking is not None:
+        blocks.append({"type": "redacted_thinking", "data": behavior.redacted_thinking})
     if behavior.reply is not None:
         blocks.append({"type": "text", "text": behavior.reply})
     for call in behavior.tool_calls:
@@ -105,6 +113,32 @@ def stream_events(model: str, behavior: Behavior, message_id: str) -> Iterator[t
                     "delta": {"type": "thinking_delta", "thinking": token},
                 },
             )
+        if behavior.reasoning_signature is not None:
+            yield event(
+                "content_block_delta",
+                {
+                    "type": "content_block_delta",
+                    "index": index,
+                    "delta": {
+                        "type": "signature_delta",
+                        "signature": behavior.reasoning_signature,
+                    },
+                },
+            )
+        yield event("content_block_stop", {"type": "content_block_stop", "index": index})
+        index += 1
+    if behavior.redacted_thinking is not None:
+        yield event(
+            "content_block_start",
+            {
+                "type": "content_block_start",
+                "index": index,
+                "content_block": {
+                    "type": "redacted_thinking",
+                    "data": behavior.redacted_thinking,
+                },
+            },
+        )
         yield event("content_block_stop", {"type": "content_block_stop", "index": index})
         index += 1
     if behavior.reply is not None:

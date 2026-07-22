@@ -5,11 +5,11 @@ import type { Command } from "commander";
 import { loadFusionConfig } from "@fusionkit/config";
 import type { EnsembleConfig } from "@fusionkit/config";
 import {
-  configuredEndpointIds,
   loadRouterConfig,
-  missingEndpointIds
+  missingModelIds
 } from "@routekit/config";
 import { contextFor, probeBinaryVersion } from "@routekit/cli-core";
+import { startRouter } from "@routekit/router";
 import { trimTrailingSlashes } from "@routekit/runtime";
 
 import { gitToplevel } from "../fusion/env.js";
@@ -25,7 +25,7 @@ type DoctorEntry = {
   hint?: string;
 };
 
-function requiredEndpointIds(
+function requiredModelIds(
   ensembles: Record<string, EnsembleConfig>
 ): Set<string> {
   return new Set(
@@ -67,17 +67,35 @@ async function runDoctor(command: Command): Promise<number> {
         selectedTool = config.tool ?? selectedTool;
         const path = resolve(repo, config.router.config);
         const routekit = loadRouterConfig({ configPath: path });
-        const required = requiredEndpointIds(config.ensembles);
-        const missing = missingEndpointIds(
-          required,
-          configuredEndpointIds(routekit.config)
-        );
+        const running = await startRouter({
+          config: routekit.config,
+          host: "127.0.0.1",
+          port: 0
+        });
+        let available: Set<string>;
+        try {
+          const response = await fetch(`${running.url}/v1/models`, {
+            signal: AbortSignal.timeout(5_000)
+          });
+          if (!response.ok) {
+            throw new Error(`RouteKit model discovery returned HTTP ${response.status}`);
+          }
+          const body = (await response.json()) as { data?: Array<{ id?: unknown }> };
+          available = new Set(
+            (body.data ?? []).flatMap((entry) =>
+              typeof entry.id === "string" ? [entry.id] : []
+            )
+          );
+        } finally {
+          await running.close();
+        }
+        const missing = missingModelIds(requiredModelIds(config.ensembles), available);
         checks.push({
           label: "embedded RouteKit config",
           ok: missing.length === 0,
           detail: path,
           ...(missing.length > 0
-            ? { hint: `configure missing RouteKit endpoint ids: ${missing.join(", ")}` }
+            ? { hint: `configure missing RouteKit model ids: ${missing.join(", ")}` }
             : {})
         });
       } else {
@@ -115,8 +133,8 @@ async function runDoctor(command: Command): Promise<number> {
             typeof entry.id === "string" ? [entry.id] : []
           )
         );
-        const missing = missingEndpointIds(
-          requiredEndpointIds(config.ensembles),
+        const missing = missingModelIds(
+          requiredModelIds(config.ensembles),
           available
         );
         checks.push({
@@ -128,7 +146,7 @@ async function runDoctor(command: Command): Promise<number> {
               : `${config.router.url} (HTTP ${response.status})`,
           ...(response?.ok === true && missing.length > 0
             ? {
-                hint: `external RouteKit is missing endpoint ids: ${missing.join(", ")}`
+                hint: `external RouteKit is missing model ids: ${missing.join(", ")}`
               }
             : response !== undefined && !response.ok
               ? { hint: "start RouteKit and verify router authentication" }

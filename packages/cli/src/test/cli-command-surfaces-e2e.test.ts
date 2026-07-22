@@ -46,7 +46,9 @@ function runCli(args: readonly string[]): {
       PORTLESS: "0",
       NO_COLOR: "1",
       FUSIONKIT_NO_TUI: "1",
-      FUSIONKIT_TELEMETRY: undefined
+      FUSIONKIT_TELEMETRY: undefined,
+      OPENAI_API_KEY: "test-openai",
+      OPENAI_BASE_URL: sim.url
     },
     encoding: "utf8",
     timeout: 120_000
@@ -68,6 +70,8 @@ function mustRun(args: readonly string[]): string {
 before(async () => {
   if (SKIP !== false) return;
   sim = await startProviderSim();
+  await sim.queue("provider-surface-a", ["catalog seed"]);
+  await sim.queue("provider-surface-b", ["catalog seed"]);
   root = mkdtempSync(join(tmpdir(), "fusionkit-v4-cli-surfaces-"));
   repo = join(root, "repo");
   home = join(root, "home");
@@ -101,13 +105,16 @@ before(async () => {
         defaultEnsemble: "default",
         ensembles: {
           default: {
-            members: ["surface-a", "surface-b"],
-            judge: "surface-a",
+            members: [
+              "openai/provider-surface-a",
+              "openai/provider-surface-b"
+            ],
+            judge: "openai/provider-surface-a",
             k: 1
           },
           mini: {
-            members: ["surface-a"],
-            judge: "surface-a",
+            members: ["openai/provider-surface-a"],
+            judge: "openai/provider-surface-a",
             k: 1
           }
         }
@@ -119,18 +126,9 @@ before(async () => {
   writeFileSync(
     join(repo, ".routekit", "router.yaml"),
     [
-      "endpoints:",
-      "  - endpointId: surface-a",
-      "    model: provider-surface-a",
-      "    provider: simulator",
-      `    baseUrl: ${sim.url}/v1`,
-      "    dialect: openai",
-      "  - endpointId: surface-b",
-      "    model: provider-surface-b",
-      "    provider: simulator",
-      `    baseUrl: ${sim.url}/v1`,
-      "    dialect: openai",
-      "defaultEndpointId: surface-a",
+      "providers:",
+      "  openai: {}",
+      "defaultModel: openai/provider-surface-a",
       ""
     ].join("\n")
   );
@@ -160,8 +158,8 @@ test("version, completion, and config surfaces execute through the real CLI", {
   };
   assert.deepEqual(shown.router, { config: ".routekit/router.yaml" });
   assert.deepEqual(shown.effective.ensembles.value[0]?.members, [
-    "surface-a",
-    "surface-b"
+    "openai/provider-surface-a",
+    "openai/provider-surface-b"
   ]);
 });
 
@@ -253,6 +251,6 @@ test("removed routing/account/install commands remain absent", {
   }
   assert.doesNotMatch(
     readFileSync(join(repo, ".fusionkit", "fusion.json"), "utf8"),
-    /provider|baseUrl|apiKey|subscription/
+    /baseUrl|apiKey|subscription/
   );
 });

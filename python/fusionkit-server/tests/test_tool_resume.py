@@ -315,11 +315,13 @@ def test_tool_results_api_rejects_wrong_tool_call(tmp_path) -> None:
 def _manager(tmp_path) -> tuple[FusionRunManager, FileSystemRunStore]:
     config = FusionConfig(
         routekit_url="http://routekit.test",
-        endpoint_ids=["fast"],
-        default_model="fast",
+        routekit_model_ids=["test/fast"],
+        default_model="test/fast",
         default_mode="single",
     )
-    engine = FusionEngine(config=config, clients={"fast": FakeModelClient("fast")})
+    engine = FusionEngine(
+        config=config, clients={"test/fast": FakeModelClient("test/fast")}
+    )
     store = FileSystemRunStore(tmp_path / "runs")
     return FusionRunManager(engine, store, LocalArtifactStore(tmp_path / "runs")), store
 
@@ -327,8 +329,8 @@ def _manager(tmp_path) -> tuple[FusionRunManager, FileSystemRunStore]:
 def _client(manager: FusionRunManager) -> TestClient:
     config = FusionConfig(
         routekit_url="http://routekit.test",
-        endpoint_ids=["fast"],
-        default_model="fast",
+        routekit_model_ids=["test/fast"],
+        default_model="test/fast",
         default_mode="single",
     )
     return TestClient(create_app(config, run_manager=manager))

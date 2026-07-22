@@ -13,18 +13,17 @@ import type { SessionStore } from "./session-store.js";
 export type { WireTrajectory } from "@fusionkit/protocol";
 
 export type PassthroughModel = {
-  modelId: string;
-  endpointId: string;
-  endpointUrl: string;
+  routekitModelId: string;
+  routekitUrl: string;
 };
 
 export type FusedModelRoute = {
   modelId: string;
   name: string;
-  memberEndpointIds: readonly string[];
-  judgeEndpointId?: string;
+  memberRoutekitModelIds: readonly string[];
+  judgeRoutekitModelId?: string;
   judgeModelName?: string;
-  synthesizerEndpointId?: string;
+  synthesizerRoutekitModelId?: string;
   /**
    * Step boundaries per panel member before aggregation: 1 = single-completion
    * proposers over the caller's messages+tools; finite > 1 = bounded managed

@@ -194,6 +194,31 @@ test("captures usage and extension metadata from any chunk", () => {
   assert.deepEqual(turn.extensions.route, { request_id: "request_1" });
 });
 
+test("merges split stream usage and rejects malformed reasoning metadata", () => {
+  const assembler = new ChatStreamAssembler();
+  feedAssembler(
+    assembler,
+    JSON.stringify({ choices: [], usage: { prompt_tokens: 7 } }),
+    chunk({
+      reasoning_details: [
+        { type: "attacker_block", index: 0, phase: "start", data: "leak" },
+        { type: "redacted_thinking", index: 1, phase: "block", data: 42 }
+      ]
+    }),
+    JSON.stringify({
+      choices: [{ index: 0, delta: {}, finish_reason: "stop" }],
+      usage: { completion_tokens: 3 }
+    })
+  );
+  const turn = assembler.result();
+  assert.deepEqual(turn.reasoningDetails, []);
+  assert.deepEqual(turn.usage, {
+    prompt_tokens: 7,
+    completion_tokens: 3,
+    total_tokens: 10
+  });
+});
+
 test("a stream that ends without finish_reason is truncated, not a clean stop", () => {
   const assembler = new ChatStreamAssembler();
   feedAssembler(assembler, chunk({ content: "partial answ" }));

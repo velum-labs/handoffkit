@@ -26,6 +26,7 @@
     "provenance": true
   },
   "dependencies": {
+    "@routekit/contracts": "workspace:*",
     "@routekit/harness-core": "workspace:*",
     "@routekit/runtime": "workspace:*",
     "@routekit/tools": "workspace:*",
@@ -41,6 +42,8 @@
     "adapter"
   ],
   "scripts": {
+    "build": "tsc -b",
+    "clean": "tsc -b --clean",
     "test": "node --test \"dist/test/*.test.js\""
   }
 }

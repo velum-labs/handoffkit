@@ -1,226 +1,292 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import type { Backend } from "../backend.js";
-import { CatalogBackend, EndpointPool, parseRouterConfig } from "../router.js";
+import type {
+  BackendRequestOptions,
+  DiscoveredModel,
+  ProviderId,
+  ProviderSource
+} from "../index.js";
+import {
+  CatalogBackend,
+  parseDiscoveredModels,
+  parseRouterConfig,
+  UnknownModelError
+} from "../index.js";
 
-function fakeBackend(
-  name: string,
-  invoke: () => Response = () => Response.json({ name })
-): Backend {
+function fakeSource(
+  sourceId: ProviderId,
+  models: readonly DiscoveredModel[],
+  calls: Array<{ source: string; model?: string }> = []
+): ProviderSource {
   return {
-    defaultModel: name,
-    chat: async () => invoke(),
-    models: async () => Response.json({ object: "list", data: [{ id: name }] }),
-    embeddings: async () => invoke()
+    sourceId,
+    async discoverModels() {
+      return models;
+    },
+    async chat(body: unknown, _signal?: AbortSignal, _options?: BackendRequestOptions) {
+      const model =
+        typeof body === "object" &&
+        body !== null &&
+        "model" in body &&
+        typeof body.model === "string"
+          ? body.model
+          : undefined;
+      calls.push({ source: sourceId, ...(model !== undefined ? { model } : {}) });
+      return Response.json({ source: sourceId, model });
+    },
+    async embeddings() {
+      return Response.json({});
+    }
   };
 }
 
-test("RouterConfig validates endpoint identity and defaults", () => {
+test("RouterConfig requires explicit providers and namespaced defaults", () => {
   const config = parseRouterConfig({
-    endpoints: [
-      {
-        endpointId: "opaque-a",
-        model: "provider-model",
-        baseUrl: "https://provider.example/v1"
-      }
-    ]
+    providers: {
+      openai: {},
+      codex: { strategy: "round_robin", switchThreshold: 0.8 }
+    },
+    defaultModel: "codex/gpt-5.5"
   });
-  assert.equal(config.endpoints[0]?.dialect, "openai");
-  assert.equal(config.strategy, "capacity_weighted");
+  assert.equal(config.providers.openai?.strategy, "capacity_weighted");
+  assert.equal(config.providers.codex?.strategy, "round_robin");
   assert.throws(
     () =>
       parseRouterConfig({
-        endpoints: [
-          {
-            endpointId: "opaque-a",
-            instanceId: "duplicate",
-            model: "provider-model",
-            baseUrl: "https://one.example/v1"
-          },
-          {
-            endpointId: "opaque-b",
-            instanceId: "duplicate",
-            model: "provider-model",
-            baseUrl: "https://two.example/v1"
-          }
-        ]
+        providers: { openai: {} },
+        defaultModel: "gpt-5.5"
       }),
-    /instance ids must be unique/
+    /provider\/model namespace/
   );
   assert.throws(
     () =>
       parseRouterConfig({
-        endpoints: [
-          {
-            endpointId: "opaque-a",
-            model: "provider-model",
-            baseUrl: "https://provider.example/v1",
-            apiKey: "must-not-be-stored-in-router-config"
-          }
-        ]
+        providers: { openai: {} },
+        defaultModel: "codex/gpt-5.5"
       }),
-    /unrecognized key/i
+    /provider "codex" is not configured/
+  );
+  assert.throws(
+    () => parseRouterConfig({ endpoints: [] }),
+    /invalid input|unrecognized key/i
+  );
+  assert.throws(
+    () =>
+      parseRouterConfig({
+        providers: { openai: {} },
+        reasoningCapabilities: {
+          "openai/opaque": {
+            efforts: [{ id: "quick" }],
+            defaultEffort: "missing"
+          }
+        }
+      }),
+    /default reasoning effort/
   );
 });
-
-test("CatalogBackend advertises opaque ids and balances endpoint instances", async () => {
-  const calls: string[] = [];
-  const backend = new CatalogBackend({
-    config: {
-      strategy: "round_robin",
-      endpoints: [
+test("discovery normalizes native response shapes", () => {
+  assert.deepEqual(
+    parseDiscoveredModels("openai", {
+      data: [{ id: "gpt-5.5" }, { id: "gpt-5.5" }, { nope: true }]
+    }).map((model) => model.id),
+    ["gpt-5.5"]
+  );
+  assert.deepEqual(
+    parseDiscoveredModels("anthropic", {
+      data: [{ id: "claude-opus-4-1" }]
+    }).map((model) => model.id),
+    ["claude-opus-4-1"]
+  );
+  assert.deepEqual(
+    parseDiscoveredModels("google", {
+      models: [{ name: "models/gemini-2.5-pro" }]
+    }).map((model) => model.id),
+    ["gemini-2.5-pro"]
+  );
+  assert.deepEqual(
+    parseDiscoveredModels("codex", {
+      models: [
         {
-          endpointId: "opaque-a",
-          model: "native-a",
-          baseUrl: "https://one.example/v1",
-          capabilities: { tools: "supported", streaming: "supported" }
-        },
+          slug: "gpt-5.5",
+          default_reasoning_level: "balanced",
+          supported_reasoning_levels: [
+            { effort: "quick", description: "Quick" },
+            { effort: "balanced", description: "Balanced" }
+          ]
+        }
+      ]
+    }, "codex").map((model) => model.id),
+    ["gpt-5.5"]
+  );
+  const reasoning = parseDiscoveredModels(
+    "codex",
+    {
+      models: [
         {
-          endpointId: "opaque-a",
-          model: "native-a",
-          baseUrl: "https://two.example/v1",
-          capabilities: { tools: "supported", streaming: "supported" }
+          slug: "opaque",
+          default_reasoning_level: "balanced",
+          supported_reasoning_levels: ["quick", "balanced"]
         }
       ]
     },
-    createBackend: (endpoint) =>
-      fakeBackend(endpoint.baseUrl, () => {
-        calls.push(endpoint.baseUrl);
-        return Response.json({ ok: true });
-      })
+    "codex"
+  )[0]?.reasoning;
+  assert.deepEqual(reasoning?.efforts, [{ id: "quick" }, { id: "balanced" }]);
+  assert.equal(reasoning?.defaultEffort, "balanced");
+  assert.equal(reasoning?.wireShape, "openai-responses");
+  assert.equal(reasoning?.provenance, "provider");
+  assert.throws(
+    () => parseDiscoveredModels("openai", { data: [] }),
+    /no usable openai models/
+  );
+});
+test("catalog namespaces live models and strips the source before dispatch", async () => {
+  const calls: Array<{ source: string; model?: string }> = [];
+  const backend = await CatalogBackend.create({
+    config: {
+      providers: { openai: {}, openrouter: {} },
+      defaultModel: "openrouter/moonshotai/kimi-k2-thinking"
+    },
+    sources: {
+      openai: fakeSource("openai", [{ id: "gpt-5.5" }], calls),
+      openrouter: fakeSource(
+        "openrouter",
+        [{ id: "moonshotai/kimi-k2-thinking" }],
+        calls
+      )
+    }
   });
 
-  assert.deepEqual(backend.listModelIds(), ["opaque-a"]);
-  assert.equal(backend.resolveModel("unknown"), "opaque-a");
-  assert.equal(backend.capabilities("opaque-a").tools, "supported");
-  await backend.chat({ model: "opaque-a", messages: [] });
-  await backend.chat({ model: "opaque-a", messages: [] });
-  assert.deepEqual(calls, ["https://one.example/v1", "https://two.example/v1"]);
+  assert.deepEqual(backend.listModelIds(), [
+    "openai/gpt-5.5",
+    "openrouter/moonshotai/kimi-k2-thinking"
+  ]);
+  assert.deepEqual(backend.resolveModelRoute("gpt-5.5", "openai"), {
+    publicId: "openai/gpt-5.5",
+    nativeId: "gpt-5.5",
+    provider: "openai"
+  });
+  assert.equal(
+    backend.resolveModelRoute("gpt-5.5"),
+    undefined,
+    "bare ids remain invalid without a native-provider scope"
+  );
+  assert.deepEqual(
+    backend.resolveModelRoute(
+      "openrouter/moonshotai/kimi-k2-thinking",
+      "openai"
+    ),
+    {
+      publicId: "openrouter/moonshotai/kimi-k2-thinking",
+      nativeId: "moonshotai/kimi-k2-thinking",
+      provider: "openrouter"
+    },
+    "an exact canonical id wins even on a native client door"
+  );
+  await backend.chat({ messages: [] });
+  await backend.chat({ model: "openai/gpt-5.5", messages: [] });
+  assert.deepEqual(calls, [
+    { source: "openrouter", model: "moonshotai/kimi-k2-thinking" },
+    { source: "openai", model: "gpt-5.5" }
+  ]);
 
   const models = (await (await backend.models()).json()) as {
-    data: Array<{ id: string; capabilities: Record<string, string> }>;
+    data: Array<{ id: string; owned_by: string }>;
   };
-  assert.equal(models.data[0]?.id, "opaque-a");
-  assert.equal(models.data[0]?.capabilities.streaming, "supported");
-});
-
-test("EndpointPool cools a throttled instance and retries another", async () => {
-  const calls: string[] = [];
-  const backend = new CatalogBackend({
-    config: {
-      strategy: "round_robin",
-      cooldownMs: 60_000,
-      endpoints: [
-        {
-          endpointId: "opaque",
-          model: "native",
-          baseUrl: "https://limited.example/v1"
-        },
-        {
-          endpointId: "opaque",
-          model: "native",
-          baseUrl: "https://healthy.example/v1"
-        }
-      ]
-    },
-    createBackend: (endpoint) =>
-      fakeBackend(endpoint.baseUrl, () => {
-        calls.push(endpoint.baseUrl);
-        return endpoint.baseUrl.includes("limited")
-          ? Response.json({ error: "limited" }, { status: 429, headers: { "retry-after": "60" } })
-          : Response.json({ ok: true });
-      })
-  });
-
-  const response = await backend.chat({ model: "opaque", messages: [] });
-  assert.equal(response.status, 200);
-  assert.deepEqual(calls, [
-    "https://limited.example/v1",
-    "https://healthy.example/v1"
-  ]);
-  calls.length = 0;
-  await backend.chat({ model: "opaque", messages: [] });
-  assert.deepEqual(calls, ["https://healthy.example/v1"]);
-});
-
-test("EndpointPool does not poison an instance after caller cancellation", async () => {
-  let calls = 0;
-  const backend = new CatalogBackend({
-    config: {
-      cooldownMs: 60_000,
-      endpoints: [
-        {
-          endpointId: "opaque",
-          model: "native",
-          baseUrl: "https://cancel.example/v1"
-        }
-      ]
-    },
-    createBackend: (endpoint) =>
-      fakeBackend(endpoint.baseUrl, () => {
-        calls += 1;
-        if (calls === 1) {
-          throw new DOMException("cancelled", "AbortError");
-        }
-        return Response.json({ ok: true });
-      })
-  });
-
-  await assert.rejects(
-    backend.chat({ model: "opaque", messages: [] }),
-    (error: unknown) => error instanceof Error && error.name === "AbortError"
-  );
-  const recovered = await backend.chat({ model: "opaque", messages: [] });
-  assert.equal(recovered.status, 200);
-  assert.equal(calls, 2);
-});
-
-test("EndpointPool exposes explicit health and cooldown controls", async () => {
-  const calls: string[] = [];
-  const firstConfig = {
-    endpointId: "opaque",
-    instanceId: "first",
-    model: "native",
-    baseUrl: "https://first.example/v1",
-    dialect: "openai" as const
-  };
-  const secondConfig = {
-    endpointId: "opaque",
-    instanceId: "second",
-    model: "native",
-    baseUrl: "https://second.example/v1",
-    dialect: "openai" as const
-  };
-  const pool = new EndpointPool({
-    endpointId: "opaque",
-    strategy: "round_robin",
-    instances: [
-      {
-        config: firstConfig,
-        backend: fakeBackend("first", () => {
-          calls.push("first");
-          return Response.json({ ok: true });
-        })
-      },
-      {
-        config: secondConfig,
-        backend: fakeBackend("second", () => {
-          calls.push("second");
-          return Response.json({ ok: true });
-        })
-      }
+  assert.deepEqual(
+    models.data.map((model) => [model.id, model.owned_by]),
+    [
+      ["openai/gpt-5.5", "openai"],
+      ["openrouter/moonshotai/kimi-k2-thinking", "openrouter"]
     ]
+  );
+});
+
+test("catalog applies configured opaque efforts and rejects unavailable values before egress", async () => {
+  const calls: Array<{ source: string; model?: string }> = [];
+  const backend = await CatalogBackend.create({
+    config: {
+      providers: { openai: {} },
+      defaultModel: "openai/opaque",
+      reasoningCapabilities: {
+        "openai/opaque": {
+          efforts: [
+            { id: "balanced", aliases: ["cursor-balanced"] },
+            { id: "deep" }
+          ],
+          defaultEffort: "balanced",
+          wireShape: "openai-chat"
+        }
+      }
+    },
+    sources: {
+      openai: fakeSource("openai", [{ id: "opaque" }], calls)
+    }
   });
+  const accepted = await backend.chat({
+    model: "openai/opaque",
+    reasoning_effort: "cursor-balanced",
+    messages: []
+  });
+  assert.equal(accepted.status, 200);
+  const rejected = await backend.chat({
+    model: "openai/opaque",
+    reasoning_effort: "maximum",
+    messages: []
+  });
+  assert.equal(rejected.status, 400);
+  const malformed = await backend.chat({
+    model: "openai/opaque",
+    reasoning_effort: 7,
+    messages: []
+  });
+  assert.equal(malformed.status, 400);
+  assert.equal(calls.length, 1);
+  assert.equal(
+    backend.reasoningCapabilities("openai/opaque")?.provenance,
+    "config"
+  );
+});
 
-  assert.deepEqual(pool.instanceIds(), ["first", "second"]);
-  pool.markUnhealthy("first");
-  await pool.chat({ model: "opaque", messages: [] });
-  assert.deepEqual(calls, ["second"]);
+test("unknown models never fall through to the default source", async () => {
+  const backend = await CatalogBackend.create({
+    config: { providers: { openai: {} } },
+    sources: { openai: fakeSource("openai", [{ id: "gpt-5.5" }]) }
+  });
+  assert.throws(
+    () => backend.chat({ model: "openai/not-real", messages: [] }),
+    (error: unknown) =>
+      error instanceof UnknownModelError && error.model === "openai/not-real"
+  );
+});
 
-  pool.markHealthy("first");
-  pool.markCooldown("second", 60_000);
-  calls.length = 0;
-  await pool.chat({ model: "opaque", messages: [] });
-  assert.deepEqual(calls, ["first"]);
+test("startup reports provider-specific discovery and credential failures", async () => {
+  await assert.rejects(
+    CatalogBackend.create({
+      config: { providers: { openai: {} } },
+      sources: {
+        openai: {
+          ...fakeSource("openai", []),
+          async discoverModels() {
+            throw new Error("bad token");
+          }
+        }
+      }
+    }),
+    /provider "openai" discovery failed: bad token/
+  );
+  await assert.rejects(
+    CatalogBackend.create({
+      config: { providers: { openai: {} } },
+      env: {}
+    }),
+    /provider "openai" is missing credential environment variable OPENAI_API_KEY/
+  );
+  await assert.rejects(
+    CatalogBackend.create({
+      config: { providers: { codex: {} } }
+    }),
+    /provider "codex" requires enrolled subscription accounts/
+  );
 });

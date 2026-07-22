@@ -1,47 +1,60 @@
 import { contextFor, parsePort } from "@routekit/cli-core";
+import { startRouteKitDaemon } from "@routekit/daemon";
 import type { Command } from "commander";
 
-import { startRouter, waitForShutdown } from "../serve.js";
+import { globalRouterConfigPath } from "../config.js";
+import { waitForShutdown } from "../serve.js";
+import { routekitVersion } from "../state.js";
 
-import { loaded } from "./context.js";
+import { configOverride } from "./context.js";
+import { attachServeOptions, drainGraceMs } from "./serve-options.js";
+import type { GatewayServeCliOptions } from "./serve-options.js";
 
 export function registerServe(program: Command): void {
-  program
-    .command("serve")
-    .description("serve the configured model router in the foreground")
-    .option("--host <host>", "bind host", "127.0.0.1")
-    .option("--port <port>", "bind port", "8080")
-    .option("--auth-token <token>", "authentication token (required for non-loopback hosts)")
-    .option("--no-portless", "disable the stable local route")
+  attachServeOptions(
+    program
+      .command("serve")
+      .description("serve the configured model router in the foreground")
+  )
     .action(
       async (
-        options: {
-          host: string;
-          port: string;
-          authToken?: string;
-          portless?: boolean;
-        },
+        options: GatewayServeCliOptions,
         command: Command
       ) => {
         const ctx = contextFor(command);
-        const result = loaded(command);
-        const running = await startRouter({
-          config: result.config,
+        const configPath =
+          configOverride(command) ??
+          process.env.ROUTEKIT_CONFIG ??
+          globalRouterConfigPath();
+        let running: Awaited<ReturnType<typeof startRouteKitDaemon>> | undefined;
+        const requestShutdown = (): void => {
+          setImmediate(() => void running?.close().finally(() => process.exit(0)));
+        };
+        running = await startRouteKitDaemon({
+          packageVersion: routekitVersion(),
+          configPath,
           host: options.host,
           port: parsePort(options.port, 8080),
+          drainGraceMs: drainGraceMs(options.drainGrace),
           ...(options.authToken !== undefined ? { authToken: options.authToken } : {}),
-          ...(options.portless !== undefined ? { portless: options.portless } : {})
+          ...(options.portless !== undefined ? { portless: options.portless } : {}),
+          onShutdownRequested: requestShutdown
         });
         if (ctx.json) {
           ctx.emit({
-            url: running.url,
-            port: running.gateway.port(),
-            config: result.path,
-            authenticated: options.authToken !== undefined
+            event: "listening",
+            url: running.dataUrl,
+            controlUrl: running.controlUrl,
+            port: running.record.dataPort,
+            config: configPath,
+            authenticated: true,
+            pid: running.record.pid,
+            generation: running.record.generation
           });
         } else {
-          ctx.presenter.success(`RouteKit gateway listening at ${running.url}`);
-          ctx.presenter.note(`config: ${result.path}`);
+          ctx.presenter.success(`RouteKit daemon gateway listening at ${running.dataUrl}`);
+          ctx.presenter.note(`control: ${running.controlUrl}`);
+          ctx.presenter.note(`config: ${configPath}`);
           ctx.presenter.note("Press Ctrl+C to stop.");
         }
         await waitForShutdown();

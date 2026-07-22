@@ -22,8 +22,17 @@ export type ProviderDiscovery = {
   path: string;
   auth: ProviderAuthStyle;
   extraHeaders?: Record<string, string>;
-  responseShape: "openai" | "anthropic" | "google";
+  responseShape: ProviderDiscoveryResponseShape;
   pickerDefaultSource?: "live" | "curated";
+};
+
+export type ProviderDiscoveryResponseShape = "openai" | "anthropic" | "google" | "codex";
+
+export type ProviderWireProtocol = "openai" | "anthropic" | "google" | "codex";
+
+export type ProviderWire = {
+  protocol: ProviderWireProtocol;
+  basePath: string;
 };
 
 export type ProviderInfo = {
@@ -36,6 +45,7 @@ export type ProviderInfo = {
   attributionHeaders?: Record<string, string>;
   keyProbe?: ProviderKeyProbe;
   discovery?: ProviderDiscovery;
+  wire?: ProviderWire;
 };
 
 export const PROVIDERS: Readonly<Record<string, ProviderInfo>> = REGISTRY.providers as Readonly<
@@ -89,6 +99,13 @@ export type SubscriptionInfo = {
   modelsCachePath?: string;
   authFileName?: string;
   defaultModel: string;
+  wire: ProviderWire;
+  discovery: {
+    path: string;
+    responseShape: ProviderDiscoveryResponseShape;
+    cacheFallback?: boolean;
+    extraHeaders?: Record<string, string>;
+  };
   oauthBetaHeader?: string;
   spoofSystemPrompt?: string;
   defaultInstructions?: string;

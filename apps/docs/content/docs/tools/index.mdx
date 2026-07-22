@@ -42,7 +42,7 @@ The behavior below works the same way in all four tools:
 | Cost controls | `--budget <usd>` caps gateway-observed spend. See [Cost and models](/docs/guides/cost-and-models). |
 | Observability | `--observe` boots the local trace dashboard. |
 | Sub-agents | Each named ensemble becomes a delegable sub-agent unless you pass `--no-subagents`. |
-| Routing boundary | Ensemble members are opaque RouteKit endpoint IDs. Use RouteKit for single-model launches. |
+| Routing boundary | Ensemble members are live namespaced RouteKit model IDs. Use RouteKit for single-model launches. |
 
 The per-tool pages cover what differs: how each agent is wired to the gateway,
 which environment the launcher sets, how the model picker is populated, and the

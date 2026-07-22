@@ -4,33 +4,26 @@
 proxy that fronts OAuth **subscription** accounts — ChatGPT/Codex, Claude Code,
 Gemini (Antigravity), Grok, Kimi — behind an OpenAI-compatible API, with
 multi-account rotation. RouteKit owns the verified binary, private config, and
-OAuth account store. FusionKit can consume it as the `cliproxy` provider: a
-plain OpenAI-compatible upstream whose "API key" is the proxy's own ingress
-key. That puts subscription-backed frontier models (Gemini, Grok, Kimi — the
-providers FusionKit has no native OAuth adapter for) on a fusion panel with
-zero engine changes.
+OAuth account store. RouteKit represents it as the explicit `cliproxy`
+provider: a live OpenAI-compatible source whose credential is the proxy's own
+ingress key. FusionKit references namespaced `cliproxy/<model>` IDs.
 
-## Where it fits vs the built-in subscription proxy
+## Where it fits
 
-| | built-in `routekit accounts serve` | `cliproxy` upstream |
-|---|---|---|
-| Providers | Claude Code, Codex | Codex, Claude Code, **Gemini/Antigravity, Grok, Kimi, …** |
-| Wire | provider-native relays (Messages / Responses) | OpenAI Chat Completions |
-| Rotation | quota-aware (sticky / round_robin / capacity_weighted) | round-robin (+ session affinity) |
-| Owner | RouteKit (TypeScript, in-tree) | RouteKit-managed external Go binary (pinned release) |
+Use native RouteKit `claude-code` and `codex` providers. They use
+provider-native relays and quota-aware selection inside the singleton daemon.
 
-Keep the built-in proxy as the default for Claude Code and Codex pooling — it
-has quota-aware selection and native wire relays. Reach for `cliproxy` when a
-panel wants providers FusionKit cannot OAuth natively (Gemini, Grok, Kimi),
-or when you already run CLIProxyAPI for other tools.
+Reach for `cliproxy` when an ensemble needs a subscription provider RouteKit
+does not support natively (Gemini, Grok, Kimi), or when you already run
+CLIProxyAPI for another tool. CLIProxyAPI is a separate, URL-backed upstream.
 
 ## Quick start (managed sidecar)
 
 ```bash
+routekit config init
 routekit accounts cliproxy install         # pinned release, SHA-256 verified
 routekit accounts cliproxy login gemini    # or claude / codex / grok / kimi / antigravity
 routekit accounts cliproxy serve           # http://127.0.0.1:8317
-routekit accounts cliproxy status          # install state, reachability, accounts
 ```
 
 The managed instance lives under `~/.routekit/cliproxy/` (or `ROUTEKIT_HOME`;
@@ -40,34 +33,44 @@ with the generated ingress key, and the proxy's OAuth `auth/` store, all
 works identically: export `ROUTEKIT_CLIPROXY_API_KEY` (one of its `api-keys`)
 and, for a non-default host/port, `ROUTEKIT_CLIPROXY_BASE_URL`.
 
-## Panel members
+In another shell, enable the provider and inspect every model RouteKit
+discovers:
 
-`fusionkit init`'s panel builder offers **CLIProxyAPI (local proxy)** as an
-auth choice; with `ROUTEKIT_CLIPROXY_API_KEY` set, the model picker lists the proxy's
-live `/v1/models` (the merged catalog of every account you logged in). In
-`.fusionkit/fusion.json` a member looks like:
-
-```json
-{ "id": "gemini", "model": "gemini-3.1-pro-preview", "provider": "cliproxy" }
+```bash
+routekit providers add cliproxy
+routekit providers status cliproxy
+routekit models list
+routekit accounts cliproxy status
 ```
 
-Or in a raw `fusionkit serve` YAML config:
+CLIProxy login never enables the RouteKit provider automatically. The
+resulting `.routekit/router.yaml` entry is:
 
 ```yaml
-endpoints:
-  - id: gemini
-    provider: cliproxy
-    model: gemini-3.1-pro-preview
-    api_key_env: ROUTEKIT_CLIPROXY_API_KEY
+providers:
+  cliproxy: {}
 ```
 
-`base_url` defaults to `http://127.0.0.1:8317` (or
-`ROUTEKIT_CLIPROXY_BASE_URL`).
-Leave `pricing` unset: a subscription has no per-token billing, so cost
-estimates stay "unknown" rather than reporting a wrong dollar amount.
+## Use a live model in Fusion
 
-`fusionkit doctor` probes the proxy (reachability + key) whenever
-`ROUTEKIT_CLIPROXY_API_KEY` is set or a configured panel references the provider.
+Fusion v4 contains namespaced model IDs only:
+
+```json
+{
+  "version": "fusionkit.fusion.v4",
+  "router": { "config": ".routekit/router.yaml" },
+  "ensembles": {
+    "default": {
+      "members": ["cliproxy/gemini-3.1-pro-preview", "openai/gpt-5.5"],
+      "judge": "openai/gpt-5.5"
+    }
+  }
+}
+```
+
+Run `routekit providers status cliproxy` to probe the proxy-backed source.
+`fusionkit doctor` validates that every namespaced model ID referenced by the
+ensemble is available from RouteKit.
 
 ## ToS caveat
 

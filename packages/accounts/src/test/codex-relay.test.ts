@@ -1,11 +1,20 @@
 import assert from "node:assert/strict";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import type { IncomingMessage, Server } from "node:http";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { test } from "node:test";
 
 import { startGateway } from "@routekit/gateway";
 import type { Backend, Gateway } from "@routekit/gateway";
-import { CodexBackendRelay, codexRelayAuth } from "../index.js";
+import {
+  CodexBackendRelay,
+  codexRelayAuth,
+  RelayOnlyBackend,
+  SubscriptionAccountSet,
+  subscriptionProvider
+} from "../index.js";
 import type { CodexCatalogEntry } from "../index.js";
 
 /**
@@ -185,7 +194,7 @@ test("GET /v1/models with ChatGPT auth merges the live stock catalog behind loca
     // Codex's ModelInfo catalog: local entries first, then the live stock list.
     assert.deepEqual(
       body.models.map((entry) => entry.slug),
-      ["local-primary", "gpt-5.5", "gpt-5.3-codex"]
+      ["local-primary", "gpt-native", "gpt-5.5", "gpt-5.3-codex"]
     );
     // OpenAI-shape clients still see `data`, extended with the stock slugs.
     assert.deepEqual(
@@ -215,7 +224,7 @@ test("GET /v1/models falls back to the stock snapshot without auth or when upstr
     };
     assert.deepEqual(
       anonymous.models.map((entry) => entry.slug),
-      ["local-primary", "gpt-5.5-cached"]
+      ["local-primary", "gpt-native", "gpt-5.5-cached"]
     );
     assert.equal(upstream.modelsRequests.length, 0);
     // Upstream down: authenticated fetch degrades to the same snapshot merge.
@@ -225,7 +234,7 @@ test("GET /v1/models falls back to the stock snapshot without auth or when upstr
     ).json()) as { models: Array<Record<string, unknown>> };
     assert.deepEqual(
       degraded.models.map((entry) => entry.slug),
-      ["local-primary", "gpt-5.5-cached"]
+      ["local-primary", "gpt-native", "gpt-5.5-cached"]
     );
   } finally {
     await gateway.close();
@@ -245,7 +254,7 @@ test("GET /v1/models validates the upstream shape: bad envelopes fall back, bad 
     ).json()) as { models: Array<Record<string, unknown>> };
     assert.deepEqual(
       degraded.models.map((entry) => entry.slug),
-      ["local-primary", "gpt-5.5-cached"]
+      ["local-primary", "gpt-native", "gpt-5.5-cached"]
     );
     // Per-entry salvage: malformed entries (no string slug, non-objects) are
     // dropped without costing the rest of the live catalog.
@@ -257,7 +266,7 @@ test("GET /v1/models validates the upstream shape: bad envelopes fall back, bad 
     ).json()) as { models: Array<Record<string, unknown>> };
     assert.deepEqual(
       salvaged.models.map((entry) => entry.slug),
-      ["local-primary", "gpt-5.5", "gpt-5.3-codex"]
+      ["local-primary", "gpt-native", "gpt-5.5", "gpt-5.3-codex"]
     );
   } finally {
     await gateway.close();
@@ -327,8 +336,12 @@ test("a gateway auth token disables the relay entirely", async () => {
   try {
     const models = (await (
       await fetch(`${gateway.url()}/v1/models`, { headers: { authorization: "Bearer gateway-token" } })
-    ).json()) as { data: Array<{ id: string }>; models?: unknown };
-    assert.equal(models.models, undefined, "no merged catalog under gateway auth");
+    ).json()) as { data: Array<{ id: string }>; models: Array<{ slug: string }> };
+    assert.deepEqual(
+      models.models.map((entry) => entry.slug),
+      ["local-primary", "gpt-native"],
+      "gateway auth exposes only the local dual-shape catalog"
+    );
     assert.deepEqual(
       models.data.map((entry) => entry.id),
       ["local-primary", "gpt-native"]
@@ -337,5 +350,94 @@ test("a gateway auth token disables the relay entirely", async () => {
   } finally {
     await gateway.close();
     await upstream.close();
+  }
+});
+
+test("server-owned Codex relay rotates pooled accounts on a usage limit", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "routekit-codex-relay-pool-"));
+  const token = "eyJhbGciOiJub25lIn0.eyJleHAiOjk5OTk5OTk5OTl9.";
+  for (const [name, accountId] of [
+    ["a", "acct-a"],
+    ["b", "acct-b"]
+  ] as const) {
+    writeFileSync(
+      join(directory, `${name}.json`),
+      JSON.stringify({
+        tokens: {
+          access_token: token,
+          refresh_token: `refresh-${name}`,
+          account_id: accountId
+        }
+      })
+    );
+  }
+  const seenAccounts: string[] = [];
+  const server = createServer((req, res) => {
+    void (async () => {
+      const accountId = String(req.headers["chatgpt-account-id"]);
+      seenAccounts.push(accountId);
+      const body = JSON.parse(await readBody(req)) as { model?: string };
+      assert.equal(body.model, "gpt-5.5");
+      if (accountId === "acct-a") {
+        res.writeHead(429, {
+          "content-type": "application/json",
+          "retry-after": "300"
+        });
+        res.end(
+          JSON.stringify({
+            error: {
+              type: "usage_limit_reached",
+              resets_at: Math.floor(Date.now() / 1000) + 300
+            }
+          })
+        );
+        return;
+      }
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ id: "resp_pooled", model: body.model }));
+    })().catch((error: unknown) => res.writeHead(500).end(String(error)));
+  });
+  await new Promise<void>((resolve) =>
+    server.listen(0, "127.0.0.1", resolve)
+  );
+  const address = server.address();
+  assert.ok(typeof address === "object" && address !== null);
+  const accounts = await SubscriptionAccountSet.open(
+    subscriptionProvider("codex"),
+    {
+      mode: "codex",
+      source: { kind: "directory", path: directory },
+      strategy: "sticky"
+    }
+  );
+  const relay = new CodexBackendRelay({
+    backendUrl: `http://127.0.0.1:${address.port}`,
+    catalog,
+    auth: { kind: "accounts", accounts }
+  });
+  const gateway = await startGateway({
+    backend: new RelayOnlyBackend(),
+    providerRelays: { codex: relay }
+  });
+  try {
+    const response = await fetch(`${gateway.url()}/v1/responses`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ model: "gpt-5.5", input: "hello" })
+    });
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), {
+      id: "resp_pooled",
+      model: "gpt-5.5"
+    });
+    assert.deepEqual(seenAccounts, ["acct-a", "acct-b"]);
+    assert.equal(
+      accounts.snapshot().members.find((member) => member.active)?.id,
+      "b"
+    );
+  } finally {
+    await gateway.close();
+    await closeServer(server);
+    rmSync(directory, { recursive: true, force: true });
   }
 });

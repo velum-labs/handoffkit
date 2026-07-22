@@ -16,12 +16,12 @@ does not install a user-facing Python `fusionkit` command.
 
 ## Install + quickstart
 
-For independent routing to configured remote endpoints:
+For independent routing through explicit providers:
 
 ```bash
 npm install -g @routekit/cli
 routekit config init
-routekit serve                      # or: routekit codex | claude | cursor | opencode
+routekit gateway serve              # or: routekit codex | claude | cursor | opencode
 ```
 
 RouteKit has no FusionKit runtime dependency and does not download local models.
@@ -32,13 +32,15 @@ For model ensembles:
 npm install -g @fusionkit/cli
 fusionkit setup                      # one-time: warm the internal synthesis sidecar
 cd your-git-repo                     # FusionKit runs over the current git repo
-fusionkit doctor                     # verifies configs, endpoint IDs, uv, and agent CLIs
+fusionkit init                       # scaffold Fusion v4 + RouteKit config
+fusionkit doctor                     # verifies configs, live model IDs, uv, and agent CLIs
 fusionkit codex                      # or: fusionkit claude | fusionkit cursor | fusionkit serve
 ```
 
-Run `fusionkit init`, then define models, URLs, and `apiKeyEnv` references in
-`.routekit/router.yaml`; `.fusionkit/fusion.json` composes those opaque endpoint
-IDs into ensembles. Every selected endpoint must be configured and available.
+Then enable providers in `.routekit/router.yaml`; RouteKit discovers their live
+models and advertises source-qualified `provider/model` IDs.
+`.fusionkit/fusion.json` composes those IDs into ensembles. Every selected
+model must be present in the live catalog.
 This checkout's committed router uses OpenRouter
 (`moonshotai/kimi-k2-thinking` + `qwen/qwen3-coder`) and therefore requires
 `OPENROUTER_API_KEY`.
@@ -62,7 +64,7 @@ The thesis is economic as much as architectural: several cheaper or open-weight 
 | Fused coding harnesses | `fusionkit codex`, `claude`, `cursor`, and `opencode` launch normal agents against a local fusion gateway. | [quickstart](https://fusionkit.velum-labs.com/docs/getting-started/quickstart) |
 | Raw inference endpoint | `fusionkit serve` exposes OpenAI-compatible chat completions backed by the same panel + synthesis engine. | [endpoint](https://fusionkit.velum-labs.com/docs/getting-started/inference-endpoint) |
 | Streaming + tool calling | OpenAI Responses, Anthropic Messages, and OpenAI Chat dialects stay native at the harness edge. | [model fusion](https://fusionkit.velum-labs.com/docs/concepts/model-fusion) |
-| Named ensembles | `.fusionkit/fusion.json` v4 composes opaque RouteKit endpoint IDs; each ensemble becomes its own `fusion-<name>` model id. | [configuration](https://fusionkit.velum-labs.com/docs/getting-started/configuration) |
+| Named ensembles | `.fusionkit/fusion.json` v4 composes live namespaced RouteKit model IDs; each ensemble becomes its own `fusion-<name>` model id. | [configuration](https://fusionkit.velum-labs.com/docs/getting-started/configuration) |
 | Rate-limit handoff | Default `onRateLimit: fusion` re-runs a failed passthrough turn on the panel instead of returning a raw 429. | [handoff](https://fusionkit.velum-labs.com/docs/getting-started/rate-limit-handoff) |
 | Durable sessions | Full turns, metadata, and costs persist locally for `sessions`, `--resume`, and `--continue`. | [privacy](https://fusionkit.velum-labs.com/docs/privacy) |
 | Cost controls | Per-turn token/USD estimates, receipts, and `--budget <usd>` keep spend visible. | [costs](https://fusionkit.velum-labs.com/docs/cli/cost-and-models) |
@@ -74,7 +76,7 @@ The thesis is economic as much as architectural: several cheaper or open-weight 
 | --- | --- |
 | `codex` / `claude` / `cursor` / `opencode` / `serve` | Main journey: run configured fusion ensembles behind a coding harness, or run just the gateway. |
 | `setup` | Pre-provision the pinned PyPI `fusionkit` engine into the `uvx` cache. |
-| `doctor` | Validate Fusion/RouteKit config, endpoint IDs, `uv`/`uvx`, git, and coding tools. |
+| `doctor` | Validate Fusion/RouteKit config, live model IDs, `uv`/`uvx`, git, and coding tools. |
 | `init` | Scaffold `.fusionkit/fusion.json` v4 and a safe `.routekit/router.yaml` when absent. |
 | `config` | `show`, `path`, `get`, `set`, `unset`, and `edit` Fusion-only settings. |
 | `prompts` | `list`, `edit`, and `reset` judge/synthesizer prompt overrides. |
@@ -88,10 +90,12 @@ The thesis is economic as much as architectural: several cheaper or open-weight 
 
 Three layers cooperate:
 
-1. **RouteKit SDKs** own RouterConfig loading, model routing, provider credentials, accounts, and the embedded router lifecycle.
+1. **RouteKit SDKs** own RouterConfig loading, live provider catalogs, model
+   routing, provider credentials, multi-subscription pools, and the embedded
+   router lifecycle.
 2. **Node `@fusionkit/cli`** owns Fusion v4 config, ensembles, harness launchers, the Fusion gateway, sessions, and observability.
 3. **Python `fusionkit-sidecar`** is internal. It receives completed trajectories
-   and performs judge/synthesis calls through opaque RouteKit endpoint IDs; it
+   and performs judge/synthesis calls through namespaced RouteKit model IDs; it
    does not implement providers or expose the public chat/model gateway.
 
 Panel members run in lightweight git worktrees so parallel candidates can inspect or edit the same repo without trampling each other. The gateway reshapes the fused result back into the dialect your harness already expects. Maintainer architecture details live in [`docs/fusion-harness-gateway.md`](docs/fusion-harness-gateway.md) and [`docs/fusion-judge-trajectory.md`](docs/fusion-judge-trajectory.md).
@@ -102,7 +106,7 @@ Panel members run in lightweight git worktrees so parallel candidates can inspec
 | --- | --- |
 | [`packages/routekit-cli`](packages/routekit-cli) | The independent npm `@routekit/cli` router front door. |
 | [`packages/cli`](packages/cli) | The npm `@fusionkit/cli` front door. |
-| [`packages/model-gateway`](packages/model-gateway) | RouteKit's neutral dialect translation, endpoint routing, provider egress, streaming, and per-call provenance/metering. |
+| [`packages/model-gateway`](packages/model-gateway) | RouteKit's neutral dialect translation, live provider catalog, namespaced dispatch, streaming, and per-call provenance/metering. |
 | [`packages/fusion-gateway`](packages/fusion-gateway) | Fusion front door, panel/synthesis orchestration, durable sessions, and aggregate budgets. |
 | [`packages/ensemble`](packages/ensemble) | Panel orchestration, worktrees, runtime-kernel workflows, judge adapters, and advanced harness tooling. |
 | [`packages/tool-*`](packages) + [`packages/tools`](packages/tools) | Per-harness launchers and the shared tool integration registry. |
@@ -134,13 +138,16 @@ uv run pytest tests -q
 uv run pytest python -q
 ```
 
-Link the local dev CLI without replacing the published `fusionkit` binary:
+Link the local dev CLIs without replacing the published binaries:
 
 ```bash
 pnpm dev:link-cli
+pnpm dev:link-routekit
 cd any-git-repo
 fusionkit-dev doctor
 fusionkit-dev codex
+routekit-dev doctor
+routekit-dev codex
 ```
 
 ## Dependency policy

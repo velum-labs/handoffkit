@@ -2,8 +2,8 @@
 
 ## Cursor Cloud specific instructions
 
-This repo is a dual-stack monorepo: a **pnpm/TypeScript** workspace
-(`packages/*`, `examples/*`) and a **uv/Python** workspace (`python/*`). The
+This repo is a dual-stack monorepo: a **pnpm/Turborepo Node** workspace
+(`packages/*`, `examples/*`, `apps/*`) and a **uv/Python** workspace (`python/*`). The
 shipped products are **RouteKit** (the independent `@routekit/cli` Node router)
 and **FusionKit** (the `@fusionkit/cli` Node front door + internal Python
 `fusionkit-sidecar` synthesis process). The `warrant` governance
@@ -27,11 +27,12 @@ node/pnpm. If you run a command in a bare non-login shell and hit
 
 ### Standard commands (authoritative source: `.github/workflows/ci.yml`)
 
-TypeScript workspace (`package.json` scripts):
+Node workspace (`package.json` scripts):
 - Install: `pnpm install --frozen-lockfile`
 - Lint/check: `pnpm check` (runs `scripts/check-repo.mjs`; regenerates protocol bindings)
-- Build: `pnpm build` (`tsc -b`); the `fusionkit` bin only links after a build
-- Test: `pnpm test` (Node test runner over built `dist/`, so build first)
+- Build: `pnpm build` (Turbo runs per-package `tsc -b` and both Next.js app builds)
+- Test: `pnpm test` (Turbo builds dependencies before package and app tests)
+- Filter: `pnpm exec turbo run build --filter=<package>...`
 
 Python workspace (`pyproject.toml`):
 - Sync: `uv sync --all-packages --extra aws` (keeps Hyperkit's AWS backend installed)
@@ -95,3 +96,15 @@ probe `/health`; it intentionally has no public chat or model routes. Notes:
 - The committed `.fusionkit/fusion.json` panel currently uses OpenRouter
   (`moonshotai/kimi-k2-thinking`, `qwen/qwen3-coder`) and requires
   `OPENROUTER_API_KEY`.
+
+### Matter MCP (external research)
+
+Handoffkit can read tagged Matter items through the `matter` MCP server (launcher: `scripts/run-matter-mcp.sh`; `.cursor/mcp.json` covers the desktop IDE, while cloud agents need the server registered in the Cursor dashboard — see `docs/matter-mcp.md`). If `matter_*` tools are not in your MCP catalog, you can still run the launcher directly as a stdio MCP server.
+
+- `scripts/setup-matter-mcp.sh` builds the vendored `vendor/matter-cursor-mcp/` copy (falling back to a sibling checkout or `gh` clone) into `matter-cursor-mcp/dist/index.js` during cloud startup.
+- `MATTER_API_TOKEN` must be a **Runtime Secret** on the **same** cloud environment the agent uses (existing runs do not pick up new secrets).
+- Read `.matter-context.json` before calling Matter tools. Default tags: `cursor`, `repo-handoffkit`.
+- Verify with `matter_health` before relying on Matter evidence.
+- Write durable research to `docs/research/matter/` unless the user asks otherwise.
+
+See `docs/matter-mcp.md` for setup and troubleshooting.

@@ -15,7 +15,11 @@
 
 import type { Backend, BackendRequestOptions } from "../backend.js";
 import { randomId } from "@routekit/runtime";
-import type { OpenAiChoice } from "./openai-chat-wire.js";
+import {
+  attachReasoningSelection,
+  attachReasoningSelectionError,
+  type OpenAiChoice
+} from "./openai-chat-wire.js";
 import { droppedField } from "./dropped.js";
 import { unwrapUpstreamError } from "./upstream-error.js";
 import { openAiSseToResponses } from "./responses-stream.js";
@@ -74,7 +78,7 @@ export type ResponsesRequest = {
    * member slug (e.g. `grok-4`, `deepseek`) resolves to Codex's fallback model
    * info, which has none. Null must translate as "no reasoning", never throw.
    */
-  reasoning?: { effort?: string; [key: string]: unknown } | null;
+  reasoning?: { effort?: string | null; [key: string]: unknown } | null;
   text?: { format?: { type?: string; name?: string; schema?: unknown; strict?: boolean; [key: string]: unknown } } | null;
   previous_response_id?: string | null;
   truncation?: string | unknown;
@@ -547,10 +551,17 @@ export function responsesToChat(
   // than treating it as an untranslatable field, and never dereference it.
   if (body.reasoning != null) {
     const effort = body.reasoning.effort;
-    if (effort === "low" || effort === "medium" || effort === "high") {
+    if (effort == null) {
+      // Current Codex releases send `{ effort: null }` when no reasoning
+      // control was selected. Treat it exactly like `reasoning: null`.
+    } else if (typeof effort === "string" && effort.length > 0) {
       chat.reasoning_effort = effort;
+      attachReasoningSelection(chat, { mode: "effort", effort });
     } else {
-      droppedField("responses", "reasoning");
+      attachReasoningSelectionError(
+        chat,
+        "reasoning.effort must be a non-empty string"
+      );
     }
   }
   if (body.text != null) {

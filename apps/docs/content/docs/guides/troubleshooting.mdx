@@ -10,15 +10,15 @@ fusionkit doctor
 ```
 
 It checks `uv`/`uvx`, agent binaries, git, Fusion config, RouteKit connectivity,
-and referenced endpoint IDs, with a fix hint for anything missing. Run
+and referenced live model IDs, with a fix hint for anything missing. Run
 `routekit doctor` for provider credential checks.
 
 ## "preflight failed"
 
-A required binary, config file, or endpoint is missing. The message lists each
+A required binary, config file, provider, or model is missing. The message lists each
 problem with an actionable hint, such as installing `uvx`, installing the
 selected agent (`codex`/`claude`/`cursor-agent`), running `fusionkit init`, or
-fixing an endpoint ID.
+fixing a namespaced model ID.
 
 ## "no --repo given and the current directory is not a git repository"
 
@@ -26,17 +26,19 @@ Run fusionkit from inside your project's git repo, or pass `--repo <dir>`.
 
 ## A panel model won't start
 
-If a RouteKit endpoint rejects a request because its credential or upstream
-model is invalid, inspect the endpoint directly:
+If a RouteKit provider cannot authenticate, discover models, or route the
+selected model, inspect the provider and live catalog:
 
 ```bash
-routekit endpoints health <endpoint-id>
+routekit providers status <provider>
+routekit models list
 routekit doctor
 ```
 
-Then correct the endpoint's `model`, `baseUrl`, or `apiKeyEnv` in
-`.routekit/router.yaml`. FusionKit does not own provider retries or credential
-resolution.
+Then correct the provider entry or its registry-defined credential/base-URL
+environment variable. For subscription providers, inspect
+`routekit accounts status`. FusionKit does not own provider retries or
+credential resolution.
 
 ## `--observe` cannot find or start Scope
 
@@ -72,6 +74,7 @@ inline.
 
 ## Provider keys are not picked up
 
-Export the variables named by `.routekit/router.yaml` before launch. RouteKit
-owns provider credential resolution; use `routekit doctor` to diagnose missing
-provider variables. FusionKit only resolves an external router's `authEnv`.
+Export the registry-defined variable for each configured API provider before
+launch. RouteKit owns provider credential resolution; use `routekit doctor` to
+diagnose missing variables. FusionKit only resolves an external router's
+`authEnv`.

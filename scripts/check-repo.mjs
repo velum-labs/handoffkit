@@ -25,6 +25,7 @@ const requiredFiles = [
   ".npmrc",
   "pnpm-lock.yaml",
   "pnpm-workspace.yaml",
+  "turbo.json",
   ".github/workflows/ci.yml",
   ".github/workflows/release-packages.yml",
   ".github/dependabot.yml",
@@ -82,6 +83,7 @@ const requiredFiles = [
   "python/fusionkit-evals/src/fusionkit_evals/cli_shared.py",
   "python/fusionkit-evals/src/fusionkit_evals/hyperkit_plugin.py",
   "python/fusionkit-cli/src/fusionkit_cli/main.py",
+  "python/fusionkit-core/tests/test_docs_contracts.py",
   // package entry points
   "packages/contracts/src/index.ts",
   "packages/contracts/src/jcs.ts",
@@ -112,6 +114,7 @@ const requiredFiles = [
   "packages/accounts/src/credentials.ts",
   "packages/accounts/src/account-source.ts",
   "packages/accounts/src/account-set.ts",
+  "packages/accounts/src/backend.ts",
   "packages/accounts/src/gateway.ts",
   "packages/accounts/src/provider.ts",
   "packages/accounts/src/relay.ts",
@@ -119,9 +122,11 @@ const requiredFiles = [
   "packages/accounts/src/types.ts",
   "packages/accounts/src/proxy.ts",
   "packages/accounts/src/client.ts",
+  "packages/accounts/src/usage.ts",
   "packages/accounts/src/cliproxy.ts",
   "packages/accounts/src/wire.ts",
   "packages/accounts/src/test/account-removal.test.ts",
+  "packages/accounts/src/test/subscription-backend.test.ts",
   "packages/fusion-gateway/src/fusion-backend.ts",
   "packages/fusion-gateway/src/fusion-proxy.ts",
   "packages/fusion-gateway/src/fusion-cost-meter.ts",
@@ -190,10 +195,11 @@ const requiredFiles = [
   "packages/routekit-cli/src/cli.ts",
   "packages/routekit-cli/src/commands/index.ts",
   "packages/routekit-cli/src/commands/context.ts",
+  "packages/routekit-cli/src/commands/gateway.ts",
   "packages/routekit-cli/src/commands/serve.ts",
   "packages/routekit-cli/src/commands/launchers.ts",
   "packages/routekit-cli/src/commands/accounts.ts",
-  "packages/routekit-cli/src/commands/endpoints.ts",
+  "packages/routekit-cli/src/commands/providers.ts",
   "packages/routekit-cli/src/commands/models.ts",
   "packages/routekit-cli/src/commands/config.ts",
   "packages/routekit-cli/src/commands/doctor.ts",
@@ -201,6 +207,7 @@ const requiredFiles = [
   "packages/routekit-cli/src/commands/telemetry.ts",
   "packages/routekit-cli/src/commands/stop.ts",
   "packages/routekit-cli/src/config.ts",
+  "packages/routekit-cli/src/catalog.ts",
   "packages/routekit-cli/src/serve.ts",
   "packages/routekit-cli/src/launch.ts",
   "packages/routekit-cli/src/accounts.ts",
@@ -208,9 +215,11 @@ const requiredFiles = [
   "packages/routekit-cli/src/telemetry.ts",
   "packages/routekit-cli/src/completion.ts",
   "packages/routekit-cli/src/test/accounts-command.test.ts",
+  "packages/routekit-cli/src/test/providers-command.test.ts",
   "packages/routekit-cli/src/test/cli.test.ts",
   "packages/routekit-cli/src/test/cliproxy-command.test.ts",
   "packages/routekit-cli/src/test/config.test.ts",
+  "packages/routekit-cli/src/test/docs-contract.test.ts",
   "packages/routekit-cli/src/test/cli-process-e2e.test.ts",
   "packages/routekit-cli/src/test/launch.test.ts",
   "packages/routekit-cli/src/test/serve-process-e2e.test.ts",
@@ -316,7 +325,7 @@ const requiredFiles = [
   "packages/routekit-router/src/test/router.test.ts",
   "packages/fusion-config/src/test/config.test.ts",
   "packages/cli/src/test/composition.test.ts",
-  "packages/cli/src/test/stack-endpoint-ids-e2e.test.ts",
+  "packages/cli/src/test/stack-model-ids-e2e.test.ts",
   "packages/cli/src/test/v4-commands.test.ts",
   "test/demos.test.js",
   "examples/mlx/src/test/run.test.ts"
@@ -498,7 +507,7 @@ if (pkg.scripts?.["test:dual-cli-pack"] !== "node scripts/check-dual-cli-pack.mj
 const ciWorkflow = readFileSync(".github/workflows/ci.yml", "utf8");
 for (const command of [
   "node scripts/check-dual-cli-pack.mjs",
-  "node --test packages/cli/dist/test/stack-endpoint-ids-e2e.test.js"
+  "node --test packages/cli/dist/test/stack-model-ids-e2e.test.js"
 ]) {
   if (!ciWorkflow.includes(command)) fail(`CI workflow must run ${command}`);
 }
@@ -548,7 +557,7 @@ const TRUSTED_THIRD_PARTY = new Map([
   // trimmed FusionKit CLI dependency closure. Downloads the official
   // cloudflared binary at runtime (no install scripts).
   ["untun", "0.1.3"],
-  ["@openai/codex-sdk", "0.142.5"],
+  ["@openai/codex-sdk", "0.145.0"],
   // OpenTelemetry: the tracing engine behind @fusionkit/tracing (spans + log
   // events, W3C propagation, batching, OTLP export). The exporter/logs line is
   // 0.x upstream; both lines are pinned exactly and bumped only as reviewed
@@ -596,13 +605,45 @@ const TRUSTED_THIRD_PARTY = new Map([
   // TOML parser/serializer used by RouteKit-owned Codex configuration.
   ["smol-toml", "1.7.0"],
   ["string-width", "8.2.1"],
+  ["turbo", "2.10.5"],
   ["typescript", "6.0.3"],
   ["ws", "8.21.0"],
   ["yaml", "2.9.0"],
   ["zod", "4.4.3"]
 ]);
 
-function checkDeps(manifestPath, manifest) {
+// The private Next.js applications share the frozen workspace lockfile and
+// exact-pin policy, but retain their framework-compatible toolchain versions.
+// Keeping this as an explicit extension preserves the core allowlist's
+// single-version invariant while making application dependency review equally
+// visible.
+const TRUSTED_APP_THIRD_PARTY = new Map([
+  ...TRUSTED_THIRD_PARTY,
+  ["@tailwindcss/postcss", "4.3.1"],
+  ["@types/mdx", "2.0.14"],
+  ["@types/react-dom", "19.2.3"],
+  ["class-variance-authority", "0.7.1"],
+  ["clsx", "2.1.1"],
+  ["fumadocs-core", "15.8.5"],
+  ["fumadocs-mdx", "11.10.1"],
+  ["fumadocs-openapi", "8.1.12"],
+  ["fumadocs-ui", "15.8.5"],
+  ["lucide-react", "1.20.0"],
+  ["mermaid", "11.15.0"],
+  ["next", "15.5.19"],
+  ["next-themes", "0.4.6"],
+  ["radix-ui", "1.6.0"],
+  ["react-dom", "19.2.7"],
+  ["recharts", "2.15.4"],
+  ["shadcn", "4.11.0"],
+  ["tailwind-merge", "3.6.0"],
+  ["tailwindcss", "4.3.1"],
+  ["tw-animate-css", "1.4.0"],
+  ["tsx", "4.22.4"],
+  ["typescript", "5.9.3"]
+]);
+
+function checkDeps(manifestPath, manifest, trustedDependencies = TRUSTED_THIRD_PARTY) {
   for (const [section, deps] of [
     ["dependencies", manifest.dependencies ?? {}],
     ["devDependencies", manifest.devDependencies ?? {}]
@@ -614,7 +655,7 @@ function checkDeps(manifestPath, manifest) {
         }
         continue;
       }
-      const trusted = TRUSTED_THIRD_PARTY.get(name);
+      const trusted = trustedDependencies.get(name);
       if (trusted === undefined) {
         fail(
           `${manifestPath} ${section} "${name}": not on the trusted dependency allowlist in scripts/check-repo.mjs`
@@ -638,7 +679,8 @@ const publishableWorkspaceDirs = new Set(
 
 const workspaceDirs = [
   ...readdirSync("packages").map((dir) => join("packages", dir)),
-  ...readdirSync("examples").map((dir) => join("examples", dir))
+  ...readdirSync("examples").map((dir) => join("examples", dir)),
+  ...readdirSync("apps").map((dir) => join("apps", dir))
 ];
 const workspaceManifests = [];
 for (const dir of workspaceDirs) {
@@ -669,7 +711,11 @@ for (const dir of workspaceDirs) {
   if (existsSync(join(dir, "src", "test")) && manifest.scripts?.test === undefined) {
     fail(`${manifestPath} has src/test/ but no "test" script — its tests would never run`);
   }
-  checkDeps(manifestPath, manifest);
+  checkDeps(
+    manifestPath,
+    manifest,
+    dir.startsWith("apps/") ? TRUSTED_APP_THIRD_PARTY : TRUSTED_THIRD_PARTY
+  );
   workspaceManifests.push({ manifestPath, manifest, dir });
 }
 
@@ -852,7 +898,7 @@ const envSpreadListing = spawnSync(
 // A deliberate exception for a trusted infrastructure child must carry an
 // `env-spread-allowed: <reason>` comment on the preceding line. The internal
 // Python sidecar is not such an exception: it receives a restricted environment
-// and calls opaque RouteKit endpoint IDs.
+// and calls namespaced RouteKit model IDs.
 if (envSpreadListing.status === 0) {
   const envSpreadPattern = /\.\.\.process\.env\b/;
   const waiverPattern = /env-spread-allowed:\s*\S/;

@@ -32,6 +32,13 @@ prompt hash so repeats are free and the loop is resumable.
 Install `fusionkit-evals` and use its maintainer-only entrypoint:
 
 ```bash
+routekit --config configs/benchmark-router.example.yaml \
+  serve --no-portless --port 8787
+```
+
+In another shell:
+
+```bash
 uv run --package fusionkit-evals --with 'datasets<4' fusionkit-bench tune-prompts \
   --config configs/benchmark-panel.example.yaml \
   --role synthesizer_system \
@@ -41,11 +48,15 @@ uv run --package fusionkit-evals --with 'datasets<4' fusionkit-bench tune-prompt
   --report out/tuning.md
 ```
 
+The benchmark YAML is the internal sidecar/eval schema: it contains a RouteKit
+URL and namespaced RouteKit model IDs only. It is not accepted by public
+`fusionkit serve`.
+
 Other flags (see `tune_prompts()` in
 `python/fusionkit-evals/src/fusionkit_evals/cli.py`): `--bank` (candidate
 bank path, built if missing), `--bank-max-tests` (cap tests/task when building
 the bank; 0 = all), `--val-fraction` (held-out validation split fraction),
-`--seed` (split seed), `--optimizer-model` (endpoint id, default judge),
+`--seed` (split seed), `--optimizer-model` (namespaced model ID, default judge),
 `--test-timeout-s`, `--concurrency`, `--cache-dir` (replay cache location), and
 `--ledger` (append the run to a history ledger).
 

@@ -61,6 +61,7 @@ export function resolveToolAdapter(
     ...(options.modelEndpoints !== undefined ? { modelEndpoints: options.modelEndpoints } : {}),
     ...(options.trace !== undefined ? { trace: options.trace } : {}),
     ...(options.turn !== undefined ? { turn: options.turn } : {}),
+    ...(options.reasoning !== undefined ? { reasoning: options.reasoning } : {}),
     ...(options.resumeCursors !== undefined ? { resumeCursors: options.resumeCursors } : {})
   });
 }
@@ -76,6 +77,7 @@ export function resolveToolDriverAdapter(
     ...(options.modelEndpoints !== undefined ? { modelEndpoints: options.modelEndpoints } : {}),
     ...(options.trace !== undefined ? { trace: options.trace } : {}),
     ...(options.turn !== undefined ? { turn: options.turn } : {}),
+    ...(options.reasoning !== undefined ? { reasoning: options.reasoning } : {}),
     ...(options.resumeCursors !== undefined ? { resumeCursors: options.resumeCursors } : {}),
     configForModel: (route) =>
       registration.configForRoute({

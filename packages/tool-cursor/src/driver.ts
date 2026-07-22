@@ -62,6 +62,17 @@ function nowIso(): string {
   return new Date().toISOString();
 }
 
+function cursorReasoningEffort(
+  reasoning: StartSessionOptions["reasoning"]
+): string | undefined {
+  if (reasoning === undefined || reasoning.mode === "auto") return undefined;
+  if (reasoning.mode === "effort") return reasoning.effort;
+  throw new HarnessError(
+    "invalid_config",
+    `Cursor ACP cannot represent reasoning mode "${reasoning.mode}"`
+  );
+}
+
 /** Map an ACP tool kind onto the canonical item type. */
 function itemTypeForToolKind(kind: string | null | undefined): HarnessItemType {
   switch (kind) {
@@ -114,6 +125,7 @@ class CursorSession implements SessionHandle {
   readonly #connection: ClientSideConnection;
   readonly #pending = new PendingRequests();
   readonly #approvalPolicy: ApprovalPolicy;
+  #reasoning: StartSessionOptions["reasoning"];
   readonly #optionKindById = new Map<string, string>();
   #sessionId: string;
   #channel: AsyncChannel<HarnessEvent> | undefined;
@@ -126,11 +138,13 @@ class CursorSession implements SessionHandle {
     connection: ClientSideConnection;
     sessionId: string;
     approvalPolicy: ApprovalPolicy;
+    reasoning?: StartSessionOptions["reasoning"];
   }) {
     this.#child = input.child;
     this.#connection = input.connection;
     this.#sessionId = input.sessionId;
     this.#approvalPolicy = input.approvalPolicy;
+    this.#reasoning = input.reasoning;
   }
 
   get sessionId(): string {
@@ -291,6 +305,21 @@ class CursorSession implements SessionHandle {
       return;
     }
 
+    if (
+      input.reasoning !== undefined &&
+      JSON.stringify(input.reasoning) !== JSON.stringify(this.#reasoning)
+    ) {
+      const effort = cursorReasoningEffort(input.reasoning);
+      if (effort !== undefined) {
+        await this.#connection.extMethod("session/set_config_option", {
+          sessionId: this.#sessionId,
+          configId: "reasoning",
+          value: effort
+        });
+      }
+      this.#reasoning = input.reasoning;
+    }
+
     const onAbort = (): void => {
       this.#pending.settleAll("cancel");
       void this.#connection.cancel({ sessionId: this.#sessionId }).catch(() => undefined);
@@ -434,11 +463,21 @@ class CursorInstance implements HarnessInstance {
           .setSessionModel({ sessionId, modelId: (options.model ?? this.#config.model) as string })
           .catch(() => undefined);
       }
+      const reasoningEffort = cursorReasoningEffort(options.reasoning);
+      if (reasoningEffort !== undefined) {
+        await connection.extMethod("session/set_config_option", {
+          sessionId,
+          configId: "reasoning",
+          value: reasoningEffort
+        });
+      }
       session = new CursorSession({
         child,
         connection,
         sessionId,
-        approvalPolicy: options.approvalPolicy ?? DEFAULT_AUTOMATION_APPROVAL_POLICY
+        approvalPolicy:
+          options.approvalPolicy ?? DEFAULT_AUTOMATION_APPROVAL_POLICY,
+        reasoning: options.reasoning
       });
       this.#sessions.add(session);
       return session;

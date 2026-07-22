@@ -35,6 +35,15 @@ export {
 } from "./model.js";
 
 export type {
+  ModelReasoningCapabilities,
+  ReasoningCapabilityProvenance,
+  ReasoningCapabilityStatus,
+  ReasoningEffortOption,
+  ReasoningSelection
+} from "./reasoning.js";
+export { resolveReasoningEffort } from "./reasoning.js";
+
+export type {
   HarnessApprovalDecision,
   HarnessContentStream,
   HarnessEvent,

@@ -6,10 +6,13 @@ export type {
   ProviderRelay,
   ProviderRelayDialect
 } from "./server.js";
+export { startSwitchingGatewayProxy } from "./switching-proxy.js";
+export type { SwitchingGatewayProxy } from "./switching-proxy.js";
 
 export { joinPath, ModelRoutedBackend, OpenAiBackend } from "./backend.js";
 export type {
   Backend,
+  BackendModelRoute,
   BackendRequestOptions,
   ModelRoutedBackendOptions,
   OpenAiBackendOptions
@@ -20,31 +23,51 @@ export {
   CodexResponsesBackend,
   GoogleGenAiBackend
 } from "./provider-backends.js";
-export type { ProviderBackendOptions } from "./provider-backends.js";
+export type { ProviderBackendOptions, ProviderTransport } from "./provider-backends.js";
 
 export {
   CatalogBackend,
-  EndpointPool,
-  modelEndpointSchema,
+  isSubscriptionProvider,
+  normalizeRouterConfigAliases,
   parseRouterConfig,
-  providerBackend,
-  routerConfigSchema
+  routerConfigSchema,
+  splitNamespacedModel,
+  UnknownModelError
 } from "./router.js";
 export type {
   CatalogBackendOptions,
-  EndpointPoolOptions,
-  ModelEndpointConfig,
-  RouterConfig
+  ProviderPolicy,
+  RouterConfig,
 } from "./router.js";
+export {
+  API_PROVIDER_IDS,
+  ApiProviderSource,
+  parseDiscoveredModels,
+  parseReasoningCapabilities,
+  PROVIDER_IDS,
+  SUBSCRIPTION_PROVIDER_IDS
+} from "./provider-source.js";
+export type {
+  ApiProviderId,
+  ApiProviderSourceOptions,
+  DiscoveredModel,
+  ProviderId,
+  ProviderSource,
+  ProviderSourceTransport,
+  SubscriptionProviderId
+} from "./provider-source.js";
 export {
   endpointHealthProbe,
   probeEndpointHealth,
   providerAuthHeaders
 } from "./endpoint-health.js";
 export type {
+  AccountEndpointConfig,
   EndpointHealthProbe,
   EndpointHealthProbePlan,
-  EndpointHealthResult
+  EndpointHealthResult,
+  ModelEndpointConfig,
+  UrlEndpointConfig
 } from "./endpoint-health.js";
 
 export { CapacityPool } from "./capacity-pool.js";

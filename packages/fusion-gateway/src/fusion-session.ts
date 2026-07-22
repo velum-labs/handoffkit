@@ -306,6 +306,7 @@ export class FusionSessionManager {
     panelDepth?: number;
     tools?: unknown;
     toolChoice?: unknown;
+    reasoningEffort?: string;
     k?: number;
     signal?: AbortSignal;
   }): { candidates: Promise<WireTrajectory[]>; abort: (reason?: unknown) => void } {
@@ -346,6 +347,9 @@ export class FusionSessionManager {
       ...(input.panelDepth !== undefined && input.panelDepth > 0 ? { panelDepth: input.panelDepth } : {}),
       ...(input.tools !== undefined ? { tools: input.tools } : {}),
       ...(input.toolChoice !== undefined ? { toolChoice: input.toolChoice } : {}),
+      ...(input.reasoningEffort !== undefined
+        ? { reasoningEffort: input.reasoningEffort }
+        : {}),
       ...(input.k !== undefined ? { k: input.k } : {})
     });
     input.session.turns.set(input.turn, candidates);

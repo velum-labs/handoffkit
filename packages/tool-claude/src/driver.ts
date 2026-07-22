@@ -102,6 +102,7 @@ class ClaudeSession implements SessionHandle {
   readonly #context: DriverContext | undefined;
   readonly #cwd: string;
   readonly #model: string | undefined;
+  readonly #reasoning: StartSessionOptions["reasoning"];
   readonly #approvalPolicy: ApprovalPolicy;
   readonly #pending = new PendingRequests();
   #sessionId: string;
@@ -120,6 +121,7 @@ class ClaudeSession implements SessionHandle {
     this.#context = input.context;
     this.#cwd = input.options.cwd;
     this.#model = input.options.model ?? input.config.model;
+    this.#reasoning = input.options.reasoning;
     this.#approvalPolicy =
       input.options.approvalPolicy ?? DEFAULT_AUTOMATION_APPROVAL_POLICY;
     this.#sessionId = resumeSessionId(input.options.resume) ?? "claude:pending";
@@ -197,6 +199,7 @@ class ClaudeSession implements SessionHandle {
       else input.signal.addEventListener("abort", () => controller.abort(input.signal?.reason), { once: true });
     }
     const resume = this.#sessionId !== "claude:pending" ? this.#sessionId : undefined;
+    const reasoning = input.reasoning ?? this.#reasoning;
     const options: Options = {
       cwd: this.#cwd,
       pathToClaudeCodeExecutable: this.#config.command,
@@ -210,6 +213,23 @@ class ClaudeSession implements SessionHandle {
       abortController: controller,
       env: this.#childEnv(),
       ...(this.#model !== undefined ? { model: this.#model } : {}),
+      ...(reasoning?.mode === "effort"
+        ? {
+            thinking: { type: "adaptive" },
+            effort: reasoning.effort as NonNullable<Options["effort"]>
+          }
+        : reasoning?.mode === "budget"
+          ? {
+              thinking: {
+                type: "enabled",
+                budgetTokens: reasoning.budgetTokens
+              }
+            }
+          : reasoning?.mode === "adaptive"
+            ? { thinking: { type: "adaptive" } }
+            : reasoning?.mode === "disabled"
+              ? { thinking: { type: "disabled" } }
+              : {}),
       ...(resume !== undefined ? { resume } : {})
     };
 

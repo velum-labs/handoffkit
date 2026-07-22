@@ -91,17 +91,21 @@ def test_estimate_panel_headroom_handles_unscored_panel() -> None:
     assert "no published member scores" in headroom.note
 
 
-def test_panel_to_fusion_config_uses_opaque_endpoint_ids_and_judge() -> None:
+def test_panel_to_fusion_config_uses_namespaced_routekit_models_and_judge() -> None:
     config = DECORRELATED_PEER_PANEL.to_fusion_config(
         routekit_url="http://routekit.test/v1"
     )
 
     assert config.routekit_url == "http://routekit.test/v1"
-    assert config.endpoint_ids == ["gpt", "opus", "gemini"]
-    assert config.judge_model == "gpt"
+    assert config.routekit_model_ids == [
+        "openai/gpt-5.5",
+        "anthropic/claude-opus-4.8",
+        "google/gemini-3-pro",
+    ]
+    assert config.judge_model == "openai/gpt-5.5"
     assert config.default_mode == "panel"
-    assert config.panel_models == ["gpt", "opus", "gemini"]
-    assert config.require_endpoint("gpt") == "gpt"
+    assert config.panel_models == config.routekit_model_ids
+    assert config.require_model("openai/gpt-5.5") == "openai/gpt-5.5"
 
 
 def test_get_benchmark_panel_rejects_unknown_panel() -> None:

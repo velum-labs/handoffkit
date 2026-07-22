@@ -1,7 +1,7 @@
 /**
  * Sidecar-config builder for simulator-backed tests. The simulator acts as the
  * RouteKit-compatible upstream; the Python process receives only its URL and
- * opaque endpoint IDs, matching the production boundary.
+ * stable namespaced RouteKit model IDs, matching the production boundary.
  */
 
 import { stringify } from "yaml";
@@ -12,9 +12,9 @@ import { stringify } from "yaml";
  */
 export const CODEX_TEST_TOKEN_ENV = "FUSIONKIT_TESTKIT_CODEX_TOKEN";
 
-/** One opaque endpoint exposed by the simulator acting as RouteKit. */
-export type SimEndpointSpec = {
-  /** RouteKit endpoint id (what sidecar requests name in `model`). */
+/** One namespaced model exposed by the simulator acting as RouteKit. */
+export type SimModelSpec = {
+  /** Stable RouteKit model id (what sidecar requests name in `model`). */
   id: string;
   /** Provider model name used when a Node RouteKit gateway fronts the simulator. */
   model: string;
@@ -26,18 +26,18 @@ export type SimEndpointSpec = {
 export function simSidecarConfigYaml(input: {
   /** RouteKit-compatible simulator base URL (from `startProviderSim`). */
   simUrl: string;
-  members: readonly SimEndpointSpec[];
-  /** Judge/synthesizer endpoint id; defaults to the first member. */
+  members: readonly SimModelSpec[];
+  /** Judge/synthesizer RouteKit model id; defaults to the first member. */
   judgeId?: string;
   synthesizerId?: string;
   /**
-   * Panel member endpoint ids for internal native-run tests.
+   * Panel member RouteKit model ids for internal native-run tests.
    */
   panelIds?: readonly string[];
   prompts?: { judge_system?: string; synthesizer_system?: string };
 }): string {
   const first = input.members[0];
-  if (first === undefined) throw new Error("at least one member endpoint is required");
+  if (first === undefined) throw new Error("at least one member model is required");
   const judgeId = input.judgeId ?? first.id;
   const synthesizerId = input.synthesizerId ?? judgeId;
   const defaultPanel = input.members
@@ -47,7 +47,7 @@ export function simSidecarConfigYaml(input: {
   return (
     stringify({
       routekit_url: input.simUrl,
-      endpoint_ids: input.members.map((member) => member.id),
+      routekit_model_ids: input.members.map((member) => member.id),
       default_model: judgeId,
       judge_model: judgeId,
       synthesizer_model: synthesizerId,

@@ -4,8 +4,8 @@
  * provider simulator -> embedded RouteKit router -> Python synthesis sidecar
  * -> RouteKit public gateway with FusionBackend.
  *
- * Fusion receives only opaque endpoint ids. Provider dialect/model details
- * exist solely in the test-owned RouteKit config.
+ * Fusion receives only namespaced model ids. Provider dialect/model details
+ * exist solely in test-owned RouteKit provider sources.
  */
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
@@ -26,15 +26,30 @@ import {
 import type {
   FusedTurnScript,
   ProviderSimHandle,
-  SimEndpointSpec
+  SimModelSpec
 } from "@fusionkit/testkit";
-import { parseRouterConfig } from "@routekit/gateway";
-import type { RouterConfig } from "@routekit/gateway";
+import {
+  AnthropicBackend,
+  CodexResponsesBackend,
+  GoogleGenAiBackend,
+  OpenAiBackend,
+  parseRouterConfig
+} from "@routekit/gateway";
+import type { ModelReasoningCapabilities } from "@routekit/contracts";
+import type {
+  Backend,
+  BackendRequestOptions,
+  ProviderId,
+  ProviderSource,
+  RouterConfig
+} from "@routekit/gateway";
 
 import type { PromptOverrides } from "../fusion-config.js";
 import { startFusionStack } from "../fusion/stack.js";
 
-export type SimStackMember = SimEndpointSpec;
+export type SimStackMember = SimModelSpec & {
+  reasoning?: ModelReasoningCapabilities;
+};
 
 export type SimStackEnsemble = {
   name: string;
@@ -102,46 +117,112 @@ function buildDoors(gatewayUrl: string): GatewayDoors {
   };
 }
 
-function dialectFor(
-  provider: SimEndpointSpec["provider"]
-): "openai" | "anthropic" | "google" | "codex" {
-  const resolved = provider ?? "openai";
-  switch (resolved) {
+function providerIdFor(member: SimStackMember): ProviderId {
+  const provider = member.provider ?? "openai";
+  switch (provider) {
     case "anthropic":
-      return "anthropic";
     case "google":
-      return "google";
     case "codex":
-      return "codex";
     case "openai":
-    case "openai-compatible":
     case "openrouter":
+      return provider;
+    case "openai-compatible":
       return "openai";
     default: {
-      const exhaustive: never = resolved;
+      const exhaustive: never = provider;
       throw new Error(`unsupported simulator provider: ${String(exhaustive)}`);
     }
   }
 }
 
-function simulatorRouterConfig(
+function publicModelId(member: SimStackMember): string {
+  return `${providerIdFor(member)}/${member.model}`;
+}
+
+function simulatorBackend(
+  simUrl: string,
+  provider: ProviderId,
+  model: string
+): Backend {
+  const options = {
+    baseUrl:
+      provider === "google" ? `${simUrl}/v1beta` : `${simUrl}/v1`,
+    apiKey: "test-provider-key",
+    defaultModel: model
+  };
+  switch (provider) {
+    case "anthropic":
+    case "claude-code":
+      return new AnthropicBackend(options);
+    case "google":
+      return new GoogleGenAiBackend(options);
+    case "codex":
+      return new CodexResponsesBackend(options);
+    case "cliproxy":
+    case "openai":
+    case "openrouter":
+      return new OpenAiBackend(options);
+    default: {
+      const exhaustive: never = provider;
+      throw new Error(`unsupported simulator provider: ${String(exhaustive)}`);
+    }
+  }
+}
+
+function simulatorProviderSource(
+  simUrl: string,
+  provider: ProviderId,
+  members: readonly SimStackMember[]
+): ProviderSource {
+  const models = members.map((member) => member.model);
+  const backend = simulatorBackend(simUrl, provider, models[0]!);
+  return {
+    sourceId: provider,
+    discoverModels: async () =>
+      members.map((member) => ({
+        id: member.model,
+        ...(member.reasoning !== undefined
+          ? { reasoning: member.reasoning }
+          : {})
+      })),
+    chat: async (
+      body: unknown,
+      signal?: AbortSignal,
+      options?: BackendRequestOptions
+    ) => await backend.chat(body, signal, options),
+    embeddings: async (body: unknown, signal?: AbortSignal) =>
+      await backend.embeddings(body, signal),
+    close: async () => await backend.close?.()
+  };
+}
+
+function simulatorRouter(
   simUrl: string,
   members: readonly SimStackMember[]
-): RouterConfig {
-  return parseRouterConfig({
-    endpoints: members.map((member) => {
-      const dialect = dialectFor(member.provider);
-      return {
-        endpointId: member.id,
-        model: member.model,
-        provider: member.provider ?? "openai",
-        baseUrl:
-          dialect === "google" ? `${simUrl}/v1beta` : `${simUrl}/v1`,
-        dialect
-      };
+): {
+  config: RouterConfig;
+  sources: Partial<Record<ProviderId, ProviderSource>>;
+} {
+  const grouped = new Map<ProviderId, SimStackMember[]>();
+  for (const member of members) {
+    const provider = providerIdFor(member);
+    grouped.set(provider, [...(grouped.get(provider) ?? []), member]);
+  }
+  const providers = Object.fromEntries(
+    [...grouped].map(([provider]) => [provider, {}])
+  );
+  return {
+    config: parseRouterConfig({
+      providers,
+      defaultModel: publicModelId(members[0]!)
     }),
-    defaultEndpointId: members[0]?.id
-  });
+    sources: Object.fromEntries(
+      [...grouped].map(([provider, providerMembers]) => [
+        provider,
+        simulatorProviderSource(simUrl, provider, providerMembers)
+      ])
+    )
+  };
 }
 
 export async function startSimFusionStack(options: {
@@ -161,23 +242,28 @@ export async function startSimFusionStack(options: {
 }): Promise<SimFusionStack> {
   const first = options.members[0];
   if (first === undefined) throw new Error("at least one member is required");
-  const judgeId =
+  const judgeAlias =
     options.judgeId ??
     options.members[options.members.length - 1]?.id ??
     first.id;
+  const modelIds = new Map(
+    options.members.map((member) => [member.id, publicModelId(member)])
+  );
+  const resolveModel = (id: string): string => modelIds.get(id) ?? id;
+  const judgeId = resolveModel(judgeAlias);
   const judgeModel =
-    options.members.find((member) => member.id === judgeId)?.model ??
+    options.members.find((member) => member.id === judgeAlias)?.model ??
     first.model;
-  const panelMembers = options.members.filter((member) => member.id !== judgeId);
+  const panelMembers = options.members.filter((member) => member.id !== judgeAlias);
   const panel = panelMembers.length > 0 ? panelMembers : [first];
   const ensembles =
     options.ensembles !== undefined && options.ensembles.length > 0
       ? options.ensembles.map((ensemble) => ({
           name: ensemble.name,
-          members: [...ensemble.memberIds],
-          judge: ensemble.judgeId ?? judgeId,
+          members: ensemble.memberIds.map(resolveModel),
+          judge: resolveModel(ensemble.judgeId ?? judgeAlias),
           ...(ensemble.synthesizerId !== undefined
-            ? { synthesizer: ensemble.synthesizerId }
+            ? { synthesizer: resolveModel(ensemble.synthesizerId) }
             : {}),
           ...(ensemble.k !== undefined
             ? { k: ensemble.k }
@@ -191,13 +277,14 @@ export async function startSimFusionStack(options: {
       : [
           {
             name: "default",
-            members: panel.map((member) => member.id),
+            members: panel.map(publicModelId),
             judge: judgeId,
             ...(options.unbounded === true ? {} : { k: options.k ?? 1 })
           }
         ];
 
   const sim = await startProviderSim();
+  const router = simulatorRouter(sim.url, options.members);
   const outputRoot = mkdtempSync(join(tmpdir(), "fusionkit-v4-sim-stack-"));
   execFileSync("git", ["init", "-q", "-b", "main"], { cwd: outputRoot });
   execFileSync(
@@ -231,7 +318,8 @@ export async function startSimFusionStack(options: {
       ensembles,
       router: {
         kind: "embedded",
-        config: simulatorRouterConfig(sim.url, options.members)
+        config: router.config,
+        sources: router.sources
       },
       harness: options.harness ?? "agent",
       reasoning: true,

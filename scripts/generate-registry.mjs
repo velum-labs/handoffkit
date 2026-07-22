@@ -82,7 +82,7 @@ function benchmarkFusionRegistry(registry) {
       panelId,
       {
         ...panel,
-        members: panel.members.map(({ id, model }) => ({ id, model }))
+        members: panel.members.map(({ id, model, provider }) => ({ id, model, provider }))
       }
     ])
   );

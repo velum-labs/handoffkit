@@ -20,7 +20,7 @@ import { buildChildEnv } from "./environment.js";
 import { terminateGroup } from "./process.js";
 import { trimSurroundingSlashes } from "./url.js";
 
-export { registerCleanup, runCleanups } from "./cleanup.js";
+export { extendCleanupGrace, registerCleanup, runCleanups } from "./cleanup.js";
 export {
   buildChildEnv,
   commandOnPath,
@@ -49,6 +49,84 @@ export type {
   RouteStoreLike,
   SpawnedService
 } from "./portless.js";
+export {
+  createServiceRecordStore,
+  processAlive,
+  processIdentity,
+  SERVICE_SUPERVISOR_ENV,
+  supervisorFromEnv
+} from "./service/records.js";
+export type {
+  ServiceRecord,
+  ServiceRecordInput,
+  ServiceRecordStore,
+  ServiceSupervisorKind
+} from "./service/records.js";
+export {
+  CONTROL_BODY_LIMIT_BYTES,
+  CONTROL_PROTOCOL_VERSION,
+  ControlClient,
+  ControlError,
+  controlTokenMatches,
+  generateControlToken,
+  startControlServer
+} from "./service/control.js";
+export type {
+  ControlClientOptions,
+  ControlErrorCode,
+  ControlEvent,
+  ControlFailure,
+  ControlHandler,
+  ControlHandlerContext,
+  ControlRequest,
+  ControlResponse,
+  ControlSuccess,
+  RunningControlServer
+} from "./service/control.js";
+export {
+  acquireLifecycleLock,
+  nextServiceGeneration
+} from "./service/authority.js";
+export type { LifecycleLock } from "./service/authority.js";
+export {
+  readLogTail,
+  rotateLogFile,
+  serviceLogPath,
+  startDaemon,
+  stopDaemonProcess,
+  waitForProcessExit,
+  waitForServiceReady
+} from "./service/daemon.js";
+export type {
+  ServiceDaemonSpec,
+  StartDaemonOptions,
+  StartDaemonResult,
+  StopDaemonResult
+} from "./service/daemon.js";
+export {
+  detectSupervisor,
+  launchdAgentPlist,
+  launchdLabel,
+  launchdPlistPath,
+  supervisorController,
+  supervisorOperationTimeoutMs,
+  systemdServiceUnit,
+  systemdUnitName,
+  systemdUnitPath
+} from "./service/supervisors.js";
+export type {
+  CommandRunner,
+  DetectSupervisorOptions,
+  ServiceUnitSpec,
+  SupervisorController,
+  SupervisorStatus
+} from "./service/supervisors.js";
+export { planUpgrade, upgradeDetachedDaemon } from "./service/upgrade.js";
+export type {
+  UpgradeDaemonInput,
+  UpgradeDaemonResult,
+  UpgradeStrategy
+} from "./service/upgrade.js";
 export {
   assertAuthenticatedBind,
   isLoopbackHost,

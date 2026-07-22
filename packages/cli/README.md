@@ -8,6 +8,7 @@ one command.
 ```bash
 npm install -g @fusionkit/cli
 cd your-project        # a git repo
+fusionkit init         # scaffold Fusion v4 + RouteKit config
 fusionkit doctor       # check prerequisites
 fusionkit codex        # launch Codex backed by the fusion panel
 ```
@@ -24,9 +25,10 @@ fusionkit codex        # launch Codex backed by the fusion panel
   [`claude`](https://docs.anthropic.com/en/docs/claude-code/overview), or
   [`cursor-agent`](https://cursor.com/cli), or
   [`opencode`](https://opencode.ai/).
-- **A RouteKit router configuration** — `.routekit/router.yaml` defines opaque
-  endpoint IDs, provider models, URLs, and credential environment-variable
-  names. Export every credential referenced by the selected endpoints.
+- **A RouteKit router configuration** — `.routekit/router.yaml` explicitly
+  enables providers. RouteKit discovers their models and advertises
+  namespaced `provider/model` IDs. Export the registry-defined credential for
+  every selected API provider or enroll the required subscription accounts.
   FusionKit does not read provider credentials or silently drop members whose
   credentials are missing.
 - **A git repository** — the panel fuses over the code in your current repo.
@@ -42,10 +44,10 @@ Run `fusionkit doctor` any time to see exactly what is and isn't ready.
 
 ## Cost
 
-An ensemble runs **multiple configured endpoints plus judge/synthesis calls** on
+An ensemble runs **multiple live RouteKit models plus judge/synthesis calls** on
 every prompt, so usage adds up. When the coding agent exits, fusionkit prints a
 session receipt with fused turns, gateway-observed spend, and the `--resume`
-id. Choose endpoint IDs and prices in `.routekit/router.yaml`; set a session cap
+id. Choose provider/model IDs from `routekit models list`; set a session cap
 with `--budget`.
 
 ## Per-repo config
@@ -56,11 +58,11 @@ Tired of long flag lines? Scaffold a committed `.fusionkit/` folder:
 fusionkit init
 ```
 
-It writes `.fusionkit/fusion.json` from the endpoint IDs already defined in
-`.routekit/router.yaml`. The Fusion file owns ensembles, judge/synthesizer
-choices, tool defaults, run policy, and prompt overrides; the RouteKit file owns
-models, URLs, accounts, and credential environment-variable names. Inspect the
-effective Fusion config with `fusionkit config show`.
+It writes `.fusionkit/fusion.json` from the live namespaced model IDs discovered
+for `.routekit/router.yaml`. The Fusion file owns ensembles,
+judge/synthesizer choices, tool defaults, run policy, and prompt overrides; the
+RouteKit file owns explicit providers and pooling policy. Inspect the effective
+Fusion config with `fusionkit config show`.
 
 ## Local checkout development
 
@@ -96,7 +98,7 @@ working directory, and does not replace the normal `fusionkit` binary. Set
 - `fusionkit setup` — pre-provision the internal Python sidecar.
 - `fusionkit doctor` — check prerequisites with fix hints.
 - `fusionkit config show | path | get | set | unset | edit` — inspect or edit Fusion v4 policy.
-- `fusionkit ensemble list | add | edit | remove | rename` — manage endpoint-ID ensembles.
+- `fusionkit ensemble list | add | edit | remove | rename` — manage namespaced-model ensembles.
 - `fusionkit prompts list | edit | reset` — manage judge/synthesizer prompt overrides.
 - `fusionkit sessions list | show | rm` — manage durable Fusion sessions (`--resume` / `--continue` rehydrate them).
 - `fusionkit models list | download | rm` — manage the local MLX model cache.
@@ -105,8 +107,8 @@ working directory, and does not replace the normal `fusionkit` binary. Set
 
 Useful flags include `--ensemble`, `--observe`, `--budget`, `--repo`,
 `--on-rate-limit`, `--resume`, and `--continue`. Provider/model/key flags and
-`--direct` do not exist. For a single endpoint, use a RouteKit launcher such as
-`routekit codex <endpoint-id>`. Put global FusionKit options before the
+`--direct` do not exist. For a single model, use a RouteKit launcher such as
+`routekit codex openai/gpt-5.5`. Put global FusionKit options before the
 subcommand, launch options after it, and `--` before arguments that must be
 forwarded unchanged to the coding tool.
 

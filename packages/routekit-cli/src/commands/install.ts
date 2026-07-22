@@ -7,20 +7,16 @@ import {
 import type { CodexInstallOwner } from "@routekit/tool-registry";
 import type { Command } from "commander";
 
-import { loaded } from "./context.js";
+import { routekitClient } from "../client.js";
 
 const CODEX_OWNER: CodexInstallOwner = {
   id: "routekit",
   displayName: "RouteKit",
   providerId: "routekit",
-  installCommand: "routekit install codex",
-  uninstallCommand: "routekit uninstall codex",
-  startCommand: "routekit serve"
+  installCommand: "routekit codex install",
+  uninstallCommand: "routekit codex uninstall",
+  startCommand: "routekit gateway serve"
 };
-
-function assertCodex(tool: string): void {
-  if (tool !== "codex") throw new Error("supported install target: codex");
-}
 
 function codexProfileId(modelId: string, index: number): string {
   return modelId.length > 0 &&
@@ -28,27 +24,29 @@ function codexProfileId(modelId: string, index: number): string {
     !modelId.includes("\\") &&
     !modelId.startsWith(".")
     ? modelId
-    : `routekit-endpoint-${index + 1}`;
+    : `routekit-model-${index + 1}`;
 }
 
-export function registerInstall(program: Command): void {
-  program
-    .command("install <tool>")
-    .description("install a RouteKit-owned provider and profiles")
-    .requiredOption("--gateway-url <url>", "running gateway URL")
+export function registerCodexIntegration(codex: Command): void {
+  codex
+    .command("install")
+    .description("install a RouteKit-owned Codex provider and profiles")
+    .option("--gateway-url <url>", "override the singleton daemon gateway URL")
     .option("--codex-home <dir>", "Codex home directory")
     .action(
-      (
-        tool: string,
-        options: { gatewayUrl: string; codexHome?: string },
+      async (
+        options: { gatewayUrl?: string; codexHome?: string },
         command: Command
       ) => {
-        assertCodex(tool);
         const ctx = contextFor(command);
-        const config = loaded(command).config;
-        const ids = [...new Set(config.endpoints.map((entry) => entry.endpointId))];
+        const client = await routekitClient();
+        const [daemon, catalog] = await Promise.all([
+          client.call("daemon.status", {}),
+          client.call("models.list", {})
+        ]);
+        const ids = catalog.models.map((model) => model.id);
         const result = installCodexIntegration({
-          gatewayUrl: trimTrailingSlashes(options.gatewayUrl),
+          gatewayUrl: trimTrailingSlashes(options.gatewayUrl ?? daemon.dataUrl),
           profiles: ids.map((modelId, index) => ({
             modelId,
             profileId: codexProfileId(modelId, index)
@@ -61,13 +59,15 @@ export function registerInstall(program: Command): void {
       }
     );
 
-  program
-    .command("uninstall <tool>")
-    .description("remove RouteKit-owned tool configuration")
+  codex
+    .command("uninstall")
+    .description("remove RouteKit-owned Codex configuration")
     .option("--codex-home <dir>", "Codex home directory")
-    .action((tool: string, options: { codexHome?: string }, command: Command) => {
-      assertCodex(tool);
+    .action(async (options: { codexHome?: string }, command: Command) => {
       const ctx = contextFor(command);
+      // Even though the external Codex file mutation is intentionally local,
+      // every product command first negotiates with the singleton daemon.
+      await (await routekitClient()).call("daemon.status", {});
       const result = uninstallCodexIntegration({
         ownerId: CODEX_OWNER.id,
         ...(options.codexHome !== undefined ? { codexHome: options.codexHome } : {})

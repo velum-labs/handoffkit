@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { subscriptionProvider } from "../index.js";
+import { codexModelsSearch } from "../provider.js";
 
 test("Anthropic adapter parses first-party unified subscription windows", () => {
   const provider = subscriptionProvider("claude-code");
@@ -16,10 +17,14 @@ test("Anthropic adapter parses first-party unified subscription windows", () => 
       "anthropic-ratelimit-unified-7d-sonnet-reset": "1775000000"
     })
   );
-  assert.equal(limits?.windows["5h"]?.utilization, 0.42);
-  assert.equal(limits?.windows["5h"]?.resetsAt, 1774933200);
-  assert.equal(limits?.windows["7d-sonnet"]?.status, "rejected");
-  assert.equal(limits?.windows["7d-sonnet"]?.utilization, 1);
+  assert.deepEqual(Object.keys(limits?.windows ?? {}), [
+    "five_hour",
+    "seven_day_sonnet"
+  ]);
+  assert.equal(limits?.windows.five_hour?.utilization, 0.42);
+  assert.equal(limits?.windows.five_hour?.resetsAt, 1774933200);
+  assert.equal(limits?.windows.seven_day_sonnet?.status, "rejected");
+  assert.equal(limits?.windows.seven_day_sonnet?.utilization, 1);
 });
 
 test("Anthropic adapter distinguishes quota rejection from a short throttle", () => {
@@ -75,6 +80,15 @@ test("Codex adapter parses dynamic limit headers and stream rate-limit events", 
   });
   assert.equal(stream?.windows.primary?.utilization, 0.5);
   assert.equal(stream?.windows.secondary?.utilization, 0.1);
+
+  const response = provider.parseLimits(new Headers(), {
+    rate_limit: {
+      primary_window: { used_percent: 20, reset_at: 1774933300 }
+    }
+  });
+  assert.equal(response?.source, "response");
+  assert.equal(response?.completeness, "partial");
+  assert.equal(response?.windows.primary?.source, "response");
 });
 
 test("Codex adapter recognizes usage_limit_reached as quota exhaustion", () => {
@@ -91,4 +105,62 @@ test("Codex adapter recognizes usage_limit_reached as quota exhaustion", () => {
   );
   assert.equal(failure?.category, "quota_exhausted");
   assert.equal(failure?.resetsAt, 1775000000);
+});
+
+test("Codex model discovery supplies the required client version query", () => {
+  assert.equal(codexModelsSearch("", "0.144.5"), "?client_version=0.144.5");
+  assert.equal(
+    codexModelsSearch("?include_hidden=true", "0.144.5"),
+    "?include_hidden=true&client_version=0.144.5"
+  );
+  assert.equal(
+    codexModelsSearch("?client_version=0.142.5", "0.144.5"),
+    "?client_version=0.142.5"
+  );
+});
+
+test("subscription adapters discover native models with member credentials", async () => {
+  const originalFetch = globalThis.fetch;
+  const requests: Array<{ url: string; headers: Headers }> = [];
+  globalThis.fetch = async (input, init) => {
+    const url = String(input);
+    requests.push({ url, headers: new Headers(init?.headers) });
+    return url.includes("anthropic")
+      ? Response.json({ data: [{ id: "claude-opus-4-1" }] })
+      : Response.json({
+          models: [
+            {
+              slug: "gpt-5.5",
+              supported_reasoning_levels: ["quick", "deep"],
+              default_reasoning_level: "deep"
+            }
+          ]
+        });
+  };
+  try {
+    const claude = await subscriptionProvider("claude-code").discoverModels({
+      mode: "claude-code",
+      accessToken: "claude-token",
+      sourcePath: "/tmp/claude.json"
+    });
+    const codex = await subscriptionProvider("codex").discoverModels({
+      mode: "codex",
+      accessToken: "codex-token",
+      accountId: "acct",
+      sourcePath: "/tmp/codex.json"
+    });
+    assert.deepEqual(claude, [{ id: "claude-opus-4-1" }]);
+    assert.equal(typeof codex[0] === "string" ? codex[0] : codex[0]?.id, "gpt-5.5");
+    assert.deepEqual(
+      typeof codex[0] === "string" ? undefined : codex[0]?.reasoning?.efforts,
+      [{ id: "quick" }, { id: "deep" }]
+    );
+    assert.equal(requests[0]?.headers.get("authorization"), "Bearer claude-token");
+    assert.equal(requests[0]?.headers.get("anthropic-version"), "2023-06-01");
+    assert.equal(requests[1]?.headers.get("authorization"), "Bearer codex-token");
+    assert.equal(requests[1]?.headers.get("chatgpt-account-id"), "acct");
+    assert.equal(requests[1]?.headers.get("originator"), "routekit");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });

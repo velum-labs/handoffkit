@@ -22,7 +22,12 @@ export type OpenSubscriptionRelaysOptions = {
 
 export type OpenSubscriptionRelaysResult = {
   relays: Partial<Record<SubscriptionRelayDialect, SubscriptionRelay>>;
+  accountSets: SubscriptionAccountSets;
 };
+
+export type SubscriptionAccountSets = Partial<
+  Record<SubscriptionMode, SubscriptionAccountSet>
+>;
 
 function stockCatalog(
   _template: CodexCatalogEntry,
@@ -31,36 +36,64 @@ function stockCatalog(
   return [...stock];
 }
 
+export async function openSubscriptionAccountSets(
+  configs: SubscriptionAccountConfigs
+): Promise<SubscriptionAccountSets> {
+  const sets: SubscriptionAccountSets = {};
+  try {
+    for (const mode of ["claude-code", "codex"] as const) {
+      const config = configs[mode];
+      if (config === undefined) continue;
+      sets[mode] = await SubscriptionAccountSet.open(subscriptionProvider(mode), {
+        mode,
+        ...config
+      });
+    }
+    return sets;
+  } catch (error) {
+    await Promise.all(
+      Object.values(sets).map(async (accounts) => await accounts.close())
+    );
+    throw error;
+  }
+}
+
+export function subscriptionRelaysFromAccountSets(
+  sets: SubscriptionAccountSets,
+  codex?: Omit<CodexRelayOptions, "auth">
+): Partial<Record<SubscriptionRelayDialect, SubscriptionRelay>> {
+  const relays: Partial<Record<SubscriptionRelayDialect, SubscriptionRelay>> = {};
+  const claude = sets["claude-code"];
+  if (claude !== undefined && claude.size > 0) {
+    relays.anthropic = new AnthropicBackendRelay({ accounts: claude });
+  }
+  const codexAccounts = sets.codex;
+  if (codexAccounts !== undefined && codexAccounts.size > 0) {
+    relays.codex = new CodexBackendRelay({
+      catalog: stockCatalog,
+      ...codex,
+      auth: { kind: "accounts", accounts: codexAccounts }
+    });
+  }
+  return relays;
+}
+
 /** Open every configured server-owned subscription through one account-set path. */
 export async function openSubscriptionRelays(
   options: OpenSubscriptionRelaysOptions
 ): Promise<OpenSubscriptionRelaysResult> {
-  const relays: Partial<Record<SubscriptionRelayDialect, SubscriptionRelay>> = {};
-  const claude = options.accounts["claude-code"];
-  if (claude !== undefined) {
-    const accounts = await SubscriptionAccountSet.open(
-      subscriptionProvider("claude-code"),
-      { mode: "claude-code", ...claude }
-    );
-    if (accounts.size > 0) relays.anthropic = new AnthropicBackendRelay({ accounts });
-    else await accounts.close();
-  }
-
-  const codex = options.accounts.codex;
-  if (codex !== undefined) {
-    const accounts = await SubscriptionAccountSet.open(subscriptionProvider("codex"), {
-      mode: "codex",
-      ...codex
-    });
-    if (accounts.size > 0) {
-      relays.codex = new CodexBackendRelay({
-        catalog: stockCatalog,
-        ...options.codex,
-        auth: { kind: "accounts", accounts }
-      });
-    } else {
+  const sets = await openSubscriptionAccountSets(options.accounts);
+  const relays = subscriptionRelaysFromAccountSets(sets, options.codex);
+  for (const mode of ["claude-code", "codex"] as const) {
+    const accounts = sets[mode];
+    if (accounts === undefined) continue;
+    const hasRelay =
+      (mode === "claude-code" && relays.anthropic !== undefined) ||
+      (mode === "codex" && relays.codex !== undefined);
+    if (!hasRelay) {
       await accounts.close();
+      delete sets[mode];
     }
   }
-  return { relays };
+  return { relays, accountSets: sets };
 }

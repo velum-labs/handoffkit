@@ -4,10 +4,10 @@ import { subscriptionUsageResponseSchema, SUBSCRIPTION_USAGE_PATH } from "./wire
 import type { SubscriptionUsageResponse } from "./wire.js";
 
 export type SubscriptionProxyClientOptions = {
-  /** Base URL of a running proxy (no trailing `/usage`). */
+  /** Base URL of a running RouteKit service (no trailing `/usage`). */
   baseUrl: string;
-  /** Ingress proxy token. */
-  token: string;
+  /** Bearer token when the service requires authentication. */
+  token?: string;
   /** Per-request timeout in milliseconds (default 3000). */
   timeoutMs?: number;
 };
@@ -19,7 +19,7 @@ export type SubscriptionProxyClientOptions = {
  */
 export class SubscriptionProxyClient {
   readonly #baseUrl: string;
-  readonly #token: string;
+  readonly #token: string | undefined;
   readonly #timeoutMs: number;
 
   private constructor(options: SubscriptionProxyClientOptions) {
@@ -60,7 +60,9 @@ export class SubscriptionProxyClient {
 
   #get(path: string): Promise<Response> {
     return fetch(`${this.#baseUrl}${path}`, {
-      headers: { authorization: `Bearer ${this.#token}` },
+      ...(this.#token !== undefined
+        ? { headers: { authorization: `Bearer ${this.#token}` } }
+        : {}),
       signal: AbortSignal.timeout(this.#timeoutMs)
     });
   }

@@ -82,17 +82,21 @@ async function requestJson(
   body?: Record<string, unknown>
 ): Promise<Response> {
   return await fetch(`${url}${path}`, {
+    headers: { authorization: "Bearer test-gateway-token" },
     ...(body !== undefined
       ? {
           method: "POST",
-          headers: { "content-type": "application/json" },
+          headers: {
+            authorization: "Bearer test-gateway-token",
+            "content-type": "application/json"
+          },
           body: JSON.stringify(body)
         }
       : {})
   });
 }
 
-test("real routekit serve process reports JSON readiness and serves every supported door", async () => {
+test("real routekit gateway serve process reports JSON readiness and serves every supported door", async () => {
   const root = mkdtempSync(join(tmpdir(), "routekit-serve-process-"));
   const project = join(root, "project");
   const stateHome = join(root, "state");
@@ -149,14 +153,9 @@ test("real routekit serve process reports JSON readiness and serves every suppor
   writeFileSync(
     configPath,
     [
-      "endpoints:",
-      "  - endpointId: opaque",
-      "    model: provider-model",
-      "    provider: mock",
-      `    baseUrl: http://127.0.0.1:${upstreamPort}/v1`,
-      "    dialect: openai",
-      "    apiKeyEnv: ROUTEKIT_PROCESS_TEST_KEY",
-      "defaultEndpointId: opaque",
+      "providers:",
+      "  openai: {}",
+      "defaultModel: openai/provider-model",
       ""
     ].join("\n")
   );
@@ -164,12 +163,15 @@ test("real routekit serve process reports JSON readiness and serves every suppor
     [
       "--config",
       configPath,
+      "gateway",
       "serve",
       "--host",
       "127.0.0.1",
       "--port",
       "0",
       "--no-portless",
+      "--auth-token",
+      "test-gateway-token",
       "--json"
     ],
     {
@@ -177,7 +179,8 @@ test("real routekit serve process reports JSON readiness and serves every suppor
       env: {
         ...process.env,
         ROUTEKIT_HOME: stateHome,
-        ROUTEKIT_PROCESS_TEST_KEY: "mock-secret",
+        OPENAI_API_KEY: "mock-secret",
+        OPENAI_BASE_URL: `http://127.0.0.1:${upstreamPort}/v1`,
         PORTLESS: "0",
         NO_COLOR: "1"
       }
@@ -185,7 +188,7 @@ test("real routekit serve process reports JSON readiness and serves every suppor
   );
   try {
     const readiness = await waitForJsonLine(routekit);
-    assert.equal(readiness.authenticated, false);
+    assert.equal(readiness.authenticated, true);
     assert.equal(readiness.config, configPath);
     assert.equal(typeof readiness.url, "string");
     const routekitUrl = readiness.url as string;
@@ -194,18 +197,18 @@ test("real routekit serve process reports JSON readiness and serves every suppor
     assert.equal(models.status, 200);
     assert.deepEqual(
       ((await models.json()) as { data: Array<{ id: string }> }).data.map((entry) => entry.id),
-      ["opaque"]
+      ["openai/provider-model"]
     );
 
     const openai = await requestJson(routekitUrl, "/v1/chat/completions", {
-      model: "opaque",
+      model: "openai/provider-model",
       messages: [{ role: "user", content: "openai door" }]
     });
     assert.equal(openai.status, 200);
     assert.match(await openai.text(), /mock upstream answer/);
 
     const anthropic = await requestJson(routekitUrl, "/v1/messages", {
-      model: "opaque",
+      model: "openai/provider-model",
       max_tokens: 32,
       messages: [{ role: "user", content: "anthropic door" }]
     });
@@ -213,14 +216,14 @@ test("real routekit serve process reports JSON readiness and serves every suppor
     assert.equal(((await anthropic.json()) as { type?: string }).type, "message");
 
     const responses = await requestJson(routekitUrl, "/v1/responses", {
-      model: "opaque",
+      model: "openai/provider-model",
       input: "responses door"
     });
     assert.equal(responses.status, 200);
     assert.equal(((await responses.json()) as { object?: string }).object, "response");
 
     const cursor = await requestJson(routekitUrl, "/v1/cursor/chat/completions", {
-      model: "opaque",
+      model: "openai/provider-model",
       input: "cursor door"
     });
     assert.equal(cursor.status, 200);

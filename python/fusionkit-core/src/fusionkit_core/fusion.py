@@ -121,7 +121,7 @@ class FusionEngine:
         if mode == "panel":
             models = list(panel_models or self.config.panel_models)
             if not models:
-                models = list(self.config.endpoint_ids)
+                models = list(self.config.routekit_model_ids)
             return await self.producer.generate_panel(models, messages, sampling, tools=tools)
         raise ValueError(f"Unsupported fusion generation mode: {mode}")
 

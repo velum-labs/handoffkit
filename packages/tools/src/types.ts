@@ -1,4 +1,8 @@
 import type { AnyHarnessDriver, HarnessKind } from "@routekit/harness-core";
+import type {
+  ModelReasoningCapabilities,
+  ReasoningSelection
+} from "@routekit/contracts";
 
 export type ToolModelFeature = "streaming" | "tools" | "images" | "reasoning_controls";
 export type ToolCapabilityGrade = "full" | "degraded" | "unsupported";
@@ -10,6 +14,7 @@ export type ToolModel = {
   label?: string;
   aliases?: readonly string[];
   features?: Partial<Record<ToolModelFeature, ToolModelFeatureStatus>>;
+  reasoning?: ModelReasoningCapabilities;
 };
 
 /** A host-authored generic agent definition serialized by each launcher. */
@@ -25,6 +30,7 @@ export type ToolLaunchSpec = {
   gatewayUrl: string;
   defaultModel: string;
   models: readonly ToolModel[];
+  reasoning?: ReasoningSelection;
   agentProfiles?: readonly AgentProfile[];
   args: readonly string[];
   cwd?: string;

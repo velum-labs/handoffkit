@@ -141,12 +141,13 @@ test("init writes v4 Fusion config and a separate safe RouteKit config", () => {
     };
     assert.equal(config.version, "fusionkit.fusion.v4");
     assert.deepEqual(config.router, { config: ".routekit/router.yaml" });
-    assert.deepEqual(config.ensembles.default?.members, ["default"]);
+    assert.deepEqual(config.ensembles.default?.members, ["openai/gpt-5.5"]);
     assert.doesNotMatch(
       readFileSync(fusionPath, "utf8"),
-      /provider|baseUrl|apiKey|subscription/
+      /baseUrl|apiKey|subscription/
     );
-    assert.match(readFileSync(routerPath, "utf8"), /apiKeyEnv:/);
+    assert.match(readFileSync(routerPath, "utf8"), /providers:/);
+    assert.match(readFileSync(routerPath, "utf8"), /defaultModel: openai\/gpt-5.5/);
   } finally {
     fixture.cleanup();
   }

@@ -11,11 +11,26 @@
 import type { Backend, BackendRequestOptions } from "../backend.js";
 import { estimateTokens, randomId } from "@routekit/runtime";
 import { SseDecoder, SseParseError } from "../sse/parse.js";
-import type { OpenAiChoice } from "./openai-chat-wire.js";
+import {
+  ANTHROPIC_MESSAGE_CONTENT,
+  ANTHROPIC_REQUEST_METADATA,
+  attachReasoningSelection,
+  attachReasoningSelectionError,
+  anthropicReasoningDetailsOf,
+  type AnthropicNativeContentBlock,
+  type AnthropicReasoningDetail,
+  type AnthropicRequestMetadata,
+  type AnthropicThinkingConfig,
+  type OpenAiChoice
+} from "./openai-chat-wire.js";
 import { droppedField } from "./dropped.js";
 import { unwrapUpstreamError } from "./upstream-error.js";
 import { composeServerToolStream, runBufferedServerToolLoop, serverToolMarkerOf } from "./server-tool-loop.js";
-import type { ExecutedSearch, ServerToolMarker } from "./server-tool-loop.js";
+import type {
+  ExecutedSearch,
+  ServerToolLoopEvent,
+  ServerToolMarker
+} from "./server-tool-loop.js";
 import { resolveWebSearchExecutor } from "./web-search.js";
 
 const ENCODER = new TextEncoder();
@@ -41,7 +56,11 @@ type AnthropicContentBlock =
   | AnthropicToolResultBlock
   | { type: string; [key: string]: unknown };
 
-type AnthropicThinking = { type?: string; budget_tokens?: number; effort?: string };
+type AnthropicThinking = AnthropicThinkingConfig | null;
+type AnthropicOutputConfig = {
+  effort?: string | null;
+  [key: string]: unknown;
+};
 
 type AnthropicMessage = { role: "user" | "assistant"; content: string | AnthropicContentBlock[] };
 
@@ -59,6 +78,7 @@ export type AnthropicRequest = {
   top_p?: number;
   top_k?: number;
   thinking?: AnthropicThinking | null;
+  output_config?: AnthropicOutputConfig | null;
   metadata?: Record<string, unknown> | null;
   stop_sequences?: string[];
   stream?: boolean;
@@ -174,23 +194,41 @@ function mapToolChoice(
   }
 }
 
-function mapThinking(thinking: AnthropicThinking): string | undefined {
-  const effort = thinking.effort;
-  if (effort === "low" || effort === "medium" || effort === "high") return effort;
-  const budget = thinking.budget_tokens;
-  if (typeof budget === "number") {
-    if (budget <= 1_024) return "low";
-    if (budget <= 8_192) return "medium";
-    return "high";
-  }
+function mapThinking(
+  thinking: NonNullable<AnthropicThinking>,
+  outputConfig: AnthropicOutputConfig | null | undefined
+): string | undefined {
   if (thinking.type === "disabled") return undefined;
-  droppedField("anthropic", "thinking");
+  const effort = outputConfig?.effort;
+  return typeof effort === "string" && effort.length > 0 ? effort : undefined;
+}
+
+function thinkingValidationError(body: AnthropicRequest): string | undefined {
+  const thinking = body.thinking;
+  if (thinking == null || thinking.type !== "enabled") return undefined;
+  const budget = thinking.budget_tokens;
+  if (!Number.isInteger(budget) || budget < 1_024) {
+    return "thinking.budget_tokens must be an integer greater than or equal to 1024";
+  }
+  if (typeof body.max_tokens === "number" && budget >= body.max_tokens) {
+    return `thinking.budget_tokens must be less than max_tokens (${body.max_tokens})`;
+  }
   return undefined;
 }
 
 function toolResultContent(result: AnthropicToolResultBlock): string {
   const text = blockText(result.content);
   return result.is_error === true ? `[tool_error]\n${text}` : text;
+}
+
+function attachAnthropicContent(
+  message: Record<string, unknown>,
+  content: readonly AnthropicNativeContentBlock[]
+): void {
+  Object.defineProperty(message, ANTHROPIC_MESSAGE_CONTENT, {
+    value: [...content],
+    enumerable: true
+  });
 }
 
 /**
@@ -218,6 +256,8 @@ export function anthropicToChat(
     const imageParts: Record<string, unknown>[] = [];
     const toolCalls: Record<string, unknown>[] = [];
     const toolResults: { id: string; content: string }[] = [];
+    const nativeContent: AnthropicNativeContentBlock[] = [];
+    let hasReplayableThinking = false;
     // Echoed gateway-executed (or genuinely provider-executed, in a resumed
     // session) web searches: `server_tool_use` + `web_search_tool_result`
     // blocks ride in the assistant message and round-trip losslessly.
@@ -228,6 +268,7 @@ export function anthropicToChat(
       switch (block.type) {
         case "text":
           textParts.push((block as AnthropicTextBlock).text);
+          nativeContent.push({ type: "text", text: (block as AnthropicTextBlock).text });
           break;
         case "image": {
           const source = (block as AnthropicImageBlock).source;
@@ -243,6 +284,12 @@ export function anthropicToChat(
             id: tool.id,
             type: "function",
             function: { name: tool.name, arguments: JSON.stringify(tool.input ?? {}) }
+          });
+          nativeContent.push({
+            type: "tool_use",
+            id: tool.id,
+            name: tool.name,
+            input: tool.input ?? {}
           });
           break;
         }
@@ -268,9 +315,40 @@ export function anthropicToChat(
           });
           break;
         }
-        case "thinking":
-          droppedField("anthropic", "thinking", "message");
+        case "thinking": {
+          const thinking = block as {
+            thinking?: unknown;
+            signature?: unknown;
+          };
+          // Only provider-issued non-empty signatures are safe to replay to
+          // Anthropic. Synthetic thinking emitted for another provider uses an
+          // empty signature and remains display-only.
+          if (
+            typeof thinking.thinking === "string" &&
+            typeof thinking.signature === "string" &&
+            thinking.signature.length > 0
+          ) {
+            nativeContent.push({
+              type: "thinking",
+              thinking: thinking.thinking,
+              signature: thinking.signature
+            });
+            hasReplayableThinking = true;
+          } else {
+            droppedField("anthropic", "thinking", "message");
+          }
           break;
+        }
+        case "redacted_thinking": {
+          const redacted = block as { data?: unknown };
+          if (typeof redacted.data === "string" && redacted.data.length > 0) {
+            nativeContent.push({ type: "redacted_thinking", data: redacted.data });
+            hasReplayableThinking = true;
+          } else {
+            droppedField("anthropic", "redacted_thinking", "message");
+          }
+          break;
+        }
         default:
           droppedField("anthropic", block.type, "message");
           break;
@@ -299,6 +377,7 @@ export function anthropicToChat(
       if (text.length > 0 || toolCalls.length > 0 || serverToolUses.length === 0) {
         const assistant: Record<string, unknown> = { role: "assistant", content: text.length > 0 ? text : null };
         if (toolCalls.length > 0) assistant.tool_calls = toolCalls;
+        if (hasReplayableThinking) attachAnthropicContent(assistant, nativeContent);
         messages.push(assistant);
       }
       continue;
@@ -334,11 +413,48 @@ export function anthropicToChat(
   if (typeof body.top_k === "number") chat.top_k = body.top_k;
   // Explicit nulls mean "unset" (see AnthropicRequest).
   if (body.metadata != null) droppedField("anthropic", "metadata");
+  if (
+    body.output_config != null &&
+    Object.hasOwn(body.output_config, "effort") &&
+    body.output_config.effort !== null &&
+    (typeof body.output_config.effort !== "string" ||
+      body.output_config.effort.length === 0)
+  ) {
+    attachReasoningSelectionError(
+      chat,
+      "output_config.effort must be a non-empty string"
+    );
+  }
   // `thinking: null` means "no extended thinking" — skip, never dereference
   // (same failure class as the Responses adapter's `reasoning: null`).
   if (body.thinking != null) {
-    const reasoningEffort = mapThinking(body.thinking);
-    if (reasoningEffort !== undefined) chat.reasoning_effort = reasoningEffort;
+    const reasoningEffort = mapThinking(body.thinking, body.output_config);
+    if (body.thinking.type === "disabled") {
+      attachReasoningSelection(chat, { mode: "disabled" });
+    } else if (reasoningEffort !== undefined) {
+      chat.reasoning_effort = reasoningEffort;
+      attachReasoningSelection(chat, {
+        mode: "effort",
+        effort: reasoningEffort
+      });
+    } else if (body.thinking.type === "adaptive") {
+      attachReasoningSelection(chat, { mode: "adaptive" });
+    } else {
+      attachReasoningSelection(chat, {
+        mode: "budget",
+        budgetTokens: body.thinking.budget_tokens
+      });
+    }
+  }
+  const metadata: AnthropicRequestMetadata = {
+    ...(body.thinking != null ? { thinking: body.thinking } : {}),
+    ...(body.output_config !== undefined ? { output_config: body.output_config } : {})
+  };
+  if (Object.keys(metadata).length > 0) {
+    Object.defineProperty(chat, ANTHROPIC_REQUEST_METADATA, {
+      value: metadata,
+      enumerable: true
+    });
   }
   if (Array.isArray(body.stop_sequences) && body.stop_sequences.length > 0) {
     chat.stop = body.stop_sequences;
@@ -437,22 +553,71 @@ function executedSearchBlocks(search: ExecutedSearch): Record<string, unknown>[]
 export function chatToAnthropicMessage(
   openai: OpenAiResponse,
   model: string,
-  searches: readonly ExecutedSearch[] = []
+  searches: readonly ExecutedSearch[] = [],
+  events?: readonly ServerToolLoopEvent[]
 ): Record<string, unknown> {
   const choice = openai.choices?.[0];
   const message = choice?.message;
   const content: Record<string, unknown>[] = [];
 
-  const reasoning =
+  const nativeReasoning = anthropicReasoningDetailsOf(
+    message?.reasoning_details,
+    "message"
+  ).sort((a, b) => a.index - b.index);
+  const appendNativeReasoning = (
+    details: readonly AnthropicReasoningDetail[]
+  ): void => {
+    for (const detail of details) {
+      if (detail.type === "thinking") {
+        content.push({
+          type: "thinking",
+          thinking: detail.thinking ?? "",
+          signature: detail.signature ?? ""
+        });
+      } else {
+        content.push({ type: "redacted_thinking", data: detail.data });
+      }
+    }
+  };
+
+  // Gateway-executed steps precede the terminal model step. Preserve their
+  // signed/redacted reasoning in exact step order around search blocks.
+  if (events !== undefined) {
+    for (const event of events) {
+      if (event.kind === "reasoning") {
+        appendNativeReasoning(
+          anthropicReasoningDetailsOf(event.details, "message")
+        );
+      } else {
+        content.push(...executedSearchBlocks(event.search));
+      }
+    }
+  } else {
+    for (const search of searches) content.push(...executedSearchBlocks(search));
+  }
+  appendNativeReasoning(nativeReasoning);
+  const rawReasoning =
     typeof message?.reasoning === "string" && message.reasoning.length > 0
       ? message.reasoning
-      : typeof message?.reasoning_content === "string" && message.reasoning_content.length > 0
-        ? message.reasoning_content
-        : "";
-  if (reasoning.length > 0) content.push({ type: "thinking", thinking: reasoning, signature: "" });
-
-  // Gateway-executed searches happened before the terminal step's output.
-  for (const search of searches) content.push(...executedSearchBlocks(search));
+      : "";
+  const narration =
+    typeof message?.reasoning_content === "string" &&
+    message.reasoning_content.length > 0
+      ? message.reasoning_content.replace(/\*\*/g, "")
+      : "";
+  if (nativeReasoning.length === 0 && rawReasoning.length > 0) {
+    // Generic providers cannot produce an Anthropic-verifiable signature.
+    // The empty marker makes the block displayable; ingress deliberately
+    // refuses to replay it as native signed history.
+    content.push({
+      type: "thinking",
+      thinking: rawReasoning,
+      signature: ""
+    });
+  }
+  if (narration.length > 0) {
+    content.push({ type: "thinking", thinking: narration, signature: "" });
+  }
 
   const text = typeof message?.content === "string" ? message.content : "";
   if (text.length > 0) content.push({ type: "text", text });
@@ -485,8 +650,14 @@ export function chatToAnthropicMessage(
     role: "assistant",
     model,
     content,
-    stop_reason: mapStopReason(choice?.finish_reason),
-    stop_sequence: null
+    stop_reason:
+      typeof choice?.anthropic_stop_reason === "string"
+        ? choice.anthropic_stop_reason
+        : mapStopReason(choice?.finish_reason),
+    stop_sequence:
+      typeof choice?.anthropic_stop_sequence === "string"
+        ? choice.anthropic_stop_sequence
+        : null
   };
   if (openai.usage !== undefined) {
     response.usage = {
@@ -508,8 +679,10 @@ type StreamState = {
   textOpen: boolean;
   textIndex: number;
   thinkingOpen: boolean;
-  thinkingClosed: boolean;
   thinkingIndex: number;
+  thinkingSourceIndex: number | undefined;
+  pendingNarration: string[];
+  outputStarted: boolean;
   nextIndex: number;
   finished: boolean;
   inputTokens: number | undefined;
@@ -538,8 +711,10 @@ export function openAiSseToAnthropic(
     textOpen: false,
     textIndex: -1,
     thinkingOpen: false,
-    thinkingClosed: false,
     thinkingIndex: -1,
+    thinkingSourceIndex: undefined,
+    pendingNarration: [],
+    outputStarted: false,
     nextIndex: 0,
     finished: false,
     inputTokens: undefined,
@@ -569,15 +744,13 @@ export function openAiSseToAnthropic(
     );
   };
 
-  // Thinking block lifecycle (the reasoning narration channel). Opened on the
-  // first `reasoning_content` delta, closed as soon as the first real output
-  // (text or tool_use) begins — thinking always precedes the answer. No
-  // signature is emitted: the gateway never verifies round-tripped thinking
-  // (the request translator drops thinking blocks entirely).
+  // Generic reasoning has no provider-verifiable signature. Native Anthropic
+  // metadata below carries its real block lifecycle and signature separately.
   const ensureThinking = (controller: Controller): void => {
     ensureStarted(controller);
-    if (state.thinkingOpen || state.thinkingClosed) return;
+    if (state.thinkingOpen || state.outputStarted) return;
     state.thinkingOpen = true;
+    state.thinkingSourceIndex = undefined;
     state.thinkingIndex = state.nextIndex++;
     controller.enqueue(
       sse("content_block_start", {
@@ -588,16 +761,48 @@ export function openAiSseToAnthropic(
     );
   };
 
-  const closeThinking = (controller: Controller): void => {
-    if (!state.thinkingOpen || state.thinkingClosed) return;
-    state.thinkingClosed = true;
+  const closeThinking = (controller: Controller, sourceIndex?: number): void => {
+    if (!state.thinkingOpen) return;
+    if (
+      sourceIndex !== undefined &&
+      state.thinkingSourceIndex !== undefined &&
+      sourceIndex !== state.thinkingSourceIndex
+    ) {
+      return;
+    }
     state.thinkingOpen = false;
     controller.enqueue(sse("content_block_stop", { type: "content_block_stop", index: state.thinkingIndex }));
+    state.thinkingSourceIndex = undefined;
+  };
+
+  const emitNarration = (controller: Controller, text: string): void => {
+    ensureThinking(controller);
+    if (!state.thinkingOpen || state.thinkingSourceIndex !== undefined) return;
+    controller.enqueue(
+      sse("content_block_delta", {
+        type: "content_block_delta",
+        index: state.thinkingIndex,
+        delta: {
+          type: "thinking_delta",
+          thinking: text.replace(/\*\*/g, "")
+        }
+      })
+    );
+  };
+
+  const flushPendingNarration = (controller: Controller): void => {
+    if (state.pendingNarration.length === 0) return;
+    const pending = state.pendingNarration.join("");
+    state.pendingNarration = [];
+    emitNarration(controller, pending);
   };
 
   const ensureText = (controller: Controller): void => {
     ensureStarted(controller);
     closeThinking(controller);
+    flushPendingNarration(controller);
+    closeThinking(controller);
+    state.outputStarted = true;
     if (state.textOpen) return;
     state.textOpen = true;
     state.textIndex = state.nextIndex++;
@@ -612,6 +817,8 @@ export function openAiSseToAnthropic(
 
   const closeOpenBlocks = (controller: Controller): void => {
     closeThinking(controller);
+    flushPendingNarration(controller);
+    closeThinking(controller);
     if (state.textOpen) {
       controller.enqueue(sse("content_block_stop", { type: "content_block_stop", index: state.textIndex }));
     }
@@ -620,7 +827,11 @@ export function openAiSseToAnthropic(
     }
   };
 
-  const finalize = (controller: Controller, stopReason: string): void => {
+  const finalize = (
+    controller: Controller,
+    stopReason: string,
+    stopSequence: string | null = null
+  ): void => {
     if (state.finished) return;
     state.finished = true;
     if (state.keepaliveTimer !== undefined) clearInterval(state.keepaliveTimer);
@@ -628,7 +839,7 @@ export function openAiSseToAnthropic(
     controller.enqueue(
       sse("message_delta", {
         type: "message_delta",
-        delta: { stop_reason: stopReason, stop_sequence: null },
+        delta: { stop_reason: stopReason, stop_sequence: stopSequence },
         ...(state.inputTokens !== undefined || state.outputTokens !== undefined
           ? {
               usage: {
@@ -681,6 +892,9 @@ export function openAiSseToAnthropic(
   const handleServerToolMarker = (controller: Controller, marker: ServerToolMarker): void => {
     ensureStarted(controller);
     closeThinking(controller);
+    flushPendingNarration(controller);
+    closeThinking(controller);
+    state.outputStarted = true;
     if (marker.phase === "start") {
       const index = state.nextIndex++;
       controller.enqueue(
@@ -713,6 +927,82 @@ export function openAiSseToAnthropic(
       })
     );
     controller.enqueue(sse("content_block_stop", { type: "content_block_stop", index }));
+    // A completed server-side tool step is an internal model boundary, not the
+    // final answer. The continuation model may legitimately begin with another
+    // signed thinking/redacted block.
+    state.outputStarted = false;
+  };
+
+  const handleReasoningDetails = (
+    controller: Controller,
+    details: readonly AnthropicReasoningDetail[]
+  ): boolean => {
+    let carriedText = false;
+    for (const detail of details) {
+      if (detail.type === "redacted_thinking") {
+        if (state.outputStarted) continue;
+        ensureStarted(controller);
+        closeThinking(controller);
+        const index = state.nextIndex++;
+        controller.enqueue(
+          sse("content_block_start", {
+            type: "content_block_start",
+            index,
+            content_block: { type: "redacted_thinking", data: detail.data }
+          })
+        );
+        controller.enqueue(sse("content_block_stop", { type: "content_block_stop", index }));
+        continue;
+      }
+      if (detail.phase === "start") {
+        if (state.outputStarted) continue;
+        ensureStarted(controller);
+        closeThinking(controller);
+        state.thinkingOpen = true;
+        state.thinkingSourceIndex = detail.index;
+        state.thinkingIndex = state.nextIndex++;
+        controller.enqueue(
+          sse("content_block_start", {
+            type: "content_block_start",
+            index: state.thinkingIndex,
+            content_block: {
+              type: "thinking",
+              thinking: "",
+              signature: detail.signature ?? ""
+            }
+          })
+        );
+        continue;
+      }
+      if (
+        state.thinkingSourceIndex !== detail.index ||
+        !state.thinkingOpen ||
+        state.outputStarted
+      ) {
+        continue;
+      }
+      if (detail.phase === "delta" && typeof detail.thinking === "string") {
+        carriedText = true;
+        controller.enqueue(
+          sse("content_block_delta", {
+            type: "content_block_delta",
+            index: state.thinkingIndex,
+            delta: { type: "thinking_delta", thinking: detail.thinking }
+          })
+        );
+      } else if (detail.phase === "signature" && typeof detail.signature === "string") {
+        controller.enqueue(
+          sse("content_block_delta", {
+            type: "content_block_delta",
+            index: state.thinkingIndex,
+            delta: { type: "signature_delta", signature: detail.signature }
+          })
+        );
+      } else if (detail.phase === "stop") {
+        closeThinking(controller, detail.index);
+      }
+    }
+    return carriedText;
   };
 
   const process = (controller: Controller, chunk: OpenAiChunk): void => {
@@ -727,22 +1017,40 @@ export function openAiSseToAnthropic(
       return;
     }
     const delta = choice.delta ?? {};
-
-    if (typeof delta.reasoning_content === "string" && delta.reasoning_content.length > 0 && !state.thinkingClosed) {
-      ensureThinking(controller);
-      // The canonical narration is bold markdown (Codex's TUI requires bold
-      // markers to display reasoning); Claude renders thinking as plain text,
-      // so drop the markers here.
-      controller.enqueue(
-        sse("content_block_delta", {
-          type: "content_block_delta",
-          index: state.thinkingIndex,
-          delta: { type: "thinking_delta", thinking: delta.reasoning_content.replace(/\*\*/g, "") }
-        })
-      );
+    const nativeDetails = anthropicReasoningDetailsOf(
+      delta.reasoning_details,
+      "stream"
+    );
+    const nativeCarriedText =
+      nativeDetails.length > 0 &&
+      handleReasoningDetails(controller, nativeDetails);
+    if (
+      state.pendingNarration.length > 0 &&
+      (!state.thinkingOpen || state.thinkingSourceIndex === undefined)
+    ) {
+      flushPendingNarration(controller);
     }
 
-    if (typeof delta.reasoning === "string" && delta.reasoning.length > 0 && !state.thinkingClosed) {
+    if (
+      typeof delta.reasoning_content === "string" &&
+      delta.reasoning_content.length > 0 &&
+      !state.outputStarted
+    ) {
+      if (state.thinkingOpen && state.thinkingSourceIndex !== undefined) {
+        // Never contaminate provider-signed thinking with gateway narration:
+        // the signature must continue to describe exactly the native text.
+        state.pendingNarration.push(delta.reasoning_content);
+      } else {
+        emitNarration(controller, delta.reasoning_content);
+      }
+    }
+
+    if (
+      !nativeCarriedText &&
+      typeof delta.reasoning === "string" &&
+      delta.reasoning.length > 0 &&
+      !state.outputStarted
+    ) {
       // Raw model thinking tokens pass through verbatim: they are already
       // plain text, and Anthropic thinking blocks stream token deltas natively.
       ensureThinking(controller);
@@ -779,6 +1087,9 @@ export function openAiSseToAnthropic(
         if (block === undefined) {
           ensureStarted(controller);
           closeThinking(controller);
+          flushPendingNarration(controller);
+          closeThinking(controller);
+          state.outputStarted = true;
           block = state.nextIndex++;
           toolBlocks.push(block);
           controller.enqueue(
@@ -813,7 +1124,15 @@ export function openAiSseToAnthropic(
     if (chunk.usage?.prompt_tokens !== undefined) state.inputTokens = chunk.usage.prompt_tokens;
     if (chunk.usage?.completion_tokens !== undefined) state.outputTokens = chunk.usage.completion_tokens;
     if (choice.finish_reason !== null && choice.finish_reason !== undefined) {
-      finalize(controller, mapStopReason(choice.finish_reason));
+      finalize(
+        controller,
+        typeof choice.anthropic_stop_reason === "string"
+          ? choice.anthropic_stop_reason
+          : mapStopReason(choice.finish_reason),
+        typeof choice.anthropic_stop_sequence === "string"
+          ? choice.anthropic_stop_sequence
+          : null
+      );
     }
   };
 
@@ -931,6 +1250,13 @@ export async function handleAnthropicMessages(
   signal?: AbortSignal,
   backendOptions: BackendRequestOptions = {}
 ): Promise<Response> {
+  const invalidThinking = thinkingValidationError(body);
+  if (invalidThinking !== undefined) {
+    return jsonResponse(400, {
+      type: "error",
+      error: { type: "invalid_request_error", message: invalidThinking }
+    });
+  }
   const requestedModel = body.model ?? backend.defaultModel ?? "";
   const upstreamModel = backend.resolveModel?.(body.model) ?? backend.defaultModel;
   // Server-executed web search is honored when the caller declared the server
@@ -982,7 +1308,15 @@ export async function handleAnthropicMessages(
         error: { type: "api_error", message: detail.slice(0, 2000) }
       });
     }
-    return jsonResponse(200, chatToAnthropicMessage(outcome.openai as OpenAiResponse, requestedModel, outcome.searches));
+    return jsonResponse(
+      200,
+      chatToAnthropicMessage(
+        outcome.openai as OpenAiResponse,
+        requestedModel,
+        outcome.searches,
+        outcome.events
+      )
+    );
   }
 
   if (body.stream === true) {
@@ -1010,6 +1344,12 @@ function isAnthropicFamilyId(id: string): boolean {
 /** The `claude-` prefix used to alias non-Anthropic models past Claude's filter. */
 export const CLAUDE_ALIAS_PREFIX = "claude-";
 
+export type ClaudePickerModelRoute = {
+  publicId: string;
+  nativeId: string;
+  provider: string;
+};
+
 /**
  * The id a model is advertised under in Claude Code's `/model` picker. Claude
  * only lists ids beginning with `claude`/`anthropic`, so non-Anthropic models
@@ -1022,6 +1362,18 @@ export function claudeModelAlias(id: string): string {
   return isAnthropicFamilyId(id) ? id : `${CLAUDE_ALIAS_PREFIX}${id}`;
 }
 
+export function resolveClaudeModelAlias(
+  requested: string | undefined,
+  modelIds: readonly string[] = []
+): string | undefined {
+  if (requested === undefined || modelIds.includes(requested)) return requested;
+  if (!requested.startsWith(CLAUDE_ALIAS_PREFIX)) return requested;
+  const candidate = requested.slice(CLAUDE_ALIAS_PREFIX.length);
+  return modelIds.includes(candidate) && claudeModelAlias(candidate) === requested
+    ? candidate
+    : requested;
+}
+
 /**
  * Anthropic-shaped `/v1/models` discovery response. Every advertised model is
  * listed so it appears in Claude Code's `/model` picker: Anthropic-family ids
@@ -1031,7 +1383,8 @@ export function claudeModelAlias(id: string): string {
  */
 export function anthropicModelsResponse(
   backendModel: string | undefined,
-  modelIds?: readonly string[]
+  modelIds?: readonly string[],
+  modelRoutes: readonly ClaudePickerModelRoute[] = []
 ): Response {
   const source =
     modelIds !== undefined && modelIds.length > 0
@@ -1040,12 +1393,21 @@ export function anthropicModelsResponse(
         ? [backendModel]
         : [];
   const seen = new Set<string>();
+  const routes = new Map(modelRoutes.map((route) => [route.publicId, route]));
   const models: Array<{ type: "model"; id: string; display_name: string; created_at: string }> = [];
   for (const realId of source) {
-    const id = claudeModelAlias(realId);
+    const route = routes.get(realId);
+    const displayName =
+      route?.provider === "claude-code" ? route.nativeId : realId;
+    const id = claudeModelAlias(displayName);
     if (seen.has(id)) continue;
     seen.add(id);
-    models.push({ type: "model", id, display_name: realId, created_at: new Date(0).toISOString() });
+    models.push({
+      type: "model",
+      id,
+      display_name: displayName,
+      created_at: new Date(0).toISOString()
+    });
   }
   const ids = models.map((model) => model.id);
   return new Response(

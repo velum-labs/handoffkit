@@ -62,3 +62,31 @@ test("opencode driver maps buffered parts into canonical events", async () => {
     await instance.dispose();
   }
 });
+
+test("opencode driver forwards an opaque effort as the SDK variant", async () => {
+  let observed: unknown;
+  const effortDriver = createOpencodeDriver({
+    backendFactory: async () => ({
+      ...fakeBackend(),
+      prompt: async (input) => {
+        observed = input.reasoning;
+        return { parts: [] };
+      }
+    })
+  });
+  const instance = await effortDriver.createInstance(
+    effortDriver.configSchema.parse(config())
+  );
+  try {
+    const session = await instance.startSession({
+      cwd: process.cwd(),
+      reasoning: { mode: "effort", effort: "deep" }
+    });
+    for await (const _event of session.sendTurn({ prompt: "hello" })) {
+      // Drain.
+    }
+    assert.deepEqual(observed, { mode: "effort", effort: "deep" });
+  } finally {
+    await instance.dispose();
+  }
+});
