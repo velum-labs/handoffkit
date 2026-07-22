@@ -39,7 +39,6 @@ function productionSources(directory: string): string[] {
 test("independent command surface is complete and has no compatibility aliases", () => {
   const program = buildProgram();
   const expected = [
-    "gateway",
     "daemon",
     "start",
     "stop",
@@ -63,9 +62,9 @@ test("independent command surface is complete and has no compatibility aliases",
     program.commands.map((entry) => entry.name()).sort(),
     expected.sort()
   );
-  assert.deepEqual(
-    command(program, "gateway").commands.map((entry) => entry.name()).sort(),
-    ["serve"]
+  assert.equal(
+    program.commands.some((entry) => entry.name() === "gateway"),
+    false
   );
   assert.deepEqual(
     command(program, "daemon").commands.map((entry) => entry.name()).sort(),
@@ -124,15 +123,12 @@ test("dynamic completion follows the command tree", () => {
   assert.equal(topLevel.includes("daemon"), false);
   assert.equal(topLevel.includes("gateway"), false);
   assert.ok(completionCandidates(program, ["co"]).includes("config"));
-  assert.deepEqual(completionCandidates(program, ["gateway", "s"]), [
-    "serve"
-  ]);
   assert.deepEqual(completionCandidates(program, ["accounts", "s"]), [
     "status"
   ]);
   assert.ok(completionCandidates(program, ["codex", "in"]).includes("install"));
   assert.ok(
-    completionCandidates(program, ["gateway", "serve", "--p"]).includes("--port")
+    completionCandidates(program, ["start", "--p"]).includes("--port")
   );
   assert.deepEqual(completionCandidates(program, ["accounts", "remove", ""]), [
     "antigravity",
@@ -154,12 +150,11 @@ test("dynamic completion follows the command tree", () => {
   ]);
 });
 
-test("serve CLI documents explicit data-plane authentication", () => {
+test("start CLI documents explicit data-plane authentication", () => {
   const program = buildProgram();
-  const gateway = command(program, "gateway");
-  const serve = gateway.commands.find((entry) => entry.name() === "serve");
-  assert.ok(serve);
-  assert.match(serve.helpInformation(), /authentication token/);
+  const start = program.commands.find((entry) => entry.name() === "start");
+  assert.ok(start);
+  assert.match(start.helpInformation(), /authentication token/);
 });
 
 test("account removal completion only suggests managed labels for its provider", () => {

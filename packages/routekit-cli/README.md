@@ -164,14 +164,13 @@ routekit daemon logs -f
 routekit daemon service install
 routekit daemon service status
 routekit daemon service uninstall
-routekit gateway serve
 ```
 
-The hidden `daemon` and `gateway` command groups remain available for repair,
-automation compatibility, and foreground development. `daemon service install`
-rewrites a moved systemd/launchd unit; `gateway serve` accepts foreground-only
-configuration overrides and exits with its terminal. They are not alternate
-normal startup paths.
+The hidden `daemon` command group remains available for repair, diagnostics,
+and automation compatibility. `daemon service install` rewrites a moved
+systemd/launchd unit. The only foreground entrypoint is the internal
+`daemon run`, which supervisors and the detached spawner execute; it is not a
+user workflow.
 
 ### Migrating existing lifecycle commands
 
@@ -182,13 +181,15 @@ normal startup paths.
 - Existing `routekit daemon service install` users can use `routekit start`;
   RouteKit chooses and installs the available supervisor automatically. Keep
   the service command only for unit repair, inspection, or removal.
-- Existing `routekit gateway serve` scripts continue to work as an advanced
-  foreground path. Interactive use should switch to `routekit start`.
+- `routekit gateway serve` has been removed. Use `routekit start`; external
+  clients read the gateway URL from `routekit status` and the data token from
+  `routekit daemon auth show`.
 - On first daemon-backed startup, RouteKit retires legacy `gateway` records and
   systemd/launchd units before publishing the singleton daemon record.
 - Import project configuration with `routekit config import --from
   .routekit/router.yaml`; the singleton never silently adopts a project
-  overlay.
+  overlay. `--config` / `ROUTEKIT_CONFIG` remain doctor/migration recovery
+  flags only.
 
 ### Graceful shutdown and upgrades
 

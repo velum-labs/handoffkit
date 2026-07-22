@@ -524,9 +524,9 @@
     {
       "id": "process.routekit-cli-serve",
       "category": "process",
-      "expectation": "The advanced foreground RouteKit process reports machine-readable readiness and serves model discovery plus every supported gateway dialect against a local upstream.",
+      "expectation": "The internal RouteKit daemon process entrypoint reports machine-readable readiness and serves model discovery plus every supported gateway dialect against a local upstream.",
       "status": "required",
-      "testFile": "packages/routekit-cli/src/test/serve-process-e2e.test.ts",
+      "testFile": "packages/routekit-cli/src/test/daemon-run-process-e2e.test.ts",
       "anchor": "reports JSON readiness and serves every supported door"
     },
     {
@@ -559,7 +559,7 @@
       "expectation": "Fusion bridges authenticated external RouteKit CLI traffic over loopback and closes only the bridge, leaving the independently owned RouteKit process alive.",
       "status": "required",
       "testFile": "packages/cli/src/test/stack-model-ids-e2e.test.ts",
-      "anchor": "authenticated external routekit gateway serve CLI uses a Fusion-owned loopback bridge"
+      "anchor": "authenticated external routekit daemon CLI uses a Fusion-owned loopback bridge"
     },
     {
       "id": "observability.trace-semantics",

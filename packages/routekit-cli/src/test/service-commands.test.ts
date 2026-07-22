@@ -3,7 +3,7 @@ import test from "node:test";
 
 import { parseRouterConfig } from "@routekit/gateway";
 
-import { drainGraceMs, serveArgvFrom } from "../commands/serve-options.js";
+import { drainGraceMs } from "../commands/serve-options.js";
 import { argsWithPort } from "../commands/upgrade.js";
 import {
   daemonUnitSpec,
@@ -78,48 +78,14 @@ test("drain grace resolves flag, environment, and default in order", () => {
   }
 });
 
-test("serve argv reconstruction preserves options and pins the config path", () => {
-  assert.deepEqual(
-    serveArgvFrom({
-      options: {
-        host: "127.0.0.1",
-        port: "8080",
-        authToken: "secret",
-        portless: false,
-        drainGrace: "10"
-      },
-      configPath: "/abs/router.yaml"
-    }),
-    [
-      "--config",
-      "/abs/router.yaml",
-      "gateway",
-      "serve",
-      "--host",
-      "127.0.0.1",
-      "--port",
-      "8080",
-      "--auth-token",
-      "secret",
-      "--no-portless",
-      "--drain-grace",
-      "10"
-    ]
-  );
-  assert.deepEqual(
-    serveArgvFrom({ options: { host: "127.0.0.1", port: "8080" }, port: "0" }),
-    ["gateway", "serve", "--host", "127.0.0.1", "--port", "0"]
-  );
-});
-
 test("blue-green replacement argv rebinds the port to an ephemeral one", () => {
   assert.deepEqual(
-    argsWithPort(["gateway", "serve", "--port", "8080", "--no-portless"], "0"),
-    ["gateway", "serve", "--port", "0", "--no-portless"]
+    argsWithPort(["daemon", "run", "--port", "8080", "--no-portless"], "0"),
+    ["daemon", "run", "--port", "0", "--no-portless"]
   );
-  assert.deepEqual(argsWithPort(["gateway", "serve"], "0"), [
-    "gateway",
-    "serve",
+  assert.deepEqual(argsWithPort(["daemon", "run"], "0"), [
+    "daemon",
+    "run",
     "--port",
     "0"
   ]);

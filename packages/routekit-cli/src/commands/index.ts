@@ -10,7 +10,6 @@ import { registerAccounts } from "./accounts.js";
 import { registerConfig } from "./config.js";
 import { registerDaemon } from "./daemon.js";
 import { registerDoctor } from "./doctor.js";
-import { registerGateway } from "./gateway.js";
 import { registerLaunchers } from "./launchers.js";
 import { registerModels } from "./models.js";
 import { registerProviders } from "./providers.js";
@@ -32,7 +31,6 @@ export function registerCommands(program: Command): void {
   registerStart(program);
   registerStop(program);
   registerDaemon(program);
-  registerGateway(program);
   registerLaunchers(program);
 
   program.commandsGroup("Inspect");

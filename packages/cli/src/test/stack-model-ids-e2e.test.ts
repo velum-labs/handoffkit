@@ -10,7 +10,6 @@ import {
   judgeAnalysis,
   repoRoot,
   scriptFusedTurn,
-  spawnCaptured,
   stackToolingSkip,
   startProviderSim
 } from "@fusionkit/testkit";
@@ -256,12 +255,14 @@ test(
 );
 
 test(
-  "authenticated external routekit gateway serve CLI uses a Fusion-owned loopback bridge",
+  "authenticated external routekit daemon CLI uses a Fusion-owned loopback bridge",
   { skip: SKIP },
   async () => {
     const sim = await startProviderSim();
     const repo = initializeRepository();
-    const configPath = join(repo, "routekit.yaml");
+    const home = join(repo, "routekit-home");
+    const configPath = join(home, ".config", "routekit", "router.yaml");
+    mkdirSync(join(home, ".config", "routekit"), { recursive: true });
     await scriptFusedTurn(sim, {
       candidates: { "provider-model": "candidate through auth bridge" },
       judgeModel: "provider-model",
@@ -278,47 +279,46 @@ test(
     );
     const routerPort = await freePort();
     const routerUrl = `http://127.0.0.1:${routerPort}`;
-    const routekit = spawnCaptured({
-      command: process.execPath,
-      args: [
-        join(repoRoot(), "packages", "routekit-cli", "dist", "index.js"),
-        "--config",
-        configPath,
-        "gateway",
-        "serve",
-        "--host",
-        "127.0.0.1",
+    const routekitCli = join(repoRoot(), "packages", "routekit-cli", "dist", "index.js");
+    const routekitEnv = {
+      ...process.env,
+      HOME: home,
+      ROUTEKIT_HOME: join(repo, ".routekit-state"),
+      ROUTEKIT_NO_SUPERVISOR: "1",
+      OPENAI_API_KEY: "test-provider-key",
+      OPENAI_BASE_URL: `${sim.url}/v1`,
+      PORTLESS: "0",
+      ROUTEKIT_PORTLESS: "0",
+      NO_COLOR: "1"
+    };
+    const routekitCommand = (args: readonly string[]): Record<string, unknown> =>
+      JSON.parse(
+        execFileSync(process.execPath, [routekitCli, ...args], {
+          cwd: repo,
+          env: routekitEnv,
+          encoding: "utf8"
+        })
+      ) as Record<string, unknown>;
+    let daemonPid: number | undefined;
+    let stack: Awaited<ReturnType<typeof startFusionStack>> | undefined;
+    let fusionClosed = false;
+    try {
+      const started = routekitCommand([
+        "start",
         "--port",
         String(routerPort),
         "--auth-token",
         "external-router-secret",
         "--no-portless",
         "--json"
-      ],
-      cwd: repo,
-      env: {
-        ...process.env,
-        ROUTEKIT_HOME: join(repo, ".routekit-state"),
-        OPENAI_API_KEY: "test-provider-key",
-        OPENAI_BASE_URL: `${sim.url}/v1`,
-        PORTLESS: "0",
-        NO_COLOR: "1"
-      }
-    });
-    let stack: Awaited<ReturnType<typeof startFusionStack>> | undefined;
-    let fusionClosed = false;
-    try {
-      await routekit.nextLine(/"authenticated": true/, 10_000);
-      const ready = JSON.parse(routekit.log()) as {
-        url?: string;
-        authenticated?: boolean;
-      };
-      assert.equal(ready.authenticated, true);
-      assert.equal(ready.url, routerUrl);
+      ]);
+      assert.equal(started.alreadyRunning, false);
+      assert.equal(started.url, routerUrl);
+      daemonPid = started.pid as number;
       const directReady = await fetch(`${routerUrl}/v1/models`, {
         headers: { authorization: "Bearer external-router-secret" }
       });
-      assert.equal(directReady.status, 200, routekit.log());
+      assert.equal(directReady.status, 200);
 
       stack = await startFusionStack({
         repo,
@@ -364,10 +364,23 @@ test(
         headers: { authorization: "Bearer external-router-secret" }
       });
       assert.equal(external.status, 200);
-      assert.equal(routekit.child.exitCode, null, "Fusion close must not kill external RouteKit");
+      assert.ok(daemonPid !== undefined);
+      assert.doesNotThrow(
+        () => process.kill(daemonPid!, 0),
+        "Fusion close must not kill external RouteKit"
+      );
+      const stopped = routekitCommand(["stop", "--json"]);
+      assert.equal(stopped.stopped, true);
+      daemonPid = undefined;
     } finally {
       if (!fusionClosed) await stack?.close();
-      await routekit.close();
+      if (daemonPid !== undefined) {
+        try {
+          process.kill(daemonPid, "SIGKILL");
+        } catch {
+          // already gone
+        }
+      }
       await sim.close();
       rmSync(repo, { recursive: true, force: true });
     }

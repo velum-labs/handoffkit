@@ -96,8 +96,8 @@ async function requestJson(
   });
 }
 
-test("real routekit gateway serve process reports JSON readiness and serves every supported door", async () => {
-  const root = mkdtempSync(join(tmpdir(), "routekit-serve-process-"));
+test("real routekit daemon run process reports JSON readiness and serves every supported door", async () => {
+  const root = mkdtempSync(join(tmpdir(), "routekit-daemon-run-process-"));
   const project = join(root, "project");
   const stateHome = join(root, "state");
   mkdirSync(join(project, ".routekit"), { recursive: true });
@@ -159,19 +159,21 @@ test("real routekit gateway serve process reports JSON readiness and serves ever
       ""
     ].join("\n")
   );
+  const authTokenFile = join(root, "data-token");
+  writeFileSync(authTokenFile, "test-gateway-token\n", { mode: 0o600 });
   const routekit = spawnCli(
     [
-      "--config",
+      "daemon",
+      "run",
+      "--config-path",
       configPath,
-      "gateway",
-      "serve",
       "--host",
       "127.0.0.1",
       "--port",
       "0",
       "--no-portless",
-      "--auth-token",
-      "test-gateway-token",
+      "--auth-token-file",
+      authTokenFile,
       "--json"
     ],
     {
@@ -182,16 +184,18 @@ test("real routekit gateway serve process reports JSON readiness and serves ever
         OPENAI_API_KEY: "mock-secret",
         OPENAI_BASE_URL: `http://127.0.0.1:${upstreamPort}/v1`,
         PORTLESS: "0",
+        ROUTEKIT_PORTLESS: "0",
         NO_COLOR: "1"
       }
     }
   );
   try {
     const readiness = await waitForJsonLine(routekit);
-    assert.equal(readiness.authenticated, true);
-    assert.equal(readiness.config, configPath);
-    assert.equal(typeof readiness.url, "string");
-    const routekitUrl = readiness.url as string;
+    assert.equal(readiness.event, "listening");
+    assert.equal(typeof readiness.controlUrl, "string");
+    assert.equal(typeof readiness.pid, "number");
+    assert.equal(typeof readiness.dataUrl, "string");
+    const routekitUrl = readiness.dataUrl as string;
 
     const models = await requestJson(routekitUrl, "/v1/models");
     assert.equal(models.status, 200);
