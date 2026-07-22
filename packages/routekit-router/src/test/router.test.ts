@@ -150,7 +150,6 @@ test("SDK serves an empty catalog when no providers are configured", async () =>
     });
     assert.equal(anthropicUnknown.status, 400);
     assert.deepEqual(await anthropicUnknown.json(), {
-      type: "error",
       error: {
         type: "invalid_request_error",
         message: "unknown model: anthropic/not-configured"
