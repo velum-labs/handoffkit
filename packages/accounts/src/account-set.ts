@@ -36,6 +36,10 @@ export type SubscriptionAccountSetOptions = {
   fallbackCooldownSeconds?: number;
 };
 
+export type SubscriptionExecutionObserver = {
+  onAttempt?(account: { label: string }): void;
+};
+
 type PersistedMemberState = {
   limits?: AccountLimits;
   coolingUntil?: number;
@@ -552,7 +556,8 @@ export class SubscriptionAccountSet {
   async execute(
     model: string | undefined,
     operation: (credential: SubscriptionCredential) => Promise<Response>,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    observer?: SubscriptionExecutionObserver
   ): Promise<Response> {
     if (this.#members.length === 0) throw new SubscriptionAccountSetExhaustedError(this.mode);
     const excluded = new Set<string>();
@@ -563,6 +568,7 @@ export class SubscriptionAccountSet {
       const lease = await this.#acquire(model, excluded, signal);
       const member = lease.value;
       try {
+        observer?.onAttempt?.({ label: member.label });
         const response = await operation(member.credential);
         const headerLimits = this.#provider.parseLimits(response.headers);
         if (headerLimits !== undefined) this.#tracker.update(member.id, headerLimits);

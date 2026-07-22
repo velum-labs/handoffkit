@@ -157,9 +157,30 @@ test("singleton daemon exposes authenticated control and a stable reloadable dat
     });
     const response = await inflight;
     assert.equal(response.status, 200);
+    const callId = response.headers.get("x-routekit-model-call-id");
+    assert.ok(callId);
     assert.match(await response.text(), /daemon answer/);
     const afterInflight = await reloaded;
     assert.equal(afterInflight.revision, updated.revision + 1);
+    const inspection = await client.call("calls.inspect", { callId });
+    assert.equal(inspection.callId, callId);
+    assert.equal(inspection.effectiveModel, "openai/mock-model");
+    assert.equal(inspection.nativeModel, "mock-model");
+    assert.equal(inspection.provider, "openai");
+    assert.equal(inspection.billingMode, "api_key");
+    assert.deepEqual(inspection.retries, {
+      attempts: 1,
+      total: 0,
+      accountFailovers: 0
+    });
+    assert.equal(inspection.cost.unknownUsage, true);
+    assert.equal(inspection.cost.unknownCost, true);
+    assert.equal("account" in inspection, false);
+    await assert.rejects(
+      client.call("calls.inspect", { callId: "model_call_missing" }),
+      (error: unknown) =>
+        error instanceof ControlError && error.code === "not_found"
+    );
 
     await assert.rejects(
       client.call("config.update", {

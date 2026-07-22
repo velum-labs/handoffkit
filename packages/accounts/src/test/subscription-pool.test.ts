@@ -203,18 +203,27 @@ test("pool retries a short throttle locally, then tries only one alternate accou
     source: { kind: "directory", path: directory }
   });
   const seen: string[] = [];
+  const attemptedAccounts: string[] = [];
   try {
-    const response = await pool.execute("gpt-5.3-codex", (credential) => {
-      seen.push(credential.accessToken);
-      return Promise.resolve(
-        new Response(JSON.stringify({ quota: false }), {
-          status: 429,
-          headers: { "content-type": "application/json" }
-        })
-      );
-    });
+    const response = await pool.execute(
+      "gpt-5.3-codex",
+      (credential) => {
+        seen.push(credential.accessToken);
+        return Promise.resolve(
+          new Response(JSON.stringify({ quota: false }), {
+            status: 429,
+            headers: { "content-type": "application/json" }
+          })
+        );
+      },
+      undefined,
+      {
+        onAttempt: (account) => attemptedAccounts.push(account.label)
+      }
+    );
     assert.equal(response.status, 429);
     assert.deepEqual(seen, ["token-a", "token-a", "token-b", "token-b"]);
+    assert.deepEqual(attemptedAccounts, ["a", "a", "b", "b"]);
   } finally {
     await pool.close();
     rmSync(directory, { recursive: true, force: true });

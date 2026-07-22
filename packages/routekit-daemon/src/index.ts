@@ -95,6 +95,7 @@ import {
   recoverAccountTransactions,
   rollbackAccountTransaction
 } from "./account-transaction.js";
+import { CallAttributionStore } from "./call-attribution-store.js";
 
 export const ROUTEKIT_DAEMON_KIND = "daemon";
 export const ROUTEKIT_PRODUCT = "routekit";
@@ -419,6 +420,7 @@ export async function startRouteKitDaemon(
     writeRevisions(home, revisions);
     const sidecar = createCliproxySidecar({ env });
     sidecarRef = sidecar;
+    const callAttributions = new CallAttributionStore();
     const wantsCliproxySidecar = (config: RouterConfig): boolean =>
       config.providers["cliproxy"] !== undefined;
     // Router generations reach the managed sidecar with its own ingress key
@@ -441,6 +443,7 @@ export async function startRouteKitDaemon(
         host: "127.0.0.1",
         port: 0,
         env: routerEnv(),
+        provenance: callAttributions,
         drainGraceMs
       });
     await sidecar.reconcile(wantsCliproxySidecar(currentConfig));
@@ -695,6 +698,16 @@ export async function startRouteKitDaemon(
           });
         }
         return model;
+      },
+      "calls.inspect": async (params) => {
+        const inspection = callAttributions.get(params.callId);
+        if (inspection === undefined) {
+          throw new ControlError({
+            code: "not_found",
+            message: `unknown or expired model call: ${params.callId}`
+          });
+        }
+        return inspection;
       },
       "accounts.list": async () => ({
         accounts: accountEntries(env).map((entry) => {

@@ -239,7 +239,12 @@ export class CodexBackendRelay implements SubscriptionRelay {
    * through untouched, and the upstream response (typically SSE) streams back
    * unchanged. This is exactly the call plain Codex would have made.
    */
-  async relayResponses(headers: IncomingHttpHeaders, body: unknown, signal?: AbortSignal): Promise<Response> {
+  async relayResponses(
+    headers: IncomingHttpHeaders,
+    body: unknown,
+    signal?: AbortSignal,
+    options?: Parameters<SubscriptionRelay["relay"]>[3]
+  ): Promise<Response> {
     const request = (injected?: Record<string, string>): Promise<Response> => {
       const forwarded = forwardRelayHeaders(headers);
       if (injected !== undefined) {
@@ -264,17 +269,25 @@ export class CodexBackendRelay implements SubscriptionRelay {
       typeof body.model === "string"
         ? body.model
         : undefined;
-    return this.#auth.accounts.execute(model, (credential) =>
-      request(subscriptionProvider("codex").authHeaders(credential))
+    return this.#auth.accounts.execute(
+      model,
+      (credential) =>
+        request(subscriptionProvider("codex").authHeaders(credential)),
+      signal,
+      {
+        onAttempt: (account) =>
+          options?.onAttribution?.({ account })
+      }
     );
   }
 
   relay(
     headers: IncomingHttpHeaders,
     body: Parameters<SubscriptionRelay["relay"]>[1],
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    options?: Parameters<SubscriptionRelay["relay"]>[3]
   ): Promise<Response> {
-    return this.relayResponses(headers, body, signal);
+    return this.relayResponses(headers, body, signal, options);
   }
 
   snapshot(): SubscriptionAccountSetSnapshot | undefined {

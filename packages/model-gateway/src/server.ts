@@ -3,7 +3,10 @@ import { createServer } from "node:http";
 import type { IncomingMessage, ServerResponse } from "node:http";
 
 import { ProviderFailureError } from "@routekit/contracts";
-import type { ModelReasoningCapabilities } from "@routekit/contracts";
+import type {
+  ModelReasoningCapabilities,
+  RequestAttribution
+} from "@routekit/contracts";
 
 import {
   anthropicModelsResponse,
@@ -17,7 +20,11 @@ import { authorizedRequest } from "./auth.js";
 import { isCursorChatBody, translateCursorRequest } from "./adapters/cursor.js";
 import { handleResponses } from "./adapters/responses.js";
 import type { ResponsesRequest } from "./adapters/responses.js";
-import type { Backend, BackendModelRoute } from "./backend.js";
+import type {
+  Backend,
+  BackendModelRoute,
+  BackendRequestOptions
+} from "./backend.js";
 import {
   validateAnthropicRequest,
   validateChatRequest,
@@ -74,7 +81,8 @@ export type ProviderRelay = {
   relay(
     headers: IncomingMessage["headers"],
     body: AnthropicRequest | ResponsesRequest,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    options?: Pick<BackendRequestOptions, "onAttribution">
   ): Promise<Response>;
   models?(
     headers: IncomingMessage["headers"],
@@ -481,8 +489,12 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
         dialect: "openai-chat",
         body,
         defaultModel: backend.defaultModel,
-        invoke: (callId, signal) =>
-          backend.chat(body, signal, { modelCallId: callId, requestContext })
+        invoke: (callId, signal, onAttribution) =>
+          backend.chat(body, signal, {
+            modelCallId: callId,
+            requestContext,
+            onAttribution
+          })
       });
       return;
     }
@@ -513,8 +525,12 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
         dialect: "openai-chat",
         body,
         defaultModel: backend.defaultModel,
-        invoke: (callId, signal) =>
-          backend.chat(body, signal, { modelCallId: callId, requestContext })
+        invoke: (callId, signal, onAttribution) =>
+          backend.chat(body, signal, {
+            modelCallId: callId,
+            requestContext,
+            onAttribution
+          })
       });
       return;
     }
@@ -588,8 +604,16 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
           dialect: "anthropic-messages",
           body,
           defaultModel: backend.defaultModel,
-          invoke: (_callId, signal) =>
-            anthropicRelay.relay(req.headers, relayBody, signal)
+          attribution: {
+            effective_model: canonicalModel ?? rawBody.model,
+            native_model: route.nativeId,
+            provider: route.provider,
+            billing_mode: "subscription"
+          },
+          invoke: (_callId, signal, onAttribution) =>
+            anthropicRelay.relay(req.headers, relayBody, signal, {
+              onAttribution
+            })
         });
         return;
       }
@@ -606,7 +630,18 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
           dialect: "anthropic-messages",
           body,
           defaultModel: backend.defaultModel,
-          invoke: (_callId, signal) => anthropicRelay.relay(req.headers, body, signal)
+          attribution: {
+            effective_model: requestedModel ?? "claude-code/default",
+            ...(requestedModel !== undefined
+              ? { native_model: requestedModel }
+              : {}),
+            provider: "claude-code",
+            billing_mode: "subscription"
+          },
+          invoke: (_callId, signal, onAttribution) =>
+            anthropicRelay.relay(req.headers, body, signal, {
+              onAttribution
+            })
         });
         return;
       }
@@ -614,8 +649,11 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
         dialect: "anthropic-messages",
         body,
         defaultModel: backend.defaultModel,
-        invoke: (callId, signal) =>
-          handleAnthropicMessages(backend, body, callId, signal, { requestContext })
+        invoke: (callId, signal, onAttribution) =>
+          handleAnthropicMessages(backend, body, callId, signal, {
+            requestContext,
+            onAttribution
+          })
       });
       return;
     }
@@ -651,8 +689,16 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
           dialect: "openai-responses",
           body: canonicalBody,
           defaultModel: backend.defaultModel,
-          invoke: (_callId, signal) =>
-            codexProviderRelay.relay(req.headers, relayBody, signal)
+          attribution: {
+            effective_model: route.publicId,
+            native_model: route.nativeId,
+            provider: route.provider,
+            billing_mode: "subscription"
+          },
+          invoke: (_callId, signal, onAttribution) =>
+            codexProviderRelay.relay(req.headers, relayBody, signal, {
+              onAttribution
+            })
         });
         return;
       }
@@ -668,8 +714,18 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
           dialect: "openai-responses",
           body,
           defaultModel: backend.defaultModel,
-          invoke: (_callId, signal) =>
-            codexRequestRelay.relay(req.headers, body, signal)
+          attribution: {
+            effective_model: requestedModel ?? "codex/default",
+            ...(requestedModel !== undefined
+              ? { native_model: requestedModel }
+              : {}),
+            provider: "codex",
+            billing_mode: "client_auth"
+          },
+          invoke: (_callId, signal, onAttribution) =>
+            codexRequestRelay.relay(req.headers, body, signal, {
+              onAttribution
+            })
         });
         return;
       }
@@ -677,9 +733,10 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
         dialect: "openai-responses",
         body: canonicalBody,
         defaultModel: backend.defaultModel,
-        invoke: (callId, signal) =>
+        invoke: (callId, signal, onAttribution) =>
           handleResponses(backend, canonicalBody, callId, signal, {
-            requestContext
+            requestContext,
+            onAttribution
           })
       });
       return;
@@ -869,8 +926,58 @@ type ModelCallRoute = {
   dialect: GatewayDialect;
   body: unknown;
   defaultModel: string | undefined;
-  invoke: (callId: string, signal: AbortSignal) => Promise<Response>;
+  attribution?: Partial<RequestAttribution>;
+  invoke: (
+    callId: string,
+    signal: AbortSignal,
+    onAttribution: NonNullable<BackendRequestOptions["onAttribution"]>
+  ) => Promise<Response>;
 };
+
+function collectAttribution(seed: Partial<RequestAttribution> | undefined): {
+  report: NonNullable<BackendRequestOptions["onAttribution"]>;
+  snapshot(): RequestAttribution | undefined;
+} {
+  let current = { ...seed };
+  let attempts = 0;
+  let retries = 0;
+  let accountFailovers = 0;
+  let previousAccount: string | undefined;
+  return {
+    report: (update) => {
+      if (update.account !== undefined) {
+        attempts += 1;
+        if (attempts > 1) retries += 1;
+        if (previousAccount !== undefined && previousAccount !== update.account.label) {
+          accountFailovers += 1;
+        }
+        previousAccount = update.account.label;
+      }
+      current = { ...current, ...update };
+    },
+    snapshot: () => {
+      if (
+        current.effective_model === undefined ||
+        current.provider === undefined ||
+        current.billing_mode === undefined
+      ) {
+        return undefined;
+      }
+      return {
+        effective_model: current.effective_model,
+        ...(current.native_model !== undefined
+          ? { native_model: current.native_model }
+          : {}),
+        provider: current.provider,
+        billing_mode: current.billing_mode,
+        ...(current.account !== undefined ? { account: current.account } : {}),
+        attempts: Math.max(1, attempts),
+        retries,
+        account_failovers: accountFailovers
+      };
+    }
+  };
+}
 
 async function handleModelCall(
   res: ServerResponse,
@@ -878,6 +985,7 @@ async function handleModelCall(
   route: ModelCallRoute
 ): Promise<void> {
   const callId = modelCallId();
+  const attribution = collectAttribution(route.attribution);
   const started = Date.now();
   const startedAt = new Date(started).toISOString();
   const context: ModelGatewayCallContext = {
@@ -898,7 +1006,7 @@ async function handleModelCall(
   };
   res.once("close", onClose);
   try {
-    const upstream = await route.invoke(callId, aborter.signal);
+    const upstream = await route.invoke(callId, aborter.signal, attribution.report);
     // Only buffer the response body when a provenance sink will consume it.
     const body = await pipeUpstream(res, upstream, sink !== undefined, aborter.signal);
     const result = {
@@ -906,6 +1014,7 @@ async function handleModelCall(
       responseBody: body,
       durationMs: Date.now() - started
     };
+    context.attribution = attribution.snapshot();
     sink?.onModelCall?.(buildModelCallRecord(context, result));
     sink?.onModelCallRaw?.(context, result);
   } catch (error) {
@@ -916,6 +1025,7 @@ async function handleModelCall(
       durationMs: Date.now() - started,
       error
     };
+    context.attribution = attribution.snapshot();
     sink?.onModelCall?.(buildModelCallRecord(context, result));
     sink?.onModelCallRaw?.(context, result);
   } finally {

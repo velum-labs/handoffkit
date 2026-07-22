@@ -107,7 +107,7 @@ export class SubscriptionAccountBackend implements Backend, ProviderSource {
     const mode = options.accountSet.mode;
     this.sourceId = mode;
     const provider = subscriptionProvider(mode);
-    const transport: ProviderTransport = async (url, init) =>
+    const transport: ProviderTransport = async (url, init, requestOptions) =>
       await this.#accountSet.execute(modelFromRequest(init.body), async (credential) => {
         const headers = new Headers(init.headers);
         headers.delete("x-api-key");
@@ -115,7 +115,10 @@ export class SubscriptionAccountBackend implements Backend, ProviderSource {
           headers.set(name, value);
         }
         return await fetch(url, { ...init, headers });
-      }, init.signal ?? undefined);
+      }, init.signal ?? undefined, {
+        onAttempt: (account) =>
+          requestOptions?.onAttribution?.({ account })
+      });
     const backendOptions = {
       baseUrl: backendBaseUrl(mode),
       apiKey: "",

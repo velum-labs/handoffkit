@@ -7,6 +7,7 @@ import type { Command } from "commander";
 import { registerDynamicCompletion } from "../completion.js";
 
 import { registerAccounts } from "./accounts.js";
+import { registerCalls } from "./calls.js";
 import { registerConfig } from "./config.js";
 import { registerDaemon } from "./daemon.js";
 import { registerDoctor } from "./doctor.js";
@@ -76,6 +77,7 @@ export function registerCommands(program: Command): void {
   program.commandsGroup("Inspect");
   registerStatus(program);
   registerUsage(program);
+  registerCalls(program);
   registerModels(program);
   registerDoctor(program);
 

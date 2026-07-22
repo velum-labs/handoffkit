@@ -6,7 +6,10 @@
  * surface can stream straight through and the dialect adapters can consume the
  * same core without a second abstraction.
  */
-import type { ModelReasoningCapabilities } from "@routekit/contracts";
+import type {
+  ModelReasoningCapabilities,
+  RequestAttribution
+} from "@routekit/contracts";
 import { reasoningSelectionOf } from "./adapters/openai-chat-wire.js";
 
 export type BackendModelRoute = {
@@ -72,6 +75,8 @@ export type Backend = {
 export type BackendRequestOptions = {
   modelCallId?: string;
   reasoningCapabilities?: ModelReasoningCapabilities;
+  /** Request-local, sanitized attribution updates from routing/backends. */
+  onAttribution?: (update: Partial<RequestAttribution>) => void;
   /**
    * Neutral request context captured at the HTTP boundary. Backends may
    * interpret their own namespaced headers; the gateway does not.

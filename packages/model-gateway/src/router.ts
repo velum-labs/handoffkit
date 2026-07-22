@@ -427,6 +427,14 @@ export class CatalogBackend implements Backend {
       );
     }
     const nativeBody = this.#withNativeModel(body, entry.nativeId);
+    options?.onAttribution?.({
+      effective_model: entry.publicId,
+      native_model: entry.nativeId,
+      provider: entry.provider,
+      billing_mode: isSubscriptionProvider(entry.provider)
+        ? "subscription"
+        : "api_key"
+    });
     if (
       nativeBody !== null &&
       typeof nativeBody === "object" &&

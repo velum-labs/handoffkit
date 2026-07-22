@@ -119,10 +119,53 @@ test("concurrent product commands auto-start exactly one daemon and all use its 
       pid: number;
       controlToken?: string;
       dataUrl?: string;
+      authTokenFile?: string;
     };
     pid = record.pid;
     assert.equal(typeof record.controlToken, "string");
     assert.equal(typeof record.dataUrl, "string");
+    assert.equal(typeof record.authTokenFile, "string");
+    const dataToken = readFileSync(record.authTokenFile!, "utf8").trim();
+    const completion = await fetch(`${record.dataUrl}/v1/chat/completions`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${dataToken}`,
+        "content-type": "application/json"
+      },
+      body: JSON.stringify({
+        model: "openai/mock-model",
+        messages: [{ role: "user", content: "attribute this" }]
+      })
+    });
+    assert.equal(completion.status, 200);
+    const callId = completion.headers.get("x-routekit-model-call-id");
+    assert.ok(callId);
+    await completion.text();
+    const attributedJson = await run(
+      ["calls", "inspect", callId, "--json"],
+      project,
+      env
+    );
+    assert.equal(attributedJson.code, 0, attributedJson.stderr);
+    const attributed = JSON.parse(attributedJson.stdout) as {
+      callId?: string;
+      effectiveModel?: string;
+      provider?: string;
+      billingMode?: string;
+    };
+    assert.equal(attributed.callId, callId);
+    assert.equal(attributed.effectiveModel, "openai/mock-model");
+    assert.equal(attributed.provider, "openai");
+    assert.equal(attributed.billingMode, "api_key");
+    assert.doesNotMatch(attributedJson.stdout, /test/);
+    const attributedHuman = await run(
+      ["calls", "inspect", callId],
+      project,
+      env
+    );
+    assert.equal(attributedHuman.code, 0, attributedHuman.stderr);
+    assert.match(attributedHuman.stdout, /effective model\s+openai\/mock-model/);
+    assert.match(attributedHuman.stdout, /billing mode\s+api_key/);
     const status = await run(["daemon", "status", "--json"], project, env);
     assert.equal(status.code, 0, status.stderr);
     assert.equal((JSON.parse(status.stdout) as { pid?: number }).pid, pid);

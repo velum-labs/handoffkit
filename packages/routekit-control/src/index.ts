@@ -12,6 +12,12 @@ import {
   ControlError
 } from "@routekit/runtime";
 import type {
+  ModelCallStatus,
+  ModelUsage,
+  ProviderErrorKind,
+  RequestBillingMode
+} from "@routekit/contracts";
+import type {
   ControlClientOptions,
   ControlHandler,
   ControlHandlerContext
@@ -30,6 +36,7 @@ export type RouteKitControlMethod =
   | "providers.set"
   | "models.list"
   | "models.info"
+  | "calls.inspect"
   | "accounts.list"
   | "accounts.status"
   | "accounts.enroll"
@@ -53,6 +60,7 @@ export type RouteKitControlParams = {
   "providers.set": { provider: string; enabled: boolean; idempotencyKey?: string };
   "models.list": { provider?: string; refresh?: boolean };
   "models.info": { model: string };
+  "calls.inspect": { callId: string };
   "accounts.list": Record<string, never>;
   "accounts.status": Record<string, never>;
   "accounts.enroll": {
@@ -117,6 +125,36 @@ export type LaunchPreparation = {
   env: Record<string, string>;
 };
 
+export type RouteKitCallInspection = {
+  callId: string;
+  status: ModelCallStatus;
+  effectiveModel: string;
+  nativeModel?: string;
+  provider: string;
+  billingMode: RequestBillingMode;
+  account?: { label: string };
+  retries: {
+    attempts: number;
+    total: number;
+    accountFailovers: number;
+  };
+  usage?: ModelUsage;
+  cost: {
+    estimateUsd?: number;
+    unknownUsage: boolean;
+    unknownCost: boolean;
+  };
+  timing: {
+    startedAt: string;
+    finishedAt?: string;
+    latencyMs?: number;
+  };
+  error?: {
+    kind: ProviderErrorKind;
+    retryable?: boolean;
+  };
+};
+
 export type RouteKitControlResults = {
   "daemon.status": DaemonStatus;
   "daemon.reload": { reloaded: true; configRevision: number; accountRevision: number };
@@ -136,6 +174,7 @@ export type RouteKitControlResults = {
   "providers.set": ConfigSnapshot;
   "models.list": { models: ModelInfo[]; defaultModel?: string; revision: number };
   "models.info": ModelInfo;
+  "calls.inspect": RouteKitCallInspection;
   "accounts.list": { accounts: unknown[]; revision: number };
   "accounts.status": {
     accounts: Array<{
@@ -194,6 +233,7 @@ const METHODS: ReadonlySet<string> = new Set<RouteKitControlMethod>([
   "providers.set",
   "models.list",
   "models.info",
+  "calls.inspect",
   "accounts.list",
   "accounts.status",
   "accounts.enroll",
@@ -295,6 +335,9 @@ export function validateRouteKitParams<M extends RouteKitControlMethod>(
       break;
     case "models.info":
       requiredString(params, "model", method);
+      break;
+    case "calls.inspect":
+      requiredString(params, "callId", method);
       break;
     case "accounts.enroll":
       requiredEnum(params, "kind", method, ["claude-code", "codex"] as const);

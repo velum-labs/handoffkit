@@ -61,7 +61,16 @@ test("WS7: a built model-call record carries normalized provenance", () => {
       model: "gpt-5.5",
       stream: false,
       requestBody: { messages: [{ role: "user", content: "hi" }] },
-      startedAt: "2026-06-27T00:00:00.000Z"
+      startedAt: "2026-06-27T00:00:00.000Z",
+      attribution: {
+        effective_model: "openai/gpt-5.5",
+        native_model: "gpt-5.5",
+        provider: "openai",
+        billing_mode: "api_key",
+        attempts: 1,
+        retries: 0,
+        account_failovers: 0
+      }
     },
     { statusCode: 200, durationMs: 12, responseBody: Buffer.from(JSON.stringify({ id: "x" })) }
   );
@@ -69,4 +78,36 @@ test("WS7: a built model-call record carries normalized provenance", () => {
   assert.equal(record.endpoint_id, "openai-chat");
   assert.equal(record.status, "succeeded");
   assert.equal(record.metadata?.unknown_cost, true);
+  assert.deepEqual(record.metadata?.attribution, {
+    effective_model: "openai/gpt-5.5",
+    native_model: "gpt-5.5",
+    provider: "openai",
+    billing_mode: "api_key",
+    attempts: 1,
+    retries: 0,
+    account_failovers: 0
+  });
+});
+
+test("model-call provenance replaces raw upstream errors with a safe summary", () => {
+  const secret = "sk-secret-must-not-survive";
+  const record = buildModelCallRecord(
+    {
+      callId: "call_redacted",
+      dialect: "openai-chat",
+      requestedModel: "openai/gpt-5.5",
+      model: "openai/gpt-5.5",
+      stream: false,
+      requestBody: { messages: [{ role: "user", content: "hi" }] },
+      startedAt: "2026-06-27T00:00:00.000Z"
+    },
+    {
+      statusCode: 502,
+      durationMs: 2,
+      error: new Error(`authorization Bearer ${secret}`)
+    }
+  );
+  assert.equal(record.error?.message, "provider request failed");
+  assert.doesNotMatch(JSON.stringify(record), new RegExp(secret));
+  assert.doesNotMatch(JSON.stringify(record), /authorization/i);
 });

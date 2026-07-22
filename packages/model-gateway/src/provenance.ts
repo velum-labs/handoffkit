@@ -10,7 +10,8 @@ import type {
   ModelCallContract,
   ModelChatMessage,
   ModelUsage,
-  ProviderError
+  ProviderError,
+  RequestAttribution
 } from "@routekit/contracts";
 
 import { meterCall, parseUsage, parseUsageFromSse } from "./cost.js";
@@ -68,6 +69,7 @@ export type ModelGatewayCallContext = {
   requestBody: unknown;
   startedAt: string;
   endpointId?: string;
+  attribution?: RequestAttribution;
 };
 
 export type ModelGatewayCallResult = {
@@ -143,14 +145,17 @@ function providerError(result: ModelGatewayCallResult): ProviderError | undefine
         : result.statusCode === 400 || result.statusCode === 422
           ? "validation_error"
           : "provider_error";
+  const message =
+    kind === "timeout"
+      ? "provider request timed out"
+      : kind === "rate_limited"
+        ? "provider rate limited the request"
+        : kind === "validation_error"
+          ? "provider rejected the request"
+          : "provider request failed";
   return {
     kind,
-    message:
-      result.error instanceof Error
-        ? result.error.message
-        : result.error !== undefined
-          ? String(result.error)
-          : responseText(result.responseBody).slice(0, 500),
+    message,
     retryable: result.statusCode === 408 || result.statusCode === 429 || result.statusCode >= 500
   };
 }
@@ -180,6 +185,24 @@ export function buildModelCallRecord(
     requested_model: context.requestedModel ?? null,
     unknown_usage: callCost.unknownUsage,
     unknown_cost: callCost.unknownCost,
+    ...(context.attribution !== undefined
+      ? {
+          attribution: {
+            effective_model: context.attribution.effective_model,
+            ...(context.attribution.native_model !== undefined
+              ? { native_model: context.attribution.native_model }
+              : {}),
+            provider: context.attribution.provider,
+            billing_mode: context.attribution.billing_mode,
+            ...(context.attribution.account !== undefined
+              ? { account: { label: context.attribution.account.label } }
+              : {}),
+            attempts: context.attribution.attempts,
+            retries: context.attribution.retries,
+            account_failovers: context.attribution.account_failovers
+          }
+        }
+      : {}),
     ...(callCost.costUsd !== undefined ? { cost_estimate_usd: callCost.costUsd } : {})
   };
   return {

@@ -33,6 +33,26 @@ export type ModelUsage = {
   total_tokens?: number;
 };
 
+export type RequestBillingMode = "api_key" | "subscription" | "client_auth";
+
+/**
+ * Sanitized, per-request routing attribution. This intentionally contains no
+ * credentials, request headers, filesystem paths, or provider response text.
+ */
+export type RequestAttribution = {
+  effective_model: string;
+  native_model?: string;
+  provider: string;
+  billing_mode: RequestBillingMode;
+  account?: {
+    /** Operator-assigned local label for the selected subscription seat. */
+    label: string;
+  };
+  attempts: number;
+  retries: number;
+  account_failovers: number;
+};
+
 export type ProviderErrorKind =
   | "none"
   | "provider_error"

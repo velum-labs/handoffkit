@@ -152,7 +152,8 @@ export class AnthropicBackendRelay implements SubscriptionRelay {
   relay(
     headers: IncomingHttpHeaders,
     body: AnthropicRequest,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    options?: Parameters<ProviderRelay["relay"]>[3]
   ): Promise<Response> {
     return this.#accounts.execute(body.model, (credential) => {
       const upstreamHeaders = this.#upstreamHeaders(headers, credential.accessToken);
@@ -162,6 +163,9 @@ export class AnthropicBackendRelay implements SubscriptionRelay {
         body: JSON.stringify(withAnthropicAccount(body, credential.accountId)),
         ...(signal !== undefined ? { signal } : {})
       });
+    }, signal, {
+      onAttempt: (account) =>
+        options?.onAttribution?.({ account })
     });
   }
 
