@@ -130,15 +130,18 @@ export function createCliproxySidecar(input: {
         await stop();
         return;
       }
-      if (child !== undefined) return;
-      spawnOnce();
+      if (child === undefined) spawnOnce();
       if (child === undefined) return;
+      // Always wait for readiness — including after a crash respawn left a
+      // child handle before the listener was accepting connections.
       const deadline = Date.now() + READY_TIMEOUT_MS;
       while (Date.now() < deadline) {
         if (await reachable(READY_POLL_MS * 2)) return;
         await new Promise((resolve) => setTimeout(resolve, READY_POLL_MS));
       }
-      log("routekit cliproxy sidecar did not answer within its readiness window");
+      throw new Error(
+        "routekit cliproxy sidecar did not answer within its readiness window"
+      );
     },
     running: () => child !== undefined,
     managed: () => cliproxyManagedLocally(env),

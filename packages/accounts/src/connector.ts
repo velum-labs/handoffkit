@@ -12,6 +12,7 @@
  * The registry (`@routekit/registry` connectors section) is the single source
  * of truth for which connector backs which kind.
  */
+import { createHash } from "node:crypto";
 import { readdirSync, readFileSync, rmSync } from "node:fs";
 import { basename, join } from "node:path";
 
@@ -99,11 +100,18 @@ export function cliproxyAccountEntries(
     const label = name.slice(0, -".json".length);
     const kind =
       (type !== undefined ? accountKindForCliproxyAuthType(type) : undefined) ??
+      // Legacy cliproxy logins used raw provider aliases (`claude`, `codex`)
+      // that are native kinds today; surface the canonical registry kind.
+      (type !== undefined ? resolveAccountConnector(type)?.kind : undefined) ??
       type ??
       label.split("-")[0] ??
       "cliproxy";
     return { kind, label, path };
   });
+}
+
+function authFileFingerprint(path: string): string {
+  return createHash("sha256").update(readFileSync(path)).digest("hex");
 }
 
 /**
@@ -145,10 +153,13 @@ export type CliproxyLoginOptions = {
   runLogin?: (invocation: CliproxyLoginInvocation) => Promise<number>;
 };
 
-async function spawnCliproxyLogin(invocation: CliproxyLoginInvocation): Promise<number> {
+async function spawnCliproxyLogin(
+  invocation: CliproxyLoginInvocation,
+  env: Readonly<Record<string, string | undefined>>
+): Promise<number> {
   const spawned = superviseSpawn(invocation.command, invocation.args, {
     stdio: "inherit",
-    env: { ...process.env } as Record<string, string>
+    env: { ...process.env, ...env } as Record<string, string>
   });
   const result = await spawned.done;
   if (result.signal !== null) {
@@ -181,7 +192,11 @@ export async function loginCliproxyAccount(
     throw new Error("CLIProxyAPI is not installed");
   }
   ensureCliproxyConfig(env);
-  const before = new Set(cliproxyAccountEntries(env).map((entry) => entry.path));
+  const beforeEntries = cliproxyAccountEntries(env);
+  const beforePaths = new Set(beforeEntries.map((entry) => entry.path));
+  const beforeFingerprints = new Map(
+    beforeEntries.map((entry) => [entry.path, authFileFingerprint(entry.path)])
+  );
   const invocation: CliproxyLoginInvocation = {
     command: binary,
     args: [
@@ -191,16 +206,20 @@ export async function loginCliproxyAccount(
       ...(options.noBrowser === true ? ["-no-browser"] : [])
     ]
   };
-  const code = await (options.runLogin ?? spawnCliproxyLogin)(invocation);
+  const code = await (options.runLogin !== undefined
+    ? options.runLogin(invocation)
+    : spawnCliproxyLogin(invocation, env));
   if (code !== 0) throw new Error(`CLIProxyAPI login exited with code ${code}`);
   const after = cliproxyAccountEntries(env);
-  const added = after.filter((entry) => !before.has(entry.path));
+  const added = after.filter((entry) => !beforePaths.has(entry.path));
   if (added.length > 0) return { added };
-  // Re-login often overwrites the same auth file in place; treat a still-
-  // present account of this kind as a successful refresh rather than a miss.
-  const refreshed = after.filter((entry) =>
-    cliproxyAccountMatchesKind(entry, resolved.kind)
-  );
+  // Re-login often overwrites the same auth file in place; only treat entries
+  // whose fingerprint changed as a successful refresh.
+  const refreshed = after.filter((entry) => {
+    if (!cliproxyAccountMatchesKind(entry, resolved.kind)) return false;
+    const previous = beforeFingerprints.get(entry.path);
+    return previous !== undefined && authFileFingerprint(entry.path) !== previous;
+  });
   if (refreshed.length > 0) return { added: refreshed };
   throw new Error("CLIProxyAPI login completed without adding an account");
 }

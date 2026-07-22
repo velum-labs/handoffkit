@@ -65,8 +65,7 @@ test("cliproxy auth store entries classify by auth type and remove by label", ()
       false
     );
 
-    // Legacy cliproxy claude/codex auth files keep a raw type; they still
-    // match the native canonical kinds for removal routing.
+    // Legacy cliproxy claude/codex auth files canonicalize to native kinds.
     plantAuthFile(home, "legacy-claude@example.com", "claude");
     plantAuthFile(home, "legacy-codex@example.com", "codex");
     const legacy = cliproxyAccountEntries(env);
@@ -74,7 +73,8 @@ test("cliproxy auth store entries classify by auth type and remove by label", ()
     const codexLegacy = legacy.find((entry) => entry.label === "legacy-codex@example.com");
     assert.ok(claudeLegacy);
     assert.ok(codexLegacy);
-    assert.equal(claudeLegacy.kind, "claude");
+    assert.equal(claudeLegacy.kind, "claude-code");
+    assert.equal(codexLegacy.kind, "codex");
     assert.equal(cliproxyAccountMatchesKind(claudeLegacy, "claude-code"), true);
     assert.equal(cliproxyAccountMatchesKind(codexLegacy, "codex"), true);
     assert.equal(cliproxyAccountMatchesKind(claudeLegacy, "gemini"), false);
@@ -131,17 +131,25 @@ test("cliproxy login installs, runs the kind's flag, and reports added accounts"
       /without adding an account/
     );
     plantAuthFile(home, "antigravity-refresh@example.com", "antigravity");
+    plantAuthFile(home, "antigravity-untouched@example.com", "antigravity");
     const refreshed = await loginCliproxyAccount("gemini", {
       env,
       runLogin: async () => {
-        // Overwrite the same auth file in place (re-login refresh).
-        plantAuthFile(home, "antigravity-refresh@example.com", "antigravity");
+        // Overwrite one auth file in place; leave the sibling untouched.
+        writeFileSync(
+          join(home, "cliproxy", "auth", "antigravity-refresh@example.com.json"),
+          JSON.stringify({ type: "antigravity", refresh: 1 })
+        );
         return 0;
       }
     });
     assert.deepEqual(
       refreshed.added.map((entry) => [entry.kind, entry.label]),
       [["gemini", "antigravity-refresh@example.com"]]
+    );
+    await assert.rejects(
+      loginCliproxyAccount("gemini", { env, runLogin: async () => 0 }),
+      /without adding an account/
     );
     await assert.rejects(loginCliproxyAccount("codex", { env }), /not a cliproxy-backed/);
   } finally {

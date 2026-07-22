@@ -307,11 +307,14 @@ test("daemon owns the cliproxy sidecar: spawn, restart, account routing, shutdow
       'const http = require("node:http");',
       'const cfg = fs.readFileSync(process.argv[process.argv.indexOf("--config") + 1], "utf8");',
       "const port = Number(/port:\\s*(\\d+)/.exec(cfg)[1]);",
-      `fs.appendFileSync(${JSON.stringify(markerPath)}, process.pid + "\\n");`,
+      // Record the pid only after the listener is accepting so crash-recovery
+      // waiters do not race the bind.
       "http.createServer((req, res) => {",
       '  res.setHeader("content-type", "application/json");',
       '  res.end(JSON.stringify({ data: [{ id: "g-model", object: "model" }] }));',
-      '}).listen(port, "127.0.0.1");',
+      '}).listen(port, "127.0.0.1", () => {',
+      `  fs.appendFileSync(${JSON.stringify(markerPath)}, process.pid + "\\n");`,
+      "});",
       ""
     ].join("\n")
   );
@@ -378,6 +381,18 @@ test("daemon owns the cliproxy sidecar: spawn, restart, account routing, shutdow
         return seen.length === 2;
       }, 10_000),
       "sidecar was not respawned after a crash"
+    );
+    // Wait until the respawned listener answers discovery before mutating.
+    assert.ok(
+      await waitFor(async () => {
+        try {
+          const listed = await client.call("models.list", {});
+          return listed.models.some((model) => model.id === "cliproxy/g-model");
+        } catch {
+          return false;
+        }
+      }, 10_000),
+      "respawned sidecar did not become discoverable"
     );
 
     // accounts.sync rescans the store; accounts.remove routes by connector.

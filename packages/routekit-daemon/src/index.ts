@@ -438,12 +438,16 @@ export async function startRouteKitDaemon(
     ): Promise<void> => {
       // Sidecar reconcile runs before the generation commits; any failure
       // below must put the sidecar back to the still-live currentConfig.
-      await sidecar.reconcile(wantsCliproxySidecar(nextConfig));
       let candidate: RunningRouter;
       try {
+        await sidecar.reconcile(wantsCliproxySidecar(nextConfig));
         candidate = await startGeneration(nextConfig);
       } catch (error) {
-        await sidecar.reconcile(wantsCliproxySidecar(currentConfig));
+        try {
+          await sidecar.reconcile(wantsCliproxySidecar(currentConfig));
+        } catch {
+          // Best-effort rollback; surface the original mutation failure.
+        }
         throw error;
       }
       const previousDocument = currentDocument;
