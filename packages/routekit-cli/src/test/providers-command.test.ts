@@ -11,6 +11,7 @@ import { fileURLToPath } from "node:url";
 
 import { buildProgram } from "../cli.js";
 import { completionCandidates } from "../completion.js";
+import { isModelRouteInfo } from "../commands/models.js";
 
 const execFileAsync = promisify(execFile);
 const CLI_ENTRY = resolve(
@@ -27,6 +28,30 @@ async function runJson(args: readonly string[]): Promise<Record<string, unknown>
   );
   return JSON.parse(stdout) as Record<string, unknown>;
 }
+
+test("route info validation rejects stale daemon payloads", () => {
+  assert.equal(
+    isModelRouteInfo({
+      id: "openai/gpt-live",
+      provider: "openai",
+      capabilities: {}
+    }),
+    false
+  );
+  assert.equal(
+    isModelRouteInfo({
+      id: "openai/gpt-live",
+      provider: "openai",
+      nativeModel: "gpt-live",
+      accountClass: "api-key",
+      billingMode: "metered-api",
+      default: true,
+      capabilities: {},
+      reasoning: null
+    }),
+    true
+  );
+});
 
 test("providers add rejects retained internal providers before daemon work", async () => {
   const providers = buildProgram().commands.find(
@@ -130,8 +155,59 @@ test("providers and models commands use the live namespaced catalog", async () =
       "info",
       "openai/gpt-live"
     ]);
-    assert.equal(info.provider, "openai");
-    assert.equal(info.default, true);
+    assert.deepEqual(info, {
+      id: "openai/gpt-live",
+      provider: "openai",
+      nativeModel: "gpt-live",
+      accountClass: "api-key",
+      billingMode: "metered-api",
+      default: true,
+      capabilities: { streaming: "supported", tools: "degraded" },
+      reasoning: null
+    });
+    assert.doesNotMatch(JSON.stringify(info), /test-key/);
+
+    const human = await execFileAsync(
+      process.execPath,
+      [CLI_ENTRY, "models", "info", "openai/gpt-live"],
+      { env: { ...process.env, NO_COLOR: "1" }, encoding: "utf8" }
+    );
+    const humanOutput = `${human.stdout}\n${human.stderr}`;
+    assert.match(humanOutput, /openai\/gpt-live/);
+    assert.match(humanOutput, /provider\s+openai/);
+    assert.match(humanOutput, /native model\s+gpt-live/);
+    assert.match(humanOutput, /account class\s+api-key/);
+    assert.match(humanOutput, /billing mode\s+metered-api/);
+    assert.match(humanOutput, /default\s+yes/);
+    assert.match(humanOutput, /streaming=supported, tools=degraded/);
+    assert.match(humanOutput, /reasoning\s+not reported/);
+    assert.doesNotMatch(humanOutput, /test-key/);
+
+    await assert.rejects(
+      execFileAsync(
+        process.execPath,
+        [CLI_ENTRY, "--json", "models", "info", "openai/not-real"],
+        { env: process.env, encoding: "utf8" }
+      ),
+      (error: unknown) => {
+        const output =
+          typeof error === "object" && error !== null && "stdout" in error
+            ? String((error as { stdout?: unknown }).stdout)
+            : "";
+        const failure = JSON.parse(output) as {
+          error?: { code?: string; message?: string; try?: string };
+        };
+        assert.deepEqual(failure, {
+          error: {
+            code: "model_not_found",
+            message: "model is not in the live catalog: openai/not-real",
+            try: "routekit models list"
+          }
+        });
+        assert.doesNotMatch(output, /test-key/);
+        return true;
+      }
+    );
 
     const status = await runJson([
       "--json",

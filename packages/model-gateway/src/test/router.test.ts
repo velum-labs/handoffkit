@@ -232,6 +232,99 @@ test("catalog namespaces live models and strips the source before dispatch", asy
       ["openrouter/moonshotai/kimi-k2-thinking", "openrouter"]
     ]
   );
+  assert.deepEqual(backend.modelInfo("openai/gpt-5.5"), {
+    id: "openai/gpt-5.5",
+    provider: "openai",
+    nativeModel: "gpt-5.5",
+    accountClass: "api-key",
+    billingMode: "metered-api",
+    default: false,
+    capabilities: {},
+    reasoning: null
+  });
+  assert.equal(backend.modelInfo("openai/not-real"), undefined);
+});
+
+test("model info exhaustively classifies subscription and proxy billing", async () => {
+  const backend = await CatalogBackend.create({
+    config: {
+      providers: { codex: {}, "claude-code": {}, cliproxy: {} },
+      defaultModel: "codex/gpt-5.5"
+    },
+    sources: {
+      codex: fakeSource("codex", [
+        {
+          id: "gpt-5.5",
+          capabilities: { tools: "supported" },
+          reasoning: {
+            status: "supported",
+            efforts: [{ id: "high" }],
+            provenance: "provider",
+            refreshedAt: "2026-07-22T00:00:00.000Z"
+          }
+        }
+      ]),
+      "claude-code": fakeSource("claude-code", [{ id: "claude-opus-4-1" }]),
+      cliproxy: fakeSource("cliproxy", [{ id: "local-route" }])
+    }
+  });
+  assert.deepEqual(backend.modelInfo("codex/gpt-5.5"), {
+    id: "codex/gpt-5.5",
+    provider: "codex",
+    nativeModel: "gpt-5.5",
+    accountClass: "subscription",
+    billingMode: "subscription",
+    default: true,
+    capabilities: { tools: "supported" },
+    reasoning: {
+      status: "supported",
+      efforts: [{ id: "high" }],
+      provenance: "provider",
+      refreshedAt: "2026-07-22T00:00:00.000Z"
+    }
+  });
+  assert.deepEqual(
+    {
+      accountClass: backend.modelInfo("claude-code/claude-opus-4-1")?.accountClass,
+      billingMode: backend.modelInfo("claude-code/claude-opus-4-1")?.billingMode
+    },
+    { accountClass: "subscription", billingMode: "subscription" }
+  );
+  assert.deepEqual(
+    {
+      accountClass: backend.modelInfo("cliproxy/local-route")?.accountClass,
+      billingMode: backend.modelInfo("cliproxy/local-route")?.billingMode
+    },
+    { accountClass: "proxy", billingMode: "upstream-managed" }
+  );
+  await backend.close();
+});
+
+test("cliproxy routes are attributed as subscription billing", async () => {
+  const backend = await CatalogBackend.create({
+    config: {
+      providers: { cliproxy: {} },
+      defaultModel: "cliproxy/gpt-test"
+    },
+    sources: {
+      cliproxy: fakeSource("cliproxy", [{ id: "gpt-test" }])
+    }
+  });
+  const updates: unknown[] = [];
+  const response = await backend.chat(
+    { model: "cliproxy/gpt-test", messages: [] },
+    undefined,
+    { onAttribution: (update) => updates.push(update) }
+  );
+  assert.equal(response.status, 200);
+  assert.deepEqual(updates, [
+    {
+      effective_model: "cliproxy/gpt-test",
+      native_model: "gpt-test",
+      provider: "cliproxy",
+      billing_mode: "subscription"
+    }
+  ]);
 });
 
 test("catalog applies configured opaque efforts and rejects unavailable values before egress", async () => {

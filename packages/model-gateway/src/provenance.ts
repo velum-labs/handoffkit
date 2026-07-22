@@ -10,13 +10,15 @@ import type {
   ModelCallContract,
   ModelChatMessage,
   ModelUsage,
-  ProviderError
+  ProviderError,
+  RequestAttribution
 } from "@routekit/contracts";
 
 import { meterCall, parseUsage, parseUsageFromSse } from "./cost.js";
 
 export type GatewayDialect =
   | "openai-chat"
+  | "openai-embeddings"
   | "anthropic-messages"
   | "openai-responses";
 
@@ -68,6 +70,7 @@ export type ModelGatewayCallContext = {
   requestBody: unknown;
   startedAt: string;
   endpointId?: string;
+  attribution?: RequestAttribution;
 };
 
 export type ModelGatewayCallResult = {
@@ -135,23 +138,37 @@ function providerError(result: ModelGatewayCallResult): ProviderError | undefine
   if (result.error === undefined && result.statusCode >= 200 && result.statusCode < 400) {
     return undefined;
   }
+  const responseError = asRecord(asRecord(parseJson(result.responseBody))?.error);
+  const noModelAvailable =
+    result.statusCode === 503 &&
+    responseError?.type === "unavailable" &&
+    responseError.message === "no model is available; configure a provider";
   const kind =
-    result.statusCode === 408
+    noModelAvailable
+      ? "capability_missing"
+      : result.statusCode === 408
       ? "timeout"
       : result.statusCode === 429
         ? "rate_limited"
         : result.statusCode === 400 || result.statusCode === 422
           ? "validation_error"
           : "provider_error";
+  const message =
+    kind === "capability_missing"
+      ? "no model route is configured"
+      : kind === "timeout"
+      ? "provider request timed out"
+      : kind === "rate_limited"
+        ? "provider rate limited the request"
+        : kind === "validation_error"
+          ? "provider rejected the request"
+          : "provider request failed";
   return {
     kind,
-    message:
-      result.error instanceof Error
-        ? result.error.message
-        : result.error !== undefined
-          ? String(result.error)
-          : responseText(result.responseBody).slice(0, 500),
-    retryable: result.statusCode === 408 || result.statusCode === 429 || result.statusCode >= 500
+    message,
+    retryable:
+      !noModelAvailable &&
+      (result.statusCode === 408 || result.statusCode === 429 || result.statusCode >= 500)
   };
 }
 
@@ -180,6 +197,24 @@ export function buildModelCallRecord(
     requested_model: context.requestedModel ?? null,
     unknown_usage: callCost.unknownUsage,
     unknown_cost: callCost.unknownCost,
+    ...(context.attribution !== undefined
+      ? {
+          attribution: {
+            effective_model: context.attribution.effective_model,
+            ...(context.attribution.native_model !== undefined
+              ? { native_model: context.attribution.native_model }
+              : {}),
+            provider: context.attribution.provider,
+            billing_mode: context.attribution.billing_mode,
+            ...(context.attribution.account !== undefined
+              ? { account: { seat: context.attribution.account.seat } }
+              : {}),
+            attempts: context.attribution.attempts,
+            retries: context.attribution.retries,
+            account_failovers: context.attribution.account_failovers
+          }
+        }
+      : {}),
     ...(callCost.costUsd !== undefined ? { cost_estimate_usd: callCost.costUsd } : {})
   };
   return {

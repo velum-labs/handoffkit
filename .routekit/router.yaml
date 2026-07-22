@@ -1,4 +1,7 @@
 providers:
+  openai: {}
+  anthropic: {}
+  openrouter: {}
   codex:
     strategy: capacity_weighted
     switchThreshold: 0.9

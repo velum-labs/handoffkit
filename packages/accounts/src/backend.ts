@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import {
   AnthropicBackend,
   CodexResponsesBackend
@@ -107,7 +109,7 @@ export class SubscriptionAccountBackend implements Backend, ProviderSource {
     const mode = options.accountSet.mode;
     this.sourceId = mode;
     const provider = subscriptionProvider(mode);
-    const transport: ProviderTransport = async (url, init) =>
+    const transport: ProviderTransport = async (url, init, requestOptions) =>
       await this.#accountSet.execute(modelFromRequest(init.body), async (credential) => {
         const headers = new Headers(init.headers);
         headers.delete("x-api-key");
@@ -115,7 +117,18 @@ export class SubscriptionAccountBackend implements Backend, ProviderSource {
           headers.set(name, value);
         }
         return await fetch(url, { ...init, headers });
-      }, init.signal ?? undefined);
+      }, init.signal ?? undefined, {
+        onAttempt: (account) =>
+          requestOptions?.onAttribution?.({
+            accountAttempt: {
+              operationId:
+                requestOptions.attributionOperationId ??
+                requestOptions.modelCallId ??
+                randomUUID(),
+              seat: account.seat
+            }
+          })
+      });
     const backendOptions = {
       baseUrl: backendBaseUrl(mode),
       apiKey: "",
@@ -183,10 +196,14 @@ export class SubscriptionAccountBackend implements Backend, ProviderSource {
     signal?: AbortSignal,
     options?: BackendRequestOptions
   ): Promise<Response> {
+    const attributedOptions = {
+      ...options,
+      attributionOperationId: randomUUID()
+    };
     return this.#backend.chat(
       withSubscriptionInstructions(this.#accountSet.mode, body),
       signal,
-      options
+      attributedOptions
     );
   }
 
@@ -194,7 +211,11 @@ export class SubscriptionAccountBackend implements Backend, ProviderSource {
     return this.#backend.models(signal);
   }
 
-  embeddings(body: unknown, signal?: AbortSignal): Promise<Response> {
-    return this.#backend.embeddings(body, signal);
+  embeddings(
+    body: unknown,
+    signal?: AbortSignal,
+    options?: BackendRequestOptions
+  ): Promise<Response> {
+    return this.#backend.embeddings(body, signal, options);
   }
 }

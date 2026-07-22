@@ -41,7 +41,8 @@ results remain pending the L06 real-account matrix.
   model-specific reasoning and images depend on OpenAI. No provider-session
   restore.
 - **Evidence:** RouteKit 0.8.0 / `2f9914d5` / 2026-07-22 repository review.
-  Exact live model/API qualification pending L06.
+  Exact live model/API qualification pending L06. [Durable L06
+  evidence](routekit-l06-evidence.md#route-openai-api).
 
 <a id="route-anthropic-api"></a>
 
@@ -59,7 +60,8 @@ results remain pending the L06 real-account matrix.
   signatures, and redacted-thinking where supported. Cross-dialect translation
   can preserve only shared fields. No provider-session restore.
 - **Evidence:** RouteKit 0.8.0 / `2f9914d5` / 2026-07-22 repository review.
-  Exact live model/API qualification pending L06.
+  Exact live model/API qualification pending L06. [Durable L06
+  evidence](routekit-l06-evidence.md#route-anthropic-api).
 
 <a id="route-openrouter-api"></a>
 
@@ -79,7 +81,8 @@ results remain pending the L06 real-account matrix.
   context, and reasoning depend on OpenRouter and the upstream model. No
   provider-session restore.
 - **Evidence:** RouteKit 0.8.0 / `2f9914d5` / 2026-07-22 repository review.
-  Exact live model/upstream qualification pending L06.
+  Exact live model/upstream qualification pending L06. [Durable L06
+  evidence](routekit-l06-evidence.md#route-openrouter-api).
 
 <a id="route-codex-subscription"></a>
 
@@ -99,7 +102,8 @@ results remain pending the L06 real-account matrix.
   discovered reasoning efforts. Official client catalog/profile compatibility
   is version-sensitive; setup and restore remain pending L06.
 - **Evidence:** RouteKit 0.8.0 / `2f9914d5` / 2026-07-22 repository review.
-  Exact Codex CLI and real-account qualification pending L06.
+  Exact Codex CLI and real-account qualification pending L06. [Durable L06
+  evidence](routekit-l06-evidence.md#route-codex-subscription).
 
 <a id="route-claude-code-subscription"></a>
 
@@ -124,7 +128,8 @@ results remain pending the L06 real-account matrix.
   [ENG-682 qualification](routekit-claude-recovery-evidence.md).
 - **Evidence:** RouteKit 0.8.0 / `4e5a45b9` / 2026-07-22 automated recovery
   review. Exact Claude Code version and real-account qualification remain
-  pending L06 under ENG-679.
+  pending L06 under ENG-679; see the [durable L06
+  evidence](routekit-l06-evidence.md#route-claude-code-subscription).
 
 <a id="route-cursor-ide"></a>
 
@@ -145,7 +150,8 @@ results remain pending the L06 real-account matrix.
   degraded. Other editor features do not use the custom model. Restore remains
   version-specific.
 - **Evidence:** RouteKit 0.8.0 / `2f9914d5` / 2026-07-22 repository review.
-  Exact authenticated Cursor IDE qualification pending L06.
+  Exact authenticated Cursor IDE qualification pending L06. [Durable L06
+  evidence](routekit-l06-evidence.md#route-cursor-ide).
 
 <a id="route-cursor-agent"></a>
 
@@ -165,7 +171,21 @@ results remain pending the L06 real-account matrix.
   are supported; images and reasoning controls are degraded. Session restore
   and compatibility are client-version-specific.
 - **Evidence:** RouteKit 0.8.0 / `2f9914d5` / 2026-07-22 repository review.
-  Exact authenticated `cursor-agent` qualification pending L06.
+  Exact authenticated `cursor-agent` qualification pending L06. [Durable L06
+  evidence](routekit-l06-evidence.md#route-cursor-agent).
+
+## Route explanation
+
+`routekit models info <provider/model>` reports the live route's namespaced and
+native model IDs, provider, account class, billing mode, default status,
+capabilities, and reasoning metadata. API-key routes are classified as
+`api-key` / `metered-api`; managed Codex and Claude Code routes as
+`subscription` / `subscription`; and retained proxy routes as `proxy` /
+`upstream-managed`. Unknown models fail and the response contract excludes
+credentials, account labels, credential paths, and environment values.
+
+The automated and zero-billed matrix evidence is recorded in
+[RouteKit route explanation evidence](routekit-route-info-evidence.md).
 
 ## Qualification requirement
 

@@ -50,7 +50,11 @@ export type ProviderBackendOptions = {
   omitSampling?: boolean;
 };
 
-export type ProviderTransport = (url: string, init: RequestInit) => Promise<Response>;
+export type ProviderTransport = (
+  url: string,
+  init: RequestInit,
+  options?: BackendRequestOptions
+) => Promise<Response>;
 
 abstract class HttpProviderBackend implements Backend {
   readonly defaultModel: string | undefined;
@@ -414,11 +418,19 @@ function openAiFinishReasonFromAnthropic(stopReason: unknown): string {
 }
 
 export class AnthropicBackend extends HttpProviderBackend {
-  chat(body: unknown, signal?: AbortSignal): Promise<Response> {
-    return this.#chat(bodyRecord(body), signal);
+  chat(
+    body: unknown,
+    signal?: AbortSignal,
+    options?: BackendRequestOptions
+  ): Promise<Response> {
+    return this.#chat(bodyRecord(body), signal, options);
   }
 
-  async #chat(body: ChatBody, signal?: AbortSignal): Promise<Response> {
+  async #chat(
+    body: ChatBody,
+    signal?: AbortSignal,
+    options?: BackendRequestOptions
+  ): Promise<Response> {
     const model = body.model ?? this.defaultModel ?? "";
     const thinkingError = anthropicThinkingValidationError(body);
     if (thinkingError !== undefined) {
@@ -427,17 +439,21 @@ export class AnthropicBackend extends HttpProviderBackend {
         400
       );
     }
-    const response = await this.transport(joinPath(this.baseUrl, "/messages"), {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "x-api-key": this.apiKey,
-        "anthropic-version": "2023-06-01",
-        ...this.extraHeaders
+    const response = await this.transport(
+      joinPath(this.baseUrl, "/messages"),
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-api-key": this.apiKey,
+          "anthropic-version": "2023-06-01",
+          ...this.extraHeaders
+        },
+        body: JSON.stringify(anthropicMessages(body, model)),
+        ...(signal !== undefined ? { signal } : {})
       },
-      body: JSON.stringify(anthropicMessages(body, model)),
-      ...(signal !== undefined ? { signal } : {})
-    });
+      options
+    );
     if (!response.ok) return copyFailure(response, await response.text());
     if (body.stream === true) {
       const blockTypes = new Map<number, string>();
@@ -843,11 +859,19 @@ function googleMessage(payload: Record<string, unknown>): Record<string, unknown
 }
 
 export class GoogleGenAiBackend extends HttpProviderBackend {
-  chat(body: unknown, signal?: AbortSignal): Promise<Response> {
-    return this.#chat(bodyRecord(body), signal);
+  chat(
+    body: unknown,
+    signal?: AbortSignal,
+    options?: BackendRequestOptions
+  ): Promise<Response> {
+    return this.#chat(bodyRecord(body), signal, options);
   }
 
-  async #chat(body: ChatBody, signal?: AbortSignal): Promise<Response> {
+  async #chat(
+    body: ChatBody,
+    signal?: AbortSignal,
+    options?: BackendRequestOptions
+  ): Promise<Response> {
     const model = body.model ?? this.defaultModel ?? "";
     const method = body.stream === true ? "streamGenerateContent" : "generateContent";
     const response = await this.transport(
@@ -863,7 +887,8 @@ export class GoogleGenAiBackend extends HttpProviderBackend {
         },
         body: JSON.stringify(googleRequest(body)),
         ...(signal !== undefined ? { signal } : {})
-      }
+      },
+      options
     );
     if (!response.ok) return copyFailure(response, await response.text());
     if (body.stream === true) {
@@ -1036,11 +1061,19 @@ export class CodexResponsesBackend extends HttpProviderBackend {
     this.#omitSampling = options.omitSampling ?? false;
   }
 
-  chat(body: unknown, signal?: AbortSignal): Promise<Response> {
-    return this.#chat(bodyRecord(body), signal);
+  chat(
+    body: unknown,
+    signal?: AbortSignal,
+    options?: BackendRequestOptions
+  ): Promise<Response> {
+    return this.#chat(bodyRecord(body), signal, options);
   }
 
-  async #chat(body: ChatBody, signal?: AbortSignal): Promise<Response> {
+  async #chat(
+    body: ChatBody,
+    signal?: AbortSignal,
+    options?: BackendRequestOptions
+  ): Promise<Response> {
     const model = body.model ?? this.defaultModel ?? "";
     const reasoning = reasoningSelectionOf(body);
     if (reasoning.mode === "budget" || reasoning.mode === "adaptive") {
@@ -1054,22 +1087,26 @@ export class CodexResponsesBackend extends HttpProviderBackend {
         400
       );
     }
-    const response = await this.transport(joinPath(this.baseUrl, "/responses"), {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        authorization: `Bearer ${this.apiKey}`,
-        ...(this.#accountId !== undefined ? { "chatgpt-account-id": this.#accountId } : {}),
-        ...this.extraHeaders
+    const response = await this.transport(
+      joinPath(this.baseUrl, "/responses"),
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${this.apiKey}`,
+          ...(this.#accountId !== undefined ? { "chatgpt-account-id": this.#accountId } : {}),
+          ...this.extraHeaders
+        },
+        body: JSON.stringify(
+          responsesRequest(body, model, {
+            forceStream: this.#forceStream,
+            omitSampling: this.#omitSampling
+          })
+        ),
+        ...(signal !== undefined ? { signal } : {})
       },
-      body: JSON.stringify(
-        responsesRequest(body, model, {
-          forceStream: this.#forceStream,
-          omitSampling: this.#omitSampling
-        })
-      ),
-      ...(signal !== undefined ? { signal } : {})
-    });
+      options
+    );
     if (!response.ok) return copyFailure(response, await response.text());
     if (body.stream === true) {
       let hasToolCalls = false;

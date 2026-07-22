@@ -31,7 +31,18 @@ async function mockProvider(): Promise<{
   const server = createServer((req, res) => {
     if (req.url === "/v1/models") {
       res.setHeader("content-type", "application/json");
-      res.end(JSON.stringify({ data: [{ id: "mock-model", object: "model" }] }));
+      res.end(
+        JSON.stringify({
+          data: [
+            {
+              id: "mock-model",
+              object: "model",
+              capabilities: { streaming: "supported", tools: "degraded" },
+              supported_reasoning_levels: ["high"]
+            }
+          ]
+        })
+      );
       return;
     }
     req.resume();
@@ -176,6 +187,26 @@ test("singleton daemon exposes authenticated control and a stable reloadable dat
     assert.equal(status.dataUrl, daemon.dataUrl);
     const models = await client.call("models.list", {});
     assert.deepEqual(models.models.map((model) => model.id), ["openai/mock-model"]);
+    const modelInfo = await client.call("models.info", { model: "openai/mock-model" });
+    assert.equal(modelInfo.id, "openai/mock-model");
+    assert.equal(modelInfo.provider, "openai");
+    assert.equal(modelInfo.nativeModel, "mock-model");
+    assert.equal(modelInfo.accountClass, "api-key");
+    assert.equal(modelInfo.billingMode, "metered-api");
+    assert.equal(modelInfo.default, true);
+    assert.deepEqual(modelInfo.capabilities, {
+      streaming: "supported",
+      tools: "degraded"
+    });
+    assert.deepEqual(modelInfo.reasoning?.efforts, [{ id: "high" }]);
+    assert.doesNotMatch(JSON.stringify(modelInfo), /test-key/);
+    await assert.rejects(
+      client.call("models.info", { model: "openai/not-real" }),
+      (error: unknown) =>
+        error instanceof ControlError &&
+        error.code === "not_found" &&
+        /unknown model/.test(error.message)
+    );
 
     const beforeUrl = status.dataUrl;
     const snapshot = await client.call("config.get", {});
@@ -220,9 +251,74 @@ test("singleton daemon exposes authenticated control and a stable reloadable dat
     });
     const response = await inflight;
     assert.equal(response.status, 200);
+    const callId = response.headers.get("x-routekit-model-call-id");
+    assert.ok(callId);
     assert.match(await response.text(), /daemon answer/);
     const afterInflight = await reloaded;
     assert.equal(afterInflight.revision, updated.revision + 1);
+    const inspection = await client.call("calls.inspect", { callId });
+    assert.equal(inspection.callId, callId);
+    assert.equal(inspection.effectiveModel, "openai/mock-model");
+    assert.equal(inspection.nativeModel, "mock-model");
+    assert.equal(inspection.provider, "openai");
+    assert.equal(inspection.billingMode, "api_key");
+    assert.deepEqual(inspection.retries, {
+      attempts: 1,
+      total: 0,
+      accountFailovers: 0
+    });
+    assert.equal(inspection.cost.unknownUsage, true);
+    assert.equal(inspection.cost.unknownCost, true);
+    assert.equal("account" in inspection, false);
+    const rejected = await fetch(`${beforeUrl}/v1/chat/completions`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${dataToken}`
+      },
+      body: JSON.stringify({
+        model: "openai/missing-model",
+        messages: [{ role: "user", content: "reject this" }]
+      })
+    });
+    assert.equal(rejected.status, 400);
+    const rejectedCallId = rejected.headers.get("x-routekit-model-call-id");
+    assert.ok(rejectedCallId);
+    await rejected.text();
+    const rejectedInspection = await client.call("calls.inspect", {
+      callId: rejectedCallId
+    });
+    assert.equal(rejectedInspection.status, "failed");
+    assert.equal(rejectedInspection.effectiveModel, "openai/missing-model");
+    assert.equal(rejectedInspection.provider, "openai");
+    assert.equal(rejectedInspection.error?.kind, "validation_error");
+    const embedding = await fetch(`${beforeUrl}/v1/embeddings`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${dataToken}`
+      },
+      body: JSON.stringify({
+        model: "openai/mock-model",
+        input: "embed this"
+      })
+    });
+    assert.equal(embedding.status, 200);
+    const embeddingCallId = embedding.headers.get("x-routekit-model-call-id");
+    assert.ok(embeddingCallId);
+    await embedding.text();
+    const embeddingInspection = await client.call("calls.inspect", {
+      callId: embeddingCallId
+    });
+    assert.equal(embeddingInspection.effectiveModel, "openai/mock-model");
+    assert.equal(embeddingInspection.nativeModel, "mock-model");
+    assert.equal(embeddingInspection.provider, "openai");
+    assert.equal(embeddingInspection.billingMode, "api_key");
+    await assert.rejects(
+      client.call("calls.inspect", { callId: "model_call_missing" }),
+      (error: unknown) =>
+        error instanceof ControlError && error.code === "not_found"
+    );
 
     await assert.rejects(
       client.call("config.update", {

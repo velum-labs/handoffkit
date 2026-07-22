@@ -14,6 +14,7 @@ export type {
   Backend,
   BackendModelRoute,
   BackendRequestOptions,
+  RequestAttributionUpdate,
   ModelRoutedBackendOptions,
   OpenAiBackendOptions
 } from "./backend.js";
@@ -37,6 +38,7 @@ export {
 } from "./router.js";
 export type {
   CatalogBackendOptions,
+  CatalogModelInfo,
   ProviderPolicy,
   RouterConfig,
 } from "./router.js";

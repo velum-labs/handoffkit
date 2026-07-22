@@ -3,7 +3,10 @@ import { createServer } from "node:http";
 import type { IncomingMessage, ServerResponse } from "node:http";
 
 import { ProviderFailureError } from "@routekit/contracts";
-import type { ModelReasoningCapabilities } from "@routekit/contracts";
+import type {
+  ModelReasoningCapabilities,
+  RequestAttribution
+} from "@routekit/contracts";
 
 import {
   anthropicModelsResponse,
@@ -17,7 +20,11 @@ import { authorizedRequest } from "./auth.js";
 import { isCursorChatBody, translateCursorRequest } from "./adapters/cursor.js";
 import { handleResponses } from "./adapters/responses.js";
 import type { ResponsesRequest } from "./adapters/responses.js";
-import type { Backend, BackendModelRoute } from "./backend.js";
+import type {
+  Backend,
+  BackendModelRoute,
+  BackendRequestOptions
+} from "./backend.js";
 import {
   validateAnthropicRequest,
   validateChatRequest,
@@ -74,7 +81,8 @@ export type ProviderRelay = {
   relay(
     headers: IncomingMessage["headers"],
     body: AnthropicRequest | ResponsesRequest,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    options?: Pick<BackendRequestOptions, "onAttribution">
   ): Promise<Response>;
   models?(
     headers: IncomingMessage["headers"],
@@ -184,6 +192,36 @@ function resolveNativeModelRoute(
     throw new UnknownModelError(requested);
   }
   return route;
+}
+
+export function initialAttribution(
+  backend: Backend,
+  requested: string | undefined,
+  nativeProvider?: "claude-code" | "codex"
+): Partial<RequestAttribution> {
+  const route = backend.resolveModelRoute?.(requested, nativeProvider);
+  const effectiveModel = route?.publicId ?? requested ?? backend.defaultModel;
+  if (effectiveModel === undefined) return {};
+  const slash = effectiveModel.indexOf("/");
+  const provider =
+    route?.provider ??
+    (slash > 0
+      ? effectiveModel.slice(0, slash)
+      : nativeProvider ?? "unknown");
+  const nativeModel =
+    route?.nativeId ??
+    (slash > 0 ? effectiveModel.slice(slash + 1) : effectiveModel);
+  return {
+    effective_model: effectiveModel,
+    native_model: nativeModel,
+    provider,
+    billing_mode:
+      provider === "codex" ||
+      provider === "claude-code" ||
+      provider === "cliproxy"
+        ? "subscription"
+        : "api_key"
+  };
 }
 
 function withModel<T extends Record<string, unknown>>(body: T, model: string): T {
@@ -481,8 +519,16 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
         dialect: "openai-chat",
         body,
         defaultModel: backend.defaultModel,
-        invoke: (callId, signal) =>
-          backend.chat(body, signal, { modelCallId: callId, requestContext })
+        attribution: initialAttribution(
+          backend,
+          effectiveModel(body, backend.defaultModel)
+        ),
+        invoke: (callId, signal, onAttribution) =>
+          backend.chat(body, signal, {
+            modelCallId: callId,
+            requestContext,
+            onAttribution
+          })
       });
       return;
     }
@@ -513,8 +559,16 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
         dialect: "openai-chat",
         body,
         defaultModel: backend.defaultModel,
-        invoke: (callId, signal) =>
-          backend.chat(body, signal, { modelCallId: callId, requestContext })
+        attribution: initialAttribution(
+          backend,
+          effectiveModel(body, backend.defaultModel)
+        ),
+        invoke: (callId, signal, onAttribution) =>
+          backend.chat(body, signal, {
+            modelCallId: callId,
+            requestContext,
+            onAttribution
+          })
       });
       return;
     }
@@ -522,7 +576,22 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
     if (method === "POST" && path === "/v1/embeddings") {
       const raw = await readJson(req, res);
       if (raw === NO_BODY) return;
-      await pipeUpstream(res, await backend.embeddings(withDefaultModel(raw, backend.defaultModel)));
+      const body = withDefaultModel(raw, backend.defaultModel);
+      await handleModelCall(res, provenance, {
+        dialect: "openai-embeddings",
+        body,
+        defaultModel: backend.defaultModel,
+        attribution: initialAttribution(
+          backend,
+          effectiveModel(body, backend.defaultModel)
+        ),
+        invoke: (callId, signal, onAttribution) =>
+          backend.embeddings(body, signal, {
+            modelCallId: callId,
+            requestContext,
+            onAttribution
+          })
+      });
       return;
     }
 
@@ -579,7 +648,8 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
         backend.listModelIds?.()
       );
       // Defer an unknown Claude model to the Anthropic adapter so it can emit
-      // the native Anthropic error envelope instead of the generic gateway one.
+      // the native Anthropic error envelope. The later handleModelCall wrapper
+      // still records attribution and provenance for the rejected request.
       const route = backend.resolveModelRoute?.(resolvedModel, "claude-code");
       const canonicalModel = route?.publicId ?? resolvedModel;
       const body =
@@ -596,8 +666,16 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
           dialect: "anthropic-messages",
           body,
           defaultModel: backend.defaultModel,
-          invoke: (_callId, signal) =>
-            anthropicRelay.relay(req.headers, relayBody, signal)
+          attribution: {
+            effective_model: canonicalModel ?? rawBody.model,
+            native_model: route.nativeId,
+            provider: route.provider,
+            billing_mode: "subscription"
+          },
+          invoke: (_callId, signal, onAttribution) =>
+            anthropicRelay.relay(req.headers, relayBody, signal, {
+              onAttribution
+            })
         });
         return;
       }
@@ -614,7 +692,18 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
           dialect: "anthropic-messages",
           body,
           defaultModel: backend.defaultModel,
-          invoke: (_callId, signal) => anthropicRelay.relay(req.headers, body, signal)
+          attribution: {
+            effective_model: requestedModel ?? "claude-code/default",
+            ...(requestedModel !== undefined
+              ? { native_model: requestedModel }
+              : {}),
+            provider: "claude-code",
+            billing_mode: "subscription"
+          },
+          invoke: (_callId, signal, onAttribution) =>
+            anthropicRelay.relay(req.headers, body, signal, {
+              onAttribution
+            })
         });
         return;
       }
@@ -622,8 +711,16 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
         dialect: "anthropic-messages",
         body,
         defaultModel: backend.defaultModel,
-        invoke: (callId, signal) =>
-          handleAnthropicMessages(backend, body, callId, signal, { requestContext })
+        attribution: initialAttribution(
+          backend,
+          resolvedModel,
+          "claude-code"
+        ),
+        invoke: (callId, signal, onAttribution) =>
+          handleAnthropicMessages(backend, body, callId, signal, {
+            requestContext,
+            onAttribution
+          })
       });
       return;
     }
@@ -641,10 +738,28 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
       // auth — forward it verbatim to the Codex backend instead of silently
       // folding it into the default.
       const requestedModel = typeof body.model === "string" ? body.model : undefined;
-      const route =
-        codexProviderRelay === undefined
-          ? backend.resolveModelRoute?.(requestedModel)
-          : resolveNativeModelRoute(backend, "codex", requestedModel);
+      let route: BackendModelRoute | undefined;
+      try {
+        route =
+          codexProviderRelay === undefined
+            ? backend.resolveModelRoute?.(requestedModel)
+            : resolveNativeModelRoute(backend, "codex", requestedModel);
+      } catch (error) {
+        await handleModelCall(res, provenance, {
+          dialect: "openai-responses",
+          body,
+          defaultModel: backend.defaultModel,
+          attribution: initialAttribution(
+            backend,
+            requestedModel,
+            "codex"
+          ),
+          invoke: async () => {
+            throw error;
+          }
+        });
+        return;
+      }
       const routedBody = withoutStaleCodexIdentity(body, route);
       const canonicalBody =
         route === undefined || route.publicId === requestedModel
@@ -659,8 +774,16 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
           dialect: "openai-responses",
           body: canonicalBody,
           defaultModel: backend.defaultModel,
-          invoke: (_callId, signal) =>
-            codexProviderRelay.relay(req.headers, relayBody, signal)
+          attribution: {
+            effective_model: route.publicId,
+            native_model: route.nativeId,
+            provider: route.provider,
+            billing_mode: "subscription"
+          },
+          invoke: (_callId, signal, onAttribution) =>
+            codexProviderRelay.relay(req.headers, relayBody, signal, {
+              onAttribution
+            })
         });
         return;
       }
@@ -676,8 +799,18 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
           dialect: "openai-responses",
           body,
           defaultModel: backend.defaultModel,
-          invoke: (_callId, signal) =>
-            codexRequestRelay.relay(req.headers, body, signal)
+          attribution: {
+            effective_model: requestedModel ?? "codex/default",
+            ...(requestedModel !== undefined
+              ? { native_model: requestedModel }
+              : {}),
+            provider: "codex",
+            billing_mode: "client_auth"
+          },
+          invoke: (_callId, signal, onAttribution) =>
+            codexRequestRelay.relay(req.headers, body, signal, {
+              onAttribution
+            })
         });
         return;
       }
@@ -685,9 +818,15 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
         dialect: "openai-responses",
         body: canonicalBody,
         defaultModel: backend.defaultModel,
-        invoke: (callId, signal) =>
+        attribution: initialAttribution(
+          backend,
+          requestedModel,
+          codexProviderRelay !== undefined ? "codex" : undefined
+        ),
+        invoke: (callId, signal, onAttribution) =>
           handleResponses(backend, canonicalBody, callId, signal, {
-            requestContext
+            requestContext,
+            onAttribution
           })
       });
       return;
@@ -886,8 +1025,68 @@ type ModelCallRoute = {
   dialect: GatewayDialect;
   body: unknown;
   defaultModel: string | undefined;
-  invoke: (callId: string, signal: AbortSignal) => Promise<Response>;
+  attribution?: Partial<RequestAttribution>;
+  invoke: (
+    callId: string,
+    signal: AbortSignal,
+    onAttribution: NonNullable<BackendRequestOptions["onAttribution"]>
+  ) => Promise<Response>;
 };
+
+export function collectAttribution(seed: Partial<RequestAttribution> | undefined): {
+  report: NonNullable<BackendRequestOptions["onAttribution"]>;
+  snapshot(): RequestAttribution | undefined;
+} {
+  let current = { ...seed };
+  let attempts = 0;
+  let retries = 0;
+  let accountFailovers = 0;
+  const operations = new Map<string, { attempts: number; lastSeat?: string }>();
+  return {
+    report: (update) => {
+      if (update.accountAttempt !== undefined) {
+        const attempt = update.accountAttempt;
+        const operation = operations.get(attempt.operationId) ?? { attempts: 0 };
+        attempts += 1;
+        if (operation.attempts > 0) retries += 1;
+        if (
+          operation.lastSeat !== undefined &&
+          operation.lastSeat !== attempt.seat
+        ) {
+          accountFailovers += 1;
+        }
+        operations.set(attempt.operationId, {
+          attempts: operation.attempts + 1,
+          lastSeat: attempt.seat
+        });
+        current = { ...current, account: { seat: attempt.seat } };
+      }
+      const { accountAttempt: _accountAttempt, ...attribution } = update;
+      current = { ...current, ...attribution };
+    },
+    snapshot: () => {
+      if (
+        current.effective_model === undefined ||
+        current.provider === undefined ||
+        current.billing_mode === undefined
+      ) {
+        return undefined;
+      }
+      return {
+        effective_model: current.effective_model,
+        ...(current.native_model !== undefined
+          ? { native_model: current.native_model }
+          : {}),
+        provider: current.provider,
+        billing_mode: current.billing_mode,
+        ...(current.account !== undefined ? { account: current.account } : {}),
+        attempts: Math.max(1, attempts),
+        retries,
+        account_failovers: accountFailovers
+      };
+    }
+  };
+}
 
 async function handleModelCall(
   res: ServerResponse,
@@ -895,6 +1094,7 @@ async function handleModelCall(
   route: ModelCallRoute
 ): Promise<void> {
   const callId = modelCallId();
+  const attribution = collectAttribution(route.attribution);
   const started = Date.now();
   const startedAt = new Date(started).toISOString();
   const context: ModelGatewayCallContext = {
@@ -915,7 +1115,7 @@ async function handleModelCall(
   };
   res.once("close", onClose);
   try {
-    const upstream = await route.invoke(callId, aborter.signal);
+    const upstream = await route.invoke(callId, aborter.signal, attribution.report);
     // Only buffer the response body when a provenance sink will consume it.
     const body = await pipeUpstream(res, upstream, sink !== undefined, aborter.signal);
     const result = {
@@ -923,6 +1123,7 @@ async function handleModelCall(
       responseBody: body,
       durationMs: Date.now() - started
     };
+    context.attribution = attribution.snapshot();
     sink?.onModelCall?.(buildModelCallRecord(context, result));
     sink?.onModelCallRaw?.(context, result);
   } catch (error) {
@@ -933,6 +1134,7 @@ async function handleModelCall(
       durationMs: Date.now() - started,
       error
     };
+    context.attribution = attribution.snapshot();
     sink?.onModelCall?.(buildModelCallRecord(context, result));
     sink?.onModelCallRaw?.(context, result);
   } finally {

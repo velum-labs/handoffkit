@@ -533,6 +533,9 @@ importers:
 
   packages/routekit-control:
     dependencies:
+      '@routekit/contracts':
+        specifier: workspace:*
+        version: link:../contracts
       '@routekit/runtime':
         specifier: workspace:*
         version: link:../runtime-utils

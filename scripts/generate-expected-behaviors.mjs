@@ -25,8 +25,23 @@ const CATEGORY_ORDER = [
   "cli",
   "composition",
   "observability",
-  "platform"
+  "platform",
+  "accounts",
+  "config"
 ];
+
+const unknownCategories = [
+  ...new Set(
+    contract.behaviors
+      .map((behavior) => behavior.category)
+      .filter((category) => !CATEGORY_ORDER.includes(category))
+  )
+];
+if (unknownCategories.length > 0) {
+  throw new Error(
+    `expected behavior categories are missing from CATEGORY_ORDER: ${unknownCategories.join(", ")}`
+  );
+}
 
 function cell(value) {
   return String(value).replaceAll("|", "\\|").replaceAll("\n", " ");

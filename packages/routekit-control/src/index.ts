@@ -12,6 +12,12 @@ import {
   ControlError
 } from "@routekit/runtime";
 import type {
+  ModelCallStatus,
+  ModelUsage,
+  ProviderErrorKind,
+  RequestBillingMode
+} from "@routekit/contracts";
+import type {
   ControlClientOptions,
   ControlHandler,
   ControlHandlerContext
@@ -30,6 +36,7 @@ export type RouteKitControlMethod =
   | "providers.set"
   | "models.list"
   | "models.info"
+  | "calls.inspect"
   | "accounts.list"
   | "accounts.status"
   | "accounts.enroll"
@@ -53,6 +60,7 @@ export type RouteKitControlParams = {
   "providers.set": { provider: string; enabled: boolean; idempotencyKey?: string };
   "models.list": { provider?: string; refresh?: boolean };
   "models.info": { model: string };
+  "calls.inspect": { callId: string };
   "accounts.list": Record<string, never>;
   "accounts.status": Record<string, never>;
   "accounts.enroll": {
@@ -109,12 +117,65 @@ export type ModelInfo = {
   reasoning?: Record<string, unknown>;
 };
 
+export type ModelAccountClass = "api-key" | "subscription" | "proxy";
+export type ModelBillingMode =
+  | "metered-api"
+  | "subscription"
+  | "upstream-managed";
+
+/**
+ * Secret-free explanation of one effective RouteKit model route.
+ *
+ * The contract deliberately excludes account labels, filesystem paths,
+ * credential environment values, and transport authentication material.
+ */
+export type ModelRouteInfo = {
+  id: string;
+  provider: string;
+  nativeModel: string;
+  accountClass: ModelAccountClass;
+  billingMode: ModelBillingMode;
+  default: boolean;
+  capabilities: Record<string, unknown>;
+  reasoning: Record<string, unknown> | null;
+};
+
 export type LaunchPreparation = {
   tool: "codex" | "claude" | "cursor" | "opencode";
   model: string;
   gatewayUrl: string;
   authToken?: string;
   env: Record<string, string>;
+};
+
+export type RouteKitCallInspection = {
+  callId: string;
+  status: ModelCallStatus;
+  effectiveModel: string;
+  nativeModel?: string;
+  provider: string;
+  billingMode: RequestBillingMode;
+  account?: { seat: string };
+  retries: {
+    attempts: number;
+    total: number;
+    accountFailovers: number;
+  };
+  usage?: ModelUsage;
+  cost: {
+    estimateUsd?: number;
+    unknownUsage: boolean;
+    unknownCost: boolean;
+  };
+  timing: {
+    startedAt: string;
+    finishedAt?: string;
+    latencyMs?: number;
+  };
+  error?: {
+    kind: ProviderErrorKind;
+    retryable?: boolean;
+  };
 };
 
 export type RouteKitControlResults = {
@@ -135,7 +196,8 @@ export type RouteKitControlResults = {
   };
   "providers.set": ConfigSnapshot;
   "models.list": { models: ModelInfo[]; defaultModel?: string; revision: number };
-  "models.info": ModelInfo;
+  "models.info": ModelRouteInfo;
+  "calls.inspect": RouteKitCallInspection;
   "accounts.list": { accounts: unknown[]; revision: number };
   "accounts.status": {
     accounts: Array<{
@@ -194,6 +256,7 @@ const METHODS: ReadonlySet<string> = new Set<RouteKitControlMethod>([
   "providers.set",
   "models.list",
   "models.info",
+  "calls.inspect",
   "accounts.list",
   "accounts.status",
   "accounts.enroll",
@@ -295,6 +358,9 @@ export function validateRouteKitParams<M extends RouteKitControlMethod>(
       break;
     case "models.info":
       requiredString(params, "model", method);
+      break;
+    case "calls.inspect":
+      requiredString(params, "callId", method);
       break;
     case "accounts.enroll":
       requiredEnum(params, "kind", method, ["claude-code", "codex"] as const);

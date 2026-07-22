@@ -56,6 +56,7 @@ Set `ROUTEKIT_DEV_SKIP_BUILD=1` after a build for a faster local check.
 | `claude install`, `claude uninstall` | Add or remove RouteKit-owned Claude Code gateway settings while preserving user configuration. |
 | `providers add`, `remove`, `status` | Manage explicit providers and run live discovery without printing credentials. |
 | `models list` | Discover and list the live namespaced model catalog. |
+| `models info <provider/model>` | Explain the effective provider and native model, account class, billing mode, default status, capabilities, and reasoning metadata without printing credentials. |
 | `accounts login` | Enroll a supported subscription kind (`claude-code` or `codex`), import the credential, and enable the matching provider. `--no-browser` prefers a device-code / copyable-URL flow for headless hosts. |
 | `accounts add`, `remove`, `list`, `status` | Import the current official CLI login or manage enrolled subscription accounts. |
 | `usage` | Show subscription rate limits, credits, and reset windows from the running gateway or enrolled local accounts. |
@@ -100,6 +101,14 @@ environment variables. Subscription providers discover the union of models
 offered by healthy enrolled accounts and keep per-account quota, refresh,
 cooldown, and model eligibility state. An explicitly requested unknown or
 unnamespaced model is rejected rather than routed to the default.
+
+`routekit models info <provider/model>` is the machine-verifiable route and
+billing explanation surface. Its JSON fields are `id`, `provider`,
+`nativeModel`, `accountClass`, `billingMode`, `default`, `capabilities`, and
+`reasoning`; unavailable reasoning metadata is reported as `null`. API-key
+routes report `api-key` / `metered-api`, managed subscription routes report
+`subscription` / `subscription`, and retained proxy routes report `proxy` /
+`upstream-managed`.
 
 ## First-launch support contract
 

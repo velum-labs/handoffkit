@@ -22,6 +22,8 @@ export type {
   ModelChatRole,
   ModelEndpoint,
   ModelUsage,
+  RequestAttribution,
+  RequestBillingMode,
   ProviderError,
   ProviderErrorKind,
   ProviderFailure,

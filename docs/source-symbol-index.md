@@ -8,7 +8,7 @@ Use it with the narrative references when you need to find the module that owns 
 
 ### `packages/accounts`
 
-- `packages/accounts/src/account-set.ts`: SubscriptionAccountSetOptions (type), RateLimitTracker (class), SubscriptionAccountSetExhaustedError (class), SubscriptionAccountSet (class)
+- `packages/accounts/src/account-set.ts`: SubscriptionAccountSetOptions (type), SubscriptionExecutionObserver (type), RateLimitTracker (class), SubscriptionAccountSetExhaustedError (class), SubscriptionAccountSet (class)
 - `packages/accounts/src/account-source.ts`: SubscriptionAccountSource (type), ResolvedSubscriptionAccounts (type), resolveSubscriptionAccounts (function)
 - `packages/accounts/src/backend.ts`: SubscriptionAccountBackendOptions (type), SubscriptionAccountBackend (class)
 - `packages/accounts/src/client.ts`: SubscriptionProxyClientOptions (type), SubscriptionProxyClient (class), SubscriptionProxyClientError (class)
@@ -107,7 +107,7 @@ Use it with the narrative references when you need to find the module that owns 
 - `packages/contracts/src/harness-event.ts`: HarnessApprovalDecision (type), HarnessRequestType (type), HarnessEventRaw (type), HarnessItemType (type), HarnessContentStream (type), HarnessTurnEndReason (type), HarnessTokenUsage (type), HarnessEvent (type), HarnessEventType (type)
 - `packages/contracts/src/hash.ts`: SHA256_PREFIX (const), sha256Hex (function), sha256PrefixedHex (function), hashCanonical (function), hashCanonicalSha256 (function), requestHash (function), responseHash (function), artifactHash (function), schemaBundleHash (function)
 - `packages/contracts/src/jcs.ts`: JsonValue (type), canonicalize (function)
-- `packages/contracts/src/model.ts`: CapabilityStatus (type), ModelCallStatus (type), ModelCallSideEffects (type), ModelChatRole (type), ModelChatMessage (type), ModelUsage (type), ProviderErrorKind (type), ProviderError (type), ProviderFailureCategory (type), ProviderFailure (type), ProviderFailureError (class), isRetryableProviderFailure (function), parseRetryAfterSeconds (function), classifyProviderFailure (function), ModelEndpoint (type), ModelCallContract (type)
+- `packages/contracts/src/model.ts`: CapabilityStatus (type), ModelCallStatus (type), ModelCallSideEffects (type), ModelChatRole (type), ModelChatMessage (type), ModelUsage (type), RequestBillingMode (type), RequestAttribution (type), ProviderErrorKind (type), ProviderError (type), ProviderFailureCategory (type), ProviderFailure (type), ProviderFailureError (class), isRetryableProviderFailure (function), parseRetryAfterSeconds (function), classifyProviderFailure (function), ModelEndpoint (type), ModelCallContract (type)
 - `packages/contracts/src/reasoning.ts`: ReasoningEffortOption (type), ReasoningCapabilityProvenance (type), ReasoningCapabilityStatus (type), ModelReasoningCapabilities (type), ReasoningSelection (type), resolveReasoningEffort (function)
 
 ### `packages/ensemble`
@@ -232,15 +232,15 @@ Use it with the narrative references when you need to find the module that owns 
 - `packages/model-gateway/src/adapters/validate.ts`: WireRejection (type), validateChatRequest (function), validateAnthropicRequest (function), validateCountTokensRequest (function), validateResponsesRequest (function)
 - `packages/model-gateway/src/adapters/web-search.ts`: WebSearchCitation (type), WebSearchOutcome (type), WebSearchExecutor (type), WebSearchDialect (type), MAX_WEB_SEARCHES_PER_TURN (const), resolveWebSearchExecutor (function)
 - `packages/model-gateway/src/auth.ts`: timingSafeStringEqual (function), verifyBearerToken (function), authorizedRequest (function)
-- `packages/model-gateway/src/backend.ts`: BackendModelRoute (type), Backend (type), BackendRequestOptions (type), OpenAiBackendOptions (type), joinPath (function), OpenAiBackend (class), ModelRoutedBackendOptions (type), ModelRoutedBackend (class)
+- `packages/model-gateway/src/backend.ts`: BackendModelRoute (type), Backend (type), BackendRequestOptions (type), RequestAttributionUpdate (type), OpenAiBackendOptions (type), joinPath (function), OpenAiBackend (class), ModelRoutedBackendOptions (type), ModelRoutedBackend (class)
 - `packages/model-gateway/src/capacity-pool.ts`: CapacityPoolStrategy (type), CapacityPoolMember (type), CapacityLease (type), CapacityPoolOptions (type), CapacityPool (class)
 - `packages/model-gateway/src/cost.ts`: ModelPricing (type), TokenUsage (type), ProviderCostMetadata (type), CallCostRecord (type), DEFAULT_MODEL_PRICING (const), parseUsage (function), parseUsageFromSse (function), lookupPricing (function), estimateCost (function), meterCall (function), formatUsd (function)
 - `packages/model-gateway/src/endpoint-health.ts`: UrlEndpointConfig (type), AccountEndpointConfig (type), ModelEndpointConfig (type), EndpointHealthProbe (type), EndpointHealthProbePlan (type), EndpointHealthResult (type), providerAuthHeaders (function), endpointHealthProbe (function), probeEndpointHealth (function)
 - `packages/model-gateway/src/provenance.ts`: GatewayDialect (type), MODEL_CALL_ID_HEADER (const), UNKNOWN_GIT_SHA (const), resolveProducerGitSha (function), readProducerVersion (function), ModelGatewayCallContext (type), ModelGatewayCallResult (type), ModelCallRecord (type), ProvenanceSink (type), buildModelCallRecord (function), modelCallId (function), responseBodyHash (function)
 - `packages/model-gateway/src/provider-backends.ts`: ProviderBackendOptions (type), ProviderTransport (type), AnthropicBackend (class), GoogleGenAiBackend (class), CodexResponsesBackend (class)
 - `packages/model-gateway/src/provider-source.ts`: API_PROVIDER_IDS (const), SUBSCRIPTION_PROVIDER_IDS (const), PROVIDER_IDS (const), ApiProviderId (type), SubscriptionProviderId (type), ProviderId (type), DiscoveredModel (type), ProviderSource (type), ProviderSourceTransport (type), parseReasoningCapabilities (function), parseDiscoveredModels (function), ApiProviderSourceOptions (type), ApiProviderSource (class)
-- `packages/model-gateway/src/router.ts`: UnknownModelError (class), NoModelAvailableError (class), routerConfigSchema (const), ProviderPolicy (type), RouterConfig (type), normalizeRouterConfigAliases (function), splitNamespacedModel (function), parseRouterConfig (function), CatalogBackendOptions (type), CatalogBackend (class), isSubscriptionProvider (function)
-- `packages/model-gateway/src/server.ts`: GatewayOptions (type), ProviderRelayDialect (type), ProviderRelay (type), Gateway (type), startGateway (function)
+- `packages/model-gateway/src/router.ts`: UnknownModelError (class), NoModelAvailableError (class), routerConfigSchema (const), ProviderPolicy (type), RouterConfig (type), normalizeRouterConfigAliases (function), splitNamespacedModel (function), parseRouterConfig (function), CatalogModelInfo (type), CatalogBackendOptions (type), CatalogBackend (class), isSubscriptionProvider (function)
+- `packages/model-gateway/src/server.ts`: GatewayOptions (type), ProviderRelayDialect (type), ProviderRelay (type), Gateway (type), initialAttribution (function), startGateway (function), collectAttribution (function)
 - `packages/model-gateway/src/sse-wire.ts`: noticeChunk (function), errorEvent (function), finishChunk (function), reasoningChunk (function), sseResponse (function)
 - `packages/model-gateway/src/sse/chat-assembler.ts`: AssembledToolCall (type), AssembledTurn (type), ChatStreamAssembler (class)
 - `packages/model-gateway/src/sse/parse.ts`: SseEvent (interface), SseParseError (class), decodeBufferedSse (function), SseDecoder (class)
@@ -278,6 +278,7 @@ Use it with the narrative references when you need to find the module that owns 
 - `packages/routekit-cli/src/cli.ts`: routekitVersion (function), buildProgram (function)
 - `packages/routekit-cli/src/client.ts`: daemonDataTokenPath (function), ensureDaemonDataToken (function), daemonStore (function), readDaemonRecord (function), controlClientForRecord (function), daemonRecordHealthy (function), canonicalConfigOrMigrationError (function), daemonServeArgs (function), ensureDaemon (function), routekitClient (function), connectDaemon (function), daemonLogPath (function), daemonLifecycleLockPath (function)
 - `packages/routekit-cli/src/commands/accounts.ts`: registerAccounts (function)
+- `packages/routekit-cli/src/commands/calls.ts`: registerCalls (function)
 - `packages/routekit-cli/src/commands/config.ts`: configImportIdempotencyKey (function), registerConfig (function)
 - `packages/routekit-cli/src/commands/context.ts`: configOverride (function), loaded (function), numberOption (function)
 - `packages/routekit-cli/src/commands/daemon.ts`: registerDaemon (function)
@@ -286,7 +287,7 @@ Use it with the narrative references when you need to find the module that owns 
 - `packages/routekit-cli/src/commands/index.ts`: registerCommands (function)
 - `packages/routekit-cli/src/commands/install.ts`: claudeInstallTarget (function), registerCodexIntegration (function), registerClaudeIntegration (function)
 - `packages/routekit-cli/src/commands/launchers.ts`: registerLaunchers (function)
-- `packages/routekit-cli/src/commands/models.ts`: registerModels (function)
+- `packages/routekit-cli/src/commands/models.ts`: isModelRouteInfo (function), registerModels (function)
 - `packages/routekit-cli/src/commands/providers.ts`: registerProviders (function)
 - `packages/routekit-cli/src/commands/serve-options.ts`: GatewayServeCliOptions (type), DEFAULT_DRAIN_GRACE_SECONDS (const), attachServeOptions (function), drainGraceMs (function)
 - `packages/routekit-cli/src/commands/start.ts`: registerStart (function), registerRestart (function)
@@ -298,7 +299,7 @@ Use it with the narrative references when you need to find the module that owns 
 - `packages/routekit-cli/src/completion.ts`: completionCandidates (function), registerDynamicCompletion (function)
 - `packages/routekit-cli/src/config.ts`: MigrationAction (type), ConfigMigrationDiagnostic (type), LegacyConfigMigration (type), convertLegacyRouterConfig (function), migrateLegacyRouterConfig (function), migrateLegacyState (function)
 - `packages/routekit-cli/src/daemon.ts`: ROUTEKIT_PRODUCT (const), cliEntryPath (function), serviceEnvironment (function), missingServiceCredentialVariables (function), serviceEnvFilePath (function), writeServiceEnvFile (function), removeServiceEnvFile (function), daemonUnitSpec (function)
-- `packages/routekit-cli/src/launch-support.ts`: LAUNCH_PROVIDER_IDS (const), LaunchProviderId (type), LAUNCH_ACCOUNT_KINDS (const), LAUNCH_ACCOUNT_KIND_CHOICES (const), LaunchAccountKind (type), LAUNCH_TOOL_IDS (const), LaunchToolId (type), isLaunchProviderId (function), isLaunchAccountKind (function), isLaunchToolId (function)
+- `packages/routekit-cli/src/launch-support.ts`: LAUNCH_PROVIDER_IDS (const), LaunchProviderId (type), LAUNCH_ROUTE_IDS (const), LaunchRouteId (type), LAUNCH_ACCOUNT_KINDS (const), LAUNCH_ACCOUNT_KIND_CHOICES (const), LaunchAccountKind (type), LAUNCH_TOOL_IDS (const), LaunchToolId (type), isLaunchProviderId (function), isLaunchAccountKind (function), isLaunchToolId (function)
 - `packages/routekit-cli/src/launch.ts`: buildToolLaunchSpec (function), launchToolWithIntegration (function), launchTool (function)
 - `packages/routekit-cli/src/state.ts`: routekitVersion (function), writeStateSnapshot (function), readStateSnapshot (function)
 - `packages/routekit-cli/src/telemetry.ts`: telemetryPath (function), resolveTelemetry (const), enableTelemetry (const), disableTelemetry (const), TELEMETRY_FIELDS (const)
@@ -311,11 +312,12 @@ Use it with the narrative references when you need to find the module that owns 
 
 ### `packages/routekit-control`
 
-- `packages/routekit-control/src/index.ts`: ROUTEKIT_CONTROL_CAPABILITY (const), RouteKitControlMethod (type), RouteKitControlParams (type), DaemonStatus (type), ConfigSnapshot (type), ModelInfo (type), LaunchPreparation (type), RouteKitControlResults (type), RouteKitMethodHandler (type), RouteKitControlHandlers (type), MUTATING_ROUTEKIT_METHODS (const), validateRouteKitParams (function), createRouteKitControlHandler (function), RouteKitControlClient (class)
+- `packages/routekit-control/src/index.ts`: ROUTEKIT_CONTROL_CAPABILITY (const), RouteKitControlMethod (type), RouteKitControlParams (type), DaemonStatus (type), ConfigSnapshot (type), ModelInfo (type), ModelAccountClass (type), ModelBillingMode (type), ModelRouteInfo (type), LaunchPreparation (type), RouteKitCallInspection (type), RouteKitControlResults (type), RouteKitMethodHandler (type), RouteKitControlHandlers (type), MUTATING_ROUTEKIT_METHODS (const), validateRouteKitParams (function), createRouteKitControlHandler (function), RouteKitControlClient (class)
 
 ### `packages/routekit-daemon`
 
 - `packages/routekit-daemon/src/account-transaction.ts`: PreparedAccountTransaction (type), AccountTransactionRecovery (type), prepareAccountTransaction (function), rollbackAccountTransaction (function), markAccountTransactionCommitted (function), cleanupAccountTransaction (function), recoverAccountTransactions (function)
+- `packages/routekit-daemon/src/call-attribution-store.ts`: DEFAULT_CALL_ATTRIBUTION_LIMIT (const), DEFAULT_CALL_ATTRIBUTION_TTL_MS (const), callInspection (function), CallAttributionStore (class)
 - `packages/routekit-daemon/src/cliproxy-sidecar.ts`: CliproxySidecar (type), cliproxyManagedLocally (function), createCliproxySidecar (function)
 - `packages/routekit-daemon/src/index.ts`: ROUTEKIT_DAEMON_KIND (const), ROUTEKIT_PRODUCT (const), RouteKitDaemonOptions (type), RunningRouteKitDaemon (type), startRouteKitDaemon (function)
 

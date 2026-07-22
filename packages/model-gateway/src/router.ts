@@ -209,6 +209,39 @@ type CatalogEntry = {
   reasoning?: ModelReasoningCapabilities;
 };
 
+export type CatalogModelInfo = {
+  id: string;
+  provider: ProviderId;
+  nativeModel: string;
+  accountClass: "api-key" | "subscription" | "proxy";
+  billingMode: "metered-api" | "subscription" | "upstream-managed";
+  default: boolean;
+  capabilities: Readonly<Record<string, string>>;
+  reasoning: ModelReasoningCapabilities | null;
+};
+
+function routeBilling(provider: ProviderId): Pick<
+  CatalogModelInfo,
+  "accountClass" | "billingMode"
+> {
+  switch (provider) {
+    case "openai":
+    case "anthropic":
+    case "google":
+    case "openrouter":
+      return { accountClass: "api-key", billingMode: "metered-api" };
+    case "codex":
+    case "claude-code":
+      return { accountClass: "subscription", billingMode: "subscription" };
+    case "cliproxy":
+      return { accountClass: "proxy", billingMode: "upstream-managed" };
+    default: {
+      const unreachable: never = provider;
+      throw new Error(`unsupported route provider: ${String(unreachable)}`);
+    }
+  }
+}
+
 export type CatalogBackendOptions = {
   config: RouterConfig | unknown;
   env?: Readonly<Record<string, string | undefined>>;
@@ -328,6 +361,20 @@ export class CatalogBackend implements Backend {
     return [...this.#entries.keys()];
   }
 
+  modelInfo(model: string): CatalogModelInfo | undefined {
+    const entry = this.#entries.get(model);
+    if (entry === undefined) return undefined;
+    return {
+      id: entry.publicId,
+      provider: entry.provider,
+      nativeModel: entry.nativeId,
+      ...routeBilling(entry.provider),
+      default: entry.publicId === this.defaultModel,
+      capabilities: entry.capabilities,
+      reasoning: entry.reasoning ?? null
+    };
+  }
+
   async providerStatuses(
     signal?: AbortSignal
   ): Promise<
@@ -433,6 +480,15 @@ export class CatalogBackend implements Backend {
       );
     }
     const nativeBody = this.#withNativeModel(body, entry.nativeId);
+    options?.onAttribution?.({
+      effective_model: entry.publicId,
+      native_model: entry.nativeId,
+      provider: entry.provider,
+      billing_mode:
+        isSubscriptionProvider(entry.provider) || entry.provider === "cliproxy"
+        ? "subscription"
+        : "api_key"
+    });
     if (
       nativeBody !== null &&
       typeof nativeBody === "object" &&
@@ -470,11 +526,25 @@ export class CatalogBackend implements Backend {
     );
   }
 
-  embeddings(body: unknown, signal?: AbortSignal): Promise<Response> {
+  embeddings(
+    body: unknown,
+    signal?: AbortSignal,
+    options?: BackendRequestOptions
+  ): Promise<Response> {
     const entry = this.#entry(this.#requestedModel(body));
+    options?.onAttribution?.({
+      effective_model: entry.publicId,
+      native_model: entry.nativeId,
+      provider: entry.provider,
+      billing_mode:
+        isSubscriptionProvider(entry.provider) || entry.provider === "cliproxy"
+          ? "subscription"
+          : "api_key"
+    });
     return entry.source.embeddings(
       this.#withNativeModel(body, entry.nativeId),
-      signal
+      signal,
+      options
     );
   }
 

@@ -1,0 +1,424 @@
+{
+  "schemaVersion": 1,
+  "routekitVersion": "0.8.0",
+  "testedRevision": "be81fa847d74c64fa8720c9ecf1d0c6abebd58fa",
+  "evidenceDate": "2026-07-22",
+  "routes": {
+    "route-openai-api": {
+      "title": "OpenAI API",
+      "qualificationStatus": "pending",
+      "credentialMode": "Pending reviewed credential/account mode for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa; no credential value is recorded.",
+      "clientProviderVersion": "Pending reviewed client/provider versions for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa.",
+      "evidence": [
+        {
+          "type": "automated",
+          "status": "pass",
+          "caseId": "deterministic.openai.openai-chat",
+          "reference": "matrix:deterministic.openai.openai-chat",
+          "result": {
+            "phase": "deterministic",
+            "provider": "openai",
+            "door": "openai-chat",
+            "durationMs": 91,
+            "billedCalls": 0,
+            "artifact": null
+          }
+        },
+        {
+          "type": "automated",
+          "status": "pending",
+          "caseId": "live.openai.openai-chat",
+          "reference": "matrix:live.openai.openai-chat",
+          "summary": "Case was not present in the promoted report for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa."
+        }
+      ],
+      "outcomes": {
+        "protocolBehavior": {
+          "status": "pending",
+          "summary": "Awaiting reviewed protocolBehavior outcome for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa."
+        },
+        "billingAttribution": {
+          "status": "pending",
+          "summary": "Awaiting reviewed billingAttribution outcome for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa."
+        },
+        "failureBehavior": {
+          "status": "pending",
+          "summary": "Awaiting reviewed failureBehavior outcome for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa."
+        },
+        "setupRestore": {
+          "status": "not-applicable",
+          "summary": "API-key routes do not provide provider-session restore."
+        }
+      }
+    },
+    "route-anthropic-api": {
+      "title": "Anthropic API",
+      "qualificationStatus": "pending",
+      "credentialMode": "Pending reviewed credential/account mode for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa; no credential value is recorded.",
+      "clientProviderVersion": "Pending reviewed client/provider versions for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa.",
+      "evidence": [
+        {
+          "type": "automated",
+          "status": "pass",
+          "caseId": "deterministic.anthropic.anthropic-messages",
+          "reference": "matrix:deterministic.anthropic.anthropic-messages",
+          "result": {
+            "phase": "deterministic",
+            "provider": "anthropic",
+            "door": "anthropic-messages",
+            "durationMs": 93,
+            "billedCalls": 0,
+            "artifact": null
+          }
+        },
+        {
+          "type": "automated",
+          "status": "pending",
+          "caseId": "live.anthropic.anthropic-messages",
+          "reference": "matrix:live.anthropic.anthropic-messages",
+          "summary": "Case was not present in the promoted report for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa."
+        }
+      ],
+      "outcomes": {
+        "protocolBehavior": {
+          "status": "pending",
+          "summary": "Awaiting reviewed protocolBehavior outcome for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa."
+        },
+        "billingAttribution": {
+          "status": "pending",
+          "summary": "Awaiting reviewed billingAttribution outcome for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa."
+        },
+        "failureBehavior": {
+          "status": "pending",
+          "summary": "Awaiting reviewed failureBehavior outcome for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa."
+        },
+        "setupRestore": {
+          "status": "not-applicable",
+          "summary": "API-key routes do not provide provider-session restore."
+        }
+      }
+    },
+    "route-openrouter-api": {
+      "title": "OpenRouter API",
+      "qualificationStatus": "pending",
+      "credentialMode": "Pending reviewed credential/account mode for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa; no credential value is recorded.",
+      "clientProviderVersion": "Pending reviewed client/provider versions for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa.",
+      "evidence": [
+        {
+          "type": "automated",
+          "status": "pass",
+          "caseId": "deterministic.openrouter.openai-chat",
+          "reference": "matrix:deterministic.openrouter.openai-chat",
+          "result": {
+            "phase": "deterministic",
+            "provider": "openrouter",
+            "door": "openai-chat",
+            "durationMs": 89,
+            "billedCalls": 0,
+            "artifact": null
+          }
+        },
+        {
+          "type": "automated",
+          "status": "pass",
+          "caseId": "deterministic.openrouter.dynamic-reasoning-capabilities",
+          "reference": "matrix:deterministic.openrouter.dynamic-reasoning-capabilities",
+          "result": {
+            "phase": "deterministic",
+            "provider": "openrouter",
+            "door": "dynamic-reasoning-capabilities",
+            "durationMs": 48,
+            "billedCalls": 0,
+            "artifact": null
+          }
+        },
+        {
+          "type": "automated",
+          "status": "pending",
+          "caseId": "live.openrouter.openai-chat",
+          "reference": "matrix:live.openrouter.openai-chat",
+          "summary": "Case was not present in the promoted report for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa."
+        }
+      ],
+      "outcomes": {
+        "protocolBehavior": {
+          "status": "pending",
+          "summary": "Awaiting reviewed protocolBehavior outcome for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa."
+        },
+        "billingAttribution": {
+          "status": "pending",
+          "summary": "Awaiting reviewed billingAttribution outcome for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa."
+        },
+        "failureBehavior": {
+          "status": "pending",
+          "summary": "Awaiting reviewed failureBehavior outcome for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa."
+        },
+        "setupRestore": {
+          "status": "not-applicable",
+          "summary": "The API route has no provider-session restore."
+        }
+      }
+    },
+    "route-codex-subscription": {
+      "title": "Codex subscription",
+      "qualificationStatus": "pending",
+      "credentialMode": "Pending reviewed credential/account mode for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa; no credential value is recorded.",
+      "clientProviderVersion": "Pending reviewed client/provider versions for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa.",
+      "evidence": [
+        {
+          "type": "automated",
+          "status": "pass",
+          "caseId": "deterministic.codex.codex-responses",
+          "reference": "matrix:deterministic.codex.codex-responses",
+          "result": {
+            "phase": "deterministic",
+            "provider": "codex",
+            "door": "codex-responses",
+            "durationMs": 91,
+            "billedCalls": 0,
+            "artifact": null
+          }
+        },
+        {
+          "type": "automated",
+          "status": "pending",
+          "caseId": "deterministic.codex.codex",
+          "reference": "matrix:deterministic.codex.codex",
+          "result": {
+            "phase": "deterministic",
+            "provider": "codex",
+            "door": "codex",
+            "durationMs": 0,
+            "billedCalls": 0,
+            "artifact": null
+          },
+          "summary": "Skipped; qualification remains pending: codex is not installed"
+        },
+        {
+          "type": "automated",
+          "status": "pending",
+          "caseId": "live.codex.codex-responses",
+          "reference": "matrix:live.codex.codex-responses",
+          "summary": "Case was not present in the promoted report for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa."
+        },
+        {
+          "type": "automated",
+          "status": "pending",
+          "caseId": "live.codex.codex",
+          "reference": "matrix:live.codex.codex",
+          "summary": "Case was not present in the promoted report for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa."
+        },
+        {
+          "type": "manual",
+          "status": "pending",
+          "label": "Codex setup and restore review",
+          "reference": "https://linear.app/velum-labs/issue/ENG-679",
+          "summary": "Manual evidence must be reviewed for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa."
+        }
+      ],
+      "outcomes": {
+        "protocolBehavior": {
+          "status": "pending",
+          "summary": "Awaiting reviewed protocolBehavior outcome for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa."
+        },
+        "billingAttribution": {
+          "status": "pending",
+          "summary": "Awaiting reviewed billingAttribution outcome for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa."
+        },
+        "failureBehavior": {
+          "status": "pending",
+          "summary": "Awaiting reviewed failureBehavior outcome for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa."
+        },
+        "setupRestore": {
+          "status": "pending",
+          "summary": "Awaiting reviewed setupRestore outcome for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa."
+        }
+      }
+    },
+    "route-claude-code-subscription": {
+      "title": "Claude Code subscription",
+      "qualificationStatus": "pending",
+      "credentialMode": "Pending reviewed credential/account mode for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa; no credential value is recorded.",
+      "clientProviderVersion": "Pending reviewed client/provider versions for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa.",
+      "evidence": [
+        {
+          "type": "automated",
+          "status": "pass",
+          "caseId": "deterministic.claude-code.anthropic-messages",
+          "reference": "matrix:deterministic.claude-code.anthropic-messages",
+          "result": {
+            "phase": "deterministic",
+            "provider": "claude-code",
+            "door": "anthropic-messages",
+            "durationMs": 91,
+            "billedCalls": 0,
+            "artifact": null
+          }
+        },
+        {
+          "type": "automated",
+          "status": "pass",
+          "caseId": "deterministic.claude-code.anthropic-thinking",
+          "reference": "matrix:deterministic.claude-code.anthropic-thinking",
+          "result": {
+            "phase": "deterministic",
+            "provider": "claude-code",
+            "door": "anthropic-thinking",
+            "durationMs": 147,
+            "billedCalls": 0,
+            "artifact": null
+          }
+        },
+        {
+          "type": "automated",
+          "status": "pending",
+          "caseId": "deterministic.claude-code.claude",
+          "reference": "matrix:deterministic.claude-code.claude",
+          "result": {
+            "phase": "deterministic",
+            "provider": "claude-code",
+            "door": "claude",
+            "durationMs": 0,
+            "billedCalls": 0,
+            "artifact": null
+          },
+          "summary": "Skipped; qualification remains pending: claude is not installed"
+        },
+        {
+          "type": "automated",
+          "status": "pending",
+          "caseId": "live.claude-code.anthropic-messages",
+          "reference": "matrix:live.claude-code.anthropic-messages",
+          "summary": "Case was not present in the promoted report for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa."
+        },
+        {
+          "type": "automated",
+          "status": "pending",
+          "caseId": "live.claude-code.claude",
+          "reference": "matrix:live.claude-code.claude",
+          "summary": "Case was not present in the promoted report for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa."
+        },
+        {
+          "type": "automated",
+          "status": "pending",
+          "caseId": "live.claude-code.pool",
+          "reference": "matrix:live.claude-code.pool",
+          "summary": "Case was not present in the promoted report for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa."
+        },
+        {
+          "type": "manual",
+          "status": "pending",
+          "label": "Claude setup, restore, and recovery review",
+          "reference": "https://linear.app/velum-labs/issue/ENG-679",
+          "summary": "Manual evidence must be reviewed for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa."
+        }
+      ],
+      "outcomes": {
+        "protocolBehavior": {
+          "status": "pending",
+          "summary": "Awaiting reviewed protocolBehavior outcome for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa."
+        },
+        "billingAttribution": {
+          "status": "pending",
+          "summary": "Awaiting reviewed billingAttribution outcome for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa."
+        },
+        "failureBehavior": {
+          "status": "pending",
+          "summary": "Awaiting reviewed failureBehavior outcome for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa."
+        },
+        "setupRestore": {
+          "status": "pending",
+          "summary": "Awaiting reviewed setupRestore outcome for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa."
+        }
+      }
+    },
+    "route-cursor-ide": {
+      "title": "Cursor IDE custom OpenAI endpoint",
+      "qualificationStatus": "pending",
+      "credentialMode": "Pending reviewed credential/account mode for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa; no credential value is recorded.",
+      "clientProviderVersion": "Pending reviewed client/provider versions for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa.",
+      "evidence": [
+        {
+          "type": "manual",
+          "status": "pending",
+          "label": "Cursor IDE custom-endpoint walkthrough",
+          "reference": "https://linear.app/velum-labs/issue/ENG-679",
+          "summary": "Manual evidence must be reviewed for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa."
+        }
+      ],
+      "outcomes": {
+        "protocolBehavior": {
+          "status": "pending",
+          "summary": "Awaiting reviewed protocolBehavior outcome for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa."
+        },
+        "billingAttribution": {
+          "status": "pending",
+          "summary": "Awaiting reviewed billingAttribution outcome for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa."
+        },
+        "failureBehavior": {
+          "status": "pending",
+          "summary": "Awaiting reviewed failureBehavior outcome for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa."
+        },
+        "setupRestore": {
+          "status": "pending",
+          "summary": "Awaiting reviewed setupRestore outcome for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa."
+        }
+      }
+    },
+    "route-cursor-agent": {
+      "title": "cursor-agent custom OpenAI endpoint",
+      "qualificationStatus": "pending",
+      "credentialMode": "Pending reviewed credential/account mode for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa; no credential value is recorded.",
+      "clientProviderVersion": "Pending reviewed client/provider versions for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa.",
+      "evidence": [
+        {
+          "type": "automated",
+          "status": "pending",
+          "caseId": "deterministic.openrouter.cursor",
+          "reference": "matrix:deterministic.openrouter.cursor",
+          "result": {
+            "phase": "deterministic",
+            "provider": "openrouter",
+            "door": "cursor",
+            "durationMs": 0,
+            "billedCalls": 0,
+            "artifact": null
+          },
+          "summary": "Skipped; qualification remains pending: cursor-agent is not installed"
+        },
+        {
+          "type": "automated",
+          "status": "pending",
+          "caseId": "live.openrouter.cursor",
+          "reference": "matrix:live.openrouter.cursor",
+          "summary": "Case was not present in the promoted report for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa."
+        },
+        {
+          "type": "manual",
+          "status": "pending",
+          "label": "Authenticated cursor-agent setup and restore review",
+          "reference": "https://linear.app/velum-labs/issue/ENG-679",
+          "summary": "Manual evidence must be reviewed for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa."
+        }
+      ],
+      "outcomes": {
+        "protocolBehavior": {
+          "status": "pending",
+          "summary": "Awaiting reviewed protocolBehavior outcome for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa."
+        },
+        "billingAttribution": {
+          "status": "pending",
+          "summary": "Awaiting reviewed billingAttribution outcome for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa."
+        },
+        "failureBehavior": {
+          "status": "pending",
+          "summary": "Awaiting reviewed failureBehavior outcome for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa."
+        },
+        "setupRestore": {
+          "status": "pending",
+          "summary": "Awaiting reviewed setupRestore outcome for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa."
+        }
+      }
+    }
+  }
+}
