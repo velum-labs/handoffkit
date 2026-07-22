@@ -199,7 +199,7 @@ function selected(value, filter) {
 }
 
 function timestamp() {
-  return new Date().toISOString().replaceAll(":", "-").replace(/\.\d{3}Z$/, "Z");
+  return `${new Date().toISOString().replaceAll(":", "-").replace(".", "-")}-${process.pid}`;
 }
 
 function sanitize(raw) {
