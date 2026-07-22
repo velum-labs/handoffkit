@@ -42,7 +42,7 @@ import type {
   ModelGatewayCallContext,
   ProvenanceSink
 } from "./provenance.js";
-import { isSubscriptionProvider, UnknownModelError } from "./router.js";
+import { UnknownModelError } from "./router.js";
 
 /**
  * The local-model gateway HTTP server. It fronts a single OpenAI Chat
@@ -209,7 +209,9 @@ function initialAttribution(
     native_model: nativeModel,
     provider,
     billing_mode:
-      isSubscriptionProvider(provider) || provider === "cliproxy"
+      provider === "codex" ||
+      provider === "claude-code" ||
+      provider === "cliproxy"
         ? "subscription"
         : "api_key"
   };
