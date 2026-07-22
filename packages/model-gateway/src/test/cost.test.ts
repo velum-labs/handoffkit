@@ -43,6 +43,26 @@ test("SSE usage extraction retains the last provider usage block", () => {
   });
 });
 
+test("SSE usage extraction reads nested Responses completion usage", () => {
+  const text =
+    `data: ${JSON.stringify({
+      type: "response.completed",
+      response: {
+        usage: {
+          input_tokens: 30,
+          output_tokens: 12,
+          total_tokens: 42
+        }
+      }
+    })}\n\n` +
+    "data: [DONE]\n\n";
+  assert.deepEqual(parseUsageFromSse(text), {
+    promptTokens: 30,
+    completionTokens: 12,
+    totalTokens: 42
+  });
+});
+
 test("provider-reported cost is canonical over a registry estimate", () => {
   const call = meterCall({
     model: "gpt-5.5",

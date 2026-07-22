@@ -81,7 +81,9 @@ export function parseUsageFromSse(text: string): TokenUsage | undefined {
     if (data.length === 0 || data === "[DONE]") continue;
     try {
       const parsed = asRecord(JSON.parse(data));
-      const candidate = parseUsage(parsed?.usage);
+      const candidate =
+        parseUsage(parsed?.usage) ??
+        parseUsage(asRecord(parsed?.response)?.usage);
       if (candidate !== undefined) usage = candidate;
     } catch {
       // Usage extraction is observational and ignores malformed events.

@@ -111,3 +111,56 @@ test("model-call provenance replaces raw upstream errors with a safe summary", (
   assert.doesNotMatch(JSON.stringify(record), new RegExp(secret));
   assert.doesNotMatch(JSON.stringify(record), /authorization/i);
 });
+
+test("model-call provenance meters aggregate buffered and Responses SSE usage", () => {
+  const context = {
+    callId: "call_aggregate",
+    dialect: "openai-responses" as const,
+    requestedModel: "gpt-5.5",
+    model: "gpt-5.5",
+    stream: false,
+    requestBody: { input: "research" },
+    startedAt: "2026-06-27T00:00:00.000Z"
+  };
+  const buffered = buildModelCallRecord(context, {
+    statusCode: 200,
+    durationMs: 3,
+    responseBody: Buffer.from(
+      JSON.stringify({
+        usage: {
+          input_tokens: 30,
+          output_tokens: 12,
+          total_tokens: 42
+        }
+      })
+    )
+  });
+  assert.deepEqual(buffered.usage, {
+    prompt_tokens: 30,
+    completion_tokens: 12,
+    total_tokens: 42
+  });
+  assert.equal(buffered.metadata?.cost_estimate_usd, 0.0001575);
+
+  const streamed = buildModelCallRecord(
+    { ...context, callId: "call_aggregate_stream", stream: true },
+    {
+      statusCode: 200,
+      durationMs: 3,
+      responseBody: Buffer.from(
+        `data: ${JSON.stringify({
+          type: "response.completed",
+          response: {
+            usage: {
+              input_tokens: 30,
+              output_tokens: 12,
+              total_tokens: 42
+            }
+          }
+        })}\n\n`
+      )
+    }
+  );
+  assert.deepEqual(streamed.usage, buffered.usage);
+  assert.equal(streamed.metadata?.cost_estimate_usd, 0.0001575);
+});

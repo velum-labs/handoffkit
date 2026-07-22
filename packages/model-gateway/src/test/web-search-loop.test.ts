@@ -145,6 +145,11 @@ test("runBufferedServerToolLoop executes searches and loops to the final answer"
   assert.deepEqual(executor.queries, ["node lts"]);
   assert.equal(outcome.searches.length, 1);
   assert.equal(outcome.searches[0]?.status, "completed");
+  assert.deepEqual(outcome.openai.usage, {
+    prompt_tokens: 20,
+    completion_tokens: 10,
+    total_tokens: 30
+  });
   // The transcript got the assistant tool call + tool result appended.
   const messages = chat.messages as Array<{ role: string; content?: unknown; tool_call_id?: string }>;
   assert.deepEqual(messages.map((message) => message.role), ["user", "assistant", "tool"]);
