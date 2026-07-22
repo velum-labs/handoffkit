@@ -157,6 +157,33 @@ test("model-fusion validators reject unsupported fields", () => {
   );
 });
 
+test("model-call metadata accepts sanitized RouteKit request attribution", () => {
+  const call = readFixture("model-call-record.v1", "minimal") as Record<
+    string,
+    unknown
+  >;
+  const attributed = {
+    ...call,
+    metadata: {
+      attribution: {
+        effective_model: "codex/gpt-5.3-codex",
+        native_model: "gpt-5.3-codex",
+        provider: "codex",
+        billing_mode: "subscription",
+        account: { seat: "seat_0123456789abcdef" },
+        attempts: 3,
+        retries: 2,
+        account_failovers: 1
+      },
+      unknown_usage: false,
+      unknown_cost: false,
+      cost_estimate_usd: 0
+    }
+  };
+  assertModelCallRecordV1(attributed);
+  assertModelFusionRecord(attributed);
+});
+
 test("harness candidate metadata accepts nested microVM hardening evidence", () => {
   const candidate = readFixture("harness-candidate-record.v1", "minimal") as Record<
     string,

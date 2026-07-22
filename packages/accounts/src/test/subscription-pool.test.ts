@@ -203,18 +203,32 @@ test("pool retries a short throttle locally, then tries only one alternate accou
     source: { kind: "directory", path: directory }
   });
   const seen: string[] = [];
+  const attemptedAccounts: string[] = [];
   try {
-    const response = await pool.execute("gpt-5.3-codex", (credential) => {
-      seen.push(credential.accessToken);
-      return Promise.resolve(
-        new Response(JSON.stringify({ quota: false }), {
-          status: 429,
-          headers: { "content-type": "application/json" }
-        })
-      );
-    });
+    const response = await pool.execute(
+      "gpt-5.3-codex",
+      (credential) => {
+        seen.push(credential.accessToken);
+        return Promise.resolve(
+          new Response(JSON.stringify({ quota: false }), {
+            status: 429,
+            headers: { "content-type": "application/json" }
+          })
+        );
+      },
+      undefined,
+      {
+        onAttempt: (account) => attemptedAccounts.push(account.seat)
+      }
+    );
     assert.equal(response.status, 429);
     assert.deepEqual(seen, ["token-a", "token-a", "token-b", "token-b"]);
+    assert.equal(attemptedAccounts.length, 4);
+    assert.match(attemptedAccounts[0]!, /^seat_[0-9a-f]{16}$/);
+    assert.equal(attemptedAccounts[0], attemptedAccounts[1]);
+    assert.notEqual(attemptedAccounts[1], attemptedAccounts[2]);
+    assert.equal(attemptedAccounts[2], attemptedAccounts[3]);
+    assert.doesNotMatch(JSON.stringify(attemptedAccounts), /"a"|"b"/);
   } finally {
     await pool.close();
     rmSync(directory, { recursive: true, force: true });

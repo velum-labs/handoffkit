@@ -47,7 +47,11 @@ export type ProviderSource = {
     signal?: AbortSignal,
     options?: BackendRequestOptions
   ): Promise<Response>;
-  embeddings(body: unknown, signal?: AbortSignal): Promise<Response>;
+  embeddings(
+    body: unknown,
+    signal?: AbortSignal,
+    options?: BackendRequestOptions
+  ): Promise<Response>;
   capabilities?(model: string): Readonly<Record<string, string>>;
   reasoningCapabilities?(model: string): ModelReasoningCapabilities | undefined;
   close?(): Promise<void> | void;
@@ -396,8 +400,12 @@ export class ApiProviderSource implements ProviderSource {
     return this.#backend.chat(body, signal, options);
   }
 
-  embeddings(body: unknown, signal?: AbortSignal): Promise<Response> {
-    return this.#backend.embeddings(body, signal);
+  embeddings(
+    body: unknown,
+    signal?: AbortSignal,
+    options?: BackendRequestOptions
+  ): Promise<Response> {
+    return this.#backend.embeddings(body, signal, options);
   }
 
   close(): Promise<void> | void {

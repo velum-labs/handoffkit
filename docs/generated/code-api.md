@@ -25,7 +25,7 @@ contract. Product CLIs can wrap this module without owning account logic.
 - `export { subscriptionProvider } from "./provider.js";`
 - `export type { AdminUsageCost, AdminUsageRange, SubscriptionProvider } from "./provider.js";`
 - `export { RateLimitTracker, SubscriptionAccountSet, SubscriptionAccountSetExhaustedError } from "./account-set.js";`
-- `export type { SubscriptionAccountSetOptions } from "./account-set.js";`
+- `export type { SubscriptionAccountSetOptions, SubscriptionExecutionObserver } from "./account-set.js";`
 - `export { SubscriptionAccountBackend } from "./backend.js";`
 - `export type { SubscriptionAccountBackendOptions } from "./backend.js";`
 - `export { CodexBackendRelay, codexRelayAuth } from "./codex-relay.js";`
@@ -127,7 +127,7 @@ No module JSDoc was found.
 - `export { canonicalize } from "./jcs.js";`
 - `export type { JsonValue } from "./jcs.js";`
 - `export { SHA256_PREFIX, artifactHash, hashCanonical, hashCanonicalSha256, requestHash, responseHash, schemaBundleHash, sha256Hex, sha256PrefixedHex } from "./hash.js";`
-- `export type { CapabilityStatus, ModelCallContract, ModelCallSideEffects, ModelCallStatus, ModelChatMessage, ModelChatRole, ModelEndpoint, ModelUsage, ProviderError, ProviderErrorKind, ProviderFailure, ProviderFailureCategory } from "./model.js";`
+- `export type { CapabilityStatus, ModelCallContract, ModelCallSideEffects, ModelCallStatus, ModelChatMessage, ModelChatRole, ModelEndpoint, ModelUsage, RequestAttribution, RequestBillingMode, ProviderError, ProviderErrorKind, ProviderFailure, ProviderFailureCategory } from "./model.js";`
 - `export { ProviderFailureError, classifyProviderFailure, isRetryableProviderFailure, parseRetryAfterSeconds } from "./model.js";`
 - `export type { ModelReasoningCapabilities, ReasoningCapabilityProvenance, ReasoningCapabilityStatus, ReasoningEffortOption, ReasoningSelection } from "./reasoning.js";`
 - `export { resolveReasoningEffort } from "./reasoning.js";`
@@ -323,7 +323,7 @@ Product-neutral RouteKit gateway and router.
 - `export { startSwitchingGatewayProxy } from "./switching-proxy.js";`
 - `export type { SwitchingGatewayProxy } from "./switching-proxy.js";`
 - `export { joinPath, ModelRoutedBackend, OpenAiBackend } from "./backend.js";`
-- `export type { Backend, BackendModelRoute, BackendRequestOptions, ModelRoutedBackendOptions, OpenAiBackendOptions } from "./backend.js";`
+- `export type { Backend, BackendModelRoute, BackendRequestOptions, RequestAttributionUpdate, ModelRoutedBackendOptions, OpenAiBackendOptions } from "./backend.js";`
 - `export { AnthropicBackend, CodexResponsesBackend, GoogleGenAiBackend } from "./provider-backends.js";`
 - `export type { ProviderBackendOptions, ProviderTransport } from "./provider-backends.js";`
 - `export { CatalogBackend, isSubscriptionProvider, normalizeRouterConfigAliases, parseRouterConfig, routerConfigSchema, splitNamespacedModel, UnknownModelError } from "./router.js";`
@@ -480,6 +480,7 @@ No module JSDoc was found.
 - `export type ModelRouteInfo ...`
   Secret-free explanation of one effective RouteKit model route.  The contract deliberately excludes account labels, filesystem paths, credential environment values, and transport authentication material.
 - `export type LaunchPreparation ...`
+- `export type RouteKitCallInspection ...`
 - `export type RouteKitControlResults ...`
 - `export type RouteKitMethodHandler<M extends RouteKitControlMethod> ...`
 - `export type RouteKitControlHandlers ...`

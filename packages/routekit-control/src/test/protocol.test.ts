@@ -62,6 +62,14 @@ test("method-specific validators reject malformed mutations at the protocol edge
     }),
     { kind: "codex", accounts: [{ label: "work" }] }
   );
+  assert.throws(
+    () => validateRouteKitParams("calls.inspect", {}),
+    /callId/
+  );
+  assert.deepEqual(
+    validateRouteKitParams("calls.inspect", { callId: "model_call_test" }),
+    { callId: "model_call_test" }
+  );
 });
 
 test("dispatcher rejects unknown methods and deduplicates idempotent mutations", async () => {

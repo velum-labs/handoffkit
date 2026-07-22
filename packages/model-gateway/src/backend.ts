@@ -6,7 +6,10 @@
  * surface can stream straight through and the dialect adapters can consume the
  * same core without a second abstraction.
  */
-import type { ModelReasoningCapabilities } from "@routekit/contracts";
+import type {
+  ModelReasoningCapabilities,
+  RequestAttribution
+} from "@routekit/contracts";
 import { reasoningSelectionOf } from "./adapters/openai-chat-wire.js";
 
 export type BackendModelRoute = {
@@ -64,7 +67,11 @@ export type Backend = {
   /** GET <base>/models. */
   models(signal?: AbortSignal): Promise<Response>;
   /** POST <base>/embeddings. */
-  embeddings(body: unknown, signal?: AbortSignal): Promise<Response>;
+  embeddings(
+    body: unknown,
+    signal?: AbortSignal,
+    options?: BackendRequestOptions
+  ): Promise<Response>;
   /** Release any owned resources (e.g. a managed model process). Optional. */
   close?(): Promise<void> | void;
 };
@@ -72,6 +79,10 @@ export type Backend = {
 export type BackendRequestOptions = {
   modelCallId?: string;
   reasoningCapabilities?: ModelReasoningCapabilities;
+  /** Request-local, sanitized attribution updates from routing/backends. */
+  onAttribution?: (update: RequestAttributionUpdate) => void;
+  /** Distinguishes compound provider operations within one public request. */
+  attributionOperationId?: string;
   /**
    * Neutral request context captured at the HTTP boundary. Backends may
    * interpret their own namespaced headers; the gateway does not.
@@ -84,6 +95,13 @@ export type BackendRequestOptions = {
    * (Anthropic / Responses) that emits its own keepalive.
    */
   translated?: boolean;
+};
+
+export type RequestAttributionUpdate = Partial<RequestAttribution> & {
+  accountAttempt?: {
+    operationId: string;
+    seat: string;
+  };
 };
 
 export type OpenAiBackendOptions = {
@@ -212,10 +230,14 @@ export class OpenAiBackend implements Backend {
     });
   }
 
-  embeddings(body: unknown, signal?: AbortSignal): Promise<Response> {
+  embeddings(
+    body: unknown,
+    signal?: AbortSignal,
+    options: BackendRequestOptions = {}
+  ): Promise<Response> {
     return fetch(joinPath(this.#baseUrl, "/embeddings"), {
       method: "POST",
-      headers: this.#headers(),
+      headers: this.#headers(options),
       body: JSON.stringify(body),
       ...(signal ? { signal } : {})
     });
@@ -278,8 +300,18 @@ export class ModelRoutedBackend implements Backend {
     return this.#primary.models(signal);
   }
 
-  embeddings(body: unknown, signal?: AbortSignal): Promise<Response> {
-    return this.#primary.embeddings(body, signal);
+  embeddings(
+    body: unknown,
+    signal?: AbortSignal,
+    options?: BackendRequestOptions
+  ): Promise<Response> {
+    const model =
+      typeof body === "object" &&
+      body !== null &&
+      typeof (body as { model?: unknown }).model === "string"
+        ? (body as { model: string }).model
+        : undefined;
+    return this.#backendFor(model).embeddings(body, signal, options);
   }
 
   async close(): Promise<void> {

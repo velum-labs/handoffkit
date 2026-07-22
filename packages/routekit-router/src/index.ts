@@ -21,6 +21,7 @@ import type {
   Gateway,
   ProviderId,
   ProviderSource,
+  ProvenanceSink,
   RouterConfig
 } from "@routekit/gateway";
 import {
@@ -36,6 +37,7 @@ export type StartRouterOptions = {
   authToken?: string;
   env?: NodeJS.ProcessEnv;
   sources?: Partial<Record<ProviderId, ProviderSource>>;
+  provenance?: ProvenanceSink;
   /**
    * Graceful-drain window applied on SIGINT/SIGTERM: in-flight requests
    * (long-lived LLM streams) get up to this long to finish before the
@@ -173,6 +175,7 @@ export async function startRouter(options: StartRouterOptions): Promise<RunningR
       host,
       ...(options.port !== undefined ? { port: options.port } : {}),
       ...(options.authToken !== undefined ? { authToken: options.authToken } : {}),
+      ...(options.provenance !== undefined ? { provenance: options.provenance } : {}),
       ...(Object.keys(relays).length > 0 ? { providerRelays: relays } : {}),
       usage: async () => {
         const usage = await collectSubscriptionUsage(accountSets);

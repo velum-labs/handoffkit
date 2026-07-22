@@ -251,10 +251,12 @@ export async function runBufferedServerToolLoop(
 ): Promise<BufferedLoopOutcome> {
   const searches: ExecutedSearch[] = [];
   const events: ServerToolLoopEvent[] = [];
+  const totals: UsageTotals = { prompt: 0, completion: 0, seen: false };
   for (let step = 0; step < MAX_LOOP_STEPS; step += 1) {
     const upstream = step === 0 ? options.firstStep : await options.runStep(options.chat);
     if (!upstream.ok) return { kind: "upstream_error", response: upstream };
     const openai = (await upstream.json()) as Record<string, unknown>;
+    accumulateUsage(totals, openai.usage);
     const choice = (Array.isArray(openai.choices) ? openai.choices[0] : undefined) as
       | {
           message?: {
@@ -269,13 +271,25 @@ export async function runBufferedServerToolLoop(
     const calls = (Array.isArray(message?.tool_calls) ? message.tool_calls : []) as RawToolCall[];
     const server = calls.filter((call) => options.serverToolNames.has(callName(call)));
     const client = calls.filter((call) => !options.serverToolNames.has(callName(call)));
-    if (server.length === 0) return { kind: "openai", openai, searches, events };
+    if (server.length === 0) {
+      return {
+        kind: "openai",
+        openai: withAccumulatedUsage(openai, totals),
+        searches,
+        events
+      };
+    }
     if (client.length > 0 || typeof choice?.finish_reason !== "string") {
       // Mixed batch (or truncated step): surface what the caller can handle;
       // the un-executable server calls are dropped, the model can re-search
       // next turn.
       if (message !== undefined) message.tool_calls = client;
-      return { kind: "openai", openai, searches, events };
+      return {
+        kind: "openai",
+        openai: withAccumulatedUsage(openai, totals),
+        searches,
+        events
+      };
     }
     // Past the search budget, executeServerCalls answers each call with a
     // limit notice instead of executing — the model gets one more step to
@@ -304,11 +318,14 @@ export async function runBufferedServerToolLoop(
   }
   return {
     kind: "openai",
-    openai: {
-      choices: [
-        { index: 0, message: { role: "assistant", content: LIMIT_MESSAGE }, finish_reason: "stop" }
-      ]
-    },
+    openai: withAccumulatedUsage(
+      {
+        choices: [
+          { index: 0, message: { role: "assistant", content: LIMIT_MESSAGE }, finish_reason: "stop" }
+        ]
+      },
+      totals
+    ),
     searches,
     events
   };
@@ -364,6 +381,28 @@ function accumulateUsage(totals: UsageTotals, usage: unknown): void {
   if (typeof source.prompt_tokens === "number") totals.prompt += source.prompt_tokens;
   if (typeof source.completion_tokens === "number") totals.completion += source.completion_tokens;
   totals.seen = true;
+}
+
+function withAccumulatedUsage(
+  openai: Record<string, unknown>,
+  totals: UsageTotals
+): Record<string, unknown> {
+  if (!totals.seen) return openai;
+  const existing =
+    openai.usage !== null &&
+    typeof openai.usage === "object" &&
+    !Array.isArray(openai.usage)
+      ? (openai.usage as Record<string, unknown>)
+      : {};
+  return {
+    ...openai,
+    usage: {
+      ...existing,
+      prompt_tokens: totals.prompt,
+      completion_tokens: totals.completion,
+      total_tokens: totals.prompt + totals.completion
+    }
+  };
 }
 
 /**
