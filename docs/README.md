@@ -26,8 +26,7 @@ Read [Documentation taxonomy](documentation-taxonomy.md) before adding, moving, 
 | [Configuration](configuration.md) | Reference | `.fusionkit/` config, precedence, prompts, and YAML export. |
 | [Privacy](privacy.md) | Policy | Local storage, provider egress, rate-limit failover, and no-telemetry disclosure. |
 | [Fusion Harness Gateway](fusion-harness-gateway.md) | Architecture | Dialect translation, streaming, and per-harness wiring. |
-| [Subscription pooling](subscription-pooling.md) | Architecture | Provider-native relays, credential pools, usage windows, and quota-aware rotation. |
-| [CLIProxyAPI upstream](cliproxy-upstream.md) | Architecture | The `cliproxy` provider: subscription models (Gemini, Grok, Kimi) on a panel via a local OAuth proxy sidecar. |
+| [Subscription pooling](subscription-pooling.md) | Architecture | One account surface over native relays and the managed CLIProxyAPI connector: credential pools, usage windows, and quota-aware rotation. |
 | [Fusion Judge Trajectory](fusion-judge-trajectory.md) | Architecture | Trajectory production, judge synthesis, OTel trace spans, and e2e drivers. |
 | [TypeScript reference](typescript-reference.md) | Reference | TypeScript package ownership and public symbols. |
 | [Python reference](python-reference.md) | Reference | Python package ownership, modules, public classes/functions, CLI commands, and examples. |

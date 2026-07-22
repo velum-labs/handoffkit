@@ -586,6 +586,14 @@
       "anchor": "Claude account backend serves OpenAI chat with managed auth and normalized usage"
     },
     {
+      "id": "accounts.connector-unified-surface",
+      "category": "accounts",
+      "expectation": "One accounts surface serves every subscription kind by connector: the daemon owns the CLIProxyAPI sidecar lifecycle (spawn, crash restart, managed credential injection, shutdown), reports connector-aware account status, and routes removal by connector.",
+      "status": "required",
+      "testFile": "packages/routekit-daemon/src/test/daemon.test.ts",
+      "anchor": "daemon owns the cliproxy sidecar: spawn, restart, account routing, shutdown"
+    },
+    {
       "id": "composition.subscription-provider-fusion",
       "category": "composition",
       "expectation": "Subscription-backed namespaced model ids drive panel, judge, and synthesis while credentials remain absent from Fusion responses.",

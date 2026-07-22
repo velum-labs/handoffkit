@@ -3,27 +3,45 @@ title: Subscription pooling
 description: RouteKit pools named subscriptions behind live provider catalogs.
 ---
 
-Subscription accounts, CLIProxyAPI, and single-model routing are RouteKit
-responsibilities. FusionKit v4 references live namespaced model IDs but does
-not expose account or proxy commands.
+Subscription accounts and single-model routing are RouteKit responsibilities.
+FusionKit v4 references live namespaced model IDs but does not expose account
+commands.
 
-Install the independent CLI:
+Install the independent CLI and enroll accounts — every subscription kind uses
+the same command:
 
 ```bash
 npm install -g @routekit/cli
 routekit config init
 routekit accounts login claude-code --name personal
-routekit accounts login claude-code --name work
-routekit providers status claude-code
+routekit accounts login codex --name work
+routekit accounts login gemini
+routekit accounts status
 routekit models list
 routekit gateway serve
 ```
 
-The canonical subscription kinds are `claude-code` and `codex`.
-`accounts login` runs the official provider login in private temporary state, imports the
-credential, and enables that provider without replacing the user's normal CLI
-login. Use `accounts add` only to import the current official CLI login. The
-Claude Code tool command remains `routekit claude [provider/model]`.
+The subscription kinds are `claude-code`, `codex`, `gemini`, `grok`, and
+`kimi`. `accounts login <kind>` runs the right OAuth flow for the kind,
+enrolls the credential, enables the matching provider, and verifies live model
+discovery. Pass `--no-browser` on a headless host to prefer a device-code or
+copyable-URL flow you can finish from a browser on another device.
+
+For `claude-code` and `codex`, RouteKit runs the official provider login in
+private temporary state, imports the credential, and never replaces the user's
+normal CLI login; use `accounts add` only to import the current official CLI
+login. The Claude Code tool command remains `routekit claude [provider/model]`.
+
+For `gemini`, `grok`, and `kimi`, RouteKit uses a bundled connector (a pinned,
+verified [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) sidecar
+that the RouteKit daemon installs, starts, restarts, and stops on its own).
+Its models appear under the `cliproxy/` namespace. These kinds reuse
+subscription OAuth tokens through reverse-engineered endpoints, which the
+providers' terms restrict: they are for **personal, local use only** — the
+sidecar binds loopback, and login warns before starting. If you already run
+CLIProxyAPI yourself, export `ROUTEKIT_CLIPROXY_API_KEY` (one of the proxy's
+`api-keys`) and, for a non-default host/port, `ROUTEKIT_CLIPROXY_BASE_URL`;
+RouteKit then treats it as a plain provider and never spawns its own sidecar.
 
 Pool policy lives on the provider:
 
@@ -45,12 +63,18 @@ in `.fusionkit/fusion.json`:
   "router": { "config": ".routekit/router.yaml" },
   "ensembles": {
     "default": {
-      "members": ["claude-code/claude-sonnet-4-5"],
+      "members": [
+        "claude-code/claude-sonnet-4-5",
+        "cliproxy/gemini-3.1-pro-preview"
+      ],
       "judge": "claude-code/claude-sonnet-4-5"
     }
   }
 }
 ```
+
+`fusionkit doctor` checks that all referenced namespaced model IDs are
+advertised by RouteKit.
 
 Inside the matching native picker, RouteKit shortens only that provider's
 subscription models: Claude Code shows
@@ -60,27 +84,9 @@ entry and uses the same managed account pool over the provider-native protocol.
 Models from other providers stay source-qualified, and Fusion/configuration
 surfaces remain strictly namespaced.
 
-Normal embedded provider routing does not require a separate account proxy.
-`routekit accounts serve` is advanced mode for exposing the subscription pool
-to an external consumer.
-
 Inspect current limits at any time with `routekit usage` (or
 `routekit usage --watch 10`). It reads live pools from the normal RouteKit
-gateway when one is running and otherwise checks enrolled accounts directly;
-the advanced accounts proxy is not a prerequisite.
-
-For CLIProxyAPI, login, keep the proxy serving, and enable its provider:
-
-```bash
-routekit accounts cliproxy install
-routekit accounts cliproxy login gemini
-routekit accounts cliproxy serve
-routekit providers add cliproxy
-routekit providers status cliproxy
-routekit models list
-```
-
-CLIProxy login does not enable a RouteKit provider.
+gateway when one is running and otherwise checks enrolled accounts directly.
 
 `fusionkit stop` never stops an external RouteKit daemon. An embedded RouteKit
 router composed by FusionKit is process-owned and closes with the Fusion stack.
