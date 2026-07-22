@@ -246,7 +246,12 @@ test("accounts login rejects unknown kinds before contacting the daemon", async 
       "--name",
       "x"
     ]),
-    /unknown subscription kind/
+    (error: unknown) => {
+      const message = error instanceof Error ? error.message : String(error);
+      assert.match(message, /unknown subscription kind.*first-launch kinds/);
+      assert.doesNotMatch(message, /gemini|grok|kimi|cliproxy/i);
+      return true;
+    }
   );
 });
 

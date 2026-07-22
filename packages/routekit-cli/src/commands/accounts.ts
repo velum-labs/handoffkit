@@ -75,6 +75,12 @@ export function registerAccounts(program: Command): void {
             "`accounts login` is interactive and does not support --json or --no-input"
           );
         }
+        if (resolveAccountConnector(subscriptionKind) === undefined) {
+          throw new Error(
+            `unknown subscription kind ${JSON.stringify(subscriptionKind)}; ` +
+              `first-launch kinds: ${LAUNCH_ACCOUNT_KINDS.join(", ")}`
+          );
+        }
         const resolved = resolveAccountKind(subscriptionKind);
         if (!isLaunchAccountKind(resolved.kind)) {
           throw new Error(
