@@ -104,6 +104,35 @@ function writeMember(directory: string, name: string, credential: FakeCredential
   writeFileSync(join(directory, `${name}.json`), JSON.stringify(credential));
 }
 
+type DiscoveryResult = Awaited<ReturnType<SubscriptionProvider["discoverModels"]>>;
+
+function deferred<T>(): {
+  promise: Promise<T>;
+  resolve(value: T): void;
+  reject(reason?: unknown): void;
+} {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = (value) => resolvePromise(value);
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+}
+
+function reasoningModel(effort: string): DiscoveryResult {
+  return [
+    {
+      id: "gpt-shared",
+      reasoning: {
+        status: "supported",
+        efforts: [{ id: effort }],
+        provenance: "provider"
+      }
+    }
+  ];
+}
+
 test("pool transparently rotates from a quota-exhausted member", async () => {
   const directory = mkdtempSync(join(tmpdir(), "routekit-pool-"));
   writeMember(directory, "a", { accessToken: "token-a" });
@@ -292,6 +321,70 @@ test("pool unions heterogeneous member catalogs and routes only eligible account
   } finally {
     await pool.close();
     rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("capability conflicts resolve by account order across reversed response timing", async () => {
+  for (const completionOrder of [
+    ["token-a", "token-b"],
+    ["token-b", "token-a"]
+  ] as const) {
+    const directory = mkdtempSync(join(tmpdir(), "routekit-pool-capabilities-"));
+    // Directory-backed pools sort filenames, independently of creation order.
+    writeMember(directory, "b", { accessToken: "token-b" });
+    writeMember(directory, "a", { accessToken: "token-a" });
+    const gates: Record<string, ReturnType<typeof deferred<DiscoveryResult>>> = {
+      "token-a": deferred<DiscoveryResult>(),
+      "token-b": deferred<DiscoveryResult>()
+    };
+    const provider = fakeProvider({ refreshes: 0 });
+    provider.discoverModels = (credential) => gates[credential.accessToken]!.promise;
+    const pool = await SubscriptionAccountSet.open(provider, {
+      mode: "codex",
+      source: { kind: "directory", path: directory }
+    });
+    try {
+      const discovering = pool.discoverModels();
+      gates[completionOrder[0]]!.resolve(reasoningModel(completionOrder[0]));
+      await Promise.resolve();
+      gates[completionOrder[1]]!.resolve(reasoningModel(completionOrder[1]));
+      await discovering;
+      assert.deepEqual(
+        pool.reasoningCapabilities("gpt-shared")?.efforts?.map((effort) => effort.id),
+        ["token-a"]
+      );
+    } finally {
+      await pool.close();
+      rmSync(directory, { recursive: true, force: true });
+    }
+  }
+});
+
+test("capability precedence skips failed and capability-omitting accounts", async () => {
+  for (const firstAccount of ["failed", "omitted"] as const) {
+    const directory = mkdtempSync(join(tmpdir(), "routekit-pool-capability-fallback-"));
+    writeMember(directory, "a", { accessToken: "token-a" });
+    writeMember(directory, "b", { accessToken: "token-b" });
+    const provider = fakeProvider({ refreshes: 0 });
+    provider.discoverModels = async (credential) => {
+      if (credential.accessToken === "token-b") return reasoningModel("second-account");
+      if (firstAccount === "failed") throw new Error("discovery unavailable");
+      return ["gpt-shared"];
+    };
+    const pool = await SubscriptionAccountSet.open(provider, {
+      mode: "codex",
+      source: { kind: "directory", path: directory }
+    });
+    try {
+      await pool.discoverModels();
+      assert.deepEqual(
+        pool.reasoningCapabilities("gpt-shared")?.efforts?.map((effort) => effort.id),
+        ["second-account"]
+      );
+    } finally {
+      await pool.close();
+      rmSync(directory, { recursive: true, force: true });
+    }
   }
 });
 

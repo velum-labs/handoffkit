@@ -640,6 +640,14 @@
       "status": "required",
       "testFile": "packages/model-gateway/src/test/router.test.ts",
       "anchor": "catalog applies configured opaque efforts and rejects unavailable values before egress"
+    },
+    {
+      "id": "reasoning.deterministic-account-precedence",
+      "category": "model-exposure",
+      "expectation": "Conflicting account-discovered reasoning capabilities resolve by configured account order regardless of response timing.",
+      "status": "required",
+      "testFile": "packages/accounts/src/test/subscription-pool.test.ts",
+      "anchor": "capability conflicts resolve by account order across reversed response timing"
     }
   ]
 }

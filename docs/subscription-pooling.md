@@ -62,6 +62,16 @@ that model. Each member keeps independent credential refresh, quota windows,
 rate-limit cooldowns, and reset times. `accounts status` reports all members
 and connector health without exposing credentials.
 
+Capability conflicts do not depend on network response timing. Explicit
+`reasoningCapabilities` configuration has highest precedence. Otherwise, a
+native pool uses the first successfully discovered account in configured order
+that reports reasoning metadata for the model: directory-backed accounts are
+ordered by account filename, and explicit account paths retain caller order.
+Failed accounts and accounts that omit the metadata are skipped. CLIProxy-backed
+Gemini, Grok, and Kimi accounts expose one connector-aggregated catalog, so
+RouteKit has no per-account capability conflict to merge on that path; the same
+explicit configuration override still wins over that discovered catalog.
+
 Claude Code and Codex present their own subscription models under bare native
 names in their `/model` pickers. This is only a client-facing alias:
 `claude-sonnet-4-6` still resolves to
