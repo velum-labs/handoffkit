@@ -14,7 +14,7 @@ npm install -g @routekit/cli
 routekit config init
 routekit providers status
 routekit models list
-routekit gateway serve
+routekit start
 routekit codex openai/gpt-5.5
 ```
 
@@ -29,8 +29,12 @@ spawning stay local. Concurrent first calls race-safely start exactly one
 daemon, using a persistent systemd user unit / launchd agent when available
 and a clearly reported detached fallback otherwise.
 
-`routekit daemon start|status|reload|restart|upgrade|stop|logs` and `daemon
-service install|uninstall|status` are the lifecycle surface. Config/account
+`routekit start|status|stop` is the public lifecycle. The same bootstrap runs
+implicitly before product commands, chooses systemd/launchd or detached
+operation internally, and never requires a separate service-install workflow.
+Advanced `routekit daemon reload|restart|upgrade|logs`, `daemon service
+install|uninstall|status`, and `gateway serve` commands remain available for
+repair, diagnostics, compatibility, and foreground development. Config/account
 reloads atomically switch router generations while
 old in-flight streams drain; binary upgrade drains and restarts the combined
 daemon, then the initiating client reconnects and retries.

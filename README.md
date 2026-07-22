@@ -21,7 +21,8 @@ For independent routing through explicit providers:
 ```bash
 npm install -g @routekit/cli
 routekit config init
-routekit gateway serve              # or: routekit codex | claude | cursor | opencode
+routekit start                      # product commands also start RouteKit automatically
+routekit codex                      # or: routekit claude | cursor | opencode
 ```
 
 RouteKit has no FusionKit runtime dependency and does not download local models.

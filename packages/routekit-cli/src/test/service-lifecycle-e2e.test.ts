@@ -47,7 +47,7 @@ function alive(pid: number): boolean {
   }
 }
 
-test("daemon lifecycle: start, idempotency, upgrade, drain-on-stop", async () => {
+test("public RouteKit lifecycle: start, idempotency, upgrade, drain-on-stop", async () => {
   const root = mkdtempSync(join(tmpdir(), "routekit-service-e2e-"));
   const project = join(root, "project");
   const home = join(root, "home");
