@@ -90,7 +90,9 @@ valid for FusionKit's `{ "config": ... }` embedded mode. `--config` and
 scope selectors. `config import` validates and atomically replaces the complete
 canonical document; it does not merge project and global files. A sparse
 project overlay that relies on inherited SDK-global fields must be expanded
-into a complete router document before import.
+into a complete router document before import. Stop any foreground gateway
+running from an explicit config before replacing the canonical singleton
+document.
 
 Enable each provider explicitly. RouteKit obtains API URLs and credential
 environment-variable names from its registry, performs live discovery at

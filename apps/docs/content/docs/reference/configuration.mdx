@@ -73,6 +73,8 @@ routekit config import --from .routekit/router.yaml
 Import validates and atomically replaces the canonical document; it does not
 merge project and global files. Expand any sparse SDK overlay that depends on
 inherited global fields into a complete router document before importing it.
+Stop any foreground gateway running from an explicit config before replacing
+the canonical singleton document.
 Daemon-backed commands reject `--config` and `ROUTEKIT_CONFIG`; those selectors
 are limited to documented foreground gateway, doctor, migration, and SDK
 recovery paths.

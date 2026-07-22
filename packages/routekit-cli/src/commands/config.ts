@@ -129,6 +129,12 @@ export function registerConfig(program: Command): void {
       }
       const client = await routekitClient();
       const current = await client.call("config.get", {});
+      if (resolve(current.path) !== resolve(path)) {
+        throw new Error(
+          `RouteKit is running with foreground config ${current.path}; ` +
+            "stop it before replacing the canonical singleton config"
+        );
+      }
       await client.call(
         "config.update",
         {
@@ -194,6 +200,12 @@ export function registerConfig(program: Command): void {
       const replaceThroughDaemon = async (): Promise<number> => {
         const client = await routekitClient();
         const current = await client.call("config.get", {});
+        if (resolve(current.path) !== resolve(canonical)) {
+          throw new Error(
+            `RouteKit is running with foreground config ${current.path}; ` +
+              "stop it before importing into the canonical singleton config"
+          );
+        }
         const imported = await client.call(
           "config.import",
           {

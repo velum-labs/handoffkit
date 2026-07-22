@@ -313,9 +313,15 @@ test("concurrent cold config mutations keep the canonical file and daemon genera
       run(["config", "import", "--from", second, "--json"], project, env),
       run(["config", "init", "--force", "--json"], project, env)
     ]);
+    const record = JSON.parse(
+      readFileSync(join(state, "services", "daemon.json"), "utf8")
+    ) as { pid: number };
+    pid = record.pid;
     assert.ok(mutations.some((result) => result.code === 0));
     for (const result of mutations) {
-      if (result.code !== 0) assert.match(result.stderr, /revision conflict/i);
+      if (result.code !== 0) {
+        assert.match(`${result.stdout}${result.stderr}`, /revision conflict/i);
+      }
     }
     for (const result of mutations.slice(0, 2)) {
       if (result.code === 0) {
@@ -326,10 +332,6 @@ test("concurrent cold config mutations keep the canonical file and daemon genera
       }
     }
 
-    const record = JSON.parse(
-      readFileSync(join(state, "services", "daemon.json"), "utf8")
-    ) as { pid: number };
-    pid = record.pid;
     const shown = await run(["config", "show", "--json"], project, env);
     assert.equal(shown.code, 0, shown.stderr);
     const active = JSON.parse(shown.stdout) as {
