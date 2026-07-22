@@ -22,6 +22,7 @@ import {
   writeRouterConfig
 } from "../config.js";
 import {
+  connectDaemon,
   daemonLifecycleLockPath,
   ensureDaemon,
   readDaemonRecord,
@@ -127,7 +128,7 @@ export function registerConfig(program: Command): void {
       if (existsSync(path) && options.force !== true) {
         throw new Error(`${path} already exists (pass --force to replace it)`);
       }
-      const client = await routekitClient();
+      const client = (await connectDaemon())?.client ?? await routekitClient();
       const current = await client.call("config.get", {});
       if (resolve(current.path) !== resolve(path)) {
         throw new Error(
@@ -198,7 +199,7 @@ export function registerConfig(program: Command): void {
       const canonical = globalRouterConfigPath();
       let revision: number | undefined;
       const replaceThroughDaemon = async (): Promise<number> => {
-        const client = await routekitClient();
+        const client = (await connectDaemon())?.client ?? await routekitClient();
         const current = await client.call("config.get", {});
         if (resolve(current.path) !== resolve(canonical)) {
           throw new Error(
