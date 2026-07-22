@@ -4,6 +4,7 @@
     "claude-code": {
       "provider": "anthropic",
       "credentialsPath": "~/.claude/.credentials.json",
+      "configPath": "~/.claude/settings.json",
       "accountsDirectory": "~/.routekit/subscriptions/claude-code",
       "keychainService": "Claude Code-credentials",
       "defaultModel": "claude-sonnet-4-5",

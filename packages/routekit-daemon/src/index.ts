@@ -1056,22 +1056,88 @@ export async function startRouteKitDaemon(
               ? join(nativeDirectory, `${params.label}.json`)
               : undefined;
           if (nativePath !== undefined && existsSync(nativePath)) {
-            const previous = readFileSync(nativePath);
-            const result = removeSubscriptionAccount(
-              kind as SubscriptionMode,
-              params.label,
-              { accountsDirectory: nativeDirectory }
+            const nativeKind = kind as SubscriptionMode;
+            const activeNativeDirectory = dirname(nativePath);
+            const hasRemainingAccount = accountEntries(env).some(
+              (entry) =>
+                entry.connector === "native" &&
+                entry.subscriptionKind === nativeKind &&
+                entry.label !== params.label
             );
-            removed = result.removed;
-            if (!result.removed) return;
+            const raw = parseYaml(currentDocument) as Record<string, unknown>;
+            const providers =
+              typeof raw.providers === "object" &&
+              raw.providers !== null &&
+              !Array.isArray(raw.providers)
+                ? { ...(raw.providers as Record<string, unknown>) }
+                : {};
+            const disableProvider =
+              !hasRemainingAccount &&
+              currentConfig.providers[nativeKind] !== undefined;
+            if (disableProvider) {
+              for (const providerKey of nativeKind === "claude-code"
+                ? ["claude-code", "claudeCode", "claude"]
+                : [nativeKind]) {
+                delete providers[providerKey];
+              }
+              raw.providers = providers;
+              if (
+                typeof raw.defaultModel === "string" &&
+                raw.defaultModel.startsWith(`${nativeKind}/`)
+              ) {
+                delete raw.defaultModel;
+              }
+            }
+            const nextDocument = disableProvider
+              ? stringifyYaml(raw)
+              : currentDocument;
+            const nextConfig = disableProvider
+              ? parseConfigDocument(nextDocument)
+              : currentConfig;
+            const transaction = prepareAccountTransaction({
+              home,
+              configPath,
+              accountPaths: [nativePath],
+              accountRoots: [activeNativeDirectory],
+              kind: nativeKind,
+              provider: nativeKind,
+              labels: [params.label]
+            });
             try {
-              await replaceRouter(currentConfig, currentDocument, {
-                write: false,
-                accountRevision: true
+              const result = removeSubscriptionAccount(
+                nativeKind,
+                params.label,
+                { accountsDirectory: activeNativeDirectory }
+              );
+              removed = result.removed;
+              if (!result.removed) {
+                cleanupAccountTransaction(transaction);
+                return;
+              }
+              await replaceRouter(nextConfig, nextDocument, {
+                write: disableProvider,
+                configRevision: disableProvider,
+                accountRevision: true,
+                beforeSwap: () => markAccountTransactionCommitted(transaction)
               });
+              try {
+                cleanupAccountTransaction(transaction);
+              } catch {
+                // A committed manifest is cleanup-only on the next daemon start.
+              }
             } catch (error) {
-              writeFileAtomic(nativePath, previous.toString("utf8"), { mode: 0o600 });
-              chmodSync(nativePath, 0o600);
+              const rollbackFailures: unknown[] = [];
+              try {
+                rollbackAccountTransaction(transaction, home);
+              } catch (rollbackError) {
+                rollbackFailures.push(rollbackError);
+              }
+              if (rollbackFailures.length > 0) {
+                throw new AggregateError(
+                  [error, ...rollbackFailures],
+                  `could not remove ${kind}/${params.label}; rollback failed`
+                );
+              }
               throw error;
             }
             return;
@@ -1133,6 +1199,7 @@ export async function startRouteKitDaemon(
       },
       "doctor.run": async (_params, context) => {
         const providers = await activeRouter!.providerStatuses(context.signal);
+        const configuredProviders = configuredProviderIds(currentConfig);
         const accounts = accountEntries(env);
         const missingProviders = [
           ...new Set(
@@ -1162,6 +1229,14 @@ export async function startRouteKitDaemon(
             { name: "canonical config", ok: existsSync(configPath), detail: configPath },
             { name: "control plane", ok: control !== undefined },
             { name: "model gateway", ok: proxy !== undefined, detail: dataUrl },
+            {
+              name: "provider configuration",
+              ok: configuredProviders.length > 0,
+              detail:
+                configuredProviders.length > 0
+                  ? `${configuredProviders.length} provider(s) configured`
+                  : "no providers configured; run `routekit providers add <provider>`"
+            },
             {
               name: "account activation recovery",
               ok: true,

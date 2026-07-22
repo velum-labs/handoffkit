@@ -16,6 +16,9 @@
     },
     {
       "path": "../runtime-utils"
+    },
+    {
+      "path": "../routekit-registry"
     }
   ]
 }

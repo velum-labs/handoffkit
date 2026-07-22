@@ -326,7 +326,7 @@ Product-neutral RouteKit gateway and router.
 - `export type { Backend, BackendModelRoute, BackendRequestOptions, RequestAttributionUpdate, ModelRoutedBackendOptions, OpenAiBackendOptions } from "./backend.js";`
 - `export { AnthropicBackend, CodexResponsesBackend, GoogleGenAiBackend } from "./provider-backends.js";`
 - `export type { ProviderBackendOptions, ProviderTransport } from "./provider-backends.js";`
-- `export { CatalogBackend, isSubscriptionProvider, normalizeRouterConfigAliases, parseRouterConfig, routerConfigSchema, splitNamespacedModel, UnknownModelError } from "./router.js";`
+- `export { CatalogBackend, isSubscriptionProvider, NoModelAvailableError, normalizeRouterConfigAliases, parseRouterConfig, routerConfigSchema, splitNamespacedModel, UnknownModelError } from "./router.js";`
 - `export type { CatalogBackendOptions, CatalogModelInfo, ProviderPolicy, RouterConfig, } from "./router.js";`
 - `export { API_PROVIDER_IDS, ApiProviderSource, parseDiscoveredModels, parseReasoningCapabilities, PROVIDER_IDS, SUBSCRIPTION_PROVIDER_IDS } from "./provider-source.js";`
 - `export type { ApiProviderId, ApiProviderSourceOptions, DiscoveredModel, ProviderId, ProviderSource, ProviderSourceTransport, SubscriptionProviderId } from "./provider-source.js";`
@@ -710,6 +710,8 @@ No module JSDoc was found.
 - `export const claudeTool: ToolIntegration ...`
 - `export { claudeDriverConfigSchema, createClaudeDriver } from "./driver.js";`
 - `export type { ClaudeDriverConfig, ClaudeDriverOptions, ClaudeQueryFn } from "./driver.js";`
+- `export { installClaudeIntegration, uninstallClaudeIntegration } from "./install.js";`
+- `export type { ClaudeInstallInput, ClaudeInstallOwner, ClaudeInstallResult } from "./install.js";`
 - `export { claudeAgentsJson, claudeEnv, claudeLaunchArgs, launchClaude } from "./launch.js";`
 
 ### `packages/tool-codex/src/index.ts`
@@ -755,6 +757,8 @@ Canonical registry of the coding-tool integrations shipped by RouteKit.
 Add a new integration to `toolIntegrations`; consumers receive it through
 `toolRegistry` without maintaining their own package imports or lists.
 
+- `export { installClaudeIntegration, uninstallClaudeIntegration } from "@routekit/tool-claude";`
+- `export type { ClaudeInstallInput, ClaudeInstallOwner, ClaudeInstallResult } from "@routekit/tool-claude";`
 - `export { codexIntegrationBlock, installCodexIntegration, uninstallCodexIntegration } from "@routekit/tool-codex";`
 - `export type { CodexInstallInput, CodexInstallOwner, CodexInstallProfile, CodexInstallResult } from "@routekit/tool-codex";`
 - `export const toolIntegrations: readonly ToolIntegration[] ...`

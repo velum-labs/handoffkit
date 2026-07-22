@@ -29,6 +29,7 @@ export type { ProviderBackendOptions, ProviderTransport } from "./provider-backe
 export {
   CatalogBackend,
   isSubscriptionProvider,
+  NoModelAvailableError,
   normalizeRouterConfigAliases,
   parseRouterConfig,
   routerConfigSchema,

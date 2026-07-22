@@ -91,6 +91,12 @@ test("real routekit command surfaces execute independently of FusionKit", () => 
     assert.match(installHelp.stdout, /--gateway-url/);
     assert.match(installHelp.stdout, /--codex-home/);
 
+    const claudeInstallHelp = runCli(["claude", "install", "--help"], input);
+    assert.equal(claudeInstallHelp.status, 0, claudeInstallHelp.stderr);
+    assert.match(claudeInstallHelp.stdout, /--gateway-url/);
+    assert.match(claudeInstallHelp.stdout, /--auth-token-env/);
+    assert.match(claudeInstallHelp.stdout, /--claude-config-dir/);
+
     const legacyInstall = runCli(["install", "codex"], input);
     assert.equal(legacyInstall.status, 1);
     assert.match(legacyInstall.stderr, /unknown command/i);

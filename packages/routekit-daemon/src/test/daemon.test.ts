@@ -7,6 +7,7 @@ import {
   readFileSync,
   rmSync,
   statSync,
+  symlinkSync,
   writeFileSync
 } from "node:fs";
 import { createServer } from "node:http";
@@ -18,6 +19,7 @@ import test from "node:test";
 import { CLIPROXY_PINNED_VERSION } from "@routekit/accounts";
 import { RouteKitControlClient } from "@routekit/control";
 import { ControlClient, ControlError, createServiceRecordStore } from "@routekit/runtime";
+import { parse as parseYaml } from "yaml";
 
 import { startRouteKitDaemon } from "../index.js";
 import { prepareAccountTransaction } from "../account-transaction.js";
@@ -70,6 +72,67 @@ async function mockProvider(): Promise<{
     close: async () =>
       await new Promise<void>((resolve) => server.close(() => resolve()))
   };
+}
+
+async function withMockAnthropicDiscovery<T>(run: () => Promise<T>): Promise<T> {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input: string | URL | Request, init?: RequestInit) => {
+    const url = new URL(input instanceof Request ? input.url : input.toString());
+    if (url.hostname === "api.anthropic.com" && url.pathname === "/v1/models") {
+      return new Response(
+        JSON.stringify({ data: [{ id: "claude-test-model", type: "model" }] }),
+        { headers: { "content-type": "application/json" } }
+      );
+    }
+    return await originalFetch(input, init);
+  };
+  try {
+    return await run();
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+}
+
+async function withMockNativeDiscovery<T>(
+  kind: "claude-code" | "codex",
+  run: () => Promise<T>
+): Promise<T> {
+  if (kind === "claude-code") return await withMockAnthropicDiscovery(run);
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input: string | URL | Request, init?: RequestInit) => {
+    const url = new URL(input instanceof Request ? input.url : input.toString());
+    if (
+      url.hostname === "chatgpt.com" &&
+      url.pathname.startsWith("/backend-api/codex/") &&
+      url.pathname.endsWith("/models")
+    ) {
+      return Response.json({ models: [{ slug: "gpt-test-model" }] });
+    }
+    return await originalFetch(input, init);
+  };
+  try {
+    return await run();
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+}
+
+function nativeCredential(kind: "claude-code" | "codex"): Record<string, unknown> {
+  return kind === "claude-code"
+    ? {
+        claudeAiOauth: {
+          accessToken: "test-access",
+          refreshToken: "test-refresh",
+          expiresAt: Date.now() + 3_600_000
+        }
+      }
+    : {
+        tokens: {
+          access_token: "eyJhbGciOiJub25lIn0.eyJleHAiOjk5OTk5OTk5OTl9.",
+          refresh_token: "test-refresh",
+          account_id: "acct-test"
+        }
+      };
 }
 
 test("singleton daemon exposes authenticated control and a stable reloadable data plane", async () => {
@@ -337,6 +400,429 @@ test("singleton daemon exposes authenticated control and a stable reloadable dat
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test("native provider stays enabled until its last account is removed", async () => {
+  const root = mkdtempSync(join(tmpdir(), "routekit-daemon-native-remove-"));
+  const stateHome = join(root, "state");
+  const configPath = join(root, "router.yaml");
+  const accountsDirectory = join(stateHome, "subscriptions", "claude-code");
+  const firstPath = join(accountsDirectory, "first.json");
+  const lastPath = join(accountsDirectory, "last.json");
+  mkdirSync(accountsDirectory, { recursive: true });
+  for (const [path, suffix] of [
+    [firstPath, "first"],
+    [lastPath, "last"]
+  ]) {
+    writeFileSync(
+      path!,
+      JSON.stringify({
+        claudeAiOauth: {
+          accessToken: `${suffix}-access`,
+          refreshToken: `${suffix}-refresh`,
+          expiresAt: Date.now() + 3_600_000
+        }
+      }),
+      { mode: 0o600 }
+    );
+  }
+  writeFileSync(
+    configPath,
+    [
+      "providers:",
+      "  openai: {}",
+      "  claude:",
+      "    strategy: round_robin",
+      "defaultModel: claude-code/claude-test-model",
+      ""
+    ].join("\n")
+  );
+  const upstream = await mockProvider();
+  try {
+    await withMockAnthropicDiscovery(async () => {
+      const daemon = await startRouteKitDaemon({
+        packageVersion: "1.2.3",
+        stateHome,
+        configPath,
+        port: 0,
+        portless: false,
+        env: {
+          ...process.env,
+          HOME: root,
+          ROUTEKIT_HOME: stateHome,
+          OPENAI_API_KEY: "test-key",
+          OPENAI_BASE_URL: upstream.url,
+          ROUTEKIT_PORTLESS: "0"
+        }
+      });
+      try {
+        const client = new RouteKitControlClient({
+          url: daemon.record.url,
+          token: daemon.record.controlToken!
+        });
+        const initial = await client.call("daemon.status", {});
+
+        const first = await client.call(
+          "accounts.remove",
+          { kind: "claude-code", label: "first" },
+          { idempotencyKey: "remove-first-claude" }
+        );
+        assert.equal(first.removed, true);
+        assert.equal(existsSync(firstPath), false);
+        assert.equal(existsSync(lastPath), true);
+        const afterFirst = await client.call("daemon.status", {});
+        assert.equal(afterFirst.configRevision, initial.configRevision);
+        assert.equal(afterFirst.accountRevision, initial.accountRevision + 1);
+        const firstConfig = parseYaml(
+          (await client.call("config.get", {})).document
+        ) as {
+          providers: Record<string, unknown>;
+          defaultModel?: string;
+        };
+        assert.ok(firstConfig.providers.claude !== undefined);
+        assert.equal(
+          firstConfig.defaultModel,
+          "claude-code/claude-test-model"
+        );
+
+        const last = await client.call(
+          "accounts.remove",
+          { kind: "claude-code", label: "last" },
+          { idempotencyKey: "remove-last-claude" }
+        );
+        assert.equal(last.removed, true);
+        assert.equal(existsSync(lastPath), false);
+        const afterLast = await client.call("daemon.status", {});
+        assert.equal(afterLast.configRevision, afterFirst.configRevision + 1);
+        assert.equal(afterLast.accountRevision, afterFirst.accountRevision + 1);
+        const lastConfig = parseYaml(
+          (await client.call("config.get", {})).document
+        ) as {
+          providers: Record<string, unknown>;
+          defaultModel?: string;
+        };
+        assert.equal(lastConfig.providers["claude-code"], undefined);
+        assert.equal(lastConfig.defaultModel, undefined);
+        assert.deepEqual(
+          (await client.call("providers.status", {})).providers.map(
+            (provider) => provider.provider
+          ),
+          ["openai"]
+        );
+        assert.deepEqual(
+          (await client.call("models.list", {})).models.map((model) => model.id),
+          ["openai/mock-model"]
+        );
+        assert.equal(
+          (
+            await client.call("doctor.run", {})
+          ).checks.find(
+            (check) => check.name === "account/provider consistency"
+          )?.ok,
+          true
+        );
+        assert.equal(existsSync(join(stateHome, "account-transactions")), false);
+
+        const repeated = await client.call(
+          "accounts.remove",
+          { kind: "claude-code", label: "last" },
+          { idempotencyKey: "remove-last-claude-again" }
+        );
+        assert.equal(repeated.removed, false);
+        assert.deepEqual(await client.call("daemon.status", {}), afterLast);
+      } finally {
+        await daemon.close();
+      }
+    });
+  } finally {
+    await upstream.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+for (const kind of ["claude-code", "codex"] as const) {
+  test(`last sole ${kind} account leaves a healthy unconfigured daemon without provider credentials`, async () => {
+    const root = mkdtempSync(join(tmpdir(), `routekit-daemon-sole-${kind}-`));
+    const stateHome = join(root, "state");
+    const configPath = join(root, "router.yaml");
+    const accountsDirectory = join(stateHome, "subscriptions", kind);
+    const accountPath = join(accountsDirectory, "only.json");
+    mkdirSync(accountsDirectory, { recursive: true });
+    writeFileSync(accountPath, JSON.stringify(nativeCredential(kind)), { mode: 0o600 });
+    writeFileSync(
+      configPath,
+      [
+        "providers:",
+        `  ${kind === "claude-code" ? "claude" : kind}: {}`,
+        `defaultModel: ${kind}/${kind === "claude-code" ? "claude-test-model" : "gpt-test-model"}`,
+        ""
+      ].join("\n")
+    );
+    try {
+      await withMockNativeDiscovery(kind, async () => {
+        const daemon = await startRouteKitDaemon({
+          packageVersion: "1.2.3",
+          stateHome,
+          configPath,
+          port: 0,
+          portless: false,
+          env: {
+            HOME: root,
+            ROUTEKIT_HOME: stateHome,
+            ROUTEKIT_PORTLESS: "0"
+          }
+        });
+        try {
+          const client = new RouteKitControlClient({
+            url: daemon.record.url,
+            token: daemon.record.controlToken!
+          });
+          const before = await client.call("daemon.status", {});
+          const result = await client.call(
+            "accounts.remove",
+            { kind, label: "only" },
+            { idempotencyKey: `remove-only-${kind}` }
+          );
+          assert.equal(result.removed, true);
+          assert.equal(result.revision, before.accountRevision + 1);
+          assert.equal(existsSync(accountPath), false);
+          const after = await client.call("daemon.status", {});
+          assert.equal(after.configRevision, before.configRevision + 1);
+          assert.equal(after.accountRevision, before.accountRevision + 1);
+          const config = parseYaml(
+            (await client.call("config.get", {})).document
+          ) as {
+            providers: Record<string, unknown>;
+            defaultModel?: string;
+          };
+          assert.deepEqual(Object.keys(config.providers), []);
+          assert.equal(config.defaultModel, undefined);
+          assert.deepEqual((await client.call("providers.status", {})).providers, []);
+          const listed = await client.call("models.list", {});
+          assert.deepEqual(listed.models, []);
+          assert.equal(listed.defaultModel, undefined);
+          const currentStatus = await client.call("daemon.status", {});
+          assert.equal(currentStatus.dataUrl, daemon.dataUrl);
+          assert.equal(currentStatus.draining, false);
+
+          const doctor = await client.call("doctor.run", {});
+          assert.deepEqual(
+            doctor.checks.find(
+              (check) => check.name === "provider configuration"
+            ),
+            {
+              name: "provider configuration",
+              ok: false,
+              detail:
+                "no providers configured; run `routekit providers add <provider>`"
+            }
+          );
+          assert.equal(
+            doctor.checks.find(
+              (check) => check.name === "account/provider consistency"
+            )?.ok,
+            true
+          );
+          await assert.rejects(
+            client.call("launcher.prepare", { tool: "codex" }),
+            (error: unknown) =>
+              error instanceof ControlError &&
+              error.code === "not_found" &&
+              /no model is available/.test(error.message)
+          );
+
+          assert.equal((await fetch(`${daemon.dataUrl}/health`)).status, 200);
+          const dataToken = readFileSync(daemon.record.authTokenFile!, "utf8").trim();
+          const gatewayModels = await fetch(`${daemon.dataUrl}/v1/models`, {
+            headers: { authorization: `Bearer ${dataToken}` }
+          });
+          assert.equal(gatewayModels.status, 200);
+          assert.deepEqual(await gatewayModels.json(), {
+            object: "list",
+            data: [],
+            models: []
+          });
+
+          const unavailableResponse = await fetch(
+            `${daemon.dataUrl}/v1/chat/completions`,
+            {
+              method: "POST",
+              headers: {
+                authorization: `Bearer ${dataToken}`,
+                "content-type": "application/json"
+              },
+              body: JSON.stringify({
+                messages: [{ role: "user", content: "hello" }]
+              })
+            }
+          );
+          assert.equal(unavailableResponse.status, 503);
+          assert.match(await unavailableResponse.text(), /no model is available/);
+
+          const modelResponse = await fetch(
+            `${daemon.dataUrl}/v1/chat/completions`,
+            {
+              method: "POST",
+              headers: {
+                authorization: `Bearer ${dataToken}`,
+                "content-type": "application/json"
+              },
+              body: JSON.stringify({
+                model: `${kind}/removed-model`,
+                messages: [{ role: "user", content: "hello" }]
+              })
+            }
+          );
+          assert.equal(modelResponse.status, 400);
+          assert.match(await modelResponse.text(), /unknown model/);
+          assert.equal(existsSync(join(stateHome, "account-transactions")), false);
+        } finally {
+          await daemon.close();
+        }
+      });
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+}
+
+test("native removal failure before deletion cleans its prepared transaction", async () => {
+  const root = mkdtempSync(join(tmpdir(), "routekit-daemon-remove-symlink-"));
+  const stateHome = join(root, "state");
+  const configPath = join(root, "router.yaml");
+  const accountsDirectory = join(stateHome, "subscriptions", "claude-code");
+  const externalPath = join(root, "external.json");
+  const accountPath = join(accountsDirectory, "linked.json");
+  mkdirSync(accountsDirectory, { recursive: true });
+  writeFileSync(externalPath, JSON.stringify(nativeCredential("claude-code")), {
+    mode: 0o600
+  });
+  symlinkSync(externalPath, accountPath);
+  writeFileSync(
+    configPath,
+    [
+      "providers:",
+      "  openai: {}",
+      "defaultModel: openai/mock-model",
+      ""
+    ].join("\n")
+  );
+  const upstream = await mockProvider();
+  const daemon = await startRouteKitDaemon({
+    packageVersion: "1.2.3",
+    stateHome,
+    configPath,
+    port: 0,
+    portless: false,
+    env: {
+      ...process.env,
+      HOME: root,
+      ROUTEKIT_HOME: stateHome,
+      OPENAI_API_KEY: "test-key",
+      OPENAI_BASE_URL: upstream.url,
+      ROUTEKIT_PORTLESS: "0"
+    }
+  });
+  try {
+    const client = new RouteKitControlClient({
+      url: daemon.record.url,
+      token: daemon.record.controlToken!
+    });
+    const before = await client.call("daemon.status", {});
+    await assert.rejects(
+      client.call(
+        "accounts.remove",
+        { kind: "claude-code", label: "linked" },
+        { idempotencyKey: "remove-linked-claude" }
+      ),
+      (error: unknown) => error instanceof ControlError
+    );
+    assert.equal(existsSync(accountPath), true);
+    assert.equal(existsSync(externalPath), true);
+    assert.deepEqual(await client.call("daemon.status", {}), before);
+    assert.equal(existsSync(join(stateHome, "account-transactions")), false);
+  } finally {
+    await daemon.close();
+    await upstream.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("failed last native account removal restores credential and config", async () => {
+  const root = mkdtempSync(join(tmpdir(), "routekit-daemon-native-rollback-"));
+  const stateHome = join(root, "state");
+  const configPath = join(root, "router.yaml");
+  const accountsDirectory = join(stateHome, "subscriptions", "claude-code");
+  const accountPath = join(accountsDirectory, "work.json");
+  mkdirSync(accountsDirectory, { recursive: true });
+  const credential = JSON.stringify({
+    claudeAiOauth: {
+      accessToken: "rollback-access",
+      refreshToken: "rollback-refresh",
+      expiresAt: Date.now() + 3_600_000
+    }
+  });
+  writeFileSync(accountPath, credential, { mode: 0o600 });
+  writeFileSync(
+    configPath,
+    [
+      "providers:",
+      "  openai: {}",
+      "  claude-code: {}",
+      "defaultModel: claude-code/claude-test-model",
+      ""
+    ].join("\n")
+  );
+  const upstream = await mockProvider();
+  try {
+    await withMockAnthropicDiscovery(async () => {
+      const daemon = await startRouteKitDaemon({
+        packageVersion: "1.2.3",
+        stateHome,
+        configPath,
+        port: 0,
+        portless: false,
+        env: {
+          ...process.env,
+          HOME: root,
+          ROUTEKIT_HOME: stateHome,
+          OPENAI_API_KEY: "test-key",
+          OPENAI_BASE_URL: upstream.url,
+          ROUTEKIT_PORTLESS: "0"
+        }
+      });
+      try {
+        const client = new RouteKitControlClient({
+          url: daemon.record.url,
+          token: daemon.record.controlToken!
+        });
+        const beforeStatus = await client.call("daemon.status", {});
+        const beforeDocument = (await client.call("config.get", {})).document;
+        await upstream.close();
+
+        await assert.rejects(
+          client.call(
+            "accounts.remove",
+            { kind: "claude-code", label: "work" },
+            { idempotencyKey: "remove-last-claude-failure" }
+          )
+        );
+        assert.equal(readFileSync(accountPath, "utf8"), credential);
+        assert.equal(
+          (await client.call("config.get", {})).document,
+          beforeDocument
+        );
+        assert.deepEqual(await client.call("daemon.status", {}), beforeStatus);
+        assert.equal(existsSync(join(stateHome, "account-transactions")), false);
+      } finally {
+        await daemon.close();
+      }
+    });
+  } finally {
+    await upstream.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 async function freePort(): Promise<number> {
   const server = createServer();
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -647,6 +1133,90 @@ test("daemon owns the cliproxy sidecar: spawn, restart, account routing, shutdow
       )?.configured,
       true
     );
+
+    const beforeClaude = await client.call("daemon.status", {});
+    const claudeActivation = {
+      kind: "claude-code" as const,
+      accounts: [
+        {
+          label: "claude-work",
+          credential: {
+            claudeAiOauth: {
+              accessToken: "claude-transaction-access",
+              refreshToken: "claude-transaction-refresh",
+              expiresAt: Date.now() + 3_600_000
+            }
+          }
+        }
+      ]
+    };
+    failActivation = true;
+    await assert.rejects(
+      client.call("accounts.enrollActivate", claudeActivation, {
+        idempotencyKey: "activate-claude-failure"
+      }),
+      (error: unknown) => error instanceof ControlError
+    );
+    failActivation = false;
+    const claudePath = join(
+      stateHome,
+      "subscriptions",
+      "claude-code",
+      "claude-work.json"
+    );
+    assert.equal(existsSync(claudePath), false);
+    assert.equal(existsSync(join(stateHome, "account-transactions")), false);
+    assert.equal(
+      (await client.call("daemon.status", {})).configRevision,
+      beforeClaude.configRevision
+    );
+    assert.equal(
+      (await client.call("daemon.status", {})).accountRevision,
+      beforeClaude.accountRevision
+    );
+
+    await withMockAnthropicDiscovery(async () => {
+      const claudeActivated = await client.call(
+        "accounts.enrollActivate",
+        claudeActivation,
+        { idempotencyKey: "activate-claude" }
+      );
+      assert.equal(claudeActivated.activated, true);
+      assert.equal(claudeActivated.configRevision, beforeClaude.configRevision + 1);
+      assert.equal(claudeActivated.accountRevision, beforeClaude.accountRevision + 1);
+      assert.equal(existsSync(claudePath), true);
+      assert.match(readFileSync(configPath, "utf8"), /claude-code:/);
+      assert.doesNotMatch(
+        JSON.stringify(claudeActivated),
+        /claude-transaction-access|claude-transaction-refresh/
+      );
+      const claudeReplay = await client.call(
+        "accounts.enrollActivate",
+        claudeActivation,
+        { idempotencyKey: "activate-claude-retry" }
+      );
+      assert.equal(claudeReplay.configRevision, claudeActivated.configRevision);
+      assert.equal(claudeReplay.accountRevision, claudeActivated.accountRevision);
+      assert.equal(
+        (await client.call("accounts.status", {})).accounts.find(
+          (entry) =>
+            entry.subscriptionKind === "claude-code" && entry.label === "claude-work"
+        )?.configured,
+        true
+      );
+      assert.equal(
+        (
+          await client.call(
+            "accounts.remove",
+            { kind: "claude-code", label: "claude-work" },
+            { idempotencyKey: "remove-claude-work" }
+          )
+        ).removed,
+        true
+      );
+      assert.equal(existsSync(claudePath), false);
+    });
+
     const removed = await client.call(
       "accounts.remove",
       { kind: "gemini", label: "antigravity-user@example.com" },
@@ -722,14 +1292,16 @@ test("second daemon cannot claim authority and generations remain monotonic", as
   }
 });
 
-test("daemon recovers interrupted activation before loading config or starting routers", async () => {
+async function assertInterruptedNativeActivationRecovery(
+  kind: "claude-code" | "codex"
+): Promise<void> {
   const root = mkdtempSync(join(tmpdir(), "routekit-daemon-recovery-"));
   const stateHome = join(root, "state");
   const configPath = join(root, "router.yaml");
   const accountPath = join(
     stateHome,
     "subscriptions",
-    "codex",
+    kind,
     "interrupted.json"
   );
   const priorConfig =
@@ -739,23 +1311,32 @@ test("daemon recovers interrupted activation before loading config or starting r
     home: stateHome,
     configPath,
     accountPaths: [accountPath],
-    kind: "codex",
-    provider: "codex",
+    kind,
+    provider: kind,
     labels: ["interrupted"]
   });
   mkdirSync(dirname(accountPath), { recursive: true });
   writeFileSync(
     accountPath,
-    JSON.stringify({
-      tokens: {
-        access_token: "interrupted-access",
-        refresh_token: "interrupted-refresh"
-      }
-    })
+    JSON.stringify(
+      kind === "claude-code"
+        ? {
+            claudeAiOauth: {
+              accessToken: "interrupted-access",
+              refreshToken: "interrupted-refresh"
+            }
+          }
+        : {
+            tokens: {
+              access_token: "interrupted-access",
+              refresh_token: "interrupted-refresh"
+            }
+          }
+    )
   );
   writeFileSync(
     configPath,
-    "providers:\n  openai: {}\n  codex: {}\ndefaultModel: openai/mock-model\n"
+    `providers:\n  openai: {}\n  ${kind}: {}\ndefaultModel: openai/mock-model\n`
   );
   writeFileSync(
     join(stateHome, "daemon-revisions.json"),
@@ -804,4 +1385,12 @@ test("daemon recovers interrupted activation before loading config or starting r
     await upstream.close();
     rmSync(root, { recursive: true, force: true });
   }
+}
+
+test("daemon recovers interrupted activation before loading config or starting routers", async () => {
+  await assertInterruptedNativeActivationRecovery("codex");
+});
+
+test("daemon recovers interrupted Claude activation before loading config or starting routers", async () => {
+  await assertInterruptedNativeActivationRecovery("claude-code");
 });

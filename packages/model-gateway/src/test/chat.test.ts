@@ -204,6 +204,7 @@ test("rejected bare native aliases retain subscription attribution", () => {
       billing_mode: "subscription"
     }
   );
+  assert.deepEqual(initialAttribution(backend, undefined), {});
 });
 
 test("embeddings receive a call id and sanitized attribution record", async () => {

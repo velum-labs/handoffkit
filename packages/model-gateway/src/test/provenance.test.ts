@@ -112,6 +112,38 @@ test("model-call provenance replaces raw upstream errors with a safe summary", (
   assert.doesNotMatch(JSON.stringify(record), /authorization/i);
 });
 
+test("an unconfigured router is not attributed to a provider or marked retryable", () => {
+  const record = buildModelCallRecord(
+    {
+      callId: "call_no_route",
+      dialect: "anthropic-messages",
+      requestedModel: undefined,
+      model: undefined,
+      stream: false,
+      requestBody: { messages: [{ role: "user", content: "hi" }] },
+      startedAt: "2026-07-22T00:00:00.000Z"
+    },
+    {
+      statusCode: 503,
+      durationMs: 1,
+      responseBody: Buffer.from(
+        JSON.stringify({
+          error: {
+            type: "unavailable",
+            message: "no model is available; configure a provider"
+          }
+        })
+      )
+    }
+  );
+  assert.equal(record.metadata?.attribution, undefined);
+  assert.deepEqual(record.error, {
+    kind: "capability_missing",
+    message: "no model route is configured",
+    retryable: false
+  });
+});
+
 test("model-call provenance meters aggregate buffered and Responses SSE usage", () => {
   const context = {
     callId: "call_aggregate",

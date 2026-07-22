@@ -110,6 +110,7 @@ environment-gated rows name the reason and exact live command.
 |---|---|---|---|
 | `harness.path-confinement` | Managed file tools reject worktree path traversal and record the failure as trajectory evidence. | required | `packages/cli/src/test/stack-harness-k-e2e.test.ts` — `reject path traversal` |
 | `security.gateway-auth` | Missing or incorrect gateway bearer credentials fail every door before provider spend. | required | `packages/cli/src/test/stack-auth-e2e.test.ts` — `rejects every door before provider spend` |
+| `accounts.claude-external-gateway-token-isolation` | A Claude gateway override never reuses the singleton daemon token; non-loopback overrides require HTTPS and an explicit environment-sourced credential. | required | `packages/routekit-cli/src/test/cli.test.ts` — `Claude gateway overrides never reuse the local daemon token` |
 
 ## robustness
 
@@ -188,4 +189,23 @@ environment-gated rows name the reason and exact live command.
 |---|---|---|---|
 | `platform.local-mlx` | Local MLX model lifecycle, scale-to-zero, memory pressure, and OOM guidance work on Apple Silicon. | environment-gated | Requires Apple Silicon and downloaded MLX model weights. Run: `pnpm mlx:stress` |
 | `providers.real-accounts` | RouteKit accounts accept the shipped request shapes and billed fusion completes. | environment-gated | Requires RouteKit account credentials and incurs spend. Run: `uv run --package fusionkit-evals fusionkit-bench public-bench --help` |
+
+## accounts
+
+| ID | Expected behavior | Status | Evidence |
+|---|---|---|---|
+| `accounts.canonical-identities-and-activation` | Subscription kinds serialize as claude-code or codex, and the singleton daemon privately enrolls and removes credentials without returning secret material. | required | `packages/routekit-daemon/src/test/daemon.test.ts` — `singleton daemon exposes authenticated control and a stable reloadable data plane` |
+| `accounts.transactional-enrollment-and-activation` | One daemon mutation imports native or CLIProxy credentials and enables the derived provider; failures restore account/config/revision state, interrupted prepared journals roll back before router startup, committed replays are no-ops, and transaction metadata contains no credential values. | required | `packages/routekit-daemon/src/test/daemon.test.ts` — `daemon recovers interrupted activation before loading config or starting routers` |
+| `accounts.managed-login-isolation` | Native account login isolates official CLI authentication, scrubs unrelated credentials, returns the credential only to the authenticated daemon client, and removes temporary state without writing daemon-owned stores locally. | required | `packages/routekit-cli/src/test/accounts-command.test.ts` — `accounts login captures isolated Codex auth without writing daemon-owned state` |
+| `accounts.claude-managed-config-restore` | Managed Claude Code setup owns only RouteKit gateway environment keys, uses process-safe locking and crash recovery, preserves unrelated user settings and post-install edits, and restores the exact original settings when untouched. | required | `packages/tool-claude/src/test/install.test.ts` — `Claude managed install updates and restores the exact original settings` |
+| `accounts.claude-interruption-recovery` | Interrupted native Claude enrollment rolls back its credential and provider config before router startup without exposing OAuth values. | required | `packages/routekit-daemon/src/test/daemon.test.ts` — `daemon recovers interrupted Claude activation before loading config or starting routers` |
+| `accounts.last-native-removal` | Removing the last native subscription account atomically disables its provider and matching default route, leaves a sole-provider daemon healthy with an empty catalog, and restores credentials, config, and revisions if router replacement fails. | required | `packages/routekit-daemon/src/test/daemon.test.ts` — `native provider stays enabled until its last account is removed` |
+| `accounts.native-backend-translation` | Managed Claude and Codex subscriptions translate OpenAI Chat Completions, inject pool credentials only at egress, and normalize usage. | required | `packages/accounts/src/test/subscription-backend.test.ts` — `Claude account backend serves OpenAI chat with managed auth and normalized usage` |
+| `accounts.connector-unified-surface` | One accounts surface serves every subscription kind by connector: the daemon owns the CLIProxyAPI sidecar lifecycle (spawn, crash restart, managed credential injection, shutdown), reports connector-aware account status, and routes removal by connector. | required | `packages/routekit-daemon/src/test/daemon.test.ts` — `daemon owns the cliproxy sidecar: spawn, restart, account routing, shutdown` |
+
+## config
+
+| ID | Expected behavior | Status | Evidence |
+|---|---|---|---|
+| `config.sparse-layer-mutation` | Legacy account aliases normalize canonically and project mutations preserve sparse overlays without inherited defaults. | required | `packages/routekit-config/src/test/config.test.ts` — `provider aliases normalize while sparse project mutations stay sparse` |
 

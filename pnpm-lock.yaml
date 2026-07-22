@@ -640,6 +640,9 @@ importers:
       '@routekit/harness-core':
         specifier: workspace:*
         version: link:../harness-core
+      '@routekit/registry':
+        specifier: workspace:*
+        version: link:../routekit-registry
       '@routekit/runtime':
         specifier: workspace:*
         version: link:../runtime-utils

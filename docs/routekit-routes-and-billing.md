@@ -135,13 +135,17 @@ public labels can change.
 - **Protocol / limitations:** The native Anthropic Messages relay forwards the
   client's body. The OpenAI-compatible subscription backend inserts the Claude
   Code identity and rewrites other caller `system` and `developer` messages as
-  `user` messages. Streaming, tools, and thinking are supported; managed
-  restore/recovery parity is pending L06.
+  `user` messages. Streaming, tools, and thinking are supported. Managed
+  install/uninstall, exact settings restore, last-account removal, and
+  interruption recovery passed the credential-free
+  [ENG-682 qualification](routekit-claude-recovery-evidence.md).
 - **Evidence:** **L06 qualification Fail — `account-unavailable`**, RouteKit 0.8.0
   / `dad16c53` / 2026-07-22. The worker had no enrolled Claude Code
-  account or Claude client, so live streaming, billing attribution, setup, and
-  restore were not observed. Deterministic tools, reasoning, cancellation,
-  failure propagation, and zero API-key fallback passed. [Stable L05 mapping; canonical import pending
+  account or Claude client, so live streaming, billing attribution, and
+  real-account/provider-session setup and restore were not observed. The
+  credential-free managed lifecycle passed separately at `4e5a45b9`.
+  Deterministic tools, reasoning, cancellation, failure propagation, and zero
+  API-key fallback passed. [Stable L05 mapping; canonical import pending
   evidence](routekit-l06-evidence.md#route-claude-code-subscription).
 
 <a id="route-cursor-ide"></a>

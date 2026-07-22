@@ -138,8 +138,15 @@ function providerError(result: ModelGatewayCallResult): ProviderError | undefine
   if (result.error === undefined && result.statusCode >= 200 && result.statusCode < 400) {
     return undefined;
   }
+  const responseError = asRecord(asRecord(parseJson(result.responseBody))?.error);
+  const noModelAvailable =
+    result.statusCode === 503 &&
+    responseError?.type === "unavailable" &&
+    responseError.message === "no model is available; configure a provider";
   const kind =
-    result.statusCode === 408
+    noModelAvailable
+      ? "capability_missing"
+      : result.statusCode === 408
       ? "timeout"
       : result.statusCode === 429
         ? "rate_limited"
@@ -147,7 +154,9 @@ function providerError(result: ModelGatewayCallResult): ProviderError | undefine
           ? "validation_error"
           : "provider_error";
   const message =
-    kind === "timeout"
+    kind === "capability_missing"
+      ? "no model route is configured"
+      : kind === "timeout"
       ? "provider request timed out"
       : kind === "rate_limited"
         ? "provider rate limited the request"
@@ -157,7 +166,9 @@ function providerError(result: ModelGatewayCallResult): ProviderError | undefine
   return {
     kind,
     message,
-    retryable: result.statusCode === 408 || result.statusCode === 429 || result.statusCode >= 500
+    retryable:
+      !noModelAvailable &&
+      (result.statusCode === 408 || result.statusCode === 429 || result.statusCode >= 500)
   };
 }
 

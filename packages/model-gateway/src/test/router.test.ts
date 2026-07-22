@@ -9,6 +9,7 @@ import type {
 } from "../index.js";
 import {
   CatalogBackend,
+  NoModelAvailableError,
   parseDiscoveredModels,
   parseRouterConfig,
   UnknownModelError
@@ -41,7 +42,8 @@ function fakeSource(
   };
 }
 
-test("RouterConfig requires explicit providers and namespaced defaults", () => {
+test("RouterConfig accepts explicit provider maps and namespaced defaults", () => {
+  assert.deepEqual(parseRouterConfig({ providers: {} }).providers, {});
   const config = parseRouterConfig({
     providers: {
       openai: {},
@@ -85,6 +87,35 @@ test("RouterConfig requires explicit providers and namespaced defaults", () => {
     /default reasoning effort/
   );
 });
+
+test("empty provider configuration creates a credential-independent empty catalog", async () => {
+  const backend = await CatalogBackend.create({
+    config: { providers: {} },
+    env: {}
+  });
+  assert.equal(backend.defaultModel, undefined);
+  assert.deepEqual(backend.listModelIds(), []);
+  assert.deepEqual(await backend.providerStatuses(), []);
+  assert.deepEqual(await (await backend.models()).json(), {
+    object: "list",
+    data: []
+  });
+  assert.throws(
+    () => backend.chat({ messages: [] }),
+    (error: unknown) => error instanceof NoModelAvailableError
+  );
+  assert.throws(
+    () => backend.chat({ model: "openai/not-configured", messages: [] }),
+    (error: unknown) =>
+      error instanceof UnknownModelError &&
+      error.model === "openai/not-configured"
+  );
+  assert.throws(
+    () => backend.embeddings({ input: "hello" }),
+    (error: unknown) => error instanceof NoModelAvailableError
+  );
+});
+
 test("discovery normalizes native response shapes", () => {
   assert.deepEqual(
     parseDiscoveredModels("openai", {

@@ -42,7 +42,7 @@ import type {
   ModelGatewayCallContext,
   ProvenanceSink
 } from "./provenance.js";
-import { UnknownModelError } from "./router.js";
+import { NoModelAvailableError, UnknownModelError } from "./router.js";
 
 /**
  * The local-model gateway HTTP server. It fronts a single OpenAI Chat
@@ -200,7 +200,8 @@ export function initialAttribution(
   nativeProvider?: "claude-code" | "codex"
 ): Partial<RequestAttribution> {
   const route = backend.resolveModelRoute?.(requested, nativeProvider);
-  const effectiveModel = route?.publicId ?? requested ?? backend.defaultModel ?? "unknown";
+  const effectiveModel = route?.publicId ?? requested ?? backend.defaultModel;
+  if (effectiveModel === undefined) return {};
   const slash = effectiveModel.indexOf("/");
   const provider =
     route?.provider ??
@@ -603,11 +604,21 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
         rawBody.model,
         backend.listModelIds?.()
       );
-      const route = resolveNativeModelRoute(
-        backend,
-        "claude-code",
-        alias
-      );
+      const route = backend.resolveModelRoute?.(alias, "claude-code");
+      if (
+        alias !== undefined &&
+        backend.resolveModelRoute !== undefined &&
+        route === undefined
+      ) {
+        writeJson(res, 400, {
+          type: "error",
+          error: {
+            type: "invalid_request_error",
+            message: `unknown model: ${alias}`
+          }
+        });
+        return;
+      }
       if (
         anthropicRelay?.countTokens !== undefined &&
         (route?.provider === "claude-code" ||
@@ -636,33 +647,10 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
         rawBody.model,
         backend.listModelIds?.()
       );
-      let route: BackendModelRoute | undefined;
-      try {
-        route = resolveNativeModelRoute(
-          backend,
-          "claude-code",
-          resolvedModel
-        );
-      } catch (error) {
-        const rejectedBody =
-          resolvedModel === undefined || resolvedModel === rawBody.model
-            ? rawBody
-            : withModel(rawBody, resolvedModel);
-        await handleModelCall(res, provenance, {
-          dialect: "anthropic-messages",
-          body: rejectedBody,
-          defaultModel: backend.defaultModel,
-          attribution: initialAttribution(
-            backend,
-            resolvedModel,
-            "claude-code"
-          ),
-          invoke: async () => {
-            throw error;
-          }
-        });
-        return;
-      }
+      // Defer an unknown Claude model to the Anthropic adapter so it can emit
+      // the native Anthropic error envelope. The later handleModelCall wrapper
+      // still records attribution and provenance for the rejected request.
+      const route = backend.resolveModelRoute?.(resolvedModel, "claude-code");
       const canonicalModel = route?.publicId ?? resolvedModel;
       const body =
         canonicalModel === rawBody.model || canonicalModel === undefined
@@ -992,6 +980,15 @@ function writeGatewayError(
   res: ServerResponse,
   error: unknown
 ): { statusCode: number; payload: Buffer } {
+  if (error instanceof NoModelAvailableError) {
+    const payload = writeErrorSafely(res, 503, {
+      error: {
+        message: error.message,
+        type: "unavailable"
+      }
+    });
+    return { statusCode: 503, payload };
+  }
   if (error instanceof UnknownModelError) {
     const payload = writeErrorSafely(res, 400, {
       error: {

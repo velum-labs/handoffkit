@@ -42,8 +42,10 @@ paths; only OAuth capture was fixture-backed.
 The non-native connector cases below are retained internal regression coverage,
 not first-launch qualification or a public support contract.
 
-- Native Codex: actual `SIGKILL` after account/config writes; prior state
-  restored.
+- Native Codex and Claude Code: actual `SIGKILL` after account/config writes;
+  prior state restored. Claude's managed setup/removal and last-account
+  recovery proof is recorded in
+  [the ENG-682 evidence](routekit-claude-recovery-evidence.md).
 - Native Claude/Codex capture: official CLI profiles remain isolated and do not
   write daemon-owned state before the combined mutation.
 - Gemini: existing CLIProxy account remains healthy through daemon-owned

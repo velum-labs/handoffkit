@@ -12,6 +12,15 @@ import { createToolRegistry } from "@routekit/tools";
 import type { ToolIntegration, ToolRegistry } from "@routekit/tools";
 
 export {
+  installClaudeIntegration,
+  uninstallClaudeIntegration
+} from "@routekit/tool-claude";
+export type {
+  ClaudeInstallInput,
+  ClaudeInstallOwner,
+  ClaudeInstallResult
+} from "@routekit/tool-claude";
+export {
   codexIntegrationBlock,
   installCodexIntegration,
   uninstallCodexIntegration

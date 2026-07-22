@@ -53,6 +53,7 @@ Set `ROUTEKIT_DEV_SKIP_BUILD=1` after a build for a faster local check.
 | `start`, `status`, `stop` | Start, inspect, and gracefully stop RouteKit through its singleton daemon. |
 | `codex`, `claude`, `cursor` | Ask the daemon to prepare a launch, then run the supported coding tool locally against the singleton gateway. |
 | `codex install`, `codex uninstall` | Add or remove RouteKit-owned Codex provider/profile blocks. |
+| `claude install`, `claude uninstall` | Add or remove RouteKit-owned Claude Code gateway settings while preserving user configuration. |
 | `providers add`, `remove`, `status` | Manage explicit providers and run live discovery without printing credentials. |
 | `models list` | Discover and list the live namespaced model catalog. |
 | `models info <provider/model>` | Explain the effective provider and native model, account class, billing mode, default status, capabilities, and reasoning metadata without printing credentials. |

@@ -43,6 +43,15 @@ export type {
   ClaudeQueryFn
 } from "./driver.js";
 export {
+  installClaudeIntegration,
+  uninstallClaudeIntegration
+} from "./install.js";
+export type {
+  ClaudeInstallInput,
+  ClaudeInstallOwner,
+  ClaudeInstallResult
+} from "./install.js";
+export {
   claudeAgentsJson,
   claudeEnv,
   claudeLaunchArgs,
