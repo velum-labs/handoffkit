@@ -3,7 +3,7 @@
 Date: 2026-07-22  
 Issue: [ENG-682](https://linear.app/velum-labs/issue/ENG-682/restore-claude-enrollment-and-recovery-parity)  
 Pull request: [#162](https://github.com/velum-labs/handoffkit/pull/162)  
-Implementation revision tested: [`4bcd8212`](https://github.com/velum-labs/handoffkit/commit/4bcd821248b420ac3bd058607b580db72fe7a179)
+Implementation revision tested: [`e303f1a5`](https://github.com/velum-labs/handoffkit/commit/e303f1a590aaafedd397767732cc0f910341d526)
 
 ## Result
 
@@ -53,6 +53,22 @@ Results:
 The tests use temporary home/config directories and fixture OAuth values.
 They make no billed provider calls and assert that journal, status, doctor,
 and control responses contain no credential values.
+
+Repository verification also passed:
+
+```text
+pnpm check  PASS
+pnpm build  PASS
+pnpm test   PASS (73 workspace tasks; 20 root tests)
+```
+
+The built public CLI was additionally run with a temporary `HOME` and Claude
+configuration directory. `claude install` returned `installed`, a second run
+returned `updated`, `claude uninstall` returned `removed`, and the original
+settings file was restored byte-for-byte. No provider completion was requested.
+The Claude Code binary itself is not installed on this worker, so its exact
+client version and a live session remain part of ENG-679 rather than this
+credential-free lifecycle check.
 
 ## Stable test anchors
 
