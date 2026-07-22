@@ -2,7 +2,7 @@
 
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { createServer } from "node:http";
 import {
   chmodSync,
@@ -43,8 +43,7 @@ import {
   qualificationCompleteness,
   reserveRouteBudget,
   ROUTE_CASES,
-  selectedRoutes,
-  validateManualEvidence
+  selectedRoutes
 } from "./routekit-qualification.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -76,8 +75,7 @@ function parseArgs(argv) {
     timeoutMs: Number(process.env.ROUTEKIT_E2E_TIMEOUT_MS ?? 120_000),
     maxLiveCalls: Number(process.env.ROUTEKIT_E2E_MAX_LIVE_CALLS ?? 32),
     models: {},
-    routes: undefined,
-    cursorIdeEvidence: undefined
+    routes: undefined
   };
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
@@ -92,7 +90,6 @@ function parseArgs(argv) {
     else if (arg === "--route") options.routes = csv(value());
     else if (arg === "--provider") options.providers = csv(value());
     else if (arg === "--door") options.doors = csv(value());
-    else if (arg === "--cursor-ide-evidence") options.cursorIdeEvidence = value();
     else if (arg === "--timeout-ms") options.timeoutMs = positiveInteger(value(), arg);
     else if (arg === "--max-live-calls") options.maxLiveCalls = positiveInteger(value(), arg);
     else if (arg === "--model") {
@@ -109,7 +106,6 @@ function parseArgs(argv) {
           "  --route <ids>             comma-separated L05 route-anchor filter",
           "  --provider <ids>          comma-separated provider filter",
           "  --door <ids>              API/CLI door filter",
-          "  --cursor-ide-evidence <p> prompt-free manual evidence JSON",
           "  --model <provider=id>     override one live namespaced model",
           "  --timeout-ms <ms>         per-PTY timeout",
           "  --max-live-calls <count>  hard client-to-gateway request budget",
@@ -885,6 +881,14 @@ function tmux(...args) {
   });
 }
 
+function cleanupMatrixTmuxSessions() {
+  for (const session of tmux("list-sessions", "-F", "#{session_name}").stdout
+    .split("\n")
+    .filter((name) => name.startsWith(`routekit-e2e-${process.pid}-`))) {
+    tmux("kill-session", "-t", session);
+  }
+}
+
 function capturePane(session) {
   const alternate = tmux("capture-pane", "-p", "-e", "-a", "-t", session);
   if (alternate.status === 0 && alternate.stdout.trim().length > 0) {
@@ -1206,8 +1210,13 @@ function accountStoreSnapshot(directory) {
     .filter((name) => name.endsWith(".json") && !name.startsWith("."))
     .sort()
     .map((name) => {
-      const stat = statSync(join(directory, name));
-      return { name, size: stat.size, mtimeMs: stat.mtimeMs };
+      const path = join(directory, name);
+      const stat = statSync(path);
+      return {
+        name,
+        size: stat.size,
+        sha256: createHash("sha256").update(readFileSync(path)).digest("hex")
+      };
     });
 }
 
@@ -1304,13 +1313,21 @@ async function startLiveRoutekit(configPath, tempRoot, providers) {
   child.stderr.on("data", (chunk) => {
     stderr += chunk.toString("utf8");
   });
-  const exitForSignal = (code) => {
-    killProcessGroup(child, "SIGTERM");
-    rmSync(isolatedStateHome, { recursive: true, force: true });
-    process.exit(128 + code);
+  let signalCleanupStarted = false;
+  const exitForSignal = async (signal) => {
+    if (signalCleanupStarted) return;
+    signalCleanupStarted = true;
+    removeSignalHandlers();
+    try {
+      await terminateChild(child);
+    } finally {
+      cleanupMatrixTmuxSessions();
+      rmSync(isolatedStateHome, { recursive: true, force: true });
+      process.kill(process.pid, signal);
+    }
   };
-  const onSigint = () => exitForSignal(2);
-  const onSigterm = () => exitForSignal(15);
+  const onSigint = () => void exitForSignal("SIGINT");
+  const onSigterm = () => void exitForSignal("SIGTERM");
   process.once("SIGINT", onSigint);
   process.once("SIGTERM", onSigterm);
   const removeSignalHandlers = () => {
@@ -1536,6 +1553,25 @@ function resultEntry(input) {
   };
 }
 
+async function observeGatewayRequests(proxy, run) {
+  const before = proxy.calls.length;
+  try {
+    return {
+      ...(await run()),
+      gatewayRequests: proxy.calls.length - before
+    };
+  } catch (error) {
+    const observed = proxy.calls.length - before;
+    if (error instanceof Error) {
+      error.gatewayRequests = observed;
+      throw error;
+    }
+    const wrapped = new Error(String(error));
+    wrapped.gatewayRequests = observed;
+    throw wrapped;
+  }
+}
+
 async function recordCase(results, input, run) {
   const started = Date.now();
   try {
@@ -1555,7 +1591,11 @@ async function recordCase(results, input, run) {
       ...input,
       status: "fail",
       reasonCode: classifyFailure(reason),
-      durationMs: Date.now() - started
+      durationMs: Date.now() - started,
+      gatewayRequests:
+        error instanceof Error && Number.isInteger(error.gatewayRequests)
+          ? error.gatewayRequests
+          : 0
     });
     results.push(entry);
     process.stderr.write(
@@ -1879,21 +1919,20 @@ async function runLive(options, results, artifactDir, tempRoot) {
             provider,
             door: door.id
           },
-          async () => {
-            const before = proxy.calls.length;
-            const answer = await callApiDoor(
-              proxy.url,
-              door,
-              chosen[provider],
-              "Reply exactly with ROUTEKIT_OK.",
-              true
-            );
-            assert.match(answer, /ROUTEKIT_OK/i);
-            return {
-              gatewayRequests: proxy.calls.length - before,
-              model: chosen[provider]
-            };
-          }
+          async () =>
+            await observeGatewayRequests(proxy, async () => {
+              const answer = await callApiDoor(
+                proxy.url,
+                door,
+                chosen[provider],
+                "Reply exactly with ROUTEKIT_OK.",
+                true
+              );
+              assert.match(answer, /ROUTEKIT_OK/i);
+              return {
+                model: chosen[provider]
+              };
+            })
         );
       }
     }
@@ -1922,27 +1961,29 @@ async function runLive(options, results, artifactDir, tempRoot) {
             provider,
             door: door.id
           },
-          async () => {
-            const output = await runPtyCase({
-              tempRoot,
-              provider,
-              door: door.id,
-              model: chosen[provider],
-              nativeModel: chosen[provider].slice(provider.length + 1),
-              configPath,
-              proxy,
-              timeoutMs: options.timeoutMs,
-              toolCase: provider === "openrouter" && door.id === "claude",
-              live: true
-            });
-            writeFileSync(transcriptPath, `${sanitize(output.transcript).trim()}\n`);
-            return {
-              gatewayRequests: output.gatewayRequests,
-              artifact: relative(ROOT, transcriptPath),
-              model: chosen[provider],
-              setupRestore: { setup: "pass", restore: "pass" }
-            };
-          }
+          async () =>
+            await observeGatewayRequests(proxy, async () => {
+              const output = await runPtyCase({
+                tempRoot,
+                provider,
+                door: door.id,
+                model: chosen[provider],
+                nativeModel: chosen[provider].slice(provider.length + 1),
+                configPath,
+                proxy,
+                timeoutMs: options.timeoutMs,
+                toolCase: provider === "openrouter" && door.id === "claude",
+                live: true
+              });
+              writeFileSync(
+                transcriptPath,
+                `${sanitize(output.transcript).trim()}\n`
+              );
+              return {
+                artifact: relative(ROOT, transcriptPath),
+                model: chosen[provider]
+              };
+            })
         );
       }
     }
@@ -1964,6 +2005,15 @@ async function runLive(options, results, artifactDir, tempRoot) {
         }
       );
     }
+  } catch (error) {
+    const observed = proxy?.calls.length ?? 0;
+    if (error instanceof Error) {
+      error.gatewayRequests = observed;
+      throw error;
+    }
+    const wrapped = new Error(String(error));
+    wrapped.gatewayRequests = observed;
+    throw wrapped;
   } finally {
     gatewayRequests = proxy?.calls.length ?? 0;
     try {
@@ -2042,7 +2092,6 @@ function buildQualification(options, results, topLevelError, liveGatewayRequests
       routes: []
     };
   }
-  const cursorIdeEvidence = options.cursorIdeEvidenceRecord;
   const cancellation = results.find(
     (entry) => entry.phase === "deterministic" && entry.door === "cancellation"
   );
@@ -2050,7 +2099,7 @@ function buildQualification(options, results, topLevelError, liveGatewayRequests
     if (route.manual === true) {
       return makeRouteResult(
         route,
-        cursorIdeEvidence ?? {
+        {
           status: "fail",
           reasonCode: "manual-evidence-unavailable",
           credentialAvailable: false,
@@ -2149,10 +2198,7 @@ function buildQualification(options, results, topLevelError, liveGatewayRequests
     routes,
     qualificationRoutes(options).map((route) => route.routeId)
   );
-  const manualGatewayRequests =
-    cursorIdeEvidence?.gatewayRequestsObserved ?? 0;
-  const totalGatewayRequests =
-    liveGatewayRequestsObserved + manualGatewayRequests;
+  const totalGatewayRequests = liveGatewayRequestsObserved;
   return {
     status: completeness.allPassed ? "pass" : "fail",
     completeness,
@@ -2172,15 +2218,6 @@ function buildQualification(options, results, topLevelError, liveGatewayRequests
 
 async function main() {
   const options = parseArgs(process.argv.slice(2));
-  if (options.cursorIdeEvidence !== undefined) {
-    assert.ok(
-      options.routes?.includes("route-cursor-ide"),
-      "--cursor-ide-evidence requires --route route-cursor-ide"
-    );
-    options.cursorIdeEvidenceRecord = validateManualEvidence(
-      JSON.parse(readFileSync(resolve(options.cursorIdeEvidence), "utf8"))
-    );
-  }
   if (!existsSync(ROUTEKIT_ENTRY)) {
     throw new Error("RouteKit is not built; run pnpm build:routekit");
   }
@@ -2211,16 +2248,15 @@ async function main() {
     }
   } catch (error) {
     topLevelError = error instanceof Error ? error.message : String(error);
+    if (error instanceof Error && Number.isInteger(error.gatewayRequests)) {
+      liveGatewayRequestsObserved = error.gatewayRequests;
+    }
     process.stderr.write(`MATRIX ERROR: ${sanitize(topLevelError)}\n`);
   } finally {
-    for (const session of tmux("list-sessions", "-F", "#{session_name}").stdout
-      .split("\n")
-      .filter((name) => name.startsWith(`routekit-e2e-${process.pid}-`))) {
-      tmux("kill-session", "-t", session);
-    }
+    cleanupMatrixTmuxSessions();
     rmSync(tempRoot, { recursive: true, force: true });
   }
-  const counts = {
+  const caseCounts = {
     pass: results.filter((entry) => entry.status === "pass").length,
     fail: results.filter((entry) => entry.status === "fail").length,
     skip: results.filter((entry) => entry.status === "skip").length
@@ -2231,8 +2267,23 @@ async function main() {
     topLevelError,
     liveGatewayRequestsObserved
   );
+  const routeCounts = {
+    pass: qualification.routes.filter((route) => route.status === "pass").length,
+    fail: qualification.routes.filter((route) => route.status === "fail").length
+  };
+  const summary = {
+    status:
+      topLevelError === undefined &&
+      caseCounts.fail === 0 &&
+      (options.routes === undefined || qualification.status === "pass")
+        ? "pass"
+        : "fail",
+    caseCounts,
+    topLevelFailures: topLevelError === undefined ? 0 : 1,
+    routeCounts
+  };
   const report = {
-    schemaVersion: 3,
+    schemaVersion: 4,
     startedAt,
     finishedAt: new Date().toISOString(),
     metadata: repositoryMetadata(),
@@ -2249,7 +2300,7 @@ async function main() {
       timeoutMs: options.timeoutMs,
       maxLiveCalls: options.maxLiveCalls
     },
-    counts,
+    summary,
     liveGatewayRequestsObserved,
     results,
     qualification,
@@ -2259,11 +2310,11 @@ async function main() {
   const reportPath = join(artifactDir, "report.json");
   writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`);
   process.stdout.write(
-    `RESULT pass=${counts.pass} fail=${counts.fail} skip=${counts.skip} gateway_requests=${report.liveGatewayRequestsObserved}\n`
+    `RESULT status=${summary.status} cases_pass=${caseCounts.pass} cases_fail=${caseCounts.fail} cases_skip=${caseCounts.skip} top_level_failures=${summary.topLevelFailures} routes_pass=${routeCounts.pass} routes_fail=${routeCounts.fail} gateway_requests=${report.liveGatewayRequestsObserved}\n`
   );
   process.stdout.write(`REPORT ${relative(ROOT, reportPath)}\n`);
   if (
-    counts.fail > 0 ||
+    caseCounts.fail > 0 ||
     topLevelError !== undefined ||
     (options.live &&
       options.routes !== undefined &&

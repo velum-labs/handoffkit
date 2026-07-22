@@ -104,7 +104,6 @@ export const ROUTE_CASES = Object.freeze([
 
 export const ROUTE_IDS = Object.freeze(ROUTE_CASES.map((route) => route.routeId));
 
-const SAFE_OUTCOMES = new Set(["pass", "fail"]);
 const SAFE_CAPABILITY_OUTCOMES = new Set(["pass", "fail", "degraded", "not-applicable"]);
 const SAFE_ATTRIBUTION_BASES = new Set([
   "namespaced-route-success",
@@ -328,41 +327,6 @@ export function makeRouteResult(route, input) {
     },
     evidence: safeEvidenceIds(input.evidence)
   };
-}
-
-export function validateManualEvidence(raw, expectedRouteId = "route-cursor-ide") {
-  assert.equal(raw?.routeId, expectedRouteId, `manual evidence must target ${expectedRouteId}`);
-  assert.ok(SAFE_OUTCOMES.has(raw.status), "manual evidence status must be pass or fail");
-  assert.ok(
-    raw.status === "pass" ||
-      (SAFE_REASON_CODES.has(raw.reasonCode) && raw.reasonCode !== "qualified"),
-    "manual evidence failure needs a known reasonCode"
-  );
-  const route = routeById(expectedRouteId);
-  assert.ok(route !== undefined, `unknown manual evidence route ${expectedRouteId}`);
-  const normalized = {
-    status: raw.status,
-    reasonCode: safeReasonCode(raw.reasonCode, raw.status),
-    durationMs: raw.durationMs,
-    model: raw.model,
-    apiRevision: raw.apiRevision,
-    credentialAvailable: raw.credentialAvailable,
-    clientVersion: raw.clientVersion,
-    protocol: raw.protocol,
-    behavior: raw.behavior,
-    attributionBasis: raw.attributionBasis,
-    gatewayRequestsObserved: raw.gatewayRequestsObserved,
-    setupRestore: raw.setupRestore,
-    evidence: safeEvidenceIds(raw.evidence)
-  };
-  if (raw.status === "pass") {
-    assert.equal(
-      makeRouteResult(route, normalized).status,
-      "pass",
-      "manual Pass evidence is missing required credential, client, capability, request, fallback, setup/restore, attribution, or evidence fields"
-    );
-  }
-  return normalized;
 }
 
 export function qualificationCompleteness(routes, expectedRouteIds = ROUTE_IDS) {

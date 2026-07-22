@@ -8,8 +8,7 @@ import {
   reserveRouteBudget,
   ROUTE_CASES,
   ROUTE_IDS,
-  selectedRoutes,
-  validateManualEvidence
+  selectedRoutes
 } from "../scripts/routekit-qualification.mjs";
 
 test("qualification declares exactly the seven launch routes", () => {
@@ -53,49 +52,15 @@ test("route result is allowlisted and cannot serialize prompts or credentials", 
   assert.equal(result.reasonCode, "provider-request-failed");
 });
 
-test("manual evidence accepts only a known route and fixed outcomes", () => {
-  const evidence = validateManualEvidence({
-    routeId: "route-cursor-ide",
-    status: "fail",
-    reasonCode: "client-unavailable",
-    clientVersion: "unavailable",
-    evidence: ["manual-preflight"]
-  });
-  assert.equal(evidence.status, "fail");
-  assert.equal(evidence.reasonCode, "client-unavailable");
-  assert.throws(
-    () =>
-      validateManualEvidence({
-        routeId: "route-cursor-ide",
-        status: "skip",
-        reasonCode: "client-unavailable"
-      }),
-    /pass or fail/
-  );
-  assert.throws(
-    () =>
-      validateManualEvidence({
-        routeId: "route-cursor-ide",
-        status: "fail",
-        reasonCode: "qualified"
-      }),
-    /known reasonCode/
-  );
-  assert.throws(
-    () =>
-      validateManualEvidence({
-        routeId: "route-cursor-ide",
-        status: "pass"
-      }),
-    /missing required/
-  );
-
-  const passing = validateManualEvidence({
-    routeId: "route-cursor-ide",
+test("route results cannot persist free-form secrets or exceed their route budget", () => {
+  const secret = "sk-secret-material";
+  const route = ROUTE_CASES.find((candidate) => candidate.routeId === "route-cursor-ide");
+  const failed = makeRouteResult(route, {
     status: "pass",
+    reasonCode: "qualified",
     credentialAvailable: true,
-    model: "openai/gpt-test",
-    clientVersion: "Cursor 1.0.0",
+    model: secret,
+    clientVersion: secret,
     protocol: { streaming: "pass", tools: "pass", reasoning: "degraded" },
     behavior: {
       cancellation: "pass",
@@ -103,47 +68,12 @@ test("manual evidence accepts only a known route and fixed outcomes", () => {
       routekitFallback: "none"
     },
     attributionBasis: "manual-custom-endpoint-observation",
-    gatewayRequestsObserved: 1,
+    gatewayRequestsObserved: 2,
     setupRestore: { setup: "pass", restore: "pass" },
-    evidence: ["desktop-route-observation"]
-  });
-  assert.equal(passing.status, "pass");
-});
-
-test("manual evidence cannot persist free-form secrets or exceed its route budget", () => {
-  const secret = "sk-secret-material";
-  assert.throws(
-    () =>
-      validateManualEvidence({
-        routeId: "route-cursor-ide",
-        status: "pass",
-        credentialAvailable: true,
-        model: secret,
-        clientVersion: secret,
-        protocol: { streaming: "pass", tools: "pass", reasoning: "degraded" },
-        behavior: {
-          cancellation: "pass",
-          failurePropagation: "pass",
-          routekitFallback: "none"
-        },
-        attributionBasis: "manual-custom-endpoint-observation",
-        gatewayRequestsObserved: 2,
-        setupRestore: { setup: "pass", restore: "pass" },
-        evidence: [secret, "private-prompt"]
-      }),
-    /missing required/
-  );
-  const failed = validateManualEvidence({
-    routeId: "route-cursor-ide",
-    status: "fail",
-    reasonCode: "client-unavailable",
-    model: secret,
-    clientVersion: secret,
     evidence: [secret, "private-prompt", "manual-preflight"]
   });
-  const serialized = JSON.stringify(
-    makeRouteResult(ROUTE_CASES.find((route) => route.routeId === "route-cursor-ide"), failed)
-  );
+  assert.equal(failed.status, "fail");
+  const serialized = JSON.stringify(failed);
   assert.doesNotMatch(serialized, new RegExp(secret));
   assert.doesNotMatch(serialized, /private-prompt/);
   assert.match(serialized, /manual-preflight/);

@@ -142,8 +142,8 @@ refuses to start if the selected routes cannot fit within
 `--max-live-calls`; the local counting proxy enforces the same cap at request
 time. API and subscription HTTP routes reserve one gateway request each.
 `cursor-agent` reserves two because a tool turn may require a continuation.
-The Cursor IDE reservation is consumed only when accepted manual evidence
-records observed custom-endpoint traffic.
+The Cursor IDE descriptor reserves one request, but this Linux runner records
+that route as Fail without issuing it.
 
 The cap does not observe provider-internal retries and must not be represented
 as a provider-request or billing limit. API routes have no RouteKit retry or
@@ -165,44 +165,34 @@ routing remains distinct from RouteKit fallback.
 
 ### Cursor IDE evidence and restore
 
-Run `routekit cursor --ide` on the supported, logged-in desktop host. Record the
+Run `routekit cursor --ide` on a supported, logged-in desktop host. Record the
 Cursor build, selected namespaced model, custom endpoint path, observed request
 count, capability outcomes, and whether the isolated profile was removed or
 restored. Do not record the prompt, response, login, token, account ID, home
 path, or raw bridge transcript.
 
-Pass the reviewed, prompt-free record back to the matrix:
-
-```bash
-ROUTEKIT_LIVE_E2E=1 pnpm test:e2e:matrix -- \
-  --route route-cursor-ide \
-  --cursor-ide-evidence /absolute/path/cursor-ide-evidence.json \
-  --max-live-calls 1
-```
-
-The JSON must target `route-cursor-ide`, use only `pass` or `fail`, and contain
-the allowlisted fields accepted by `validateManualEvidence()`. A Pass requires
-an available credential and versioned client, a namespaced model, all required
-capability/failure/setup/restore outcomes, no RouteKit fallback, one bounded
-gateway request, a fixed attribution basis, and safe evidence IDs. The matrix
-derives the final status from those fields; unknown fields, raw diagnostics,
-messages, and credential values are not serialized.
+This runner does not ingest self-authored JSON as Pass evidence. Until a trusted
+desktop harness can bind those observations to its own proxy trace and verify
+restore, `route-cursor-ide` remains Fail. This prevents an asserted manual
+record from qualifying a route or injecting free-form material into the report.
 
 For Codex and Claude Code, the live runner copies only the selected enrolled
 credential files into its mode-`0600` temporary RouteKit home, verifies the
 source account store is unchanged after shutdown, and removes the temporary
-home. Cursor clients use their isolated launcher state. A response alone does
-not prove setup/restore; every required setup and restore outcome must pass.
-API-key routes correctly mark setup/restore as not applicable.
+home. `cursor-agent` also remains Fail until a dedicated harness compares its
+authenticated state before and after the isolated launch. A response alone
+does not prove setup/restore; every required setup and restore outcome must
+pass. API-key routes correctly mark setup/restore as not applicable.
 
 ## Artifacts and interpretation
 
 Each run writes a timestamped `report.json` and sanitized PTY transcripts under
 `.artifacts/routekit-e2e/`. This directory is ignored by Git. The report has
-exact pass/fail/skip counts, per-case duration and gateway-request counts, and
+exact case and route pass/fail/skip counts, top-level failure count, per-case
+duration and gateway-request counts, and
 the total number of client-to-RouteKit model requests observed at the local
 counting proxy.
-Schema version 3 also records the exact Git SHA, RouteKit and client versions,
+Schema version 4 also records the exact Git SHA, RouteKit and client versions,
 authorized budget, selected route anchors, fixed reason codes, route
 capabilities, billing basis, setup/restore outcomes, and completeness.
 PTY cases isolate RouteKit and XDG runtime state and disable CLI auto-updaters
