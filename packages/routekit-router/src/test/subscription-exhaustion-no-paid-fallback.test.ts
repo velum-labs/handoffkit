@@ -30,7 +30,7 @@ function recordingPaidSource(
   return {
     sourceId: provider,
     async discoverModels() {
-      return [{ id: `${provider}-paid-model` }];
+      return [{ id: "gpt-subscription" }];
     },
     async chat(
       _body: unknown,
@@ -72,7 +72,7 @@ test("subscription exhaustion never calls a configured paid API provider", async
   globalThis.fetch = async (input, init) => {
     const url = String(input);
     if (!url.startsWith("https://chatgpt.com/backend-api/codex/")) {
-      return await originalFetch(input, init);
+      throw new Error(`unexpected external request: ${url}`);
     }
     if (new URL(url).pathname.endsWith("/models")) {
       return Response.json({ models: [{ slug: "gpt-subscription" }] });
@@ -134,7 +134,7 @@ test("subscription exhaustion never calls a configured paid API provider", async
     assert.ok(modelIds.has("codex/gpt-subscription"));
     for (const provider of paidProviders) {
       assert.ok(
-        modelIds.has(`${provider}/${provider}-paid-model`),
+        modelIds.has(`${provider}/gpt-subscription`),
         `${provider} paid route must be configured`
       );
     }
@@ -161,8 +161,11 @@ test("subscription exhaustion never calls a configured paid API provider", async
     assert.equal(subscriptionCalls, 1);
     assert.deepEqual(paidCalls, []);
   } finally {
-    await router?.close();
     globalThis.fetch = originalFetch;
-    rmSync(routekitHome, { recursive: true, force: true });
+    try {
+      await router?.close();
+    } finally {
+      rmSync(routekitHome, { recursive: true, force: true });
+    }
   }
 });
