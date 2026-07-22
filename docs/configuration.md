@@ -208,12 +208,15 @@ defaults.
 FusionKit does not silently dual-read v3. Loading a v1-v3 file returns migration
 guidance:
 
-1. Run `routekit config migrate` for a legacy router file. Known providers and
-   account policies become provider entries; custom aliases, pools, custom
-   URLs, and custom credential variables are reported when they cannot be
-   represented.
-2. Replace every legacy endpoint alias in Fusion ensembles with the live
-   `provider/model` ID reported by `routekit models list`.
+1. Run `routekit --config <legacy-router-path> config migrate` for the specific
+   legacy project file. Known providers and account policies become provider
+   entries; custom aliases, pools, custom URLs, and custom credential variables
+   are reported when they cannot be represented.
+2. Replace every legacy endpoint alias in Fusion ensembles with a namespaced
+   `provider/model` ID from the provider's catalog, then use `fusionkit doctor`
+   to validate the embedded project. If `router.url` uses the standalone
+   singleton, import the complete migrated router first and use
+   `routekit models list` against that external catalog.
 3. Set the config version to `fusionkit.fusion.v4` and add `router.config` or
    `router.url`.
 

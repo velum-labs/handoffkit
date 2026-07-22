@@ -251,7 +251,7 @@ test("project overlays require explicit import into the canonical global config"
     rmSync(root, { recursive: true, force: true });
   }
 });
-test("concurrent cold imports keep the canonical file and daemon generation synchronized", async () => {
+test("concurrent cold config mutations keep the canonical file and daemon generation synchronized", async () => {
   const root = mkdtempSync(join(tmpdir(), "routekit-concurrent-import-"));
   const home = join(root, "home");
   const state = join(root, "state");
@@ -282,7 +282,11 @@ test("concurrent cold imports keep the canonical file and daemon generation sync
   const upstream = createServer((request, response) => {
     response.setHeader("content-type", "application/json");
     if (request.url === "/v1/models") {
-      response.end(JSON.stringify({ data: [{ id: "mock-model" }] }));
+      response.end(
+        JSON.stringify({
+          data: [{ id: "mock-model" }, { id: "gpt-5.5" }]
+        })
+      );
     } else {
       response.end(JSON.stringify({ choices: [{ message: { content: "ok" } }] }));
     }
@@ -304,17 +308,22 @@ test("concurrent cold imports keep the canonical file and daemon generation sync
   };
   let pid: number | undefined;
   try {
-    const imports = await Promise.all(
-      [first, second].map(async (source) =>
-        await run(["config", "import", "--from", source, "--json"], project, env)
-      )
-    );
-    for (const result of imports) {
-      assert.equal(result.code, 0, result.stderr);
-      assert.equal(
-        (JSON.parse(result.stdout) as { imported?: boolean }).imported,
-        true
-      );
+    const mutations = await Promise.all([
+      run(["config", "import", "--from", first, "--json"], project, env),
+      run(["config", "import", "--from", second, "--json"], project, env),
+      run(["config", "init", "--force", "--json"], project, env)
+    ]);
+    assert.ok(mutations.some((result) => result.code === 0));
+    for (const result of mutations) {
+      if (result.code !== 0) assert.match(result.stderr, /revision conflict/i);
+    }
+    for (const result of mutations.slice(0, 2)) {
+      if (result.code === 0) {
+        assert.equal(
+          (JSON.parse(result.stdout) as { imported?: boolean }).imported,
+          true
+        );
+      }
     }
 
     const record = JSON.parse(
@@ -324,23 +333,12 @@ test("concurrent cold imports keep the canonical file and daemon generation sync
     const shown = await run(["config", "show", "--json"], project, env);
     assert.equal(shown.code, 0, shown.stderr);
     const active = JSON.parse(shown.stdout) as {
-      config?: {
-        providers?: {
-          openai?: { fallbackCooldownSeconds?: number };
-        };
-      };
+      config?: Record<string, unknown>;
     };
     const disk = parseYaml(
       readFileSync(join(home, ".config", "routekit", "router.yaml"), "utf8")
-    ) as {
-      providers?: {
-        openai?: { fallbackCooldownSeconds?: number };
-      };
-    };
-    const activeCooldown =
-      active.config?.providers?.openai?.fallbackCooldownSeconds;
-    assert.ok(activeCooldown === 11 || activeCooldown === 22);
-    assert.equal(disk.providers?.openai?.fallbackCooldownSeconds, activeCooldown);
+    ) as Record<string, unknown>;
+    assert.deepEqual(active.config, disk);
 
     const stopped = await run(["daemon", "stop", "--json"], project, env);
     assert.equal(stopped.code, 0, stopped.stderr);

@@ -150,10 +150,13 @@ ensemble. Manage them with `fusionkit prompts list|edit|reset`.
 
 ## Migrating from v3
 
-v1-v3 files are not silently dual-read. Run `routekit config migrate`, replace
-opaque aliases with live `provider/model` IDs, and set `fusionkit.fusion.v4`.
-Runtime loading rejects legacy `endpoints`, `accounts`, and
-`defaultEndpointId` fields.
+v1-v3 files are not silently dual-read. Run
+`routekit --config <legacy-router-path> config migrate` for the specific
+project file, replace opaque aliases with namespaced `provider/model` IDs from
+the provider's catalog, validate the embedded project with `fusionkit doctor`,
+and set `fusionkit.fusion.v4`. For an external singleton, import the complete
+migrated router before inspecting it with `routekit models list`. Runtime
+loading rejects legacy `endpoints`, `accounts`, and `defaultEndpointId` fields.
 
 <Callout type="warn">
   Keep provider credentials out of `.fusionkit/`. The generated Python sidecar

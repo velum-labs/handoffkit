@@ -73,46 +73,70 @@ export function registerConfig(program: Command): void {
     .action(async (options: { force?: boolean }, command: Command) => {
       const ctx = contextFor(command);
       const path = globalRouterConfigPath();
+      const missingCredentials =
+        missingServiceCredentialVariables(DEFAULT_ROUTER_CONFIG);
       if (existsSync(path) && options.force !== true) {
         throw new Error(`${path} already exists (pass --force to replace it)`);
       }
-      if (readDaemonRecord() !== undefined && existsSync(path)) {
-        const client = await routekitClient();
-        const current = await client.call("config.get", {});
-        await client.call(
-          "config.update",
-          {
-            expectedRevision: current.revision,
-            document: stringifyYaml(DEFAULT_ROUTER_CONFIG)
-          },
-          { idempotencyKey: `config-init-${current.revision}` }
-        );
-      } else {
-        // Bootstrap/recovery exception: there cannot be a daemon until its
-        // canonical config exists.
-        writeRouterConfig(path, DEFAULT_ROUTER_CONFIG);
-        const missingCredentials =
-          missingServiceCredentialVariables(DEFAULT_ROUTER_CONFIG);
-        if (missingCredentials.length === 0) {
-          await ensureDaemon({ configPath: path });
-        } else {
+      if (readDaemonRecord() === undefined) {
+        const lock = await acquireLifecycleLock(daemonLifecycleLockPath(), {
+          timeoutMs: 90_000
+        });
+        let bootstrapped = false;
+        try {
+          if (readDaemonRecord() === undefined) {
+            if (existsSync(path) && options.force !== true) {
+              throw new Error(`${path} already exists (pass --force to replace it)`);
+            }
+            writeRouterConfig(path, DEFAULT_ROUTER_CONFIG);
+            if (missingCredentials.length === 0) {
+              await ensureDaemon({
+                configPath: path,
+                lifecycleLockHeld: true
+              });
+            }
+            bootstrapped = true;
+          }
+        } finally {
+          lock.release();
+        }
+        if (bootstrapped) {
           if (ctx.json) {
             ctx.emit({
               path,
               created: true,
-              daemonStarted: false,
-              missingCredentials
+              ...(missingCredentials.length > 0
+                ? {
+                    daemonStarted: false,
+                    missingCredentials
+                  }
+                : {})
             });
-            return;
+          } else {
+            ctx.presenter.success(`created ${path}`);
+            if (missingCredentials.length > 0) {
+              ctx.presenter.warn(
+                `daemon not started: set ${missingCredentials.join(" or ")}`
+              );
+              ctx.presenter.note("then run `routekit daemon start`");
+            }
           }
-          ctx.presenter.success(`created ${path}`);
-          ctx.presenter.warn(
-            `daemon not started: set ${missingCredentials.join(" or ")}`
-          );
-          ctx.presenter.note("then run `routekit daemon start`");
           return;
         }
       }
+      if (existsSync(path) && options.force !== true) {
+        throw new Error(`${path} already exists (pass --force to replace it)`);
+      }
+      const client = await routekitClient();
+      const current = await client.call("config.get", {});
+      await client.call(
+        "config.update",
+        {
+          expectedRevision: current.revision,
+          document: stringifyYaml(DEFAULT_ROUTER_CONFIG)
+        },
+        { idempotencyKey: `config-init-${current.revision}` }
+      );
       if (ctx.json) ctx.emit({ path, created: true });
       else ctx.presenter.success(`created ${path}`);
     });
@@ -166,7 +190,7 @@ export function registerConfig(program: Command): void {
       const document = readFileSync(source, "utf8");
       parseYaml(document);
       const canonical = globalRouterConfigPath();
-      let revision: number;
+      let revision: number | undefined;
       const replaceThroughDaemon = async (): Promise<number> => {
         const client = await routekitClient();
         const current = await client.call("config.get", {});
@@ -181,7 +205,7 @@ export function registerConfig(program: Command): void {
         );
         return imported.revision;
       };
-      if (!existsSync(canonical) && readDaemonRecord() === undefined) {
+      if (readDaemonRecord() === undefined) {
         const lock = await acquireLifecycleLock(daemonLifecycleLockPath(), {
           timeoutMs: 90_000
         });
@@ -195,13 +219,12 @@ export function registerConfig(program: Command): void {
               lifecycleLockHeld: true
             });
             revision = (await started.client.call("config.get", {})).revision;
-          } else {
-            revision = await replaceThroughDaemon();
           }
         } finally {
           lock.release();
         }
-      } else {
+      }
+      if (revision === undefined) {
         revision = await replaceThroughDaemon();
       }
       if (ctx.json) ctx.emit({ imported: true, source, path: canonical, revision });
