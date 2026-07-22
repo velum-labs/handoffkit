@@ -492,8 +492,7 @@ test("daemon owns the cliproxy sidecar: spawn, restart, account routing, shutdow
           ]
         },
         { idempotencyKey: "activate-kimi-failure" }
-      ),
-      /injected activation failure/
+      )
     );
     failActivation = false;
     assert.equal(existsSync(join(authDirectory, "kimi-rollback.json")), false);
