@@ -40,6 +40,24 @@ def test_run_store_appends_events_and_replays_after_cursor(tmp_path) -> None:
     assert page.next_event_cursor == 2
 
 
+def test_run_store_hashes_untrusted_run_ids_before_building_paths(tmp_path) -> None:
+    store = FileSystemRunStore(tmp_path / "runs")
+    run_id = "../../outside"
+    event = FusionRunEvent(
+        event_seq=1,
+        run_id=run_id,
+        trace_id=make_id("trace"),
+        state="queued",
+        status=status_for_run_state("queued"),
+        event_type="run_queued",
+    )
+
+    store.append_event(event)
+
+    assert store.list_events(run_id)[0].run_id == run_id
+    assert not (tmp_path / "outside").exists()
+
+
 def test_run_store_assigns_unique_sequences_under_concurrency(tmp_path) -> None:
     store = FileSystemRunStore(tmp_path / "runs")
     run_id = "run_concurrent"

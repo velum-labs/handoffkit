@@ -3,13 +3,13 @@
 Registered as a ``pytest11`` entry point, so any test in the uv workspace can
 use these fixtures without imports or conftest wiring::
 
-    def test_my_feature(provider_sim):
-        provider_sim.queue("gpt-x", "hello")
+    def test_my_feature(routekit_sim):
+        routekit_sim.queue("endpoint-x", "hello")
         ...
 
 Fixtures:
 
-- ``provider_sim`` — a fresh :class:`ProviderSimulator` per test (started,
+- ``routekit_sim`` — a fresh :class:`RouteKitSimulator` per test (started,
   stopped, journal isolated).
 - ``sim_stack`` — a factory: ``sim_stack(members=[...])`` boots the simulator
   plus the REAL ``fusionkit serve`` engine process over it and returns
@@ -21,50 +21,47 @@ Fixtures:
 from __future__ import annotations
 
 from collections.abc import Iterator
-from typing import TYPE_CHECKING, Protocol
+from typing import Protocol
 
 import pytest
 
-from fusionkit_testkit.endpoints import panel_config
+from fusionkit_testkit.endpoints import SimModel, panel_config
 from fusionkit_testkit.engine import EngineProcess
-from fusionkit_testkit.server import ProviderSimulator
-
-if TYPE_CHECKING:
-    from fusionkit_core.config import ModelEndpoint
+from fusionkit_testkit.server import RouteKitSimulator
 
 
 class SimStackFactory(Protocol):
     def __call__(
         self,
         *,
-        members: list[ModelEndpoint],
-        judge: ModelEndpoint | None = None,
-        synthesizer: ModelEndpoint | None = None,
-    ) -> tuple[ProviderSimulator, EngineProcess]: ...
+        members: list[SimModel],
+        judge: SimModel | None = None,
+        synthesizer: SimModel | None = None,
+    ) -> tuple[RouteKitSimulator, EngineProcess]: ...
 
 
 @pytest.fixture
-def provider_sim() -> Iterator[ProviderSimulator]:
-    with ProviderSimulator() as simulator:
+def routekit_sim() -> Iterator[RouteKitSimulator]:
+    with RouteKitSimulator() as simulator:
         yield simulator
 
 
 @pytest.fixture
-def sim_stack(provider_sim: ProviderSimulator) -> Iterator[SimStackFactory]:
+def sim_stack(routekit_sim: RouteKitSimulator) -> Iterator[SimStackFactory]:
     engines: list[EngineProcess] = []
 
     def factory(
         *,
-        members: list[ModelEndpoint],
-        judge: ModelEndpoint | None = None,
-        synthesizer: ModelEndpoint | None = None,
-    ) -> tuple[ProviderSimulator, EngineProcess]:
+        members: list[SimModel],
+        judge: SimModel | None = None,
+        synthesizer: SimModel | None = None,
+    ) -> tuple[RouteKitSimulator, EngineProcess]:
         config = panel_config(
-            provider_sim, members=members, judge=judge, synthesizer=synthesizer
+            routekit_sim, members=members, judge=judge, synthesizer=synthesizer
         )
         engine = EngineProcess(config).start()
         engines.append(engine)
-        return provider_sim, engine
+        return routekit_sim, engine
 
     try:
         yield factory

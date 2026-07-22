@@ -16,14 +16,12 @@ FusionKit's benchmarking infrastructure.
 
 FusionKit is a plugin:
 
-- `fusionkit-serve` is a `SystemUnderTest` registered by the FusionKit CLI
-  package's entry point (`python/fusionkit-cli/pyproject.toml`,
-  `hyperkit.suts` -> `fusionkit_cli.hyperkit_plugin:factory`); hyperkit core
-  itself only ships the `solo-model` SUT;
-- `TopologySpec` today materializes a full serve config and boots
-  `fusionkit serve`; a bridge that resolves specs directly onto the TypeScript
-  `OperatorGraph`/`Scheduler` kernel has not landed yet
-  (`fusionkit_cli/hyperkit_plugin.py`);
+- `fusionkit-serve` is a `SystemUnderTest` registered by the maintainer-only
+  `fusionkit-evals` package (`hyperkit.suts` ->
+  `fusionkit_evals.hyperkit_plugin:factory`); hyperkit core itself only ships
+  the `solo-model` SUT;
+- the plugin boots the Node `fusionkit serve` gateway, which starts the
+  internal Python sidecar itself;
 - Fusion-specific metrics ship as a Grafana dashboard pack.
 
 Built-in benchmark adapters live in `python/hyperkit/src/hyperkit/adapters/`:
@@ -38,30 +36,24 @@ from hyperkit import Cell, Experiment, TopologySpec, experiment
 @experiment(id="k1-grid")
 class Grid(Experiment):
     def cells(self, ctx):
-        for k in (1, 4):
-            yield Cell(
-                sut=TopologySpec(
-                    kind="fusionkit-serve",
-                    params={
-                        "serve_config": {
-                            "endpoints": [...],  # full serve schema (ModelEndpoint list)
-                            "default_model": "terminus",
-                            "panel_models": ["terminus", "qwen3"],
-                            "default_mode": "panel",
-                            "sample_count": k,
-                        }
-                    },
-                ),
-                benchmark="swebench_verified",
-                instances=ctx.manifest("swebench_verified", "manifest.txt"),
-            )
+        yield Cell(
+            sut=TopologySpec(
+                kind="fusionkit-serve",
+                params={
+                    "project_dir": "/path/to/configured/fusionkit-project",
+                    "model": "fusionkit/panel",
+                },
+            ),
+            benchmark="swebench_verified",
+            instances=ctx.manifest("swebench_verified", "manifest.txt"),
+        )
 ```
 
-The `fusionkit-serve` SUT requires either `params.config` (path to an existing
-serve YAML) or `params.serve_config` (an inline dict written out as the serve
-config); the payload is opaque to hyperkit and validated by FusionKit's config
-loader when `fusionkit serve` boots
-(`python/fusionkit-cli/src/fusionkit_cli/hyperkit_plugin.py`).
+The `fusionkit-serve` SUT accepts `params.project_dir` for an existing
+Node-configured project, or `params.fusion_config` plus
+`params.routekit_config` to materialize `.fusionkit/fusion.json` and
+`.routekit/router.yaml` in the shard work directory. The removed Python
+`serve_config` provider schema is rejected.
 
 `hyperkit plan grid.py` evaluates the code once and freezes canonical cells
 into `sweep.lock.json`. Shard identity is a hash of materialized SUT config,

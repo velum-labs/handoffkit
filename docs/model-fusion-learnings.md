@@ -71,12 +71,15 @@ Skipping unavailable providers or harnesses is a valid result; silent success is
 
 ### Provider Metadata Is Configuration, Not Routing
 
-Provider/model metadata is typed in core config and surfaced through model-call
-metadata and run inspection. FusionKit did not add LiteLLM/Bifrost as a core router.
-If those appear later, treat them as ordinary OpenAI-compatible endpoints.
+RouteKit owns provider/model metadata and exposes live namespaced model IDs to
+FusionKit. Fusion v4 and the internal sidecar config contain no provider
+definitions. If LiteLLM/Bifrost appear later, represent them as ordinary
+explicit RouteKit providers with live namespaced catalogs.
 
-Secrets should be represented by `api_key_env` references. Resolved API keys are used
-by clients but must not be written into records, metrics, fixtures, or benchmark rows.
+API-key credential environment names come from the RouteKit provider registry;
+subscription providers draw from named account pools. Resolved credentials are
+used by clients but must not be written into records, metrics, fixtures, or
+benchmark rows.
 
 ## Current Data Flow
 

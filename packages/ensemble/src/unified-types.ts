@@ -1,7 +1,10 @@
-import type { JsonValue, ModelFusionStatus } from "@fusionkit/protocol";
-import type { ResumeCursor } from "@fusionkit/harness-core";
+import type { ModelFusionStatus } from "@fusionkit/protocol";
+import type { JsonValue } from "@routekit/contracts";
+import type { ResumeCursor } from "@routekit/harness-core";
+import type { ReasoningSelection } from "@routekit/contracts";
+import type { ToolRegistry } from "@routekit/tools";
 import type { FusionTraceCarrier } from "@fusionkit/tracing";
-import type { EnsembleDescriptor, EnsembleModel, EnsembleRunResult, HarnessAdapter } from "./harness.js";
+import type { EnsembleModel, EnsembleRunResult } from "./harness.js";
 
 export type UnifiedHarnessKind =
   | "mock"
@@ -10,7 +13,8 @@ export type UnifiedHarnessKind =
   | "codex"
   | "claude-code"
   | "cursor-acp"
-  | "cursor-desktop";
+  | "cursor-desktop"
+  | "opencode";
 
 /**
  * Trust level for unattended panel candidates. `full` (the default) gives each
@@ -62,7 +66,7 @@ export type ToolHarnessResolveOptions = {
   /**
    * Per-model router endpoints keyed by `EnsembleModel.id`. When a candidate's
    * model id is present, its harness is pointed at that endpoint (and requests
-   * the endpoint id as its model) instead of the shared `fusionBackendUrl`, so
+   * the namespaced model id as its model) instead of the shared `fusionBackendUrl`, so
    * each panel model backs its own routed candidate through the one launched
    * harness.
    */
@@ -74,6 +78,7 @@ export type ToolHarnessResolveOptions = {
    */
   trace?: FusionTraceCarrier;
   turn?: number;
+  reasoning?: ReasoningSelection;
   /** When true, the tool harness tells its model which panel member it is. */
   panelIdentity?: boolean;
   /** Panel candidate trust level; unset means `full` (maximum autonomy). */
@@ -102,15 +107,11 @@ export type ToolHarnessResolveOptions = {
 /**
  * Provides everything ensemble needs about a tool-backed harness kind (codex,
  * claude-code, cursor-*) without ensemble depending on any per-tool package. The
- * fusionkit CLI registers one (built from its tool registry) via
- * {@link setToolHarnessProvider}; without it, requesting a tool harness kind
+ * host registers one (built from its neutral tool registry) via
+ * `setToolDriverRegistry`; without it, requesting a tool harness kind
  * throws a clear error.
  */
-export type ToolHarnessProvider = {
-  adapter(kind: UnifiedHarnessKind, options: ToolHarnessResolveOptions): HarnessAdapter;
-  sideEffects(kind: UnifiedHarnessKind): EnsembleDescriptor["policy"]["sideEffects"];
-  responseShape(kind: UnifiedHarnessKind): string;
-};
+export type ToolDriverRegistry = Pick<ToolRegistry, "driverForKind">;
 
 export type UnifiedHarnessMatrixResult = {
   harness: UnifiedHarnessKind;
@@ -154,6 +155,7 @@ export type UnifiedHarnessE2EOptions = {
   repo: string;
   outputRoot: string;
   prompt: string;
+  reasoning?: ReasoningSelection;
   harnesses: UnifiedHarnessKind[];
   models: EnsembleModel[];
   command?: string;

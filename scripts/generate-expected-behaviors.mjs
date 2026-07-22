@@ -16,11 +16,14 @@ const CATEGORY_ORDER = [
   "harness",
   "policy",
   "security",
+  "robustness",
+  "concurrency",
   "sessions",
   "lifecycle",
   "runs",
   "process",
   "cli",
+  "composition",
   "observability",
   "platform"
 ];

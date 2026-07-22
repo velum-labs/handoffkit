@@ -16,6 +16,21 @@
       "path": "../cli-ui"
     },
     {
+      "path": "../cli-core"
+    },
+    {
+      "path": "../config-core"
+    },
+    {
+      "path": "../routekit-config"
+    },
+    {
+      "path": "../fusion-config"
+    },
+    {
+      "path": "../telemetry-core"
+    },
+    {
       "path": "../ensemble"
     },
     {
@@ -23,6 +38,12 @@
     },
     {
       "path": "../model-gateway"
+    },
+    {
+      "path": "../routekit-router"
+    },
+    {
+      "path": "../fusion-gateway"
     },
     {
       "path": "../protocol"
@@ -34,22 +55,19 @@
       "path": "../registry"
     },
     {
+      "path": "../contracts"
+    },
+    {
+      "path": "../routekit-registry"
+    },
+    {
       "path": "../testkit"
     },
     {
-      "path": "../tool-claude"
-    },
-    {
-      "path": "../tool-codex"
-    },
-    {
-      "path": "../tool-cursor"
-    },
-    {
-      "path": "../tool-opencode"
-    },
-    {
       "path": "../tools"
+    },
+    {
+      "path": "../tool-registry"
     },
     {
       "path": "../workspace"

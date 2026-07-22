@@ -11,10 +11,10 @@
  */
 import { spawn } from "node:child_process";
 
-import { createPresenter, dim, gray, yellow } from "@fusionkit/cli-ui";
-import type { Presenter } from "@fusionkit/cli-ui";
+import { createPresenter, dim, gray, yellow } from "@routekit/cli-ui";
+import type { Presenter } from "@routekit/cli-ui";
+import { distillLog } from "@routekit/runtime";
 
-import { distillLog } from "../shared/proc.js";
 import { hasBinary } from "../shared/preflight.js";
 
 import { FUSIONKIT_PYPI_VERSION, fusionkitWarmArgv } from "./env.js";

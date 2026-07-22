@@ -29,7 +29,7 @@ export {
   runFusionPanelWorkflow,
   runFusionPanels,
   runUnifiedHarnessE2E,
-  setToolHarnessProvider
+  setToolDriverRegistry
 } from "./unified.js";
 export { runPanelRound } from "./panel-round.js";
 export type { PanelRoundOptions } from "./panel-round.js";
@@ -42,7 +42,7 @@ export type {
   FusedSubagentEnsemble,
   FusionPanelOptions,
   PanelTrust,
-  ToolHarnessProvider,
+  ToolDriverRegistry,
   ToolHarnessResolveOptions,
   UnifiedHarnessE2EOptions,
   UnifiedHarnessE2EResult,

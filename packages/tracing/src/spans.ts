@@ -17,20 +17,32 @@
  * environments (`TRACEPARENT`/`BAGGAGE`), so there is exactly one propagation
  * shape everywhere. Events emitted with a carrier inherit its trace/span ids.
  */
-import { randomBytes } from "node:crypto";
-
 import {
-  context as apiContext,
-  propagation,
   trace,
   SpanKind,
   SpanStatusCode,
   TraceFlags
 } from "@opentelemetry/api";
-import type { Attributes, AttributeValue, Context, Span } from "@opentelemetry/api";
+import type { Attributes, AttributeValue, Span } from "@opentelemetry/api";
 import { logs, SeverityNumber } from "@opentelemetry/api-logs";
 import type { LogAttributes } from "@opentelemetry/api-logs";
 import { FUSION_SCOPES } from "@fusionkit/protocol";
+import {
+  baggageOf,
+  carrierFromEnv,
+  carrierFromHeaders,
+  carrierOf,
+  contextOf,
+  envOf,
+  headersOf,
+  newSessionCarrier,
+  newSpanId,
+  newTraceId,
+  sessionCarrier,
+  traceIdOf,
+  withBaggage
+} from "@routekit/tracing";
+import type { TraceCarrier } from "@routekit/tracing";
 
 export type FusionScope = keyof typeof FUSION_SCOPES;
 
@@ -38,9 +50,20 @@ export type FusionScope = keyof typeof FUSION_SCOPES;
  * Serializable trace context: the W3C header values as data. `traceparent`
  * is always present; `baggage` carries fusion correlation entries.
  */
-export type FusionTraceCarrier = {
-  traceparent: string;
-  baggage?: string;
+export type FusionTraceCarrier = TraceCarrier;
+
+export {
+  carrierFromEnv,
+  carrierFromHeaders,
+  carrierOf,
+  contextOf,
+  envOf,
+  headersOf,
+  newSessionCarrier,
+  newSpanId,
+  newTraceId,
+  sessionCarrier,
+  traceIdOf
 };
 
 function tracerFor(scope: FusionScope) {
@@ -49,101 +72,6 @@ function tracerFor(scope: FusionScope) {
 
 function loggerFor(scope: FusionScope) {
   return logs.getLogger(FUSION_SCOPES[scope]);
-}
-
-/** 32-hex OTel trace id. */
-export function newTraceId(): string {
-  return randomBytes(16).toString("hex");
-}
-
-/** 16-hex OTel span id. */
-export function newSpanId(): string {
-  return randomBytes(8).toString("hex");
-}
-
-/**
- * Mint a session identity: a fresh trace with a virtual (never-exported)
- * session root span. Every turn in the session parents onto this carrier, so
- * multi-turn sessions stay correlated without holding a long-lived span open.
- */
-export function newSessionCarrier(): { traceId: string; carrier: FusionTraceCarrier } {
-  const traceId = newTraceId();
-  return { traceId, carrier: sessionCarrier(traceId, newSpanId()) };
-}
-
-/** Rebuild a session carrier from persisted 32-hex trace / 16-hex span ids. */
-export function sessionCarrier(traceId: string, spanId: string): FusionTraceCarrier {
-  return { traceparent: `00-${traceId}-${spanId}-01` };
-}
-
-/** Rebuild an OTel Context from a carrier (or the root context when absent). */
-export function contextOf(carrier: FusionTraceCarrier | undefined): Context {
-  if (carrier === undefined) return apiContext.active();
-  return propagation.extract(apiContext.active(), carrier, {
-    get: (c, key) => (c as Record<string, string | undefined>)[key],
-    keys: (c) => Object.keys(c as Record<string, string>)
-  });
-}
-
-/** Serialize a Context back into a carrier. */
-export function carrierOf(ctx: Context): FusionTraceCarrier {
-  const target: Record<string, string> = {};
-  propagation.inject(ctx, target, {
-    set: (c, key, value) => {
-      c[key] = value;
-    }
-  });
-  const traceparent = target.traceparent;
-  if (traceparent === undefined) {
-    // No recording span in the context: mint a fresh identity so downstream
-    // signals still correlate somewhere rather than vanishing.
-    return newSessionCarrier().carrier;
-  }
-  return { traceparent, ...(target.baggage !== undefined ? { baggage: target.baggage } : {}) };
-}
-
-/** The trace id encoded in a carrier. */
-export function traceIdOf(carrier: FusionTraceCarrier): string {
-  const parts = carrier.traceparent.split("-");
-  return parts[1] ?? "";
-}
-
-/** Extract a carrier from incoming HTTP headers (case-insensitive). */
-export function carrierFromHeaders(
-  headers: Record<string, string | string[] | undefined>
-): FusionTraceCarrier | undefined {
-  const first = (value: string | string[] | undefined): string | undefined =>
-    Array.isArray(value) ? value[0] : value;
-  const traceparent = first(headers.traceparent);
-  if (traceparent === undefined || traceparent.length === 0) return undefined;
-  const baggage = first(headers.baggage);
-  return { traceparent, ...(baggage !== undefined && baggage.length > 0 ? { baggage } : {}) };
-}
-
-/** The carrier as outgoing HTTP headers. */
-export function headersOf(carrier: FusionTraceCarrier): Record<string, string> {
-  return {
-    traceparent: carrier.traceparent,
-    ...(carrier.baggage !== undefined ? { baggage: carrier.baggage } : {})
-  };
-}
-
-/** The carrier as child-process environment variables. */
-export function envOf(carrier: FusionTraceCarrier): Record<string, string> {
-  return {
-    TRACEPARENT: carrier.traceparent,
-    ...(carrier.baggage !== undefined ? { BAGGAGE: carrier.baggage } : {})
-  };
-}
-
-/** A carrier from the ambient environment (set by a parent fusion process). */
-export function carrierFromEnv(env: NodeJS.ProcessEnv = process.env): FusionTraceCarrier | undefined {
-  const traceparent = env.TRACEPARENT;
-  if (traceparent === undefined || traceparent.length === 0) return undefined;
-  return {
-    traceparent,
-    ...(env.BAGGAGE !== undefined && env.BAGGAGE.length > 0 ? { baggage: env.BAGGAGE } : {})
-  };
 }
 
 export type FusionBaggage = {
@@ -158,30 +86,19 @@ const BAGGAGE_TURN = "fusion.turn";
 
 /** Return a carrier with fusion correlation entries added to its baggage. */
 export function withFusionBaggage(carrier: FusionTraceCarrier, entries: FusionBaggage): FusionTraceCarrier {
-  const ctx = contextOf(carrier);
-  const existing = propagation.getBaggage(ctx) ?? propagation.createBaggage();
-  let updated = existing;
-  if (entries.candidateId !== undefined) {
-    updated = updated.setEntry(BAGGAGE_CANDIDATE, { value: encodeURIComponent(entries.candidateId) });
-  }
-  if (entries.trajectoryId !== undefined) {
-    updated = updated.setEntry(BAGGAGE_TRAJECTORY, { value: encodeURIComponent(entries.trajectoryId) });
-  }
-  if (entries.turn !== undefined) {
-    updated = updated.setEntry(BAGGAGE_TURN, { value: String(entries.turn) });
-  }
-  return carrierOf(propagation.setBaggage(ctx, updated));
+  return withBaggage(carrier, {
+    [BAGGAGE_CANDIDATE]: entries.candidateId,
+    [BAGGAGE_TRAJECTORY]: entries.trajectoryId,
+    [BAGGAGE_TURN]: entries.turn
+  });
 }
 
 /** Read fusion correlation entries out of a carrier's baggage. */
 export function fusionBaggageOf(carrier: FusionTraceCarrier | undefined): FusionBaggage {
-  if (carrier?.baggage === undefined) return {};
-  const ctx = contextOf(carrier);
-  const baggage = propagation.getBaggage(ctx);
-  if (baggage === undefined) return {};
-  const candidate = baggage.getEntry(BAGGAGE_CANDIDATE)?.value;
-  const trajectory = baggage.getEntry(BAGGAGE_TRAJECTORY)?.value;
-  const turnRaw = baggage.getEntry(BAGGAGE_TURN)?.value;
+  const baggage = baggageOf(carrier, [BAGGAGE_CANDIDATE, BAGGAGE_TRAJECTORY, BAGGAGE_TURN]);
+  const candidate = baggage[BAGGAGE_CANDIDATE];
+  const trajectory = baggage[BAGGAGE_TRAJECTORY];
+  const turnRaw = baggage[BAGGAGE_TURN];
   const turn = turnRaw !== undefined ? Number(turnRaw) : undefined;
   return {
     ...(candidate !== undefined ? { candidateId: decodeURIComponent(candidate) } : {}),

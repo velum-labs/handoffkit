@@ -7,7 +7,7 @@
     "url": "git+https://github.com/velum-labs/handoffkit.git",
     "directory": "packages/protocol"
   },
-  "description": "FusionKit protocol schemas and primitives: model-fusion contracts, generated validators, trajectories, traces, receipts, and zero-runtime-dependency helpers.",
+  "description": "FusionKit wire, panel, and model-fusion schemas plus temporarily retained legacy governance contracts; generic primitives live in @routekit/contracts.",
   "license": "Apache-2.0",
   "type": "module",
   "exports": {
@@ -20,6 +20,9 @@
     "dist",
     "LICENSE"
   ],
+  "dependencies": {
+    "@routekit/contracts": "workspace:*"
+  },
   "publishConfig": {
     "registry": "https://registry.npmjs.org",
     "access": "public",
@@ -36,6 +39,8 @@
     "trajectory"
   ],
   "scripts": {
+    "build": "tsc -b",
+    "clean": "tsc -b --clean",
     "test": "node --test \"dist/test/*.test.js\""
   }
 }

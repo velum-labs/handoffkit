@@ -157,7 +157,7 @@ class RunInspection(RunBaseModel):
     judge_synthesis_record: dict[str, Any] | None = None
     requires_action: ToolPausePlaceholder | None = None
     terminal_error: NativeRunError | None = None
-    provider_metadata: list[dict[str, Any]] = Field(default_factory=list)
+    model_call_metadata: list[dict[str, Any]] = Field(default_factory=list)
     #: Token usage summed across every ledgered model call (panel + judge +
     #: synthesizer). Fields stay ``None`` when no call reported them.
     usage: RunUsage | None = None

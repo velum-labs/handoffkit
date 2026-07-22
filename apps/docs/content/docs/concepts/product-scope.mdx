@@ -10,9 +10,9 @@ FusionKit's daily product surface is the `fusionkit` CLI and the model-fusion st
 Most users touch these commands:
 
 ```bash
-fusionkit doctor
 fusionkit setup
 fusionkit init
+fusionkit doctor
 fusionkit codex
 fusionkit claude
 fusionkit cursor
@@ -22,7 +22,9 @@ fusionkit models
 fusionkit config show
 ```
 
-That path starts `@fusionkit/cli`, the Fusion Harness Gateway, tool integrations, the Python fusion server, and the configured model panel. It uses the repository you run it from as the coding workspace.
+That path starts `@fusionkit/cli`, the Node Fusion gateway, an embedded or
+external RouteKit router, tool integrations, and the internal Python synthesis
+sidecar. It uses the repository you run it from as the coding workspace.
 
 ## Product packages
 
@@ -31,12 +33,14 @@ The main product path uses these packages directly.
 | Package | Role |
 | --- | --- |
 | `@fusionkit/cli` | The `fusionkit` command and launch orchestration. |
-| `@fusionkit/model-gateway` | Wire dialects, streaming, sessions, cost, rate-limit handoff, and gateway HTTP routes. |
+| `@routekit/gateway` | Neutral HTTP routes, wire dialects, endpoint routing, provider egress, and per-call metering. |
+| `@routekit/accounts` | Subscription credentials, pooling, provider relays, and proxy clients. |
+| `@fusionkit/gateway` | Fusion orchestration, sessions, aggregate budgets, trajectories, and local-model lifecycle. |
 | `@fusionkit/ensemble` | Panel execution, worktrees, harness adapters, judge synthesis integration, and runtime-kernel workflows. |
 | `@fusionkit/protocol` | Shared records, validators, hashes, and generated model-fusion contracts. |
 | `@fusionkit/workspace` | Git capture, materialization, safe paths, and output collection. |
-| `@fusionkit/tools` and `@fusionkit/tool-*` | Tool registry and Codex, Claude Code, Cursor, and opencode integrations. |
-| `fusionkit-core` and `fusionkit-server` | Python engine, provider clients, judge synthesis, run storage, and HTTP serving. |
+| `@routekit/tools` and `@routekit/tool-*` | Neutral registry and canonical Codex, Claude Code, Cursor, and OpenCode integrations. |
+| `fusionkit-core` and `fusionkit-server` | Provider-neutral Python synthesis engine, RouteKit client, internal sidecar routes, and native run storage. |
 
 ## Platform depth
 

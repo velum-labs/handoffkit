@@ -10,14 +10,14 @@
  */
 import type { Command } from "commander";
 
-import { bold, dim, green, red } from "@fusionkit/cli-ui";
-import type { Presenter } from "@fusionkit/cli-ui";
+import { bold, dim, green, red } from "@routekit/cli-ui";
+import { contextFor } from "@routekit/cli-core";
+import type { CommandContext } from "@routekit/cli-core";
+import type { Presenter } from "@routekit/cli-ui";
 
 import { detectHost } from "../fusion/local-catalog.js";
 import { platformCapabilities } from "../fusion/platform.js";
 import { provisionEngineWithProgress } from "../fusion/provision.js";
-import { contextFor } from "../shared/context.js";
-import type { CommandContext } from "../shared/context.js";
 
 import { registerPaletteAction } from "./palette.js";
 

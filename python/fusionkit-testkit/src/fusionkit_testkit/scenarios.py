@@ -12,7 +12,7 @@ import json
 from collections.abc import Mapping
 
 from fusionkit_testkit.behaviors import Behavior
-from fusionkit_testkit.server import ProviderSimulator
+from fusionkit_testkit.server import RouteKitSimulator
 
 ScriptedReply = str | Behavior
 
@@ -46,7 +46,7 @@ def judge_analysis(
 
 
 def script_fused_turn(
-    sim: ProviderSimulator,
+    sim: RouteKitSimulator,
     *,
     candidates: Mapping[str, ScriptedReply],
     judge_model: str,
@@ -56,10 +56,10 @@ def script_fused_turn(
 ) -> None:
     """Script one full fused turn: panel candidates, judge analysis, synthesis.
 
-    ``candidates`` maps provider model names (what the simulator journals) to
-    their panel replies. When ``synthesizer_model`` is unset the judge endpoint
-    serves both fuse-step roles, consumed in order: analysis first, answer
-    second.
+    ``candidates`` maps namespaced RouteKit model ids (what the simulator
+    journals) to their panel replies. When ``synthesizer_model`` is unset the
+    judge model serves both fuse-step roles, consumed in order: analysis first,
+    answer second.
     """
     for model, reply in candidates.items():
         sim.queue(model, as_behavior(reply))

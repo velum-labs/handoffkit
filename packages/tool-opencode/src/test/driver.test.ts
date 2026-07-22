@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { driverContractSuite } from "@fusionkit/harness-core/testing";
-import type { HarnessEvent } from "@fusionkit/harness-core";
+import { driverContractSuite } from "@routekit/harness-core/testing";
+import type { HarnessEvent } from "@routekit/harness-core";
 
 import { createOpencodeDriver } from "../driver.js";
 import type { OpencodeBackend, OpencodeBackendFactory } from "../driver.js";
@@ -30,17 +30,18 @@ function fakeBackend(): OpencodeBackend {
 
 const backendFactory: OpencodeBackendFactory = async () => fakeBackend();
 const driver = createOpencodeDriver({ backendFactory });
+const config = (): unknown => ({ gatewayUrl: "http://127.0.0.1:9999" });
 
 driverContractSuite({
   name: "opencode driver",
-  createInstance: async () => driver.createInstance(driver.configSchema.parse({})),
+  createInstance: async () => driver.createInstance(driver.configSchema.parse(config())),
   startOptions: () => ({ cwd: process.cwd() }),
   supportsResume: true,
   turnTimeoutMs: 10_000
 });
 
 test("opencode driver maps buffered parts into canonical events", async () => {
-  const instance = await driver.createInstance(driver.configSchema.parse({}));
+  const instance = await driver.createInstance(driver.configSchema.parse(config()));
   try {
     const session = await instance.startSession({ cwd: process.cwd() });
     const events: HarnessEvent[] = [];
@@ -57,6 +58,34 @@ test("opencode driver maps buffered parts into canonical events", async () => {
     assert.equal(completed?.usage?.outputTokens, 2);
     assert.ok(events.every((event) => event.kind === "opencode"));
     await session.stop();
+  } finally {
+    await instance.dispose();
+  }
+});
+
+test("opencode driver forwards an opaque effort as the SDK variant", async () => {
+  let observed: unknown;
+  const effortDriver = createOpencodeDriver({
+    backendFactory: async () => ({
+      ...fakeBackend(),
+      prompt: async (input) => {
+        observed = input.reasoning;
+        return { parts: [] };
+      }
+    })
+  });
+  const instance = await effortDriver.createInstance(
+    effortDriver.configSchema.parse(config())
+  );
+  try {
+    const session = await instance.startSession({
+      cwd: process.cwd(),
+      reasoning: { mode: "effort", effort: "deep" }
+    });
+    for await (const _event of session.sendTurn({ prompt: "hello" })) {
+      // Drain.
+    }
+    assert.deepEqual(observed, { mode: "effort", effort: "deep" });
   } finally {
     await instance.dispose();
   }

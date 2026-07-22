@@ -1,177 +1,84 @@
 ---
 title: Command reference
-description: Every fusionkit command and the flags that shape a fused run.
+description: Fusion-only commands and neutral RouteKit composition.
 ---
 
-The `fusionkit` CLI boots the panel, synthesizer, and gateway, then launches your coding agent pre-wired to them. Run `fusionkit --help` for the live command tree, or `fusionkit <command> --help` for command-specific flags.
+## RouteKit boundary
 
-## Launch commands
+FusionKit composes `@routekit/config`, `@routekit/router`, gateway, and tool SDK
+packages. It does not install or invoke the `routekit` executable.
 
-| Command | What it does |
-| --- | --- |
-| `fusionkit codex [args...]` | Launch OpenAI Codex backed by the panel. See [Codex](/docs/tools/codex). |
-| `fusionkit claude [args...]` | Launch Claude Code backed by the panel. See [Claude Code](/docs/tools/claude-code). |
-| `fusionkit cursor [args...]` | Launch Cursor backed by the panel; add `--ide` for the desktop proxy. See [Cursor](/docs/tools/cursor). |
-| `fusionkit serve [args...]` | Run only the gateway and print setup snippets for OpenAI-compatible tools. |
-
-FusionKit's own flags come before anything forwarded to the tool.
+Install `@routekit/cli` separately for provider/catalog/account/proxy management and
+single-model launches:
 
 ```bash
-fusionkit codex --local
-fusionkit claude --repo /path/to/repo
-fusionkit codex --yes -- "fix the build"
+npm install -g @routekit/cli
+routekit providers status
+routekit models list
+routekit gateway serve
+routekit codex openai/gpt-5.5
 ```
 
-## Setup and inspection
+There are no FusionKit forwarding aliases.
+
+## Fusion launch commands
 
 | Command | What it does |
 | --- | --- |
-| `fusionkit setup` | Pre-provision the pinned Python fusion engine into the `uvx` cache. Use `--force` to refresh it. |
-| `fusionkit doctor` | Check uv/uvx, agent binaries, provider keys, git, PATH collisions, and platform capability. It exits nonzero with "almost ready" when no usable credentials are present. |
-| `fusionkit init` | Scaffold a committed `.fusionkit/` folder for this repo. |
-| `fusionkit install codex` | Add FusionKit to your real `~/.codex/config.toml` (managed block: gateway provider + one profile per ensemble); pair with `fusionkit serve --port <n>` and launch via `codex --profile fusion-panel`. |
-| `fusionkit uninstall codex` | Remove the managed FusionKit block from `~/.codex/config.toml`. |
-| `fusionkit stop` | Stop all background fusion services, including the subscription proxy. |
-| `fusionkit telemetry <status\|on\|off\|inspect>` | Inspect and control anonymous, opt-in product telemetry (off by default). `inspect` prints exactly what a session event would contain. |
-| `fusionkit version` | Print the npm CLI and pinned PyPI synthesizer versions. |
-| `fusionkit completion <bash\|zsh\|fish>` | Print a static shell completion script. |
+| `fusionkit codex [args...]` | Launch Codex with configured fusion ensembles. |
+| `fusionkit claude [args...]` | Launch Claude Code with configured fusion ensembles. |
+| `fusionkit cursor [args...]` | Launch Cursor; `--ide` enables the desktop integration. |
+| `fusionkit opencode [args...]` | Launch OpenCode through the generic driver path. |
+| `fusionkit serve` | Run the Fusion gateway without launching a coding tool. |
 
-## Configuration commands
+All four tools receive the same neutral `ToolLaunchSpec`. Each ensemble becomes
+a generic agent profile and `fusion-<name>` model; the default uses
+`fusion-panel`.
 
-| Command | What it does |
-| --- | --- |
-| `fusionkit config show` | Print the effective config, where each value came from, and the run plan. |
-| `fusionkit config path` | Print the `.fusionkit/fusion.json` path. |
-| `fusionkit config get <path>` | Read one stored config value. |
-| `fusionkit config set <path> <value>` | Set one value, validated before writing. |
-| `fusionkit config unset <path>` | Remove one value so it falls back to defaults. |
-| `fusionkit config edit` | Open an interactive editor over supported settings. |
-| `fusionkit config export-yaml [-o file]` | Emit the derived Python router YAML. |
-
-## Prompt commands
+## Fusion product commands
 
 | Command | What it does |
 | --- | --- |
-| `fusionkit prompts list` | List judge and synthesizer prompt overrides. |
-| `fusionkit prompts edit <judge\|synthesizer>` | Open `$EDITOR`, seeded from the built-in default when needed. |
-| `fusionkit prompts reset <judge\|synthesizer>` | Remove an override and return to the built-in prompt. |
+| `fusionkit init` | Scaffold Fusion v4 and safe RouteKit config. |
+| `fusionkit setup` | Warm the pinned Python synthesis engine. |
+| `fusionkit doctor` | Validate git, Fusion/RouteKit config, live models, uv, and tools. |
+| `fusionkit config show\|path\|get\|set\|unset\|edit` | Inspect and edit Fusion v4. |
+| `fusionkit ensemble list\|add\|edit\|remove\|rename` | Manage namespaced-model ensembles. |
+| `fusionkit prompts list\|edit\|reset` | Manage judge/synthesizer prompts. |
+| `fusionkit sessions list\|show\|rm` | Manage durable Fusion sessions. |
+| `fusionkit models list\|download\|rm` | Manage the Fusion-owned local MLX cache. |
+| `fusionkit stop` | Stop only Fusion-owned processes and portless routes. |
+| `fusionkit telemetry`, `completion`, `version` | Telemetry, shell completion, and versions. |
 
-Add `--ensemble <name>` to target per-ensemble prompt overrides.
+Removed surfaces include `fusionkit proxy`, account/CLIProxy management, Codex
+install/uninstall (`routekit codex install|uninstall`), `--direct`, and
+direct/single-model mode. Use RouteKit for those responsibilities.
 
-## Ensemble commands
-
-| Command | What it does |
-| --- | --- |
-| `fusionkit ensemble list` | Show named ensembles and their `fusion-<name>` model ids. |
-| `fusionkit ensemble add <name>` | Add an ensemble interactively or with `--model` flags. |
-| `fusionkit ensemble edit <name>` | Add or remove members, or change the judge and synthesizer. |
-| `fusionkit ensemble remove <name>` | Delete an ensemble. |
-| `fusionkit ensemble rename <old> <new>` | Rename an ensemble and its prompt directory. |
-
-Set the session default with `fusionkit config set defaultEnsemble <name>`.
-
-## Subscription pooling proxy
-
-`fusionkit proxy` runs a long-lived local proxy that pools multiple Claude Code or Codex subscription accounts behind one provider-native endpoint. See the [Subscription pooling guide](/docs/guides/subscription-pooling) for the full workflow.
-
-| Command | What it does |
-| --- | --- |
-| `fusionkit proxy serve` | Serve the pooled provider-native proxy and print Claude Code / Codex wiring snippets. |
-| `fusionkit proxy add <claude-code\|codex>` | Copy the current official CLI login into the FusionKit-owned pool; `--name <label>` names the account. |
-| `fusionkit proxy status` | Show proxy health and per-account subscription windows. |
-| `fusionkit proxy stop` | Stop the running subscription proxy. |
-
-`fusionkit proxy serve` flags:
+## Launch flags
 
 | Flag | Effect |
 | --- | --- |
-| `--host <host>` | Bind host (default `127.0.0.1`). |
-| `--port <port>` | Bind port (default `8790`). |
-| `--auth-token <token>` | Stable ingress proxy token. |
-| `--strategy <strategy>` | Account selection: `sticky` (default), `round_robin`, or `capacity_weighted`. |
-| `--switch-threshold <ratio>` | Proactive utilization threshold (default `0.9`). |
-| `--probe-interval <seconds>` | Usage endpoint poll interval; `0` (the default) disables polling. |
-| `--no-portless` | Bind loopback only, skipping the stable portless route. |
+| `--ensemble <name>` | Select a configured ensemble. |
+| `--repo <dir>` | Select the coding workspace. |
+| `--observe` / `--no-observe` | Start or skip local observability. |
+| `--reasoning` / `--no-reasoning` | Show or suppress fusion progress. |
+| `--subagents` / `--no-subagents` | Create or suppress ensemble agent profiles. |
+| `--port <n>` | Set the Fusion gateway port. |
+| `--portless` / `--no-portless` | Enable or disable Fusion-owned named routes. |
+| `--auth-token <token>` | Protect the Fusion gateway. |
+| `--on-rate-limit fusion\|passthrough\|fail` | Select rate-limit behavior. |
+| `--budget <usd>` | Set the session budget. |
+| `--panel-trust full\|guarded` | Select panel worktree policy. |
+| `--k <n>` | Set panel step boundaries. |
+| `--resume <id>` / `--continue` | Resume a durable session. |
+| `--ide` | Enable Cursor desktop wiring. |
+| `--fusionkit-dir <dir>` | Use a local Python engine checkout. |
 
-## Durable sessions
+Provider/model/key flags and `--direct` do not exist. Routing is configured in
+`.routekit/router.yaml`.
 
-Sessions are persisted under `~/.fusionkit/sessions/` unless `FUSIONKIT_SESSIONS_DIR` overrides the location.
+## Ownership and shutdown
 
-| Command | What it does |
-| --- | --- |
-| `fusionkit sessions` / `fusionkit sessions list` | List sessions, including id, tool, panel, turn count, last activity, and cost. |
-| `fusionkit sessions show <id>` | Show metadata and recent turns. Unique id prefixes are accepted. |
-| `fusionkit sessions rm <id>` | Delete a stored session. |
-
-```bash
-fusionkit codex --continue
-fusionkit codex --resume 1a2b3c
-```
-
-## Model cache and direct mode
-
-| Command | What it does |
-| --- | --- |
-| `fusionkit models list` | Show the curated MLX catalog, downloaded state, sizes, and RAM fit. |
-| `fusionkit models download <model>` | Download a local model. |
-| `fusionkit models rm <model>` | Remove a downloaded local model. |
-| `fusionkit <tool> --direct` | Back a vendor agent with one local OpenAI-compatible model and no fusion. Use `--local` instead for a fused local panel. Direct Cursor mode supports `--public-url <url>` (or `FUSIONKIT_PUBLIC_URL`) for the tunnel URL. |
-
-## Common launch flags
-
-| Flag | Effect |
-| --- | --- |
-| `--direct` | Bypass the panel, judge, and synthesis and use one local model directly. |
-| `--local` / `--no-local` | Use the on-device MLX panel, or override a `local: true` config default. |
-| `--model ID=PROVIDER:MODEL` | Define a panel member. Repeat for multiple members. |
-| `--model-endpoint ID=URL` | Use a pre-running OpenAI-compatible endpoint as a panel member. |
-| `--ensemble <name>` | Use a named ensemble from `.fusionkit/fusion.json`. |
-| `--judge-model <model>` | Model used for judge synthesis. |
-| `--key-env ID=ENV` | Env var holding a panel member's API key. |
-| `--synthesis-url <url>` | Reuse an already-running `fusionkit serve` for synthesis. |
-| `--repo <dir>` | Coding workspace to fuse over. Defaults to the current git repo. |
-| `--observe` / `--no-observe` | Boot or skip the local trace dashboard. |
-| `--reasoning` / `--no-reasoning` | Narrate panel and judge progress in the tool's thinking UI. Default on; `--no-reasoning` keeps the stream silent until the judge's first token. |
-| `--reasoning-model [model]` | Have a model write the narration prose: a panel member, a `provider/model` token, or a local MLX repo. The bare flag uses `mlx-community/Qwen3-1.7B-4bit` (Apple Silicon). |
-| `--panel-trust <full\|guarded>` | Panel model sandbox: `full` (default) lets models run any command and edit any file; `guarded` restricts each model to its own draft worktree. |
-| `--subagents` / `--no-subagents` | Auto-provision one native sub-agent per ensemble in the launched tool (default on). |
-| `--yes` | Skip the interactive cloud-panel cost confirmation. |
-| `--port <n>` | Fixed gateway port. |
-| `--portless` / `--no-portless` | Route services through stable portless URLs or raw loopback ports. |
-| `--auth-token <token>` | Require a bearer token on the gateway. |
-| `--budget <usd>` | Stop when gateway-observed spend crosses this cap. |
-| `--on-rate-limit <fusion\|passthrough\|fail>` | Choose behavior when a passthrough vendor hits rate limits, quota, or billing errors. |
-| `--resume <id>` | Resume a stored session by id or unique prefix. |
-| `--continue` | Resume the most recently active stored session. |
-| `--ide` | Cursor only: wire the Cursor IDE through the local desktop proxy. |
-| `--expose` | `serve` only: publish the gateway on a public HTTPS Quick Tunnel with a required bearer token (for example, for Cursor BYOK). |
-| `--k <n>` | Step boundaries per panel member before aggregation for the selected ensemble: `1` = single-completion proposers (the caller's harness executes the adopted step), `n > 1` = bounded managed lookahead, unset = full rollouts (default). |
-
-## Fused and passthrough model ids
-
-The Node gateway exposes `fusion-panel` for synthesized ensemble answers. It also exposes panel member ids, such as `gpt`, `sonnet`, or `kimi`, as direct passthrough models. The raw Python router uses `fusionkit/panel` for the panel model id.
-
-## Environment variables
-
-| Variable | Meaning |
-| --- | --- |
-| `FUSIONKIT_DIR` | Local FusionKit checkout for the Python engine. |
-| `FUSIONKIT_NO_TUI` | Force plain output instead of the TUI. |
-| `FUSIONKIT_SESSIONS_DIR` | Durable session store. |
-| `FUSIONKIT_CONSENT_PATH` | Cloud-panel cost consent file override. |
-| `FUSIONKIT_SKIP_KEY_VALIDATION` | Skip live provider-key validation when set to `1`. |
-| `FUSIONKIT_TELEMETRY` | `1`/`0` overrides the stored product-telemetry consent for one invocation. |
-| `FUSIONKIT_TELEMETRY_PATH` | Telemetry consent file override (default `~/.fusionkit/telemetry.json`). |
-| `FUSIONKIT_CATALOG_PATH` | Local MLX model catalog cache override (default `~/.fusionkit/catalog.json`). |
-| `FUSIONKIT_PUBLIC_URL` | Public tunnel URL for direct Cursor mode (`fusionkit cursor --direct`; same as `--public-url`). |
-| `FUSIONKIT_WEB_SEARCH` | Set to `0` to disable gateway-executed web search entirely. |
-| `FUSIONKIT_WEB_SEARCH_OPENAI_MODEL` | Model for OpenAI-delegated searches (default `gpt-5.5`). |
-| `FUSIONKIT_WEB_SEARCH_ANTHROPIC_MODEL` | Model for Anthropic-delegated searches (default `claude-haiku-4-5`). |
-| `FUSIONKIT_WEB_SEARCH_OPENAI_URL` | Base URL for the OpenAI search side call (default `https://api.openai.com/v1`). |
-| `FUSIONKIT_WEB_SEARCH_ANTHROPIC_URL` | Base URL for the Anthropic search side call (default `https://api.anthropic.com/v1`). |
-| `DO_NOT_TRACK` | Any non-empty value force-disables product telemetry, beating every other setting. |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | Export fusion spans + events to your own OTLP/HTTP collector (base URL; signal-specific `..._TRACES_ENDPOINT`/`..._LOGS_ENDPOINT` win); `--observe` fills it with the local scope dashboard when unset. |
-| `PORTLESS` | Set to `0` to disable portless routing by default. |
-| `PORTLESS_STATE_DIR`, `PORTLESS_TLD` | Portless proxy state directory and local domain. |
-
-Legacy `WARRANT_*` environment variables are no longer read; use `FUSIONKIT_*` in scripts.
+An embedded RouteKit router closes with its Fusion process. An external router
+is only connected to and is never killed by `fusionkit stop` or stack cleanup.
+Fusion sessions remain under `@fusionkit/gateway`.

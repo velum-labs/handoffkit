@@ -47,6 +47,7 @@ export type PanelRoundOptions = Omit<FusionPanelOptions, "repo" | "outputRoot" |
   /** The caller's tool definitions / tool_choice, verbatim (k = 1 only). */
   tools?: unknown;
   toolChoice?: unknown;
+  reasoningEffort?: string;
 };
 
 export async function runPanelRound(options: PanelRoundOptions): Promise<WireTrajectory[]> {
@@ -73,6 +74,9 @@ export async function runPanelRound(options: PanelRoundOptions): Promise<WireTra
       ...(options.id !== undefined ? { id: options.id } : {}),
       ...(options.tools !== undefined ? { tools: options.tools } : {}),
       ...(options.toolChoice !== undefined ? { toolChoice: options.toolChoice } : {}),
+      ...(options.reasoningEffort !== undefined
+        ? { reasoningEffort: options.reasoningEffort }
+        : {}),
       ...(options.modelEndpoints !== undefined ? { modelEndpoints: options.modelEndpoints } : {}),
       ...(options.fusionApiKey !== undefined ? { fusionApiKey: options.fusionApiKey } : {}),
       ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),
@@ -87,7 +91,15 @@ export async function runPanelRound(options: PanelRoundOptions): Promise<WireTra
   // Rollout mode: strip the caller-fidelity fields so B20 ("rollout members
   // never see caller tools") holds by construction, not by downstream care —
   // and require the executor fields with actionable guidance.
-  const { messages: _messages, tools: _tools, toolChoice: _toolChoice, repo, outputRoot, prompt, ...rest } = options;
+  const {
+    messages: _messages,
+    tools: _tools,
+    toolChoice: _toolChoice,
+    repo,
+    outputRoot,
+    prompt,
+    ...rest
+  } = options;
   if (repo === undefined || outputRoot === undefined || prompt === undefined) {
     throw new Error(
       `rollout mode (k=${options.k ?? "∞"}) needs \`repo\`, \`outputRoot\`, and \`prompt\`: members ` +

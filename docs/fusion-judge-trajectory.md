@@ -17,7 +17,7 @@ verification. Iteration and any test runs are the harness's job.
 
 - **CandidateTrajectory**: one panel model's full reasoning / tool-call /
   observation / output for the task (the reference solutions), reconstructed at
-  the gateway wire boundary ([trajectory-capture.ts](../packages/model-gateway/src/trajectory-capture.ts))
+  the gateway wire boundary ([trajectory-capture.ts](../packages/fusion-gateway/src/trajectory-capture.ts))
   from the launched harness's model calls. It supports three provider dialects, no per-CLI
   stdout parsing, no verification verdict.
 - **Consolidated trajectory**: the live conversation the harness resends each
@@ -57,8 +57,8 @@ the harness loop ends.
 | Concern | Location |
 |---|---|
 | Judge gap-analysis + synthesizer step over candidates + conversation | [python/fusionkit-server/.../app.py](../python/fusionkit-server/src/fusionkit_server/app.py) `POST /v1/fusion/trajectories:fuse`, [judge.py](../python/fusionkit-core/src/fusionkit_core/judge.py) `JudgeSynthesizer.fuse` runs `analyze()` then injects the analysis into `build_fuse_system` |
-| Native trajectory reconstruction at the wire boundary | [packages/model-gateway/src/trajectory-capture.ts](../packages/model-gateway/src/trajectory-capture.ts), captured via `ProvenanceSink.onModelCallRaw` |
-| Front-door backend: panels-once + per-turn proxy, immediate streaming + keepalive | [packages/model-gateway/src/fusion-backend.ts](../packages/model-gateway/src/fusion-backend.ts) |
+| Native trajectory reconstruction at the wire boundary | [packages/fusion-gateway/src/trajectory-capture.ts](../packages/fusion-gateway/src/trajectory-capture.ts), captured via `ProvenanceSink.onModelCallRaw` |
+| Front-door backend: panels-once + per-turn proxy, immediate streaming + keepalive | [packages/fusion-gateway/src/fusion-backend.ts](../packages/fusion-gateway/src/fusion-backend.ts) |
 | Dialect adapters (chat / responses / anthropic) with tools + streaming | [packages/model-gateway/src/adapters/](../packages/model-gateway/src/adapters/) |
 | Panel runner: run the agents once, capture trajectories | [packages/ensemble/src/unified.ts](../packages/ensemble/src/unified.ts) `runFusionPanels` |
 | CLI wiring | [packages/cli/src/gateway.ts](../packages/cli/src/gateway.ts) `startFusionStepGateway`, [fusion-quickstart.ts](../packages/cli/src/fusion-quickstart.ts) |
@@ -93,20 +93,13 @@ launch the dashboard and export both signals into it (standard
 ```bash
 cd /path/to/this/repo && pnpm build
 
-# One command: real cloud panel (gpt-5.5 + sonnet + gemini), judge gpt-5.5, codex as the
-# front-door harness, and the scope dashboard observing it live on :4317.
-node packages/cli/dist/index.js fusion codex \
-  --observe \
-  --fusionkit-dir . \
-  --model gpt=openai:gpt-5.5 \
-  --model sonnet=anthropic:claude-sonnet-4-6 \
-  --model gemini=google:gemini-2.5-pro \
-  --judge-model gpt-5.5
+# Configure provider endpoints in .routekit/router.yaml and their opaque ids in
+# .fusionkit/fusion.json, then launch the configured compound.
+node packages/cli/dist/index.js codex --observe --fusionkit-dir .
 ```
 
-API keys (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`) are loaded
-from the FusionKit checkout's `.env`. Omit `--model` flags to use the default
-cloud trio, or pass `--local` on Apple Silicon to use the local MLX trio.
+Provider keys are resolved by RouteKit from the `apiKeyEnv` references in its
+router config; FusionKit receives namespaced model IDs only.
 
 ### Automated end-to-end drivers
 

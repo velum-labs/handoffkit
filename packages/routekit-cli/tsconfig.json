@@ -1,0 +1,55 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist",
+    "esModuleInterop": true
+  },
+  "include": [
+    "src/**/*.ts"
+  ],
+  "references": [
+    {
+      "path": "../accounts"
+    },
+    {
+      "path": "../cli-core"
+    },
+    {
+      "path": "../cli-ui"
+    },
+    {
+      "path": "../contracts"
+    },
+    {
+      "path": "../routekit-config"
+    },
+    {
+      "path": "../routekit-control"
+    },
+    {
+      "path": "../routekit-daemon"
+    },
+    {
+      "path": "../model-gateway"
+    },
+    {
+      "path": "../routekit-router"
+    },
+    {
+      "path": "../routekit-registry"
+    },
+    {
+      "path": "../runtime-utils"
+    },
+    {
+      "path": "../telemetry-core"
+    },
+    {
+      "path": "../tool-registry"
+    },
+    {
+      "path": "../tools"
+    }
+  ]
+}

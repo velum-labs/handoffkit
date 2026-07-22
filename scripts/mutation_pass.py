@@ -11,23 +11,27 @@ workspace)::
     uv run python scripts/mutation_pass.py            # full pass
     uv run python scripts/mutation_pass.py M31 M32    # only these mutations
 
-Not part of CI's per-commit path (it runs each targeted suite twice, ~1 min
-total); run it when touching the testkit, the provider clients, or the
-engine/gateway wire paths. History: the first pass scored 6/8 — the two
-survivors exposed a retry test masked by the openai SDK's internal retries
-and a simulator that accepted tool_calls behaviors for requests that never
-declared tools; both the tests and the simulator were hardened (see
-docs/testing.md).
+Not part of CI's per-commit path because it runs each targeted suite twice;
+run it when touching the testkit, provider clients, CLI process boundaries,
+or engine/gateway wire paths. The mutation inventory is expected to grow, so
+documentation intentionally avoids a fixed score (see docs/testing.md).
 """
 
 from __future__ import annotations
 
+import os
+import signal
 import subprocess
 import sys
+import time
+from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+TEST_TIMEOUT_SECONDS = 180.0
+BUILD_TIMEOUT_SECONDS = 300.0
+TERMINATION_GRACE_SECONDS = 5.0
 
 
 @dataclass
@@ -40,45 +44,49 @@ class Mutation:
     cmd: str
     replace_all: bool = False
     build: bool = False
+    timeout_seconds: float = TEST_TIMEOUT_SECONDS
+
+
+@dataclass(frozen=True)
+class CommandResult:
+    returncode: int | None
+    timed_out: bool
+    output: bytes
 
 
 MUTATIONS = [
     Mutation(
         id="M1",
-        what="OpenAI stream client drops parallel tool-call slots beyond the first",
-        file="python/fusionkit-core/src/fusionkit_core/client_openai.py",
+        what="RouteKit stream client drops parallel tool-call slots beyond the first",
+        file="python/fusionkit-core/src/fusionkit_core/routekit_client.py",
         old="for fragment in fragments[1:]:",
         new="for fragment in fragments[1:1]:",
-        cmd="uv run pytest python/fusionkit-testkit/tests/test_adversarial.py -q -x -k parallel",
+        cmd=(
+            "uv run pytest python/fusionkit-core/tests/test_routekit_client.py "
+            "-q -x -k simultaneous"
+        ),
     ),
     Mutation(
         id="M2",
         what="transient provider errors are never retried",
-        file="python/fusionkit-core/src/fusionkit_core/client_errors.py",
-        old='return self.category == "transient"',
-        new="return False",
-        cmd="uv run pytest python/fusionkit-testkit/tests/test_engine_e2e.py -q -x -k retried",
-    ),
-    Mutation(
-        id="M3",
-        what="Anthropic streaming loses prompt tokens from message_start",
-        file="python/fusionkit-core/src/fusionkit_core/client_anthropic.py",
-        old='prompt_tokens = getattr(start_usage, "input_tokens", None)',
-        new="prompt_tokens = None",
+        file="packages/model-gateway/src/router.ts",
+        old="    return isRetryableProviderFailure(failure.category);",
+        new="    return false;",
+        build=True,
         cmd=(
-            "uv run pytest python/fusionkit-testkit/tests/test_matrix_wire_clients.py -q -x "
-            '-k "stream_reassembles and anthropic"'
+            "node --test --test-name-pattern 'cools a throttled instance' "
+            "packages/model-gateway/dist/test/router.test.js"
         ),
     ),
     Mutation(
         id="M4",
-        what="out-of-band reasoning fields are dropped by the wire parser",
-        file="python/fusionkit-core/src/fusionkit_core/client_wire.py",
+        what="out-of-band reasoning fields are dropped by the RouteKit wire parser",
+        file="python/fusionkit-core/src/fusionkit_core/routekit_client.py",
         old='for field in ("reasoning", "reasoning_content"):',
         new="for field in ():",
         cmd=(
-            "uv run pytest python/fusionkit-testkit/tests/test_matrix_wire_clients.py -q -x "
-            '-k "chat_roundtrip and openai"'
+            "uv run pytest python/fusionkit-core/tests/test_routekit_client.py "
+            "-q -x -k reasoning"
         ),
     ),
     Mutation(
@@ -89,19 +97,19 @@ MUTATIONS = [
         new="tools=None,",
         replace_all=True,
         cmd=(
-            "uv run pytest python/fusionkit-testkit/tests/test_matrix_engine_passthrough.py "
-            "-q -x -k tool_loop"
+            "PORTLESS=0 node --test --test-name-pattern 'tool loop' "
+            "packages/cli/dist/test/stack-e2e.test.js"
         ),
     ),
     Mutation(
         id="M6",
-        what="the Cursor BYOK hybrid translation is skipped",
-        file="python/fusionkit-server/src/fusionkit_server/app.py",
-        old="FusionRequest.model_validate(translate_cursor_request(body))",
-        new="FusionRequest.model_validate(body)",
+        what="the Cursor BYOK hybrid translation is skipped at the gateway",
+        file="packages/model-gateway/src/server.ts",
+        old="      const translated = translateCursorRequest(raw);",
+        new="      const translated = raw;",
+        build=True,
         cmd=(
-            "uv run pytest python/fusionkit-testkit/tests/test_engine_surfaces.py -q -x "
-            "-k cursor_door_translates"
+            "node --test packages/model-gateway/dist/test/cursor.test.js"
         ),
     ),
     Mutation(
@@ -115,12 +123,15 @@ MUTATIONS = [
     ),
     Mutation(
         id="M8",
-        what="Node panel proposals route by provider model name instead of endpoint id",
+        what="Node panel proposals send bare provider model names instead of namespaced model ids",
         file="packages/ensemble/src/panel-propose.ts",
         old="model: model.id,",
         new="model: model.model,",
         build=True,
-        cmd="PORTLESS=0 node --test packages/cli/dist/test/stack-e2e.test.js",
+        cmd=(
+            "node --test --test-name-pattern 'members receive' "
+            "packages/ensemble/dist/test/panel-propose.test.js"
+        ),
     ),
     Mutation(
         id="M9",
@@ -130,19 +141,8 @@ MUTATIONS = [
         new="prompts=None,",
         replace_all=True,
         cmd=(
-            "uv run pytest python/fusionkit-testkit/tests/test_engine_depth.py -q -x "
-            "-k prompt_overrides"
-        ),
-    ),
-    Mutation(
-        id="M10",
-        what="the synthesizer context-overflow ladder loses its candidate fallback",
-        file="python/fusionkit-core/src/fusionkit_core/judge.py",
-        old='if retry_exc.category != "context_overflow":',
-        new="if True:",
-        cmd=(
-            "uv run pytest python/fusionkit-testkit/tests/test_engine_depth.py -q -x "
-            "-k context_overflow_ladder"
+            "PORTLESS=0 node --test --test-name-pattern prompt "
+            "packages/cli/dist/test/stack-depth-e2e.test.js"
         ),
     ),
     Mutation(
@@ -159,9 +159,15 @@ MUTATIONS = [
     Mutation(
         id="M12",
         what="the Node gateway forwards empty ensemble prompt overrides",
-        file="packages/model-gateway/src/fusion-turn.ts",
-        old="stepBody.prompts = route.prompts;",
-        new="stepBody.prompts = {};",
+        file="packages/fusion-gateway/src/fusion-turn.ts",
+        old=(
+            "    if (route?.prompts !== undefined && Object.keys(route.prompts).length > 0) "
+            "stepBody.prompts = route.prompts;"
+        ),
+        new=(
+            "    if (route?.prompts !== undefined && Object.keys(route.prompts).length > 0) "
+            "stepBody.prompts = {};"
+        ),
         build=True,
         cmd="PORTLESS=0 node --test packages/cli/dist/test/stack-depth-e2e.test.js",
     ),
@@ -201,7 +207,10 @@ MUTATIONS = [
         old='delta: { type: "input_json_delta", partial_json: args }',
         new='delta: { type: "input_json_delta", partial_json: "{}" }',
         build=True,
-        cmd="PORTLESS=0 node --test packages/cli/dist/test/stack-cli-e2e.test.js",
+        cmd=(
+            "node --test --test-name-pattern 'streams a routed tool call' "
+            "packages/model-gateway/dist/test/anthropic.test.js"
+        ),
     ),
     Mutation(
         id="M15",
@@ -230,17 +239,13 @@ MUTATIONS = [
     Mutation(
         id="M17",
         what="Claude's harness-core driver bypasses the native per-member dialect gateway",
-        file="packages/tool-claude/src/index.ts",
-        old=(
-            "    fusionBackendUrl: options.fusionBackendUrl,\n"
-            "    ...(options.modelEndpoints !== undefined "
-            "? { modelEndpoints: options.modelEndpoints } : {}),"
-        ),
-        new="    fusionBackendUrl: options.fusionBackendUrl,\n    ...{},",
+        file="packages/ensemble/src/driver-adapter.ts",
+        old="    const endpointUrl = options.modelEndpoints?.[modelId];",
+        new='    const endpointUrl = options.modelEndpoints?.["__missing__"];',
         build=True,
         cmd=(
-            "PORTLESS=0 node --test --test-name-pattern claude-agent-sdk "
-            "packages/cli/dist/test/stack-drivers-e2e.test.js"
+            "node --test --test-name-pattern 'model-specific endpoint' "
+            "packages/ensemble/dist/test/driver-adapter.test.js"
         ),
     ),
     Mutation(
@@ -251,37 +256,26 @@ MUTATIONS = [
         new="  return false;",
         build=True,
         cmd=(
-            "PORTLESS=0 node --test --test-name-pattern claude-agent-sdk "
-            "packages/cli/dist/test/stack-drivers-e2e.test.js"
-        ),
-    ),
-    Mutation(
-        id="M19",
-        what="OpenRouter's post-response generation cost is no longer associated with the response",
-        file="python/fusionkit-testkit/src/fusionkit_testkit/server.py",
-        old="        self._state.record_generation(response_id, model, behavior)",
-        new="        self._state.record_generation(response_id, model, Behavior())",
-        cmd=(
-            "uv run pytest python/fusionkit-testkit/tests/test_matrix_wire_clients.py "
-            "-q -x -k openrouter_provider_cost"
+            "node --test --test-name-pattern 'stale native resume cursor' "
+            "packages/ensemble/dist/test/driver-adapter.test.js"
         ),
     ),
     Mutation(
         id="M20",
-        what="the product CLI's router ignores configured provider base URLs",
-        file="packages/cli/src/fusion/stack.ts",
-        old="      entry.base_url = baseUrl;",
-        new='      entry.base_url = "http://127.0.0.1:1";',
+        what="the RouteKit catalog ignores configured provider base URLs",
+        file="packages/model-gateway/src/router.ts",
+        old="    baseUrl: endpoint.baseUrl,",
+        new='    baseUrl: "http://127.0.0.1:1",',
         build=True,
         cmd="PORTLESS=0 node --test packages/cli/dist/test/stack-npm-cli-e2e.test.js",
     ),
     Mutation(
         id="M21",
         what="the gateway budget gate never stops an over-budget session",
-        file="packages/model-gateway/src/frontdoor/operators.ts",
+        file="packages/fusion-gateway/src/frontdoor/operators.ts",
         old=(
-            "        services.budgetUsd !== undefined && "
-            "services.costTotalUsd(req.sessionKey) >= services.budgetUsd;"
+            "        services.budgetUsd !== undefined && services.costTotalUsd(req.sessionKey) "
+            ">= services.budgetUsd;"
         ),
         new="        false;",
         build=True,
@@ -303,21 +297,9 @@ MUTATIONS = [
         ),
     ),
     Mutation(
-        id="M23",
-        what="driver cutover skips the per-member native dialect gateways",
-        file="packages/cli/src/test/sim-stack.ts",
-        old="    if (driverHarness && harnessDriversEnabled()) {",
-        new="    if (false) {",
-        build=True,
-        cmd=(
-            "PORTLESS=0 node --test --test-name-pattern claude-agent-sdk "
-            "packages/cli/dist/test/stack-drivers-e2e.test.js"
-        ),
-    ),
-    Mutation(
         id="M24",
         what="unbounded completed candidates are never restored from the durable turn cache",
-        file="packages/model-gateway/src/fusion-session.ts",
+        file="packages/fusion-gateway/src/fusion-session.ts",
         old="    const cacheable = !isFiniteK(input.k);",
         new="    const cacheable = false;",
         build=True,
@@ -347,9 +329,9 @@ MUTATIONS = [
     Mutation(
         id="M27",
         what="streamed synthesizer model reasoning is dropped before the gateway",
-        file="python/fusionkit-core/src/fusionkit_core/client_openai.py",
-        old="                model_reasoning_delta=_reasoning_text(delta),",
-        new="                model_reasoning_delta=None,",
+        file="python/fusionkit-core/src/fusionkit_core/routekit_client.py",
+        old="                    model_reasoning_delta=_reasoning(delta),",
+        new="                    model_reasoning_delta=None,",
         cmd=(
             "PORTLESS=0 node --test --test-name-pattern reasoning "
             "packages/cli/dist/test/stack-e2e.test.js"
@@ -364,19 +346,19 @@ MUTATIONS = [
         build=True,
         cmd=(
             "PORTLESS=0 node --test --test-name-pattern "
-            "'\\[claude\\].*fusion-mini' packages/cli/dist/test/stack-cli-e2e.test.js"
+            "'\\[claude\\].*fusion-mini' packages/testkit/dist/test/clis.test.js"
         ),
     ),
     Mutation(
         id="M29",
         what="the real Codex CLI ignores the injected named fused model",
         file="packages/testkit/src/clis.ts",
-        old='      `model = "${input.model ?? "fusion-panel"}"`,',
-        new='      \'model = "fusion-panel"\',',
+        old='    `model = "${input.model ?? "fusion-panel"}"`,',
+        new='    \'model = "fusion-panel"\',',
         build=True,
         cmd=(
             "PORTLESS=0 node --test --test-name-pattern "
-            "'\\[codex\\].*fusion-mini' packages/cli/dist/test/stack-cli-e2e.test.js"
+            "'\\[codex\\].*fusion-mini' packages/testkit/dist/test/clis.test.js"
         ),
     ),
     Mutation(
@@ -388,7 +370,7 @@ MUTATIONS = [
         build=True,
         cmd=(
             "PORTLESS=0 node --test --test-name-pattern "
-            "'\\[opencode\\].*fusion-mini' packages/cli/dist/test/stack-cli-e2e.test.js"
+            "'\\[opencode\\].*fusion-mini' packages/testkit/dist/test/clis.test.js"
         ),
     ),
     Mutation(
@@ -410,7 +392,7 @@ MUTATIONS = [
     Mutation(
         id="M32",
         what="FusionBackend's own boundary guard is removed (empty fused turns leak 502 internals)",
-        file="packages/model-gateway/src/fusion-proxy.ts",
+        file="packages/fusion-gateway/src/fusion-proxy.ts",
         old="    if (messages.length === 0) {",
         new="    if (false) {",
         build=True,
@@ -442,18 +424,18 @@ MUTATIONS = [
         new='extra["usage"] = _usage_payload(final_result.turn_usage())',
         cmd=(
             "uv run pytest python/fusionkit-server/tests/test_streaming.py -q -x "
-            "-k fused_streaming_streams_synthesizer"
+            "-k internal_fuse_streams_reasoning_tools_and_exact_usage"
         ),
     ),
     Mutation(
         id="M35",
-        what="unknown engine model ids silently fall into fusion",
+        what="unknown RouteKit endpoint ids silently enter sidecar fusion",
         file="python/fusionkit-server/src/fusionkit_server/app.py",
-        old="        if request.model not in FUSION_MODEL_ALIASES:",
-        new="        if False:",
+        old="        for endpoint_id in (judge_model, synthesizer_model):",
+        new="        for endpoint_id in ():",
         cmd=(
-            "uv run pytest python/fusionkit-testkit/tests/test_engine_fuzz.py -q -x "
-            "-k unknown_model"
+            "uv run pytest python/fusionkit-server/tests/test_server.py -q -x "
+            "-k unknown_routekit_endpoint"
         ),
     ),
     Mutation(
@@ -488,25 +470,25 @@ MUTATIONS = [
     Mutation(
         id="M38",
         what="expired live session hints keep reattaching fresh conversations",
-        file="packages/model-gateway/src/fusion-session.ts",
+        file="packages/fusion-gateway/src/fusion-session.ts",
         old="    this.#sweepExpired(Date.now());",
         new="    // mutation: stale hints are never swept",
         build=True,
         cmd=(
             "node --test --test-name-pattern 'identical fresh opener' "
-            "packages/model-gateway/dist/test/fusion-backend-session.test.js"
+            "packages/fusion-gateway/dist/test/fusion-backend-session.test.js"
         ),
     ),
     Mutation(
         id="M39",
         what="caller abort no longer reaches an in-flight panel run",
-        file="packages/model-gateway/src/fusion-proxy.ts",
+        file="packages/fusion-gateway/src/fusion-proxy.ts",
         old="      ...(signal !== undefined ? { signal } : {})",
         new="      ...(false ? { signal } : {})",
         build=True,
         cmd=(
             "node --test --test-name-pattern 'caller abort propagates' "
-            "packages/model-gateway/dist/test/fusion-backend-panel-timeout.test.js"
+            "packages/fusion-gateway/dist/test/fusion-backend-panel-timeout.test.js"
         ),
     ),
     Mutation(
@@ -604,17 +586,243 @@ MUTATIONS = [
             "packages/model-gateway/dist/test/wire-validation.test.js"
         ),
     ),
+    Mutation(
+        id="M47",
+        what="Fusion rewrites namespaced model ids before generating the sidecar config",
+        file="packages/cli/src/fusion/stack.ts",
+        old="      routekit_model_ids: input.routekitModelIds,",
+        new='      routekit_model_ids: input.routekitModelIds.map((id) => `provider-${id}`),',
+        build=True,
+        cmd=(
+            "node --test --test-name-pattern "
+            "'Python sidecar receives namespaced RouteKit model ids' "
+            "packages/cli/dist/test/composition.test.js"
+        ),
+    ),
+    Mutation(
+        id="M48",
+        what="the Fusion-owned bridge sends the wrong credential to external RouteKit",
+        file="packages/cli/src/fusion/stack.ts",
+        old="              apiKey: ingressToken",
+        new='              apiKey: "wrong-routekit-token"',
+        build=True,
+        cmd=(
+            "PORTLESS=0 node --test --test-name-pattern 'authenticated external routekit' "
+            "packages/cli/dist/test/stack-model-ids-e2e.test.js"
+        ),
+    ),
+    Mutation(
+        id="M49",
+        what=(
+            "routekit daemon serve reports a false readiness URL instead of "
+            "its stable gateway"
+        ),
+        file="packages/routekit-cli/src/commands/serve.ts",
+        old="            url: running.dataUrl,",
+        new='            url: "http://127.0.0.1:1",',
+        build=True,
+        cmd=(
+            "node --test packages/routekit-cli/dist/test/serve-process-e2e.test.js"
+        ),
+    ),
+    Mutation(
+        id="M50",
+        what="unknown endpoint ids silently fall back to the default endpoint",
+        file="packages/model-gateway/src/router.ts",
+        old="    return this.#pools.has(requested) ? requested : undefined;",
+        new="    return this.#pools.has(requested) ? requested : this.defaultModel;",
+        build=True,
+        cmd=(
+            "node --test --test-name-pattern 'unknown endpoint ids fail' "
+            "packages/model-gateway/dist/test/router.test.js"
+        ),
+    ),
+    Mutation(
+        id="M51",
+        what="legacy Claude account keys stop normalizing to claude-code",
+        file="packages/model-gateway/src/router.ts",
+        old='  if (claudeKey !== undefined && claudeKey !== "claude-code") {',
+        new=(
+            '  if (claudeKey !== undefined && claudeKey !== "claude-code" '
+            "&& claudeKey.length < 0) {"
+        ),
+        build=True,
+        cmd=(
+            "node --test --test-name-pattern 'legacy account aliases normalize' "
+            "packages/routekit-config/dist/test/config.test.js"
+        ),
+    ),
+    Mutation(
+        id="M52",
+        what="account enrollment stores credentials without activating routing",
+        file="packages/routekit-cli/src/commands/accounts.ts",
+        old="[result.subscriptionKind]: { ...policy, enabled: true }",
+        new="[result.subscriptionKind]: { ...policy, enabled: false }",
+        build=True,
+        cmd=(
+            "node --test --test-name-pattern 'accounts add canonically' "
+            "packages/routekit-cli/dist/test/accounts-command.test.js"
+        ),
+    ),
+    Mutation(
+        id="M53",
+        what="project config mutation materializes the merged global config",
+        file="packages/routekit-config/src/index.ts",
+        old="  writeRouterConfigDocument(target, draft);",
+        new="  writeRouterConfigDocument(target, effective);",
+        build=True,
+        cmd=(
+            "node --test --test-name-pattern 'sparse project mutations' "
+            "packages/routekit-config/dist/test/config.test.js"
+        ),
+    ),
+    Mutation(
+        id="M54",
+        what="subscription account credentials are not injected at provider egress",
+        file="packages/accounts/src/backend.ts",
+        old="          headers.set(name, value);",
+        new="          headers.set(name, `missing-${value.length}`);",
+        build=True,
+        cmd=(
+            "node --test --test-name-pattern 'Claude account backend serves' "
+            "packages/accounts/dist/test/subscription-backend.test.js"
+        ),
+    ),
+    Mutation(
+        id="M55",
+        what="Fusion config set retains both router.url and router.config",
+        file="packages/cli/src/commands/config.ts",
+        old='  if (path === "router.url") writePath(shape, "router.config", undefined);',
+        new='  if (false && path === "router.url") writePath(shape, "router.config", undefined);',
+        build=True,
+        cmd="node --test packages/cli/dist/test/v4-commands.test.js",
+    ),
+    Mutation(
+        id="M56",
+        what="Fusion launchers accept typo flags before the passthrough delimiter",
+        file="packages/cli/src/commands/fusion.ts",
+        old='    .option("--continue", "resume the latest Fusion session");',
+        new=(
+            '    .option("--continue", "resume the latest Fusion session")\n'
+            "    .allowUnknownOption()\n"
+            "    .passThroughOptions();"
+        ),
+        build=True,
+        cmd=(
+            "node --test --test-name-pattern 'CLI rejects typo flags' "
+            "packages/cli/dist/test/v4-commands.test.js"
+        ),
+    ),
 ]
 
 
-def _run(cmd: str) -> int:
-    return subprocess.run(cmd, shell=True, cwd=ROOT, capture_output=True).returncode
+def _descendant_process_groups(root_pid: int) -> set[int]:
+    processes: dict[int, tuple[int, int]] = {}
+    try:
+        entries = tuple(Path("/proc").iterdir())
+    except OSError:
+        return {root_pid}
+    for entry in entries:
+        if not entry.name.isdigit():
+            continue
+        try:
+            fields = (entry / "stat").read_text().rsplit(")", 1)[1].split()
+            processes[int(entry.name)] = (int(fields[1]), int(fields[2]))
+        except (IndexError, OSError, ValueError):
+            continue
+
+    descendants = {root_pid}
+    changed = True
+    while changed:
+        changed = False
+        for pid, (parent_pid, _group_id) in processes.items():
+            if parent_pid in descendants and pid not in descendants:
+                descendants.add(pid)
+                changed = True
+    return {
+        processes[pid][1]
+        for pid in descendants
+        if pid in processes
+    } | {root_pid}
+
+
+def _signal_process_groups(group_ids: set[int], sig: signal.Signals) -> None:
+    for group_id in group_ids:
+        with suppress(ProcessLookupError, PermissionError):
+            os.killpg(group_id, sig)
+
+
+def _live_process_groups(group_ids: set[int]) -> set[int]:
+    live: set[int] = set()
+    for group_id in group_ids:
+        try:
+            os.killpg(group_id, 0)
+        except (ProcessLookupError, PermissionError):
+            continue
+        live.add(group_id)
+    return live
+
+
+def _terminate(process: subprocess.Popen[bytes]) -> bytes:
+    group_ids = _descendant_process_groups(process.pid)
+    _signal_process_groups(group_ids, signal.SIGTERM)
+    try:
+        output, _ = process.communicate(timeout=TERMINATION_GRACE_SECONDS)
+    except subprocess.TimeoutExpired:
+        output = b""
+
+    deadline = time.monotonic() + TERMINATION_GRACE_SECONDS
+    live = _live_process_groups(group_ids)
+    while live and time.monotonic() < deadline:
+        time.sleep(0.05)
+        live = _live_process_groups(live)
+    _signal_process_groups(live, signal.SIGKILL)
+    if process.poll() is None:
+        output, _ = process.communicate()
+    return output
+
+
+def _run_command(cmd: str, timeout_seconds: float) -> CommandResult:
+    process = subprocess.Popen(
+        cmd,
+        shell=True,
+        cwd=ROOT,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        start_new_session=True,
+    )
+    try:
+        output, _ = process.communicate(timeout=timeout_seconds)
+    except subprocess.TimeoutExpired:
+        output = _terminate(process)
+        return CommandResult(returncode=None, timed_out=True, output=output)
+    return CommandResult(
+        returncode=process.returncode,
+        timed_out=False,
+        output=output,
+    )
+
+
+def _run(mutation: Mutation) -> CommandResult:
+    result = _run_command(mutation.cmd, mutation.timeout_seconds)
+    if result.timed_out:
+        print(
+            f"{mutation.id}: TIMEOUT after {mutation.timeout_seconds:g}s: {mutation.cmd}",
+            file=sys.stderr,
+            flush=True,
+        )
+    return result
 
 
 def _build() -> None:
-    result = subprocess.run("pnpm build", shell=True, cwd=ROOT, capture_output=True)
+    result = _run_command("pnpm build", BUILD_TIMEOUT_SECONDS)
+    if result.timed_out:
+        sys.stderr.write(result.output.decode(errors="replace")[-4000:])
+        raise SystemExit(
+            f"pnpm build timed out after {BUILD_TIMEOUT_SECONDS:g}s during mutation pass"
+        )
     if result.returncode != 0:
-        sys.stderr.write(result.stdout.decode()[-2000:] + result.stderr.decode()[-2000:])
+        sys.stderr.write(result.output.decode(errors="replace")[-4000:])
         raise SystemExit("pnpm build failed during mutation pass")
 
 
@@ -637,43 +845,72 @@ def main() -> None:
         raise SystemExit(f"unknown mutation id(s): {sorted(requested - known)}")
     # Validate every mechanical target before running an expensive suite, so a
     # stale/non-unique pattern fails immediately rather than halfway through.
-    originals: dict[str, str] = {}
+    originals: dict[str, bytes] = {}
     for mutation in selected:
         original = originals.setdefault(
-            mutation.file, (ROOT / mutation.file).read_text()
+            mutation.file, (ROOT / mutation.file).read_bytes()
         )
-        occurrences = original.count(mutation.old)
+        old = mutation.old.encode()
+        occurrences = original.count(old)
         if occurrences < 1:
             raise SystemExit(f"{mutation.id}: pattern not found in {mutation.file}")
         if not mutation.replace_all and occurrences != 1:
             raise SystemExit(f"{mutation.id}: pattern is not unique ({occurrences}x)")
 
-    results: list[tuple[Mutation, str]] = []
+    results: list[tuple[Mutation, str, str | None]] = []
     for mutation in selected:
         path = ROOT / mutation.file
         original = originals[mutation.file]
         try:
-            path.write_text(original.replace(mutation.old, mutation.new))
+            path.write_bytes(
+                original.replace(mutation.old.encode(), mutation.new.encode())
+            )
             if mutation.build:
                 _build()
-            caught = _run(mutation.cmd) != 0
+            mutated = _run(mutation)
+            caught = mutated.timed_out or mutated.returncode != 0
         finally:
-            path.write_text(original)
-            if mutation.build:
-                _build()
-        restored = _run(mutation.cmd) == 0
+            try:
+                path.write_bytes(original)
+                if mutation.build:
+                    _build()
+            finally:
+                # A generator invoked by the build may rewrite its own source.
+                # The mutation pass must leave the exact bytes it started with,
+                # even when the restore build fails.
+                path.write_bytes(original)
+        restored = _run(mutation)
         verdict = (
             "KILLED"
-            if caught and restored
+            if caught and not restored.timed_out and restored.returncode == 0
             else ("SURVIVED" if not caught else "RESTORE-FAIL")
         )
-        results.append((mutation, verdict))
-        print(f"{mutation.id:>3}  {verdict:<12} {mutation.what}", flush=True)
+        detail = (
+            "mutated test TIMEOUT (treated as killed)"
+            if verdict == "KILLED" and mutated.timed_out
+            else (
+                "restored test TIMEOUT"
+                if restored.timed_out
+                else None
+            )
+        )
+        results.append((mutation, verdict, detail))
+        suffix = f" [{detail}]" if detail is not None else ""
+        print(
+            f"{mutation.id:>3}  {verdict:<12} {mutation.what}{suffix}",
+            flush=True,
+        )
 
     survivors = [entry for entry in results if entry[1] != "KILLED"]
     print("\n=== mutation pass summary ===")
-    for mutation, verdict in results:
-        print(f"{mutation.id}: {verdict}\n    mutation: {mutation.what}\n    suite: {mutation.cmd}")
+    for mutation, verdict, detail in results:
+        detail_line = f"\n    detail: {detail}" if detail is not None else ""
+        print(
+            f"{mutation.id}: {verdict}\n"
+            f"    mutation: {mutation.what}\n"
+            f"    suite: {mutation.cmd}"
+            f"{detail_line}"
+        )
     print(f"\nscore: {len(results) - len(survivors)}/{len(results)} mutations killed")
     if survivors:
         raise SystemExit(1)

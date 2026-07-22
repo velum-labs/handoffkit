@@ -177,7 +177,7 @@ test("id-and-index-less argument fragments append to the last open call", () => 
   assert.deepEqual(turn.toolCalls, [{ id: "call_a", name: "run", arguments: '{"cmd":"ls"}' }]);
 });
 
-test("captures usage and fusion metadata from any chunk", () => {
+test("captures usage and extension metadata from any chunk", () => {
   const assembler = new ChatStreamAssembler();
   feedAssembler(
     assembler,
@@ -185,13 +185,38 @@ test("captures usage and fusion metadata from any chunk", () => {
     JSON.stringify({
       choices: [{ index: 0, delta: {}, finish_reason: "stop" }],
       usage: { prompt_tokens: 3, completion_tokens: 5 },
-      fusion: { run_id: "run_1" }
+      route: { request_id: "request_1" }
     }),
     "[DONE]"
   );
   const turn = assembler.result();
   assert.deepEqual(turn.usage, { prompt_tokens: 3, completion_tokens: 5 });
-  assert.deepEqual(turn.fusion, { run_id: "run_1" });
+  assert.deepEqual(turn.extensions.route, { request_id: "request_1" });
+});
+
+test("merges split stream usage and rejects malformed reasoning metadata", () => {
+  const assembler = new ChatStreamAssembler();
+  feedAssembler(
+    assembler,
+    JSON.stringify({ choices: [], usage: { prompt_tokens: 7 } }),
+    chunk({
+      reasoning_details: [
+        { type: "attacker_block", index: 0, phase: "start", data: "leak" },
+        { type: "redacted_thinking", index: 1, phase: "block", data: 42 }
+      ]
+    }),
+    JSON.stringify({
+      choices: [{ index: 0, delta: {}, finish_reason: "stop" }],
+      usage: { completion_tokens: 3 }
+    })
+  );
+  const turn = assembler.result();
+  assert.deepEqual(turn.reasoningDetails, []);
+  assert.deepEqual(turn.usage, {
+    prompt_tokens: 7,
+    completion_tokens: 3,
+    total_tokens: 10
+  });
 });
 
 test("a stream that ends without finish_reason is truncated, not a clean stop", () => {

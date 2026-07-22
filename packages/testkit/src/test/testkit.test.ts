@@ -1,8 +1,8 @@
 /**
  * Tooling validation: the Node testkit can boot the cross-stack harness —
- * provider simulator (spawned Python child) + the REAL Python fusion engine
- * (`fusionkit serve`, the exact entrypoint the production CLI spawns) — script
- * provider behaviors over the control plane, drive the engine's HTTP surface,
+ * RouteKit-upstream simulator (spawned Python child) + the internal Python
+ * synthesis sidecar (the exact entrypoint the production CLI spawns) — script
+ * responses over the control plane, drive the sidecar's internal HTTP surface,
  * and observe the wire journal.
  *
  * Skipped (with the reason) where the Python toolchain is unavailable; the
@@ -15,7 +15,7 @@ import { after, before, test } from "node:test";
 import {
   parseSse,
   simErrors,
-  simRouterConfigYaml,
+  simSidecarConfigYaml,
   spawnCaptured,
   sseDone,
   sseText,
@@ -52,14 +52,14 @@ before(async function () {
   if (SKIP !== false) return;
   sim = await startProviderSim();
   engine = await startEngine({
-    configYaml: simRouterConfigYaml({
+    configYaml: simSidecarConfigYaml({
       simUrl: sim.url,
       members: [
-        { id: "alpha", model: "gpt-panel-a", provider: "openai" },
-        { id: "beta", model: "claude-panel-b", provider: "anthropic" },
-        { id: "judge", model: "gpt-judge", provider: "openai" }
+        { id: "openai/alpha", model: "alpha" },
+        { id: "anthropic/beta", model: "beta" },
+        { id: "openai/judge", model: "judge" }
       ],
-      judgeId: "judge"
+      judgeId: "openai/judge"
     })
   });
 });
@@ -88,36 +88,35 @@ test("provider simulator is scriptable and observable from Node", { skip: SKIP }
   const journal = await sim.journalFor("gpt-panel-a");
   assert.equal(journal.length, 1);
   assert.equal(journal[0]?.source, "queued");
-  assert.equal(journal[0]?.auth.authorization, "Bearer sk-node");
 });
 
-test("real engine process: passthrough routes to the simulator on the right dialect", { skip: SKIP }, async () => {
+test("internal sidecar: fused streaming step calls namespaced RouteKit judge id", { skip: SKIP }, async () => {
   await sim.reset();
-  await sim.queue("claude-panel-b", [{ reply: "anthropic passthrough via real engine" }]);
-  const response = await fetch(`${engine.url}/v1/chat/completions`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ model: "beta", messages: [{ role: "user", content: "hi" }] })
-  });
-  assert.equal(response.status, 200);
-  const body = (await response.json()) as { choices: Array<{ message: { content: string } }> };
-  assert.equal(body.choices[0]?.message.content, "anthropic passthrough via real engine");
-  const journal = await sim.journalFor("claude-panel-b");
-  assert.equal(journal[0]?.dialect, "anthropic-messages");
-});
-
-test("real engine process: fused streaming turn end to end", { skip: SKIP }, async () => {
-  await sim.reset();
-  await sim.queue("gpt-panel-a", [{ reply: "candidate A" }]);
-  await sim.queue("claude-panel-b", [{ reply: "candidate B" }]);
-  await sim.queue("gpt-judge", [{ reply: JUDGE_ANALYSIS }, { reply: "fused across the stack" }]);
-  const response = await fetch(`${engine.url}/v1/chat/completions`, {
+  await sim.queue("openai/judge", [
+    { reply: JUDGE_ANALYSIS },
+    { reply: "fused across the stack" }
+  ]);
+  const response = await fetch(`${engine.url}/v1/fusion/trajectories:fuse`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
-      model: "fusionkit/panel",
+      model: "fusion-panel",
       stream: true,
-      messages: [{ role: "user", content: "fuse it" }]
+      messages: [{ role: "user", content: "fuse it" }],
+      trajectories: [
+        {
+          trajectory_id: "traj-alpha",
+          model_id: "openai/alpha",
+          status: "succeeded",
+          final_output: "candidate A"
+        },
+        {
+          trajectory_id: "traj-beta",
+          model_id: "anthropic/beta",
+          status: "succeeded",
+          final_output: "candidate B"
+        }
+      ]
     })
   });
   assert.equal(response.status, 200);
@@ -126,24 +125,38 @@ test("real engine process: fused streaming turn end to end", { skip: SKIP }, asy
   assert.equal(sseText(frames), "fused across the stack");
   assert.ok(sseDone(frames), "fused stream must terminate with [DONE]");
 
-  // The journal shows the full call graph: both members, then judge + synth.
+  // Panel trajectories are produced by Node; the sidecar calls only judge and
+  // synthesis through the namespaced RouteKit model.
   const models = (await sim.journal()).map((entry) => entry.model);
-  assert.ok(models.includes("gpt-panel-a"));
-  assert.ok(models.includes("claude-panel-b"));
-  assert.equal(models.filter((model) => model === "gpt-judge").length, 2);
+  assert.deepEqual(models, ["openai/judge", "openai/judge"]);
 });
 
-test("error injection reaches through the real engine (provider 401 surfaces)", { skip: SKIP }, async () => {
+test("internal sidecar can synthesize after RouteKit judge analysis fails", { skip: SKIP }, async () => {
   await sim.reset();
-  await sim.queue("gpt-panel-a", [{ error: simErrors.invalidApiKey() }]);
-  const response = await fetch(`${engine.url}/v1/chat/completions`, {
+  await sim.queue("openai/judge", [{ error: simErrors.invalidApiKey() }]);
+  const response = await fetch(`${engine.url}/v1/fusion/trajectories:fuse`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ model: "alpha", messages: [{ role: "user", content: "hi" }] })
+    body: JSON.stringify({
+      model: "fusion-panel",
+      messages: [{ role: "user", content: "hi" }],
+      trajectories: [
+        {
+          trajectory_id: "traj-alpha",
+          model_id: "openai/alpha",
+          status: "succeeded",
+          final_output: "candidate"
+        }
+      ]
+    })
   });
-  assert.equal(response.status, 401);
-  const journal = await sim.journalFor("gpt-panel-a");
-  assert.deepEqual(journal.map((entry) => entry.status), [401]);
+  assert.equal(response.status, 200);
+  const body = (await response.json()) as {
+    choices: Array<{ message: { content: string } }>;
+  };
+  assert.match(body.choices[0]?.message.content ?? "", /judge default reply/);
+  const journal = await sim.journalFor("openai/judge");
+  assert.deepEqual(journal.map((entry) => entry.status), [401, 200]);
 });
 
 test("captured-process teardown kills wrapper grandchildren", async () => {

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { distillLog, freePort, spawnLogged, spawnTool, waitForHttp } from "../shared/proc.js";
+import { distillLog, freePort, spawnLogged, spawnTool, waitForHttp } from "@routekit/runtime";
 
 const MISSING_BINARY = "fusionkit-definitely-not-a-real-binary-xyz";
 

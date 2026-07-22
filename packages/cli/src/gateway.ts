@@ -1,46 +1,23 @@
-/**
- * Fusion Harness Gateway CLI wiring. Builds the front-door runner that turns a
- * single tool prompt into a unified HandoffKit/FusionKit harness ensemble run,
- * and exposes it over the provider wire protocols (Codex Responses, Claude
- * Messages, Cursorkit chat), the generic ACP local agent, and the unified
- * front-door acceptance suite.
- */
+/** Fusion Harness Gateway CLI wiring. */
 
-import { mkdirSync, writeFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 
 import {
   createKernelFuseStepRunner,
-  runPanelRound,
-  runUnifiedHarnessE2E
+  runPanelRound
 } from "@fusionkit/ensemble";
 import type {
   EnsembleModel,
   FusedSubagentAccess,
   PanelTrust,
-  UnifiedHarnessE2EResult,
   UnifiedHarnessKind
 } from "@fusionkit/ensemble";
-import type { ResumeCursor } from "@fusionkit/harness-core";
+import type { ResumeCursor } from "@routekit/harness-core";
 import { ATTR, normalizeWireTrajectories } from "@fusionkit/protocol";
-import { emitFusionEvent, initFusionTracing, jsonAttr, newSessionCarrier, startFusionSpan } from "@fusionkit/tracing";
-import {
-  FusionBackend,
-  installAcpAdapters,
-  runAcpAgent,
-  runFrontDoorAcceptance,
-  startFusionGateway,
-  startGateway
-} from "@fusionkit/model-gateway";
+import { emitFusionEvent, initFusionTracing, jsonAttr } from "@fusionkit/tracing";
+import { FusionBackend } from "@fusionkit/gateway";
 import type {
-  AcpRunner,
   ChatMessageLike,
-  FrontDoorRunner,
-  FrontDoorRunnerResult,
-  FusionGateway,
-  Gateway,
-  LocalComputePricing,
-  ModelPricing,
   NarrationWriter,
   OnRateLimitPolicy,
   PanelRunner,
@@ -48,22 +25,18 @@ import type {
   SessionMetaInput,
   SessionStore,
   WireTrajectory
-} from "@fusionkit/model-gateway";
-import { CodexBackendRelay, openSubscriptionRelays } from "@fusionkit/model-gateway/subscriptions";
-import type {
-  CodexRelayOptions,
-  SubscriptionAccountSetOptions
-} from "@fusionkit/model-gateway/subscriptions";
-import type { SubscriptionMode } from "@fusionkit/registry";
-import { bold, cyan, gray, uiStream } from "@fusionkit/cli-ui";
-import { registerCleanup } from "@fusionkit/runtime-utils";
-import { FUSION_PANEL_MODEL, harnessDriversEnabled, trimTrailingSlashes } from "@fusionkit/tools";
-import { buildCursorAcpProducer } from "@fusionkit/tool-cursor";
+} from "@fusionkit/gateway";
+import {
+  installAcpAdapters,
+  startGateway
+} from "@routekit/gateway";
+import type { Gateway } from "@routekit/gateway";
+import { bold, cyan, gray, uiStream } from "@routekit/cli-ui";
+import { registerCleanup, trimTrailingSlashes } from "@routekit/runtime";
+import { FUSION_PANEL_MODEL } from "@fusionkit/registry";
 import { PROMPT_CONFIG_KEY } from "./fusion-config.js";
 import type { PromptOverrides } from "./fusion-config.js";
 import {
-  logRequestDone,
-  logRequestStart,
   logTurnCandidates,
   logTurnFailed,
   logTurnStart,
@@ -73,8 +46,8 @@ import { toolRegistry } from "./tools.js";
 
 /**
  * One named ensemble as the gateway routes it: the advertised fused model id,
- * the panel members that fan out for it, the judge/synthesizer router endpoint
- * ids sent on the fuse step, the judge's model name (WS7 cost attribution),
+ * the panel members that fan out for it, the judge/synthesizer namespaced
+ * RouteKit model ids sent on the fuse step, the judge's model name (WS7 cost attribution),
  * and its prompt overrides.
  */
 export type GatewayEnsembleConfig = {
@@ -82,11 +55,11 @@ export type GatewayEnsembleConfig = {
   /** Advertised gateway model id (`fusion-panel` / `fusion-<name>`). */
   modelId: string;
   models: EnsembleModel[];
-  /** Router endpoint id the fuse step's `judge_model` routes to. */
-  judgeEndpointId: string;
+  /** Namespaced RouteKit model id the fuse step's `judge_model` routes to. */
+  judgeRoutekitModelId: string;
   /** The judge's provider model name (cost attribution + narration). */
   judgeModelName: string;
-  synthesizerEndpointId?: string;
+  synthesizerRoutekitModelId?: string;
   /**
    * Step boundaries per panel member before aggregation: 1 = single-completion
    * proposers over the caller's messages+tools (no managed harness); finite
@@ -109,21 +82,6 @@ export type GatewayRunnerConfig = {
    * the one implicit ensemble behind the default fused model.
    */
   ensembles?: GatewayEnsembleConfig[];
-  /**
-   * Codex backend relay config: keeps a Codex client's own stock models
-   * working through this gateway (live merged `/v1/models` catalog + verbatim
-   * Responses relay under the client's own ChatGPT auth). Inert for other
-   * clients; ignored when `authToken` is set (the Authorization header is then
-   * the gateway's own bearer, not a relayable ChatGPT token).
-   */
-  codexRelay?: CodexRelayOptions;
-  /**
-   * Optional provider-native subscription account sets. Static provider metadata
-   * comes from the registry; these options only control runtime policy/store.
-   */
-  subscriptionAccounts?: Partial<
-    Record<SubscriptionMode, Omit<SubscriptionAccountSetOptions, "mode">>
-  >;
   command?: string;
   timeoutMs?: number;
   /**
@@ -140,18 +98,12 @@ export type GatewayRunnerConfig = {
    */
   stragglerGraceMs?: number;
   judgeModel?: string;
-  fusionApiKey?: string;
-  modelEndpoints?: Record<string, string>;
+  /** One RouteKit gateway URL shared by every namespaced panel model. */
+  routekitUrl?: string;
   /** WS5 rate-limit / credit failover policy for vendor passthrough models. */
   onRateLimit?: OnRateLimitPolicy;
   /** WS7 budget cap (USD) for the session's gateway-observed cost. */
   budgetUsd?: number;
-  /** Per-model token pricing overrides. */
-  pricing?: Readonly<Record<string, ModelPricing>>;
-  /** Per-model local compute pricing overrides. */
-  localCompute?: Readonly<Record<string, LocalComputePricing>>;
-  /** Model names / endpoint ids of panel members running on local compute (MLX). */
-  localModels?: readonly string[];
   /** WS4 durable session store; when set the gateway persists/resumes sessions. */
   sessionStore?: SessionStore;
   /** WS4 resume target id bound to the first conversation this gateway serves. */
@@ -172,7 +124,7 @@ export type GatewayRunnerConfig = {
   panelTrust?: PanelTrust;
   /**
    * Enable same-model sub-agents inside panel members (a member may
-   * parallelize its own work; children reuse its model/endpoint). Default on;
+   * parallelize its own work; children reuse its RouteKit model). Default on;
    * `--no-subagents` / `subagents: false` turns it off.
    */
   subagents?: boolean;
@@ -257,123 +209,6 @@ function emitGatewayStatus(status: GatewayTurnStatus): void {
   }
 }
 
-function mapStatus(status: string): FrontDoorRunnerResult["status"] {
-  if (status === "succeeded") return "succeeded";
-  if (status === "skipped") return "skipped";
-  return "failed";
-}
-
-function summarize(report: UnifiedHarnessE2EResult, primary: UnifiedHarnessKind): FrontDoorRunnerResult {
-  const row = report.results.find((entry) => entry.harness === primary) ?? report.results[0];
-  const ensemble = row?.ensemble;
-  const finalOutput =
-    ensemble?.judgeSynthesisRecord?.final_output ??
-    ensemble?.harnessRunResult.output_summary ??
-    row?.message ??
-    "";
-  const evidence: string[] = [];
-  if (ensemble !== undefined) {
-    if (ensemble.artifacts.some((artifact) => artifact.kind === "patch")) {
-      evidence.push("patch_artifact");
-    }
-    if (ensemble.toolRecords.length > 0) evidence.push("tool_execution");
-    if (ensemble.judgeSynthesisRecord !== undefined) evidence.push("judge_synthesis");
-  }
-  return {
-    finalOutput,
-    runId: report.id,
-    status: mapStatus(row?.status ?? "failed"),
-    evidence,
-    ...(report.reportPath !== undefined ? { reportPath: report.reportPath } : {})
-  };
-}
-
-export function buildFrontDoorRunner(config: GatewayRunnerConfig): FrontDoorRunner {
-  return async (input) => {
-    const environment = {
-      repo: config.repo,
-      fusion_backend_url: config.fusionBackendUrl,
-      harnesses: config.harnesses,
-      judge_model: config.judgeModel ?? null,
-      models: config.models.map((model) => ({
-        id: model.id,
-        model: model.model,
-        ...(model.endpointId !== undefined ? { endpoint_id: model.endpointId } : {})
-      })),
-      ...(config.modelEndpoints !== undefined ? { model_endpoints: config.modelEndpoints } : {})
-    };
-    const run = startFusionSpan("gateway", "fusion.run", input.trace, {
-      [ATTR.FUSION_DIALECT]: input.dialect,
-      [ATTR.FUSION_PROMPT_PREVIEW]: input.prompt.slice(0, 600),
-      [ATTR.FUSION_ENVIRONMENT]: jsonAttr(environment),
-      [ATTR.FUSION_REPO]: config.repo
-    });
-    run.event("gateway", "fusion.turn.info", {
-      [ATTR.FUSION_DIALECT]: input.dialect,
-      [ATTR.FUSION_PROMPT_PREVIEW]: input.prompt.slice(0, 600),
-      [ATTR.FUSION_ENVIRONMENT]: jsonAttr(environment),
-      [ATTR.FUSION_REPO]: config.repo
-    });
-    logRequestStart({ requestId: input.requestId, dialect: input.dialect, preview: input.prompt });
-    const startedAt = Date.now();
-    try {
-      const report = await runUnifiedHarnessE2E({
-        id: `gateway_${input.requestId}`,
-        fusionBackendUrl: config.fusionBackendUrl,
-        repo: config.repo,
-        outputRoot: join(config.outputRoot, input.requestId),
-        prompt: input.prompt,
-        harnesses: config.harnesses,
-        models: config.models,
-        trace: run.carrier,
-        ...(config.command !== undefined ? { command: config.command } : {}),
-        ...(config.timeoutMs !== undefined ? { timeoutMs: config.timeoutMs } : {}),
-        ...(config.judgeModel !== undefined ? { judgeModel: config.judgeModel } : {}),
-        ...(config.fusionApiKey !== undefined ? { fusionApiKey: config.fusionApiKey } : {}),
-        ...(config.modelEndpoints !== undefined ? { modelEndpoints: config.modelEndpoints } : {})
-      });
-      const summary = summarize(report, config.harnesses[0] ?? "command");
-      run.end({
-        status: summary.status,
-        attributes: {
-          [ATTR.FUSION_RUN_ID]: summary.runId,
-          [ATTR.FUSION_EVIDENCE]: jsonAttr(summary.evidence),
-          [ATTR.FUSION_FINAL_OUTPUT_PREVIEW]: summary.finalOutput.slice(0, 600)
-        }
-      });
-      logRequestDone({
-        requestId: input.requestId,
-        status: summary.status,
-        elapsedMs: Date.now() - startedAt
-      });
-      return summary;
-    } catch (error) {
-      run.end({ status: "failed", error: error instanceof Error ? error.message : String(error) });
-      logRequestDone({ requestId: input.requestId, status: "failed", elapsedMs: Date.now() - startedAt });
-      throw error;
-    }
-  };
-}
-
-export function buildAcpRunner(config: GatewayRunnerConfig): AcpRunner {
-  const front = buildFrontDoorRunner(config);
-  return async (input) => {
-    const result = await front({
-      dialect: "openai-chat",
-      prompt: input.prompt,
-      requestedModel: undefined,
-      requestId: input.requestId,
-      trace: newSessionCarrier().carrier
-    });
-    return {
-      finalOutput: result.finalOutput,
-      runId: result.runId,
-      status: result.status,
-      evidence: result.evidence
-    };
-  };
-}
-
 /**
  * Style one tool's setup snippet: bold title line, gray config comments, cyan
  * URLs, everything else dim — so the copy-pasteable parts stand out from the
@@ -388,13 +223,20 @@ function styledSnippet(snippet: string): string {
   return [bold(title ?? snippet), ...styledBody].join("\n");
 }
 
-export function gatewaySetupSnippets(gatewayUrl: string, cursorKitNote: string): string {
+export function gatewaySetupSnippets(
+  gatewayUrl: string,
+  cursorKitNote: string,
+  model = "gateway-model"
+): string {
   const toolSnippets = toolRegistry
     .list()
     .flatMap((tool) => {
       const snippet = tool.setupSnippet?.({
         gatewayUrl,
-        ...(tool.id === "cursor" ? { note: cursorKitNote } : {})
+        model,
+        ...(tool.id === "cursor" && cursorKitNote.length > 0
+          ? { note: cursorKitNote }
+          : {})
       });
       return snippet === undefined ? [] : [snippet];
     });
@@ -457,11 +299,8 @@ export async function startFusionStepGateway(input: {
   };
 
   // Native multi-turn: one resume-cursor map per conversation (keyed by
-  // session), each holding a cursor per panel model. When the harness-driver
-  // cutover flag is on, a follow-up turn resumes each member's native session
-  // from these instead of re-prompting a fresh process. Legacy harnesses
-  // ignore the map, so it is a no-op with the flag off.
-  const driversEnabled = harnessDriversEnabled();
+  // session), each holding a cursor per panel model. A follow-up turn resumes
+  // each member's native session instead of re-prompting a fresh process.
   const resumeCursorsBySession = new Map<string, Map<string, ResumeCursor>>();
   const resumeCursorsFor = (sessionKey: string): Map<string, ResumeCursor> => {
     let map = resumeCursorsBySession.get(sessionKey);
@@ -492,8 +331,8 @@ export async function startFusionStepGateway(input: {
       ensembleModelId !== undefined
         ? (ensemblesByModelId.get(ensembleModelId)?.models ?? config.models)
         : config.models;
-    // WS5 failover excludes the throttled vendor (by router endpoint id == panel
-    // model id) so the ensemble fuses over the healthy survivors this turn.
+    // WS5 failover excludes the throttled namespaced RouteKit model so the
+    // ensemble fuses over the healthy survivors this turn.
     const panelModels =
       excludeModelIds === undefined || excludeModelIds.length === 0
         ? ensembleModels
@@ -516,9 +355,9 @@ export async function startFusionStepGateway(input: {
         models: panelModels.map((model) => ({
           id: model.id,
           model: model.model,
-          ...(model.endpointId !== undefined ? { endpoint_id: model.endpointId } : {})
+          routekit_model_id: model.id
         })),
-        ...(config.modelEndpoints !== undefined ? { model_endpoints: config.modelEndpoints } : {})
+        ...(config.routekitUrl !== undefined ? { routekit_url: config.routekitUrl } : {})
       })
     });
     logTurnStart({
@@ -550,8 +389,13 @@ export async function startFusionStepGateway(input: {
         ...(tools !== undefined ? { tools } : {}),
         ...(toolChoice !== undefined ? { toolChoice } : {}),
         ...(k !== undefined ? { k } : {}),
-        ...(config.modelEndpoints !== undefined ? { modelEndpoints: config.modelEndpoints } : {}),
-        ...(config.fusionApiKey !== undefined ? { fusionApiKey: config.fusionApiKey } : {}),
+        ...(config.routekitUrl !== undefined
+          ? {
+              modelEndpoints: Object.fromEntries(
+                panelModels.map((model) => [model.id, config.routekitUrl as string])
+              )
+            }
+          : {}),
         ...(config.timeoutMs !== undefined ? { timeoutMs: config.timeoutMs } : {}),
         ...(signal !== undefined ? { signal } : {}),
         stragglerGraceMs: config.stragglerGraceMs ?? DEFAULT_STRAGGLER_GRACE_MS,
@@ -563,7 +407,7 @@ export async function startFusionStepGateway(input: {
           return fusedSubagents !== undefined ? { fusedSubagents } : {};
         })(),
         ...(harnessSystem !== undefined ? { harnessSystem } : {}),
-        ...(driversEnabled ? { resumeCursors: resumeCursorsFor(sessionKey) } : {})
+        resumeCursors: resumeCursorsFor(sessionKey)
       });
       const trajectories = normalizeWireTrajectories(wire);
       logTurnCandidates({
@@ -591,33 +435,29 @@ export async function startFusionStepGateway(input: {
     }
   };
 
-  // Expose every panel model as a native passthrough alongside the fused model,
-  // so the tool's picker can switch to a vendor model (and back to fusion). Each
-  // routes to its `fusionkit serve` router endpoint, which already calls the
-  // real provider with the reused subscription/API credentials.
+  // Expose every namespaced RouteKit model id as passthrough alongside fused models.
+  // RouteKit remains the only owner of provider details and credentials.
   const passthrough: PassthroughModel[] =
-    config.modelEndpoints === undefined
+    config.routekitUrl === undefined
       ? []
-      : config.models.flatMap((model) => {
-          const endpointUrl = config.modelEndpoints?.[model.id];
-          return endpointUrl === undefined
-            ? []
-            : [{ modelId: model.model, endpointId: model.id, endpointUrl }];
-        });
+      : config.models.map((model) => ({
+          routekitModelId: model.id,
+          routekitUrl: config.routekitUrl as string
+        }));
 
   // Each named ensemble is advertised as its own fused model. The route carries
   // what a fused turn for it needs: which members fan out (checked by the panel
-  // runner above), the judge/synthesizer router endpoint ids for the fuse step,
+  // runner above), the judge/synthesizer RouteKit model ids for the fuse step,
   // the judge model name for cost/narration, and its prompt overrides (wire keys
   // per PROMPT_CONFIG_KEY, ready to POST).
   const fusedModels = ensembles.map((ensemble) => ({
     modelId: ensemble.modelId,
     name: ensemble.name,
-    memberEndpointIds: ensemble.models.map((model) => model.id),
-    judgeEndpointId: ensemble.judgeEndpointId,
+    memberRoutekitModelIds: ensemble.models.map((model) => model.id),
+    judgeRoutekitModelId: ensemble.judgeRoutekitModelId,
     judgeModelName: ensemble.judgeModelName,
-    ...(ensemble.synthesizerEndpointId !== undefined
-      ? { synthesizerEndpointId: ensemble.synthesizerEndpointId }
+    ...(ensemble.synthesizerRoutekitModelId !== undefined
+      ? { synthesizerRoutekitModelId: ensemble.synthesizerRoutekitModelId }
       : {}),
     ...(ensemble.k !== undefined ? { k: ensemble.k } : {}),
     ...(ensemble.prompts !== undefined
@@ -647,9 +487,6 @@ export async function startFusionStepGateway(input: {
     ...(config.onRateLimit !== undefined ? { onRateLimit: config.onRateLimit } : {}),
     ...(config.panelTimeoutMs !== undefined ? { panelTimeoutMs: config.panelTimeoutMs } : {}),
     ...(config.budgetUsd !== undefined ? { budgetUsd: config.budgetUsd } : {}),
-    ...(config.pricing !== undefined ? { pricing: config.pricing } : {}),
-    ...(config.localCompute !== undefined ? { localCompute: config.localCompute } : {}),
-    ...(config.localModels !== undefined ? { localModels: config.localModels } : {}),
     ...(config.reasoningTraces !== undefined ? { reasoningTraces: config.reasoningTraces } : {}),
     ...(config.narrationWriter !== undefined ? { narrationWriter: config.narrationWriter } : {}),
     // WS7 cost attribution: a fused turn's gateway-observed `usage` is the
@@ -664,99 +501,22 @@ export async function startFusionStepGateway(input: {
     // CLI's timestamped request log instead of the engine's flat stderr default.
     logger: requestLogGatewayLogger
     // judge_model is intentionally NOT forwarded here: `config.judgeModel` is the
-    // provider model name, but the router (and trajectories:fuse) route by endpoint
-    // id. The Python fuse path already resolves the configured judge endpoint via
+    // display/cost model name, while trajectories:fuse routes by the stable
+    // namespaced RouteKit model id. The Python fuse path resolves that configured id via
     // config.resolved_judge_model, so omitting this keeps routing correct while
     // the judge gap-analysis still runs on the configured judge.
   });
   // Session persistence is detached from the request path; make sure the tail
   // of turn/cost writes lands before the process exits (WS10).
   registerCleanup(() => backend.flush());
-  const { relays: subscriptionRelays } = await openSubscriptionRelays({
-    accounts: config.subscriptionAccounts ?? {},
-    ...(config.codexRelay !== undefined
-      ? { codex: { logger: requestLogGatewayLogger, ...config.codexRelay } }
-      : {})
-  });
-  const codexRelay =
-    subscriptionRelays.codex === undefined && config.codexRelay !== undefined
-      ? new CodexBackendRelay({ logger: requestLogGatewayLogger, ...config.codexRelay })
-      : undefined;
   const gateway = await startGateway({
     backend,
     host: input.host,
     port: input.port,
-    ...(input.authToken !== undefined ? { authToken: input.authToken } : {}),
-    ...(codexRelay !== undefined ? { codexRelay } : {}),
-    ...(Object.keys(subscriptionRelays).length > 0 ? { subscriptionRelays } : {})
+    ...(input.authToken !== undefined ? { authToken: input.authToken } : {})
   });
   selfGatewayUrl = gateway.url();
   return gateway;
-}
-
-export async function startConfiguredGateway(input: {
-  config: GatewayRunnerConfig;
-  host: string;
-  port: number;
-  authToken?: string;
-  defaultModel?: string;
-}): Promise<FusionGateway> {
-  // Standalone gateway entry (outside the quickstart boot): install the tracer
-  // provider here so a user-configured OTLP endpoint exports. Idempotent.
-  initFusionTracing({ serviceName: "fusionkit-gateway" });
-  return await startFusionGateway({
-    runner: buildFrontDoorRunner(input.config),
-    host: input.host,
-    port: input.port,
-    ...(input.authToken !== undefined ? { authToken: input.authToken } : {}),
-    ...(input.defaultModel !== undefined ? { defaultModel: input.defaultModel } : {})
-  });
-}
-
-export async function runGatewayAcp(config: GatewayRunnerConfig): Promise<void> {
-  initFusionTracing({ serviceName: "fusionkit-gateway" });
-  await runAcpAgent({ runner: buildAcpRunner(config) });
-}
-
-export type GatewayAcceptanceInput = {
-  config: GatewayRunnerConfig;
-  sentinel: string;
-  host: string;
-  outPath: string;
-};
-
-export async function runGatewayAcceptance(input: GatewayAcceptanceInput): Promise<{
-  reportPath: string;
-  failed: boolean;
-}> {
-  const gateway = await startConfiguredGateway({
-    config: input.config,
-    host: input.host,
-    port: 0
-  });
-  try {
-    const cursorAcp = buildCursorAcpProducer({
-      gatewayUrl: gateway.url(),
-      sentinel: input.sentinel,
-      repo: input.config.repo,
-      ...(input.config.models[0]?.id !== undefined
-        ? { modelName: input.config.models[0].id }
-        : {}),
-      ...(input.config.timeoutMs !== undefined ? { timeoutMs: input.config.timeoutMs } : {})
-    });
-    const report = await runFrontDoorAcceptance({
-      gatewayUrl: gateway.url(),
-      sentinel: input.sentinel,
-      acpRunner: buildAcpRunner(input.config),
-      ...(cursorAcp !== undefined ? { cursorAcp } : {})
-    });
-    mkdirSync(resolve(input.outPath, ".."), { recursive: true });
-    writeFileSync(input.outPath, JSON.stringify(report, null, 2) + "\n");
-    const failed = report.front_doors.some((door) => door.status === "failed");
-    return { reportPath: input.outPath, failed };
-  } finally {
-    await gateway.close();
-  }
 }
 
 export async function installRegistryAdapters(input: {

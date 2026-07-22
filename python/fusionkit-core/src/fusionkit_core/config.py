@@ -7,60 +7,22 @@ current working directory when serving from elsewhere) > built-in defaults.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Literal
 
 import yaml
-from pydantic import BaseModel, Field, field_validator, model_validator
-
-from fusionkit_core.registry import sampling_overrides_for_model
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 FusionMode = Literal["single", "self", "panel", "heuristic"]
-ProviderKind = Literal[
-    "openai",
-    "anthropic",
-    "google",
-    "openrouter",
-    "cliproxy",
-    "openai-compatible",
-    "mlx-lm",
-    "custom",
-    "codex",
-]
-SubscriptionAuthMode = Literal["api_key", "claude-code", "codex"]
-
-
-class EndpointAuth(BaseModel):
-    """How an endpoint obtains its credential.
-
-    ``api_key`` (the default) keeps the existing behaviour: a literal ``api_key``
-    or ``api_key_env`` on the endpoint. The subscription modes read the local CLI
-    OAuth store read-only at request time (see ``fusionkit_core.credentials``):
-    ``claude-code`` reuses the Claude Code (Pro/Max) login, ``codex`` reuses the
-    Codex (ChatGPT) login.
-    """
-
-    mode: SubscriptionAuthMode = "api_key"
-    credentials_path: str | None = None
-    token_env: str | None = None
-
-
-class EndpointCapabilities(BaseModel):
-    structured_output: bool | None = None
-    tool_calls: bool | None = None
-    streaming: bool | None = None
-
-
-class CostMetadata(BaseModel):
-    input_per_1m_tokens: float | None = Field(default=None, ge=0)
-    output_per_1m_tokens: float | None = Field(default=None, ge=0)
-    currency: str = "USD"
+_ROUTEKIT_MODEL_ID = re.compile(r"^[a-z0-9][a-z0-9-]*/[^/\s][^\s]*$")
 
 
 class RunBudget(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     max_candidates: int | None = Field(default=None, ge=1)
     wall_clock_s: float | None = Field(default=None, ge=0)
-    max_cost: float | None = Field(default=None, ge=0)
     max_tool_rounds: int | None = Field(default=None, ge=0)
     max_tool_calls: int | None = Field(default=None, ge=0)
 
@@ -68,12 +30,14 @@ class RunBudget(BaseModel):
 class ContextPolicy(BaseModel):
     """How judge/synthesizer prompts are budgeted against a model's context window.
 
-    ``default_max_context`` is used when an endpoint declares no ``max_context``.
+    ``default_max_context`` is the sidecar's model-agnostic context budget.
     ``safety_margin_tokens`` absorbs token-estimation error (the estimator is a
     chars/4 heuristic, which under-counts dense code). ``keep_head_items`` /
     ``keep_tail_items`` control middle-out trajectory packing: the first items
     (the plan) and the last items (the outcome) survive, the middle is elided.
     """
+
+    model_config = ConfigDict(extra="forbid")
 
     default_max_context: int = Field(default=64_000, ge=1_024)
     safety_margin_tokens: int = Field(default=2_048, ge=0)
@@ -82,6 +46,8 @@ class ContextPolicy(BaseModel):
 
 
 class SamplingConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     temperature: float = Field(default=0.2, ge=0, le=2)
     top_p: float = Field(default=0.95, gt=0, le=1)
     max_tokens: int = Field(default=1024, ge=1)
@@ -108,20 +74,6 @@ def merge_sampling(
     return fallback.model_copy(update=updates)
 
 
-def model_sampling_defaults(model: str) -> dict[str, float]:
-    """Per-model sampling defaults for panel/passthrough model calls.
-
-    Derived from opencode's production transform table
-    (references/opencode/provider/transform.ts, temperature/topP): qwen-family
-    models are prone to tool-call repetition loops at generic temperature
-    defaults and want temperature 0.55 / top_p 1.0; kimi-k2 wants 0.6 (1.0 for
-    the thinking / k2.5+ variants). Returns only the keys that should override
-    the generic :class:`SamplingConfig` defaults; callers apply them when
-    neither the request nor the operator config pinned a value.
-    """
-    return sampling_overrides_for_model(model)
-
-
 class PromptOverrides(BaseModel):
     """Optional overrides for the built-in fusion system prompts.
 
@@ -131,35 +83,24 @@ class PromptOverrides(BaseModel):
     the way into the synthesizer via the router config the CLI generates.
     """
 
+    model_config = ConfigDict(extra="forbid")
+
     judge_system: str | None = None
     synthesizer_system: str | None = None
 
 
-class ModelEndpoint(BaseModel):
-    id: str = Field(min_length=1)
-    model: str = Field(min_length=1)
-    # Optional for subscription endpoints (claude-code / codex), where the client
-    # falls back to the provider's default base URL.
-    base_url: str = ""
-    api_key: str = "not-needed"
-    api_key_env: str | None = None
-    provider: ProviderKind = "openai-compatible"
-    auth: EndpointAuth = Field(default_factory=EndpointAuth)
-    max_context: int | None = None
-    estimated_memory_gb: float | None = None
-    capabilities: EndpointCapabilities = Field(default_factory=EndpointCapabilities)
-    pricing: CostMetadata = Field(default_factory=CostMetadata)
-    tags: list[str] = Field(default_factory=list)
-    timeout_s: float = 120.0
-
-    @field_validator("base_url")
-    @classmethod
-    def strip_trailing_slash(cls, value: str) -> str:
-        return value.rstrip("/")
-
-
 class FusionConfig(BaseModel):
-    endpoints: list[ModelEndpoint] = Field(min_length=1)
+    """Configuration for the internal synthesis sidecar.
+
+    RouteKit owns accounts, providers, retries, balancing, and pricing. FusionKit
+    receives only its neutral OpenAI-compatible gateway URL and stable,
+    namespaced RouteKit model identifiers.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    routekit_url: str
+    routekit_model_ids: list[str] = Field(min_length=1)
     default_model: str
     judge_model: str | None = None
     synthesizer_model: str | None = None
@@ -184,12 +125,30 @@ class FusionConfig(BaseModel):
     # names no best candidate. No effect on tool-using agent fusion.
     synthesis_select_best: bool = False
 
+    @field_validator("routekit_url")
+    @classmethod
+    def normalize_routekit_url(cls, value: str) -> str:
+        normalized = value.rstrip("/")
+        if not normalized:
+            raise ValueError("routekit_url must not be empty")
+        return normalized
+
+    @field_validator("routekit_model_ids")
+    @classmethod
+    def validate_routekit_model_ids(cls, values: list[str]) -> list[str]:
+        invalid = [value for value in values if _ROUTEKIT_MODEL_ID.fullmatch(value) is None]
+        if invalid:
+            raise ValueError(
+                "routekit_model_ids must use provider/model namespaces: "
+                + ", ".join(invalid)
+            )
+        return values
+
     @model_validator(mode="after")
     def _validate_model_references(self) -> FusionConfig:
-        endpoint_ids = [endpoint.id for endpoint in self.endpoints]
-        known = set(endpoint_ids)
-        if len(known) != len(endpoint_ids):
-            raise ValueError("endpoint ids must be unique")
+        known = set(self.routekit_model_ids)
+        if len(known) != len(self.routekit_model_ids):
+            raise ValueError("RouteKit model ids must be unique")
         references = {
             "default_model": self.default_model,
             "judge_model": self.judge_model,
@@ -197,21 +156,20 @@ class FusionConfig(BaseModel):
         }
         for field, model_id in references.items():
             if model_id is not None and model_id not in known:
-                raise ValueError(f"{field} references unknown endpoint {model_id!r}")
+                raise ValueError(f"{field} references unknown RouteKit model {model_id!r}")
         if len(set(self.panel_models)) != len(self.panel_models):
             raise ValueError("panel_models must not contain duplicates")
         unknown_panel = [model_id for model_id in self.panel_models if model_id not in known]
         if unknown_panel:
             raise ValueError(
-                f"panel_models reference unknown endpoints: {', '.join(unknown_panel)}"
+                f"panel_models reference unknown RouteKit models: {', '.join(unknown_panel)}"
             )
         return self
 
-    def endpoint_for(self, model_id: str) -> ModelEndpoint:
-        for endpoint in self.endpoints:
-            if endpoint.id == model_id:
-                return endpoint
-        raise KeyError(f"Unknown model endpoint: {model_id}")
+    def require_model(self, model_id: str) -> str:
+        if model_id not in self.routekit_model_ids:
+            raise KeyError(f"Unknown RouteKit model: {model_id}")
+        return model_id
 
     @property
     def resolved_judge_model(self) -> str:

@@ -5,9 +5,8 @@
  * `messages` string, an empty body) sailed past the doors, hit deep code, and
  * surfaced as 502 `upstream_error`s carrying raw TypeError text
  * ("requested.startsWith is not a function", "body.messages is not iterable")
- * or internal fusion jargon ("proposal mode (k=1) needs the caller's
- * `messages`"). A caller error must be a 400 in the door's native error
- * envelope, and it must never reach the panel (no provider fanout, no spend).
+ * or internal implementation details. A caller error must be a 400 in the
+ * door's native error envelope, and it must never reach a provider.
  *
  * Validation here is *structural only* — field presence and JSON types
  * matching what the real providers enforce. Semantic rules (role enums,

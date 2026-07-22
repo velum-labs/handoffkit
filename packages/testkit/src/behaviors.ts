@@ -32,6 +32,10 @@ export type SimBehavior = {
   tool_calls?: SimToolCall[];
   /** Out-of-band reasoning (OpenAI `reasoning_content` / Anthropic `thinking`). */
   reasoning?: string | null;
+  /** Opaque Anthropic signature paired with `reasoning` (defaults to `sim`). */
+  reasoning_signature?: string | null;
+  /** Opaque Anthropic `redacted_thinking` payload emitted after reasoning. */
+  redacted_thinking?: string | null;
   error?: SimError | null;
   /** Sleep before answering (latency injection). */
   delay_s?: number;
@@ -52,7 +56,7 @@ export type SimBehavior = {
 /** The provider wire dialects the simulator speaks (one per FusionKit client family). */
 export type SimDialect = "openai-chat" | "anthropic-messages" | "openai-responses" | "google-generate";
 
-/** One journal entry: what actually crossed the provider wire. */
+/** One journal entry: what actually crossed the simulated RouteKit wire. */
 export type SimJournalEntry = {
   seq: number;
   ts: number;
@@ -63,15 +67,10 @@ export type SimJournalEntry = {
   source: "queued" | "default";
   kind: "reply" | "tool_calls" | "error";
   status: number;
-  auth: {
-    authorization: string | null;
-    x_api_key: string | null;
-    x_goog_api_key: string | null;
-    chatgpt_account_id: string | null;
-  };
   request: Record<string, unknown>;
   reply_preview: string;
   tool_call_names: string[];
+  error_code: string | null;
 };
 
 /** What `queue` accepts: a full behavior, or a plain string as a text reply. */

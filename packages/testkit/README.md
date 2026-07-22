@@ -4,7 +4,14 @@ Private cross-stack test tooling for FusionKit (never published). Not to be conf
 
 ## Architecture
 
-Composable layers for realistic end-to-end tests: `startProviderSim` spawns the scriptable provider simulator (`python/fusionkit-testkit`) as a child process, driven over its HTTP control plane and observed through its wire journal; `simRouterConfigYaml` builds real `fusionkit serve` router configs whose endpoints all point at the simulator; and `startEngine` runs the real Python fusion engine as a child process — the same entrypoint the production CLI spawns. SSE parsing helpers and honest skip-gating for environments without the Python toolchain round out the surface.
+Composable layers for realistic end-to-end tests: `startProviderSim` spawns a
+scriptable RouteKit-compatible upstream (`python/fusionkit-testkit`) as a child
+process, driven over its HTTP control plane and observed through its wire
+journal; `simSidecarConfigYaml` builds production-shaped sidecar config from
+namespaced RouteKit model IDs; and `startEngine` runs the internal `fusionkit-sidecar`
+process — the same entrypoint the production CLI spawns. SSE parsing helpers and
+honest skip-gating for environments without the Python toolchain round out the
+surface.
 
 ## Docs
 

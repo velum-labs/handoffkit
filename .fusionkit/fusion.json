@@ -1,54 +1,30 @@
 {
-  "version": "fusionkit.fusion.v3",
-  "_comment": "This repository panel routes through OpenRouter and requires OPENROUTER_API_KEY; run fusionkit init in your own repo to choose a different panel.",
+  "version": "fusionkit.fusion.v4",
+  "router": {
+    "config": ".routekit/router.yaml"
+  },
   "tool": "codex",
   "defaultEnsemble": "default",
   "ensembles": {
     "default": {
-      "panel": [
-        {
-          "id": "kimi",
-          "model": "moonshotai/kimi-k2-thinking",
-          "provider": "openrouter",
-          "keyEnv": "OPENROUTER_API_KEY"
-        },
-        {
-          "id": "qwen3",
-          "model": "qwen/qwen3-coder",
-          "provider": "openrouter",
-          "keyEnv": "OPENROUTER_API_KEY"
-        }
+      "members": [
+        "openrouter/moonshotai/kimi-k2-thinking",
+        "openrouter/qwen/qwen3-coder"
       ],
-      "judgeModel": "moonshotai/kimi-k2-thinking",
-      "synthesizerModel": "moonshotai/kimi-k2-thinking"
+      "judge": "openrouter/moonshotai/kimi-k2-thinking",
+      "synthesizer": "openrouter/moonshotai/kimi-k2-thinking"
     },
     "kimi": {
-      "panel": [
-        {
-          "id": "kimi",
-          "model": "moonshotai/kimi-k2-thinking",
-          "provider": "openrouter",
-          "keyEnv": "OPENROUTER_API_KEY"
-        }
-      ],
-      "judgeModel": "moonshotai/kimi-k2-thinking",
-      "synthesizerModel": "moonshotai/kimi-k2-thinking"
+      "members": ["openrouter/moonshotai/kimi-k2-thinking"],
+      "judge": "openrouter/moonshotai/kimi-k2-thinking",
+      "synthesizer": "openrouter/moonshotai/kimi-k2-thinking"
     },
     "qwen3": {
-      "panel": [
-        {
-          "id": "qwen3",
-          "model": "qwen/qwen3-coder",
-          "provider": "openrouter",
-          "keyEnv": "OPENROUTER_API_KEY"
-        }
-      ],
-      "judgeModel": "qwen/qwen3-coder",
-      "synthesizerModel": "qwen/qwen3-coder"
+      "members": ["openrouter/qwen/qwen3-coder"],
+      "judge": "openrouter/qwen/qwen3-coder",
+      "synthesizer": "openrouter/qwen/qwen3-coder"
     }
   },
-  "local": false,
   "observe": true,
-  "reasoning": true,
-  "reasoningModel": "kimi"
+  "reasoning": true
 }

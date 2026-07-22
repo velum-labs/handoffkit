@@ -12,8 +12,8 @@ from fusionkit_core.types import FusionAnalysis, Trajectory
 class FusionIdentity:
     """Factual description of the roles in a fusion run, for prompt disclosure.
 
-    ``panel`` are the panel member endpoint ids (the independent candidates),
-    ``judge``/``synthesizer`` the endpoint ids of those roles, and
+    ``panel`` are the panel member RouteKit model ids (the independent candidates),
+    ``judge``/``synthesizer`` the RouteKit model ids of those roles, and
     ``self_id``/``self_ordinal`` identify *this* role when it is a single panel
     member (1-based ``self_ordinal`` of ``len(panel)`` peers). All fields are
     optional so the block degrades gracefully when a role is unknown.

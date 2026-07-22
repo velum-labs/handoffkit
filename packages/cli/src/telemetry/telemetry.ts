@@ -20,6 +20,13 @@ import { arch, platform } from "node:os";
 
 import { PostHog } from "posthog-node";
 import {
+  anonymousEventProperties,
+  allowlistedProperties,
+  boundedShutdown,
+  CLI_COMMAND_TELEMETRY_FIELDS,
+  durationBucket
+} from "@routekit/telemetry-core";
+import {
   addFusionEventListener,
   addSpanListener,
   attrJson,
@@ -56,15 +63,7 @@ export function telemetryHost(env: NodeJS.ProcessEnv = process.env): string {
   return host !== undefined && host.length > 0 ? host : TELEMETRY_DEFAULT_HOST;
 }
 
-/** Coarse duration bucket, so timings cannot fingerprint a machine. */
-export function durationBucket(ms: number): string {
-  if (ms < 1_000) return "<1s";
-  if (ms < 10_000) return "1-10s";
-  if (ms < 60_000) return "10-60s";
-  if (ms < 300_000) return "1-5m";
-  if (ms < 1_800_000) return "5-30m";
-  return ">30m";
-}
+export { durationBucket };
 
 export type CliCommandEvent = {
   command: string;
@@ -91,6 +90,24 @@ export type FusionSessionEvent = {
   candidate_failures: number;
   error_kind?: string;
 };
+
+const CLI_COMMAND_FIELDS = [
+  ...CLI_COMMAND_TELEMETRY_FIELDS,
+  "observe",
+  "local"
+] as const satisfies readonly (keyof CliCommandEvent)[];
+const FUSION_SESSION_FIELDS: readonly (keyof FusionSessionEvent)[] = [
+  "panel_size",
+  "providers",
+  "harness",
+  "judge_decision",
+  "turn_count",
+  "duration_bucket",
+  "input_tokens",
+  "output_tokens",
+  "candidate_failures",
+  "error_kind"
+];
 
 type SessionAcc = {
   providers: Set<string>;
@@ -240,21 +257,21 @@ export function initTelemetry(options: InitTelemetryOptions = {}): TelemetryDeci
   return decision;
 }
 
-function capture(event: string, properties: Record<string, unknown>): void {
+function capture(
+  event: string,
+  properties: Record<string, unknown>,
+  allow: readonly string[]
+): void {
+  const safeProperties = allowlistedProperties(properties, allow);
   if (injectedCapture !== undefined) {
-    injectedCapture(event, properties);
+    injectedCapture(event, safeProperties);
     return;
   }
   if (client === undefined || installId === undefined) return;
   client.capture({
     distinctId: installId,
     event,
-    properties: {
-      ...properties,
-      // Anonymous by design: no person profile, no client IP retention.
-      $process_person_profile: false,
-      $ip: null
-    }
+    properties: anonymousEventProperties(safeProperties)
   });
 }
 
@@ -281,7 +298,7 @@ export function captureCommand(input: {
     local: input.local === true,
     is_ci: process.env.CI !== undefined
   };
-  capture("cli.command", { ...event });
+  capture("cli.command", { ...event }, CLI_COMMAND_FIELDS);
 }
 
 /** Ship pending session aggregates and flush the SDK queue (bounded). */
@@ -289,17 +306,14 @@ export async function shutdownTelemetry(): Promise<void> {
   for (const acc of sessions.values()) {
     // Only sessions that actually fused something are worth a record.
     if (acc.candidates.size === 0 && acc.judgeDecision === undefined) continue;
-    capture("fusion.session", { ...sessionEvent(acc) });
+    capture("fusion.session", { ...sessionEvent(acc) }, FUSION_SESSION_FIELDS);
   }
   sessions.clear();
   const active = client;
   client = undefined;
   if (active !== undefined) {
     // posthog-node flushes on shutdown; bound it so exit never hangs.
-    await Promise.race([
-      active.shutdown().catch(() => undefined),
-      new Promise((resolve) => setTimeout(resolve, 2_000))
-    ]);
+    await boundedShutdown(() => active.shutdown());
   }
 }
 

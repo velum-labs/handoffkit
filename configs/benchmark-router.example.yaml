@@ -1,0 +1,7 @@
+# RouteKit router for the maintainer benchmark sidecar configs in this folder.
+# Provider details stay here; benchmark-panel.*.yaml contains namespaced model IDs.
+providers:
+  openai: {}
+  anthropic: {}
+  google: {}
+defaultModel: openai/gpt-5.5

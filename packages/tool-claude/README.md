@@ -1,17 +1,17 @@
-# @fusionkit/tool-claude
+# @routekit/tool-claude
 
-Claude Code integration for FusionKit.
+Product-neutral Claude Code launcher and canonical harness driver.
 
 ## Architecture
 
-This package wires Claude Code into FusionKit through launcher environment setup and the Claude harness adapter used by panel runs.
+This package owns the one Claude Code profile serializer, launcher, and driver.
 
 ## Usage
 
-Most users should run `fusionkit claude` from `@fusionkit/cli`.
+Register `claudeTool` in an `@routekit/tools` registry.
 
 ```ts
-import * as fusionkitPackage from "@fusionkit/tool-claude";
+import { claudeTool } from "@routekit/tool-claude";
 ```
 
 ## Docs

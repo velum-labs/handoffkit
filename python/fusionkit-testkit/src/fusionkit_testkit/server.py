@@ -1,16 +1,14 @@
-"""The provider simulator HTTP server.
+"""The canonical multi-dialect provider simulator HTTP server.
 
-A stdlib-only threaded HTTP server that speaks the OpenAI Chat Completions and
-Anthropic Messages wire dialects, plus a control plane (behavior queueing /
-journal / reset) under ``/__sim/*``. Stdlib on purpose: no web framework in
-the test trust surface, and byte-level control of the wire (chunked SSE
-pacing, deliberately truncated streams) that a framework would abstract away.
+A stdlib-only threaded HTTP server that speaks OpenAI Chat Completions,
+Anthropic Messages, Google GenAI, and OpenAI Responses, plus one shared control
+plane (behavior queueing / journal / reset) under ``/__sim/*``.
 
 Usage (in-process)::
 
-    with ProviderSimulator() as sim:
+    with RouteKitSimulator() as sim:
         sim.queue("gpt-test", Behavior(reply="hello"))
-        ... point an endpoint's base_url at sim.url ...
+        ... point ``FusionConfig.routekit_url`` at sim.url ...
         assert sim.journal()[0]["model"] == "gpt-test"
 
 Usage (standalone, e.g. from the Node test suite)::
@@ -28,17 +26,16 @@ import time
 from collections import defaultdict, deque
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any, cast
-from urllib.parse import parse_qs, urlsplit
+from urllib.parse import unquote, urlsplit
 
 from fusionkit_testkit import wire_anthropic, wire_google, wire_openai, wire_responses
 from fusionkit_testkit.behaviors import Behavior, SimError
 
 _JSON_TYPE = "application/json"
 _SSE_TYPE = "text/event-stream"
-
-# google-genai builds `{base_url}/{api_version}/models/{model}:{method}`.
 _GOOGLE_ROUTE = re.compile(
-    r"^/(?:v1beta|v1)/models/(?P<model>[^:]+):(?P<method>generateContent|streamGenerateContent)$"
+    r"^/(?:v1beta|v1)/models/(?P<model>[^:]+):"
+    r"(?P<method>generateContent|streamGenerateContent)$"
 )
 
 
@@ -52,9 +49,6 @@ class _SimulatorState:
         self._default_counts: dict[str, int] = defaultdict(int)
         self._seq = 0
         self._response_seq = 0
-        # OpenRouter post-response accounting: response id -> generation data
-        # served on GET /v1/generation (recorded for every OpenAI-chat reply).
-        self._generations: dict[str, dict[str, Any]] = {}
 
     def queue(self, model: str, *behaviors: Behavior) -> None:
         with self._lock:
@@ -82,40 +76,20 @@ class _SimulatorState:
         with self._lock:
             return [dict(entry) for entry in self._journal]
 
-    def known_models(self) -> list[str]:
+    def models(self) -> list[str]:
         with self._lock:
-            return sorted(set(self._queues) | set(self._default_counts))
+            return sorted(self._queues)
 
     def next_response_id(self, prefix: str) -> str:
         with self._lock:
             self._response_seq += 1
             return f"{prefix}{self._response_seq}"
 
-    def record_generation(self, response_id: str, model: str, behavior: Behavior) -> None:
-        completion = behavior.resolved_completion_tokens()
-        with self._lock:
-            self._generations[response_id] = {
-                "id": response_id,
-                "model": model,
-                "total_cost": behavior.provider_cost_usd,
-                "provider_name": "simulated",
-                "tokens_prompt": behavior.prompt_tokens,
-                "tokens_completion": completion,
-                "native_tokens_prompt": behavior.prompt_tokens,
-                "native_tokens_completion": completion,
-            }
-
-    def generation(self, response_id: str) -> dict[str, Any] | None:
-        with self._lock:
-            data = self._generations.get(response_id)
-            return dict(data) if data is not None else None
-
     def reset(self) -> None:
         with self._lock:
             self._queues.clear()
             self._journal.clear()
             self._default_counts.clear()
-            self._generations.clear()
             self._seq = 0
 
 
@@ -144,7 +118,9 @@ def _last_user_text_anthropic(messages: list[Any]) -> str:
                 return "".join(
                     part.get("text", "")
                     for part in content
-                    if isinstance(part, dict) and part.get("type") == "text"
+                    if isinstance(part, dict)
+                    and part.get("type") == "text"
+                    and isinstance(part.get("text"), str)
                 )
     return ""
 
@@ -214,49 +190,12 @@ class _Handler(BaseHTTPRequestHandler):
         if self.path.startswith("/__sim/journal"):
             self._send_json({"entries": self._state.journal()})
             return
-        parts = urlsplit(self.path)
-        if parts.path == "/v1/generation":
-            # OpenRouter's post-response accounting endpoint: served for every
-            # OpenAI-chat response id the simulator produced.
-            generation_id = parse_qs(parts.query).get("id", [""])[0]
-            data = self._state.generation(generation_id)
-            if data is None:
-                self._send_json(
-                    {"error": {"message": f"generation {generation_id!r} not found"}}, status=404
-                )
-                return
-            self._state.record(
-                {
-                    "ts": time.time(),
-                    "dialect": "openrouter-generation",
-                    "path": self.path,
-                    "model": str(data.get("model", "")),
-                    "stream": False,
-                    "source": "generation",
-                    "kind": "reply",
-                    "status": 200,
-                    "auth": {
-                        "authorization": self.headers.get("Authorization"),
-                        "x_api_key": self.headers.get("x-api-key"),
-                        "x_goog_api_key": self.headers.get("x-goog-api-key"),
-                        "chatgpt_account_id": self.headers.get("chatgpt-account-id"),
-                    },
-                    "request": {"id": generation_id},
-                    "reply_preview": "",
-                    "tool_call_names": [],
-                    "error_code": None,
-                }
-            )
-            self._send_json({"data": data})
-            return
-        if self.path in ("/v1/models", "/models"):
+        if urlsplit(self.path).path in ("/v1/models", "/models"):
+            models = self._state.models()
             self._send_json(
                 {
-                    "object": "list",
-                    "data": [
-                        {"id": model, "object": "model"}
-                        for model in self._state.known_models()
-                    ],
+                    "data": [{"id": model} for model in models],
+                    "models": [{"slug": model} for model in models],
                 }
             )
             return
@@ -288,7 +227,7 @@ class _Handler(BaseHTTPRequestHandler):
         if google is not None:
             self._google_generate(
                 body,
-                model=google.group("model"),
+                model=unquote(google.group("model")),
                 stream=google.group("method") == "streamGenerateContent",
             )
             return
@@ -320,8 +259,10 @@ class _Handler(BaseHTTPRequestHandler):
         behavior: Behavior,
         body: dict[str, Any],
     ) -> None:
-        kind = "error" if behavior.error is not None else (
-            "tool_calls" if behavior.tool_calls else "reply"
+        kind = (
+            "error"
+            if behavior.error is not None
+            else ("tool_calls" if behavior.tool_calls else "reply")
         )
         self._state.record(
             {
@@ -333,12 +274,6 @@ class _Handler(BaseHTTPRequestHandler):
                 "source": source,
                 "kind": kind,
                 "status": behavior.error.status if behavior.error is not None else 200,
-                "auth": {
-                    "authorization": self.headers.get("Authorization"),
-                    "x_api_key": self.headers.get("x-api-key"),
-                    "x_goog_api_key": self.headers.get("x-goog-api-key"),
-                    "chatgpt_account_id": self.headers.get("chatgpt-account-id"),
-                },
                 "request": body,
                 "reply_preview": (behavior.reply or "")[:200],
                 "tool_call_names": [call.name for call in behavior.tool_calls],
@@ -346,7 +281,7 @@ class _Handler(BaseHTTPRequestHandler):
             }
         )
 
-    # -- shared dialect plumbing --------------------------------------------
+    # -- shared gateway plumbing ---------------------------------------------
 
     def _resolve(
         self, *, dialect: str, model: str, stream: bool, last_user: str, body: dict[str, Any]
@@ -359,9 +294,6 @@ class _Handler(BaseHTTPRequestHandler):
         # the test script is wrong) — fail loudly instead of letting the
         # missing declaration pass silently.
         if behavior.tool_calls and not body.get("tools"):
-            # Status 400 with no taxonomy markers classifies `unknown`: neither
-            # the SDKs nor FusionKit retry it, so the violation cannot be
-            # masked by a retry falling through to the echo default.
             behavior = Behavior(
                 error=SimError(
                     status=400,
@@ -370,13 +302,17 @@ class _Handler(BaseHTTPRequestHandler):
                     message=(
                         f"simulator: a tool_calls behavior was queued for {model!r} but the "
                         "request declared no tools — the caller's tool definitions were "
-                        "dropped before reaching the provider wire"
+                        "dropped before reaching the RouteKit wire"
                     ),
                 )
             )
         self._record(
-            dialect=dialect, model=model, stream=stream,
-            source=source, behavior=behavior, body=body,
+            dialect=dialect,
+            model=model,
+            stream=stream,
+            source=source,
+            behavior=behavior,
+            body=body,
         )
         if behavior.delay_s > 0:
             time.sleep(behavior.delay_s)
@@ -420,7 +356,7 @@ class _Handler(BaseHTTPRequestHandler):
     ) -> None:
         """Emit the whole SSE payload re-split into fixed-size wire chunks.
 
-        Real providers make no promise about how a stream's bytes align to
+        Gateways make no promise about how a stream's bytes align to
         frames: a chunk may end mid-`data:` line or mid-UTF-8-rune. Splitting
         at every ``chunk_bytes`` boundary (including inside multi-byte
         characters) proves client stream reassembly is byte-exact.
@@ -442,14 +378,16 @@ class _Handler(BaseHTTPRequestHandler):
         stream = body.get("stream") is True
         messages = body.get("messages") if isinstance(body.get("messages"), list) else []
         behavior = self._resolve(
-            dialect="openai-chat", model=model, stream=stream,
-            last_user=_last_user_text_openai(messages or []), body=body,
+            dialect="openai-chat",
+            model=model,
+            stream=stream,
+            last_user=_last_user_text_openai(messages or []),
+            body=body,
         )
         response_id = self._state.next_response_id("chatcmpl-sim")
         if behavior.error is not None:
             self._send_error(behavior, wire_openai.error_body(behavior))
             return
-        self._state.record_generation(response_id, model, behavior)
         if not stream:
             self._send_json(wire_openai.completion_body(model, behavior, response_id))
             return
@@ -463,17 +401,20 @@ class _Handler(BaseHTTPRequestHandler):
         ]
         self._stream_sse(blocks, behavior, done=b"data: [DONE]\n\n")
 
-    # -- Anthropic Messages -------------------------------------------------
+    # -- Anthropic Messages ------------------------------------------------
 
     def _anthropic_messages(self, body: dict[str, Any]) -> None:
         model = str(body.get("model", "unknown"))
         stream = body.get("stream") is True
         messages = body.get("messages") if isinstance(body.get("messages"), list) else []
         behavior = self._resolve(
-            dialect="anthropic-messages", model=model, stream=stream,
-            last_user=_last_user_text_anthropic(messages or []), body=body,
+            dialect="anthropic-messages",
+            model=model,
+            stream=stream,
+            last_user=_last_user_text_anthropic(messages or []),
+            body=body,
         )
-        message_id = f"msg_sim{int(time.time() * 1000) % 1_000_000}"
+        message_id = self._state.next_response_id("msg_sim")
         if behavior.error is not None:
             self._send_error(behavior, wire_anthropic.error_body(behavior))
             return
@@ -486,17 +427,19 @@ class _Handler(BaseHTTPRequestHandler):
         ]
         self._stream_sse(blocks, behavior)
 
-    # -- OpenAI Responses (the codex provider dialect) -----------------------
+    # -- OpenAI Responses --------------------------------------------------
 
     def _openai_responses(self, body: dict[str, Any]) -> None:
         model = str(body.get("model", "unknown"))
-        # The codex client is stream-only; honor an explicit stream=false anyway.
-        stream = body.get("stream") is not False
+        stream = body.get("stream") is True
         behavior = self._resolve(
-            dialect="openai-responses", model=model, stream=stream,
-            last_user=wire_responses.last_user_text(body), body=body,
+            dialect="openai-responses",
+            model=model,
+            stream=stream,
+            last_user=wire_responses.last_user_text(body),
+            body=body,
         )
-        response_id = f"resp_sim{int(time.time() * 1000) % 1_000_000}"
+        response_id = self._state.next_response_id("resp_sim")
         if behavior.error is not None:
             self._send_error(behavior, wire_responses.error_body(behavior))
             return
@@ -511,12 +454,15 @@ class _Handler(BaseHTTPRequestHandler):
         ]
         self._stream_sse(blocks, behavior)
 
-    # -- Google Gemini (GenAI API) -------------------------------------------
+    # -- Google GenAI ------------------------------------------------------
 
     def _google_generate(self, body: dict[str, Any], *, model: str, stream: bool) -> None:
         behavior = self._resolve(
-            dialect="google-generate", model=model, stream=stream,
-            last_user=wire_google.last_user_text(body), body=body,
+            dialect="google-generate",
+            model=model,
+            stream=stream,
+            last_user=wire_google.last_user_text(body),
+            body=body,
         )
         if behavior.error is not None:
             self._send_error(behavior, wire_google.error_body(behavior))
@@ -536,8 +482,8 @@ class _SimulatorServer(ThreadingHTTPServer):
         self.state = state
 
 
-class ProviderSimulator:
-    """A running provider simulator bound to a loopback port.
+class RouteKitSimulator:
+    """A simulated RouteKit gateway bound to a loopback port.
 
     Context-manager friendly; ``start()``/``stop()`` for manual lifecycles.
     """
@@ -551,7 +497,7 @@ class ProviderSimulator:
 
     # -- lifecycle --------------------------------------------------------
 
-    def start(self) -> ProviderSimulator:
+    def start(self) -> RouteKitSimulator:
         if self._server is not None:
             return self
         self._server = _SimulatorServer((self._host, self._requested_port), self._state)
@@ -571,7 +517,7 @@ class ProviderSimulator:
         self._server = None
         self._thread = None
 
-    def __enter__(self) -> ProviderSimulator:
+    def __enter__(self) -> RouteKitSimulator:
         return self.start()
 
     def __exit__(self, *exc_info: object) -> None:
@@ -635,7 +581,7 @@ class ProviderSimulator:
             f"stream={entry['stream']} reply={entry['reply_preview']!r}"
             for entry in self._state.journal()
         ]
-        return "\n".join(lines) if lines else "(no provider calls journaled)"
+        return "\n".join(lines) if lines else "(no RouteKit calls journaled)"
 
     def reset(self) -> None:
         self._state.reset()

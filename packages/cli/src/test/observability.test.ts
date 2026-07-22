@@ -2,9 +2,15 @@ import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { after, test } from "node:test";
 
-import { scopeSourceIdentity } from "../fusion/observability.js";
+import {
+  bundledScopeServer,
+  expectedScopeIdentity,
+  SCOPE_BUNDLED_IDENTITY,
+  scopeSourceIdentity
+} from "../fusion/observability.js";
 
 const tmpRoots: string[] = [];
 
@@ -43,4 +49,52 @@ test("scope source identity ignores generated Next build output", () => {
   writeFileSync(join(root, ".next", "BUILD_ID"), "generated\n");
 
   assert.equal(scopeSourceIdentity(root), before);
+});
+
+test("bundled scope server resolves beside the compiled CLI dist directory", () => {
+  const cliPackage = mkdtempSync(join(tmpdir(), "scope-bundle-"));
+  tmpRoots.push(cliPackage);
+  const modulePath = join(cliPackage, "dist", "fusion", "observability.js");
+  const serverPath = join(cliPackage, "scope", "server.js");
+  mkdirSync(join(cliPackage, "dist", "fusion"), { recursive: true });
+  mkdirSync(join(cliPackage, "scope"), { recursive: true });
+  writeFileSync(modulePath, "");
+  writeFileSync(serverPath, "export {};\n");
+  const moduleUrl = pathToFileURL(modulePath).href;
+
+  assert.equal(bundledScopeServer(moduleUrl, {}), serverPath);
+  assert.equal(expectedScopeIdentity({ moduleUrl, env: {} }), SCOPE_BUNDLED_IDENTITY);
+});
+
+test("missing staged bundle falls back to source identity", () => {
+  const cliPackage = mkdtempSync(join(tmpdir(), "scope-no-bundle-"));
+  tmpRoots.push(cliPackage);
+  const moduleUrl = pathToFileURL(
+    join(cliPackage, "dist", "fusion", "observability.js")
+  ).href;
+  const scopeDir = makeScopeFixture();
+
+  assert.equal(bundledScopeServer(moduleUrl, {}), undefined);
+  assert.equal(
+    expectedScopeIdentity({ moduleUrl, env: {}, scopeDir }),
+    scopeSourceIdentity(scopeDir)
+  );
+});
+
+test("dev mode ignores a staged bundle and uses source identity", () => {
+  const cliPackage = mkdtempSync(join(tmpdir(), "scope-dev-bundle-"));
+  tmpRoots.push(cliPackage);
+  const modulePath = join(cliPackage, "dist", "fusion", "observability.js");
+  mkdirSync(join(cliPackage, "dist", "fusion"), { recursive: true });
+  mkdirSync(join(cliPackage, "scope"), { recursive: true });
+  writeFileSync(join(cliPackage, "scope", "server.js"), "export {};\n");
+  const scopeDir = makeScopeFixture();
+  const moduleUrl = pathToFileURL(modulePath).href;
+  const env = { FUSIONKIT_DEV: "1" };
+
+  assert.equal(bundledScopeServer(moduleUrl, env), undefined);
+  assert.equal(
+    expectedScopeIdentity({ moduleUrl, env, scopeDir }),
+    scopeSourceIdentity(scopeDir)
+  );
 });

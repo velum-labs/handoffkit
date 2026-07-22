@@ -1,0 +1,18 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist"
+  },
+  "references": [
+    { "path": "../runtime-utils" },
+    { "path": "../routekit-control" },
+    { "path": "../routekit-config" },
+    { "path": "../routekit-router" },
+    { "path": "../model-gateway" },
+    { "path": "../accounts" },
+    { "path": "../routekit-registry" },
+    { "path": "../telemetry-core" }
+  ],
+  "include": ["src/**/*.ts"]
+}

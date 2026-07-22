@@ -12,13 +12,16 @@ Explicitly **out of scope** for this plan: the Warrant governance plane (contrac
 
 The end-to-end loop is real today, verified across the codebase:
 
-- **Harness gateway loop**: `fusionkit codex|claude|cursor|serve` auto-wires each harness to an in-process gateway → runs a per-model panel (each model in its own git worktree, driven through the launched harness) → fuses trajectories via the Python synthesizer (`uvx fusionkit serve` → `POST /v1/fusion/trajectories:fuse`) → returns a native-shaped answer in the tool's own dialect (OpenAI Responses / Anthropic Messages / OpenAI Chat). Streaming + keepalive work for Codex.
+- **Harness gateway loop**: `fusionkit codex|claude|cursor|serve` auto-wires each harness to the Node gateway → runs a per-model panel (each model in its own git worktree, driven through the launched harness) → sends completed trajectories to the internal `fusionkit-sidecar` → returns a native-shaped answer in the tool's own dialect (OpenAI Responses / Anthropic Messages / OpenAI Chat).
 - **Auto-wiring** per harness: Codex via ephemeral `CODEX_HOME` config.toml; Claude via `ANTHROPIC_BASE_URL`/`ANTHROPIC_AUTH_TOKEN`; Cursor via the bundled cursorkit bridge driving `cursor-agent`.
 - **Onboarding**: `fusionkit init` (interactive panel wizard), `fusionkit doctor` (preflight), `fusionkit models download|list|rm` (resumable HF download for MLX, RAM-fit guard) — **all in the Node CLI**.
-- **Cloud auth**: env-var API keys + read-only OAuth reuse of Claude Code / Codex CLI logins (`SubscriptionAuthMode = api_key|claude-code|codex`).
+- **Cloud auth**: RouteKit API providers use registry-defined credential
+  variables; `claude-code` and `codex` use named, pooled subscription accounts.
 - **Ensemble fault-tolerance**: a failed model becomes a `status="failed"` trajectory; survivors are still fused (`producers.py`); only zero survivors raises.
 - **Native passthrough**: the gateway also exposes each panel model as a direct (non-fused) pick — the substrate for "use the vendor, fall back to fusion."
-- **Config**: `.fusionkit/fusion.json` (`fusionkit.fusion.v3`) + `.fusionkit/prompts/*.md`, precedence CLI > `.fusionkit` > defaults.
+- **Config**: `.fusionkit/fusion.json` v4 contains namespaced RouteKit model IDs
+  and Fusion policy; `.routekit/router.yaml` owns explicit provider and pooling
+  policy while the live catalog supplies models.
 
 So this is a **gap-closing** effort, not greenfield. The gaps cluster into 8 workstreams below.
 
@@ -44,10 +47,11 @@ So this is a **gap-closing** effort, not greenfield. The gaps cluster into 8 wor
 
 ## Architecture (kept)
 
-Two cooperating processes, unchanged in shape:
+Current implementation uses three cooperating layers:
 
-1. **`fusionkit serve`** (Python, PyPI `fusionkit`) — the model **router + fusion engine**: fronts every panel model by id (passthrough) and performs judge+synthesis (`/v1/fusion/trajectories:fuse`, `/v1/chat/completions`). This is the inference brain.
-2. **`@fusionkit/cli`** (Node) — the **harness gateway + UX**: auto-wires Codex/Claude/Cursor, manages worktrees, spawns the Python router via `uvx`, runs the panel, owns onboarding/config/model-management.
+1. **RouteKit** owns endpoint routing, provider dialects, credentials, and subscription accounts.
+2. **`@fusionkit/cli`** (Node) owns the public gateway, Fusion v4 config, harness wiring, worktrees, onboarding, and sessions.
+3. **`fusionkit-sidecar`** (Python, provisioned from PyPI) is internal and performs judge/synthesis calls through namespaced RouteKit model IDs.
 
 Git worktrees stay (lightweight, and essential for multiple harnesses editing one repo in parallel) — they are not "VM isolation." We drop only the governance/VM packages from the shipped surface.
 
@@ -80,7 +84,7 @@ Make `fusionkit serve` behave like a real OpenAI/Anthropic-compatible endpoint, 
 
 - [ ] **One config source of truth.** Reconcile Node `.fusionkit/fusion.json` and Python YAML — either generate the Python router YAML from `.fusionkit/fusion.json` (already partly done) and make that the only file users edit, or share a schema. Document precedence once.
 - [ ] **`fusionkit doctor` / `init` on the Python side.** The Node CLI has both; the Python `fusionkit init` is a shallow detector and there is **no `fusionkit doctor`**. Bring Python to parity (or make the Node CLI the single front door that drives Python).
-- [ ] **First-run experience**: provider/key detection, hardware-aware default panel (local trio vs cloud pair — and make the cloud default a genuine 3-model decorrelated trio, not the current pair), model-download progress with a global budget, and a one-time cost confirmation for cloud panels.
+- [ ] **Historical first-run proposal**: provider/key detection, hardware-aware defaults, and model-download progress. The proposed one-time cloud cost-confirmation prompt was not adopted; current controls are explicit RouteKit endpoint configuration and Fusion `--budget`.
 
 ## Workstream 4 — Session lifecycle & continuity (P1)
 

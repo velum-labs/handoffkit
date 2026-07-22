@@ -12,7 +12,7 @@ import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { test } from "node:test";
 
-import { FileSystemSessionStore } from "@fusionkit/model-gateway";
+import { FileSystemSessionStore } from "@fusionkit/gateway";
 import { judgeAnalysis, stackToolingSkip } from "@fusionkit/testkit";
 
 import { startSimFusionStack } from "./sim-stack.js";

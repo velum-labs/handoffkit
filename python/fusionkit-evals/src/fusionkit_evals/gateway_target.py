@@ -18,12 +18,15 @@ from __future__ import annotations
 from typing import Literal
 
 from fusionkit_core.registry import (
-    FUSION_GATEWAY_API_KEY_ENV,
-    FUSION_GATEWAY_DEFAULT_BASE_URL,
     FUSION_MODEL_ALIASES,
     FUSION_PANEL_ALIAS,
 )
 from pydantic import BaseModel
+
+from fusionkit_evals.registry import (
+    FUSION_GATEWAY_API_KEY_ENV,
+    FUSION_GATEWAY_DEFAULT_BASE_URL,
+)
 
 GatewayDialect = Literal["openai-chat", "anthropic-messages", "openai-responses"]
 

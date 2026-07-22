@@ -101,9 +101,9 @@ reconnect before the first byte.
 - The gateway owns dialect translation, streaming, and orchestration; the
   synthesizer owns the actual fusion/judge synthesis; the harness owns governed
   execution.
-- The runner is injected into the gateway (dependency injection) so the
-  `@fusionkit/model-gateway` package does not depend on `@fusionkit/ensemble` or
-  the CLI.
+- The runner is injected into `@fusionkit/gateway` (dependency injection) so
+  the gateway does not depend on `@fusionkit/ensemble` or the CLI. Its neutral
+  HTTP and provider layer is supplied by `@routekit/gateway`.
 - Fusion quality is only as good as the panel and judge model behind it. A tiny
   local model proves the plumbing, not the answer quality.
 

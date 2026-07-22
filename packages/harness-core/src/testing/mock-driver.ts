@@ -3,7 +3,11 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 
 import { HarnessError } from "../errors.js";
-import { PANEL_APPROVAL_POLICY, PendingRequests, decideApproval } from "../approvals.js";
+import {
+  DEFAULT_AUTOMATION_APPROVAL_POLICY,
+  PendingRequests,
+  decideApproval
+} from "../approvals.js";
 import type { ApprovalDecision } from "../approvals.js";
 import type {
   DriverContext,
@@ -52,7 +56,7 @@ class MockSession implements SessionHandle {
 
   constructor(config: MockDriverConfig, options: StartSessionOptions) {
     this.#config = config;
-    this.#approvalPolicy = options.approvalPolicy ?? PANEL_APPROVAL_POLICY;
+    this.#approvalPolicy = options.approvalPolicy ?? DEFAULT_AUTOMATION_APPROVAL_POLICY;
     if (options.resume !== undefined) {
       const data = options.resume.data as { sessionId?: string; turnCount?: number };
       this.sessionId = data.sessionId ?? randomUUID();
@@ -75,7 +79,10 @@ class MockSession implements SessionHandle {
       return;
     }
     if (this.#config.approvalDetail !== undefined) {
-      const auto = decideApproval(this.#approvalPolicy ?? PANEL_APPROVAL_POLICY, "exec_command_approval");
+      const auto = decideApproval(
+        this.#approvalPolicy ?? DEFAULT_AUTOMATION_APPROVAL_POLICY,
+        "exec_command_approval"
+      );
       if (auto === undefined) {
         const request = this.#pending.open({
           requestType: "exec_command_approval",

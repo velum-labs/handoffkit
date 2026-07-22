@@ -1,11 +1,15 @@
 {
-  "$comment": "Provider metadata: single source of truth for provider base URLs, API key env vars, wire compatibility, key-validation probes, and live model-discovery capabilities. Consumed via generated bindings (packages/registry + fusionkit_core._generated.registry_data); regenerate with `node scripts/generate-registry.mjs`.",
+  "$comment": "Provider metadata: single source of truth for provider base URLs, API key env vars, wire compatibility, key-validation probes, and live model-discovery capabilities. Consumed via the generated @routekit/registry binding; regenerate with `node scripts/generate-registry.mjs`.",
   "providers": {
     "openai": {
       "baseUrl": "https://api.openai.com",
       "keyEnv": "OPENAI_API_KEY",
       "baseUrlEnv": "OPENAI_BASE_URL",
       "apiCompatibility": "openai-chat-completions",
+      "wire": {
+        "protocol": "openai",
+        "basePath": "/v1"
+      },
       "keyProbe": {
         "path": "/v1/models",
         "auth": "bearer",
@@ -23,6 +27,10 @@
       "authTokenEnv": "ANTHROPIC_AUTH_TOKEN",
       "baseUrlEnv": "ANTHROPIC_BASE_URL",
       "apiCompatibility": "custom",
+      "wire": {
+        "protocol": "anthropic",
+        "basePath": "/v1"
+      },
       "keyProbe": {
         "path": "/v1/models",
         "auth": "x-api-key",
@@ -40,6 +48,10 @@
       "baseUrl": "https://generativelanguage.googleapis.com",
       "keyEnv": "GEMINI_API_KEY",
       "apiCompatibility": "custom",
+      "wire": {
+        "protocol": "google",
+        "basePath": "/v1beta"
+      },
       "keyProbe": {
         "path": "/v1beta/models",
         "auth": "x-goog-api-key",
@@ -55,9 +67,13 @@
       "baseUrl": "https://openrouter.ai/api",
       "keyEnv": "OPENROUTER_API_KEY",
       "apiCompatibility": "openai-chat-completions",
+      "wire": {
+        "protocol": "openai",
+        "basePath": "/v1"
+      },
       "attributionHeaders": {
         "HTTP-Referer": "https://github.com/velum-labs/handoffkit",
-        "X-Title": "FusionKit"
+        "X-Title": "RouteKit"
       },
       "keyProbe": {
         "path": "/v1/key",
@@ -69,7 +85,7 @@
         "auth": "bearer",
         "extraHeaders": {
           "HTTP-Referer": "https://github.com/velum-labs/handoffkit",
-          "X-Title": "FusionKit"
+          "X-Title": "RouteKit"
         },
         "responseShape": "openai",
         "pickerDefaultSource": "curated"
@@ -78,9 +94,13 @@
     "cliproxy": {
       "$comment": "CLIProxyAPI (github.com/router-for-me/CLIProxyAPI): a local OpenAI-compatible proxy fronting OAuth subscription accounts (Codex, Claude Code, Gemini/Antigravity, Grok, Kimi) with multi-account rotation. Personal/local use only.",
       "baseUrl": "http://127.0.0.1:8317",
-      "keyEnv": "CLIPROXY_API_KEY",
-      "baseUrlEnv": "CLIPROXY_BASE_URL",
+      "keyEnv": "ROUTEKIT_CLIPROXY_API_KEY",
+      "baseUrlEnv": "ROUTEKIT_CLIPROXY_BASE_URL",
       "apiCompatibility": "openai-chat-completions",
+      "wire": {
+        "protocol": "openai",
+        "basePath": "/v1"
+      },
       "keyProbe": {
         "path": "/v1/models",
         "auth": "bearer",
@@ -95,7 +115,16 @@
     "codex": {
       "baseUrl": "https://chatgpt.com/backend-api/codex",
       "apiCompatibility": "openai-responses",
-      "credentialEnvNames": ["CODEX_API_KEY", "OPENAI_API_KEY"]
+      "credentialEnvNames": ["CODEX_API_KEY", "OPENAI_API_KEY"],
+      "wire": {
+        "protocol": "codex",
+        "basePath": ""
+      },
+      "discovery": {
+        "path": "/models",
+        "auth": "bearer",
+        "responseShape": "codex"
+      }
     },
     "ai-gateway": {
       "baseUrl": "https://ai-gateway.vercel.sh",

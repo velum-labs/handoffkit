@@ -7,7 +7,7 @@
     "url": "git+https://github.com/velum-labs/handoffkit.git",
     "directory": "packages/registry"
   },
-  "description": "Generated provider/model/auth/fusion registry data (from spec/registry) with typed accessors: the single source of truth shared by the FusionKit Node packages and the Python workspace.",
+  "description": "Generated FusionKit model identities and panel presets, separated from the product-neutral @routekit/registry catalog.",
   "license": "Apache-2.0",
   "type": "module",
   "exports": {
@@ -32,10 +32,11 @@
     "ensemble",
     "coding-agent",
     "registry",
-    "providers",
-    "models"
+    "panel-presets"
   ],
   "scripts": {
+    "build": "tsc -b",
+    "clean": "tsc -b --clean",
     "test": "node --test \"dist/test/*.test.js\""
   }
 }

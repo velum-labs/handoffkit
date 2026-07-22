@@ -1,5 +1,5 @@
 export type * from "./unified-types.js";
-export { setToolHarnessProvider } from "./harness-kind-registry.js";
+export { setToolDriverRegistry } from "./harness-kind-registry.js";
 export {
   buildPanelPrompt,
   createFusionKitJudgeSynthesizer,

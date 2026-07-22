@@ -1,4 +1,4 @@
-import { randomId } from "@fusionkit/runtime-utils";
+import { randomId } from "@routekit/runtime";
 import { SseDecoder, SseParseError } from "../sse/parse.js";
 import type { OpenAiChoice } from "./openai-chat-wire.js";
 import { serverToolMarkerOf } from "./server-tool-loop.js";
@@ -213,7 +213,7 @@ export function openAiSseToResponses(
   // Reasoning summary item lifecycle. The item opens on the first reasoning
   // delta and closes as soon as the first real output (text or tool call)
   // begins. Two delta flavors share the item:
-  // - `reasoning_content` (fusion narration): each delta is a complete beat,
+  // - `reasoning_content` (reasoning narration): each delta is a complete beat,
   //   so each becomes its OWN summary part (added -> delta -> done). Codex
   //   flushes reasoning to the transcript on summary-part boundaries and
   //   promotes the newest part's bold header to its live status, so per-beat
@@ -462,7 +462,7 @@ export function openAiSseToResponses(
     );
   };
 
-  // A mid-stream provider failure (`data: {"error": {...}}` — e.g. the fusion
+  // A mid-stream provider failure (`data: {"error": {...}}` — e.g. the
   // router's classified provider_error) becomes a `response.failed` event
   // carrying the upstream message, so the consumer (codex) reports the real
   // provider/API error instead of a bare "stream disconnected".
@@ -661,7 +661,7 @@ export function openAiSseToResponses(
       // Emit `response.created` immediately and keep the connection alive with
       // SSE comments while the upstream is still producing its first event. Real
       // CLIs (codex) reconnect if they see nothing for a while — which happens
-      // during the fusion panel phase before the judge's first token.
+      // during a slow upstream phase before the first token.
       ensureCreated(controller);
       keepaliveTimer = setInterval(() => {
         if (finished) return;

@@ -1,12 +1,4 @@
-"""Google Gemini (GenAI API) wire rendering for the simulator.
-
-Faithful to the real wire so the ``google-genai`` SDK parses these exactly as
-it would the real API: ``generateContent`` returns candidates whose content
-parts are typed (``text`` / ``thought``-flagged text / ``functionCall``), with
-camelCase ``usageMetadata``; ``streamGenerateContent?alt=sse`` emits ``data:``
-chunks of the same shape with the terminal chunk carrying ``finishReason`` and
-usage. Errors use the Google RPC error envelope.
-"""
+"""Google GenAI wire rendering for the provider simulator."""
 
 from __future__ import annotations
 
@@ -16,7 +8,6 @@ from typing import Any
 
 from fusionkit_testkit.behaviors import Behavior
 
-# HTTP status -> canonical google.rpc.Code name (what the real API sends).
 _RPC_STATUS = {
     400: "INVALID_ARGUMENT",
     401: "UNAUTHENTICATED",
@@ -49,18 +40,21 @@ def _usage_metadata(behavior: Behavior) -> dict[str, int]:
     }
 
 
+def _function_call(call_id: str, name: str, arguments: str) -> dict[str, Any]:
+    try:
+        args = json.loads(arguments or "{}")
+    except json.JSONDecodeError:
+        args = {}
+    return {"functionCall": {"id": call_id, "name": name, "args": args}}
+
+
 def _parts(behavior: Behavior) -> list[dict[str, Any]]:
     parts: list[dict[str, Any]] = []
     if behavior.reasoning is not None:
         parts.append({"text": behavior.reasoning, "thought": True})
     if behavior.reply is not None:
         parts.append({"text": behavior.reply})
-    for call in behavior.tool_calls:
-        try:
-            args = json.loads(call.arguments or "{}")
-        except json.JSONDecodeError:
-            args = {}
-        parts.append({"functionCall": {"id": call.id, "name": call.name, "args": args}})
+    parts.extend(_function_call(call.id, call.name, call.arguments) for call in behavior.tool_calls)
     return parts
 
 
@@ -84,7 +78,7 @@ def _tokenize(text: str) -> list[str]:
 
 
 def stream_frames(behavior: Behavior) -> Iterator[str]:
-    """Yield the JSON payloads for a ``streamGenerateContent?alt=sse`` stream."""
+    """Yield JSON payloads for a ``streamGenerateContent`` SSE stream."""
 
     def chunk(parts: list[dict[str, Any]], *, final: bool = False) -> str:
         candidate: dict[str, Any] = {"content": {"role": "model", "parts": parts}, "index": 0}
@@ -100,15 +94,9 @@ def stream_frames(behavior: Behavior) -> Iterator[str]:
     for token in _tokenize(behavior.text()):
         if token:
             yield chunk([{"text": token}])
-    # Gemini emits complete function calls (never argument fragments), and the
-    # terminal chunk carries finishReason + usage.
-    final_parts: list[dict[str, Any]] = []
-    for call in behavior.tool_calls:
-        try:
-            args = json.loads(call.arguments or "{}")
-        except json.JSONDecodeError:
-            args = {}
-        final_parts.append({"functionCall": {"id": call.id, "name": call.name, "args": args}})
+    final_parts = [
+        _function_call(call.id, call.name, call.arguments) for call in behavior.tool_calls
+    ]
     yield chunk(final_parts, final=True)
 
 

@@ -2,7 +2,7 @@
 
 > **Documentation split:** `docs/` is the maintainer and contributor documentation layer. `apps/docs` is the canonical user documentation source, published at <https://fusionkit.velum-labs.com/docs>.
 
-FusionKit runs panels of local and cloud models as a raw inference endpoint and behind unmodified coding harnesses (Codex, Claude Code, Cursor). The Node `@fusionkit/cli` is the product front door; the Python `fusionkit serve` engine is the raw endpoint it drives.
+FusionKit runs panels of local and cloud models as a raw inference endpoint and behind unmodified coding harnesses (Codex, Claude Code, Cursor). The Node `@fusionkit/cli` owns the product gateway and starts an internal Python synthesis sidecar when fusion needs it.
 
 Use this directory for implementation, release, protocol, benchmark, and historical context. When a page overlaps with the public site, the site is the source of truth and any `docs/quickstart-*.md` page is an in-repo mirror kept for existing links.
 
@@ -18,7 +18,7 @@ Read [Documentation taxonomy](documentation-taxonomy.md) before adding, moving, 
 | [Repository reference](repository-reference.md) | Reference | Comprehensive package, API, app, example, protocol, and operations map. |
 | [Getting started](getting-started.md) | Task guide | Contributor setup, local verification, portless behavior, and demos. |
 | [Package guide](packages.md) | Reference | Short package guide for readers who do not need full package references. |
-| [Testing](testing.md) | Task guide | Test tooling (provider simulator, testkits), the coverage matrix, and the mutation pass. |
+| [Testing](testing.md) | Task guide | RouteKit/sidecar test tooling, the coverage matrix, and the mutation pass. |
 | [Hyperkit](hyperkit.md) | Reference | The SUT-agnostic experiment platform: boundary, CLI, adapters, backends, and observability. |
 | [Source symbol index](source-symbol-index.md) | Reference | Source-grounded TypeScript export and Python symbol inventory. |
 | [Generated code API reference](generated/code-api.md) | Reference | API reference emitted from TypeScript JSDoc and Python docstrings. |
@@ -63,10 +63,10 @@ Governance / VM-isolation documentation has moved to [`legacy/docs/`](../legacy/
 
 ## Repository at a glance
 
-- `packages/` contains the TypeScript pnpm workspace. Start with [TypeScript reference](typescript-reference.md).
+- `packages/`, `examples/`, and `apps/` form the pnpm/Turborepo Node workspace. Start with [TypeScript reference](typescript-reference.md).
 - `python/` contains the uv workspace, including the `hyperkit` experiment platform. Start with [Python reference](python-reference.md).
 - `spec/` contains schemas, OpenAPI contracts, generated bindings, fixtures, trace specs, and the registry data under `spec/registry/`. Start with [Specs and APIs](specs-and-apis.md).
-- `apps/` and `examples/` contain standalone apps and runnable demos. Start with [Apps and examples](apps-and-examples.md).
+- `apps/` and `examples/` contain workspace applications and runnable demos. Start with [Apps and examples](apps-and-examples.md).
 - `scripts/`, `release/`, and `.github/workflows/` contain maintainer automation. Start with [Operations and scripts](operations-and-scripts.md).
 - `lab/` is the shared Hyperkit experiment lab (registry, journal, experiment procedures). Start with [`lab/AGENTS.md`](../lab/AGENTS.md).
 - `infra/` contains Hyperkit deployment infrastructure: `infra/hyperkit` (Terraform + Grafana), `infra/hypergrid-batch`, and `infra/hypergrid-obs` (deploy scripts and observability compose stack).

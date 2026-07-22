@@ -1,118 +1,86 @@
 ---
-title: Subscription pooling proxy
-description: Pool multiple Claude Code or Codex subscriptions behind one long-lived local endpoint.
+title: Subscription pooling
+description: RouteKit pools named subscriptions behind live provider catalogs.
 ---
 
-FusionKit can expose a provider-native local proxy that selects among multiple
-Claude Code or Codex subscriptions. The proxy preserves each harness's native
-wire protocol and streaming behavior; it only replaces the ingress proxy token
-with the selected account's OAuth token.
+Subscription accounts, CLIProxyAPI, and single-model routing are RouteKit
+responsibilities. FusionKit v4 references live namespaced model IDs but does
+not expose account or proxy commands.
 
-## Start with one account
-
-The official CLIs remain the login UI. Sign in normally, then start the proxy:
+Install the independent CLI:
 
 ```bash
-claude
-codex login
-fusionkit proxy serve
+npm install -g @routekit/cli
+routekit config init
+routekit accounts login claude-code --name personal
+routekit accounts login claude-code --name work
+routekit providers status claude-code
+routekit models list
+routekit gateway serve
 ```
 
-When no managed accounts exist yet, FusionKit imports the current official CLI
-login as a managed one-account set. The same selection and refresh path serves
-one or many accounts; single-account auth is not a separate mode.
+The canonical subscription kinds are `claude-code` and `codex`.
+`accounts login` runs the official provider login in private temporary state, imports the
+credential, and enables that provider without replacing the user's normal CLI
+login. Use `accounts add` only to import the current official CLI login. The
+Claude Code tool command remains `routekit claude [provider/model]`.
 
-## Add accounts
+Pool policy lives on the provider:
 
-To grow that account set, sign into another account and enroll it:
+```yaml
+providers:
+  claude-code:
+    strategy: capacity_weighted
+    switchThreshold: 0.9
+```
+
+RouteKit discovers each healthy account, publishes the union, and routes a
+model only to members that advertise it. Quota windows, refresh, cooldowns, and
+reset times remain independent per account. Use the advertised namespaced ID
+in `.fusionkit/fusion.json`:
+
+```json
+{
+  "version": "fusionkit.fusion.v4",
+  "router": { "config": ".routekit/router.yaml" },
+  "ensembles": {
+    "default": {
+      "members": ["claude-code/claude-sonnet-4-5"],
+      "judge": "claude-code/claude-sonnet-4-5"
+    }
+  }
+}
+```
+
+Inside the matching native picker, RouteKit shortens only that provider's
+subscription models: Claude Code shows
+`claude-code/claude-sonnet-4-6` as `claude-sonnet-4-6`, while Codex shows
+`codex/gpt-5.5` as `gpt-5.5`. The alias resolves back to the namespaced catalog
+entry and uses the same managed account pool over the provider-native protocol.
+Models from other providers stay source-qualified, and Fusion/configuration
+surfaces remain strictly namespaced.
+
+Normal embedded provider routing does not require a separate account proxy.
+`routekit accounts serve` is advanced mode for exposing the subscription pool
+to an external consumer.
+
+Inspect current limits at any time with `routekit usage` (or
+`routekit usage --watch 10`). It reads live pools from the normal RouteKit
+gateway when one is running and otherwise checks enrolled accounts directly;
+the advanced accounts proxy is not a prerequisite.
+
+For CLIProxyAPI, login, keep the proxy serving, and enable its provider:
 
 ```bash
-claude
-fusionkit proxy add claude-code --name personal
-
-codex login
-fusionkit proxy add codex --name work
+routekit accounts cliproxy install
+routekit accounts cliproxy login gemini
+routekit accounts cliproxy serve
+routekit providers add cliproxy
+routekit providers status cliproxy
+routekit models list
 ```
 
-Pool copies live under `~/.fusionkit/subscriptions/<provider>/` with private
-permissions. FusionKit never modifies the canonical `~/.claude` or `~/.codex`
-credential store. It refreshes only the enrolled copies so idle accounts remain
-usable.
+CLIProxy login does not enable a RouteKit provider.
 
-## Start the endpoint
-
-```bash
-fusionkit proxy serve
-```
-
-The command prints:
-
-- `ANTHROPIC_BASE_URL` and `ANTHROPIC_AUTH_TOKEN` exports for Claude Code.
-- A Codex `model_providers` TOML block and `FUSIONKIT_PROXY_TOKEN`.
-
-The default is a sticky account policy, which keeps prompt-cache affinity until
-an account approaches 90% utilization. Other policies are available:
-
-```bash
-fusionkit proxy serve \
-  --strategy capacity_weighted \
-  --switch-threshold 0.9 \
-  --probe-interval 60
-```
-
-`--probe-interval 0` (the default) disables active probes. Passive rate-limit
-headers are still captured on every request.
-
-## Inspect limits
-
-```bash
-fusionkit proxy status
-fusionkit --json proxy status
-```
-
-Status reports each account's observed short and weekly windows, model-specific
-buckets, reset timestamps, credits, and cooldown state. The proxy uses the same
-first-party OAuth usage endpoints as the official clients:
-
-- Claude Code: `GET https://api.anthropic.com/api/oauth/usage`
-- Codex: `GET https://chatgpt.com/backend-api/wham/usage`
-
-These OAuth-scoped endpoints report subscription windows. The documented
-organization Admin usage APIs report API-platform billing and are not used for
-subscription routing.
-
-`fusionkit proxy stop` (and `fusionkit stop`, which reaps every background
-fusion service) shuts the proxy down.
-
-## Programmatic SDK
-
-The same capability is available without the CLI from the
-`@fusionkit/model-gateway/subscriptions` subpath:
-
-```ts
-import {
-  startSubscriptionProxy,
-  SubscriptionProxyClient
-} from "@fusionkit/model-gateway/subscriptions";
-
-const proxy = await startSubscriptionProxy({
-  accounts: { "claude-code": { source: { kind: "auto" } } }
-});
-console.log(proxy.url(), proxy.token, proxy.providers);
-
-const client = SubscriptionProxyClient.open({ baseUrl: proxy.url(), token: proxy.token });
-const usage = await client.usage(); // typed via the shared wire schema
-```
-
-## Security and limits
-
-- The proxy binds to `127.0.0.1` by default and always requires its generated
-  proxy token. Use additional network controls before binding off-loopback.
-- Account tokens are never returned by `/usage` or printed by status.
-- A spent quota window rotates to another eligible account; when every eligible
-  account is spent the proxy returns `429` with `Retry-After`. A short per-minute
-  throttle waits on the same account to avoid moving a burst through the pool.
-- IP-based throttles may affect every account and cannot be fixed by account
-  rotation.
-- Use only accounts you control and operate within provider terms and normal
-  request volumes.
+`fusionkit stop` never stops an external RouteKit daemon. An embedded RouteKit
+router composed by FusionKit is process-owned and closes with the Fusion stack.

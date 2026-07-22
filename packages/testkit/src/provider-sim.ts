@@ -1,10 +1,11 @@
 /**
- * Spawn and drive the provider simulator (python/fusionkit-testkit) from Node.
+ * Spawn and drive the RouteKit-upstream simulator
+ * (python/fusionkit-testkit) from Node.
  *
  * The simulator process is the same one Python tests use in-process; from Node
  * it is scripted over its HTTP control plane (`/__sim/behaviors`) and observed
  * through its journal (`/__sim/journal`) — so cross-stack tests assert on what
- * actually crossed the provider wire, not on mock plumbing.
+ * actually crossed the RouteKit wire, not on mock plumbing.
  */
 
 import { asBehavior } from "./behaviors.js";
@@ -50,7 +51,10 @@ export type ProviderSimHandle = {
 export async function startProviderSim(options: { startupTimeoutMs?: number } = {}): Promise<ProviderSimHandle> {
   const runner = uvRunArgv("fusionkit-testkit", "fusionkit-sim", ["--port", "0"]);
   const proc = spawnCaptured(runner);
-  const listening = await proc.nextLine(/"event":\s*"listening"/, options.startupTimeoutMs ?? 60_000);
+  const listening = await proc.nextLine(
+    /"event":\s*"listening"/,
+    options.startupTimeoutMs ?? 120_000
+  );
   const parsed = JSON.parse(listening) as { url: string; port: number };
   const url = parsed.url;
 
@@ -89,7 +93,7 @@ export async function startProviderSim(options: { startupTimeoutMs?: number } = 
     calls,
     describeJournal: async () => {
       const entries = await journal();
-      if (entries.length === 0) return "(no provider calls journaled)";
+      if (entries.length === 0) return "(no RouteKit calls journaled)";
       return entries
         .map(
           (entry) =>

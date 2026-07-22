@@ -14,7 +14,7 @@ Emits the standard external-run envelope: per task, ``passed`` is the fused
 compound-vs-individual comparison and McNemar test consume it directly.
 
 Contract: ExternalBenchmarkRequest on stdin, run envelope on stdout. Requires
-FUSIONKIT_BENCH_CONFIG (panel YAML) and provider keys. Env: LCB_SELECT_SAMPLES
+FUSIONKIT_BENCH_CONFIG (panel YAML) and a reachable RouteKit gateway. Env: LCB_SELECT_SAMPLES
 (default 3), LCB_SELECT_TEMPS (default "0.2,0.6,0.9"), plus the usual LCB_* knobs.
 """
 
@@ -33,7 +33,6 @@ from typing import Any
 from fusionkit_core.clients import build_clients
 from fusionkit_core.config import load_config
 from fusionkit_core.fusion import FusionEngine
-from fusionkit_core.providers import estimate_cost
 from fusionkit_core.registry import FUSION_PANEL_ALIAS
 from fusionkit_core.types import ChatMessage
 
@@ -77,7 +76,7 @@ def cache_dir() -> Path:
 def signature(engine: FusionEngine, samples: int, temps: list[float]) -> str:
     config = engine.config
     payload = {
-        "endpoints": sorted((e.id, e.model, e.provider) for e in config.endpoints),
+        "routekit_model_ids": sorted(config.routekit_model_ids),
         "panel_models": sorted(config.panel_models),
         "samples": samples,
         "temps": temps,
@@ -147,7 +146,7 @@ async def evaluate_problem(
     if not public or not private:
         return _terminal(sig, task_id, "excluded", "missing public/private tests")
     prompt = (problem.get("question_content") or "") + LCB_PROMPT_SUFFIX
-    models = list(engine.config.panel_models) or [e.id for e in engine.config.endpoints]
+    models = list(engine.config.panel_models) or list(engine.config.routekit_model_ids)
 
     async with semaphore:
         started = time.monotonic()
@@ -164,18 +163,12 @@ async def evaluate_problem(
     scored = await asyncio.to_thread(
         _score_problem, sandbox, per_model, public, private, timeout, checker
     )
-    cost = 0.0
-    for model_id, trajs in per_model.items():
-        for traj in trajs:
-            est = _cost(engine, model_id, traj.metadata.get("usage"))
-            if est is not None:
-                cost += est
     row = {
         "task_id": task_id,
         "outcome": "scored",
         "passed": scored["fused_private"],
         "score": 1.0 if scored["fused_private"] else 0.0,
-        "cost_usd": round(cost, 6),
+        "cost_usd": None,
         "latency_s": round(latency, 2),
         "candidate_scores": scored["candidate_scores"],
         "metadata": {
@@ -273,14 +266,6 @@ def _terminal(sig: str, task_id: str, outcome: str, reason: str) -> dict[str, An
     return row
 
 
-def _cost(engine: FusionEngine, model_id: str, usage: object) -> float | None:
-    try:
-        endpoint = engine.config.endpoint_for(model_id)
-    except KeyError:
-        return None
-    return estimate_cost(endpoint, usage if isinstance(usage, dict) else None)
-
-
 def _resolve_checker(value: str) -> CheckerMode:
     return value if value in ("exact", "token", "float", "case_insensitive") else "exact"
 
@@ -315,7 +300,8 @@ async def main() -> None:
     semaphore = asyncio.Semaphore(concurrency)
     log(
         f"execution-guided selection: {len(problems)} problems, {samples} samples x "
-        f"{len(config.panel_models) or len(config.endpoints)} models, temps={temps}, sig={sig}"
+        f"{len(config.panel_models) or len(config.routekit_model_ids)} models, "
+        f"temps={temps}, sig={sig}"
     )
 
     rows = await asyncio.gather(
@@ -344,11 +330,11 @@ async def main() -> None:
         "resolved_tasks": len(scored),
         "total_tasks": len(rows),
         "passed_tasks": sum(1 for r in scored if r["passed"]),
-        "cost_total_usd": round(sum(r.get("cost_usd") or 0.0 for r in rows), 6),
+        "cost_total_usd": None,
         "tasks": rows,
         "provenance": build_provenance(
             prompt_template=LCB_PROMPT_SUFFIX,
-            model_versions={e.id: e.model for e in config.endpoints},
+            model_versions={model_id: model_id for model_id in config.routekit_model_ids},
             dataset_revision=os.environ.get("LCB_VERSION", "release_v6"),
             extra={
                 "method": "execution-guided best-of-N: select on public tests, grade on private",

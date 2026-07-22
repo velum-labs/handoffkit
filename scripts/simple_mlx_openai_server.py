@@ -226,7 +226,8 @@ def main() -> None:
     if fusion_trace is not None:
         fusion_trace.setup_fusion_tracing("fusionkit-panel-model")
     print(json.dumps({"event": "loading", "model": args.model}), flush=True)
-    model, tokenizer = load(args.model)
+    loaded = load(args.model)
+    model, tokenizer = loaded[0], loaded[1]
     mx.eval(model.parameters())
     print(json.dumps({"event": "loaded", "model": args.model, "port": args.port}), flush=True)
     server = HTTPServer((args.host, args.port), make_handler(args.model, model, tokenizer))

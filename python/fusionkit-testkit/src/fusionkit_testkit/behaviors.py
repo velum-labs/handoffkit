@@ -1,4 +1,4 @@
-"""Scriptable provider behaviors.
+"""Scriptable provider behaviors shared by every simulator dialect.
 
 A :class:`Behavior` describes how the simulator answers one model call. Tests
 queue behaviors per model name (FIFO); a call with no queued behavior gets a
@@ -18,7 +18,7 @@ BrokenStream = Literal["truncate", "garbage"]
 
 @dataclass
 class SimToolCall:
-    """One tool call the simulated model asks for (OpenAI/Anthropic agnostic)."""
+    """One tool call the simulated model asks for."""
 
     id: str
     name: str
@@ -38,15 +38,7 @@ class SimToolCall:
 
 @dataclass
 class SimError:
-    """A provider-shaped error response.
-
-    ``status``/``code``/``error_type``/``message`` are rendered into the wire
-    dialect's native error body (OpenAI ``{"error": {...}}``, Anthropic
-    ``{"type": "error", ...}``) so the real SDK exception classes — and
-    FusionKit's ``classify_provider_error`` on top of them — see exactly what a
-    real provider would send. ``retry_after`` (seconds) is emitted as a
-    ``retry-after`` header.
-    """
+    """A provider-shaped error response rendered in the selected dialect."""
 
     status: int = 500
     code: str = "internal_error"
@@ -74,59 +66,6 @@ class SimError:
             retry_after=float(retry_after) if retry_after is not None else None,
         )
 
-    # -- canned provider failures (match the real wire spellings that
-    # -- classify_provider_error keys on) --------------------------------
-
-    @staticmethod
-    def rate_limited(retry_after: float | None = 0.0) -> SimError:
-        return SimError(
-            status=429,
-            code="rate_limit_exceeded",
-            error_type="rate_limit_error",
-            message="Rate limit reached, try again later.",
-            retry_after=retry_after,
-        )
-
-    @staticmethod
-    def quota_exhausted() -> SimError:
-        return SimError(
-            status=429,
-            code="insufficient_quota",
-            error_type="insufficient_quota",
-            message="You exceeded your current quota, please check your plan and billing details.",
-        )
-
-    @staticmethod
-    def invalid_api_key() -> SimError:
-        return SimError(
-            status=401,
-            code="invalid_api_key",
-            error_type="authentication_error",
-            message="Incorrect API key provided.",
-        )
-
-    @staticmethod
-    def context_overflow() -> SimError:
-        return SimError(
-            status=400,
-            code="context_length_exceeded",
-            error_type="invalid_request_error",
-            message="This model's maximum context length is exceeded.",
-        )
-
-    @staticmethod
-    def overloaded() -> SimError:
-        return SimError(
-            status=529,
-            code="overloaded_error",
-            error_type="overloaded_error",
-            message="Overloaded",
-        )
-
-    @staticmethod
-    def server_error() -> SimError:
-        return SimError(status=500)
-
 
 @dataclass
 class Behavior:
@@ -140,7 +79,7 @@ class Behavior:
     ``broken_stream`` corrupts a streaming response on purpose: ``truncate``
     closes the connection mid-stream, ``garbage`` emits an unparseable frame.
     ``chunk_bytes`` re-splits the streamed SSE bytes into wire chunks of that
-    size, crossing frame and UTF-8 rune boundaries — real providers make no
+    size, crossing frame and UTF-8 rune boundaries — gateways make no
     chunk-alignment promises, so client stream parsing must reassemble any
     split losslessly.
     """
@@ -148,6 +87,8 @@ class Behavior:
     reply: str | None = None
     tool_calls: list[SimToolCall] = field(default_factory=list)
     reasoning: str | None = None
+    reasoning_signature: str | None = "sim"
+    redacted_thinking: str | None = None
     error: SimError | None = None
     delay_s: float = 0.0
     chunk_delay_s: float = 0.0
@@ -158,10 +99,6 @@ class Behavior:
     #: wire chunks of exactly this many bytes (the last may be shorter),
     #: splitting frames and multi-byte UTF-8 runes at arbitrary boundaries.
     chunk_bytes: int | None = None
-    #: When set, the OpenRouter generation-cost lookup (`GET /v1/generation`)
-    #: for this response's id reports this exact USD cost (the openrouter
-    #: provider's post-response accounting wire).
-    provider_cost_usd: float | None = None
 
     def finish_reason(self) -> str:
         return "tool_calls" if self.tool_calls else "stop"
@@ -179,6 +116,8 @@ class Behavior:
             "reply": self.reply,
             "tool_calls": [call.to_json() for call in self.tool_calls],
             "reasoning": self.reasoning,
+            "reasoning_signature": self.reasoning_signature,
+            "redacted_thinking": self.redacted_thinking,
             "error": self.error.to_json() if self.error is not None else None,
             "delay_s": self.delay_s,
             "chunk_delay_s": self.chunk_delay_s,
@@ -186,7 +125,6 @@ class Behavior:
             "completion_tokens": self.completion_tokens,
             "broken_stream": self.broken_stream,
             "chunk_bytes": self.chunk_bytes,
-            "provider_cost_usd": self.provider_cost_usd,
         }
 
     @staticmethod
@@ -196,11 +134,12 @@ class Behavior:
         completion_tokens = data.get("completion_tokens")
         broken = data.get("broken_stream")
         chunk_bytes = data.get("chunk_bytes")
-        provider_cost_usd = data.get("provider_cost_usd")
         return Behavior(
             reply=data.get("reply"),
             tool_calls=[SimToolCall.from_json(call) for call in raw_calls],
             reasoning=data.get("reasoning"),
+            reasoning_signature=data.get("reasoning_signature", "sim"),
+            redacted_thinking=data.get("redacted_thinking"),
             error=SimError.from_json(error) if isinstance(error, dict) else None,
             delay_s=float(data.get("delay_s", 0.0)),
             chunk_delay_s=float(data.get("chunk_delay_s", 0.0)),
@@ -208,5 +147,4 @@ class Behavior:
             completion_tokens=int(completion_tokens) if completion_tokens is not None else None,
             broken_stream=broken if broken in ("truncate", "garbage") else None,
             chunk_bytes=int(chunk_bytes) if chunk_bytes is not None else None,
-            provider_cost_usd=float(provider_cost_usd) if provider_cost_usd is not None else None,
         )

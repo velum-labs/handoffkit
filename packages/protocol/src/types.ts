@@ -4,7 +4,7 @@
  * fusionkit.event.v1, fusionkit.manifest.v1, fusionkit.policy.v1).
  */
 
-import type { JsonValue } from "./jcs.js";
+import type { JsonValue } from "@routekit/contracts";
 import type { ExecutionSpec } from "./execution.js";
 
 export type RunStatus =

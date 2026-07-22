@@ -1,98 +1,85 @@
-import type {
-  HarnessAdapter,
-  ToolHarnessResolveOptions,
-  UnifiedHarnessKind
-} from "@fusionkit/ensemble";
-import type { ModelFusionSideEffects } from "@fusionkit/protocol";
+import type { HarnessKind } from "@routekit/harness-core";
 
-import type { ToolDashboardMetadata, ToolIntegration } from "./types.js";
+import type {
+  ToolCapabilityGrade,
+  ToolIntegration,
+  ToolModel,
+  ToolModelFeature
+} from "./types.js";
 
 export type ToolRegistry = {
   /** Resolve a tool by id or alias. */
   get(idOrAlias: string): ToolIntegration | undefined;
   /** All registered tools, in registration order. */
   list(): ToolIntegration[];
-  /** Tools that can be launched behind the fusion panel. */
-  launchableFusion(): ToolIntegration[];
-  /** Tools that can be launched against a single local model. */
-  launchableLocal(): ToolIntegration[];
-  /** Build the ensemble harness adapter for a unified harness kind. */
-  harnessForKind(kind: UnifiedHarnessKind, options: ToolHarnessResolveOptions): HarnessAdapter;
-  /** Policy side-effects for a tool-backed harness kind. */
-  sideEffectsForKind(kind: UnifiedHarnessKind): ModelFusionSideEffects;
-  /** Judge response-shape hint for a tool-backed harness kind. */
-  responseShapeForKind(kind: UnifiedHarnessKind): string;
-  /** All unified harness kinds answered by a registered tool. */
-  harnessKinds(): UnifiedHarnessKind[];
-  /**
-   * The panel harness kind for the launched tool (by id or alias), i.e. the
-   * harness every panel model runs through when this tool is launched. Undefined
-   * for unknown tools or tools without a panel harness (e.g. opencode, serve).
-   */
-  panelHarnessKindFor(idOrAlias: string): UnifiedHarnessKind | undefined;
-  /** Dashboard metadata for tools that provide it, in registration order. */
-  dashboardTools(): ToolDashboardMetadata[];
+  /** Resolve the one canonical driver by its harness kind. */
+  driverForKind(kind: HarnessKind): ToolIntegration | undefined;
+  /** All canonical drivers in registration order. */
+  drivers(): ToolIntegration[];
 };
 
-/**
- * Assemble a tool registry from a fixed list of integrations. The CLI is the
- * single place that knows every tool package, so it builds the registry here and
- * wires it into both the launchers and (via `setToolAdapterResolver`) the
- * ensemble harness gateway. Adding a tool is one new package plus one entry in
- * the list the CLI passes here.
- */
 export function createToolRegistry(integrations: readonly ToolIntegration[]): ToolRegistry {
   const byKey = new Map<string, ToolIntegration>();
+  const byKind = new Map<HarnessKind, ToolIntegration>();
   for (const integration of integrations) {
+    if (byKey.has(integration.id)) {
+      throw new Error(`tool integration already registered for id "${integration.id}"`);
+    }
     byKey.set(integration.id, integration);
     for (const alias of integration.aliases ?? []) {
+      if (byKey.has(alias)) throw new Error(`tool integration alias already registered: "${alias}"`);
       byKey.set(alias, integration);
     }
+    const kind = integration.driver.kind;
+    if (byKind.has(kind)) throw new Error(`tool driver already registered for kind "${kind}"`);
+    byKind.set(kind, integration);
   }
-  const harnessIndex = new Map<UnifiedHarnessKind, ToolIntegration>();
-  for (const integration of integrations) {
-    for (const kind of integration.harnessKinds) {
-      harnessIndex.set(kind, integration);
-    }
-  }
-  const toolForKind = (kind: UnifiedHarnessKind): ToolIntegration => {
-    const integration = harnessIndex.get(kind);
-    if (integration === undefined) {
-      throw new Error(`no tool integration provides a harness for kind "${kind}"`);
-    }
-    return integration;
-  };
   return {
     get: (idOrAlias) => byKey.get(idOrAlias),
     list: () => [...integrations],
-    launchableFusion: () => integrations.filter((tool) => tool.modes.includes("fusion")),
-    launchableLocal: () => integrations.filter((tool) => tool.modes.includes("local")),
-    harnessForKind: (kind, options) => {
-      const integration = toolForKind(kind);
-      if (integration.createHarness === undefined) {
-        throw new Error(`tool "${integration.id}" has no harness factory for kind "${kind}"`);
-      }
-      return integration.createHarness(kind, options);
-    },
-    sideEffectsForKind: (kind) => {
-      const harness = toolForKind(kind).harness;
-      if (harness === undefined) {
-        throw new Error(`tool for kind "${kind}" has no harness metadata`);
-      }
-      return harness.sideEffects;
-    },
-    responseShapeForKind: (kind) => {
-      const harness = toolForKind(kind).harness;
-      if (harness === undefined) {
-        throw new Error(`tool for kind "${kind}" has no harness metadata`);
-      }
-      return harness.responseShape;
-    },
-    harnessKinds: () => integrations.flatMap((tool) => [...tool.harnessKinds]),
-    panelHarnessKindFor: (idOrAlias) => byKey.get(idOrAlias)?.panelHarnessKind,
-    dashboardTools: () =>
-      integrations
-        .map((tool) => tool.dashboard)
-        .filter((dashboard): dashboard is ToolDashboardMetadata => dashboard !== undefined)
+    driverForKind: (kind) => byKind.get(kind),
+    drivers: () => [...integrations]
   };
+}
+
+export type ToolCapabilityCell = {
+  modelId: string;
+  toolId: string;
+  feature: ToolModelFeature;
+  grade: ToolCapabilityGrade;
+};
+
+function gradeFor(
+  integration: ToolIntegration,
+  model: ToolModel,
+  feature: ToolModelFeature
+): ToolCapabilityGrade {
+  const modelStatus = model.features?.[feature] ?? "unknown";
+  const toolStatus = integration.capabilities[feature];
+  if (modelStatus === "unsupported" || toolStatus === "unsupported") return "unsupported";
+  if (modelStatus === "full" && toolStatus === "full") return "full";
+  return "degraded";
+}
+
+/** Evaluate opaque model metadata against every registered harness. */
+export function createToolCapabilityMatrix(
+  registry: ToolRegistry,
+  models: readonly ToolModel[]
+): ToolCapabilityCell[] {
+  const features: readonly ToolModelFeature[] = [
+    "streaming",
+    "tools",
+    "images",
+    "reasoning_controls"
+  ];
+  return models.flatMap((model) =>
+    registry.list().flatMap((integration) =>
+      features.map((feature) => ({
+        modelId: model.id,
+        toolId: integration.id,
+        feature,
+        grade: gradeFor(integration, model, feature)
+      }))
+    )
+  );
 }
