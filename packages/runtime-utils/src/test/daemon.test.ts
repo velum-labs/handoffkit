@@ -78,6 +78,15 @@ function fixturePath(home: string): string {
   return path;
 }
 
+test("processAlive rejects pid reuse even when the pid belongs to another user", () => {
+  // pid 1 always exists and (for an unprivileged user) kill(1, 0) fails with
+  // EPERM — the same signature as a rebooted machine reusing a recorded pid
+  // for a system process. A mismatched birth identity must win over EPERM.
+  assert.equal(processAlive(1, "Mon Jan  1 00:00:00 2001"), false);
+  // Without a recorded identity, EPERM still means "alive".
+  assert.equal(processAlive(1), true);
+});
+
 test("startDaemon detaches, waits for record + health, is idempotent, and stop reaps", async () => {
   const home = mkdtempSync(join(tmpdir(), "daemon-lifecycle-"));
   const script = fixturePath(home);

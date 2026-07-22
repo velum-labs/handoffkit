@@ -74,6 +74,8 @@ export type SupervisorController = {
 };
 
 const STOP_MARGIN_MS = 10_000;
+const DEFAULT_COMMAND_TIMEOUT_MS = 30_000;
+const LAUNCHD_BOOTSTRAP_RETRY_DELAYS_MS = [100, 250, 500, 1_000, 2_000] as const;
 
 function stopTimeoutSeconds(drainGraceMs: number | undefined): number {
   return Math.ceil(((drainGraceMs ?? 30_000) + STOP_MARGIN_MS) / 1000);
@@ -143,6 +145,10 @@ function runnerError(
 ): Error {
   const detail = `${result.stderr}\n${result.stdout}`.trim();
   return new Error(`${label} failed (exit ${result.exitCode})${detail.length > 0 ? `: ${detail}` : ""}`);
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function createSystemdController(input: {
@@ -313,6 +319,28 @@ function createLaunchdController(input: {
     const result = await runner("launchctl", args, options);
     if (result.exitCode !== 0) throw runnerError(label_, result);
   };
+  const bootstrap = async (options?: { timeoutMs?: number }): Promise<void> => {
+    const deadline = Date.now() + (options?.timeoutMs ?? DEFAULT_COMMAND_TIMEOUT_MS);
+    for (let attempt = 0; ; attempt += 1) {
+      const remainingMs = Math.max(1, deadline - Date.now());
+      const result = await runner(
+        "launchctl",
+        ["bootstrap", domainTarget, unitPath],
+        { timeoutMs: remainingMs }
+      );
+      if (result.exitCode === 0) return;
+      const detail = `${result.stderr}\n${result.stdout}`;
+      const transient =
+        result.exitCode === 5 || /Bootstrap failed:\s*5(?:\D|$)/i.test(detail);
+      const retryDelay = LAUNCHD_BOOTSTRAP_RETRY_DELAYS_MS[attempt];
+      if (!transient || retryDelay === undefined || Date.now() + retryDelay >= deadline) {
+        throw runnerError(`launchctl bootstrap ${label}`, result);
+      }
+      // bootout may return before launchd has fully retired the old service.
+      // Back off and require bootstrap itself to confirm the replacement.
+      await delay(retryDelay);
+    }
+  };
   return {
     kind: "launchd",
     unitName: label,
@@ -328,7 +356,7 @@ function createLaunchdController(input: {
       // Re-installs must bootout the previous instance first; ignore failures
       // when nothing was loaded.
       await runner("launchctl", ["bootout", serviceTarget]);
-      await launchctl(["bootstrap", domainTarget, unitPath], `launchctl bootstrap ${label}`);
+      await bootstrap({ timeoutMs: supervisorOperationTimeoutMs(spec.drainGraceMs) });
       await runner("launchctl", ["enable", serviceTarget]);
     },
     async uninstall(options) {
@@ -345,7 +373,7 @@ function createLaunchdController(input: {
       return true;
     },
     async start(options) {
-      await launchctl(["bootstrap", domainTarget, unitPath], `launchctl bootstrap ${label}`, options);
+      await bootstrap(options);
     },
     async stop(options) {
       // bootout (not `stop`): KeepAlive would immediately restart a stopped
@@ -354,11 +382,7 @@ function createLaunchdController(input: {
     },
     async restart(options) {
       await launchctl(["bootout", serviceTarget], `launchctl bootout ${label}`, options);
-      await launchctl(
-        ["bootstrap", domainTarget, unitPath],
-        `launchctl bootstrap ${label}`,
-        options
-      );
+      await bootstrap(options);
     },
     async status() {
       const installed = existsSync(unitPath);

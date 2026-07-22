@@ -14,10 +14,13 @@ routekit start
 routekit codex
 ```
 
-The singleton daemon loads `~/.config/routekit/router.yaml`; import a project
-overlay explicitly with `routekit config import --from .routekit/router.yaml`.
-`--config` / `ROUTEKIT_CONFIG` are reserved for foreground doctor/migration
-recovery paths. `ROUTEKIT_HOME` relocates runtime state.
+The singleton daemon loads `~/.config/routekit/router.yaml`; replace that
+canonical document from a project file explicitly with
+`routekit config import --from .routekit/router.yaml`. Import validates and
+atomically replaces the complete document; it does not merge configuration.
+Sparse SDK overlays must be expanded into a complete router document before
+import. `--config` / `ROUTEKIT_CONFIG` are reserved for foreground gateway,
+doctor, and migration recovery paths. `ROUTEKIT_HOME` relocates runtime state.
 
 ## Local checkout development
 
@@ -48,12 +51,12 @@ Set `ROUTEKIT_DEV_SKIP_BUILD=1` after a build for a faster local check.
 | Command | RouteKit responsibility |
 | --- | --- |
 | `start`, `status`, `stop` | Start, inspect, and gracefully stop RouteKit through its singleton daemon. |
-| `codex`, `claude`, `cursor`, `opencode` | Ask the daemon to prepare a launch, then run the coding tool locally against the singleton gateway. |
+| `codex`, `claude`, `cursor` | Ask the daemon to prepare a launch, then run the supported coding tool locally against the singleton gateway. |
 | `codex install`, `codex uninstall` | Add or remove RouteKit-owned Codex provider/profile blocks. |
 | `providers add`, `remove`, `status` | Manage explicit providers and run live discovery without printing credentials. |
 | `models list` | Discover and list the live namespaced model catalog. |
-| `accounts login` | Enroll any subscription kind (`claude-code`, `codex`, `gemini`, `grok`, `kimi`): run the right connector's OAuth flow, enroll the credential, and enable the matching provider. `--no-browser` prefers a device-code / copyable-URL flow for headless hosts. |
-| `accounts add`, `remove`, `list`, `status` | Import the current official CLI login (native kinds) or manage enrolled subscription accounts across every connector. |
+| `accounts login` | Enroll a supported subscription kind (`claude-code` or `codex`), import the credential, and enable the matching provider. `--no-browser` prefers a device-code / copyable-URL flow for headless hosts. |
+| `accounts add`, `remove`, `list`, `status` | Import the current official CLI login or manage enrolled subscription accounts. |
 | `usage` | Show subscription rate limits, credits, and reset windows from the running gateway or enrolled local accounts. |
 | `config path`, `show`, `init`, `edit`, `import`, `migrate` | Manage the daemon's canonical global router config with revision-checked writes. |
 | `doctor` | Check router configuration, referenced credential variables, and installed coding-agent binaries. |
@@ -69,8 +72,8 @@ Provider activation, live model catalogs, account relays, and registry-defined
 credential environment variables are RouteKit-owned. Fusion policy, panels,
 judging, synthesis, and Fusion sessions are intentionally outside this package.
 
-Subscription kinds are `claude-code`, `codex`, `gemini`, `grok`, and `kimi`;
-the Claude Code launcher command remains `routekit claude [provider/model]`.
+The first-launch subscription kinds are `claude-code` and `codex`; the Claude
+Code launcher command remains `routekit claude [provider/model]`.
 Pool policy uses the same provider map as API-key sources:
 
 ```yaml
@@ -84,23 +87,32 @@ providers:
 defaultModel: codex/gpt-5.5
 ```
 
-The one enrollment path for every kind is
-`routekit accounts login <kind>`. Each kind is backed by a connector the user
-never manages directly: `claude-code` and `codex` run the official provider
-CLI in a private temporary profile, atomically import the resulting
-credential, and remove the temporary profile without changing the user's
-normal login (`accounts add` is the explicit current-login import path);
-`gemini`, `grok`, and `kimi` run the OAuth flow of RouteKit's pinned,
-daemon-supervised CLIProxyAPI sidecar (see
-[CLIProxyAPI connector](../../docs/subscription-pooling.md)). `--no-browser`
-prefers a device-code / copyable-URL flow so a headless host only needs a
-browser on some other device.
+The one enrollment path is `routekit accounts login <kind>`. The supported
+`claude-code` and `codex` kinds run the official provider CLI in a private
+temporary profile, atomically import the resulting credential, and remove the
+temporary profile without changing the user's normal login (`accounts add` is
+the explicit current-login import path). `--no-browser` prefers a device-code /
+copyable-URL flow so a headless host only needs a browser on some other device.
 
 API providers infer their key and optional base URL from registry-defined
 environment variables. Subscription providers discover the union of models
 offered by healthy enrolled accounts and keep per-account quota, refresh,
 cooldown, and model eligibility state. An explicitly requested unknown or
 unnamespaced model is rejected rather than routed to the default.
+
+## First-launch support contract
+
+RouteKit's public first-launch set is:
+
+- API providers: OpenAI, Anthropic, and OpenRouter;
+- subscriptions: Codex and Claude Code; and
+- harnesses: Codex CLI, Claude Code, Cursor IDE, and `cursor-agent` through
+  Cursor's custom OpenAI endpoint.
+
+Public support remains conditional on L06 qualification. The neutral registry
+and internal packages may retain additional providers, connectors, and tool
+integrations for compatibility and development. Those retained implementations
+are not first-launch UX, are not qualified, and are not a support contract.
 
 ## Singleton daemon
 
@@ -115,11 +127,20 @@ The daemon owns:
   a replacement router first, atomically switch new traffic, then drain the old
   generation so active LLM streams finish.
 
+`accounts login` and `accounts add` use one `accounts.enrollActivate` control
+mutation. OAuth capture is isolated from daemon-owned stores; the daemon keeps
+a private rollback vault while it commits account files, provider config,
+account/config revisions, and the router generation. An error restores prior
+state, and startup rolls back any prepared transaction before loading config.
+Committed retries are no-ops. Status and doctor report sanitized recovery and
+account/provider consistency without returning transaction credentials.
+
 Help, version, completion, terminal rendering, OAuth/editor interaction, and
 the final coding-tool process remain local. Interactive results are committed
 back through authenticated RPC, so the daemon remains the sole RouteKit state
 writer. Project `.routekit/router.yaml` files are SDK/embedded-router inputs,
-not standalone daemon scopes; import one explicitly:
+not standalone daemon scopes. To migrate one into the singleton, explicitly
+replace its canonical document:
 
 ```sh
 routekit config import --from .routekit/router.yaml

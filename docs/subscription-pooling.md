@@ -13,21 +13,32 @@ npm install -g @routekit/cli
 routekit config init
 routekit accounts login claude-code --name personal
 routekit accounts login codex --name work
-routekit accounts login gemini
 routekit accounts status
 routekit models list
 ```
 
-`accounts login <kind>` resolves the connector that backs the kind, runs its
-OAuth flow, enrolls the credential, enables the matching router provider, and
-verifies live model discovery. `--no-browser` prefers a browserless flow
+`accounts login <kind>` accepts the first-launch `claude-code` and `codex`
+kinds, runs the official CLI OAuth flow, enrolls the credential, enables the
+matching router provider, and verifies live model discovery. `--no-browser`
+prefers a browserless flow
 (Codex device code; copyable URL + pasted code elsewhere) so a headless host
 only needs a browser on some other device. The first successful login
 automatically enables the subscription provider in the effective router
 config; `accounts remove`, `list`, and `status` operate uniformly across all
 kinds.
 
-## Connectors (implementation detail)
+Enrollment and activation are one daemon-owned transaction. OAuth runs against
+disposable profiles first; the authenticated daemon then commits every account
+file, the provider config, both revisions, and the replacement router
+generation together. A failure restores the exact prior local state. If the
+daemon is interrupted after preparation, startup restores the private rollback
+vault before loading config or starting the router.
+Retries of an already committed account/provider pair are no-ops. Transaction
+manifests contain paths, hashes, phases, and revision metadata only—credential
+values remain in mode-`0600` opaque rollback files and are deleted after commit
+or recovery.
+
+## Supported connectors
 
 The registry (`spec/registry/connectors.json`) declares which mechanism backs
 each kind. Users never install, serve, or configure a connector directly.
@@ -36,15 +47,15 @@ each kind. Users never install, serve, or configure a connector directly.
 | --- | --- | --- |
 | `claude-code` (alias `claude`) | native | Official CLI login in a private temporary profile; credential imported into RouteKit's native pool; provider-native relay. |
 | `codex` | native | Same managed login; `--no-browser` runs `codex login --device-auth`. |
-| `gemini` (alias `antigravity`) | cliproxy | OAuth via the RouteKit-managed CLIProxyAPI sidecar. |
-| `grok` (alias `xai`) | cliproxy | Same. |
-| `kimi` | cliproxy | Same. |
 
 The native login runs the matching official CLI in a private temporary
 profile, imports only that credential, and removes the temporary profile. It
 never replaces the user's normal Claude Code or Codex login. Use
 `accounts add <kind> --name <label>` only to import the current official CLI
 login instead.
+
+Router startup never imports an official CLI login implicitly. This keeps the
+daemon transaction as the sole RouteKit-owned enrollment write path.
 
 Pool selection policy lives on the provider:
 
@@ -61,6 +72,13 @@ eligibility prevents a request from reaching an account that did not advertise
 that model. Each member keeps independent credential refresh, quota windows,
 rate-limit cooldowns, and reset times. `accounts status` reports all members
 and connector health without exposing credentials.
+
+Capability conflicts do not depend on network response timing. Explicit
+`reasoningCapabilities` configuration has highest precedence. Otherwise, a
+native pool uses the first successfully discovered account in configured order
+that reports reasoning metadata for the model: directory-backed accounts are
+ordered by account filename, and explicit account paths retain caller order.
+Failed accounts and accounts that omit the metadata are skipped.
 
 Claude Code and Codex present their own subscription models under bare native
 names in their `/model` pickers. This is only a client-facing alias:
@@ -80,74 +98,13 @@ authenticated model gateway. There is no separate accounts-proxy lifecycle.
 `routekit usage` and `routekit usage --watch <seconds>` inspect the normal
 daemon's live pools.
 
-## The CLIProxyAPI connector
+## Internal implementation retention (non-contractual)
 
-[CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) (MIT) is a local
-proxy that fronts OAuth subscription accounts behind an OpenAI-compatible API
-with multi-account rotation. RouteKit uses it as the connector for
-subscription kinds it does not relay natively (Gemini via Antigravity, Grok,
-Kimi) and represents it as the `cliproxy` router provider; models appear as
-`cliproxy/<model>` in the live catalog and in Fusion ensembles:
-
-```json
-{
-  "version": "fusionkit.fusion.v4",
-  "router": { "config": ".routekit/router.yaml" },
-  "ensembles": {
-    "default": {
-      "members": ["cliproxy/gemini-3.1-pro-preview", "openai/gpt-5.5"],
-      "judge": "openai/gpt-5.5"
-    }
-  }
-}
-```
-
-The whole lifecycle is RouteKit-owned:
-
-- The first `accounts login` of a cliproxy-backed kind downloads the pinned,
-  SHA-256-verified release into `~/.routekit/cliproxy/` (or `ROUTEKIT_HOME`)
-  and generates a private `config.yaml` with the sidecar's ingress key; the
-  binary, config, and OAuth `auth/` store are all 0600/0700. Commands never
-  print credential values.
-- The **daemon supervises the sidecar process**: it starts it whenever the
-  `cliproxy` provider is configured, restarts it after a crash, stops it on
-  daemon shutdown, and injects the managed ingress key and listen address into
-  every router generation. There is no user-facing serve command.
-- `routekit doctor` reports sidecar reachability; `accounts status` marks
-  cliproxy-backed accounts `local-only`.
-
-A self-managed CLIProxyAPI still works as a plain provider: export
-`ROUTEKIT_CLIPROXY_API_KEY` (one of its `api-keys`) and, for a non-default
-host/port, `ROUTEKIT_CLIPROXY_BASE_URL`. When that base-URL override is set,
-the daemon never spawns its own sidecar.
-
-### ToS caveat
-
-CLIProxyAPI reuses subscription OAuth tokens through reverse-engineered
-endpoints. Anthropic, OpenAI, Google, and xAI restrict reusing subscription
-credentials in third-party tooling. Cliproxy-backed kinds are for
-**personal/local use only** — the sidecar binds loopback, `accounts login`
-warns before starting, and FusionKit never ships it as a hosted feature. Use
-at your own risk. Prefer the native `claude-code` and `codex` connectors,
-which use provider-native relays and quota-aware selection inside the
-singleton daemon.
-
-### Operational notes
-
-- The release is pinned (`CLIPROXY_PINNED_VERSION` in
-  `packages/accounts/src/cliproxy.ts`) and verified against the release's
-  `checksums.txt`; upgrades are a deliberate pin bump, not implicit.
-- Upstream endpoints can break when vendors change their private APIs; a
-  broken member simply fails its panel slot (survivors are still fused), and
-  direct API-key members are unaffected.
-- The provider preset lives in `spec/registry/providers.json`
-  (`providers.cliproxy`) and the connector map in
-  `spec/registry/connectors.json`; regenerate bindings with
-  `node scripts/generate-registry.mjs` after editing.
-- The upstream source is vendored read-only at `references/cliproxyapi/`
-  (pinned to the same commit as release v7.2.72, tracked via trackcn — see
-  `references/THIRD_PARTY.md`), so the wire formats, OAuth flows, and rotation
-  behavior we depend on can be studied and diffed offline when bumping the pin.
+The neutral registry and daemon may retain additional provider and connector
+implementations for compatibility, migration, and development. They are not
+first-launch onboarding, are not qualified by L06, and do not create a public
+support commitment. Do not infer RouteKit support from registry entries,
+generated catalogs, package presence, or internal tests.
 
 FusionKit links the reusable `@routekit/router` SDK for embedded composition;
 it does not depend on `@routekit/cli` or execute `routekit`. `fusionkit stop`

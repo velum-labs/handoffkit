@@ -91,7 +91,6 @@ for (const command of [
   "codex",
   "claude",
   "cursor",
-  "opencode",
   "accounts",
   "providers",
   "usage",
@@ -109,6 +108,11 @@ for (const command of [
 for (const advanced of ["gateway", "daemon"]) {
   if (helpHasCommand(routeHelp.stdout, advanced)) {
     fail(`RouteKit help exposes advanced lifecycle surface "${advanced}"`);
+  }
+}
+for (const notOffered of ["opencode", "google", "gemini", "grok", "kimi", "cliproxy"]) {
+  if (new RegExp(`\\b${notOffered}\\b`, "i").test(routeHelp.stdout)) {
+    fail(`RouteKit help exposes not-offered route "${notOffered}"`);
   }
 }
 const gatewayProbe = runCli(ROUTE_CLI, ["gateway", "serve"]);
@@ -159,8 +163,9 @@ if (
   fail(`expected a preflight failure, got:\n${preflightOutput}`);
 }
 
-// 4) RouteKit doctor is useful without harness binaries, and launch fails
-// before opening a gateway when the selected real harness is absent.
+// 4) RouteKit doctor accepts an explicit recovery config without harness
+// binaries, while a daemon-backed launcher fails before ensuring the singleton
+// when the selected real harness is absent.
 const routekitRoot = mkdtempSync(join(tmpdir(), "routekit-ootb-"));
 const routekitProject = join(routekitRoot, "project");
 const routekitConfig = join(routekitProject, "router.yaml");
@@ -210,7 +215,7 @@ try {
 
   const missingHarness = runCli(
     ROUTE_CLI,
-    ["--config", routekitConfig, "codex", "ootb"],
+    ["codex", "ootb"],
     routekitEnv
   );
   if (missingHarness.status === 0) {

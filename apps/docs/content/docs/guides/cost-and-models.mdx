@@ -17,7 +17,10 @@ spend control.
 
 ### Pick cheaper models
 
-Choose cheaper entries from `routekit models list`, then compose their IDs:
+For an embedded project router, choose cheaper namespaced entries from the
+provider's catalog and use `fusionkit doctor` to validate the configured IDs.
+Use `routekit models list` to inspect available entries only when `router.url`
+targets the standalone singleton, then compose those IDs:
 
 ```bash
 fusionkit ensemble add economical \

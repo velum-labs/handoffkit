@@ -1,25 +1,27 @@
 /**
- * One account surface for every subscription kind. `accounts login <kind>`
- * dispatches to the connector the registry declares for that kind — the
- * native official-CLI capture (claude-code, codex) or the RouteKit-managed
- * CLIProxyAPI sidecar (gemini, grok, kimi) — enrolls the credential, enables
- * the matching provider, and verifies live model discovery. Users never
- * manage the connector machinery directly.
+ * Public enrollment is limited to the first-launch subscription contract.
+ * Additional connector implementations remain available internally for
+ * compatibility, but registry presence does not make them supported UX.
  */
 import {
   captureLoginCredential,
+  captureCliproxyLoginCredentials,
   defaultSubscriptionCredentialPath,
-  loginCliproxyAccount,
   parseAccountMode,
   resolveAccountKind
 } from "@routekit/accounts";
 import { contextFor } from "@routekit/cli-core";
-import { accountKinds, resolveAccountConnector } from "@routekit/registry";
+import { resolveAccountConnector } from "@routekit/registry";
 import { randomId } from "@routekit/runtime";
 import type { Command } from "commander";
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 
 import { routekitClient } from "../client.js";
+import {
+  isLaunchAccountKind,
+  LAUNCH_ACCOUNT_KINDS
+} from "../launch-support.js";
 
 /** The router provider a subscription kind routes through. */
 function providerForKind(kind: string, connector: "native" | "cliproxy"): string {
@@ -35,14 +37,14 @@ function isCliproxyAccount(entry: {
   return resolveAccountConnector(entry.subscriptionKind)?.info.connector === "cliproxy";
 }
 
-async function activateAccount(provider: string): Promise<string> {
-  const client = await routekitClient();
-  const updated = await client.call(
-    "providers.set",
-    { provider, enabled: true },
-    { idempotencyKey: `account-activate-${provider}-${randomId(16)}` }
-  );
-  return updated.path;
+function activationKey(
+  kind: string,
+  accounts: Array<{ label: string; credential?: unknown }>
+): string {
+  const fingerprint = createHash("sha256")
+    .update(JSON.stringify({ kind, accounts }))
+    .digest("hex");
+  return `account-enroll-activate-${fingerprint}`;
 }
 
 const LOCAL_ONLY_WARNING =
@@ -55,7 +57,7 @@ export function registerAccounts(program: Command): void {
 
   accounts
     .command("login <subscription-kind>")
-    .description(`enroll a subscription account (${accountKinds().join(", ")})`)
+    .description(`enroll a subscription account (${LAUNCH_ACCOUNT_KINDS.join(", ")})`)
     .option("--name <name>", "account label (native subscription kinds)")
     .option(
       "--no-browser",
@@ -73,55 +75,71 @@ export function registerAccounts(program: Command): void {
             "`accounts login` is interactive and does not support --json or --no-input"
           );
         }
+        if (resolveAccountConnector(subscriptionKind) === undefined) {
+          throw new Error(
+            `unknown subscription kind ${JSON.stringify(subscriptionKind)}; ` +
+              `first-launch kinds: ${LAUNCH_ACCOUNT_KINDS.join(", ")}`
+          );
+        }
         const resolved = resolveAccountKind(subscriptionKind);
+        if (!isLaunchAccountKind(resolved.kind)) {
+          throw new Error(
+            `subscription kind ${JSON.stringify(subscriptionKind)} is not offered at first launch; ` +
+              `supported kinds: ${LAUNCH_ACCOUNT_KINDS.join(", ")}`
+          );
+        }
         const noBrowser = options.browser === false;
         if (resolved.localOnly) ctx.presenter.warn(`${resolved.kind}: ${LOCAL_ONLY_WARNING}`);
         const client = await routekitClient();
-        let enrolledLabels: string[];
+        let enrolledAccounts: Array<{ label: string; credential?: unknown }>;
         if (resolved.connector === "native") {
           if (options.name === undefined) {
             throw new Error(
               `\`accounts login ${resolved.kind}\` requires --name <label>`
             );
           }
-          const result = await captureLoginCredential(resolved.kind, options.name, {
-            ...(noBrowser ? { noBrowser } : {})
-          });
-          await client.call(
-            "accounts.enroll",
-            {
-              kind: result.subscriptionKind,
-              label: result.label,
-              credential: result.credential
-            },
-            { idempotencyKey: `account-login-${randomId(16)}` }
+          const existing = (await client.call("accounts.status", {})).accounts.find(
+            (entry) =>
+              entry.subscriptionKind === resolved.kind &&
+              entry.label === options.name
           );
-          enrolledLabels = [result.label];
+          if (existing !== undefined) {
+            enrolledAccounts = [{ label: options.name }];
+          } else {
+            const result = await captureLoginCredential(resolved.kind, options.name, {
+              ...(noBrowser ? { noBrowser } : {})
+            });
+            enrolledAccounts = [
+              { label: result.label, credential: result.credential }
+            ];
+          }
         } else {
           if (options.name !== undefined) {
             ctx.presenter.note(
               "--name is ignored for this kind; the account identity comes from the OAuth login"
             );
           }
-          const result = await loginCliproxyAccount(resolved.kind, {
+          const result = await captureCliproxyLoginCredentials(resolved.kind, {
             ...(noBrowser ? { noBrowser } : {}),
             onProgress: (line) => ctx.presenter.note(line)
           });
-          await client.call(
-            "accounts.sync",
-            {},
-            { idempotencyKey: `account-sync-${randomId(16)}` }
-          );
-          enrolledLabels = result.added.map((entry) => entry.label);
+          enrolledAccounts = result.accounts.map((entry) => ({
+            label: entry.label,
+            credential: entry.credential
+          }));
         }
         const provider = providerForKind(resolved.kind, resolved.connector);
-        const configPath = await activateAccount(provider);
-        for (const label of enrolledLabels) {
+        const activated = await client.call(
+          "accounts.enrollActivate",
+          { kind: resolved.kind, accounts: enrolledAccounts },
+          { idempotencyKey: activationKey(resolved.kind, enrolledAccounts) }
+        );
+        for (const { label } of enrolledAccounts) {
           ctx.presenter.success(
             `logged in, enrolled, and enabled ${resolved.kind}/${label}`
           );
         }
-        ctx.presenter.note(`config: ${configPath}`);
+        ctx.presenter.note(`config: ${activated.configPath}`);
         const models = await client.call("models.list", { provider });
         if (models.models.length === 0) {
           ctx.presenter.warn(
@@ -141,21 +159,32 @@ export function registerAccounts(program: Command): void {
       const ctx = contextFor(command);
       const kind = parseAccountMode(subscriptionKind);
       const label = options.name ?? `${kind}-default`;
-      const sourcePath = defaultSubscriptionCredentialPath(kind);
-      const credential = JSON.parse(readFileSync(sourcePath, "utf8")) as unknown;
       const client = await routekitClient();
-      const enrolled = await client.call(
-        "accounts.enroll",
-        { kind, label, credential },
-        { idempotencyKey: `account-add-${randomId(16)}` }
+      const existing = (await client.call("accounts.status", {})).accounts.find(
+        (entry) => entry.subscriptionKind === kind && entry.label === label
       );
-      const configPath = await activateAccount(kind);
+      const accounts =
+        existing !== undefined
+          ? [{ label }]
+          : [
+              {
+                label,
+                credential: JSON.parse(
+                  readFileSync(defaultSubscriptionCredentialPath(kind), "utf8")
+                ) as unknown
+              }
+            ];
+      const enrolled = await client.call(
+        "accounts.enrollActivate",
+        { kind, accounts },
+        { idempotencyKey: activationKey(kind, accounts) }
+      );
       const output = {
         subscriptionKind: kind,
         label,
-        revision: enrolled.revision,
+        revision: enrolled.accountRevision,
         activated: true,
-        configPath
+        configPath: enrolled.configPath
       };
       if (ctx.json) {
         ctx.emit(output);
@@ -163,7 +192,7 @@ export function registerAccounts(program: Command): void {
         ctx.presenter.success(
           `enrolled and enabled ${kind}/${label}`
         );
-        ctx.presenter.note(`config: ${configPath}`);
+        ctx.presenter.note(`config: ${enrolled.configPath}`);
       }
     });
 
@@ -214,7 +243,7 @@ export function registerAccounts(program: Command): void {
           connector === "cliproxy"
             ? !accounts.some((entry) => isCliproxyAccount(entry))
             : accounts.every((entry) => entry.subscriptionKind !== kind);
-        if (shouldSuggestProviderRemove) {
+        if (shouldSuggestProviderRemove && isLaunchAccountKind(kind)) {
           ctx.presenter.note(
             `run \`routekit providers remove ${routerProvider}\` to stop subscription routing`
           );
@@ -258,12 +287,22 @@ export function registerAccounts(program: Command): void {
           relayOpen?: boolean;
         }>;
         revision: number;
+        recovery: {
+          state: "clean" | "recovered";
+          recovered: number;
+          cleaned: number;
+        };
       };
       if (ctx.json) {
         ctx.emit(status);
         return;
       }
       ctx.presenter.status("ok", "daemon account pool", `revision ${status.revision}`);
+      if (status.recovery.recovered > 0) {
+        ctx.presenter.note(
+          `restored ${status.recovery.recovered} interrupted account activation(s)`
+        );
+      }
       for (const entry of status.accounts) {
         const ok =
           entry.credentialValid === true &&

@@ -5,7 +5,7 @@ description: RouteKit live provider catalogs and FusionKit v4 ensembles.
 
 RouteKit owns models; FusionKit owns ensembles.
 
-Enable provider sources once:
+For FusionKit embedded mode, enable provider sources in the project file:
 
 ```yaml
 # .routekit/router.yaml
@@ -27,11 +27,18 @@ providers:
 ```
 
 ```bash
+routekit config import --from .routekit/router.yaml
 routekit accounts login codex --name personal
 routekit accounts login codex --name work
 routekit providers status codex
 routekit models list
 ```
+
+The import is required before using daemon-backed RouteKit commands with this
+project policy. It validates and replaces the singleton's complete canonical
+document; project files are never implicit daemon scopes and are not merged
+with the existing global file. For embedded-only API providers,
+`fusionkit doctor` validates the project catalog without importing it.
 
 RouteKit authenticates every configured provider at startup and publishes a
 namespaced live catalog. Subscription providers union the models discovered

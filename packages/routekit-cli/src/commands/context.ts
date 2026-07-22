@@ -1,29 +1,11 @@
-import { resolve } from "node:path";
-
 import type { Command } from "commander";
 
-import {
-  findProjectRouterConfig,
-  globalRouterConfigPath,
-  loadRouterConfig,
-  projectRouterConfigPath
-} from "../config.js";
+import { loadRouterConfig } from "../config.js";
 
 type ConfigGlobalOptions = { config?: string };
 
 export function configOverride(command: Command): string | undefined {
   return command.optsWithGlobals<ConfigGlobalOptions>().config;
-}
-
-export function editableConfigPath(input: {
-  command: Command;
-  global?: boolean;
-  cwd?: string;
-}): string {
-  const override = configOverride(input.command) ?? process.env.ROUTEKIT_CONFIG;
-  if (override !== undefined && override.length > 0) return resolve(override);
-  if (input.global === true) return globalRouterConfigPath();
-  return findProjectRouterConfig(input.cwd) ?? projectRouterConfigPath(input.cwd);
 }
 
 export function loaded(command: Command) {

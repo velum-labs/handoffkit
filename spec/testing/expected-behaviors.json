@@ -586,6 +586,14 @@
       "anchor": "singleton daemon exposes authenticated control and a stable reloadable data plane"
     },
     {
+      "id": "accounts.transactional-enrollment-and-activation",
+      "category": "accounts",
+      "expectation": "One daemon mutation imports native or CLIProxy credentials and enables the derived provider; failures restore account/config/revision state, interrupted prepared journals roll back before router startup, committed replays are no-ops, and transaction metadata contains no credential values.",
+      "status": "required",
+      "testFile": "packages/routekit-daemon/src/test/daemon.test.ts",
+      "anchor": "daemon recovers interrupted activation before loading config or starting routers"
+    },
+    {
       "id": "accounts.managed-login-isolation",
       "category": "accounts",
       "expectation": "Native account login isolates official CLI authentication, scrubs unrelated credentials, returns the credential only to the authenticated daemon client, and removes temporary state without writing daemon-owned stores locally.",
@@ -656,6 +664,14 @@
       "status": "required",
       "testFile": "packages/model-gateway/src/test/router.test.ts",
       "anchor": "catalog applies configured opaque efforts and rejects unavailable values before egress"
+    },
+    {
+      "id": "reasoning.deterministic-account-precedence",
+      "category": "model-exposure",
+      "expectation": "Conflicting account-discovered reasoning capabilities resolve by configured account order regardless of response timing.",
+      "status": "required",
+      "testFile": "packages/accounts/src/test/subscription-pool.test.ts",
+      "anchor": "capability conflicts resolve by account order across reversed response timing"
     }
   ]
 }

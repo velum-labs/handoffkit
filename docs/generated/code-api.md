@@ -40,10 +40,10 @@ contract. Product CLIs can wrap this module without owning account logic.
 - `export type { SubscriptionProxyClientOptions } from "./client.js";`
 - `export { collectSubscriptionUsage, DEFAULT_SUBSCRIPTION_USAGE_REFRESH_MS, openLocalSubscriptionUsage } from "./usage.js";`
 - `export type { SubscriptionUsageSource } from "./usage.js";`
-- `export { CLIPROXY_API_KEY_ENV, CLIPROXY_BASE_URL_ENV, CLIPROXY_HOME_ENV, CLIPROXY_PINNED_VERSION, cliproxyAssetName, cliproxyApiKey, cliproxyBaseUrl, cliproxyBinaryPath, cliproxyConfigPath, cliproxyHome, cliproxyManagedPort, cliproxyStatus, ensureCliproxyConfig, installCliproxy, spawnCliproxy } from "./cliproxy.js";`
+- `export { CLIPROXY_API_KEY_ENV, CLIPROXY_BASE_URL_ENV, CLIPROXY_HOME_ENV, CLIPROXY_PINNED_VERSION, cliproxyAssetName, cliproxyApiKey, cliproxyBaseUrl, cliproxyBinaryPath, cliproxyConfigPath, cliproxyHome, cliproxyManagedPort, cliproxyStatus, ensureCliproxyConfig, installCliproxy, spawnCliproxy, writeCliproxyLoginConfig } from "./cliproxy.js";`
 - `export type { CliproxyInstallResult, CliproxyStatus } from "./cliproxy.js";`
-- `export { accountStoreEntries, cliproxyAccountEntries, cliproxyAccountMatchesKind, loginCliproxyAccount, removeCliproxyAccount, resolveAccountKind } from "./connector.js";`
-- `export type { AccountStoreEntry, CliproxyAccountEntry, CliproxyLoginInvocation, CliproxyLoginOptions, ResolvedAccountKind } from "./connector.js";`
+- `export { accountStoreEntries, captureCliproxyLoginCredentials, cliproxyAccountEntries, cliproxyAccountMatchesKind, cliproxyAuthDirectory, cliproxyCredentialValid, loginCliproxyAccount, removeCliproxyAccount, resolveAccountKind } from "./connector.js";`
+- `export type { AccountStoreEntry, CapturedCliproxyCredential, CliproxyAccountEntry, CliproxyLoginInvocation, CliproxyLoginOptions, ResolvedAccountKind } from "./connector.js";`
 - `export { captureLoginCredential, claudeProfileKeychainService, parseAccountMode } from "./managed-login.js";`
 - `export type { ManagedAccountLoginInvocation, ManagedAccountLoginOptions, ManagedLoginKeychain } from "./managed-login.js";`
 - `export { snapshotsToUsage, SUBSCRIPTION_USAGE_PATH, subscriptionUsageResponseSchema } from "./wire.js";`
@@ -531,9 +531,9 @@ panel presets are deliberately excluded.
 - `export type AccountConnectorInfo ...`
 - `export const ACCOUNT_CONNECTORS: Readonly<Record<string, AccountConnectorInfo>> ...`
 - `export function accountKinds(): readonly string[] ...`
-  Canonical account kinds accepted by `routekit accounts login <kind>`.
+  Canonical account kinds known to the neutral registry (not a support contract).
 - `export function accountKindChoices(): readonly string[] ...`
-  Canonical account kinds plus every accepted user-facing alias.
+  Canonical registry kinds plus their aliases (not necessarily public CLI choices).
 - `export function resolveAccountConnector(`
   Resolve a user-supplied account kind (canonical name or alias) to its canonical kind and connector metadata.
 - `export function accountKindForCliproxyAuthType(type: string): string | undefined ...`
@@ -595,7 +595,7 @@ No module JSDoc was found.
 - `export { createServiceRecordStore, processAlive, processIdentity, SERVICE_SUPERVISOR_ENV, supervisorFromEnv } from "./service/records.js";`
 - `export type { ServiceRecord, ServiceRecordInput, ServiceRecordStore, ServiceSupervisorKind } from "./service/records.js";`
 - `export { CONTROL_BODY_LIMIT_BYTES, CONTROL_PROTOCOL_VERSION, ControlClient, ControlError, controlTokenMatches, generateControlToken, startControlServer } from "./service/control.js";`
-- `export type { ControlClientOptions, ControlErrorCode, ControlEvent, ControlFailure, ControlHandler, ControlHandlerContext, ControlRequest, ControlResponse, ControlSuccess, RunningControlServer } from "./service/control.js";`
+- `export type { ControlClientOptions, ControlErrorCode, ControlEvent, ControlFailure, ControlHandler, ControlHandlerContext, ControlRequest, ControlResponse, ControlServerErrorContext, ControlSuccess, RunningControlServer } from "./service/control.js";`
 - `export { acquireLifecycleLock, nextServiceGeneration } from "./service/authority.js";`
 - `export type { LifecycleLock } from "./service/authority.js";`
 - `export { readLogTail, rotateLogFile, serviceLogPath, startDaemon, stopDaemonProcess, waitForProcessExit, waitForServiceReady } from "./service/daemon.js";`

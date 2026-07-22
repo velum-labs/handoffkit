@@ -20,6 +20,7 @@ import { RouteKitControlClient } from "@routekit/control";
 import { ControlClient, ControlError, createServiceRecordStore } from "@routekit/runtime";
 
 import { startRouteKitDaemon } from "../index.js";
+import { prepareAccountTransaction } from "../account-transaction.js";
 
 async function mockProvider(): Promise<{
   url: string;
@@ -319,6 +320,7 @@ test("daemon owns the cliproxy sidecar: spawn, restart, account routing, shutdow
     ].join("\n")
   );
   chmodSync(binary, 0o755);
+  let failActivation = false;
   const daemon = await startRouteKitDaemon({
     packageVersion: "1.2.3",
     stateHome,
@@ -326,6 +328,11 @@ test("daemon owns the cliproxy sidecar: spawn, restart, account routing, shutdow
     port: 0,
     portless: false,
     drainGraceMs: 2_000,
+    onAccountTransactionPhase: (phase) => {
+      if (failActivation && phase === "credentials-written") {
+        throw new Error("injected activation failure");
+      }
+    },
     env: {
       ...process.env,
       HOME: root,
@@ -466,6 +473,84 @@ test("daemon owns the cliproxy sidecar: spawn, restart, account routing, shutdow
     );
     assert.equal(orphanRemoved.removed, true);
     assert.equal(existsSync(join(authDirectory, "legacy-claude@example.com.json")), false);
+    const beforeActivation = await client.call("daemon.status", {});
+    failActivation = true;
+    await assert.rejects(
+      client.call(
+        "accounts.enrollActivate",
+        {
+          kind: "kimi",
+          accounts: [
+            {
+              label: "kimi-rollback",
+              credential: {
+                type: "kimi",
+                access_token: "rollback-access",
+                expiry: "2999-01-01T00:00:00Z"
+              }
+            }
+          ]
+        },
+        { idempotencyKey: "activate-kimi-failure" }
+      )
+    );
+    failActivation = false;
+    assert.equal(existsSync(join(authDirectory, "kimi-rollback.json")), false);
+    assert.equal(existsSync(join(stateHome, "account-transactions")), false);
+    assert.equal(
+      (await client.call("daemon.status", {})).configRevision,
+      beforeActivation.configRevision
+    );
+    assert.equal(
+      (await client.call("daemon.status", {})).accountRevision,
+      beforeActivation.accountRevision
+    );
+    const activationParams = {
+      kind: "grok",
+      accounts: [
+        {
+          label: "xai-transaction@example.com",
+          credential: {
+            type: "xai",
+            token: {
+              access_token: "transaction-access",
+              expires_at: Math.floor(Date.now() / 1_000) + 3_600
+            }
+          }
+        }
+      ]
+    };
+    const activated = await client.call(
+      "accounts.enrollActivate",
+      activationParams,
+      { idempotencyKey: "activate-grok" }
+    );
+    assert.equal(activated.activated, true);
+    assert.equal(activated.configRevision, beforeActivation.configRevision + 1);
+    assert.equal(activated.accountRevision, beforeActivation.accountRevision + 1);
+    assert.equal(
+      existsSync(join(authDirectory, "xai-transaction@example.com.json")),
+      true
+    );
+    assert.doesNotMatch(JSON.stringify(activated), /transaction-access/);
+    assert.equal(existsSync(join(stateHome, "account-transactions")), false);
+
+    // A fresh transport retry converges on the committed state without
+    // incrementing either revision again.
+    const replayed = await client.call(
+      "accounts.enrollActivate",
+      activationParams,
+      { idempotencyKey: "activate-grok-retry" }
+    );
+    assert.equal(replayed.configRevision, activated.configRevision);
+    assert.equal(replayed.accountRevision, activated.accountRevision);
+    const activatedStatus = await client.call("accounts.status", {});
+    assert.equal(
+      activatedStatus.accounts.find(
+        (entry) => entry.label === "xai-transaction@example.com"
+      )?.configured,
+      true
+    );
     const removed = await client.call(
       "accounts.remove",
       { kind: "gemini", label: "antigravity-user@example.com" },
@@ -536,6 +621,90 @@ test("second daemon cannot claim authority and generations remain monotonic", as
     assert.equal(second.record.generation, 2);
   } finally {
     await second.close();
+    await upstream.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("daemon recovers interrupted activation before loading config or starting routers", async () => {
+  const root = mkdtempSync(join(tmpdir(), "routekit-daemon-recovery-"));
+  const stateHome = join(root, "state");
+  const configPath = join(root, "router.yaml");
+  const accountPath = join(
+    stateHome,
+    "subscriptions",
+    "codex",
+    "interrupted.json"
+  );
+  const priorConfig =
+    "providers:\n  openai: {}\ndefaultModel: openai/mock-model\n";
+  writeFileSync(configPath, priorConfig);
+  prepareAccountTransaction({
+    home: stateHome,
+    configPath,
+    accountPaths: [accountPath],
+    kind: "codex",
+    provider: "codex",
+    labels: ["interrupted"]
+  });
+  mkdirSync(dirname(accountPath), { recursive: true });
+  writeFileSync(
+    accountPath,
+    JSON.stringify({
+      tokens: {
+        access_token: "interrupted-access",
+        refresh_token: "interrupted-refresh"
+      }
+    })
+  );
+  writeFileSync(
+    configPath,
+    "providers:\n  openai: {}\n  codex: {}\ndefaultModel: openai/mock-model\n"
+  );
+  writeFileSync(
+    join(stateHome, "daemon-revisions.json"),
+    JSON.stringify({ config: 1, accounts: 1, daemon: 0 })
+  );
+  const upstream = await mockProvider();
+  const daemon = await startRouteKitDaemon({
+    packageVersion: "1.2.3",
+    stateHome,
+    configPath,
+    port: 0,
+    portless: false,
+    env: {
+      ...process.env,
+      HOME: root,
+      ROUTEKIT_HOME: stateHome,
+      OPENAI_API_KEY: "test-key",
+      OPENAI_BASE_URL: upstream.url,
+      ROUTEKIT_PORTLESS: "0"
+    }
+  });
+  try {
+    assert.equal(existsSync(accountPath), false);
+    assert.equal(readFileSync(configPath, "utf8"), priorConfig);
+    const client = new RouteKitControlClient({
+      url: daemon.record.url,
+      token: daemon.record.controlToken!
+    });
+    const accounts = await client.call("accounts.status", {});
+    assert.deepEqual(accounts.accounts, []);
+    assert.deepEqual(accounts.recovery, {
+      state: "recovered",
+      recovered: 1,
+      cleaned: 0
+    });
+    const doctor = await client.call("doctor.run", {});
+    assert.equal(
+      doctor.checks.find(
+        (check) => check.name === "account activation recovery"
+      )?.detail,
+      "recovered 1 interrupted operation(s)"
+    );
+    assert.doesNotMatch(JSON.stringify({ accounts, doctor }), /interrupted-access/);
+  } finally {
+    await daemon.close();
     await upstream.close();
     rmSync(root, { recursive: true, force: true });
   }

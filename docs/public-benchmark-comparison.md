@@ -66,7 +66,7 @@ LiveCodeBench commands under `uv run --with 'datasets<4'`.
 
 ```bash
 routekit --config configs/benchmark-router.example.yaml \
-  serve --no-portless --port 8787
+  gateway serve --no-portless --port 8787
 ```
 
 In another shell:

@@ -452,7 +452,7 @@ export class SubscriptionAccountSet {
 
   async discoverModels(signal?: AbortSignal): Promise<readonly string[]> {
     this.#reasoning.clear();
-    await Promise.allSettled(
+    const discoveries = await Promise.allSettled(
       this.#members.map(async (member) => {
         member.models.clear();
         await this.#ensureFresh(member, signal);
@@ -464,13 +464,19 @@ export class SubscriptionAccountSet {
           typeof model === "string" ? { id: model } : model
         );
         member.models = new Set(normalized.map((model) => model.id));
-        for (const model of normalized) {
-          if (model.reasoning !== undefined && !this.#reasoning.has(model.id)) {
-            this.#reasoning.set(model.id, model.reasoning);
-          }
-        }
+        return normalized;
       })
     );
+    // Promise.allSettled preserves input order. Merge after all discoveries
+    // finish so conflicts resolve by configured account order, not timing.
+    for (const discovery of discoveries) {
+      if (discovery.status !== "fulfilled") continue;
+      for (const model of discovery.value) {
+        if (model.reasoning !== undefined && !this.#reasoning.has(model.id)) {
+          this.#reasoning.set(model.id, model.reasoning);
+        }
+      }
+    }
     this.#catalogReady = true;
     return this.listModelIds();
   }

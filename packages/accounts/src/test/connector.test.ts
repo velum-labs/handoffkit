@@ -1,5 +1,13 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  writeFileSync
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import test from "node:test";
@@ -7,6 +15,7 @@ import test from "node:test";
 import { CLIPROXY_PINNED_VERSION } from "../cliproxy.js";
 import {
   accountStoreEntries,
+  captureCliproxyLoginCredentials,
   cliproxyAccountEntries,
   cliproxyAccountMatchesKind,
   loginCliproxyAccount,
@@ -226,6 +235,58 @@ test("cliproxy login installs, runs the kind's flag, and reports added accounts"
       /without adding an account/
     );
     await assert.rejects(loginCliproxyAccount("codex", { env }), /not a cliproxy-backed/);
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test("cliproxy login capture keeps OAuth files out of daemon-owned state", async () => {
+  const home = mkdtempSync(join(tmpdir(), "routekit-connector-capture-"));
+  const env = { ROUTEKIT_HOME: home };
+  const binary = join(home, "cliproxy", "bin", CLIPROXY_PINNED_VERSION, "cli-proxy-api");
+  mkdirSync(dirname(binary), { recursive: true });
+  writeFileSync(binary, "");
+  let isolatedHome = "";
+  try {
+    const captured = await captureCliproxyLoginCredentials("grok", {
+      env,
+      temporaryParent: home,
+      runLogin: async (invocation) => {
+        const configPath = invocation.args[1]!;
+        isolatedHome = dirname(configPath);
+        const config = readFileSync(configPath, "utf8");
+        const authDirectory = /auth-dir: "([^"]+)"/.exec(config)?.[1];
+        assert.ok(authDirectory);
+        mkdirSync(authDirectory, { recursive: true });
+        writeFileSync(
+          join(authDirectory, "xai-captured@example.com.json"),
+          JSON.stringify({
+            type: "xai",
+            token: {
+              access_token: "captured-access",
+              expires_at: Math.floor(Date.now() / 1_000) + 3_600
+            }
+          })
+        );
+        return 0;
+      }
+    });
+    assert.deepEqual(
+      captured.accounts.map((entry) => [entry.subscriptionKind, entry.label]),
+      [["grok", "xai-captured@example.com"]]
+    );
+    assert.equal(
+      (captured.accounts[0]?.credential.token as { access_token?: string })
+        .access_token,
+      "captured-access"
+    );
+    assert.deepEqual(
+      existsSync(join(home, "cliproxy", "auth"))
+        ? readdirSync(join(home, "cliproxy", "auth"))
+        : [],
+      []
+    );
+    assert.equal(existsSync(isolatedHome), false);
   } finally {
     rmSync(home, { recursive: true, force: true });
   }

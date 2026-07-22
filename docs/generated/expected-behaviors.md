@@ -31,6 +31,7 @@ environment-gated rows name the reason and exact live command.
 | `models.real-opencode-selection` | The real OpenCode CLI can select a named injected fused model and only its configured members run. | required | `packages/cli/src/test/stack-cli-e2e.test.ts` — `id: "opencode"` |
 | `models.real-cursor-selection` | The real Cursor Agent can select fusion-panel through the Cursorkit bridge. | environment-gated | Requires a genuine Cursor login; the official binary is installed and version-checked in CI. Run: `FUSIONKIT_GATEWAY_LIVE_CURSOR=1 node --test packages/cli/dist/test/gateway-e2e.test.js` |
 | `reasoning.dynamic-capabilities` | Provider-discovered opaque reasoning efforts survive discovery, route validation, per-model tool selectors, and provider egress without model-name inference or fabricated tiers. | required | `packages/model-gateway/src/test/router.test.ts` — `catalog applies configured opaque efforts and rejects unavailable values before egress` |
+| `reasoning.deterministic-account-precedence` | Conflicting account-discovered reasoning capabilities resolve by configured account order regardless of response timing. | required | `packages/accounts/src/test/subscription-pool.test.ts` — `capability conflicts resolve by account order across reversed response timing` |
 
 ## request-fidelity
 

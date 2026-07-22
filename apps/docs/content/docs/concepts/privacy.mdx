@@ -41,8 +41,15 @@ in your active ensemble. Inspect both layers before a run:
 
 ```bash
 fusionkit config show
-routekit config show
+cat .routekit/router.yaml
+fusionkit doctor
 ```
+
+This inspects the default embedded-router path. If `router.url` connects to the
+standalone RouteKit singleton, inspect that external router with
+`routekit config show`, `routekit providers status`, and `routekit models list`.
+Daemon-backed RouteKit commands do not discover project configuration by
+working directory.
 
 The repository's `.fusionkit/fusion.json` contains namespaced model IDs only; its
 `.routekit/router.yaml` maps them to OpenRouter and therefore requires

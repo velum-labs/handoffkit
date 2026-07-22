@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import type { ChildProcess } from "node:child_process";
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdtempSync,
+  mkdirSync,
+  rmSync,
+  writeFileSync
+} from "node:fs";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
@@ -76,6 +82,19 @@ async function waitForJsonLine(
   );
 }
 
+async function waitForExit(processHandle: SpawnedCli, timeoutMs = 10_000): Promise<number> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (processHandle.child.exitCode !== null) return processHandle.child.exitCode;
+    await new Promise((resolveWait) => setTimeout(resolveWait, 20));
+  }
+  await processHandle.close();
+  throw new Error(
+    `timed out waiting for routekit to exit\n` +
+      `${processHandle.stdout()}\n${processHandle.stderr()}`
+  );
+}
+
 async function requestJson(
   url: string,
   path: string,
@@ -98,6 +117,7 @@ async function requestJson(
 
 test("real routekit daemon run process reports JSON readiness and serves every supported door", async () => {
   const root = mkdtempSync(join(tmpdir(), "routekit-daemon-run-process-"));
+  const home = join(root, "home");
   const project = join(root, "project");
   const stateHome = join(root, "state");
   mkdirSync(join(project, ".routekit"), { recursive: true });
@@ -161,6 +181,16 @@ test("real routekit daemon run process reports JSON readiness and serves every s
   );
   const authTokenFile = join(root, "data-token");
   writeFileSync(authTokenFile, "test-gateway-token\n", { mode: 0o600 });
+  const cliEnv = {
+    ...process.env,
+    HOME: home,
+    ROUTEKIT_HOME: stateHome,
+    OPENAI_API_KEY: "mock-secret",
+    OPENAI_BASE_URL: `http://127.0.0.1:${upstreamPort}/v1`,
+    PORTLESS: "0",
+    ROUTEKIT_PORTLESS: "0",
+    NO_COLOR: "1"
+  };
   const routekit = spawnCli(
     [
       "daemon",
@@ -178,15 +208,7 @@ test("real routekit daemon run process reports JSON readiness and serves every s
     ],
     {
       cwd: project,
-      env: {
-        ...process.env,
-        ROUTEKIT_HOME: stateHome,
-        OPENAI_API_KEY: "mock-secret",
-        OPENAI_BASE_URL: `http://127.0.0.1:${upstreamPort}/v1`,
-        PORTLESS: "0",
-        ROUTEKIT_PORTLESS: "0",
-        NO_COLOR: "1"
-      }
+      env: cliEnv
     }
   );
   try {
@@ -196,6 +218,20 @@ test("real routekit daemon run process reports JSON readiness and serves every s
     assert.equal(typeof readiness.pid, "number");
     assert.equal(typeof readiness.dataUrl, "string");
     const routekitUrl = readiness.dataUrl as string;
+
+    const importer = spawnCli(
+      ["config", "import", "--from", configPath, "--json"],
+      { cwd: project, env: cliEnv }
+    );
+    assert.equal(await waitForExit(importer), 1);
+    assert.match(
+      `${importer.stdout()}${importer.stderr()}`,
+      /running with foreground config/
+    );
+    assert.equal(
+      existsSync(join(home, ".config", "routekit", "router.yaml")),
+      false
+    );
 
     const models = await requestJson(routekitUrl, "/v1/models");
     assert.equal(models.status, 200);

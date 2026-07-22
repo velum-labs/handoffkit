@@ -113,10 +113,13 @@ export function processIdentity(pid: number): string | undefined {
 export function processAlive(pid: number, identity?: string): boolean {
   try {
     process.kill(pid, 0);
-    return identity === undefined || processIdentity(pid) === identity;
   } catch (error) {
-    return (error as NodeJS.ErrnoException).code === "EPERM";
+    // EPERM: the pid exists but belongs to another user. After a reboot the
+    // pid may have been reused by a system process, so the birth-identity
+    // check below must still run before declaring the service alive.
+    if ((error as NodeJS.ErrnoException).code !== "EPERM") return false;
   }
+  return identity === undefined || processIdentity(pid) === identity;
 }
 
 function optionalString(value: unknown): string | undefined {

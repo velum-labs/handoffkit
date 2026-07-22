@@ -17,19 +17,22 @@ See also: [inference endpoint](quickstart-inference.md) ·
 pnpm add -g @fusionkit/cli      # or: npm i -g @fusionkit/cli
 fusionkit setup                 # pre-provision the Python engine (warm the uv cache)
 fusionkit init
-$EDITOR .routekit/router.yaml
-export PROVIDER_API_KEY=...      # the apiKeyEnv named by your endpoints
-fusionkit doctor                 # verify uv, git, config, endpoints, and your agent CLI
+$EDITOR .routekit/router.yaml    # configure the embedded RouteKit router
+export OPENAI_API_KEY=...        # registry-defined variable for an enabled provider
+fusionkit doctor                 # verify uv, git, config, live models, and your agent CLI
 ```
 
 Install the agent CLI you want to use (`codex`, `claude`, `cursor-agent`, or
 `opencode`) before running `doctor`.
 
 FusionKit composes live namespaced model IDs in `.fusionkit/fusion.json`; it does not
-read provider credentials or skip unavailable panel members. Use
-`routekit doctor`, `routekit providers status`, and `routekit models list` for
-provider checks. This
-repository's committed router uses OpenRouter and needs `OPENROUTER_API_KEY`.
+read provider credentials or skip unavailable panel members. The generated
+`.routekit/router.yaml` is an explicit embedded-router input, not an implicit
+scope for the standalone RouteKit daemon. To inspect the same policy through
+the singleton CLI, first run
+`routekit config import --from .routekit/router.yaml`; import replaces the
+canonical document rather than merging it. This repository's committed router
+uses OpenRouter and needs `OPENROUTER_API_KEY`.
 
 ## 2. Run it
 
@@ -57,7 +60,7 @@ You don't edit any agent config. `fusionkit` sets up each harness for you:
 | Codex | an ephemeral `CODEX_HOME` with a `fusion-gateway` provider (`wire_api = responses`) |
 | Claude Code | `ANTHROPIC_BASE_URL` / `ANTHROPIC_AUTH_TOKEN` pointed at the gateway |
 | Cursor | the bundled cursorkit bridge driving `cursor-agent`; add `--ide` to wire the **Cursor IDE** through a local desktop proxy |
-| OpenCode | the generic RouteKit tool launcher and driver |
+| OpenCode | FusionKit's retained generic tool driver (outside RouteKit's first-launch support contract) |
 
 ```bash
 fusionkit cursor --ide          # turnkey Cursor IDE (no manual tunnel)

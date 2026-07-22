@@ -45,7 +45,6 @@ test("independent command surface is complete and has no compatibility aliases",
     "codex",
     "claude",
     "cursor",
-    "opencode",
     "status",
     "usage",
     "accounts",
@@ -81,7 +80,7 @@ test("independent command surface is complete and has no compatibility aliases",
     command(program, "codex").commands.map((entry) => entry.name()).sort(),
     ["install", "uninstall"]
   );
-  for (const launcher of ["claude", "cursor", "opencode"]) {
+  for (const launcher of ["claude", "cursor"]) {
     assert.deepEqual(command(program, launcher).commands, []);
   }
   // One connector-neutral account surface: no cliproxy (or other
@@ -114,6 +113,33 @@ test("top-level help presents one public RouteKit lifecycle", () => {
   assert.doesNotMatch(help, /^\s+gateway\b/m);
 });
 
+test("config help describes import-only singleton policy", () => {
+  const program = buildProgram();
+  const globalConfig = program.options.find((option) => option.long === "--config");
+  assert.ok(globalConfig);
+  assert.match(
+    globalConfig.description,
+    /doctor and migration recovery only/
+  );
+
+  const config = command(program, "config");
+  const init = config.commands.find((entry) => entry.name() === "init");
+  const edit = config.commands.find((entry) => entry.name() === "edit");
+  const importCommand = config.commands.find((entry) => entry.name() === "import");
+  assert.ok(init);
+  assert.ok(edit);
+  assert.ok(importCommand);
+  assert.equal(
+    init.options.find((option) => option.long === "--global")?.hidden,
+    true
+  );
+  assert.equal(
+    edit.options.find((option) => option.long === "--global")?.hidden,
+    true
+  );
+  assert.match(importCommand.description(), /replace the canonical singleton config/);
+});
+
 test("dynamic completion follows the command tree", () => {
   const program = buildProgram();
   const topLevel = completionCandidates(program, [""]);
@@ -131,18 +157,11 @@ test("dynamic completion follows the command tree", () => {
     completionCandidates(program, ["start", "--p"]).includes("--port")
   );
   assert.deepEqual(completionCandidates(program, ["accounts", "remove", ""]), [
-    "antigravity",
     "claude",
     "claude-code",
-    "codex",
-    "gemini",
-    "grok",
-    "kimi",
-    "xai"
+    "codex"
   ]);
-  assert.deepEqual(completionCandidates(program, ["accounts", "login", "a"]), [
-    "antigravity"
-  ]);
+  assert.deepEqual(completionCandidates(program, ["accounts", "login", "a"]), []);
   assert.deepEqual(completionCandidates(program, ["accounts", "add", ""]), [
     "claude",
     "claude-code",
@@ -181,7 +200,7 @@ test("account removal completion only suggests managed labels for its provider",
       completionCandidates(buildProgram(), ["accounts", "remove", "claude", "w"]),
       []
     );
-    // Aliases resolve to the canonical kind's labels.
+    // Retained internal connector state never leaks into public completion.
     assert.deepEqual(
       completionCandidates(buildProgram(), [
         "accounts",
@@ -189,20 +208,15 @@ test("account removal completion only suggests managed labels for its provider",
         "antigravity",
         "a"
       ]),
-      ["antigravity-user@example.com"]
+      []
     );
     assert.deepEqual(
       completionCandidates(buildProgram(), ["accounts", "remove", "gemini", "a"]),
-      ["antigravity-user@example.com"]
-    );
-    assert.ok(
-      completionCandidates(buildProgram(), ["accounts", "remove", "m"]).includes(
-        "mystery"
-      )
+      []
     );
     assert.deepEqual(
       completionCandidates(buildProgram(), ["accounts", "remove", "mystery", "m"]),
-      ["mystery-blob"]
+      []
     );
   } finally {
     if (previousHome === undefined) delete process.env.ROUTEKIT_HOME;

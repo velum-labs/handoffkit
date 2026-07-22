@@ -15,7 +15,9 @@ routekit doctor
 
 This provides `routekit` and requires neither the FusionKit package nor its
 Python executable. RouteKit uses explicitly configured providers and does not
-download or start local models.
+download or start local models. Its singleton daemon owns
+`~/.config/routekit/router.yaml`; `routekit config init` creates that canonical
+document.
 
 For model ensembles, install FusionKit:
 
@@ -62,18 +64,28 @@ not require Claude Code or Cursor to be installed.
 
 ### RouteKit providers and credentials
 
-Run `fusionkit init`, then edit `.routekit/router.yaml` to enable providers.
+For FusionKit's embedded router, run `fusionkit init`, then edit the generated
+`.routekit/router.yaml` to enable providers. This project file is an explicit
+Fusion/SDK input, not an implicit scope for the standalone RouteKit daemon.
+To use it with the singleton daemon, replace the canonical document explicitly:
+
+```bash
+routekit config import --from .routekit/router.yaml
+```
+
 API providers read the registry-defined environment variable:
 
 ```bash
 export OPENAI_API_KEY=...
 ```
 
-Subscription providers use named accounts enrolled with
-`routekit accounts add <kind> --name <label>`. FusionKit v4 stores only live
-namespaced RouteKit model IDs and never reads provider credentials. This
-repository's committed router uses `OPENROUTER_API_KEY`. `fusionkit doctor`
-reports missing model IDs; `routekit doctor` owns provider credential checks.
+The first-launch subscription providers are `claude-code` and `codex`. Enroll
+one with `routekit accounts login claude-code --name <label>` or `routekit
+accounts login codex --name <label>`, or use `accounts add` to import that
+official CLI's current login. FusionKit v4 stores only live namespaced RouteKit
+model IDs and never reads provider credentials. This repository's committed
+router uses `OPENROUTER_API_KEY`. `fusionkit doctor` reports missing model IDs;
+`routekit doctor` owns provider credential checks.
 
 ### A git repository (required)
 

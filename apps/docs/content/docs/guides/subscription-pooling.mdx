@@ -7,41 +7,28 @@ Subscription accounts and single-model routing are RouteKit responsibilities.
 FusionKit v4 references live namespaced model IDs but does not expose account
 commands.
 
-Install the independent CLI and enroll accounts — every subscription kind uses
-the same command:
+Install the independent CLI and enroll a supported subscription:
 
 ```bash
 npm install -g @routekit/cli
 routekit config init
 routekit accounts login claude-code --name personal
 routekit accounts login codex --name work
-routekit accounts login gemini
 routekit accounts status
 routekit models list
 routekit start
 ```
 
-The subscription kinds are `claude-code`, `codex`, `gemini`, `grok`, and
-`kimi`. `accounts login <kind>` runs the right OAuth flow for the kind,
-enrolls the credential, enables the matching provider, and verifies live model
-discovery. Pass `--no-browser` on a headless host to prefer a device-code or
-copyable-URL flow you can finish from a browser on another device.
+The first-launch subscription kinds are `claude-code` and `codex`.
+`accounts login <kind>` runs the official CLI OAuth flow, enrolls the
+credential, enables the matching provider, and verifies live model discovery.
+Pass `--no-browser` on a headless host to prefer a device-code or copyable-URL
+flow you can finish from a browser on another device.
 
 For `claude-code` and `codex`, RouteKit runs the official provider login in
 private temporary state, imports the credential, and never replaces the user's
 normal CLI login; use `accounts add` only to import the current official CLI
 login. The Claude Code tool command remains `routekit claude [provider/model]`.
-
-For `gemini`, `grok`, and `kimi`, RouteKit uses a bundled connector (a pinned,
-verified [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) sidecar
-that the RouteKit daemon installs, starts, restarts, and stops on its own).
-Its models appear under the `cliproxy/` namespace. These kinds reuse
-subscription OAuth tokens through reverse-engineered endpoints, which the
-providers' terms restrict: they are for **personal, local use only** — the
-sidecar binds loopback, and login warns before starting. If you already run
-CLIProxyAPI yourself, export `ROUTEKIT_CLIPROXY_API_KEY` (one of the proxy's
-`api-keys`) and, for a non-default host/port, `ROUTEKIT_CLIPROXY_BASE_URL`;
-RouteKit then treats it as a plain provider and never spawns its own sidecar.
 
 Pool policy lives on the provider:
 
@@ -57,6 +44,13 @@ model only to members that advertise it. Quota windows, refresh, cooldowns, and
 reset times remain independent per account. Use the advertised namespaced ID
 in `.fusionkit/fusion.json`:
 
+Capability conflicts are deterministic. Explicit `reasoningCapabilities`
+configuration wins first. Otherwise, native pools use the first successfully
+discovered account in configured order that reports reasoning metadata for the
+model. Directory-backed accounts are ordered by account filename; explicit
+paths retain caller order. Failed accounts and accounts without that metadata
+are skipped.
+
 ```json
 {
   "version": "fusionkit.fusion.v4",
@@ -65,7 +59,7 @@ in `.fusionkit/fusion.json`:
     "default": {
       "members": [
         "claude-code/claude-sonnet-4-5",
-        "cliproxy/gemini-3.1-pro-preview"
+        "openrouter/qwen/qwen3-coder"
       ],
       "judge": "claude-code/claude-sonnet-4-5"
     }
