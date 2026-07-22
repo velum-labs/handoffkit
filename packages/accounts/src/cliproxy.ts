@@ -9,7 +9,7 @@ import {
   writeFileSync
 } from "node:fs";
 import { arch as osArch, homedir, platform as osPlatform } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { promisify } from "node:util";
 
 import { trimTrailingSlashes, writeFileAtomic } from "@routekit/runtime";
@@ -146,6 +146,32 @@ export function ensureCliproxyConfig(
   writeFileAtomic(cliproxyConfigPath(env), config, { mode: 0o600 });
   chmodSync(cliproxyConfigPath(env), 0o600);
   return cliproxyConfigPath(env);
+}
+
+/**
+ * Write a short-lived CLIProxyAPI login config whose auth store is isolated
+ * from the daemon-owned store. The login command exits without serving this
+ * port; the random ingress key is only required by CLIProxyAPI's config parser.
+ */
+export function writeCliproxyLoginConfig(path: string, authDirectory: string): string {
+  mkdirSync(authDirectory, { recursive: true, mode: 0o700 });
+  chmodSync(authDirectory, 0o700);
+  mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
+  const config = [
+    'host: "127.0.0.1"',
+    "port: 8317",
+    `auth-dir: "${authDirectory}"`,
+    "api-keys:",
+    `  - "rk-login-${randomBytes(16).toString("hex")}"`,
+    "usage-statistics-enabled: false",
+    "remote-management:",
+    '  secret-key: ""',
+    "  disable-control-panel: true",
+    ""
+  ].join("\n");
+  writeFileAtomic(path, config, { mode: 0o600 });
+  chmodSync(path, 0o600);
+  return path;
 }
 
 export type CliproxyInstallResult = {

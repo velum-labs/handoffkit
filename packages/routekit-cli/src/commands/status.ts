@@ -112,7 +112,8 @@ export function registerStatus(program: Command): void {
             url: daemon.dataUrl,
             pid: daemon.pid,
             accounts: accounts.accounts,
-            revision: accounts.revision
+            revision: accounts.revision,
+            recovery: accounts.recovery
           },
           models: {
             count: models.models.length,
@@ -161,6 +162,11 @@ function renderDaemonOverviewLines(
         configured?: boolean;
         relayOpen?: boolean;
       }>;
+      recovery?: {
+        state: "clean" | "recovered";
+        recovered: number;
+        cleaned: number;
+      };
     };
     models: { count: number; defaultModel?: string };
     catalog: { models: Array<{ id: string }>; defaultModel?: string };
@@ -193,6 +199,11 @@ function renderDaemonOverviewLines(
     );
   }
   lines.push("", "Accounts");
+  if ((overview.accounts.recovery?.recovered ?? 0) > 0) {
+    lines.push(
+      `  ${stateMark(true)} restored ${overview.accounts.recovery!.recovered} interrupted activation(s)`
+    );
+  }
   if (overview.accounts.accounts.length === 0) lines.push("  no enrolled accounts");
   for (const account of overview.accounts.accounts) {
     lines.push(
