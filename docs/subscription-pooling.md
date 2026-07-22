@@ -1,88 +1,79 @@
-# Subscription pooling architecture
+# Subscription pooling
 
-The subscription proxy is a cohesive SDK published under the
-`@fusionkit/model-gateway/subscriptions` subpath, not a pile of exports on the
-gateway's core entrypoint. The core `startGateway` still owns the HTTP door,
-ingress authentication, request validation, streaming backpressure, and abort
-propagation; the subscriptions module supplies the relays, account sets,
-provider adapters, programmatic proxy, and typed client that plug into it.
+RouteKit owns subscription credentials, multi-account pools, CLIProxyAPI,
+provider relays, and their command surfaces. FusionKit v4 consumes the same
+namespaced `provider/model` IDs that RouteKit advertises for API-key providers.
 
-## SDK surface (`@fusionkit/model-gateway/subscriptions`)
+```sh
+npm install -g @routekit/cli
+routekit config init
+routekit accounts login claude-code --name personal
+routekit accounts login claude-code --name work
+routekit providers status claude-code
+routekit models list
+routekit gateway serve
+```
 
-- `startSubscriptionProxy(options)`: the one-call programmatic entrypoint —
-  opens the configured account sets into relays, fronts them with a relay-only
-  gateway, and returns `{ url, port, token, providers, usage(), close() }`. The
-  CLI `fusionkit proxy serve` is a thin wrapper over it.
-- `SubscriptionProxyClient`: a typed client for a running proxy; `usage()`
-  parses through the shared wire schema so consumers never re-declare the shape.
-- `subscriptionUsageResponseSchema` / `SubscriptionUsageResponse`: the zod wire
-  contract for `GET /usage`, shared by the gateway server (producer) and the
-  client (consumer).
-- `SubscriptionAccountSet` + `openSubscriptionRelays`, provider adapters,
-  credential/enrollment helpers, and relays.
+The canonical subscription kinds are `claude-code` and `codex`.
+`accounts login` runs the matching official CLI login in a private temporary profile,
+imports only that credential into RouteKit's native pool, and removes the
+temporary profile. It never replaces the user's normal Claude Code or Codex
+login. Use `accounts add <kind> --name <label>` only to import the current
+official CLI login instead.
 
-## Ownership
+The Claude Code tool launcher remains `routekit claude [provider/model]`; there
+is no `routekit claude-code` command. The first successful login or import
+automatically enables the subscription provider in the effective router
+config. Pool selection policy lives on that provider:
 
-- `spec/registry/subscriptions.json`: static provider metadata (credential
-  paths, OAuth refresh and usage endpoints, Admin accounting endpoints, and
-  rate-limit header names).
-- `subscriptions/provider.ts`: the only provider-specific layer. It frames
-  credentials, refreshes tokens, parses first-party usage signals, and
-  classifies quota failures.
-- `subscriptions/account-source.ts`: resolves the official CLI login, an
-  enrolled directory, or explicit paths into one account sequence. An empty
-  managed directory imports the canonical login as a one-member set.
-- `subscriptions/account-set.ts`: the provider-independent `SubscriptionAccountSet`
-  selection, cooldown, refresh coalescing, storm ramp, and normalized
-  `AccountLimits` persistence.
-- `subscriptions/gateway.ts`: the single relay-opening path shared by the
-  standalone proxy and fusion gateway.
-- `subscriptions/relay.ts` / `subscriptions/codex-relay.ts`: native HTTP
-  forwarding. They strip the proxy credential and inject the selected upstream
-  credential.
-- `subscriptions/proxy.ts` / `subscriptions/client.ts` / `subscriptions/wire.ts`:
-  the programmatic proxy, typed client, and shared usage wire contract.
-- `packages/cli/src/fusion/subscription-proxy.ts`: the CLI daemon lifecycle —
-  records the running proxy, registers a `subscriptions.fusion.localhost`
-  portless route (so `fusionkit stop` reaps it), and discovers/stops it. The
-  `fusionkit proxy` commands are thin wrappers over the SDK plus this helper.
+```yaml
+providers:
+  claude-code:
+    strategy: capacity_weighted
+    switchThreshold: 0.9
+```
 
-The Node `SubscriptionCredential` contract mirrors Python
-`fusionkit_core.credentials.SubscriptionToken`; shared constants are generated
-for both languages from the registry.
+At startup RouteKit performs discovery against every healthy member and
+publishes the union as `claude-code/<model>` or `codex/<model>`. Per-model
+eligibility prevents a request from reaching an account that did not advertise
+that model. Each member keeps independent credential refresh, quota windows,
+rate-limit cooldowns, and reset times. `accounts status` reports all members
+without exposing credentials.
 
-## Exhaustion
+Claude Code and Codex present their own subscription models under bare native
+names in their `/model` pickers. This is only a client-facing alias:
+`claude-sonnet-4-6` still resolves to
+`claude-code/claude-sonnet-4-6`, and `gpt-5.5` in Codex still resolves to
+`codex/gpt-5.5`. RouteKit then selects an eligible managed account and forwards
+the unchanged provider-native request. The native relay is part of the
+RouteKit-owned pooling path, not a bypass around it. Other clients and
+configuration continue to use namespaced IDs.
 
-When every pooled account for a request's model is spent or cooling, the account
-set raises `SubscriptionAccountSetExhaustedError`, and the gateway maps it to an
-HTTP `429` with a `Retry-After` derived from the soonest reset instead of a
-generic `502`.
+Reference the advertised namespaced ID from `.fusionkit/fusion.json`. Do not
+put account enrollment, provider policy, URLs, or keys in Fusion config.
 
-## Usage signals
+The singleton daemon owns subscription backends and exposes them through its
+authenticated model gateway. There is no separate accounts-proxy lifecycle.
 
-Routing uses real-time subscription signals rather than Admin billing reports:
+`routekit usage` and `routekit usage --watch <seconds>` inspect the normal
+daemon's live pools.
 
-- Anthropic response headers under `anthropic-ratelimit-unified-*` and
-  `GET /api/oauth/usage`.
-- Codex response headers under `x-codex-*`, streamed `rate_limits` events, and
-  `GET /backend-api/wham/usage`.
+CLIProxyAPI remains an optional external provider with a separate lifecycle:
 
-The public Admin usage/cost APIs are retained as registry metadata for optional
-accounting integrations. They require Admin keys, lag behind live traffic, and
-do not describe personal subscription windows.
+```sh
+routekit accounts cliproxy install
+routekit accounts cliproxy login gemini
+routekit accounts cliproxy serve
+routekit providers add cliproxy
+routekit providers status cliproxy
+routekit models list
+```
 
-## Credential lifecycle
+Login alone does not enable the `cliproxy` provider. Keep CLIProxyAPI serving,
+enable the provider once, and select models from its live
+`cliproxy/<model>` catalog.
 
-On first use, the current official CLI login is copied to a private,
-FusionKit-owned account file. `fusionkit proxy add` grows the same account set;
-it accepts only `claude-code` or `codex` as the provider argument. The managed
-account state lives under `~/.fusionkit/subscriptions` (override with
-`FUSIONKIT_SUBSCRIPTIONS_DIR`), and clients authenticate to the proxy with the
-bearer token `proxy serve` prints (the Codex snippet references it via the
-`FUSIONKIT_PROXY_TOKEN` env var). The proxy may rotate one-time refresh tokens
-only in managed copies; it never writes the canonical official CLI store.
-Refreshes are single-flight per member and reset stale observed-window state.
-
-The default sticky policy preserves account-scoped prompt caches. Quota
-rejection cools the member until its first-party reset timestamp and selects a
-new member. Short transient throttles are absorbed on the same account.
+FusionKit links the reusable `@routekit/router` SDK for embedded composition;
+it does not depend on `@routekit/cli` or execute `routekit`. `fusionkit stop`
+only reaps Fusion-owned processes and portless routes. External RouteKit
+daemons remain running.

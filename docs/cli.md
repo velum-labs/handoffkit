@@ -1,259 +1,134 @@
 # CLI reference
 
-The `fusionkit` CLI (`@fusionkit/cli`) is the single front door to the ensemble
-product: it runs an ensemble of local + cloud models, both as a raw inference
-endpoint and behind a coding harness (Codex, Claude Code, Cursor). It is
-implemented in [`packages/cli`](../packages/cli); the command tree is wired in
-[`packages/cli/src/cli.ts`](../packages/cli/src/cli.ts) (`buildProgram`).
+## Product boundary
 
-Build the workspace before using the local binary:
+`@fusionkit/cli` installs only `fusionkit`. It composes the neutral
+`@routekit/config`, `@routekit/router`, gateway, and tool-launcher SDK packages;
+it does not depend on `@routekit/cli` or invoke the `routekit` executable.
 
-```sh
-pnpm build
-fusionkit --help            # or: node packages/cli/dist/index.js --help
-```
-
-The Python synthesizer (`fusionkit serve`) is fetched from PyPI via `uvx`; only
-`uv` and the coding-agent CLI you launch need to be installed locally. The pinned
-engine is **auto-provisioned** on first use; pre-warm it with `fusionkit setup`
-(or `fusionkit doctor --provision`) so the first real run is instant.
-
-Task-focused walkthroughs: [inference endpoint](quickstart-inference.md),
-[coding harness](quickstart-harness.md),
-[rate-limit handoff](quickstart-handoff.md), and the
-[model catalog](model-catalog.md).
-
-## Quick tour
+Install `@routekit/cli` separately when you want RouteKit's provider, account,
+live-catalog, proxy, or single-model command surfaces:
 
 ```sh
-fusionkit setup                      # pre-provision (warm) the fusion engine into the uvx cache
-fusionkit codex                      # run the ensemble behind Codex (or: claude | cursor | serve)
-fusionkit init                       # scaffold a committed .fusionkit/ for this repo (interactive wizard)
-fusionkit doctor                     # check prerequisites (uv, agents, keys, git, platform capability)
-fusionkit serve                      # run the raw OpenAI/Anthropic-compatible ensemble endpoint
-fusionkit config show                # the effective config + where each value came from
-fusionkit config set budgetUsd 5     # edit any setting from the CLI (validated before writing)
-fusionkit ensemble list              # the named ensembles (each its own fusion-<name> model)
-fusionkit sessions                   # list durable sessions you can --resume
+npm install -g @routekit/cli
+routekit config init
+routekit providers status
+routekit models list
+routekit gateway serve
+routekit codex openai/gpt-5.5
 ```
 
-## Output contract
+FusionKit has no forwarding aliases for those commands.
 
-Every command renders its human UI on **stderr** (rich Ink rendering on an
-interactive TTY; ordered plain lines in CI/pipes); **stdout** is reserved for
-machine payloads. The global flags compose with every command:
+RouteKit is a thin client of one singleton daemon per `ROUTEKIT_HOME`. The
+daemon owns a private authenticated `control.v1` listener, the stable model
+gateway, provider/catalog state, subscription pools, usage, and canonical
+global config. Every product command negotiates with it; help/version/shell
+completion, terminal interaction, OAuth/editor subprocesses, and coding-tool
+spawning stay local. Concurrent first calls race-safely start exactly one
+daemon, using a persistent systemd user unit / launchd agent when available
+and a clearly reported detached fallback otherwise.
+
+`routekit daemon start|status|reload|restart|upgrade|stop|logs` and `daemon
+service install|uninstall|status` are the lifecycle surface. Config/account
+reloads atomically switch router generations while
+old in-flight streams drain; binary upgrade drains and restarts the combined
+daemon, then the initiating client reconnects and retries.
+See the [`@routekit/cli` README](../packages/routekit-cli/README.md) for the
+full service runbook.
+
+## Fusion launchers
+
+```sh
+fusionkit codex [args...]
+fusionkit claude [args...]
+fusionkit cursor [args...]
+fusionkit opencode [args...]
+fusionkit serve
+```
+
+Every tool launcher receives the same neutral `ToolLaunchSpec`. Each configured
+ensemble becomes a generic agent profile and a selectable `fusion-<name>` model;
+the default ensemble keeps the `fusion-panel` ID.
+
+Common Fusion flags:
 
 | Flag | Meaning |
 | --- | --- |
-| `--json` | Emit a machine-readable JSON result on stdout (implies non-interactive). Errors become `{ "error": { "code", "message" } }`. |
-| `--no-input` | Never prompt; prompts resolve to their defaults (the CI posture). |
-| `--yes` | Accept confirmations (cost consent, destructive prompts) without asking. |
-| `--quiet` | Suppress informational output; warnings and errors still print. |
+| `--ensemble <name>` | Session-default configured ensemble. |
+| `--repo <dir>` | Coding workspace. |
+| `--observe` / `--no-observe` | Start or skip the Fusion observability dashboard. |
+| `--reasoning` / `--no-reasoning` | Show or suppress fusion progress reasoning. |
+| `--subagents` / `--no-subagents` | Create or suppress one generic agent profile per ensemble. |
+| `--port <n>` | Fusion gateway port. |
+| `--portless` / `--no-portless` | Enable or disable Fusion-owned portless routes. |
+| `--auth-token <token>` | Protect the Fusion gateway. |
+| `--on-rate-limit fusion\|passthrough\|fail` | Rate-limit policy. |
+| `--budget <usd>` | Session spend cap. |
+| `--panel-trust full\|guarded` | Panel worktree policy. |
+| `--k <n>` | Step boundaries per panel member. |
+| `--resume <id>` / `--continue` | Resume a durable Fusion session. |
+| `--ide` | Cursor desktop integration. |
+| `--fusionkit-dir <dir>` | Local Python FusionKit checkout for development. |
 
-Global flags precede the subcommand name (like every fusionkit flag);
-informational commands also accept `--json` after the subcommand, e.g.
-`fusionkit doctor --json`. `NO_COLOR`, `FORCE_COLOR`, and `FUSIONKIT_NO_TUI=1`
-are honored, and piped answers still drive prompts
-(`printf "2\n" | fusionkit init`).
+There is no `--direct`, provider/model/key flag, or single-model mode. Use
+RouteKit for single-model launches and edit `.routekit/router.yaml` for routing.
 
-## Command groups
+## Fusion commands
 
-| Command | Purpose | Source |
-| --- | --- | --- |
-| `codex` \| `claude` \| `cursor` \| `serve` | Run the model ensemble behind a coding harness (or `serve` to print raw-endpoint setup). The headline product path. | `packages/cli/src/commands/fusion.ts` |
-| `fusion [tool]` | The generic launcher behind the per-tool shortcuts; omit the tool on a TTY to pick interactively. `fusion stop` reaps portless singleton services. | `packages/cli/src/commands/fusion.ts` |
-| `init` | Scaffold a committed `.fusionkit/` folder (panel, judge, tool, prompts, extras, named ensembles) for a repo; `--repo` targets another repo, `--fusionkit-dir` a local checkout for default prompts, `--force` overwrites an existing config. | `packages/cli/src/commands/fusion.ts` |
-| `setup` | Pre-provision (warm) the pinned `fusionkit` engine into the `uvx` cache; `--force` re-warms, `--fusionkit-dir` targets a local checkout. | `packages/cli/src/commands/setup.ts` |
-| `doctor`, `status` | Preflight the environment (prerequisites, per-platform capability, engine-cached state) and preview the effective fusion config + run plan. `doctor --provision` also warms the engine. | `packages/cli/src/commands/doctor.ts` |
-| `config` | Inspect **and edit** the one config source of truth: `config show` / `path` / `get` / `set` / `unset` / `edit` / `export-yaml`. | `packages/cli/src/commands/config.ts` |
-| `prompts` | Manage the judge/synthesizer prompt overrides: `prompts list` / `prompts edit <id>` (opens `$EDITOR`, seeded from the engine default) / `prompts reset <id>`, with `--ensemble` for per-ensemble overrides. | `packages/cli/src/commands/prompts.ts` |
-| `sessions` | List, inspect, and remove durable gateway sessions: `sessions [list]` / `sessions show <id>` / `sessions rm <id>`. | `packages/cli/src/commands/sessions.ts` |
-| `models` | Manage the local MLX model cache: `models list` / `models download` / `models rm` (`models` alone also lists; `download --force` downloads even when the model looks too large for this host). | `packages/cli/src/commands/models.ts` |
-| `ensemble` | Manage named ensembles (`list` / `add` / `edit` / `remove` / `rename` / `use`) plus advanced maintainer harness tooling: `ensemble run` / `handoff` / `dashboard` / `e2e` / `gateway`. | `packages/cli/src/commands/ensemble.ts`, `ensemble-config.ts` |
-| `install <tool>` / `uninstall <tool>` | Register FusionKit inside a tool's own config (currently `codex`: an extra model provider plus one launch profile per ensemble in `~/.codex/config.toml`). Flags: `--gateway-url`, `--port`, `--repo`, `--codex-home`. | `packages/cli/src/commands/install.ts` |
-| `proxy` | Long-lived Claude Code / Codex subscription pooling proxy: `proxy serve` / `proxy add <provider>` / `proxy status` / `proxy stop`. | `packages/cli/src/commands/proxy.ts` |
-| `stop` | Stop background fusion services (router, dashboard, ...) — the same reap as `fusion stop`. | `packages/cli/src/commands/stop.ts` |
-| `telemetry` | Inspect and control anonymous, opt-in product telemetry: `telemetry status` / `on` / `off` / `inspect` (prints exactly what a session event would contain). Off by default; `DO_NOT_TRACK` beats everything. | `packages/cli/src/commands/telemetry.ts` |
-| `completion <shell>` | Print a static shell completion script for bash, zsh, or fish (advanced). | `packages/cli/src/commands/completion.ts` |
-| `runtime` | Advanced maintainer inspection of runtime-kernel workflows and composition primitives. | `packages/cli/src/commands/runtime.ts` |
-| `version` | Print the npm CLI and pinned Python synthesizer version matrix. | `packages/cli/src/commands/version.ts` |
+| Command | Purpose |
+| --- | --- |
+| `init` | Scaffold Fusion v4 config and, when absent, safe RouteKit router config. |
+| `setup` | Warm the pinned Python synthesis engine. |
+| `doctor` | Check git, Fusion/RouteKit config, live model IDs, uv, and tool binaries. |
+| `config show\|path\|get\|set\|unset\|edit` | Inspect or atomically edit Fusion v4 settings. |
+| `ensemble list\|add\|edit\|remove\|rename` | Manage ensembles of namespaced RouteKit model IDs. |
+| `prompts list\|edit\|reset` | Manage judge/synthesizer prompt files. |
+| `sessions list\|show\|rm` | Manage durable Fusion sessions in `@fusionkit/gateway`. |
+| `models list\|download\|rm` | Manage the Fusion-owned local MLX cache. |
+| `stop` | Stop only Fusion-owned processes and portless routes. |
+| `telemetry status\|on\|off\|inspect` | Control opt-in Fusion telemetry. |
+| `completion`, `version` | Shell completion and version information. |
 
-## The ensemble launchers (`codex` / `claude` / `cursor` / `serve`)
+`fusionkit stop` never stops an external RouteKit daemon. An embedded RouteKit
+router is owned by the launching Fusion process and closes with that process.
 
-`fusionkit codex` (and its siblings) spawn the whole stack: the model panel, a
-single `fusionkit serve` router that fronts each panel model and performs
-synthesis, the harness gateway, and the chosen agent pre-wired to it in one
-command. fusionkit's own flags must precede the tool name; everything after the
-tool is forwarded to it.
-
-```sh
-fusionkit codex --local                                 # local MLX trio (Apple Silicon)
-fusionkit codex --direct                                # one local model, no fusion
-fusionkit claude --repo /path/to/repo                   # fuse over another repo
-fusionkit codex --model gpt=openai:gpt-5.5 --model opus=anthropic:claude-opus-4-8
-fusionkit cursor --ide                                  # wire the Cursor IDE (no tunnel)
-```
-
-Panel specs accept every provider in `PANEL_PROVIDERS` (`mlx`, `openai`,
-`anthropic`, `google`, `openrouter`, `openai-compatible`); `openrouter` members
-read `OPENROUTER_API_KEY` by default. The prefix may also be a subscription auth
-mode instead of a provider: `id=claude-code:MODEL` reuses the local Claude Code
-login and `id=codex:MODEL` the Codex login (no `keyEnv`; see
-[subscription pooling](subscription-pooling.md)).
-
-Shared flags (full list in `applyFusionOptions`):
-
-| Flag | Meaning | Workstream |
-| --- | --- | --- |
-| `--model ID=MODEL` / `ID=PROVIDER:MODEL` | Panel member (repeatable; overrides the selected ensemble's panel). `--models` is an alias. | core |
-| `--model-endpoint ID=URL` | Use a pre-running OpenAI-compatible endpoint as a panel member. | core |
-| `--key-env ID=ENV` | Env var holding a model's API key. | core |
-| `--ensemble NAME` | The session-default ensemble from `.fusionkit/fusion.json` (all defined ensembles still register as their own `fusion-<name>` models). | core |
-| `--judge-model MODEL` | Model used for judge synthesis (applies to the selected ensemble). | core |
-| `--direct` | Back the tool with one local model directly, bypassing the panel, judge, and synthesis. | core |
-| `--local` / `--no-local` | Run the panel on local MLX models (Apple Silicon only) instead of cloud providers. | core |
-| `--observe` / `--no-observe` | Boot the local scope dashboard and stream trace spans to it. | core |
-| `--reasoning` / `--no-reasoning` | Narrate panel/judge progress in the tool's thinking UI (default on); `--no-reasoning` keeps the stream silent until the judge's first token. | core |
-| `--reasoning-model [MODEL]` | Write the narration prose with a model: a panel member, `provider/model` (e.g. `openai/gpt-5.5-mini`), or a local MLX repo (Apple Silicon). Omitting the value picks the built-in default narrator. | core |
-| `--panel-trust full\|guarded` | Panel model sandbox: `full` (default) lets panel models run any command and edit any file; `guarded` confines each model to its own draft worktree. | core |
-| `--repo DIR` | The coding workspace the panel fuses over. | core |
-| `--synthesis-url URL` / `--fusionkit-dir DIR` | Reuse a running `fusionkit serve`, or run a local FusionKit checkout (dev override). | core |
-| `--port N` / `--portless` / `--no-portless` | Gateway port / portless stable URLs. | core |
-| `--auth-token TOKEN` | Require a bearer token on the gateway. | core |
-| `--yes` | Skip the interactive cloud-panel cost confirmation. | core |
-| `--subagents` / `--no-subagents` | Auto-provision one native sub-agent per ensemble in the launched tool (default on): Codex roles, Claude `--agents`, `.cursor/agents/` scaffolds, opencode agents. | core |
-| `--ide` | Cursor only: wire the Cursor IDE to the gateway via a local desktop proxy (no public tunnel). | WS6 |
-| `--expose` | `serve` only: publish the gateway on a public HTTPS Quick Tunnel with a required (auto-generated) bearer token — for clients that cannot reach loopback, e.g. Cursor BYOK. | core |
-| `--k N` | Step boundaries per panel member before aggregation (selected ensemble): 1 = single-completion proposers over the caller's exact messages+tools (tool calls become judged proposals), N > 1 = bounded managed lookahead (agent harness only), unset = full rollouts. | core |
-| `--on-rate-limit fusion\|passthrough\|fail` | Vendor rate-limit / credit handoff policy (default `fusion`). | WS5 |
-| `--budget USD` | Stop the session once it has spent this much (gateway-observed USD). | WS7 |
-| `--resume ID` | Resume a stored session by id or unique prefix. | WS4 |
-| `--continue` | Resume the most recently active stored session. | WS4 |
-
-See [Fusion Harness Gateway](fusion-harness-gateway.md) for the per-harness wire
-details and the streaming model, and [Configuration](configuration.md) for how
-flags, `.fusionkit/fusion.json`, and built-in defaults compose.
-
-## Durable sessions (`--resume` / `--continue`)
-
-Gateway sessions are persisted under `~/.fusionkit/sessions/` (override with
-`FUSIONKIT_SESSIONS_DIR`), keyed by session id, holding the conversation,
-candidate cache, and per-turn cost. Resume one later:
-
-```sh
-fusionkit sessions                 # id, tool, panel, turn count, last activity, cost
-fusionkit sessions show <id>       # header + the most recent turns
-fusionkit codex --continue         # resume the most recently active session
-fusionkit codex --resume 1a2b3c    # resume a specific session (unique prefix ok)
-fusionkit sessions rm <id>         # delete a stored session
-```
-
-## Cost metering and budgets (`--budget`)
-
-Every turn is metered (tokens + USD, from endpoint `pricing` metadata) and a
-running session total is kept; `fusionkit sessions` shows it. `--budget <usd>`
-caps a session: once the gateway-observed spend crosses the cap, the session
-stops. See [Configuration](configuration.md) for setting `budgetUsd` and
-`onRateLimit` as repo defaults.
+Removed Fusion commands include `proxy`, account/CLIProxy management, Codex
+install/uninstall, and direct/single-model mode. Their equivalents live in
+RouteKit (for example `routekit codex install|uninstall`).
 
 ## Configuration
 
-`fusionkit` has one config source of truth: a committed `.fusionkit/` folder at
-your repo root. Flags win over `.fusionkit/fusion.json`, which wins over built-in
-defaults. The whole surface is editable from the CLI — no hand-editing needed:
-
 ```sh
-fusionkit config show                          # effective config + provenance (flag / .fusionkit / default)
-fusionkit config set budgetUsd 5               # set any value (dot paths; validated before writing)
-fusionkit config set ensembles.default.judgeModel gpt-5.5
-fusionkit config unset budgetUsd               # back to the built-in default
-fusionkit config edit                          # interactive editor over every setting
-fusionkit config path                          # the .fusionkit/fusion.json location
-fusionkit config export-yaml                   # the derived `fusionkit serve` router YAML (raw endpoint)
+fusionkit init
+fusionkit config show
+fusionkit ensemble add deep \
+  --member openai/gpt-5.5 \
+  --member anthropic/claude-sonnet-4-5 \
+  --judge anthropic/claude-sonnet-4-5
+fusionkit config set defaultEnsemble deep
 ```
 
-Named ensembles are managed the same way:
-
-```sh
-fusionkit ensemble list                        # every ensemble + its fusion-<name> model id
-fusionkit ensemble add fast                    # interactive panel builder (or --model/--judge flags)
-fusionkit ensemble edit fast --add-model flash=google:gemini-2.5-flash
-fusionkit ensemble edit fast --remove-model flash      # drop a member by id (repeatable)
-fusionkit ensemble use fast                    # make it the session default
-fusionkit ensemble rename fast quick           # prompt overrides move with it
-fusionkit ensemble remove quick --yes          # --yes skips the confirmation
-```
-
-The full model is documented in [Configuration](configuration.md).
-
-## Stopping background services (`stop`)
-
-Fusion runs can leave persistent portless singletons (the shared router, the
-scope dashboard, ...) running across sessions. Top-level `fusionkit stop`
-performs the same reap as `fusionkit fusion stop`:
-
-```sh
-fusionkit stop                     # stop background fusion services (router, dashboard, ...)
-```
-
-## Codex integration (`install` / `uninstall`)
-
-`fusionkit install codex` writes a managed block into `~/.codex/config.toml`
-that registers the FusionKit gateway as an extra model provider plus one launch
-profile per fusion ensemble — the user's default model/provider stays
-untouched, and plain `codex` behaves as before. Pair it with a running
-`fusionkit serve`:
-
-```sh
-fusionkit serve --port 4114
-fusionkit install codex --port 4114     # or --gateway-url http://127.0.0.1:4114
-codex --profile fusion-panel            # fused session with the full model picker
-fusionkit uninstall codex               # remove the managed block
-```
-
-Flags: `--gateway-url URL` (running gateway base URL), `--port N` (shorthand for
-`--gateway-url http://127.0.0.1:N`), `--repo DIR` (repo whose
-`.fusionkit/fusion.json` defines the ensembles), `--codex-home DIR`
-(default `~/.codex`).
-
-## Subscription pooling proxy (`proxy`)
-
-`fusionkit proxy` runs a long-lived relay that pools multiple Claude Code /
-Codex subscription logins behind one provider-native endpoint (see
-[subscription pooling](subscription-pooling.md)):
-
-```sh
-fusionkit proxy serve              # serve the pooled provider-native proxy
-fusionkit proxy add claude-code    # enroll the current CLI login (claude-code | codex only)
-fusionkit proxy status             # proxy health + per-account subscription windows
-fusionkit proxy stop               # stop the running proxy
-```
-
-`proxy serve` flags: `--host` (default `127.0.0.1`), `--port` (default `8790`),
-`--auth-token` (stable ingress token), `--strategy sticky|round_robin|capacity_weighted`
-(default `sticky`), `--switch-threshold RATIO` (default `0.9`),
-`--probe-interval SECONDS` (0 disables; default), and `--no-portless`
-(loopback only).
+`.fusionkit/fusion.json` v4 contains only fusion policy and namespaced model
+IDs. Explicit providers and routing policy live in `.routekit/router.yaml`;
+credentials remain in registry-defined environment variables or RouteKit's
+private subscription store. See [Configuration](configuration.md).
 
 ## Environment variables
 
 | Variable | Meaning |
 | --- | --- |
-| `FUSIONKIT_DIR` | Local FusionKit checkout for the Python engine (`uv run --package fusionkit ...`). |
-| `FUSIONKIT_NO_TUI` | Force plain output instead of the TUI. |
-| `FUSIONKIT_SESSIONS_DIR` | Durable session store (default: `~/.fusionkit/sessions`). |
-| `FUSIONKIT_CONSENT_PATH` | Cloud-panel cost consent file override (mostly tests/CI). |
-| `FUSIONKIT_SKIP_KEY_VALIDATION` | Skip live provider-key validation when set to `1`. |
-| `FUSIONKIT_CATALOG_PATH` | Cached model-catalog file override (default: `~/.fusionkit/catalog.json`). |
-| `FUSIONKIT_SUBSCRIPTIONS_DIR` | Subscription proxy state directory (default: `~/.fusionkit/subscriptions`). |
-| `FUSIONKIT_MLX_DIR` | Owned local MLX runtime/model cache directory override. |
-| `FUSIONKIT_DASHBOARD_PORT` | Fixed port for the local scope dashboard (default: `6971`). |
-| `FUSIONKIT_TELEMETRY_PATH` | Product-telemetry consent file override (mostly tests/CI). |
-| `FUSIONKIT_PROXY_TOKEN` | Bearer token clients present to the subscription proxy (referenced by the Codex snippet `proxy serve` prints). |
-| `FUSIONKIT_TELEMETRY` | `1`/`0` overrides the stored product-telemetry consent for one invocation. |
-| `DO_NOT_TRACK` | Any non-empty value force-disables product telemetry, beating every other setting. |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | Export fusion spans + events to your own OTLP/HTTP collector (base URL; signal-specific `..._TRACES_ENDPOINT`/`..._LOGS_ENDPOINT` win); `--observe` fills it with the local scope dashboard when unset. |
-| `PORTLESS` | Set to `0` to disable portless routing by default. |
-| `PORTLESS_STATE_DIR`, `PORTLESS_TLD` | Portless proxy state directory and local domain. |
+| `FUSIONKIT_DIR` | Local Python engine checkout. |
+| `FUSIONKIT_NO_TUI` | Force plain output. |
+| `FUSIONKIT_SESSIONS_DIR` | Durable Fusion session directory. |
+| `FUSIONKIT_CATALOG_PATH` | Local MLX catalog cache. |
+| `FUSIONKIT_MLX_DIR` | Fusion-owned MLX runtime/model cache. |
+| `FUSIONKIT_DASHBOARD_PORT` | Local dashboard port. |
+| `FUSIONKIT_TELEMETRY` | Per-run telemetry override. |
+| `DO_NOT_TRACK` | Force-disable telemetry. |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | External OTLP endpoint; `--observe` supplies the local one when unset. |
+| `PORTLESS`, `PORTLESS_STATE_DIR`, `PORTLESS_TLD` | Portless behavior. |
 
-Legacy `WARRANT_*` environment variables are no longer read; use `FUSIONKIT_*` in new scripts and docs.
+External RouteKit gateway authentication is referenced by the `router.authEnv`
+name in Fusion config. Provider key variables are read by RouteKit, not
+FusionKit.

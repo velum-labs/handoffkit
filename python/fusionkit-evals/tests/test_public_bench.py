@@ -5,13 +5,13 @@ import sys
 from pathlib import Path
 
 import pytest
-from fusionkit_cli.main import app
 from fusionkit_evals.benchmark_panel import (
     DECORRELATED_PEER_PANEL,
     LOPSIDED_DEFAULT_PANEL,
     estimate_panel_headroom,
     get_benchmark_panel,
 )
+from fusionkit_evals.cli import bench_app
 from fusionkit_evals.gateway_target import GatewayTarget, default_dialect_for_runner
 from fusionkit_evals.public_bench import (
     PUBLIC_BENCHMARK_SUITES,
@@ -91,16 +91,21 @@ def test_estimate_panel_headroom_handles_unscored_panel() -> None:
     assert "no published member scores" in headroom.note
 
 
-def test_panel_to_fusion_config_uses_panel_members_and_judge() -> None:
-    config = DECORRELATED_PEER_PANEL.to_fusion_config()
+def test_panel_to_fusion_config_uses_namespaced_routekit_models_and_judge() -> None:
+    config = DECORRELATED_PEER_PANEL.to_fusion_config(
+        routekit_url="http://routekit.test/v1"
+    )
 
-    assert [endpoint.id for endpoint in config.endpoints] == ["gpt", "opus", "gemini"]
-    assert config.judge_model == "gpt"
+    assert config.routekit_url == "http://routekit.test/v1"
+    assert config.routekit_model_ids == [
+        "openai/gpt-5.5",
+        "anthropic/claude-opus-4.8",
+        "google/gemini-3-pro",
+    ]
+    assert config.judge_model == "openai/gpt-5.5"
     assert config.default_mode == "panel"
-    assert config.panel_models == ["gpt", "opus", "gemini"]
-    gpt = config.endpoint_for("gpt")
-    assert gpt.base_url == "https://api.openai.com"
-    assert gpt.api_key_env == "OPENAI_API_KEY"
+    assert config.panel_models == config.routekit_model_ids
+    assert config.require_model("openai/gpt-5.5") == "openai/gpt-5.5"
 
 
 def test_get_benchmark_panel_rejects_unknown_panel() -> None:
@@ -249,9 +254,9 @@ def test_public_bench_cli_without_runner_writes_unavailable_report(tmp_path) -> 
     runner = CliRunner()
 
     result = runner.invoke(
-        app,
+        bench_app,
         [
-            "public-bench",
+            "public",
             "--suite",
             "aider-polyglot",
             "--panel",
@@ -280,9 +285,9 @@ def test_public_bench_cli_with_adapter_reports_ran(tmp_path) -> None:
     runner = CliRunner()
 
     result = runner.invoke(
-        app,
+        bench_app,
         [
-            "public-bench",
+            "public",
             "--suite",
             "aider-polyglot",
             "--runner-command",
@@ -301,7 +306,7 @@ def test_public_bench_cli_with_adapter_reports_ran(tmp_path) -> None:
 def test_public_bench_cli_rejects_unknown_suite() -> None:
     runner = CliRunner()
 
-    result = runner.invoke(app, ["public-bench", "--suite", "not-a-suite"])
+    result = runner.invoke(bench_app, ["public", "--suite", "not-a-suite"])
 
     assert result.exit_code != 0
 
@@ -309,7 +314,9 @@ def test_public_bench_cli_rejects_unknown_suite() -> None:
 def test_public_bench_baselines_cli_outputs_suite_table() -> None:
     runner = CliRunner()
 
-    result = runner.invoke(app, ["public-bench-baselines", "--suite", "aider-polyglot"])
+    result = runner.invoke(
+        bench_app, ["public-baselines", "--suite", "aider-polyglot"]
+    )
 
     assert result.exit_code == 0
     payload = json.loads(result.stdout)

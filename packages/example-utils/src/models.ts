@@ -25,7 +25,7 @@
  */
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import type { LanguageModelV3 } from "@ai-sdk/provider";
-import { providerDefaultBaseUrl } from "@fusionkit/registry";
+import { providerDefaultBaseUrl } from "@routekit/registry";
 
 // The OpenAI base URL from the provider registry; the AI SDK's
 // OpenAI-compatible provider wants the /v1 prefix on the base URL.

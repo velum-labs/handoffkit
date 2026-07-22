@@ -6,8 +6,8 @@ checkout. If you only want to use the product, start with the root
 task quickstarts for [coding harnesses](quickstart-harness.md) and the
 [inference endpoint](quickstart-inference.md).
 
-FusionKit's shipped product is the Node `@fusionkit/cli` front door plus the
-Python `fusionkit serve` fusion engine. The legacy Warrant governance plane,
+FusionKit's shipped product is the Node `@fusionkit/cli` front door plus its
+internal Python `fusionkit-sidecar` synthesis process. The legacy Warrant governance plane,
 Docker compose stack, runner, receipt, and VM-isolation packages are retained in
 the repository but are out of product scope; see [Product scope](scope.md).
 
@@ -19,11 +19,9 @@ the repository but are out of product scope; see [Product scope](scope.md).
 - pnpm `>=10.33.4`, normally activated through Corepack from the root
   `packageManager` field.
 - `uv` for the Python workspace and for exercising the Python fusion endpoint.
-- Provider keys when you run real cloud panels. `OPENAI_API_KEY` is enough for an
-  OpenAI-only config; the default cloud trio also looks for `ANTHROPIC_API_KEY`
-  and `GEMINI_API_KEY`. Those built-in defaults apply to fresh repos: this
-  repository's committed `.fusionkit/fusion.json` panel uses OpenRouter models,
-  so working inside this checkout needs `OPENROUTER_API_KEY`.
+- Registry-defined provider keys for each API provider enabled in
+  `.routekit/router.yaml`. This checkout uses OpenRouter and therefore needs
+  `OPENROUTER_API_KEY`; FusionKit itself does not read provider credentials.
 - A coding harness CLI (`codex`, `claude`, or `cursor-agent`) when testing the
   harness-backed product path.
 - Docker only if you are explicitly working on the legacy compose stack. Docker
@@ -73,35 +71,38 @@ uv run pytest tests -q
 uv run pytest python -q
 ```
 
-To exercise the raw fusion endpoint directly during development, use a config
-whose endpoints are available on your machine:
+To exercise the internal synthesis sidecar during development, use a config
+that names the RouteKit URL and namespaced `provider/model` IDs:
 
 ```sh
-uv run --package fusionkit fusionkit serve -c <config.yaml> --host 127.0.0.1 --port 8080
+uv run --package fusionkit fusionkit-sidecar serve \
+  -c <config.yaml> --host 127.0.0.1 --port 8080
 ```
 
-Then POST to `/v1/chat/completions` with model `fusionkit/panel`, or use a
-specific endpoint id for passthrough.
+Use `/health` for readiness and `/v1/fusion/trajectories:fuse` for an internal
+fusion step. Public chat, messages, responses, model listing, and passthrough
+remain on the Node gateway started by `fusionkit serve`.
 
 ## Product quick checks
 
 ```sh
-fusionkit doctor
 fusionkit init
-fusionkit status
-fusionkit codex      # or: fusionkit claude | fusionkit cursor
+fusionkit doctor
+fusionkit config show
+fusionkit codex      # or: fusionkit claude | cursor | opencode
 fusionkit serve      # gateway/raw endpoint path
 ```
 
-The committed `.fusionkit/` folder is the product config source of truth. Edit
-`.fusionkit/fusion.json` for panels, judge, tool defaults, and run defaults; edit
-`.fusionkit/prompts/*.md` for prompt overrides. The Python router YAML is derived
-from that config, not hand-maintained separately.
+The committed `.fusionkit/fusion.json` v4 file contains only ensembles of
+namespaced RouteKit model IDs and Fusion policy. Explicit providers and pooling
+policy live in `.routekit/router.yaml`; RouteKit obtains API connection
+metadata from its registry and subscription credentials from private account
+state. Prompt overrides remain in `.fusionkit/prompts/*.md`.
 
 ## Portless (stable named URLs)
 
-Every service the fusion stack starts, including the scope dashboard, the gateway
-your coding agent connects to, and the `fusionkit serve` router, can use
+Fusion-owned services, including the scope dashboard and the gateway your coding
+agent connects to, can use
 [portless](https://github.com/vercel-labs/portless) for stable local HTTPS names
 instead of raw ports. Named services are also reused across runs
 (discover-or-spawn singletons).
@@ -114,13 +115,13 @@ portless service install   # run the HTTPS proxy at OS startup
 portless trust             # add the local CA to your system trust store
 ```
 
-Then `fusionkit codex|claude|cursor|serve` print
+Then `fusionkit codex|claude|cursor|opencode|serve` print
 `https://*.localhost` URLs automatically. To opt out for a run (raw loopback
 ports, e.g. in CI), pass `--no-portless` or set `PORTLESS=0`. When portless is
 not installed (Node `<24`) the stack transparently falls back to ports.
 
 Reap persistent singletons left running by prior runs with the top-level
-`fusionkit stop` (or the equivalent `fusionkit fusion stop`).
+`fusionkit stop`.
 
 ## Legacy Docker compose
 

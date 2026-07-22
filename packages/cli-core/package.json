@@ -1,0 +1,47 @@
+{
+  "name": "@routekit/cli-core",
+  "private": false,
+  "version": "0.8.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/velum-labs/handoffkit.git",
+    "directory": "packages/cli-core"
+  },
+  "description": "Brand-neutral CLI context, errors, option parsing, completion, version, and test helpers.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./testing": {
+      "types": "./dist/testing.d.ts",
+      "default": "./dist/testing.js"
+    }
+  },
+  "files": [
+    "dist",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org",
+    "access": "public",
+    "provenance": true
+  },
+  "dependencies": {
+    "@routekit/cli-ui": "workspace:*",
+    "commander": "14.0.3"
+  },
+  "keywords": [
+    "routekit",
+    "cli",
+    "commander",
+    "terminal"
+  ],
+  "scripts": {
+    "build": "tsc -b",
+    "clean": "tsc -b --clean",
+    "test": "node --test \"dist/test/*.test.js\""
+  }
+}

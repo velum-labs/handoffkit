@@ -28,7 +28,7 @@
     {
       "id": "models.native-members-advertised",
       "category": "model-exposure",
-      "expectation": "Panel provider models remain available as native passthrough choices.",
+      "expectation": "Live namespaced RouteKit model ids remain available as native passthrough choices.",
       "status": "required",
       "testFile": "packages/cli/src/test/stack-e2e.test.ts",
       "anchor": "must be advertised as a passthrough"
@@ -40,6 +40,14 @@
       "status": "required",
       "testFile": "packages/cli/src/test/stack-e2e.test.ts",
       "anchor": "Claude Code's discovery probe"
+    },
+    {
+      "id": "models.native-picker-aliases",
+      "category": "model-exposure",
+      "expectation": "Claude Code and Codex show their matching subscription models under bare native ids while requests resolve through the canonical namespaced RouteKit pool.",
+      "status": "required",
+      "testFile": "packages/model-gateway/src/test/anthropic.test.ts",
+      "anchor": "Claude picker aliases use the canonical catalog and pooled native relay"
     },
     {
       "id": "models.cursor-discovery-mirror",
@@ -102,16 +110,16 @@
       "category": "request-fidelity",
       "expectation": "Sampling, system prompts, auth, tools, and token limits are transformed according to each provider wire.",
       "status": "required",
-      "testFile": "python/fusionkit-testkit/tests/test_engine_depth.py",
-      "anchor": "test_wire_request_shape_matrix"
+      "testFile": "packages/model-gateway/src/test/provider-backends.test.ts",
+      "anchor": "Anthropic egress preserves tools and normalizes the response"
     },
     {
       "id": "request.cursor-hybrid-translation",
       "category": "request-fidelity",
       "expectation": "Cursor Responses-hybrid input is translated into a valid chat conversation without dropping tool history.",
       "status": "required",
-      "testFile": "python/fusionkit-testkit/tests/test_engine_surfaces.py",
-      "anchor": "test_cursor_door_translates_the_responses_hybrid_body"
+      "testFile": "packages/model-gateway/src/test/cursor.test.ts",
+      "anchor": "Cursor hybrid requests translate to chat messages and tools"
     },
     {
       "id": "fusion.all-members-called",
@@ -124,10 +132,10 @@
     {
       "id": "fusion.judge-then-synth",
       "category": "fusion",
-      "expectation": "Candidates are judged before synthesis, using the configured judge and synthesizer endpoints.",
+      "expectation": "Candidates are judged before synthesis, using the configured judge and synthesizer models.",
       "status": "required",
-      "testFile": "python/fusionkit-testkit/tests/test_engine_e2e.py",
-      "anchor": "ordered_models.index"
+      "testFile": "packages/cli/src/test/stack-model-ids-e2e.test.ts",
+      "anchor": "embedded RouteKit routes namespaced model ids"
     },
     {
       "id": "fusion.named-ensemble-isolation",
@@ -140,58 +148,66 @@
     {
       "id": "fusion.passthrough-bypasses-fusion",
       "category": "fusion",
-      "expectation": "Selecting a native provider model performs exactly one provider call and never invokes the judge.",
+      "expectation": "Selecting a namespaced RouteKit model performs exactly one provider call and never invokes the judge.",
       "status": "required",
       "testFile": "packages/cli/src/test/stack-e2e.test.ts",
-      "anchor": "vendor passthrough routes each member"
+      "anchor": "RouteKit model passthrough routes each namespaced id"
     },
     {
       "id": "fusion.extension-metadata",
       "category": "fusion",
       "expectation": "Terminal fused responses carry synthesis decision, input trajectory ids, contribution diagnostics, and usage.",
       "status": "required",
-      "testFile": "python/fusionkit-testkit/tests/test_engine_e2e.py",
-      "anchor": "test_trajectories_fuse_step_over_the_real_wire"
+      "testFile": "python/fusionkit-server/tests/test_trajectory_step.py",
+      "anchor": "test_internal_trajectory_fuse_returns_synthesis_extension"
     },
     {
       "id": "fusion.mode-panel",
       "category": "fusion",
-      "expectation": "fusionkit/panel performs panel fanout, judge, and synthesis.",
+      "expectation": "The internal panel fusion mode performs panel fanout, judge, and synthesis.",
       "status": "required",
-      "testFile": "python/fusionkit-testkit/tests/test_engine_surfaces.py",
-      "anchor": "test_panel_fans_out_across_all_four_provider_dialects"
+      "testFile": "python/fusionkit-core/tests/test_core.py",
+      "anchor": "test_fusion_engine_final_output_is_synthesized_not_top_trajectory"
     },
     {
       "id": "fusion.mode-single",
       "category": "fusion",
-      "expectation": "fusionkit/single calls only the default model.",
+      "expectation": "The internal single fusion mode calls only the default model.",
       "status": "required",
-      "testFile": "python/fusionkit-testkit/tests/test_engine_surfaces.py",
-      "anchor": "test_single_mode_calls_only_the_default_model"
+      "testFile": "python/fusionkit-core/tests/test_fusion_run.py",
+      "anchor": "test_tracked_fusion_run_records_failure"
     },
     {
       "id": "fusion.mode-self",
       "category": "fusion",
       "expectation": "fusionkit/self generates the configured number of samples and fuses them.",
       "status": "required",
-      "testFile": "python/fusionkit-testkit/tests/test_engine_surfaces.py",
-      "anchor": "test_self_mode_samples_the_default_model_then_fuses"
+      "testFile": "python/fusionkit-core/tests/test_core.py",
+      "anchor": "test_panel_runner_generates_self_fusion_candidates"
     },
     {
       "id": "fusion.mode-heuristic",
       "category": "fusion",
       "expectation": "fusionkit/heuristic deterministically routes simple and hard requests to the documented modes.",
       "status": "required",
-      "testFile": "python/fusionkit-testkit/tests/test_engine_surfaces.py",
-      "anchor": "test_heuristic_mode_routes_hard_keywords_to_panel"
+      "testFile": "python/fusionkit-core/tests/test_core_units.py",
+      "anchor": "test_router_routes_hard_keywords_to_panel"
     },
     {
       "id": "reasoning.provider-captured",
       "category": "reasoning",
-      "expectation": "Every provider client's out-of-band reasoning is parsed separately from answer text.",
+      "expectation": "RouteKit out-of-band reasoning is parsed separately from answer text.",
       "status": "required",
-      "testFile": "python/fusionkit-testkit/tests/test_matrix_wire_clients.py",
-      "anchor": "assert response.reasoning == \"matrix thinking\""
+      "testFile": "python/fusionkit-core/tests/test_routekit_client.py",
+      "anchor": "test_routekit_client_parses_streamed_text_reasoning_usage_and_tools"
+    },
+    {
+      "id": "reasoning.anthropic-lossless",
+      "category": "reasoning",
+      "expectation": "Anthropic thinking controls, signed thinking, signature deltas, and redacted thinking survive native provider translation and tool-loop replay.",
+      "status": "required",
+      "testFile": "packages/model-gateway/src/test/provider-backends.test.ts",
+      "anchor": "Anthropic egress preserves native thinking controls, signed history, and buffered blocks"
     },
     {
       "id": "reasoning.candidates-reach-judge",
@@ -238,24 +254,24 @@
       "category": "streaming",
       "expectation": "The fused stream's terminal frame carries exact panel plus judge plus synthesizer usage.",
       "status": "required",
-      "testFile": "python/fusionkit-testkit/tests/test_engine_depth.py",
-      "anchor": "test_fused_stream_terminal_usage_is_the_exact_judge_plus_synth_sum"
+      "testFile": "python/fusionkit-server/tests/test_streaming.py",
+      "anchor": "test_internal_fuse_streams_openai_neutral_wire"
     },
     {
       "id": "stream.parallel-tools",
       "category": "streaming",
       "expectation": "Parallel tool calls packed into multi-slot chunks survive reassembly.",
       "status": "required",
-      "testFile": "python/fusionkit-testkit/tests/test_adversarial.py",
-      "anchor": "test_parallel_tool_calls_survive_multi_slot_stream_chunks"
+      "testFile": "python/fusionkit-server/tests/test_tool_call_reassembly.py",
+      "anchor": "test_interleaved_parallel_calls_fold_by_index_not_arrival_order"
     },
     {
       "id": "stream.failure-terminates",
       "category": "streaming",
       "expectation": "Truncated or garbage provider streams emit a safe error event and terminate rather than hanging.",
       "status": "required",
-      "testFile": "python/fusionkit-testkit/tests/test_adversarial.py",
-      "anchor": "test_truncated_provider_stream_surfaces_error_event_and_terminates"
+      "testFile": "packages/model-gateway/src/test/provider-backends.test.ts",
+      "anchor": "provider streaming surfaces malformed and truncated SSE"
     },
     {
       "id": "tools.all-door-roundtrip",
@@ -308,7 +324,7 @@
     {
       "id": "harness.driver-cutover",
       "category": "harness",
-      "expectation": "Claude Agent SDK and Codex SDK drivers use per-member native dialect gateways on multiple turns.",
+      "expectation": "Canonical tool drivers use the single RouteKit gateway on multiple turns.",
       "status": "required",
       "testFile": "packages/cli/src/test/stack-drivers-e2e.test.ts",
       "anchor": "real driver runs two fused turns"
@@ -332,7 +348,7 @@
     {
       "id": "policy.failover-passthrough",
       "category": "policy",
-      "expectation": "Passthrough policy surfaces the engine's classified provider failure verbatim.",
+      "expectation": "Passthrough policy surfaces RouteKit's native provider failure verbatim.",
       "status": "required",
       "testFile": "packages/cli/src/test/stack-policies-e2e.test.ts",
       "anchor": "onRateLimit=passthrough"
@@ -348,10 +364,10 @@
     {
       "id": "policy.budget-before-spend",
       "category": "policy",
-      "expectation": "An over-budget session is refused with 402 before any provider call.",
+      "expectation": "An exhausted budget is refused with 402 before any RouteKit model call.",
       "status": "required",
       "testFile": "packages/cli/src/test/stack-policies-e2e.test.ts",
-      "anchor": "over-budget session is refused before any model call"
+      "anchor": "exhausted budget is refused before any RouteKit model call"
     },
     {
       "id": "security.gateway-auth",
@@ -380,10 +396,10 @@
     {
       "id": "session.cost-persisted",
       "category": "sessions",
-      "expectation": "Fused usage and priced cost are persisted in the durable session ledger.",
+      "expectation": "Fused usage is persisted without inferring provider pricing from namespaced model ids.",
       "status": "required",
       "testFile": "packages/cli/src/test/stack-depth-e2e.test.ts",
-      "anchor": "priced cost"
+      "anchor": "without resolving namespaced model ids to provider pricing"
     },
     {
       "id": "lifecycle.straggler-bounded",
@@ -428,18 +444,18 @@
     {
       "id": "robustness.engine-malformed-rejected",
       "category": "robustness",
-      "expectation": "The Python engine's own door rejects malformed bodies as 4xx without provider fanout and never leaks tracebacks.",
+      "expectation": "The internal Python sidecar rejects invalid model ids as a stable 4xx without leaking tracebacks.",
       "status": "required",
-      "testFile": "python/fusionkit-testkit/tests/test_engine_fuzz.py",
-      "anchor": "test_malformed_bodies_reject_without_fanout"
+      "testFile": "python/fusionkit-server/tests/test_server.py",
+      "anchor": "test_fuse_rejects_unknown_routekit_model"
     },
     {
       "id": "robustness.chunk-boundary-reassembly",
       "category": "robustness",
-      "expectation": "Provider streams split at arbitrary byte boundaries (including mid-UTF-8-rune) reassemble byte-exactly for every provider family.",
+      "expectation": "OpenAI-compatible streams split at arbitrary byte boundaries, including mid-UTF-8-rune, reassemble byte-exactly.",
       "status": "required",
-      "testFile": "python/fusionkit-testkit/tests/test_stream_chunk_fuzz.py",
-      "anchor": "test_streamed_text_reassembles_byte_exactly_at_any_chunk_boundary"
+      "testFile": "packages/model-gateway/src/test/sse-codec.test.ts",
+      "anchor": "handles events split at arbitrary byte boundaries"
     },
     {
       "id": "concurrency.no-cross-talk",
@@ -478,39 +494,63 @@
       "category": "runs",
       "expectation": "Native runs create, complete, inspect, page events, and idempotently replay without extra provider calls.",
       "status": "required",
-      "testFile": "python/fusionkit-testkit/tests/test_engine_runs_and_processes.py",
-      "anchor": "test_native_run_idempotency_key_replays_the_same_run"
+      "testFile": "python/fusionkit-server/tests/test_fusion_runs_api.py",
+      "anchor": "test_native_fusion_run_idempotency_replay"
     },
     {
       "id": "process.product-cli-boot",
       "category": "process",
-      "expectation": "The real FusionKit CLI loads config, preflights providers, spawns the Python engine, starts the gateway, and serves fusion.",
+      "expectation": "The real FusionKit CLI loads config, starts RouteKit and the internal Python sidecar, then serves fusion.",
       "status": "required",
       "testFile": "packages/cli/src/test/stack-npm-cli-e2e.test.ts",
       "anchor": "boots its production stack"
     },
     {
-      "id": "process.serve-endpoint",
+      "id": "process.routekit-cli-serve",
       "category": "process",
-      "expectation": "The real serve-endpoint child process advertises and fronts its single configured model.",
+      "expectation": "The real RouteKit CLI process reports machine-readable readiness and serves model discovery plus every supported gateway dialect against a local upstream.",
       "status": "required",
-      "testFile": "python/fusionkit-testkit/tests/test_engine_runs_and_processes.py",
-      "anchor": "test_serve_endpoint_process_fronts_one_model"
+      "testFile": "packages/routekit-cli/src/test/serve-process-e2e.test.ts",
+      "anchor": "reports JSON readiness and serves every supported door"
     },
     {
       "id": "cli.management-surfaces",
       "category": "cli",
-      "expectation": "The real CLI covers config, prompts, install/uninstall, telemetry, setup, doctor, completions, versions, and runtime registry.",
+      "expectation": "The FusionKit CLI exposes fusion launchers and management surfaces while excluding proxy, account, install/uninstall, and direct-mode commands.",
       "status": "required",
-      "testFile": "packages/cli/src/test/cli-command-surfaces-e2e.test.ts",
-      "anchor": "config path/show/get/set/unset/export-yaml"
+      "testFile": "packages/cli/src/test/composition.test.ts",
+      "anchor": "Fusion CLI contains only fusion product launch surfaces"
+    },
+    {
+      "id": "cli.routekit-command-surfaces",
+      "category": "cli",
+      "expectation": "The real RouteKit CLI independently executes version, completion, config, provider, model, telemetry, doctor, and install surfaces while rejecting Fusion-only commands.",
+      "status": "required",
+      "testFile": "packages/routekit-cli/src/test/cli-process-e2e.test.ts",
+      "anchor": "real routekit command surfaces execute independently"
+    },
+    {
+      "id": "composition.routekit-model-ids",
+      "category": "composition",
+      "expectation": "Namespaced RouteKit model IDs cross the real embedded-router, Python-sidecar, and Fusion-gateway stack while provider credentials remain behind RouteKit.",
+      "status": "required",
+      "testFile": "packages/cli/src/test/stack-model-ids-e2e.test.ts",
+      "anchor": "embedded RouteKit routes namespaced model ids"
+    },
+    {
+      "id": "composition.routekit-authenticated-cli-bridge",
+      "category": "composition",
+      "expectation": "Fusion bridges authenticated external RouteKit CLI traffic over loopback and closes only the bridge, leaving the independently owned RouteKit process alive.",
+      "status": "required",
+      "testFile": "packages/cli/src/test/stack-model-ids-e2e.test.ts",
+      "anchor": "authenticated external routekit gateway serve CLI uses a Fusion-owned loopback bridge"
     },
     {
       "id": "observability.trace-semantics",
       "category": "observability",
       "expectation": "Fusion candidate, panel, judge, and provider spans use the registered semantic conventions and preserve trace context.",
       "status": "required",
-      "testFile": "packages/model-gateway/src/test/fusion-backend-trace.test.ts",
+      "testFile": "packages/fusion-gateway/src/test/fusion-backend-trace.test.ts",
       "anchor": "trace"
     },
     {
@@ -522,12 +562,76 @@
       "liveCommand": "pnpm mlx:stress"
     },
     {
+      "id": "accounts.canonical-identities-and-activation",
+      "category": "accounts",
+      "expectation": "Subscription kinds serialize as claude-code or codex, and the singleton daemon privately enrolls and removes credentials without returning secret material.",
+      "status": "required",
+      "testFile": "packages/routekit-daemon/src/test/daemon.test.ts",
+      "anchor": "singleton daemon exposes authenticated control and a stable reloadable data plane"
+    },
+    {
+      "id": "accounts.managed-login-isolation",
+      "category": "accounts",
+      "expectation": "Native account login isolates official CLI authentication, scrubs unrelated credentials, returns the credential only to the authenticated daemon client, and removes temporary state without writing daemon-owned stores locally.",
+      "status": "required",
+      "testFile": "packages/routekit-cli/src/test/accounts-command.test.ts",
+      "anchor": "accounts login captures isolated Codex auth without writing daemon-owned state"
+    },
+    {
+      "id": "accounts.native-backend-translation",
+      "category": "accounts",
+      "expectation": "Managed Claude and Codex subscriptions translate OpenAI Chat Completions, inject pool credentials only at egress, and normalize usage.",
+      "status": "required",
+      "testFile": "packages/accounts/src/test/subscription-backend.test.ts",
+      "anchor": "Claude account backend serves OpenAI chat with managed auth and normalized usage"
+    },
+    {
+      "id": "composition.subscription-provider-fusion",
+      "category": "composition",
+      "expectation": "Subscription-backed namespaced model ids drive panel, judge, and synthesis while credentials remain absent from Fusion responses.",
+      "status": "required",
+      "testFile": "packages/cli/src/test/stack-model-ids-e2e.test.ts",
+      "anchor": "subscription-backed model ids drive panel judge and synthesis without leaking credentials"
+    },
+    {
+      "id": "routing.unknown-id-rejected",
+      "category": "robustness",
+      "expectation": "An explicit unknown model id is rejected instead of silently routing through the default model.",
+      "status": "required",
+      "testFile": "packages/model-gateway/src/test/router.test.ts",
+      "anchor": "unknown models never fall through to the default source"
+    },
+    {
+      "id": "config.sparse-layer-mutation",
+      "category": "config",
+      "expectation": "Legacy account aliases normalize canonically and project mutations preserve sparse overlays without inherited defaults.",
+      "status": "required",
+      "testFile": "packages/routekit-config/src/test/config.test.ts",
+      "anchor": "provider aliases normalize while sparse project mutations stay sparse"
+    },
+    {
+      "id": "cli.strict-flags-json-and-passthrough",
+      "category": "cli",
+      "expectation": "CLI typo flags fail, launcher passthrough requires --, and unsupported interactive JSON is rejected with one machine document.",
+      "status": "required",
+      "testFile": "packages/cli/src/test/v4-commands.test.ts",
+      "anchor": "CLI rejects typo flags, gates passthrough behind --, and rejects interactive JSON"
+    },
+    {
       "id": "providers.real-accounts",
       "category": "platform",
-      "expectation": "Real provider accounts accept the shipped request shapes and billed fusion completes.",
+      "expectation": "RouteKit accounts accept the shipped request shapes and billed fusion completes.",
       "status": "environment-gated",
-      "gateReason": "Requires explicit provider credentials and incurs spend.",
-      "liveCommand": "uv run --package fusionkit fusionkit bench public-bench --help"
+      "gateReason": "Requires RouteKit account credentials and incurs spend.",
+      "liveCommand": "uv run --package fusionkit-evals fusionkit-bench public-bench --help"
+    },
+    {
+      "id": "reasoning.dynamic-capabilities",
+      "category": "model-exposure",
+      "expectation": "Provider-discovered opaque reasoning efforts survive discovery, route validation, per-model tool selectors, and provider egress without model-name inference or fabricated tiers.",
+      "status": "required",
+      "testFile": "packages/model-gateway/src/test/router.test.ts",
+      "anchor": "catalog applies configured opaque efforts and rejects unavailable values before egress"
     }
   ]
 }

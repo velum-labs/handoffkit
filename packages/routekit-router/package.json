@@ -1,0 +1,44 @@
+{
+  "name": "@routekit/router",
+  "private": false,
+  "version": "0.8.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/velum-labs/handoffkit.git",
+    "directory": "packages/routekit-router"
+  },
+  "description": "Reusable RouteKit router composition for embedded and standalone gateways.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org",
+    "access": "public",
+    "provenance": true
+  },
+  "dependencies": {
+    "@routekit/accounts": "workspace:*",
+    "@routekit/gateway": "workspace:*",
+    "@routekit/runtime": "workspace:*"
+  },
+  "keywords": [
+    "routekit",
+    "router",
+    "gateway",
+    "sdk"
+  ],
+  "scripts": {
+    "build": "tsc -b",
+    "clean": "tsc -b --clean",
+    "test": "node --test \"dist/test/*.test.js\""
+  }
+}

@@ -1,10 +1,12 @@
 # @fusionkit/registry
 
-Generated model and provider registry for FusionKit.
+Generated FusionKit model identities and panel presets.
 
 ## Architecture
 
-The registry is generated from `spec/registry` and shared by the Node packages and Python workspace for provider auth, model defaults, and routing metadata.
+The registry is generated from `spec/registry/fusion.json`. Product-neutral
+provider, subscription, catalog, capability, pricing, and local model metadata
+lives in `@routekit/registry`.
 
 ## Usage
 

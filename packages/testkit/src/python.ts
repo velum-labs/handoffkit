@@ -5,7 +5,8 @@
  */
 
 import { spawnSync } from "node:child_process";
-import { dirname, resolve } from "node:path";
+import { existsSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 /** The monorepo root (this package lives at `<root>/packages/testkit`). */
@@ -52,9 +53,19 @@ export function uvRunArgv(pkg: string, entrypoint: string, args: readonly string
   args: string[];
   cwd: string;
 } {
+  const root = repoRoot();
+  const installed = join(
+    root,
+    ".venv",
+    process.platform === "win32" ? "Scripts" : "bin",
+    process.platform === "win32" ? `${entrypoint}.exe` : entrypoint
+  );
+  if (existsSync(installed)) {
+    return { command: installed, args: [...args], cwd: root };
+  }
   return {
     command: "uv",
     args: ["run", "--package", pkg, entrypoint, ...args],
-    cwd: repoRoot()
+    cwd: root
   };
 }

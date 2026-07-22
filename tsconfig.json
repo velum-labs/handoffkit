@@ -2,7 +2,46 @@
   "files": [],
   "references": [
     {
+      "path": "packages/contracts"
+    },
+    {
+      "path": "packages/routekit-registry"
+    },
+    {
+      "path": "packages/runtime-utils"
+    },
+    {
+      "path": "packages/routekit-tracing"
+    },
+    {
+      "path": "packages/cli-ui"
+    },
+    {
+      "path": "packages/cli-core"
+    },
+    {
+      "path": "packages/config-core"
+    },
+    {
+      "path": "packages/routekit-config"
+    },
+    {
+      "path": "packages/routekit-router"
+    },
+    {
+      "path": "packages/routekit-control"
+    },
+    {
+      "path": "packages/routekit-daemon"
+    },
+    {
+      "path": "packages/telemetry-core"
+    },
+    {
       "path": "packages/registry"
+    },
+    {
+      "path": "packages/fusion-config"
     },
     {
       "path": "packages/kernel"
@@ -12,6 +51,12 @@
     },
     {
       "path": "packages/model-gateway"
+    },
+    {
+      "path": "packages/accounts"
+    },
+    {
+      "path": "packages/fusion-gateway"
     },
     {
       "path": "packages/protocol"
@@ -24,9 +69,6 @@
     },
     {
       "path": "packages/ensemble"
-    },
-    {
-      "path": "packages/runtime-utils"
     },
     {
       "path": "packages/harness-core"
@@ -50,7 +92,10 @@
       "path": "packages/tool-opencode"
     },
     {
-      "path": "packages/cli-ui"
+      "path": "packages/tool-registry"
+    },
+    {
+      "path": "packages/routekit-cli"
     },
     {
       "path": "packages/cli"

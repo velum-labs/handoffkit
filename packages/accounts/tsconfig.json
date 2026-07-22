@@ -1,0 +1,24 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist"
+  },
+  "include": [
+    "src/**/*.ts"
+  ],
+  "references": [
+    {
+      "path": "../contracts"
+    },
+    {
+      "path": "../model-gateway"
+    },
+    {
+      "path": "../routekit-registry"
+    },
+    {
+      "path": "../runtime-utils"
+    }
+  ]
+}

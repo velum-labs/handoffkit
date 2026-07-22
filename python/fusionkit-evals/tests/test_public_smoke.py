@@ -5,7 +5,7 @@ from typing import cast
 
 import pytest
 from fusionkit_core.clients import FakeModelClient
-from fusionkit_core.config import FusionConfig, ModelEndpoint
+from fusionkit_core.config import FusionConfig
 from fusionkit_core.contracts import BenchmarkTaskRecordV1
 from fusionkit_core.fusion import FusionEngine
 from fusionkit_evals.fusion_bench import FusionBenchRunner, build_fusion_bench_report
@@ -112,17 +112,12 @@ def test_public_smoke_docs_contain_claim_disclaimer() -> None:
 
 def _engine() -> FusionEngine:
     config = FusionConfig(
-        endpoints=[
-            ModelEndpoint(
-                id="fast",
-                model="fake-fast",
-                base_url="http://localhost:8101",
-            ),
-        ],
-        default_model="fast",
+        routekit_url="http://routekit.test",
+        routekit_model_ids=["test/fast"],
+        default_model="test/fast",
         default_mode="single",
     )
     return FusionEngine(
         config=config,
-        clients={"fast": FakeModelClient("fast", ["unused"])},
+        clients={"test/fast": FakeModelClient("test/fast", ["unused"])},
     )

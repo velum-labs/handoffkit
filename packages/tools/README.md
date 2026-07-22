@@ -1,18 +1,32 @@
-# @fusionkit/tools
+# @routekit/tools
 
-FusionKit tool integration contracts and registry.
+`packages/tools` publishes `@routekit/tools`: product-neutral coding-tool
+launcher, canonical-driver, lifecycle, and capability-registry contracts.
 
 ## Architecture
 
-This package defines the launcher and harness adapter shape that per-tool packages register for Codex, Claude Code, Cursor, and opencode.
+This package defines the host/integration boundary used by Codex, Claude Code,
+Cursor, and OpenCode adapters. Individual `@routekit/tool-*` packages implement
+`ToolIntegration`; hosts assemble immutable registries and supply an opaque
+`ToolLaunchSpec`.
 
 ## Usage
 
-Install `@fusionkit/cli` for the normal workflow; use this package when adding a new harness integration.
+Use this package when adding a coding-tool integration to a RouteKit host.
 
 ```ts
-import * as fusionkitPackage from "@fusionkit/tools";
+import {
+  createToolCapabilityMatrix,
+  createToolLaunchContext,
+  createToolRegistry
+} from "@routekit/tools";
 ```
+
+`createToolRegistry()` validates and indexes integrations.
+`createToolCapabilityMatrix()` compares declared model features across tools.
+`createToolLaunchContext()` pairs host lifecycle callbacks and a launch spec
+with reverse-order, exactly-once disposer cleanup; `createDisposerRunner()` is
+available when a host only needs that cleanup primitive.
 
 ## Docs
 

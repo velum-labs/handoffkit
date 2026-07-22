@@ -13,7 +13,7 @@
  */
 import type { ClaudeCodeAuthOptions } from "@ai-sdk/harness-claude-code";
 import type { PiAuthOptions } from "@ai-sdk/harness-pi";
-import { PROVIDERS } from "@fusionkit/registry";
+import { PROVIDERS } from "@routekit/registry";
 import { CapabilityMismatchError } from "@fusionkit/runner";
 
 /** The env vars (key/token/base URL) a provider registry entry names. */

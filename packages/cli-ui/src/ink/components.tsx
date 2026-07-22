@@ -13,6 +13,21 @@ import { SPINNER_FRAMES, glyph, supportsColor } from "../theme.js";
 
 import { Store } from "./store.js";
 
+export type LiveFrameState = {
+  lines: readonly string[];
+};
+
+export function LiveFrameView({ store }: { store: Store<LiveFrameState> }): ReactElement {
+  const state = useSyncExternalStore(store.subscribe, store.get, store.get);
+  return (
+    <Box flexDirection="column">
+      {state.lines.map((line, index) => (
+        <Text key={`${index}:${line}`}>{line}</Text>
+      ))}
+    </Box>
+  );
+}
+
 /** Animate through the braille spinner frames while mounted. */
 export function useSpinnerFrame(intervalMs = 80): string {
   const [frame, setFrame] = useState(0);

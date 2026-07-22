@@ -1,5 +1,5 @@
 {
-  "name": "@fusionkit/cli-ui",
+  "name": "@routekit/cli-ui",
   "private": false,
   "version": "0.8.0",
   "repository": {
@@ -7,7 +7,7 @@
     "url": "git+https://github.com/velum-labs/handoffkit.git",
     "directory": "packages/cli-ui"
   },
-  "description": "The fusionkit terminal UX layer: an Ink-based presenter, prompt facade, and plain-text fallback shared by every user-facing surface.",
+  "description": "Brand-configurable terminal UX: an Ink presenter, prompt facade, and plain-text fallback.",
   "license": "Apache-2.0",
   "type": "module",
   "exports": {
@@ -37,16 +37,14 @@
     "ink-testing-library": "4.0.0"
   },
   "keywords": [
-    "fusionkit",
-    "model-fusion",
-    "llm",
-    "ensemble",
-    "coding-agent",
+    "routekit",
     "terminal-ui",
     "ink",
     "prompts"
   ],
   "scripts": {
+    "build": "tsc -b",
+    "clean": "tsc -b --clean",
     "test": "node --test \"dist/test/*.test.js\""
   }
 }

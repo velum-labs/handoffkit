@@ -12,8 +12,7 @@ keywords = [
   "model-fusion",
   "llm",
   "ensemble",
-  "routing",
-  "providers",
+  "synthesis",
 ]
 classifiers = [
   "Development Status :: 4 - Beta",
@@ -24,9 +23,7 @@ classifiers = [
   "Operating System :: OS Independent",
 ]
 dependencies = [
-  "anthropic>=0.116.0",
-  "google-genai>=1.0.0",
-  "openai>=2.13.0",
+  "httpx>=0.28.1",
   "opentelemetry-api>=1.43.0",
   "opentelemetry-exporter-otlp-proto-http>=1.43.0",
   "opentelemetry-sdk>=1.43.0",
@@ -41,5 +38,5 @@ Documentation = "https://fusionkit.velum-labs.com"
 
 
 [build-system]
-requires = ["uv_build>=0.11.21,<0.12.0"]
+requires = ["uv_build>=0.11.29,<0.12.0"]
 build-backend = "uv_build"

@@ -51,7 +51,7 @@ packages/model-gateway/src/adapters/responses.ts:95-96
 the latest user message only; the system message is discarded:
 
 ```
-packages/model-gateway/src/fusion-backend.ts:1314-1332  (#task)
+packages/fusion-gateway/src/fusion-backend.ts:1314-1332  (#task)
   // Real CLIs put their large agent harness prompt in the system message ...
   // so take the latest user turn ... fall back to system text only if there is
   // no user content at all.
@@ -65,7 +65,7 @@ custom/developer instructions are lost.
 harness system message) is sent to the fuse step:
 
 ```
-packages/model-gateway/src/fusion-backend.ts:958-968  (buildStepBody)
+packages/fusion-gateway/src/fusion-backend.ts:958-968  (buildStepBody)
   messages,
   trajectories: candidates,
 ```
@@ -141,8 +141,8 @@ A small structure describing the run, available wherever we build a prompt:
 ```
 FusionIdentity:
   panel:        list[str]   # panel member model_ids (e.g. ["qwen-fast", "gemma-writer", "codex"])
-  judge:        str | None  # judge endpoint id
-  synthesizer:  str | None  # synthesizer endpoint id
+  judge:        str | None  # judge namespaced model id
+  synthesizer:  str | None  # synthesizer namespaced model id
   self_id:      str | None  # the id of THIS role (a panel member's own id), when applicable
   self_ordinal: int | None  # 1-based peer index for a panel member
 ```
@@ -276,8 +276,8 @@ silently disable disclosure or stale the dynamic model list.
 | 6 | this repository (FusionKit monorepo) `.../tool-codex/src/harness.ts` `run` / `codexArgs` | Prepend identity suffix (and, if not threaded earlier, the passed‑through instructions) to `descriptor.prompt`; `model.id`/`ordinal` already in scope (`harness.ts:524`). |
 | 7 | this repository (FusionKit monorepo) ensemble panel runner (`runFusionPanels`) | Accept the composed task / messages so #5 reaches the harness. |
 
-No changes to `fusion-gateway.ts` wire formats, `adapters/*`, or the step body
-schema are required for the synthesizer path.
+No changes to the RouteKit public gateway adapters or the step body schema are
+required for the synthesizer path.
 
 ## 7. Configuration / flags
 

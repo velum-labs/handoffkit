@@ -2,7 +2,10 @@
 
 ## Supported versions
 
-FusionKit ships as the npm `@fusionkit/cli` front door and the PyPI `fusionkit` engine. Security fixes land on `main` first and are released for the latest minor line of both packages, currently `0.8.x`.
+RouteKit and FusionKit ship as the npm `@routekit/*` foundation and
+`@fusionkit/*` product packages. FusionKit also provisions the internal PyPI
+sidecar packages. Security fixes land on `main` first and are released for the
+latest minor line, currently `0.8.x`.
 
 ## Reporting a vulnerability
 
@@ -19,9 +22,10 @@ Include:
 
 In scope:
 
-- the `fusionkit` CLI and its harness launchers
-- the model gateway, session store, cost metering, and rate-limit handoff path
-- the Python router, fusion engine, and raw `fusionkit serve` endpoint
+- the `routekit` and `fusionkit` CLIs and their harness launchers
+- the Node RouteKit/Fusion gateways, provider egress, session store, cost
+  metering, and rate-limit handoff path
+- the internal Python synthesis sidecar, fusion engine, and native run APIs
 
 The legacy governance stack (`plane`, `runner`, `sdk`, `handoff`, `adapter-compute`, and session backends) is maintained on a best-effort basis while it remains in this repository, but it is not part of the FusionKit product surface.
 
@@ -29,7 +33,11 @@ The legacy governance stack (`plane`, `runner`, `sdk`, `handoff`, `adapter-compu
 
 FusionKit stores durable harness sessions locally under `~/.fusionkit/sessions` unless `FUSIONKIT_SESSIONS_DIR` overrides the location. Session turn logs include the full prompt/message array and candidate trajectories for each turn so `fusionkit sessions` and resume flows can inspect them.
 
-FusionKit does not include product telemetry or phone-home analytics. Provider credentials are read from environment variables or local `.env` files at runtime and are not persisted by the session store; committed config stores only environment variable names for keys.
+FusionKit and RouteKit product telemetry is off by default and requires explicit
+opt-in; `DO_NOT_TRACK` force-disables it. RouteKit reads provider credentials
+from the environment names referenced by router config. Credentials are not
+passed to the Python sidecar or persisted by the Fusion session store; committed
+config stores only environment-variable names.
 
 See [Privacy and data handling](docs/privacy.md) for local retention, provider egress, OpenRouter disclosure, and rate-limit failover behavior.
 

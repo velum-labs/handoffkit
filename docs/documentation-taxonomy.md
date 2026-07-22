@@ -42,7 +42,7 @@ A page belongs in the public site when it helps a user install, run, configure, 
 | `quickstart-handoff.md` | Task guide mirror | In-repo mirror of rate-limit failover; not legacy handoff SDK. |
 | `configuration.md` | Reference | `.fusionkit/fusion.json` fields, precedence, default panels, prompts, and YAML export. |
 | `cli.md` | Reference | Complete CLI command surface and shared flags. |
-| `privacy.md` | Privacy and policy | Local session storage, consent, retention, provider egress, failover expansion, and no telemetry. |
+| `privacy.md` | Privacy and policy | Local session storage, retention, provider egress, failover expansion, and opt-in telemetry. |
 | `model-catalog.md` | Reference | Provider matrix, default panels, local MLX, mixed panels, pricing, and budgets. |
 | `fusion-harness-gateway.md` | Concepts and architecture | Product gateway architecture, dialects, streaming, wiring, and front-door behavior. |
 | `subscription-pooling.md` | Concepts and architecture | Provider-native relays, credential pools, usage windows, and quota-aware rotation. |
@@ -61,7 +61,6 @@ A page belongs in the public site when it helps a user install, run, configure, 
 | `oss-release/audit-findings.md` | Internal/design archive | OSS release audit findings; internal working notes. |
 | `specs/harness-prompt-passthrough.md` | Design archive | Implemented harness prompt pass-through design spec. |
 | `local-mlx-panel-demo.md` | Task guide | Local MLX panel demo behavior and setup. |
-| `fusionkit-handoff-executor.md` | Reference | Advanced maintainer eval executor for `fusionkit ensemble handoff`. |
 | `handoffkit-fusion-bench.md` | Evaluation and tuning | Fusion benchmark workflow retained for maintainer evaluation work. |
 | `benchmarking-runbook.md` | Evaluation and tuning | Benchmark execution and troubleshooting runbook. |
 | `prompt-tuning.md` | Evaluation and tuning | Prompt tuning workflow and reporting guidance. |

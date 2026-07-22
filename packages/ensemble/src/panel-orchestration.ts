@@ -1,9 +1,9 @@
 import type { WireTrajectory } from "@fusionkit/protocol";
 import { ATTR } from "@fusionkit/protocol";
-import { randomId } from "@fusionkit/runtime-utils";
+import { randomId } from "@routekit/runtime";
 import { headersOf, jsonAttr, startFusionSpan } from "@fusionkit/tracing";
 import type { FusionTraceCarrier } from "@fusionkit/tracing";
-import type { ResumeCursor } from "@fusionkit/harness-core";
+import type { ResumeCursor } from "@routekit/harness-core";
 import { PanelGenerateOperator } from "./fusion-operators.js";
 import { runEnsemble } from "./run.js";
 import { FusionRuntime, StaticDAGScheduler, createArtifact } from "./runtime.js";
@@ -379,6 +379,7 @@ export type FusionPanelOptions = {
   fusedSubagents?: FusedSubagentAccess;
   /** Finite step-boundary budget per member (see UnifiedHarnessE2EOptions.k). */
   k?: number;
+  reasoningEffort?: string;
   /** Native-session resume cursors keyed by model id (see UnifiedHarnessE2EOptions). */
   resumeCursors?: Map<string, ResumeCursor>;
 };
@@ -408,6 +409,14 @@ async function captureFusionPanelWires(options: FusionPanelOptions): Promise<Wir
         ? { fusedModelIds: options.fusedSubagents.ensembles.map((ensemble) => ensemble.modelId) }
         : {})
     }),
+    ...(options.reasoningEffort !== undefined
+      ? {
+          reasoning: {
+            mode: "effort",
+            effort: options.reasoningEffort
+          }
+        }
+      : {}),
     harnesses: [harness],
     models: options.models,
     ...(options.modelEndpoints !== undefined ? { modelEndpoints: options.modelEndpoints } : {}),

@@ -6,9 +6,7 @@
   },
   "include": ["src/**/*.ts"],
   "references": [
-    { "path": "../ensemble" },
-    { "path": "../protocol" },
-    { "path": "../registry" },
-    { "path": "../runtime-utils" }
+    { "path": "../contracts" },
+    { "path": "../harness-core" }
   ]
 }

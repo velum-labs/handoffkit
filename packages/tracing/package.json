@@ -27,14 +27,11 @@
   },
   "dependencies": {
     "@fusionkit/protocol": "workspace:*",
+    "@routekit/tracing": "workspace:*",
     "@opentelemetry/api": "1.9.1",
     "@opentelemetry/api-logs": "0.220.0",
-    "@opentelemetry/exporter-logs-otlp-http": "0.220.0",
-    "@opentelemetry/exporter-trace-otlp-http": "0.220.0",
-    "@opentelemetry/resources": "2.9.0",
     "@opentelemetry/sdk-logs": "0.220.0",
-    "@opentelemetry/sdk-trace-base": "2.9.0",
-    "@opentelemetry/sdk-trace-node": "2.9.0"
+    "@opentelemetry/sdk-trace-base": "2.9.0"
   },
   "keywords": [
     "fusionkit",
@@ -46,6 +43,8 @@
     "observability"
   ],
   "scripts": {
+    "build": "tsc -b",
+    "clean": "tsc -b --clean",
     "test": "node --test \"dist/test/*.test.js\""
   }
 }

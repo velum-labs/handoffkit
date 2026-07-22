@@ -1,17 +1,10 @@
 import { spawn } from "node:child_process";
 import { createInterface } from "node:readline";
 
-import { resolveCursorkitCli } from "@fusionkit/ensemble";
-import {
-  CURSOR_BRIDGE_MODEL_NAME,
-  FUSION_PANEL_MODEL,
-  commandOnPath,
-  readEnv,
-  reservePort,
-  terminate
-} from "@fusionkit/tools";
+import { commandOnPath, reservePort, terminate } from "@routekit/runtime";
 
 import { cursorBridgeEnv } from "./bridge-config.js";
+import { resolveCursorkitCli } from "./cursorkit-path.js";
 
 type CursorFrontDoorOutcome = {
   id: string;
@@ -29,7 +22,9 @@ export type CursorAcpProducerInput = {
   repo: string;
   command?: string;
   modelName?: string;
+  providerModel?: string;
   timeoutMs?: number;
+  enabled?: boolean;
 };
 
 export function buildCursorAcpProducer(
@@ -40,7 +35,7 @@ export function buildCursorAcpProducer(
   // bundled Cursorkit bridge, so it stays opt-in: without the live flag the
   // acceptance suite reports this door as `blocked` rather than spawning live
   // tooling (keeping deterministic runs free of credential/CLI dependencies).
-  if (readEnv(process.env, "FUSIONKIT_GATEWAY_LIVE_CURSOR") !== "1") {
+  if (input.enabled === false) {
     return undefined;
   }
   if (!commandOnPath(command)) {
@@ -52,7 +47,7 @@ export function buildCursorAcpProducer(
 async function runCursorAcpOutcome(
   input: Required<Pick<CursorAcpProducerInput, "command">> & CursorAcpProducerInput
 ): Promise<CursorFrontDoorOutcome> {
-  const modelName = input.modelName ?? CURSOR_BRIDGE_MODEL_NAME;
+  const modelName = input.modelName ?? "routekit";
   // Hold a real free loopback port until the bridge is about to bind it, so
   // parallel probes cannot collide on (or steal) it.
   const reservation = await reservePort();
@@ -61,7 +56,7 @@ async function runCursorAcpOutcome(
     port: bridgePort,
     gatewayUrl: input.gatewayUrl,
     modelName,
-    providerModel: FUSION_PANEL_MODEL
+    providerModel: input.providerModel ?? modelName
   });
 
   const { serveCli } = resolveCursorkitCli();
@@ -209,7 +204,7 @@ async function driveCursorAgentSentinel(input: {
           fs: { readTextFile: false, writeTextFile: false },
           terminal: false
         },
-        clientInfo: { name: "fusionkit-acceptance", version: "0.1.0" }
+        clientInfo: { name: "routekit-acp", version: "0.1.0" }
       }),
       60_000
     );

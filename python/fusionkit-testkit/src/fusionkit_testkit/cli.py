@@ -13,16 +13,16 @@ import signal
 import sys
 import threading
 
-from fusionkit_testkit.server import ProviderSimulator
+from fusionkit_testkit.server import RouteKitSimulator
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="FusionKit provider simulator")
+    parser = argparse.ArgumentParser(description="FusionKit RouteKit gateway simulator")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=0)
     args = parser.parse_args()
 
-    simulator = ProviderSimulator(host=args.host, port=args.port).start()
+    simulator = RouteKitSimulator(host=args.host, port=args.port).start()
     print(
         json.dumps(
             {

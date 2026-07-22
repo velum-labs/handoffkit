@@ -12,7 +12,8 @@ Harness-side kernels are cell coordinates via ``Cell.params``:
   passing the most PUBLIC tests, grade on PRIVATE -- leakage-free) |
   ``public-exec-repair`` (public-exec + one failure-directed repair round when
   the winner still fails a public test).
-- ``max_tokens`` (default 16384), ``test_timeout_s`` (default 8.0),
+- ``max_tokens`` (default 16384), ``test_timeout_s`` (default 30.0 wall;
+  the 12 s CPU rlimit is the binding, environment-independent limit),
   ``model`` (override the target's served model id, e.g. a fusionkit
   passthrough endpoint id).
 
@@ -39,12 +40,13 @@ import subprocess
 import sys
 import tempfile
 import time
-import urllib.error
-import urllib.request
 import zlib
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
+
+import httpx
 
 from hyperkit.core import registry
 from hyperkit.core.manifests import TextManifest
@@ -217,11 +219,33 @@ def run_tests(
 
 
 class _Client:
-    """Minimal OpenAI-compatible chat client (stdlib only, retrying)."""
+    """Minimal OpenAI-compatible chat client with retries and a hard deadline."""
 
-    def __init__(self, base_url: str, api_key: str | None):
+    def __init__(
+        self,
+        base_url: str,
+        api_key: str | None,
+        *,
+        transport: httpx.BaseTransport | None = None,
+        clock: Callable[[], float] = time.monotonic,
+    ):
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
+        self.transport = transport
+        self.clock = clock
+
+    def _read_json(self, response: httpx.Response, *, deadline: float) -> dict[str, Any]:
+        body = bytearray()
+        for chunk in response.iter_bytes():
+            if self.clock() >= deadline:
+                raise TimeoutError("chat completion exceeded its wall-clock deadline")
+            body.extend(chunk)
+        if self.clock() >= deadline:
+            raise TimeoutError("chat completion exceeded its wall-clock deadline")
+        data = json.loads(body)
+        if not isinstance(data, dict):
+            raise ValueError("chat completion response must be a JSON object")
+        return data
 
     def complete(
         self,
@@ -241,35 +265,40 @@ class _Client:
             # OpenRouter returns exact billed cost; other servers ignore this.
             "usage": {"include": True},
         }
-        body = json.dumps(payload).encode()
         headers = {"Content-Type": "application/json"}
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
         url = f"{self.base_url}/chat/completions"
         last_error: Exception | None = None
-        for attempt in range(attempts):
-            request = urllib.request.Request(url, data=body, headers=headers)
-            try:
-                with urllib.request.urlopen(request, timeout=timeout_s) as response:
-                    data = json.loads(response.read())
-                choice = (data.get("choices") or [{}])[0]
-                message = choice.get("message") or {}
-                usage = data.get("usage") or {}
-                return {
-                    "text": message.get("content") or "",
-                    "prompt_tokens": int(usage.get("prompt_tokens") or 0),
-                    "completion_tokens": int(usage.get("completion_tokens") or 0),
-                    "cost_usd": float(usage.get("cost") or 0.0),
-                    "finish_reason": choice.get("finish_reason"),
-                }
-            except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, OSError) as exc:
-                last_error = exc
-                retryable = True
-                if isinstance(exc, urllib.error.HTTPError):
-                    retryable = exc.code in (408, 409, 429, 500, 502, 503, 504)
-                if not retryable or attempt == attempts - 1:
-                    raise
-                time.sleep(min(60.0, 2.0 * 2**attempt))
+        with httpx.Client(
+            headers=headers,
+            timeout=httpx.Timeout(timeout_s),
+            transport=self.transport,
+        ) as client:
+            for attempt in range(attempts):
+                try:
+                    deadline = self.clock() + timeout_s
+                    with client.stream("POST", url, json=payload) as response:
+                        response.raise_for_status()
+                        data = self._read_json(response, deadline=deadline)
+                    choice = (data.get("choices") or [{}])[0]
+                    message = choice.get("message") or {}
+                    usage = data.get("usage") or {}
+                    return {
+                        "text": message.get("content") or "",
+                        "prompt_tokens": int(usage.get("prompt_tokens") or 0),
+                        "completion_tokens": int(usage.get("completion_tokens") or 0),
+                        "cost_usd": float(usage.get("cost") or 0.0),
+                        "finish_reason": choice.get("finish_reason"),
+                    }
+                except (json.JSONDecodeError, httpx.HTTPError, TimeoutError, OSError) as exc:
+                    last_error = exc
+                    retryable = True
+                    if isinstance(exc, httpx.HTTPStatusError):
+                        retryable = exc.response.status_code in (408, 409, 429, 500, 502, 503, 504)
+                    if not retryable or attempt == attempts - 1:
+                        raise
+                    time.sleep(min(60.0, 2.0 * 2**attempt))
         raise RuntimeError(f"chat completion failed: {last_error}")
 
 
@@ -280,7 +309,9 @@ class LivecodebenchGrader:
 
 class LivecodebenchAdapter:
     name = "livecodebench"
-    version = "1"
+    # v2: fair grading wall clock (30 s >= the 12 s CPU rlimit) and parallel
+    # sample draws. Grading semantics changed, so shard identity must too.
+    version = "2"
 
     def manifest(self, ref: str) -> TextManifest:
         return TextManifest(ref)
@@ -315,7 +346,9 @@ class LivecodebenchAdapter:
         temps = [float(t) for t in params.get("temps", [0.2])] or [0.2]
         selection = str(params.get("selection", "first"))
         max_tokens = int(params.get("max_tokens", 16384))
-        timeout_s = float(params.get("test_timeout_s", 8.0))
+        # Wall clock must exceed the CPU rlimit or grading becomes a lottery on
+        # slow hosts: a CPU-bound solution must always get its full CPU budget.
+        timeout_s = float(params.get("test_timeout_s", 30.0))
         model = str(params.get("model", target.model))
         # Multi-stage SUTs (panel -> judge -> synth) legitimately take much
         # longer per request than a single model; retrying a timed-out fused
@@ -326,8 +359,7 @@ class LivecodebenchAdapter:
         client = _Client(target.base_url, _resolve_api_key(target.base_url, params))
         sandbox = _Sandbox()
 
-        samples: list[dict[str, Any]] = []
-        for index in range(n_samples):
+        def draw_sample(index: int) -> dict[str, Any]:
             temperature = temps[index % len(temps)]
             completion = client.complete(
                 model,
@@ -341,21 +373,28 @@ class LivecodebenchAdapter:
             public = run_tests(
                 sandbox, code, public_tests, timeout_s=timeout_s, stop_on_failure=False
             )
-            samples.append(
-                {
-                    "index": index,
-                    "temperature": temperature,
-                    "code": code,
-                    "finish_reason": completion["finish_reason"],
-                    "prompt_tokens": completion["prompt_tokens"],
-                    "completion_tokens": completion["completion_tokens"],
-                    "cost_usd": completion["cost_usd"],
-                    "public_passed": public["passed"],
-                    "public_total": public["total"],
-                    "public_all": public["all_passed"],
-                    "public_failure": public["failure"],
-                }
-            )
+            return {
+                "index": index,
+                "temperature": temperature,
+                "code": code,
+                "finish_reason": completion["finish_reason"],
+                "prompt_tokens": completion["prompt_tokens"],
+                "completion_tokens": completion["completion_tokens"],
+                "cost_usd": completion["cost_usd"],
+                "public_passed": public["passed"],
+                "public_total": public["total"],
+                "public_all": public["all_passed"],
+                "public_failure": public["failure"],
+            }
+
+        # Samples are independent: draw them concurrently so an n-sample cell's
+        # wall clock tracks the slowest single completion, not their sum
+        # (sequential 3x1800 s draws overran the 3600 s Batch limit in e003).
+        if n_samples == 1:
+            samples = [draw_sample(0)]
+        else:
+            with ThreadPoolExecutor(max_workers=n_samples) as pool:
+                samples = list(pool.map(draw_sample, range(n_samples)))
 
         if selection == "first":
             selected = 0

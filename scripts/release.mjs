@@ -210,6 +210,11 @@ function readVersionSource(repoAbs, spec) {
     const m = text.match(re);
     return m ? m[1] : null;
   }
+  if (file.endsWith(".ts") && field) {
+    const escaped = field.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const m = text.match(new RegExp(`\\b${escaped}\\s*=\\s*"([^"]+)"`));
+    return m ? m[1] : null;
+  }
   return null;
 }
 
@@ -244,6 +249,14 @@ function writeVersionSource(repoAbs, spec, version) {
       /(export const FUSIONKIT_PYPI_VERSION = ")[^"]+(")/,
       `$1${version}$2`
     );
+    writeFileSync(path, text);
+    return true;
+  }
+  if (file.endsWith(".ts") && field) {
+    const escaped = field.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const re = new RegExp(`(\\b${escaped}\\s*=\\s*")[^"]+(")`);
+    if (!re.test(text)) return false;
+    text = text.replace(re, `$1${version}$2`);
     writeFileSync(path, text);
     return true;
   }
@@ -969,7 +982,8 @@ function bumpFusionkitPypiPin(repoAbs, version) {
   return [];
 }
 
-// handoffkit: root + all publishable @fusionkit/* + release/npm-packages.json protocol.version.
+// handoffkit: root + all publishable @routekit/* and @fusionkit/* packages +
+// release/npm-packages.json protocol.version.
 function bumpPnpmMonorepo(unit, version) {
   const touched = ["package.json"];
   writeVersionSource(unit.absRepo, "package.json#version", version);

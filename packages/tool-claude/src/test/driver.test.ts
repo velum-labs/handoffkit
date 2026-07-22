@@ -3,8 +3,8 @@ import { test } from "node:test";
 
 import type { Options, Query, SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 
-import { driverContractSuite } from "@fusionkit/harness-core/testing";
-import type { HarnessEvent } from "@fusionkit/harness-core";
+import { driverContractSuite } from "@routekit/harness-core/testing";
+import type { HarnessEvent } from "@routekit/harness-core";
 
 import { createClaudeDriver } from "../driver.js";
 import type { ClaudeQueryFn } from "../driver.js";
@@ -97,7 +97,34 @@ test("claude driver maps SDK messages into canonical events", async () => {
   }
 });
 
-test("claude driver auto-approves tools under the panel policy", async () => {
+test("claude driver forwards opaque effort through SDK options", async () => {
+  let observed: Options | undefined;
+  const delegate = scriptedQuery("claude-reasoning-session");
+  const effortDriver = createClaudeDriver({
+    queryFn: (input) => {
+      observed = input.options;
+      return delegate(input);
+    }
+  });
+  const instance = await effortDriver.createInstance(
+    effortDriver.configSchema.parse({ command: "claude" })
+  );
+  try {
+    const session = await instance.startSession({
+      cwd: process.cwd(),
+      reasoning: { mode: "effort", effort: "deep" }
+    });
+    for await (const _event of session.sendTurn({ prompt: "reason deeply" })) {
+      // Drain.
+    }
+    assert.deepEqual(observed?.thinking, { type: "adaptive" });
+    assert.equal(observed?.effort, "deep");
+  } finally {
+    await instance.dispose();
+  }
+});
+
+test("claude driver auto-approves tools under the automation policy", async () => {
   const instance = await driver.createInstance(driver.configSchema.parse({ command: "claude" }));
   try {
     const session = await instance.startSession({ cwd: process.cwd() });

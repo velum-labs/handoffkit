@@ -17,7 +17,7 @@ import type {
   RunStatus,
   SessionIsolation
 } from "@fusionkit/protocol";
-import { RUNTIME_TIMEOUT_MS } from "@fusionkit/runtime-utils";
+import { DEFAULT_RUNTIME_TIMEOUTS } from "@routekit/runtime";
 import { PlaneClient } from "@fusionkit/sdk";
 
 /**
@@ -151,7 +151,7 @@ export type SwarmTools = {
   context: Handoff;
 };
 
-const DEFAULT_TIMEOUT_MS = RUNTIME_TIMEOUT_MS.session;
+const DEFAULT_TIMEOUT_MS = DEFAULT_RUNTIME_TIMEOUTS.session;
 const DEFAULT_DIFF_EXCERPT_BYTES = 4 * 1024;
 const DEFAULT_WORKER_SESSION: SessionIsolation = "hermetic";
 const DEFAULT_CLOUD_SESSION: SessionIsolation = "process";

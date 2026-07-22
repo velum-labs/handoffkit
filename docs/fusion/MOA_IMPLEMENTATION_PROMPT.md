@@ -123,7 +123,7 @@ Start by reading:
 - `docs/fusion/MOA_DESIGN.md`
 - `packages/ensemble/src/unified.ts`
 - `packages/ensemble/src/harness.ts`
-- `packages/model-gateway/src/fusion-backend.ts`
+- `packages/fusion-gateway/src/fusion-backend.ts`
 - `packages/cli/src/gateway.ts`
 - `packages/cli/src/fusion/stack.ts`
 

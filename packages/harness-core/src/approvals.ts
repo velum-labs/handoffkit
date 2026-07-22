@@ -7,26 +7,24 @@
  */
 import { randomUUID } from "node:crypto";
 
-export type ApprovalDecision = "accept" | "acceptForSession" | "decline" | "cancel";
+import type {
+  HarnessApprovalDecision,
+  HarnessRequestType as RouteHarnessRequestType
+} from "@routekit/contracts";
 
-/** Canonical approval/user-input request categories across all providers. */
-export type HarnessRequestType =
-  | "exec_command_approval"
-  | "file_change_approval"
-  | "file_read_approval"
-  | "tool_approval"
-  | "tool_user_input";
+export type ApprovalDecision = HarnessApprovalDecision;
+export type HarnessRequestType = RouteHarnessRequestType;
 
 /**
  * What the session auto-approves without surfacing a request. `all` is the
- * headless panel default (the historical `--force --trust` /
+ * headless automation default (the historical `--force --trust` /
  * `bypassPermissions` behavior, now an explicit policy instead of a baked-in
  * flag); `edits` approves workspace writes but surfaces command execution;
  * `none` surfaces everything.
  */
 export type ApprovalPolicy = { autoApprove: "all" | "edits" | "none" };
 
-export const PANEL_APPROVAL_POLICY: ApprovalPolicy = { autoApprove: "all" };
+export const DEFAULT_AUTOMATION_APPROVAL_POLICY: ApprovalPolicy = { autoApprove: "all" };
 
 /** The policy's verdict for a request type, or undefined to surface it. */
 export function decideApproval(

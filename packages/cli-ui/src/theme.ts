@@ -60,13 +60,18 @@ export const SPINNER_FRAMES: readonly string[] = supportsUnicode()
   ? ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
   : ["|", "/", "-", "\\"];
 
-/** The product tagline, shown beneath the banner/header. */
-const BRAND_TAGLINE = "real model fusion behind your coding agent";
+export type BrandOptions = { name: string; tagline: string };
+let brand: BrandOptions = { name: "routekit", tagline: "shared routing infrastructure" };
+
+/** Configure the product wordmark rendered by presenter banners. */
+export function configureBrand(options: BrandOptions): void {
+  brand = { ...options };
+}
 
 /** The compact one-line product header (used for sub-surfaces and fallbacks). */
 export function brandHeader(subtitle?: string): string {
-  const title = bold(cyan("fusionkit"));
-  const tag = dim(BRAND_TAGLINE);
+  const title = bold(cyan(brand.name));
+  const tag = dim(brand.tagline);
   const head = `${title}  ${tag}`;
   return subtitle === undefined ? head : `${head}\n${dim(subtitle)}`;
 }
@@ -303,7 +308,7 @@ export function brandBanner(subtitle?: string): string {
 
   let art: string;
   try {
-    art = figlet.textSync("fusionkit", { font: "ANSI Shadow" });
+    art = figlet.textSync(brand.name, { font: "ANSI Shadow" });
   } catch {
     return fallback;
   }
@@ -315,7 +320,7 @@ export function brandBanner(subtitle?: string): string {
 
   const trimmed = lines.join("\n");
   const wordmark = supportsTrueColor() ? gradient(trimmed) : bold(cyan(trimmed));
-  const tag = dim(BRAND_TAGLINE);
+  const tag = dim(brand.tagline);
   const sub = subtitle !== undefined ? `\n${dim(subtitle)}` : "";
   return `${wordmark}\n${tag}${sub}`;
 }

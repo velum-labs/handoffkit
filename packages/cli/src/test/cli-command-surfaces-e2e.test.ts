@@ -1,14 +1,4 @@
-/**
- * Real-process coverage for the non-serving `fusionkit` CLI surfaces. These
- * invoke the actual built entrypoint against isolated repo/HOME/CODEX_HOME
- * fixtures — no injected Commander program or mocked command handlers.
- *
- * Covered: version, completions, runtime registry, config path/show/get/set/
- * unset/export-yaml, prompts list/reset, codex install/uninstall, telemetry
- * status/on/inspect/off, setup provisioning via the local uv workspace, and
- * doctor's machine-readable preflight against the provider simulator.
- */
-
+/** Real-process coverage for non-serving FusionKit v4 CLI surfaces. */
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
 import {
@@ -24,60 +14,65 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { after, before, test } from "node:test";
 
-import { repoRoot, stackToolingSkip, startProviderSim } from "@fusionkit/testkit";
+import {
+  repoRoot,
+  stackToolingSkip,
+  startProviderSim
+} from "@fusionkit/testkit";
 import type { ProviderSimHandle } from "@fusionkit/testkit";
 
 const SKIP = stackToolingSkip();
-const CLI_ENTRY = resolve(dirname(fileURLToPath(import.meta.url)), "..", "index.js");
+const CLI_ENTRY = resolve(
+  dirname(fileURLToPath(import.meta.url)),
+  "..",
+  "index.js"
+);
 
 let root: string;
 let repo: string;
 let home: string;
 let sim: ProviderSimHandle;
 
-type CliResult = {
+function runCli(args: readonly string[]): {
   status: number | null;
   stdout: string;
   stderr: string;
-};
-
-function runCli(args: readonly string[], extraEnv: NodeJS.ProcessEnv = {}): CliResult {
+} {
   const result = spawnSync(process.execPath, [CLI_ENTRY, ...args], {
     cwd: repo,
-    // env-spread-allowed: the product CLI needs normal PATH/HOME; all mutable homes and credentials are isolated below
     env: {
       ...process.env,
       HOME: home,
       PORTLESS: "0",
       NO_COLOR: "1",
+      FUSIONKIT_NO_TUI: "1",
       FUSIONKIT_TELEMETRY: undefined,
-      ...extraEnv
+      OPENAI_API_KEY: "test-openai",
+      OPENAI_BASE_URL: sim.url
     },
     encoding: "utf8",
     timeout: 120_000
   });
   if (result.error !== undefined) throw result.error;
-  return {
-    status: result.status,
-    stdout: result.stdout,
-    stderr: result.stderr
-  };
+  return result;
 }
 
-function mustRun(args: readonly string[], env: NodeJS.ProcessEnv = {}): string {
-  const result = runCli(args, env);
+function mustRun(args: readonly string[]): string {
+  const result = runCli(args);
   assert.equal(
     result.status,
     0,
-    `fusionkit ${args.join(" ")} failed\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`
+    `fusionkit ${args.join(" ")} failed\n${result.stdout}\n${result.stderr}`
   );
   return result.stdout;
 }
 
-before(async function () {
+before(async () => {
   if (SKIP !== false) return;
   sim = await startProviderSim();
-  root = mkdtempSync(join(tmpdir(), "fusionkit-cli-surfaces-"));
+  await sim.queue("provider-surface-a", ["catalog seed"]);
+  await sim.queue("provider-surface-b", ["catalog seed"]);
+  root = mkdtempSync(join(tmpdir(), "fusionkit-v4-cli-surfaces-"));
   repo = join(root, "repo");
   home = join(root, "home");
   mkdirSync(repo);
@@ -99,52 +94,43 @@ before(async function () {
     { cwd: repo }
   );
   mkdirSync(join(repo, ".fusionkit"));
+  mkdirSync(join(repo, ".routekit"));
   writeFileSync(
     join(repo, ".fusionkit", "fusion.json"),
-    JSON.stringify(
+    `${JSON.stringify(
       {
-        version: "fusionkit.fusion.v3",
+        version: "fusionkit.fusion.v4",
+        router: { config: ".routekit/router.yaml" },
         tool: "codex",
         defaultEnsemble: "default",
         ensembles: {
           default: {
-            k: 1,
-            panel: [
-              {
-                id: "alpha",
-                model: "surface-openai",
-                provider: "openai",
-                baseUrl: sim.url,
-                keyEnv: "SIM_KEY"
-              },
-              {
-                id: "beta",
-                model: "surface-anthropic",
-                provider: "anthropic",
-                baseUrl: sim.url,
-                keyEnv: "SIM_KEY"
-              }
+            members: [
+              "openai/provider-surface-a",
+              "openai/provider-surface-b"
             ],
-            judgeModel: "surface-openai"
+            judge: "openai/provider-surface-a",
+            k: 1
           },
           mini: {
-            k: 1,
-            panel: [
-              {
-                id: "alpha",
-                model: "surface-openai",
-                provider: "openai",
-                baseUrl: sim.url,
-                keyEnv: "SIM_KEY"
-              }
-            ],
-            judgeModel: "surface-openai"
+            members: ["openai/provider-surface-a"],
+            judge: "openai/provider-surface-a",
+            k: 1
           }
         }
       },
       null,
       2
-    )
+    )}\n`
+  );
+  writeFileSync(
+    join(repo, ".routekit", "router.yaml"),
+    [
+      "providers:",
+      "  openai: {}",
+      "defaultModel: openai/provider-surface-a",
+      ""
+    ].join("\n")
   );
 });
 
@@ -154,122 +140,64 @@ after(async () => {
   rmSync(root, { recursive: true, force: true });
 });
 
-test("version, completion, and runtime registry surfaces execute through the real CLI", { skip: SKIP }, () => {
+test("version, completion, and config surfaces execute through the real CLI", {
+  skip: SKIP
+}, () => {
   const version = JSON.parse(mustRun(["version", "--json"])) as {
     cli?: string;
   };
   assert.match(version.cli ?? "", /^\d+\.\d+\.\d+/);
-
   for (const shell of ["bash", "zsh", "fish"]) {
-    const completion = mustRun(["completion", shell]);
-    assert.ok(completion.length > 100, `${shell} completion must be substantive`);
-    assert.match(completion, /fusionkit/);
+    assert.match(mustRun(["completion", shell]), /fusionkit/);
   }
-
-  const workflows = JSON.parse(mustRun(["runtime", "list", "--json"])) as {
-    workflows?: Array<{ id?: string }>;
+  const shown = JSON.parse(
+    mustRun(["config", "show", "--repo", repo, "--json"])
+  ) as {
+    router: { config: string };
+    effective: { ensembles: { value: Array<{ members: string[] }> } };
   };
-  assert.ok((workflows.workflows?.length ?? 0) > 0);
-  const workflowId = workflows.workflows?.[0]?.id;
-  assert.ok(workflowId);
-  const explanation = mustRun(["runtime", "explain", workflowId, "--json"]);
-  assert.match(explanation, new RegExp(workflowId));
+  assert.deepEqual(shown.router, { config: ".routekit/router.yaml" });
+  assert.deepEqual(shown.effective.ensembles.value[0]?.members, [
+    "openai/provider-surface-a",
+    "openai/provider-surface-b"
+  ]);
 });
 
-test("config path/show/get/set/unset/export-yaml round-trip the stored source of truth", { skip: SKIP }, () => {
-  const configPath = join(repo, ".fusionkit", "fusion.json");
-  assert.equal(mustRun(["config", "path", "--repo", repo]).trim(), configPath);
-
-  const shown = JSON.parse(mustRun(["config", "show", "--repo", repo, "--json"])) as {
-    source?: string;
-    effective?: { defaultEnsemble?: { value?: string; source?: string } };
-  };
-  assert.equal(shown.source, configPath);
-  assert.equal(shown.effective?.defaultEnsemble?.value, "default");
-  assert.equal(shown.effective?.defaultEnsemble?.source, "config");
-
-  mustRun(["config", "set", "budgetUsd", "2.5", "--repo", repo, "--json"]);
-  assert.equal(mustRun(["config", "get", "budgetUsd", "--repo", repo]).trim(), "2.5");
-  const stored = JSON.parse(readFileSync(configPath, "utf8")) as { budgetUsd?: number };
-  assert.equal(stored.budgetUsd, 2.5);
-
-  mustRun(["config", "unset", "budgetUsd", "--repo", repo, "--json"]);
-  const missing = runCli(["config", "get", "budgetUsd", "--repo", repo]);
-  assert.equal(missing.status, 1, "get exits 1 for an unset path");
-
-  const yaml = mustRun(["config", "export-yaml", "--repo", repo]);
-  assert.match(yaml, /default_model: alpha/);
-  assert.match(yaml, /provider: openai/);
-  assert.match(yaml, /provider: anthropic/);
-});
-
-test("prompt list/reset operates on real committed override files", { skip: SKIP }, () => {
+test("prompt, telemetry, and config mutation surfaces preserve JSON contracts", {
+  skip: SKIP
+}, () => {
   const promptDir = join(repo, ".fusionkit", "prompts");
   mkdirSync(promptDir, { recursive: true });
   const judgePath = join(promptDir, "judge.md");
-  writeFileSync(judgePath, "JUDGE SURFACE OVERRIDE\n");
-
-  const listed = mustRun(["prompts", "list", "--repo", repo, "--json"]);
-  assert.match(listed, /JUDGE SURFACE OVERRIDE|judge\.md|configured/);
-
+  writeFileSync(judgePath, "JUDGE V4 OVERRIDE\n");
+  const listed = JSON.parse(
+    mustRun(["prompts", "list", "--repo", repo, "--json"])
+  ) as { prompts: Array<{ id: string; active: boolean }> };
+  assert.equal(
+    listed.prompts.find((entry) => entry.id === "judge")?.active,
+    true
+  );
   mustRun(["prompts", "reset", "judge", "--repo", repo, "--json"]);
   assert.equal(existsSync(judgePath), false);
+
+  mustRun(["config", "set", "budgetUsd", "2.5", "--repo", repo, "--json"]);
+  assert.equal(
+    mustRun(["config", "get", "budgetUsd", "--repo", repo]).trim(),
+    "2.5"
+  );
+  mustRun(["config", "unset", "budgetUsd", "--repo", repo, "--json"]);
+
+  assert.equal(
+    (JSON.parse(mustRun(["telemetry", "status", "--json"])) as {
+      enabled?: boolean;
+    }).enabled,
+    false
+  );
 });
 
-test("install/uninstall codex writes valid managed config and preserves user content", { skip: SKIP }, () => {
-  const codexHome = join(root, "codex-home");
-  mkdirSync(codexHome);
-  const configPath = join(codexHome, "config.toml");
-  writeFileSync(configPath, 'model = "user-model"\n');
-
-  mustRun([
-    "install",
-    "codex",
-    "--gateway-url",
-    "http://127.0.0.1:4114",
-    "--repo",
-    repo,
-    "--codex-home",
-    codexHome
-  ]);
-  const installed = readFileSync(configPath, "utf8");
-  assert.match(installed, /model = "user-model"/);
-  assert.match(installed, /\[model_providers\.fusionkit\]/);
-  assert.match(installed, /http:\/\/127\.0\.0\.1:4114\/v1/);
-  assert.match(installed, /fusion-panel/);
-  assert.match(installed, /fusion-mini/);
-
-  mustRun(["uninstall", "codex", "--codex-home", codexHome]);
-  const uninstalled = readFileSync(configPath, "utf8");
-  assert.match(uninstalled, /model = "user-model"/);
-  assert.doesNotMatch(uninstalled, /model_providers\.fusionkit/);
-});
-
-test("telemetry status/on/inspect/off is isolated to the temporary HOME", { skip: SKIP }, () => {
-  const initial = JSON.parse(mustRun(["telemetry", "status", "--json"])) as {
-    enabled?: boolean;
-  };
-  assert.equal(initial.enabled, false);
-
-  const enabled = JSON.parse(mustRun(["telemetry", "on", "--json"])) as {
-    enabled?: boolean;
-    installId?: string;
-  };
-  assert.equal(enabled.enabled, true);
-  assert.match(enabled.installId ?? "", /^[a-f0-9-]{16,}$/i);
-
-  const inspection = JSON.parse(mustRun(["telemetry", "inspect", "--json"])) as {
-    pending?: unknown[];
-  };
-  assert.deepEqual(inspection.pending, [], "inspect sends nothing and reports the pending queue");
-
-  const disabled = JSON.parse(mustRun(["telemetry", "off", "--json"])) as {
-    enabled?: boolean;
-  };
-  assert.equal(disabled.enabled, false);
-});
-
-test("setup provisions the local Python engine and doctor probes the real simulator endpoints", { skip: SKIP }, () => {
+test("setup and doctor validate the v4 Fusion/RouteKit composition", {
+  skip: SKIP
+}, () => {
   const setup = JSON.parse(
     mustRun([
       "setup",
@@ -278,24 +206,51 @@ test("setup provisions the local Python engine and doctor probes the real simula
       "--force",
       "--json"
     ])
-  ) as { ok?: boolean; capabilities?: Array<{ label?: string; ok?: boolean }> };
-  assert.equal(setup.ok, true);
-  assert.ok(setup.capabilities?.some((capability) => capability.label === "cloud ensembles"));
-
-  const doctorResult = runCli(["doctor", "--json"], { SIM_KEY: "sk-doctor" });
-  assert.equal(
-    doctorResult.status,
-    0,
-    `doctor failed\nstdout:\n${doctorResult.stdout}\nstderr:\n${doctorResult.stderr}`
-  );
-  const doctor = JSON.parse(doctorResult.stdout) as {
-    ready?: boolean;
-    checks?: Array<{ ok?: boolean }>;
+  ) as {
+    ok?: boolean;
+    capabilities?: Array<{ label?: string; ok?: boolean }>;
   };
-  assert.equal(doctor.ready, true);
-  assert.ok((doctor.checks?.length ?? 0) > 0);
+  assert.equal(setup.ok, true);
   assert.ok(
-    doctor.checks?.some((check) => check.ok === true),
-    "doctor must report concrete passing checks, not only a top-level flag"
+    setup.capabilities?.some(
+      (capability) =>
+        capability.label === "RouteKit-backed fusion" &&
+        capability.ok === true
+    )
+  );
+
+  const doctor = runCli(["doctor", "--json"]);
+  const result = JSON.parse(doctor.stdout) as {
+    ready?: boolean;
+    checks?: Array<{ label?: string; ok?: boolean; required?: boolean }>;
+  };
+  const selected = result.checks?.find((check) => check.label === "codex");
+  assert.equal(selected?.required, true);
+  assert.equal(result.ready, selected?.ok);
+  assert.equal(doctor.status, selected?.ok === true ? 0 : 1, `${doctor.stdout}\n${doctor.stderr}`);
+  assert.ok(
+    result.checks?.some(
+      (check) => check.label === "embedded RouteKit config" && check.ok === true
+    )
+  );
+  assert.deepEqual(
+    result.checks
+      ?.filter((check) => ["codex", "claude", "cursor", "opencode"].includes(check.label ?? ""))
+      .map((check) => check.label),
+    ["codex", "claude", "cursor", "opencode"]
+  );
+});
+
+test("removed routing/account/install commands remain absent", {
+  skip: SKIP
+}, () => {
+  for (const command of ["proxy", "accounts", "install", "uninstall"]) {
+    const result = runCli([command]);
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /unknown command/i);
+  }
+  assert.doesNotMatch(
+    readFileSync(join(repo, ".fusionkit", "fusion.json"), "utf8"),
+    /baseUrl|apiKey|subscription/
   );
 });

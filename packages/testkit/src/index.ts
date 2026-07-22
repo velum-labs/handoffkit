@@ -6,10 +6,10 @@
  * - {@link startProviderSim}: the scriptable provider simulator
  *   (python/fusionkit-testkit) as a child process, driven over its HTTP
  *   control plane and observed through its wire journal.
- * - {@link simRouterConfigYaml}: real `fusionkit serve` router configs whose
- *   endpoints all point at the simulator.
- * - {@link startEngine}: the REAL Python fusion engine as a child process —
- *   the same entrypoint the production CLI spawns.
+ * - {@link simSidecarConfigYaml}: production-shaped sidecar config over stable
+ *   namespaced RouteKit model IDs.
+ * - {@link startEngine}: the internal Python synthesis sidecar as a child
+ *   process — the same entrypoint the production CLI spawns.
  * - {@link parseSse} / {@link sseText}: structured SSE observation.
  * - {@link detectStackTooling}: honest skip-gating for environments without
  *   the Python toolchain.
@@ -42,8 +42,8 @@ export { startProviderSim } from "./provider-sim.js";
 export type { ProviderSimHandle, SimCallFilter } from "./provider-sim.js";
 export { detectStackTooling, repoRoot, stackToolingSkip, uvRunArgv } from "./python.js";
 export type { StackTooling } from "./python.js";
-export { CODEX_TEST_TOKEN_ENV, simRouterConfigYaml } from "./router-config.js";
-export type { SimEndpointSpec } from "./router-config.js";
+export { CODEX_TEST_TOKEN_ENV, simSidecarConfigYaml } from "./router-config.js";
+export type { SimModelSpec } from "./router-config.js";
 export { judgeAnalysis, scriptFusedTurn } from "./scenarios.js";
 export type { FusedTurnScript } from "./scenarios.js";
 export { parseSse, sseDone, sseReasoning, sseText } from "./sse.js";

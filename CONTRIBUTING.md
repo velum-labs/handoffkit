@@ -9,7 +9,7 @@ Thanks for helping make FusionKit better. Keep changes focused, practical, and e
 - `uv` for the Python workspace.
 - Git, plus any coding-agent CLI needed for manual harness testing.
 
-## TypeScript workflow
+## Node workflow
 
 ```sh
 corepack enable
@@ -21,6 +21,11 @@ pnpm verify
 ```
 
 `pnpm check` runs `scripts/check-repo.mjs`, protocol checks, generated docs checks, and release publish checks. Any file add, move, or delete can require a matching update to `scripts/check-repo.mjs`; treat that script as the repository manifest.
+
+Turborepo orchestrates every Node project under `packages/*`, `examples/*`, and
+`apps/*` from the single root lockfile. Use package filters for focused work,
+for example `pnpm exec turbo run build test --filter=@fusionkit/cli...` or
+`pnpm exec turbo run build --filter=fusionkit-docs`.
 
 ## Python workflow
 

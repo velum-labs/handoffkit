@@ -561,7 +561,8 @@ frozen product config, evidence card, archived outcome data — mechanically.
 
 - CI: card rendering golden test; expiry math; archive schema round-trip;
   emitted `.fusionkit/` config validates against the product loader
-  (`fusionkit serve -c <emitted> --check` or the closest existing dry-run).
+  (`fusionkit init`, install the emitted v4 JSON at
+  `.fusionkit/fusion.json`, then run `fusionkit doctor`).
 - The M2 rehearsal run from Stage 6 produces a card + archive slice
   reviewed end-to-end.
 

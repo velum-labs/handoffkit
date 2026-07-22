@@ -1,27 +1,46 @@
-/**
- * opencode tool integration entry point. It exposes launcher configuration helpers for local-model and gateway-backed opencode sessions.
- */
-import type { ToolIntegration } from "@fusionkit/tools";
+import type { ToolIntegration } from "@routekit/tools";
 
+import { createOpencodeDriver, opencodeDriverConfigSchema } from "./driver.js";
 import { launchOpencode } from "./launch.js";
 
-// opencode joins the panel via the harness-core driver (`createOpencodeDriver`
-// + ensemble's `createDriverHarness`). Its front-door ToolIntegration stays
-// launcher-focused until the harness-kind vocabulary is unified (so the
-// UnifiedHarnessKind switches stay exhaustive); the driver is the panel path.
+const driver = createOpencodeDriver();
+
 export const opencodeTool: ToolIntegration = {
   id: "opencode",
-  displayName: "opencode",
-  pickerHint: "opencode CLI (local model only)",
+  displayName: "OpenCode",
+  pickerHint: "OpenCode CLI",
   binary: "opencode",
-  packageName: "@fusionkit/tool-opencode",
-  installHint: "install opencode: https://opencode.ai/docs",
-  modes: ["local"],
-  harnessKinds: [],
-  launch: launchOpencode
+  packageName: "@routekit/tool-opencode",
+  installHint: "install OpenCode: https://opencode.ai/docs",
+  authSummary: "OpenCode uses an OpenAI-compatible gateway provider.",
+  setupSnippet: ({ gatewayUrl, model = "gateway-model" }) =>
+    `OpenCode gateway: ${gatewayUrl} (model: ${model})`,
+  launch: launchOpencode,
+  driver: {
+    kind: driver.kind,
+    driver,
+    configForRoute: (route) =>
+      opencodeDriverConfigSchema.parse({
+        gatewayUrl: route.gatewayUrl,
+        model: route.model,
+        providerId: "routekit",
+        ...(route.authToken !== undefined ? { authToken: route.authToken } : {})
+      })
+  },
+  capabilities: {
+    streaming: "full",
+    tools: "full",
+    images: "full",
+    reasoning_controls: "full"
+  }
 };
 
-export { launchOpencode, opencodeConfig, opencodeModelArg } from "./launch.js";
+export {
+  launchOpencode,
+  opencodeConfig,
+  opencodeModelArg,
+  opencodeProviderConfig
+} from "./launch.js";
 export { createOpencodeDriver, opencodeDriverConfigSchema } from "./driver.js";
 export type {
   OpencodeBackend,

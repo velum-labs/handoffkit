@@ -1,11 +1,11 @@
-"""Real-engine process harness.
+"""Real-sidecar process harness.
 
-Runs the actual ``fusionkit serve`` CLI as a child process — the same
+Runs the actual ``fusionkit-sidecar serve`` CLI as a child process — the same
 entrypoint the Node CLI spawns in production — against a caller-provided
-:class:`fusionkit_core.config.FusionConfig` (typically pointing every endpoint
-at a :class:`~fusionkit_testkit.server.ProviderSimulator`). This is the
+:class:`fusionkit_core.config.FusionConfig` pointing at a neutral RouteKit
+simulator. This is the
 process-level test seam: it exercises config discovery/loading, uvicorn
-startup, tracing setup, and the full HTTP surface exactly as shipped, instead
+startup, tracing setup, and the internal HTTP surface exactly as shipped, instead
 of an in-process ``create_app`` shortcut.
 
 The harness is observable by construction: engine stdout/stderr are captured
@@ -43,13 +43,13 @@ def free_port(host: str = "127.0.0.1") -> int:
 
 
 def _engine_argv() -> list[str]:
-    """How to invoke the real ``fusionkit`` CLI from the test environment.
+    """How to invoke the real ``fusionkit-sidecar`` CLI from the test environment.
 
     Prefers the console script installed in the active venv (what ``uv run
     pytest`` provides); falls back to invoking the Typer app through the
     current interpreter so the harness also works under a bare virtualenv.
     """
-    script = shutil.which("fusionkit")
+    script = shutil.which("fusionkit-sidecar")
     if script is not None:
         return [script]
     return [sys.executable, "-c", "from fusionkit_cli.main import app; app()"]
@@ -64,12 +64,12 @@ class EngineProcessError(RuntimeError):
 
 
 class EngineProcess:
-    """A running ``fusionkit serve`` child process bound to a loopback port.
+    """A running ``fusionkit-sidecar serve`` child process bound to a loopback port.
 
     Context-manager friendly::
 
         with EngineProcess(config) as engine:
-            httpx.post(f"{engine.url}/v1/chat/completions", json=...)
+            httpx.get(f"{engine.url}/health")
 
     ``config`` is serialized to the YAML the CLI loads via ``load_config``, so
     the real config-loading path (including ``.fusionkit/prompts`` overlay
@@ -87,9 +87,8 @@ class EngineProcess:
     ) -> None:
         """``config`` drives the default ``serve --config <yaml>`` invocation.
 
-        ``command_args`` overrides the subcommand entirely (e.g.
-        ``["serve-endpoint", "--id", "solo", ...]``); ``--host``/``--port`` are
-        still appended by the harness. Exactly one of the two must be given.
+        ``command_args`` overrides the subcommand entirely; ``--host``/``--port``
+        are still appended by the harness. Exactly one of the two must be given.
         """
         if (config is None) == (command_args is None):
             raise ValueError("provide exactly one of `config` or `command_args`")
@@ -192,11 +191,14 @@ class EngineProcess:
     def _wait_ready(self) -> None:
         assert self._proc is not None
         deadline = time.monotonic() + self._startup_timeout_s
-        probe = f"{self.url}/v1/models"
+        probe = f"{self.url}/health"
         while time.monotonic() < deadline:
             if self._proc.poll() is not None:
                 raise EngineProcessError(
-                    f"fusionkit serve exited with code {self._proc.returncode} during startup",
+                    (
+                        "fusionkit-sidecar serve exited with code "
+                        f"{self._proc.returncode} during startup"
+                    ),
                     self.log,
                 )
             try:
@@ -207,6 +209,9 @@ class EngineProcess:
                 pass
             time.sleep(0.1)
         raise EngineProcessError(
-            f"fusionkit serve did not become ready within {self._startup_timeout_s:.0f}s",
+            (
+                "fusionkit-sidecar serve did not become ready within "
+                f"{self._startup_timeout_s:.0f}s"
+            ),
             self.log,
         )

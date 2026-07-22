@@ -35,6 +35,7 @@ export type ProposalPanelOptions = {
   /** The caller's tool definitions / tool_choice, verbatim. */
   tools?: unknown;
   toolChoice?: unknown;
+  reasoningEffort?: string;
   /** Fallback OpenAI-compatible base URL (the shared router). */
   fusionBackendUrl: string;
   /** Per-member endpoint base URLs keyed by `EnsembleModel.id`. */
@@ -180,11 +181,14 @@ async function proposeOne(
         ...(options.fusionApiKey !== undefined ? { authorization: `Bearer ${options.fusionApiKey}` } : {})
       },
       body: JSON.stringify({
-        // The shared router routes by endpoint id; a dedicated endpoint ignores it.
+        // The shared router routes by namespaced model id; a dedicated backend ignores it.
         model: model.id,
         messages: options.messages,
         ...(options.tools !== undefined ? { tools: options.tools } : {}),
         ...(options.toolChoice !== undefined ? { tool_choice: options.toolChoice } : {}),
+        ...(options.reasoningEffort !== undefined
+          ? { reasoning_effort: options.reasoningEffort }
+          : {}),
         stream: false
       }),
       signal

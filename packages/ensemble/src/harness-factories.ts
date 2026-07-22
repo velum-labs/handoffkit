@@ -1,19 +1,21 @@
 import { writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { isFiniteK } from "@fusionkit/protocol";
-import type { JsonValue, ModelFusionStatus } from "@fusionkit/protocol";
-import { ensureRunOutputDir, runCliCapture } from "@fusionkit/runtime-utils";
+import type { ModelFusionStatus } from "@fusionkit/protocol";
+import { ensureRunOutputDir, runCliCapture } from "@routekit/runtime";
 import { envOf } from "@fusionkit/tracing";
-import { deriveSourceRepo } from "./source-repo.js";
 import { gitText } from "@fusionkit/workspace";
+import type { JsonValue } from "@routekit/contracts";
+
 import { createAgentHarness } from "./agent.js";
 import { createCommandHarness } from "./command.js";
+import { deriveSourceRepo } from "./source-repo.js";
 import { resolveCursorkitCli } from "./cursorkit-path.js";
 import { createMockHarness } from "./mock.js";
 import { runEnsemble } from "./run.js";
 import type { EnsembleDescriptor, EnsembleRunResult, HarnessAdapter } from "./harness.js";
 import { createFusionKitJudgeSynthesizer } from "./panel-orchestration.js";
-import { requireToolHarnessProvider, resolveToolAdapter } from "./harness-kind-registry.js";
+import { resolveToolAdapter } from "./harness-kind-registry.js";
 import { chatCompletionsUrl, normalizeFusionBackendUrl } from "./unified-url.js";
 import type { CursorHarnessRunnerInput, CursorHarnessRunnerResult, UnifiedHarnessE2EOptions, UnifiedHarnessE2EResult, UnifiedHarnessKind, UnifiedHarnessMatrixResult } from "./unified-types.js";
 export type { CursorHarnessRunnerInput, CursorHarnessRunnerResult, UnifiedHarnessE2EOptions, UnifiedHarnessE2EResult, UnifiedHarnessMatrixResult } from "./unified-types.js";
@@ -30,7 +32,8 @@ export function sideEffectsForHarness(kind: UnifiedHarnessKind): EnsembleDescrip
     case "claude-code":
     case "cursor-acp":
     case "cursor-desktop":
-      return requireToolHarnessProvider(kind).sideEffects(kind);
+    case "opencode":
+      return "writes_workspace";
     default: {
       const exhausted: never = kind;
       throw new Error(`unsupported unified harness: ${String(exhausted)}`);
@@ -95,6 +98,7 @@ function harnessAdapter(kind: UnifiedHarnessKind, options: UnifiedHarnessE2EOpti
     case "claude-code":
     case "cursor-acp":
     case "cursor-desktop":
+    case "opencode":
       return resolveToolAdapter(kind, options);
     default: {
       const exhausted: never = kind;
@@ -117,7 +121,8 @@ export function responseShapeFor(kind: UnifiedHarnessKind): string {
     case "claude-code":
     case "cursor-acp":
     case "cursor-desktop":
-      return requireToolHarnessProvider(kind).responseShape(kind);
+    case "opencode":
+      return "Return a concise coding-agent result with changes and verification evidence.";
     default: {
       const exhausted: never = kind;
       throw new Error(`unsupported unified harness: ${String(exhausted)}`);
@@ -189,7 +194,7 @@ async function defaultCursorRunner(input: CursorHarnessRunnerInput): Promise<Cur
     "--timeout-ms",
     String(input.timeoutMs ?? 60_000)
   ];
-  ensureRunOutputDir(input.outDir);
+  ensureRunOutputDir(input.outDir, { dataDirectoryNames: [".fusionkit"] });
   const result = await runCliCapture(process.execPath, args, {
     cwd: input.outDir,
     // The probe CLI enforces its own per-step timeout; this outer deadline is
@@ -245,7 +250,7 @@ export async function runUnifiedHarnessE2E(
   options: UnifiedHarnessE2EOptions
 ): Promise<UnifiedHarnessE2EResult> {
   const outputRoot = resolve(options.outputRoot);
-  ensureRunOutputDir(outputRoot);
+  ensureRunOutputDir(outputRoot, { dataDirectoryNames: [".fusionkit"] });
   const results: UnifiedHarnessMatrixResult[] = [];
   for (const kind of options.harnesses) {
     if (

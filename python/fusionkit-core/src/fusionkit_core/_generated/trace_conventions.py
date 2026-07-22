@@ -61,7 +61,7 @@ class ATTR:
     FUSION_JUDGE_DEGRADED: Final[str] = "fusion.judge.degraded"
     FUSION_TERMINAL: Final[str] = "fusion.terminal"
     FUSION_FUSION_UNIT: Final[str] = "fusion.fusion_unit"
-    FUSION_ENDPOINT_ID: Final[str] = "fusion.endpoint_id"
+    FUSION_ROUTEKIT_MODEL_ID: Final[str] = "fusion.routekit.model_id"
     FUSION_USAGE: Final[str] = "fusion.usage"
     FUSION_COST_STAGE: Final[str] = "fusion.cost.stage"
     FUSION_COST_MODEL: Final[str] = "fusion.cost.model"
@@ -87,7 +87,7 @@ class ATTR:
     GEN_AI_USAGE_OUTPUT_TOKENS: Final[str] = "gen_ai.usage.output_tokens"
 
 
-EXPORTABLE_ATTRIBUTES: Final[frozenset[str]] = frozenset({"fusion.turn", "fusion.dialect", "fusion.status", "fusion.run_id", "fusion.session_id", "fusion.candidate.id", "fusion.trajectory.id", "fusion.model.id", "fusion.step_count", "fusion.tool_call_count", "fusion.finish_reason", "fusion.verification_status", "fusion.step.index", "fusion.step.type", "fusion.message_count", "fusion.tool_count", "fusion.judge.model", "fusion.synthesizer.model", "fusion.trajectory_ids", "fusion.input_ids", "fusion.synthesis_empty", "fusion.decision", "fusion.selected.trajectory_id", "fusion.judge.degraded", "fusion.terminal", "fusion.fusion_unit", "fusion.endpoint_id", "fusion.cost.stage", "fusion.cost.model", "fusion.cost.turn_usd", "fusion.cost.provider_usd", "fusion.cost.local_compute_usd", "fusion.cost.session_total_usd", "fusion.cost.unknown", "fusion.cost.unknown_usage", "fusion.execution_id", "fusion.plan_id", "fusion.output_hash", "error.type", "http.response.status_code", "gen_ai.operation.name", "gen_ai.provider.name", "gen_ai.request.model", "gen_ai.response.finish_reasons", "gen_ai.usage.input_tokens", "gen_ai.usage.output_tokens"})
+EXPORTABLE_ATTRIBUTES: Final[frozenset[str]] = frozenset({"fusion.turn", "fusion.dialect", "fusion.status", "fusion.run_id", "fusion.session_id", "fusion.candidate.id", "fusion.trajectory.id", "fusion.model.id", "fusion.step_count", "fusion.tool_call_count", "fusion.finish_reason", "fusion.verification_status", "fusion.step.index", "fusion.step.type", "fusion.message_count", "fusion.tool_count", "fusion.judge.model", "fusion.synthesizer.model", "fusion.trajectory_ids", "fusion.input_ids", "fusion.synthesis_empty", "fusion.decision", "fusion.selected.trajectory_id", "fusion.judge.degraded", "fusion.terminal", "fusion.fusion_unit", "fusion.routekit.model_id", "fusion.cost.stage", "fusion.cost.model", "fusion.cost.turn_usd", "fusion.cost.provider_usd", "fusion.cost.local_compute_usd", "fusion.cost.session_total_usd", "fusion.cost.unknown", "fusion.cost.unknown_usage", "fusion.execution_id", "fusion.plan_id", "fusion.output_hash", "error.type", "http.response.status_code", "gen_ai.operation.name", "gen_ai.provider.name", "gen_ai.request.model", "gen_ai.response.finish_reasons", "gen_ai.usage.input_tokens", "gen_ai.usage.output_tokens"})
 
 FUSION_SCOPES: Final[dict[str, str]] = {"gateway": "fusionkit.gateway", "ensemble": "fusionkit.ensemble", "panel-model": "fusionkit.panel-model", "judge": "fusionkit.judge", "synthesis": "fusionkit.synthesis", "cli": "fusionkit.cli", "cursor-bridge": "fusionkit.cursor-bridge"}
 

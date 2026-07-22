@@ -3,8 +3,18 @@ import { test } from "node:test";
 
 import { render } from "ink-testing-library";
 
-import { ChecklistView, ProgressView, TaskView } from "../ink/components.js";
-import type { ChecklistState, ProgressState, TaskState } from "../ink/components.js";
+import {
+  ChecklistView,
+  LiveFrameView,
+  ProgressView,
+  TaskView
+} from "../ink/components.js";
+import type {
+  ChecklistState,
+  LiveFrameState,
+  ProgressState,
+  TaskState
+} from "../ink/components.js";
 import { ConfirmPrompt, SelectPrompt } from "../ink/prompts.js";
 import { Store } from "../ink/store.js";
 
@@ -57,6 +67,19 @@ test("ProgressView renders a bar with percent and totals", () => {
   const { lastFrame, unmount } = render(<ProgressView store={store} />);
   assert.match(frame(lastFrame()), /50%/);
   assert.match(frame(lastFrame()), /512 B \/ 1 KB/);
+  unmount();
+});
+
+test("LiveFrameView replaces the complete multi-line frame", async () => {
+  const store = new Store<LiveFrameState>({ lines: ["first", "old detail"] });
+  const { lastFrame, unmount } = render(<LiveFrameView store={store} />);
+  assert.match(frame(lastFrame()), /first/);
+  assert.match(frame(lastFrame()), /old detail/);
+  store.set(() => ({ lines: ["second", "new detail"] }));
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.doesNotMatch(frame(lastFrame()), /old detail/);
+  assert.match(frame(lastFrame()), /second/);
+  assert.match(frame(lastFrame()), /new detail/);
   unmount();
 });
 

@@ -1,7 +1,7 @@
 /**
  * Cross-process stack matrix: every gateway front door x {JSON, SSE,
  * multi-turn tool loop}, generated from the testkit's `DOOR_PROFILES` axis —
- * driving the REAL Node fusion gateway -> REAL Python engine
+ * driving the REAL Node RouteKit/Fusion gateways -> internal Python sidecar
  * (`fusionkit serve`) -> scripted provider simulator, with a panel spanning
  * every provider client family (`OpenAI`, Anthropic, Google, Codex). Nothing
  * between the tool's HTTP request and the provider wire is mocked; every wire
@@ -40,6 +40,12 @@ const MEMBERS = [
 ] as const;
 
 const PANEL_MODELS = ["gpt-panel-a", "claude-panel-b", "gemini-panel-c", "gpt-codex-panel-d"];
+const PANEL_MODEL_IDS = [
+  "openai/gpt-panel-a",
+  "anthropic/claude-panel-b",
+  "google/gemini-panel-c",
+  "codex/gpt-codex-panel-d"
+];
 
 const CANDIDATES = Object.fromEntries(
   PANEL_MODELS.map((model) => [model, `candidate from ${model}`])
@@ -128,12 +134,12 @@ for (const door of DOOR_PROFILES) {
         stream: true
       });
       assert.equal(response.status, 200);
-      const { frames } = await doorFrames(response);
+      const { frames, raw } = await doorFrames(response);
       const reasoning = door.streamReasoningOf(frames);
       assert.match(
         reasoning,
         new RegExp(`SYNTH_REASON_${door.id}`),
-        `${door.id} must carry the synthesizer model's own reasoning`
+        `${door.id} must carry the synthesizer model's own reasoning: ${raw}`
       );
       assert.match(
         reasoning,
@@ -206,24 +212,26 @@ for (const door of DOOR_PROFILES) {
 
 // --- cross-door invariants: per-provider vendor passthrough -----------------------------
 
-test("vendor passthrough routes each member to its own provider dialect", { skip: SKIP }, async () => {
+test("RouteKit model passthrough routes each namespaced id to its provider dialect", { skip: SKIP }, async () => {
   await stack.sim.reset();
-  const expected: Array<[string, string]> = [
-    ["gpt-panel-a", "openai-chat"],
-    ["claude-panel-b", "anthropic-messages"],
-    ["gemini-panel-c", "google-generate"],
-    ["gpt-codex-panel-d", "openai-responses"]
+  const expected: Array<[string, string, string]> = [
+    ["openai/gpt-panel-a", "gpt-panel-a", "openai-chat"],
+    ["anthropic/claude-panel-b", "claude-panel-b", "anthropic-messages"],
+    ["google/gemini-panel-c", "gemini-panel-c", "google-generate"],
+    ["codex/gpt-codex-panel-d", "gpt-codex-panel-d", "openai-responses"]
   ];
-  for (const [model] of expected) await stack.sim.queue(model, [`${model} passthrough`]);
-  for (const [model, dialect] of expected) {
+  for (const [, providerModel] of expected) {
+    await stack.sim.queue(providerModel, [`${providerModel} passthrough`]);
+  }
+  for (const [modelId, providerModel, dialect] of expected) {
     const response = await stack.door.chat({
-      model,
-      messages: [{ role: "user", content: `direct to ${model}` }]
+      model: modelId,
+      messages: [{ role: "user", content: `direct to ${modelId}` }]
     });
-    assert.equal(response.status, 200, `${model} passthrough must succeed`);
+    assert.equal(response.status, 200, `${modelId} passthrough must succeed`);
     const body = (await response.json()) as { choices: Array<{ message: { content: string } }> };
-    assert.match(body.choices[0]?.message.content ?? "", new RegExp(`${model} passthrough`));
-    const calls = await stack.sim.calls({ model });
+    assert.match(body.choices[0]?.message.content ?? "", new RegExp(`${providerModel} passthrough`));
+    const calls = await stack.sim.calls({ model: providerModel });
     assert.equal(calls.length, 1, await stack.sim.describeJournal());
     assert.equal(calls[0]?.dialect, dialect);
   }
@@ -235,9 +243,10 @@ test("model discovery doors advertise the fused model and every member", { skip:
   const models = (await (await stack.door.models()).json()) as { data: Array<{ id: string }> };
   const ids = new Set(models.data.map((entry) => entry.id));
   assert.ok(ids.has("fusion-panel"), "fused ensemble model must be advertised");
-  for (const model of PANEL_MODELS) {
-    assert.ok(ids.has(model), `${model} must be advertised as a passthrough`);
+  for (const modelId of PANEL_MODEL_IDS) {
+    assert.ok(ids.has(modelId), `${modelId} must be advertised as a passthrough`);
   }
+  assert.ok(PANEL_MODELS.every((model) => !ids.has(model)), "provider model names stay behind RouteKit");
 
   // Claude Code's discovery probe (anthropic-version header) gets the Anthropic shape.
   const anthropicModels = (await (await stack.door.models({ anthropicShape: true })).json()) as {

@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+import httpx
 import pytest
 from hyperkit.adapters.livecodebench import (
     LivecodebenchAdapter,
@@ -78,6 +79,83 @@ def test_run_tests_reports_first_failure() -> None:
     assert result["failure"]["actual"].strip() == "wrong"
 
 
+def test_client_retries_malformed_provider_json(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    bodies = iter(
+        [
+            b"  \n",
+            json.dumps(
+                {
+                    "choices": [
+                        {
+                            "message": {"content": "ok"},
+                            "finish_reason": "stop",
+                        }
+                    ],
+                    "usage": {
+                        "prompt_tokens": 1,
+                        "completion_tokens": 1,
+                        "cost": 0.001,
+                    },
+                }
+            ).encode(),
+        ]
+    )
+    calls = 0
+
+    def handler(_: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        return httpx.Response(200, content=next(bodies))
+
+    monkeypatch.setattr("hyperkit.adapters.livecodebench.time.sleep", lambda _: None)
+
+    result = _Client(
+        "https://provider.example/v1",
+        "key",
+        transport=httpx.MockTransport(handler),
+    ).complete(
+        "model",
+        "prompt",
+        temperature=0.2,
+        max_tokens=16,
+        attempts=2,
+    )
+
+    assert calls == 2
+    assert result["text"] == "ok"
+    assert result["cost_usd"] == 0.001
+
+
+class _HeartbeatStream(httpx.SyncByteStream):
+    def __iter__(self):
+        yield b" \n"
+        yield b" \n"
+
+
+def test_client_enforces_wall_clock_deadline_despite_heartbeats() -> None:
+    ticks = iter([0.0, 0.5, 1.1])
+    transport = httpx.MockTransport(
+        lambda _: httpx.Response(200, stream=_HeartbeatStream())
+    )
+
+    with pytest.raises(TimeoutError, match="wall-clock deadline"):
+        _Client(
+            "https://provider.example/v1",
+            "key",
+            transport=transport,
+            clock=lambda: next(ticks),
+        ).complete(
+            "model",
+            "prompt",
+            temperature=0.2,
+            max_tokens=16,
+            timeout_s=1.0,
+            attempts=1,
+        )
+
+
 PROBLEM = {
     "question_id": "q1",
     "question_content": "Double the input integer.",
@@ -103,12 +181,22 @@ def store(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     return tmp_path
 
 
-def _patch_completions(monkeypatch: pytest.MonkeyPatch, responses: list[str]) -> list[dict]:
+def _patch_completions(
+    monkeypatch: pytest.MonkeyPatch,
+    responses: list[str],
+    by_temperature: dict[float, str] | None = None,
+) -> list[dict]:
+    """Stub completions; samples draw concurrently, so multi-sample tests key
+    the response on temperature instead of arrival order."""
+
     calls: list[dict] = []
 
     def fake_complete(self: _Client, model: str, prompt: str, **kwargs: Any) -> dict[str, Any]:
         calls.append({"model": model, "prompt": prompt, **kwargs})
-        text = responses[min(len(calls) - 1, len(responses) - 1)]
+        if by_temperature is not None and kwargs.get("temperature") in by_temperature:
+            text = by_temperature[kwargs["temperature"]]
+        else:
+            text = responses[min(len(calls) - 1, len(responses) - 1)]
         return {
             "text": text,
             "prompt_tokens": 10,
@@ -139,7 +227,11 @@ def test_selection_first_grades_sample_zero(
 def test_public_exec_selects_passing_sample(
     store: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    _patch_completions(monkeypatch, [BAD, GOOD, BAD])
+    _patch_completions(
+        monkeypatch,
+        [BAD],
+        by_temperature={0.2: BAD, 0.6: GOOD, 0.9: BAD},
+    )
     raw = LivecodebenchAdapter().run_instance(
         "q1",
         SUTTarget(base_url="http://local/v1", model="m"),
@@ -150,6 +242,7 @@ def test_public_exec_selects_passing_sample(
     assert raw["resolved"] is True
     assert raw["oracle_private"] is True
     assert len(raw["samples"]) == 3
+    assert [s["temperature"] for s in raw["samples"]] == [0.2, 0.6, 0.9]
     assert raw["cost_usd"] == pytest.approx(0.003)
 
 

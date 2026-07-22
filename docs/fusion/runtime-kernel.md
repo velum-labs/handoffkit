@@ -130,21 +130,12 @@ hidden fanout or silently choose candidates.
 Register them when you want workflow IDs:
 
 ```ts
-import { getWorkflow, registerBuiltInWorkflows, runWorkflow } from "@fusionkit/ensemble";
+import { getWorkflow, listWorkflows, registerBuiltInWorkflows } from "@fusionkit/ensemble";
 
 registerBuiltInWorkflows();
+console.log(listWorkflows());
 console.log(getWorkflow("rank-fuse"));
 ```
-
-## CLI discovery
-
-```bash
-fusionkit runtime list
-fusionkit runtime explain panel-judge-synth
-```
-
-The CLI commands are intentionally discovery-oriented. Running arbitrary graphs from JSON requires a
-serializable operator registry; application code should use the TypeScript composition API.
 
 ## Type and graph helpers
 

@@ -19,29 +19,14 @@ DASHBOARD_DIR = ROOT / "infra" / "hyperkit" / "grafana" / "dashboards"
 EXPECTED_DASHBOARDS = {
     "hyperkit-cell-drilldown",
     "hyperkit-fleet",
-    "hyperkit-fusion-internal",
-    "hyperkit-generation-coverage",
     "hyperkit-hypergrid-dynamics",
-    "hyperkit-hypergrid-explorer",
     "hyperkit-hypergrid-leaderboard",
-    "hyperkit-learning-curve",
-    "hyperkit-pareto",
     "hyperkit-sweep-live",
 }
 REQUIRED_VARIABLES = {
     "hyperkit-cell-drilldown": {"benchmark", "cell_id", "generation", "run_id"},
-    "hyperkit-generation-coverage": {"benchmark", "run_id"},
     "hyperkit-hypergrid-dynamics": {"benchmark", "generation", "run_id"},
-    "hyperkit-hypergrid-explorer": {
-        "benchmark",
-        "generation",
-        "run_id",
-        "x_dimension",
-        "y_dimension",
-    },
     "hyperkit-hypergrid-leaderboard": {"benchmark", "generation", "run_id"},
-    "hyperkit-learning-curve": {"benchmark", "cell_id", "generation", "run_id"},
-    "hyperkit-pareto": {"benchmark", "generation", "run_id"},
 }
 BUSINESS_CHARTS_PLUGIN_ID = "volkovlabs-echarts-panel"
 BUSINESS_CHARTS_PLUGIN_VERSION = "7.2.5"
@@ -54,11 +39,8 @@ SUPPORTED_PANEL_TYPES = {
 }
 EXPECTED_BUSINESS_CHARTS = {
     "Quality / Cost Bubble Explorer": ("type: 'scatter'", "dataZoom", "toolbox"),
-    "Cell Trade-space Parallel Coordinates": ("type: 'parallel'", "parallelAxis"),
-    "Topology × K Resolution Heatmap": ("type: 'heatmap'", "visualMap"),
-    "Generation → Topology → Cell Flow": ("type: 'sankey'", "links"),
-    "Live Cell Ranking": ("type: 'bar'", "animationDurationUpdate"),
-    "Resolution Confidence Forest": ("type: 'custom'", "renderItem"),
+    "Live Model Ranking": ("type: 'bar'", "animationDurationUpdate"),
+    "Model Resolution Confidence": ("type: 'custom'", "renderItem"),
 }
 UNSAFE_CHART_CODE_PATTERN = re.compile(
     r"\b(?:eval|fetch|XMLHttpRequest|WebSocket|axios)\s*\(|https?://",
@@ -72,21 +54,17 @@ SUPPORTED_METRICS = {
     "hyperkit_cell_errors",
     "hyperkit_cell_latency_p50_seconds",
     "hyperkit_cell_latency_p95_seconds",
-    "hyperkit_cell_pareto",
     "hyperkit_cell_planned_shards",
     "hyperkit_cell_rank",
     "hyperkit_cell_resolution_rate",
     "hyperkit_cell_resolved_shards",
     "hyperkit_cell_wilson_high",
     "hyperkit_cell_wilson_low",
-    "hyperkit_cells_total",
     "hyperkit_cost_usd_total",
     "hyperkit_shard_latency_seconds_bucket",
     "hyperkit_shards_completed_total",
     "hyperkit_shards_errors_total",
-    "hyperkit_shards_pending",
     "hyperkit_shards_resolved_total",
-    "hyperkit_shards_running",
     "otelcol_exporter_send_failed_metric_points",
     "otelcol_exporter_sent_metric_points",
     "otelcol_receiver_accepted_metric_points",
@@ -105,8 +83,6 @@ SUBSTITUTIONS = {
     "$cell_id": ".*",
     "$generation": ".*",
     "$run_id": ".*",
-    "$x_dimension": "k",
-    "$y_dimension": "topology",
 }
 
 

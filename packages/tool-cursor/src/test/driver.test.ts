@@ -5,8 +5,8 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 
-import { driverContractSuite } from "@fusionkit/harness-core/testing";
-import type { HarnessEvent } from "@fusionkit/harness-core";
+import { driverContractSuite } from "@routekit/harness-core/testing";
+import type { HarnessEvent } from "@routekit/harness-core";
 
 import { createCursorDriver } from "../driver.js";
 
@@ -66,12 +66,30 @@ test("cursor driver maps ACP session updates into canonical events", async () =>
   }
 });
 
-test("cursor driver auto-approves under the panel policy", async () => {
+test("cursor driver forwards effort through the ACP config option", async () => {
   const instance = await driver.createInstance(
     driver.configSchema.parse({ command: wrapperCommand() })
   );
   try {
-    // Panel policy (autoApprove:all) is the default: exec approval is granted
+    const session = await instance.startSession({
+      cwd: here,
+      reasoning: { mode: "effort", effort: "deep" }
+    });
+    for await (const _event of session.sendTurn({ prompt: "reason about this" })) {
+      // Drain.
+    }
+    await session.stop();
+  } finally {
+    await instance.dispose();
+  }
+});
+
+test("cursor driver auto-approves under the automation policy", async () => {
+  const instance = await driver.createInstance(
+    driver.configSchema.parse({ command: wrapperCommand() })
+  );
+  try {
+    // Automation policy (autoApprove:all) is the default: exec approval is granted
     // server-side without a surfaced request, so the turn completes.
     const session = await instance.startSession({ cwd: here });
     const events: HarnessEvent[] = [];

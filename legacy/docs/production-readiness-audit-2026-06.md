@@ -93,7 +93,7 @@ Root package is literally named `warrant` ("the governed execution and provenanc
 - Runner is **outbound-only**: polls, claims, materializes workspace, runs the harness in a session backend, signs runner receipts.
 - Deps `jose`/`pino`/`zod`; `protocol`/`sdk`/`workspace` stay Node-builtins-only for auditability.
 
-**Fusion harness gateway** (`@fusionkit/model-gateway` + `ensemble` + `apps/scope`)
+**Fusion harness gateway** (`@fusionkit/gateway` + `ensemble` + `apps/scope`)
 - Lets unmodified Codex / Claude / Cursor use model fusion as backend. Each panel model runs through the **same harness** in its own git worktree.
 - `FusionBackend` = "the judge streams a trajectory the user's harness executes." No apply/verify/repair — iteration is the harness's job.
 - Dependency-injected `PanelRunner` so `model-gateway` does not depend on `ensemble`/`cli`.
@@ -302,7 +302,7 @@ Flagship repo, two product identities (`warrant` plane + `fusionkit` gateway). 2
 | **sdk** | 238 | **0 — none** |
 | **tools** | — | **0 — none** |
 
-> `@fusionkit/sdk` (offline receipt verification client) and `@fusionkit/tools` (subprocess infra) have **no own tests**.
+> `@fusionkit/sdk` (offline receipt verification client) and the former tool registry had **no own tests** at the time of this audit.
 
 **CI gaps (`.github/workflows/ci.yml`):** `check` job runs `pnpm check` → build → OOTB CLI smoke → `pnpm test` → `pnpm demo all` → **`pnpm bench` (§8.4 budgets)** → `pnpm audit`. Plus `python` and `docker` jobs.
 - **`apps/scope` tests never run in CI** — `pnpm test` globs `packages/*/dist/test`, `examples/*`, `test/*`; scope is an isolated workspace with its own lockfile, only **built** (in the release workflow), never `npm test`ed.

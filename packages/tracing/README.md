@@ -4,7 +4,7 @@ OpenTelemetry-based tracing for the fusion stack.
 
 ## Architecture
 
-The engine is the OTel SDK (ids, W3C propagation, batching, flush, OTLP export); this package owns the thin domain layer: typed span and event helpers over the fusion semantic conventions (`spec/fusion-trace/registry.json`), the serializable trace carrier that threads context through values, HTTP headers, and child environments, and the in-process span/event listeners the narrator and product telemetry subscribe to. Published to npm alongside the other `@fusionkit/*` packages.
+`@routekit/tracing` owns the generic OTel provider, W3C propagation, listeners, and policy-based export redaction. This package is the one-way FusionKit conventions facade: typed span/event helpers, Fusion baggage and attributes, and the generated semantic conventions in `spec/fusion-trace/registry.json`.
 
 ## Usage
 

@@ -4,6 +4,12 @@ Status: product cutover for the runtime kernel introduced in PR #37. The fusion
 front-door turn is now native (this doc records the plan and its completed
 state).
 
+> **Historical cutover record:** Command and API inventories below capture the
+> pre-RouteKit-split migration and are not current product guidance. See
+> [`docs/cli.md`](../cli.md), [`docs/fusion-harness-gateway.md`](../fusion-harness-gateway.md),
+> and [`docs/python-reference.md`](../python-reference.md) for the shipped
+> surfaces.
+
 The fusion front-door surfaces (`fusionkit codex / claude / cursor / serve`) now
 execute every turn as a named kernel graph. `FusionBackend` is a kernel-native
 surface adapter: it maps the gateway wire contract onto `FusionRuntime`
@@ -55,18 +61,17 @@ request; `frontdoor.vendor-proxy` emits a classified outcome; and
 the fusion turn, or (on a vendor pre-stream failover) back into the fusion turn
 with the throttled vendor excluded. The operators capture no per-turn closures.
 
-## Current surface inventory
+## Cutover-time surface inventory (historical)
 
 | Surface | Current execution path | Kernel-backed today? | Cutover target |
 | --- | --- | ---: | --- |
 | `fusionkit codex` | CLI -> FusionBackend -> `fusion-frontdoor-turn` graph (panel -> fuse -> finalize) | Kernel-native | done |
 | `fusionkit claude` | Same stack, Anthropic dialect | Kernel-native | done; dialect adapter only |
 | `fusionkit cursor` | Same stack, Cursor bridge/ACP/IDE | Kernel-native | done; Cursor adapter only |
-| `fusionkit fusion <tool>` | Generic dispatcher to `runFusion` | Kernel-native | done |
 | `fusionkit serve` | Fusion gateway dispatches every turn into a named workflow | Kernel-native | done |
 | `fusionkit <tool> --direct` | kernel-wrapped local gateway over direct backend | Kernel-wrapped | native `direct-model-turn` |
-| `fusionkit ensemble run` | `runEnsemble` wrapper -> legacy operator | Kernel-wrapped | decomposed `ensemble-run` |
-| `fusionkit ensemble e2e` | `runUnifiedHarnessE2E` -> `runEnsemble` wrapper | Kernel-wrapped | e2e adapter -> decomposed workflow |
+| `runEnsemble` library API | wrapper -> legacy operator | Kernel-wrapped | decomposed `ensemble-run` |
+| `runUnifiedHarnessE2E` test API | `runEnsemble` wrapper | Kernel-wrapped | e2e adapter -> decomposed workflow |
 | Node `/v1/chat/completions` | protocol adapter -> backend.chat | Only fused panel capture | backend execution via workflow |
 | Node `/v1/responses` | responses adapter -> backend.chat | Only fused panel capture | adapter only; kernel owns execution |
 | Node `/v1/messages` | Anthropic adapter -> backend.chat | Only fused panel capture | adapter only; kernel owns execution |
@@ -94,7 +99,7 @@ Used when a tool picker selects a native panel model.
 
 Must preserve:
 
-- endpoint-id routing;
+- namespaced-model routing;
 - model discovery/listing;
 - streaming;
 - provider failure normalization;

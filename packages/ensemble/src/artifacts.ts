@@ -2,9 +2,9 @@ import { writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { artifactHash } from "@fusionkit/protocol";
 import type { ModelFusionArtifactKind } from "@fusionkit/protocol";
-import { ensureRunOutputDir } from "@fusionkit/runtime-utils";
+import { artifactHash } from "@routekit/contracts";
+import { ensureRunOutputDir } from "@routekit/runtime";
 
 import type { HarnessArtifact } from "./harness.js";
 
@@ -29,7 +29,7 @@ function safeFileName(value: string): string {
 
 export function createArtifactStore(root: string): ArtifactStore {
   const resolvedRoot = resolve(root);
-  ensureRunOutputDir(resolvedRoot);
+  ensureRunOutputDir(resolvedRoot, { dataDirectoryNames: [".fusionkit"] });
   return {
     root: resolvedRoot,
     writeText(input) {

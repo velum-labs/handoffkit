@@ -1,14 +1,15 @@
 [build-system]
-requires = ["uv_build>=0.11,<0.13"]
+requires = ["uv_build>=0.11.29,<0.13"]
 build-backend = "uv_build"
 
 [project]
 name = "fusionkit-testkit"
 version = "0.8.0"
-description = "Realistic, scriptable LLM provider simulator for testing FusionKit end to end (never published)."
+description = "Scriptable RouteKit-upstream simulator for FusionKit tests (never published)."
 readme = "README.md"
 requires-python = ">=3.11"
 license = "Apache-2.0"
+license-files = ["LICENSE"]
 authors = [{ name = "Velum Labs" }]
 # The simulator itself (server/behaviors/wire_*) is stdlib-only on purpose: no
 # web framework in the test trust surface, and hand-rolled HTTP gives
@@ -20,7 +21,7 @@ dependencies = ["fusionkit-core==0.8.0"]
 [project.scripts]
 fusionkit-sim = "fusionkit_testkit.cli:main"
 
-# Workspace-wide pytest fixtures (provider_sim, sim_stack): any member's tests
+# Workspace-wide pytest fixtures (routekit_sim, sim_stack): any member's tests
 # can use them with zero conftest wiring.
 [project.entry-points.pytest11]
 fusionkit_testkit = "fusionkit_testkit.pytest_plugin"

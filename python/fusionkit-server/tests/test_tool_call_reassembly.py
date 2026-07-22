@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import json
 
-from fusionkit_core.config import model_sampling_defaults
 from fusionkit_core.judge import accumulate_tool_call
 from fusionkit_core.types import ToolCall
 
@@ -102,10 +101,3 @@ def test_large_indexed_stream_survives_many_fragments() -> None:
 
     assert folded[0]["arguments"] == arguments
     assert json.loads(folded[0]["arguments"])["patch"] == source
-
-
-def test_qwen_and_kimi_sampling_defaults() -> None:
-    assert model_sampling_defaults("qwen/qwen3-coder") == {"temperature": 0.55, "top_p": 1.0}
-    assert model_sampling_defaults("moonshotai/kimi-k2") == {"temperature": 0.6}
-    assert model_sampling_defaults("moonshotai/kimi-k2-thinking") == {"temperature": 1.0}
-    assert model_sampling_defaults("gpt-5.5") == {}

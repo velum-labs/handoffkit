@@ -30,11 +30,11 @@ function makeRepo(): { repo: string; outputRoot: string; cleanup: () => void } {
   };
 }
 
-test("capability matrix covers Cursor, Claude Code, Codex, command, and mock", () => {
+test("capability matrix covers every routed tool plus command and mock", () => {
   const matrix = createHarnessCapabilityMatrix({ env: {} });
   const harnessIds = matrix.rows.map((row) => row.harnessId);
 
-  assert.deepEqual(harnessIds, ["codex", "claude-code", "cursor", "command", "mock"]);
+  assert.deepEqual(harnessIds, ["codex", "claude", "cursor", "opencode", "command", "mock"]);
   assert.ok(matrix.capabilities.includes("model_override"));
   assert.ok(matrix.capabilities.includes("transcript_capture"));
   assert.ok(matrix.capabilities.includes("diff_capture"));
@@ -49,7 +49,7 @@ test("capability matrix covers Cursor, Claude Code, Codex, command, and mock", (
     "credential_gated"
   );
   assert.equal(
-    matrix.rows.find((row) => row.harnessId === "claude-code")?.harnessKind,
+    matrix.rows.find((row) => row.harnessId === "claude")?.harnessKind,
     "claude_code"
   );
   assert.equal(matrix.rows.find((row) => row.harnessId === "codex")?.harnessKind, "codex");
@@ -68,7 +68,7 @@ test("smoke dashboard writes schema-valid success, failure, skipped, and missing
       env: {}
     });
 
-    assert.equal(dashboard.records.length, 6);
+    assert.equal(dashboard.records.length, 7);
     assert.equal(existsSync(dashboard.dashboardPath), true);
     for (const record of dashboard.records) {
       assertHarnessRunResultV1(record.result);
@@ -83,24 +83,24 @@ test("smoke dashboard writes schema-valid success, failure, skipped, and missing
       "skipped",
       "skipped",
       "skipped",
+      "skipped",
       "succeeded",
       "succeeded"
     ]);
     assert.equal(
-      dashboard.records.find((record) => record.taskId === "claude-code-skipped")?.result
-        .harness_kind,
+      dashboard.records.find((record) => record.taskId === "claude-driver")?.result.harness_kind,
       "claude_code"
     );
     assert.equal(
-      dashboard.records.find((record) => record.taskId === "codex-skipped")?.result.harness_kind,
+      dashboard.records.find((record) => record.taskId === "codex-driver")?.result.harness_kind,
       "codex"
     );
     assert.equal(
-      dashboard.records.find((record) => record.taskId === "cursor-skipped")?.result.harness_kind,
+      dashboard.records.find((record) => record.taskId === "cursor-driver")?.result.harness_kind,
       "cursor"
     );
     assert.equal(
-      dashboard.records.find((record) => record.taskId === "cursor-skipped")?.result.status,
+      dashboard.records.find((record) => record.taskId === "cursor-driver")?.result.status,
       "skipped"
     );
 
@@ -112,9 +112,9 @@ test("smoke dashboard writes schema-valid success, failure, skipped, and missing
     assert.match(markdown, /credentials missing\/skipped/);
     assert.match(markdown, /live smoke not requested/);
     assert.match(markdown, /command-failure/);
-    assert.match(markdown, /cursor-skipped/);
+    assert.match(markdown, /cursor-driver/);
     assert.match(markdown, /harness-run-results\/mock-success\.json/);
-    assert.equal(dashboard.readiness.length, 5);
+    assert.equal(dashboard.readiness.length, 6);
   } finally {
     fixture.cleanup();
   }
@@ -129,10 +129,10 @@ test("smoke dashboard only adds live records when explicit smoke env is enabled"
       timeoutMs: 1_000,
       createdAt: "2026-06-16T00:00:00.000Z",
       env: {},
-      liveSmoke: ["claude-code", "codex"]
+      liveSmoke: ["claude", "codex"]
     });
 
-    assert.equal(dashboard.records.length, 6);
+    assert.equal(dashboard.records.length, 7);
     assert.equal(
       dashboard.records.some((record) => record.purpose === "live"),
       false
@@ -151,15 +151,15 @@ test("explicit live smoke without credentials records a failed preflight", async
       timeoutMs: 1_000,
       createdAt: "2026-06-16T00:00:00.000Z",
       env: { FUSIONKIT_CLAUDE_SMOKE: "1" },
-      liveSmoke: ["claude-code"]
+      liveSmoke: ["claude"]
     });
-    const live = dashboard.records.find((record) => record.taskId === "claude-code-live");
+    const live = dashboard.records.find((record) => record.taskId === "claude-live");
 
     assert.equal(live?.purpose, "live");
     assert.equal(live?.result.status, "failed");
     assert.match(live?.result.output_summary ?? "", /Explicit live smoke failed before launch/);
     assert.equal(
-      dashboard.readiness.find((row) => row.harnessId === "claude-code")?.liveSmoke,
+      dashboard.readiness.find((row) => row.harnessId === "claude")?.liveSmoke,
       "live smoke failed"
     );
   } finally {
@@ -229,16 +229,16 @@ test("live smoke readiness reports sanitized local evidence refs", async () => {
         ANTHROPIC_API_KEY: "anthropic-test",
         CODEX_API_KEY: "codex-test"
       },
-      liveSmoke: ["claude-code", "codex"],
+      liveSmoke: ["claude", "codex"],
       liveSmokeHarnesses: {
-        "claude-code": claudeHarness,
+        claude: claudeHarness,
         codex: codexHarness
       }
     });
 
-    assert.equal(dashboard.records.length, 8);
+    assert.equal(dashboard.records.length, 9);
     assert.equal(
-      dashboard.records.find((record) => record.taskId === "claude-code-live")?.result.status,
+      dashboard.records.find((record) => record.taskId === "claude-live")?.result.status,
       "succeeded"
     );
     assert.equal(
@@ -246,7 +246,7 @@ test("live smoke readiness reports sanitized local evidence refs", async () => {
       "succeeded"
     );
     assert.equal(
-      dashboard.readiness.find((row) => row.harnessId === "claude-code")?.liveSmoke,
+      dashboard.readiness.find((row) => row.harnessId === "claude")?.liveSmoke,
       "live smoke passed"
     );
     assert.equal(

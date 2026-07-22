@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
+import { getEventListeners } from "node:events";
 import { test } from "node:test";
 
 import { formatBytes, relativeTime } from "../format.js";
 import { PlainPresenter, renderKeyValueLines, renderTableLines } from "../plain.js";
 import { isInteractive } from "../runtime.js";
+import { watch } from "../presenter.js";
 import {
   bold,
   box,
@@ -188,6 +190,100 @@ test("plain presenter progress prints milestones, not every update", () => {
     assert.equal(output.filter((line) => line.includes("50%")).length, 1);
     assert.match(output[output.length - 1] ?? "", /\[ok\] model/);
   });
+});
+
+test("plain presenter liveFrame appends timestamped snapshots", () => {
+  withNoColor(() => {
+    const { presenter, lines } = capturingPresenter();
+    const frame = presenter.liveFrame();
+    frame.render(["first"]);
+    frame.render(() => ["second", "detail"]);
+    frame.stop();
+    const output = lines();
+    assert.equal(output.filter((line) => /^\[\d{4}-\d{2}-\d{2}T/.test(line)).length, 2);
+    assert.deepEqual(
+      output.filter((line) => !line.startsWith("[")),
+      ["first", "second", "detail"]
+    );
+  });
+});
+
+test("watch renders fetch errors and cancels an in-flight refresh on abort", async () => {
+  const { presenter, lines } = capturingPresenter();
+  const abort = new AbortController();
+  let calls = 0;
+  await watch(
+    presenter,
+    0.1,
+    () => {
+      calls += 1;
+      if (calls === 1) throw new Error("temporary");
+      abort.abort();
+      return ["healthy"];
+    },
+    { signal: abort.signal }
+  );
+  assert.equal(calls, 2);
+  assert.ok(lines().some((line) => line.includes("error: temporary")));
+  assert.equal(lines().includes("healthy"), false);
+});
+
+test("watch does not poll with a pre-aborted signal", async () => {
+  const { presenter, lines } = capturingPresenter();
+  const abort = new AbortController();
+  abort.abort();
+  let calls = 0;
+  await watch(
+    presenter,
+    0.1,
+    () => {
+      calls += 1;
+      return ["unexpected"];
+    },
+    { signal: abort.signal }
+  );
+  assert.equal(calls, 0);
+  assert.deepEqual(lines(), []);
+});
+
+test("watch does not start a refresh when abort wins the microtask race", async () => {
+  const { presenter } = capturingPresenter();
+  const abort = new AbortController();
+  let calls = 0;
+  queueMicrotask(() => abort.abort());
+  await watch(
+    presenter,
+    0.1,
+    () => {
+      calls += 1;
+      return ["unexpected"];
+    },
+    { signal: abort.signal }
+  );
+  assert.equal(calls, 0);
+});
+
+test("watch removes interval abort listeners after each refresh", async () => {
+  const { presenter } = capturingPresenter();
+  const abort = new AbortController();
+  let calls = 0;
+  let maximumListeners = 0;
+  await watch(
+    presenter,
+    0.1,
+    (signal) => {
+      calls += 1;
+      maximumListeners = Math.max(
+        maximumListeners,
+        getEventListeners(signal, "abort").length
+      );
+      if (calls === 3) abort.abort();
+      return [`frame ${calls}`];
+    },
+    { signal: abort.signal }
+  );
+  assert.equal(calls, 3);
+  assert.ok(maximumListeners <= 1, `abort listeners accumulated: ${maximumListeners}`);
 });
 
 test("plain presenter status renders glyph, detail, and hint", () => {

@@ -1,10 +1,10 @@
 /**
  * The REAL product front door: `fusionkit serve` (this package's actual CLI
- * entrypoint) booting its production stack — config loading from
- * `.fusionkit/fusion.json`, provider-key preflight probes, the Python engine
+ * entrypoint) booting its production stack — v4 Fusion/RouteKit config loading,
+ * the credential-free Python sidecar
  * spawned through the real dev override (`uv run --package fusionkit`), the
- * in-process gateway, and the printed setup snippets — with every provider
- * endpoint pointed at the scripted simulator. A fused turn is then driven
+ * in-process gateway, and the printed setup snippets — with every RouteKit
+ * provider pointed at the scripted simulator. A fused turn is then driven
  * through the gateway the CLI itself booted.
  *
  * This is the orchestration path production users run (`fusion-quickstart` ->
@@ -35,7 +35,7 @@ let cli: ChildProcess | undefined;
 let cliOutput = "";
 let gatewayUrl: string | undefined;
 
-function makeConfiguredRepo(simUrl: string): string {
+function makeConfiguredRepo(): string {
   const dir = mkdtempSync(join(tmpdir(), "fusionkit-npm-cli-"));
   execFileSync("git", ["init", "-q", "-b", "main"], { cwd: dir });
   execFileSync(
@@ -44,22 +44,21 @@ function makeConfiguredRepo(simUrl: string): string {
     { cwd: dir }
   );
   mkdirSync(join(dir, ".fusionkit"));
+  mkdirSync(join(dir, ".routekit"));
   writeFileSync(
     join(dir, ".fusionkit", "fusion.json"),
     JSON.stringify(
       {
-        version: "fusionkit.fusion.v3",
+        version: "fusionkit.fusion.v4",
+        router: { config: ".routekit/router.yaml" },
         defaultEnsemble: "default",
         ensembles: {
           default: {
             // k=1 proposal mode keeps provider scripting deterministic; the
             // rollout path is covered by gateway-e2e's worktree suite.
             k: 1,
-            panel: [
-              { id: "alpha", model: "gpt-real-a", provider: "openai", baseUrl: simUrl, keyEnv: "SIM_KEY" },
-              { id: "beta", model: "claude-real-b", provider: "anthropic", baseUrl: simUrl, keyEnv: "SIM_KEY" }
-            ],
-            judgeModel: "gpt-real-a"
+            members: ["openai/gpt-real-a", "anthropic/claude-real-b"],
+            judge: "openai/gpt-real-a"
           }
         }
       },
@@ -67,13 +66,25 @@ function makeConfiguredRepo(simUrl: string): string {
       2
     )
   );
+  writeFileSync(
+    join(dir, ".routekit", "router.yaml"),
+    [
+      "providers:",
+      "  openai: {}",
+      "  anthropic: {}",
+      "defaultModel: openai/gpt-real-a",
+      ""
+    ].join("\n")
+  );
   return dir;
 }
 
 before(async function () {
   if (SKIP !== false) return;
   sim = await startProviderSim();
-  repo = makeConfiguredRepo(sim.url);
+  await sim.queue("gpt-real-a", ["catalog seed"]);
+  await sim.queue("claude-real-b", ["catalog seed"]);
+  repo = makeConfiguredRepo();
   cli = spawn(
     process.execPath,
     [
@@ -85,13 +96,21 @@ before(async function () {
       repo,
       "--no-reasoning",
       "--no-observe",
-      "--no-subagents",
-      "--yes"
+      "--no-subagents"
     ],
     {
       cwd: repo,
       // env-spread-allowed: the CLI under test is this repo's own product entrypoint
-      env: { ...process.env, SIM_KEY: "sk-sim", PORTLESS: "0", FUSIONKIT_TELEMETRY: "0", NO_COLOR: "1" },
+      env: {
+        ...process.env,
+        PORTLESS: "0",
+        FUSIONKIT_TELEMETRY: "0",
+        NO_COLOR: "1",
+        OPENAI_API_KEY: "test-openai",
+        OPENAI_BASE_URL: sim.url,
+        ANTHROPIC_API_KEY: "test-anthropic",
+        ANTHROPIC_BASE_URL: sim.url
+      },
       stdio: ["ignore", "pipe", "pipe"]
     }
   );
@@ -100,11 +119,9 @@ before(async function () {
   const deadline = Date.now() + 120_000;
   while (Date.now() < deadline && gatewayUrl === undefined) {
     if (cli.exitCode !== null) break;
-    if (/gateway is running/i.test(cliOutput)) {
-      // The Claude setup snippet names the gateway root unambiguously (the
-      // first loopback URL in the output can be the router, not the gateway).
-      gatewayUrl = cliOutput.match(/ANTHROPIC_BASE_URL=(http:\/\/[\d.]+:\d+)/)?.[1];
-    }
+    gatewayUrl = cliOutput.match(
+      /fusion: ready at (http:\/\/[\d.]+:\d+)/
+    )?.[1];
     await new Promise((resolvePromise) => setTimeout(resolvePromise, 250));
   }
 });
@@ -120,12 +137,12 @@ after(async () => {
 
 test("the real `fusionkit serve` CLI boots its production stack against the simulator", { skip: SKIP }, () => {
   assert.ok(gatewayUrl, `the CLI must print a running gateway URL:\n${cliOutput.slice(0, 3000)}`);
-  // Preflight really probed the (simulated) providers and passed.
-  assert.doesNotMatch(cliOutput, /preflight failed/i);
-  // The product's own onboarding surface: per-tool setup snippets.
-  assert.match(cliOutput, /Codex \(OpenAI Responses\)/);
-  assert.match(cliOutput, /Claude Code \(Anthropic Messages\)/);
-  assert.match(cliOutput, /fusion-panel/);
+  assert.doesNotMatch(cliOutput, /FusionKit v4 requires a router reference/i);
+  // The product's own onboarding surface: all four tools select fusion-panel.
+  assert.match(cliOutput, /model = "fusion-panel"/);
+  assert.match(cliOutput, /ANTHROPIC_MODEL=fusion-panel/);
+  assert.match(cliOutput, /cursor-agent .*--model fusion-panel/);
+  assert.match(cliOutput, /OpenCode gateway: .*model: fusion-panel/);
 });
 
 test("the CLI-booted gateway advertises the fused model", { skip: SKIP }, async () => {
@@ -135,7 +152,12 @@ test("the CLI-booted gateway advertises the fused model", { skip: SKIP }, async 
   };
   const ids = new Set(models.data.map((entry) => entry.id));
   assert.ok(ids.has("fusion-panel"));
-  assert.ok(ids.has("gpt-real-a"), "panel members are advertised as passthroughs");
+  assert.ok(ids.has("openai/gpt-real-a"), "namespaced RouteKit models must be advertised");
+  assert.ok(
+    ids.has("anthropic/claude-real-b"),
+    "namespaced RouteKit models must be advertised"
+  );
+  assert.ok(!ids.has("gpt-real-a"), "unnamespaced provider model names stay behind RouteKit");
 });
 
 test("a fused turn flows through the CLI-booted stack end to end", { skip: SKIP }, async () => {

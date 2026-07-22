@@ -58,18 +58,30 @@ class EntityAlreadyExistsException(Exception):
     pass
 
 
+class NoSuchEntityException(Exception):
+    pass
+
+
 class FakeIam:
     class exceptions:
         EntityAlreadyExistsException = EntityAlreadyExistsException
+        NoSuchEntityException = NoSuchEntityException
 
-    def __init__(self) -> None:
+    def __init__(self, *, role_exists: bool = False) -> None:
         self.created_role: dict[str, Any] | None = None
+        self.role_exists = role_exists
+        self.put_policy_calls = 0
+
+    def get_role(self, **_: Any) -> dict[str, Any]:
+        if not self.role_exists:
+            raise NoSuchEntityException
+        return {"Role": {"RoleName": "hypergrid-obs-role"}}
 
     def create_role(self, **kwargs: Any) -> None:
         self.created_role = kwargs
 
     def put_role_policy(self, **_: Any) -> None:
-        pass
+        self.put_policy_calls += 1
 
     def create_instance_profile(self, **_: Any) -> None:
         pass
@@ -148,6 +160,21 @@ def test_instance_role_applies_required_permissions_boundary() -> None:
 
     assert iam.created_role is not None
     assert iam.created_role["PermissionsBoundary"] == boundary
+
+
+def test_existing_instance_role_requires_no_iam_mutation() -> None:
+    iam = FakeIam(role_exists=True)
+
+    deploy._ensure_instance_profile(
+        iam,
+        "123456789012",
+        "us-east-1",
+        "/tailscale/key",
+        "arn:aws:iam::123456789012:policy/required-boundary",
+    )
+
+    assert iam.created_role is None
+    assert iam.put_policy_calls == 0
 
 
 def test_legacy_instance_is_not_treated_as_tailnet_secured() -> None:

@@ -13,6 +13,10 @@ import {
   composeServerToolStream,
   runBufferedServerToolLoop
 } from "../adapters/server-tool-loop.js";
+import {
+  ANTHROPIC_MESSAGE_CONTENT,
+  type AnthropicNativeContentBlock
+} from "../adapters/openai-chat-wire.js";
 import { resolveWebSearchExecutor } from "../adapters/web-search.js";
 import type { WebSearchExecutor, WebSearchOutcome } from "../adapters/web-search.js";
 
@@ -75,7 +79,7 @@ test("resolveWebSearchExecutor prefers the dialect's own provider and falls back
   assert.equal(resolveWebSearchExecutor("anthropic", { OPENAI_API_KEY: "sk-a" })?.provider, "openai");
   assert.equal(resolveWebSearchExecutor("responses", { ANTHROPIC_API_KEY: "sk-b" })?.provider, "anthropic");
   assert.equal(resolveWebSearchExecutor("responses", {}), undefined);
-  assert.equal(resolveWebSearchExecutor("responses", { ...both, FUSIONKIT_WEB_SEARCH: "0" }), undefined);
+  assert.equal(resolveWebSearchExecutor("responses", { ...both, ROUTEKIT_WEB_SEARCH: "0" }), undefined);
 });
 
 // ---- Responses ingress ----
@@ -149,7 +153,7 @@ test("runBufferedServerToolLoop executes searches and loops to the final answer"
   // The final Responses payload renders the native item before the message.
   const rendered = chatToResponses(
     outcome.openai as never,
-    "fusion-panel",
+    "route-primary",
     responsesToolRegistry({ tools: [WEB_SEARCH_DECL] }, { serverTools: true }),
     outcome.searches
   );
@@ -157,6 +161,73 @@ test("runBufferedServerToolLoop executes searches and loops to the final answer"
   assert.equal(output[0]?.type, "web_search_call");
   assert.equal((output[0]?.action as { query?: string }).query, "node lts");
   assert.equal(output[1]?.type, "message");
+});
+
+test("runBufferedServerToolLoop replays signed Anthropic thinking before a server tool continuation", async () => {
+  const first = chatCompletion(
+    {
+      content: null,
+      reasoning: "I should search.",
+      reasoning_details: [
+        {
+          type: "thinking",
+          index: 0,
+          thinking: "I should search.",
+          signature: "sig-native"
+        }
+      ],
+      tool_calls: [
+        {
+          id: "call_1",
+          function: { name: "web_search", arguments: '{"query":"routekit"}' }
+        }
+      ]
+    },
+    "tool_calls"
+  );
+  const chat: Record<string, unknown> = {
+    model: "m",
+    messages: [{ role: "user", content: "look it up" }]
+  };
+  let replayed: AnthropicNativeContentBlock[] | undefined;
+  const outcome = await runBufferedServerToolLoop({
+    chat,
+    firstStep: jsonResponse(first),
+    runStep: async (next) => {
+      const assistant = (next.messages as Array<Record<string, unknown>>)[1] as
+        | (Record<string, unknown> & {
+            [ANTHROPIC_MESSAGE_CONTENT]?: AnthropicNativeContentBlock[];
+          })
+        | undefined;
+      replayed = assistant?.[ANTHROPIC_MESSAGE_CONTENT];
+      return jsonResponse(chatCompletion({ content: "done" }));
+    },
+    serverToolNames: new Set(["web_search"]),
+    executor: fakeExecutor({
+      routekit: { text: "RouteKit result", citations: [] }
+    })
+  });
+  assert.equal(outcome.kind, "openai");
+  assert.deepEqual(replayed?.map((block) => block.type), ["thinking", "tool_use"]);
+  assert.equal(
+    (replayed?.[0] as { signature?: string } | undefined)?.signature,
+    "sig-native"
+  );
+  if (outcome.kind !== "openai") return;
+  const rendered = chatToAnthropicMessage(
+    outcome.openai as never,
+    "route-primary",
+    outcome.searches,
+    outcome.events
+  );
+  assert.deepEqual(
+    (rendered.content as Array<Record<string, unknown>>).map((block) => block.type),
+    ["thinking", "server_tool_use", "web_search_tool_result", "text"]
+  );
+  assert.equal(
+    (rendered.content as Array<Record<string, unknown>>)[0]?.signature,
+    "sig-native"
+  );
 });
 
 test("runBufferedServerToolLoop surfaces mixed batches and drops the server calls", async () => {
@@ -265,7 +336,7 @@ test("composeServerToolStream renders native web_search_call items and one compl
     executor
   });
   const registry = responsesToolRegistry({ tools: [WEB_SEARCH_DECL] }, { serverTools: true });
-  const text = await new Response(openAiSseToResponses(composed, "fusion-panel", registry)).text();
+  const text = await new Response(openAiSseToResponses(composed, "route-primary", registry)).text();
   assert.ok(text.includes('"type":"web_search_call"'), "native search item emitted");
   assert.ok(text.includes("response.web_search_call.searching"), "search lifecycle events emitted");
   assert.ok(!text.includes('"type":"function_call"'), "the server tool never surfaces as a function_call");
@@ -279,12 +350,128 @@ test("composeServerToolStream renders native web_search_call items and one compl
     payload.response.output.map((item) => item.type).sort(),
     ["message", "web_search_call"]
   );
-  // Usage sums both fused steps.
+  // Usage sums both model steps.
   assert.equal(payload.response.usage.input_tokens, 30);
   assert.equal(payload.response.usage.output_tokens, 10);
   // The full text of both steps reached the message item.
   assert.ok(text.includes("Let me check."));
   assert.ok(text.includes("Node 24 is the LTS."));
+});
+
+test("composeServerToolStream carries streamed signed thinking into the continuation request", async () => {
+  const firstStep = sseStream(
+    chunk({
+      reasoning_details: [
+        { type: "thinking", index: 0, phase: "start", signature: "" }
+      ]
+    }),
+    chunk({
+      reasoning: "search first",
+      reasoning_details: [
+        {
+          type: "thinking",
+          index: 0,
+          phase: "delta",
+          thinking: "search first"
+        }
+      ]
+    }),
+    chunk({
+      reasoning_details: [
+        {
+          type: "thinking",
+          index: 0,
+          phase: "signature",
+          signature: "sig-stream-loop"
+        }
+      ]
+    }),
+    chunk({
+      reasoning_details: [
+        { type: "thinking", index: 0, phase: "stop" }
+      ]
+    }),
+    chunk({
+      tool_calls: [
+        {
+          index: 0,
+          id: "call_1",
+          function: {
+            name: "web_search",
+            arguments: '{"query":"routekit"}'
+          }
+        }
+      ]
+    }),
+    chunk({}, "tool_calls"),
+    "data: [DONE]\n\n"
+  );
+  const secondStep = sseStream(
+    chunk({
+      reasoning_details: [
+        { type: "thinking", index: 0, phase: "start", signature: "" }
+      ]
+    }),
+    chunk({
+      reasoning: "answer now",
+      reasoning_details: [
+        {
+          type: "thinking",
+          index: 0,
+          phase: "delta",
+          thinking: "answer now"
+        }
+      ]
+    }),
+    chunk({
+      reasoning_details: [
+        {
+          type: "thinking",
+          index: 0,
+          phase: "signature",
+          signature: "sig-second-step"
+        },
+        { type: "thinking", index: 0, phase: "stop" }
+      ]
+    }),
+    chunk({ content: "done" }),
+    chunk({}, "stop"),
+    "data: [DONE]\n\n"
+  );
+  const chat: Record<string, unknown> = {
+    model: "m",
+    messages: [],
+    stream: true
+  };
+  let replayed: AnthropicNativeContentBlock[] | undefined;
+  const composed = composeServerToolStream({
+    chat,
+    firstStep,
+    runStep: async (next) => {
+      const assistant = (next.messages as Array<Record<PropertyKey, unknown>>)[0];
+      replayed = assistant?.[ANTHROPIC_MESSAGE_CONTENT] as
+        | AnthropicNativeContentBlock[]
+        | undefined;
+      return secondStep;
+    },
+    serverToolNames: new Set(["web_search"]),
+    executor: fakeExecutor({
+      routekit: { text: "RouteKit result", citations: [] }
+    })
+  });
+  const translated = await new Response(
+    openAiSseToAnthropic(composed, "route-primary")
+  ).text();
+  assert.deepEqual(replayed?.map((block) => block.type), [
+    "thinking",
+    "tool_use"
+  ]);
+  assert.equal(
+    (replayed?.[0] as { signature?: string } | undefined)?.signature,
+    "sig-stream-loop"
+  );
+  assert.match(translated, /"thinking":"answer now"/);
+  assert.match(translated, /"signature":"sig-second-step"/);
 });
 
 // ---- Anthropic dialect ----
@@ -337,7 +524,7 @@ test("chatToAnthropicMessage renders executed searches as native blocks", () => 
   const openai = {
     choices: [{ index: 0, message: { role: "assistant", content: "Node 24." }, finish_reason: "stop" }]
   };
-  const rendered = chatToAnthropicMessage(openai as never, "fusion-panel", [
+  const rendered = chatToAnthropicMessage(openai as never, "route-primary", [
     {
       itemId: "srv_1",
       query: "node lts",
@@ -385,7 +572,7 @@ test("openAiSseToAnthropic renders loop markers as native search blocks", async 
     serverToolNames: new Set(["web_search"]),
     executor
   });
-  const text = await new Response(openAiSseToAnthropic(composed, "fusion-panel")).text();
+  const text = await new Response(openAiSseToAnthropic(composed, "route-primary")).text();
   assert.ok(text.includes('"type":"server_tool_use"'));
   assert.ok(text.includes('"type":"web_search_tool_result"'));
   assert.ok(text.includes('"url":"https://nodejs.org"'));

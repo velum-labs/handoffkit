@@ -1,17 +1,17 @@
-# @fusionkit/tool-cursor
+# @routekit/tool-cursor
 
-Cursor integration for FusionKit.
+Product-neutral Cursor launcher, bridge serializer, and canonical ACP driver.
 
 ## Architecture
 
-This package wires Cursor and Cursorkit bridge flows into FusionKit so Cursor can run against a fused panel backend.
+This package owns the one Cursor launch path and canonical driver.
 
 ## Usage
 
-Most users should run `fusionkit cursor` from `@fusionkit/cli`.
+Register `cursorTool` in an `@routekit/tools` registry.
 
 ```ts
-import * as fusionkitPackage from "@fusionkit/tool-cursor";
+import { cursorTool } from "@routekit/tool-cursor";
 ```
 
 ## Docs
