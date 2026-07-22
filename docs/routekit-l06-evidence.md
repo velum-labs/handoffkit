@@ -5,7 +5,7 @@
 Audience: maintainers reviewing the first-launch RouteKit support contract.
 
 - **RouteKit version:** 0.8.0
-- **Tested revision:** [`2f9914d5dc04f4f7d604737b3085345572ac6226`](https://github.com/velum-labs/handoffkit/commit/2f9914d5dc04f4f7d604737b3085345572ac6226)
+- **Tested revision:** [`40271dc4906089d54108b910f45ba0852a47cb20`](https://github.com/velum-labs/handoffkit/commit/40271dc4906089d54108b910f45ba0852a47cb20)
 - **Evidence date:** 2026-07-22
 - **Mapping schema:** 1
 - **Mapping digest:** `6882999e378bba583e2743349c7227539092737802337dcdccafa249b8108ebe`
@@ -24,7 +24,7 @@ sanitized record.
 
 | Evidence | Type | Status | Reference | Result details |
 | --- | --- | --- | --- | --- |
-| deterministic.openai.openai-chat | automated | pending | matrix:deterministic.openai.openai-chat | — |
+| deterministic.openai.openai-chat | automated | pass | matrix:deterministic.openai.openai-chat | deterministic/openai/openai-chat; 92 ms; 0 billed calls |
 | live.openai.openai-chat | automated | pending | ENG-679 real-account matrix | — |
 
 | Required outcome | Status | Sanitized result |
@@ -44,7 +44,7 @@ sanitized record.
 
 | Evidence | Type | Status | Reference | Result details |
 | --- | --- | --- | --- | --- |
-| deterministic.anthropic.anthropic-messages | automated | pending | matrix:deterministic.anthropic.anthropic-messages | — |
+| deterministic.anthropic.anthropic-messages | automated | pass | matrix:deterministic.anthropic.anthropic-messages | deterministic/anthropic/anthropic-messages; 93 ms; 0 billed calls |
 | live.anthropic.anthropic-messages | automated | pending | ENG-679 real-account matrix | — |
 
 | Required outcome | Status | Sanitized result |
@@ -64,8 +64,8 @@ sanitized record.
 
 | Evidence | Type | Status | Reference | Result details |
 | --- | --- | --- | --- | --- |
-| deterministic.openrouter.openai-chat | automated | pending | matrix:deterministic.openrouter.openai-chat | — |
-| deterministic.openrouter.dynamic-reasoning-capabilities | automated | pending | matrix:deterministic.openrouter.dynamic-reasoning-capabilities | — |
+| deterministic.openrouter.openai-chat | automated | pass | matrix:deterministic.openrouter.openai-chat | deterministic/openrouter/openai-chat; 93 ms; 0 billed calls |
+| deterministic.openrouter.dynamic-reasoning-capabilities | automated | pass | matrix:deterministic.openrouter.dynamic-reasoning-capabilities | deterministic/openrouter/dynamic-reasoning-capabilities; 48 ms; 0 billed calls |
 | live.openrouter.openai-chat | automated | pending | ENG-679 real-account matrix | — |
 
 | Required outcome | Status | Sanitized result |
@@ -85,8 +85,8 @@ sanitized record.
 
 | Evidence | Type | Status | Reference | Result details |
 | --- | --- | --- | --- | --- |
-| deterministic.codex.codex-responses | automated | pending | matrix:deterministic.codex.codex-responses | — |
-| deterministic.codex.codex | automated | pending | matrix:deterministic.codex.codex | — |
+| deterministic.codex.codex-responses | automated | pass | matrix:deterministic.codex.codex-responses | deterministic/codex/codex-responses; 95 ms; 0 billed calls |
+| deterministic.codex.codex | automated | pending | matrix:deterministic.codex.codex | deterministic/codex/codex; 0 ms; 0 billed calls |
 | live.codex.codex-responses | automated | pending | ENG-679 real-account matrix | — |
 | live.codex.codex | automated | pending | ENG-679 real-account matrix | — |
 | Codex setup and restore review | manual | pending | https://linear.app/velum-labs/issue/ENG-679 | — |
@@ -108,9 +108,9 @@ sanitized record.
 
 | Evidence | Type | Status | Reference | Result details |
 | --- | --- | --- | --- | --- |
-| deterministic.claude-code.anthropic-messages | automated | pending | matrix:deterministic.claude-code.anthropic-messages | — |
-| deterministic.claude-code.anthropic-thinking | automated | pending | matrix:deterministic.claude-code.anthropic-thinking | — |
-| deterministic.claude-code.claude | automated | pending | matrix:deterministic.claude-code.claude | — |
+| deterministic.claude-code.anthropic-messages | automated | pass | matrix:deterministic.claude-code.anthropic-messages | deterministic/claude-code/anthropic-messages; 90 ms; 0 billed calls |
+| deterministic.claude-code.anthropic-thinking | automated | pass | matrix:deterministic.claude-code.anthropic-thinking | deterministic/claude-code/anthropic-thinking; 151 ms; 0 billed calls |
+| deterministic.claude-code.claude | automated | pending | matrix:deterministic.claude-code.claude | deterministic/claude-code/claude; 0 ms; 0 billed calls |
 | live.claude-code.anthropic-messages | automated | pending | ENG-679 real-account matrix | — |
 | live.claude-code.claude | automated | pending | ENG-679 real-account matrix | — |
 | live.claude-code.pool | automated | pending | ENG-679 real-account matrix | — |
@@ -152,7 +152,7 @@ sanitized record.
 
 | Evidence | Type | Status | Reference | Result details |
 | --- | --- | --- | --- | --- |
-| deterministic.openrouter.cursor | automated | pending | matrix:deterministic.openrouter.cursor | — |
+| deterministic.openrouter.cursor | automated | pending | matrix:deterministic.openrouter.cursor | deterministic/openrouter/cursor; 0 ms; 0 billed calls |
 | live.openrouter.cursor | automated | pending | ENG-679 real-account matrix | — |
 | Authenticated cursor-agent setup and restore review | manual | pending | https://linear.app/velum-labs/issue/ENG-679 | — |
 

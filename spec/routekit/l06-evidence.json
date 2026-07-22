@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "routekitVersion": "0.8.0",
-  "testedRevision": "2f9914d5dc04f4f7d604737b3085345572ac6226",
+  "testedRevision": "40271dc4906089d54108b910f45ba0852a47cb20",
   "evidenceDate": "2026-07-22",
   "routes": {
     "route-openai-api": {
@@ -12,9 +12,17 @@
       "evidence": [
         {
           "type": "automated",
-          "status": "pending",
+          "status": "pass",
           "caseId": "deterministic.openai.openai-chat",
-          "reference": "matrix:deterministic.openai.openai-chat"
+          "reference": "matrix:deterministic.openai.openai-chat",
+          "result": {
+            "phase": "deterministic",
+            "provider": "openai",
+            "door": "openai-chat",
+            "durationMs": 92,
+            "billedCalls": 0,
+            "artifact": null
+          }
         },
         {
           "type": "automated",
@@ -50,9 +58,17 @@
       "evidence": [
         {
           "type": "automated",
-          "status": "pending",
+          "status": "pass",
           "caseId": "deterministic.anthropic.anthropic-messages",
-          "reference": "matrix:deterministic.anthropic.anthropic-messages"
+          "reference": "matrix:deterministic.anthropic.anthropic-messages",
+          "result": {
+            "phase": "deterministic",
+            "provider": "anthropic",
+            "door": "anthropic-messages",
+            "durationMs": 93,
+            "billedCalls": 0,
+            "artifact": null
+          }
         },
         {
           "type": "automated",
@@ -88,15 +104,31 @@
       "evidence": [
         {
           "type": "automated",
-          "status": "pending",
+          "status": "pass",
           "caseId": "deterministic.openrouter.openai-chat",
-          "reference": "matrix:deterministic.openrouter.openai-chat"
+          "reference": "matrix:deterministic.openrouter.openai-chat",
+          "result": {
+            "phase": "deterministic",
+            "provider": "openrouter",
+            "door": "openai-chat",
+            "durationMs": 93,
+            "billedCalls": 0,
+            "artifact": null
+          }
         },
         {
           "type": "automated",
-          "status": "pending",
+          "status": "pass",
           "caseId": "deterministic.openrouter.dynamic-reasoning-capabilities",
-          "reference": "matrix:deterministic.openrouter.dynamic-reasoning-capabilities"
+          "reference": "matrix:deterministic.openrouter.dynamic-reasoning-capabilities",
+          "result": {
+            "phase": "deterministic",
+            "provider": "openrouter",
+            "door": "dynamic-reasoning-capabilities",
+            "durationMs": 48,
+            "billedCalls": 0,
+            "artifact": null
+          }
         },
         {
           "type": "automated",
@@ -132,15 +164,32 @@
       "evidence": [
         {
           "type": "automated",
-          "status": "pending",
+          "status": "pass",
           "caseId": "deterministic.codex.codex-responses",
-          "reference": "matrix:deterministic.codex.codex-responses"
+          "reference": "matrix:deterministic.codex.codex-responses",
+          "result": {
+            "phase": "deterministic",
+            "provider": "codex",
+            "door": "codex-responses",
+            "durationMs": 95,
+            "billedCalls": 0,
+            "artifact": null
+          }
         },
         {
           "type": "automated",
           "status": "pending",
           "caseId": "deterministic.codex.codex",
-          "reference": "matrix:deterministic.codex.codex"
+          "reference": "matrix:deterministic.codex.codex",
+          "result": {
+            "phase": "deterministic",
+            "provider": "codex",
+            "door": "codex",
+            "durationMs": 0,
+            "billedCalls": 0,
+            "artifact": null
+          },
+          "summary": "Skipped; qualification remains pending: codex is not installed"
         },
         {
           "type": "automated",
@@ -188,21 +237,46 @@
       "evidence": [
         {
           "type": "automated",
-          "status": "pending",
+          "status": "pass",
           "caseId": "deterministic.claude-code.anthropic-messages",
-          "reference": "matrix:deterministic.claude-code.anthropic-messages"
+          "reference": "matrix:deterministic.claude-code.anthropic-messages",
+          "result": {
+            "phase": "deterministic",
+            "provider": "claude-code",
+            "door": "anthropic-messages",
+            "durationMs": 90,
+            "billedCalls": 0,
+            "artifact": null
+          }
         },
         {
           "type": "automated",
-          "status": "pending",
+          "status": "pass",
           "caseId": "deterministic.claude-code.anthropic-thinking",
-          "reference": "matrix:deterministic.claude-code.anthropic-thinking"
+          "reference": "matrix:deterministic.claude-code.anthropic-thinking",
+          "result": {
+            "phase": "deterministic",
+            "provider": "claude-code",
+            "door": "anthropic-thinking",
+            "durationMs": 151,
+            "billedCalls": 0,
+            "artifact": null
+          }
         },
         {
           "type": "automated",
           "status": "pending",
           "caseId": "deterministic.claude-code.claude",
-          "reference": "matrix:deterministic.claude-code.claude"
+          "reference": "matrix:deterministic.claude-code.claude",
+          "result": {
+            "phase": "deterministic",
+            "provider": "claude-code",
+            "door": "claude",
+            "durationMs": 0,
+            "billedCalls": 0,
+            "artifact": null
+          },
+          "summary": "Skipped; qualification remains pending: claude is not installed"
         },
         {
           "type": "automated",
@@ -290,7 +364,16 @@
           "type": "automated",
           "status": "pending",
           "caseId": "deterministic.openrouter.cursor",
-          "reference": "matrix:deterministic.openrouter.cursor"
+          "reference": "matrix:deterministic.openrouter.cursor",
+          "result": {
+            "phase": "deterministic",
+            "provider": "openrouter",
+            "door": "cursor",
+            "durationMs": 0,
+            "billedCalls": 0,
+            "artifact": null
+          },
+          "summary": "Skipped; qualification remains pending: cursor-agent is not installed"
         },
         {
           "type": "automated",
