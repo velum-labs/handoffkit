@@ -123,6 +123,7 @@ export type { CliproxyInstallResult, CliproxyStatus } from "./cliproxy.js";
 
 // Account connectors: one login surface over native + cliproxy mechanisms
 export {
+  accountStoreEntries,
   cliproxyAccountEntries,
   cliproxyAccountMatchesKind,
   loginCliproxyAccount,
@@ -130,6 +131,7 @@ export {
   resolveAccountKind
 } from "./connector.js";
 export type {
+  AccountStoreEntry,
   CliproxyAccountEntry,
   CliproxyLoginInvocation,
   CliproxyLoginOptions,

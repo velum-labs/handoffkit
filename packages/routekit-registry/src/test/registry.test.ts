@@ -10,6 +10,7 @@ import {
   LOCAL_PROBE_MODEL,
   PREFERRED_LOCAL_MODELS,
   REGISTRY,
+  accountKindChoices,
   accountKindForCliproxyAuthType,
   providerDiscovery,
   resolveAccountConnector
@@ -80,4 +81,14 @@ test("account connector map resolves canonical kinds, aliases, and auth types", 
   assert.equal(accountKindForCliproxyAuthType("antigravity"), "gemini");
   assert.equal(accountKindForCliproxyAuthType("xai"), "grok");
   assert.equal(accountKindForCliproxyAuthType("vertex"), undefined);
+  assert.deepEqual(accountKindChoices(), [
+    "claude-code",
+    "codex",
+    "gemini",
+    "grok",
+    "kimi",
+    "claude",
+    "antigravity",
+    "xai"
+  ]);
 });

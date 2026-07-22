@@ -27,6 +27,8 @@ const STOP_GRACE_MS = 5_000;
 export type CliproxySidecar = {
   /** Start or stop the managed process to match the desired state. */
   reconcile(wanted: boolean): Promise<void>;
+  /** Restart a wanted managed process so it reloads its auth store. */
+  refresh(): Promise<void>;
   running(): boolean;
   /** True when this daemon manages the sidecar process (not an external URL). */
   managed(): boolean;
@@ -48,6 +50,7 @@ export function createCliproxySidecar(input: {
   let child: ChildProcess | undefined;
   let wanted = false;
   let closed = false;
+  let stopping = false;
   let respawnTimer: NodeJS.Timeout | undefined;
 
   const reachable = async (timeoutMs = 1_500): Promise<boolean> => {
@@ -64,7 +67,16 @@ export function createCliproxySidecar(input: {
     }
   };
 
-  const spawnOnce = (): void => {
+  function scheduleRespawn(): void {
+    if (closed || !wanted || stopping || respawnTimer !== undefined) return;
+    respawnTimer = setTimeout(() => {
+      respawnTimer = undefined;
+      spawnOnce();
+    }, RESPAWN_DELAY_MS);
+    respawnTimer.unref();
+  }
+
+  function spawnOnce(): void {
     if (closed || !wanted || child !== undefined) return;
     let spawned: ChildProcess;
     try {
@@ -75,25 +87,24 @@ export function createCliproxySidecar(input: {
           error instanceof Error ? error.message : String(error)
         }`
       );
+      scheduleRespawn();
       return;
     }
     child = spawned;
     spawned.once("error", (error) => {
+      if (child === spawned) child = undefined;
       log(`routekit cliproxy sidecar error: ${error.message}`);
+      scheduleRespawn();
     });
     spawned.once("exit", (code, signal) => {
       if (child === spawned) child = undefined;
-      if (closed || !wanted) return;
+      if (closed || !wanted || stopping) return;
       log(
         `routekit cliproxy sidecar exited (${signal ?? `code ${code ?? "unknown"}`}); restarting`
       );
-      respawnTimer = setTimeout(() => {
-        respawnTimer = undefined;
-        spawnOnce();
-      }, RESPAWN_DELAY_MS);
-      respawnTimer.unref();
+      scheduleRespawn();
     });
-  };
+  }
 
   const stop = async (): Promise<void> => {
     if (respawnTimer !== undefined) {
@@ -103,20 +114,39 @@ export function createCliproxySidecar(input: {
     const current = child;
     if (current === undefined) return;
     child = undefined;
-    await new Promise<void>((resolve) => {
-      const killTimer = setTimeout(() => {
-        current.kill("SIGKILL");
-      }, STOP_GRACE_MS);
-      killTimer.unref();
-      current.once("exit", () => {
-        clearTimeout(killTimer);
-        resolve();
+    stopping = true;
+    try {
+      await new Promise<void>((resolve) => {
+        const killTimer = setTimeout(() => {
+          current.kill("SIGKILL");
+        }, STOP_GRACE_MS);
+        killTimer.unref();
+        current.once("exit", () => {
+          clearTimeout(killTimer);
+          resolve();
+        });
+        if (!current.kill("SIGTERM")) {
+          clearTimeout(killTimer);
+          resolve();
+        }
       });
-      if (!current.kill("SIGTERM")) {
-        clearTimeout(killTimer);
-        resolve();
-      }
-    });
+    } finally {
+      stopping = false;
+    }
+  };
+
+  const waitUntilReady = async (): Promise<void> => {
+    const deadline = Date.now() + READY_TIMEOUT_MS;
+    while (Date.now() < deadline) {
+      if (await reachable(READY_POLL_MS * 2)) return;
+      await new Promise((resolve) => setTimeout(resolve, READY_POLL_MS));
+    }
+    // Force an unhealthy child through the normal crash-recovery path. Spawn
+    // failures already leave a retry timer armed.
+    child?.kill("SIGKILL");
+    throw new Error(
+      "routekit cliproxy sidecar did not answer within its readiness window"
+    );
   };
 
   return {
@@ -131,17 +161,22 @@ export function createCliproxySidecar(input: {
         return;
       }
       if (child === undefined) spawnOnce();
-      if (child === undefined) return;
       // Always wait for readiness — including after a crash respawn left a
       // child handle before the listener was accepting connections.
-      const deadline = Date.now() + READY_TIMEOUT_MS;
-      while (Date.now() < deadline) {
-        if (await reachable(READY_POLL_MS * 2)) return;
-        await new Promise((resolve) => setTimeout(resolve, READY_POLL_MS));
+      await waitUntilReady();
+    },
+    refresh: async (): Promise<void> => {
+      if (
+        closed ||
+        !wanted ||
+        !cliproxyManagedLocally(env) ||
+        cliproxyBinaryPath(CLIPROXY_PINNED_VERSION, env) === undefined
+      ) {
+        return;
       }
-      throw new Error(
-        "routekit cliproxy sidecar did not answer within its readiness window"
-      );
+      await stop();
+      spawnOnce();
+      await waitUntilReady();
     },
     running: () => child !== undefined,
     managed: () => cliproxyManagedLocally(env),

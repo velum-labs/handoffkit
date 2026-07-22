@@ -6,6 +6,7 @@ import test from "node:test";
 
 import { CLIPROXY_PINNED_VERSION } from "../cliproxy.js";
 import {
+  accountStoreEntries,
   cliproxyAccountEntries,
   cliproxyAccountMatchesKind,
   loginCliproxyAccount,
@@ -48,15 +49,61 @@ test("cliproxy auth store entries classify by auth type and remove by label", ()
     plantAuthFile(home, "xai-user@example.com", "xai");
     plantAuthFile(home, "kimi-1712", "kimi");
     plantAuthFile(home, "mystery-blob");
+    writeFileSync(
+      plantAuthFile(home, "xai-valid@example.com", "xai"),
+      JSON.stringify({
+        type: "xai",
+        token: {
+          access_token: "access",
+          expires_at: Math.floor(Date.now() / 1_000) + 3_600
+        }
+      })
+    );
+    writeFileSync(
+      plantAuthFile(home, "kimi-expired", "kimi"),
+      JSON.stringify({
+        type: "kimi",
+        access_token: "expired-access",
+        expiry: "2000-01-01T00:00:00Z"
+      })
+    );
+    writeFileSync(
+      plantAuthFile(home, "kimi-refreshable", "kimi"),
+      JSON.stringify({
+        type: "kimi",
+        access_token: "expired-access",
+        refresh_token: "refresh",
+        expires_at: 946_684_800
+      })
+    );
     const entries = cliproxyAccountEntries(env);
     assert.deepEqual(
       entries.map((entry) => [entry.kind, entry.label]),
       [
         ["gemini", "antigravity-user@example.com"],
         ["kimi", "kimi-1712"],
+        ["kimi", "kimi-expired"],
+        ["kimi", "kimi-refreshable"],
         ["mystery", "mystery-blob"],
-        ["grok", "xai-user@example.com"]
+        ["grok", "xai-user@example.com"],
+        ["grok", "xai-valid@example.com"]
       ]
+    );
+    assert.equal(
+      entries.find((entry) => entry.label === "xai-valid@example.com")?.credentialValid,
+      true
+    );
+    assert.equal(
+      entries.find((entry) => entry.label === "kimi-expired")?.credentialValid,
+      false
+    );
+    assert.equal(
+      entries.find((entry) => entry.label === "kimi-refreshable")?.credentialValid,
+      true
+    );
+    assert.equal(
+      entries.find((entry) => entry.label === "mystery-blob")?.credentialValid,
+      false
     );
     assert.equal(removeCliproxyAccount("kimi-1712", env).removed, true);
     assert.equal(removeCliproxyAccount("kimi-1712", env).removed, false);
@@ -78,6 +125,33 @@ test("cliproxy auth store entries classify by auth type and remove by label", ()
     assert.equal(cliproxyAccountMatchesKind(claudeLegacy, "claude-code"), true);
     assert.equal(cliproxyAccountMatchesKind(codexLegacy, "codex"), true);
     assert.equal(cliproxyAccountMatchesKind(claudeLegacy, "gemini"), false);
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test("shared account-store enumeration covers native and cliproxy stores", () => {
+  const home = mkdtempSync(join(tmpdir(), "routekit-account-stores-"));
+  const env = { ROUTEKIT_HOME: home };
+  try {
+    const native = join(home, "subscriptions", "codex", "work.json");
+    mkdirSync(dirname(native), { recursive: true });
+    writeFileSync(native, "{}");
+    writeFileSync(
+      plantAuthFile(home, "xai-user@example.com", "xai"),
+      JSON.stringify({ type: "xai", access_token: "access" })
+    );
+    assert.deepEqual(
+      accountStoreEntries(env).map((entry) => [
+        entry.subscriptionKind,
+        entry.label,
+        entry.connector
+      ]),
+      [
+        ["codex", "work", "native"],
+        ["grok", "xai-user@example.com", "cliproxy"]
+      ]
+    );
   } finally {
     rmSync(home, { recursive: true, force: true });
   }

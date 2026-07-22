@@ -22,7 +22,7 @@ import {
   accountKinds,
   resolveAccountConnector
 } from "@routekit/registry";
-import type { AccountConnector } from "@routekit/registry";
+import type { AccountConnector, SubscriptionMode } from "@routekit/registry";
 import { superviseSpawn } from "@routekit/runtime";
 
 import {
@@ -33,6 +33,7 @@ import {
   ensureCliproxyConfig,
   installCliproxy
 } from "./cliproxy.js";
+import { defaultSubscriptionAccountDirectory } from "./credentials.js";
 
 export type ResolvedAccountKind = {
   /** Canonical kind, e.g. "codex" or "gemini" (aliases resolved). */
@@ -67,6 +68,8 @@ export type CliproxyAccountEntry = {
   /** Auth-store file stem; the OAuth identity chosen by the provider. */
   label: string;
   path: string;
+  /** Local structural/token check; does not make a provider network request. */
+  credentialValid: boolean;
 };
 
 function cliproxyAuthDirectory(
@@ -75,7 +78,62 @@ function cliproxyAuthDirectory(
   return join(cliproxyHome(env), "auth");
 }
 
-/** List enrolled CLIProxyAPI accounts without reading credential values. */
+function recordValue(value: unknown): Record<string, unknown> | undefined {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+function nonEmptyString(value: unknown): boolean {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function expirationMillis(record: Record<string, unknown>): number | undefined {
+  for (const key of [
+    "expired",
+    "expire",
+    "expires_at",
+    "expiresAt",
+    "expiry",
+    "expires"
+  ]) {
+    const raw = record[key];
+    if (typeof raw === "number" && Number.isFinite(raw) && raw > 0) {
+      return raw > 1_000_000_000_000 ? raw : raw * 1_000;
+    }
+    if (typeof raw === "string" && raw.trim().length > 0) {
+      const numeric = Number(raw);
+      if (Number.isFinite(numeric) && numeric > 0) {
+        return numeric > 1_000_000_000_000 ? numeric : numeric * 1_000;
+      }
+      const parsed = Date.parse(raw);
+      if (Number.isFinite(parsed)) return parsed;
+    }
+  }
+  const nested = recordValue(record.token) ?? recordValue(record.Token);
+  return nested === undefined ? undefined : expirationMillis(nested);
+}
+
+function cliproxyCredentialValid(
+  parsed: Record<string, unknown>,
+  type: string | undefined
+): boolean {
+  const classified =
+    type !== undefined &&
+    (accountKindForCliproxyAuthType(type) !== undefined ||
+      resolveAccountConnector(type) !== undefined);
+  if (!classified) return false;
+  const token = recordValue(parsed.token) ?? recordValue(parsed.Token);
+  const hasAccessToken =
+    nonEmptyString(parsed.access_token) || nonEmptyString(token?.access_token);
+  const hasRefreshToken =
+    nonEmptyString(parsed.refresh_token) || nonEmptyString(token?.refresh_token);
+  const expiresAt = expirationMillis(parsed);
+  const accessExpired = expiresAt !== undefined && expiresAt <= Date.now();
+  return hasRefreshToken || (hasAccessToken && !accessExpired);
+}
+
+/** List enrolled CLIProxyAPI accounts without returning credential values. */
 export function cliproxyAccountEntries(
   env: Readonly<Record<string, string | undefined>> = process.env
 ): CliproxyAccountEntry[] {
@@ -91,9 +149,12 @@ export function cliproxyAccountEntries(
   return names.map((name) => {
     const path = join(directory, name);
     let type: string | undefined;
+    let credentialValid = false;
     try {
-      const parsed = JSON.parse(readFileSync(path, "utf8")) as { type?: unknown };
+      const parsed = recordValue(JSON.parse(readFileSync(path, "utf8")));
+      if (parsed === undefined) throw new Error("auth file must contain an object");
       if (typeof parsed.type === "string" && parsed.type.length > 0) type = parsed.type;
+      credentialValid = cliproxyCredentialValid(parsed, type);
     } catch {
       type = undefined;
     }
@@ -106,8 +167,66 @@ export function cliproxyAccountEntries(
       type ??
       label.split("-")[0] ??
       "cliproxy";
-    return { kind, label, path };
+    return { kind, label, path, credentialValid };
   });
+}
+
+export type AccountStoreEntry =
+  | {
+      subscriptionKind: SubscriptionMode;
+      label: string;
+      path: string;
+      connector: "native";
+    }
+  | {
+      subscriptionKind: string;
+      label: string;
+      path: string;
+      connector: "cliproxy";
+      localOnly: boolean;
+      credentialValid: boolean;
+    };
+
+function nativeSubscriptionKinds(): SubscriptionMode[] {
+  return Object.entries(ACCOUNT_CONNECTORS)
+    .filter(([, info]) => info.connector === "native")
+    .map(([kind]) => kind as SubscriptionMode);
+}
+
+/** Enumerate every RouteKit-owned account store from one shared implementation. */
+export function accountStoreEntries(
+  env: Readonly<Record<string, string | undefined>> = process.env
+): AccountStoreEntry[] {
+  const native = nativeSubscriptionKinds().flatMap(
+    (subscriptionKind): AccountStoreEntry[] => {
+      const directory = defaultSubscriptionAccountDirectory(subscriptionKind, env);
+      let names: string[];
+      try {
+        names = readdirSync(directory)
+          .filter((name) => name.endsWith(".json") && !name.startsWith("."))
+          .sort();
+      } catch {
+        return [];
+      }
+      return names.map((name) => ({
+        subscriptionKind,
+        label: name.slice(0, -".json".length),
+        path: join(directory, name),
+        connector: "native"
+      }));
+    }
+  );
+  const cliproxy = cliproxyAccountEntries(env).map(
+    (entry): AccountStoreEntry => ({
+      subscriptionKind: entry.kind,
+      label: entry.label,
+      path: entry.path,
+      connector: "cliproxy",
+      localOnly: resolveAccountConnector(entry.kind)?.info.localOnly ?? true,
+      credentialValid: entry.credentialValid
+    })
+  );
+  return [...native, ...cliproxy];
 }
 
 function authFileFingerprint(path: string): string {

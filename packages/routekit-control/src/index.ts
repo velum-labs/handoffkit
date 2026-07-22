@@ -59,7 +59,7 @@ export type RouteKitControlParams = {
     label: string;
     credential: unknown;
   };
-  /** `kind` accepts any registry account kind; the daemon routes by connector. */
+  /** Registry kind or the raw kind returned by accounts.list for an unclassified file. */
   "accounts.remove": { kind: string; label: string };
   /** Rescan connector account stores and reconcile the managed sidecar. */
   "accounts.sync": Record<string, never>;
@@ -284,7 +284,7 @@ export function validateRouteKitParams<M extends RouteKitControlMethod>(
       }
       break;
     case "accounts.remove":
-      // Any registry account kind; the daemon routes native vs cliproxy.
+      // Registry kinds and raw stored kinds are resolved by the daemon.
       requiredString(params, "kind", method);
       requiredString(params, "label", method);
       break;

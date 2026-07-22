@@ -293,7 +293,7 @@ test("daemon owns the cliproxy sidecar: spawn, restart, account routing, shutdow
   );
   writeFileSync(
     join(authDirectory, "antigravity-user@example.com.json"),
-    JSON.stringify({ type: "antigravity" })
+    JSON.stringify({ type: "antigravity", access_token: "test-access" })
   );
   // Fake pinned binary: records its pid and serves /v1/models on the
   // configured port so discovery and reachability run against it.
@@ -394,15 +394,70 @@ test("daemon owns the cliproxy sidecar: spawn, restart, account routing, shutdow
       }, 10_000),
       "respawned sidecar did not become discoverable"
     );
+    const respawnedPid = Number(
+      readFileSync(markerPath, "utf8").trim().split("\n")[1]
+    );
 
-    // accounts.sync rescans the store; accounts.remove routes by connector.
+    // accounts.sync rescans the store and restarts the managed sidecar so it
+    // cannot miss an auth-directory watch event.
+    writeFileSync(join(authDirectory, "broken-account.json"), "{not-json");
+    writeFileSync(
+      join(authDirectory, "kimi-invalid.json"),
+      JSON.stringify({ type: "kimi" })
+    );
     const synced = await client.call("accounts.sync", {}, { idempotencyKey: "sync-1" });
     assert.equal(synced.synced, true);
-    // Legacy cliproxy claude auth files list under the raw type but remove
-    // through the native kind alias (`claude` → `claude-code`).
+    assert.ok(
+      await waitFor(
+        () => readFileSync(markerPath, "utf8").trim().split("\n").length === 3,
+        10_000
+      ),
+      "accounts.sync did not restart the managed sidecar"
+    );
+    assert.equal(processAlive(respawnedPid), false);
+    const refreshedStatus = await client.call("accounts.status", {});
+    assert.equal(
+      refreshedStatus.accounts.find(
+        (entry) => entry.label === "antigravity-user@example.com"
+      )?.credentialValid,
+      true
+    );
+    assert.equal(
+      refreshedStatus.accounts.find((entry) => entry.label === "kimi-invalid")
+        ?.credentialValid,
+      false
+    );
+    assert.equal(
+      refreshedStatus.accounts.find((entry) => entry.label === "broken-account")
+        ?.credentialValid,
+      false
+    );
+    const syncedPid = Number(
+      readFileSync(markerPath, "utf8").trim().split("\n")[2]
+    );
+
+    // Unclassified/corrupt auth files remain removable using the kind shown
+    // by accounts.list rather than becoming stuck in the store.
+    const unknownRemoved = await client.call(
+      "accounts.remove",
+      { kind: "broken", label: "broken-account" },
+      { idempotencyKey: "remove-broken" }
+    );
+    assert.equal(unknownRemoved.removed, true);
+    assert.equal(existsSync(join(authDirectory, "broken-account.json")), false);
+    assert.ok(
+      await waitFor(
+        () => readFileSync(markerPath, "utf8").trim().split("\n").length === 4,
+        10_000
+      ),
+      "accounts.remove did not restart the managed sidecar"
+    );
+    assert.equal(processAlive(syncedPid), false);
+
+    // Legacy cliproxy aliases canonicalize and remove through the native kind.
     writeFileSync(
       join(authDirectory, "legacy-claude@example.com.json"),
-      JSON.stringify({ type: "claude" })
+      JSON.stringify({ type: "claude", access_token: "legacy-access" })
     );
     const orphanRemoved = await client.call(
       "accounts.remove",

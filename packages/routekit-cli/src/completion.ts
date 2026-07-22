@@ -3,7 +3,10 @@ import { Command } from "commander";
 import { completionCandidates as coreCompletionCandidates } from "@routekit/cli-core";
 import { configuredProviderIds } from "@routekit/config";
 import { PROVIDER_IDS } from "@routekit/gateway";
-import { accountKinds, resolveAccountConnector } from "@routekit/registry";
+import {
+  accountKindChoices,
+  resolveAccountConnector
+} from "@routekit/registry";
 
 import { listAccounts } from "./accounts.js";
 import { globalRouterConfigPath, loadRouterConfig } from "./config.js";
@@ -71,22 +74,40 @@ function dynamicValues(
     return modelIds();
   }
   if (group === "accounts" && subcommand === "add" && argumentDepth === 0) {
-    return ["claude-code", "codex"];
+    return accountKindChoices().filter(
+      (kind) => resolveAccountConnector(kind)?.info.connector === "native"
+    );
   }
   if (
     group === "accounts" &&
-    (subcommand === "login" || subcommand === "remove") &&
+    subcommand === "login" &&
     argumentDepth === 0
   ) {
-    return [...accountKinds()];
+    return [...accountKindChoices()];
+  }
+  if (
+    group === "accounts" &&
+    subcommand === "remove" &&
+    argumentDepth === 0
+  ) {
+    return [
+      ...new Set([
+        ...accountKindChoices(),
+        ...listAccounts().map((entry) => entry.subscriptionKind)
+      ])
+    ];
   }
   if (group === "accounts" && subcommand === "remove" && argumentDepth === 1) {
-    const resolved = resolveAccountConnector(positional[0] ?? "");
-    if (resolved === undefined) return [];
+    const suppliedKind = positional[0] ?? "";
+    const resolved = resolveAccountConnector(suppliedKind);
+    const kind = resolved?.kind ?? suppliedKind;
     return listAccounts()
       .filter((entry) => {
-        if (entry.subscriptionKind === resolved.kind) return true;
-        return resolveAccountConnector(entry.subscriptionKind)?.kind === resolved.kind;
+        if (entry.subscriptionKind === kind) return true;
+        return (
+          resolved !== undefined &&
+          resolveAccountConnector(entry.subscriptionKind)?.kind === resolved.kind
+        );
       })
       .map((entry) => entry.label);
   }

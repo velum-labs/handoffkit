@@ -149,6 +149,14 @@ export function accountKinds(): readonly string[] {
   return Object.keys(ACCOUNT_CONNECTORS);
 }
 
+/** Canonical account kinds plus every accepted user-facing alias. */
+export function accountKindChoices(): readonly string[] {
+  return [
+    ...accountKinds(),
+    ...Object.values(ACCOUNT_CONNECTORS).flatMap((info) => info.aliases ?? [])
+  ];
+}
+
 /**
  * Resolve a user-supplied account kind (canonical name or alias) to its
  * canonical kind and connector metadata.

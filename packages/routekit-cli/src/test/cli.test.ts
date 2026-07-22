@@ -118,13 +118,20 @@ test("dynamic completion follows the command tree", () => {
     completionCandidates(program, ["gateway", "serve", "--p"]).includes("--port")
   );
   assert.deepEqual(completionCandidates(program, ["accounts", "remove", ""]), [
+    "antigravity",
+    "claude",
     "claude-code",
     "codex",
     "gemini",
     "grok",
-    "kimi"
+    "kimi",
+    "xai"
+  ]);
+  assert.deepEqual(completionCandidates(program, ["accounts", "login", "a"]), [
+    "antigravity"
   ]);
   assert.deepEqual(completionCandidates(program, ["accounts", "add", ""]), [
+    "claude",
     "claude-code",
     "codex"
   ]);
@@ -147,6 +154,10 @@ test("account removal completion only suggests managed labels for its provider",
   writeFileSync(
     join(root, "cliproxy", "auth", "antigravity-user@example.com.json"),
     JSON.stringify({ type: "antigravity" })
+  );
+  writeFileSync(
+    join(root, "cliproxy", "auth", "mystery-blob.json"),
+    "{not-json"
   );
   process.env.ROUTEKIT_HOME = root;
   try {
@@ -171,6 +182,15 @@ test("account removal completion only suggests managed labels for its provider",
     assert.deepEqual(
       completionCandidates(buildProgram(), ["accounts", "remove", "gemini", "a"]),
       ["antigravity-user@example.com"]
+    );
+    assert.ok(
+      completionCandidates(buildProgram(), ["accounts", "remove", "m"]).includes(
+        "mystery"
+      )
+    );
+    assert.deepEqual(
+      completionCandidates(buildProgram(), ["accounts", "remove", "mystery", "m"]),
+      ["mystery-blob"]
     );
   } finally {
     if (previousHome === undefined) delete process.env.ROUTEKIT_HOME;

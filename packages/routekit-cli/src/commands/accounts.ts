@@ -172,33 +172,55 @@ export function registerAccounts(program: Command): void {
     .description("remove an enrolled account from RouteKit-managed state")
     .action(async (provider: string, name: string, _options: unknown, command: Command) => {
       const ctx = contextFor(command);
-      const resolved = resolveAccountKind(provider);
-      const result = await (await routekitClient()).call(
+      const client = await routekitClient();
+      const registryKind = resolveAccountConnector(provider);
+      const kind = registryKind?.kind ?? provider;
+      let connector = registryKind?.info.connector;
+      if (connector === undefined) {
+        const listed = await client.call("accounts.list", {});
+        const rawEntry = (
+          listed.accounts as Array<{
+            subscriptionKind?: string;
+            label?: string;
+            connector?: string;
+          }>
+        ).find(
+          (entry) =>
+            entry.subscriptionKind === provider &&
+            entry.label === name &&
+            entry.connector === "cliproxy"
+        );
+        if (rawEntry === undefined) {
+          throw new Error(`unknown subscription kind ${JSON.stringify(provider)}`);
+        }
+        connector = "cliproxy";
+      }
+      const result = await client.call(
         "accounts.remove",
-        { kind: resolved.kind, label: name },
+        { kind, label: name },
         { idempotencyKey: `account-remove-${randomId(16)}` }
       );
       if (ctx.json) {
-        ctx.emit({ ...result, subscriptionKind: resolved.kind, label: name });
+        ctx.emit({ ...result, subscriptionKind: kind, label: name });
       } else if (result.removed) {
-        ctx.presenter.success(`removed ${resolved.kind}/${name}`);
-        const remaining = await (await routekitClient()).call("accounts.list", {});
+        ctx.presenter.success(`removed ${kind}/${name}`);
+        const remaining = await client.call("accounts.list", {});
         const accounts = remaining.accounts as Array<{
           subscriptionKind?: string;
           connector?: string;
         }>;
-        const routerProvider = providerForKind(resolved.kind, resolved.connector);
+        const routerProvider = providerForKind(kind, connector);
         const shouldSuggestProviderRemove =
-          resolved.connector === "cliproxy"
+          connector === "cliproxy"
             ? !accounts.some((entry) => isCliproxyAccount(entry))
-            : accounts.every((entry) => entry.subscriptionKind !== resolved.kind);
+            : accounts.every((entry) => entry.subscriptionKind !== kind);
         if (shouldSuggestProviderRemove) {
           ctx.presenter.note(
             `run \`routekit providers remove ${routerProvider}\` to stop subscription routing`
           );
         }
       } else {
-        ctx.presenter.note(`${resolved.kind}/${name} is not enrolled`);
+        ctx.presenter.note(`${kind}/${name} is not enrolled`);
       }
     });
 
