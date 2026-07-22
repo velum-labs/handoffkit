@@ -108,8 +108,8 @@ public labels can change.
 - **Protocol / limitations:** OpenAI Responses with streaming, tools, and
   discovered reasoning efforts. Official client catalog/profile compatibility
   is version-sensitive; setup and restore remain pending L06.
-- **Evidence:** **L06 qualification Fail — `account-unavailable`**, RouteKit
-  0.8.0 / `dad16c53` / 2026-07-22. The worker had no enrolled Codex account or
+- **Evidence:** **L06 qualification Fail — `account-unavailable`**, RouteKit 0.8.0
+  / `dad16c53` / 2026-07-22. The worker had no enrolled Codex account or
   Codex client, so live streaming, billing attribution, setup, and restore were
   not observed. Deterministic tools, reasoning, cancellation, failure
   propagation, and zero API-key fallback passed.
@@ -133,8 +133,8 @@ public labels can change.
   Code identity and rewrites other caller `system` and `developer` messages as
   `user` messages. Streaming, tools, and thinking are supported; managed
   restore/recovery parity is pending L06.
-- **Evidence:** **L06 qualification Fail — `account-unavailable`**, RouteKit
-  0.8.0 / `dad16c53` / 2026-07-22. The worker had no enrolled Claude Code
+- **Evidence:** **L06 qualification Fail — `account-unavailable`**, RouteKit 0.8.0
+  / `dad16c53` / 2026-07-22. The worker had no enrolled Claude Code
   account or Claude client, so live streaming, billing attribution, setup, and
   restore were not observed. Deterministic tools, reasoning, cancellation,
   failure propagation, and zero API-key fallback passed.
@@ -179,8 +179,8 @@ public labels can change.
 - **Protocol / limitations:** Cursor bridge to OpenAI Chat. Streaming and tools
   are supported; images and reasoning controls are degraded. Session restore
   and compatibility are client-version-specific.
-- **Evidence:** **L06 qualification Fail — `client-unavailable`**, RouteKit
-  0.8.0 / `dad16c53` / 2026-07-22. `cursor-agent` was not installed, so no
+- **Evidence:** **L06 qualification Fail — `client-unavailable`**, RouteKit 0.8.0
+  / `dad16c53` / 2026-07-22. `cursor-agent` was not installed, so no
   authenticated traffic, billing attribution, setup, or restore was observed.
   Deterministic bridge-protocol tools, reasoning, cancellation, failure
   propagation, and no RouteKit fallback passed.
