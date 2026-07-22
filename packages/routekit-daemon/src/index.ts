@@ -45,7 +45,7 @@ import {
 import type {
   ConfigSnapshot,
   DaemonStatus,
-  ModelCatalogEntry,
+  ModelInfo,
   RouteKitControlHandlers
 } from "@routekit/control";
 import {
@@ -664,7 +664,7 @@ export async function startRouteKitDaemon(
             message: `gateway model discovery failed (${response.status})`
           });
         }
-        const body = (await response.json()) as { data?: ModelCatalogEntry[] };
+        const body = (await response.json()) as { data?: ModelInfo[] };
         const models = (body.data ?? []).filter(
           (model) => params.provider === undefined || model.id.startsWith(`${params.provider}/`)
         );

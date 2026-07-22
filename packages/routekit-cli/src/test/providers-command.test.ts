@@ -11,6 +11,7 @@ import { fileURLToPath } from "node:url";
 
 import { buildProgram } from "../cli.js";
 import { completionCandidates } from "../completion.js";
+import { isModelRouteInfo } from "../commands/models.js";
 
 const execFileAsync = promisify(execFile);
 const CLI_ENTRY = resolve(
@@ -27,6 +28,30 @@ async function runJson(args: readonly string[]): Promise<Record<string, unknown>
   );
   return JSON.parse(stdout) as Record<string, unknown>;
 }
+
+test("route info validation rejects stale daemon payloads", () => {
+  assert.equal(
+    isModelRouteInfo({
+      id: "openai/gpt-live",
+      provider: "openai",
+      capabilities: {}
+    }),
+    false
+  );
+  assert.equal(
+    isModelRouteInfo({
+      id: "openai/gpt-live",
+      provider: "openai",
+      nativeModel: "gpt-live",
+      accountClass: "api-key",
+      billingMode: "metered-api",
+      default: true,
+      capabilities: {},
+      reasoning: null
+    }),
+    true
+  );
+});
 
 test("providers add rejects retained internal providers before daemon work", async () => {
   const providers = buildProgram().commands.find(

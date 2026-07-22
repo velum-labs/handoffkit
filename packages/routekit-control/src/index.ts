@@ -102,7 +102,7 @@ export type ConfigSnapshot = {
   sources: readonly ["global"];
 };
 
-export type ModelCatalogEntry = {
+export type ModelInfo = {
   id: string;
   provider?: string;
   capabilities?: Record<string, unknown>;
@@ -121,7 +121,7 @@ export type ModelBillingMode =
  * The contract deliberately excludes account labels, filesystem paths,
  * credential environment values, and transport authentication material.
  */
-export type ModelInfo = {
+export type ModelRouteInfo = {
   id: string;
   provider: string;
   nativeModel: string;
@@ -157,8 +157,8 @@ export type RouteKitControlResults = {
     }>;
   };
   "providers.set": ConfigSnapshot;
-  "models.list": { models: ModelCatalogEntry[]; defaultModel?: string; revision: number };
-  "models.info": ModelInfo;
+  "models.list": { models: ModelInfo[]; defaultModel?: string; revision: number };
+  "models.info": ModelRouteInfo;
   "accounts.list": { accounts: unknown[]; revision: number };
   "accounts.status": {
     accounts: Array<{

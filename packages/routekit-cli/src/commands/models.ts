@@ -1,8 +1,29 @@
 import { CliError, contextFor } from "@routekit/cli-core";
+import type { ModelRouteInfo } from "@routekit/control";
 import { ControlError } from "@routekit/runtime";
 import type { Command } from "commander";
 
 import { routekitClient } from "../client.js";
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+export function isModelRouteInfo(value: unknown): value is ModelRouteInfo {
+  if (!isRecord(value)) return false;
+  return (
+    typeof value.id === "string" &&
+    typeof value.provider === "string" &&
+    typeof value.nativeModel === "string" &&
+    ["api-key", "subscription", "proxy"].includes(String(value.accountClass)) &&
+    ["metered-api", "subscription", "upstream-managed"].includes(
+      String(value.billingMode)
+    ) &&
+    typeof value.default === "boolean" &&
+    isRecord(value.capabilities) &&
+    (value.reasoning === null || isRecord(value.reasoning))
+  );
+}
 
 export function registerModels(program: Command): void {
   const modelsCommand = program
@@ -62,6 +83,14 @@ export function registerModels(program: Command): void {
           code: "model_not_found",
           message: `model is not in the live catalog: ${id}`,
           tryCommand: "routekit models list"
+        });
+      }
+      if (!isModelRouteInfo(model)) {
+        throw new CliError({
+          code: "daemon_upgrade_required",
+          message:
+            "the running RouteKit daemon does not support the route explanation contract",
+          tryCommand: "routekit daemon upgrade --force"
         });
       }
       if (ctx.json) {

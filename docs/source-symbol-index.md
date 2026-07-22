@@ -286,7 +286,7 @@ Use it with the narrative references when you need to find the module that owns 
 - `packages/routekit-cli/src/commands/index.ts`: registerCommands (function)
 - `packages/routekit-cli/src/commands/install.ts`: registerCodexIntegration (function)
 - `packages/routekit-cli/src/commands/launchers.ts`: registerLaunchers (function)
-- `packages/routekit-cli/src/commands/models.ts`: registerModels (function)
+- `packages/routekit-cli/src/commands/models.ts`: isModelRouteInfo (function), registerModels (function)
 - `packages/routekit-cli/src/commands/providers.ts`: registerProviders (function)
 - `packages/routekit-cli/src/commands/serve-options.ts`: GatewayServeCliOptions (type), DEFAULT_DRAIN_GRACE_SECONDS (const), attachServeOptions (function), drainGraceMs (function)
 - `packages/routekit-cli/src/commands/start.ts`: registerStart (function), registerRestart (function)
@@ -311,7 +311,7 @@ Use it with the narrative references when you need to find the module that owns 
 
 ### `packages/routekit-control`
 
-- `packages/routekit-control/src/index.ts`: ROUTEKIT_CONTROL_CAPABILITY (const), RouteKitControlMethod (type), RouteKitControlParams (type), DaemonStatus (type), ConfigSnapshot (type), ModelCatalogEntry (type), ModelAccountClass (type), ModelBillingMode (type), ModelInfo (type), LaunchPreparation (type), RouteKitControlResults (type), RouteKitMethodHandler (type), RouteKitControlHandlers (type), MUTATING_ROUTEKIT_METHODS (const), validateRouteKitParams (function), createRouteKitControlHandler (function), RouteKitControlClient (class)
+- `packages/routekit-control/src/index.ts`: ROUTEKIT_CONTROL_CAPABILITY (const), RouteKitControlMethod (type), RouteKitControlParams (type), DaemonStatus (type), ConfigSnapshot (type), ModelInfo (type), ModelAccountClass (type), ModelBillingMode (type), ModelRouteInfo (type), LaunchPreparation (type), RouteKitControlResults (type), RouteKitMethodHandler (type), RouteKitControlHandlers (type), MUTATING_ROUTEKIT_METHODS (const), validateRouteKitParams (function), createRouteKitControlHandler (function), RouteKitControlClient (class)
 
 ### `packages/routekit-daemon`
 

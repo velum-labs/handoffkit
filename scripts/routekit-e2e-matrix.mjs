@@ -4,13 +4,13 @@ import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
 import { createServer } from "node:http";
 import {
+  cpSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
   readdirSync,
   rmSync,
-  symlinkSync,
   writeFileSync
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -34,6 +34,7 @@ import {
   doorFrames,
   startProviderSim
 } from "../packages/testkit/dist/index.js";
+import { processAlive } from "../packages/runtime-utils/dist/index.js";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const ROUTEKIT_ENTRY = join(ROOT, "packages", "routekit-cli", "dist", "index.js");
@@ -1119,9 +1120,16 @@ function liveRouteInfo(configPath, chosen, tempRoot) {
     }
     const target = join(stateHome, "subscriptions", provider);
     mkdirSync(dirname(target), { recursive: true });
-    // Keep the isolated daemon's service/config state separate while reading
-    // the same enrolled accounts as the already-qualified live gateway.
-    symlinkSync(source, target, "dir");
+    // Discovery and token refresh may persist account state. Copy credentials
+    // into the private temporary root so a verification run cannot mutate the
+    // operator's enrolled accounts.
+    cpSync(source, target, {
+      recursive: true,
+      dereference: true,
+      errorOnExist: true,
+      force: false,
+      preserveTimestamps: true
+    });
   }
   const env = {
     ...process.env,
@@ -1160,16 +1168,43 @@ function liveRouteInfo(configPath, chosen, tempRoot) {
       ]) {
         assert.ok(Object.hasOwn(info, field), `${model} route info is missing ${field}`);
       }
-      records[provider] = info;
+      records[provider] = {
+        id: info.id,
+        provider: info.provider,
+        nativeModel: info.nativeModel,
+        accountClass: info.accountClass,
+        billingMode: info.billingMode,
+        default: info.default,
+        capabilities: info.capabilities,
+        reasoning: info.reasoning
+      };
     }
     return records;
   } finally {
-    spawnSync(process.execPath, [ROUTEKIT_ENTRY, "--json", "stop"], {
-      cwd: ROOT,
-      env,
-      encoding: "utf8",
-      timeout: 90_000
-    });
+    const stopped = spawnSync(
+      process.execPath,
+      [ROUTEKIT_ENTRY, "--json", "stop", "--force"],
+      {
+        cwd: ROOT,
+        env,
+        encoding: "utf8",
+        timeout: 90_000
+      }
+    );
+    if (stopped.status !== 0) {
+      throw new Error(
+        `route info daemon cleanup failed\n${sanitize(stopped.stdout)}\n${sanitize(stopped.stderr)}`
+      );
+    }
+    const recordPath = join(stateHome, "services", "daemon.json");
+    if (existsSync(recordPath)) {
+      const record = JSON.parse(readFileSync(recordPath, "utf8"));
+      assert.equal(
+        typeof record.pid === "number" && processAlive(record.pid),
+        false,
+        "route info daemon remained alive after cleanup"
+      );
+    }
   }
 }
 
