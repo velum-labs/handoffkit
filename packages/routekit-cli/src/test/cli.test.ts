@@ -83,16 +83,11 @@ test("independent command surface is complete and has no compatibility aliases",
   for (const launcher of ["claude", "cursor", "opencode"]) {
     assert.deepEqual(command(program, launcher).commands, []);
   }
+  // One connector-neutral account surface: no cliproxy (or other
+  // implementation-detail) subtree is exposed.
   assert.deepEqual(
     command(program, "accounts").commands.map((entry) => entry.name()).sort(),
-    ["add", "cliproxy", "list", "login", "remove", "status"]
-  );
-  assert.deepEqual(
-    command(program, "accounts")
-      .commands.find((entry) => entry.name() === "cliproxy")
-      ?.commands.map((entry) => entry.name())
-      .sort(),
-    ["install", "login", "serve", "status"]
+    ["add", "list", "login", "remove", "status"]
   );
   assert.deepEqual(
     command(program, "providers").commands.map((entry) => entry.name()).sort(),
@@ -123,6 +118,13 @@ test("dynamic completion follows the command tree", () => {
     completionCandidates(program, ["gateway", "serve", "--p"]).includes("--port")
   );
   assert.deepEqual(completionCandidates(program, ["accounts", "remove", ""]), [
+    "claude-code",
+    "codex",
+    "gemini",
+    "grok",
+    "kimi"
+  ]);
+  assert.deepEqual(completionCandidates(program, ["accounts", "add", ""]), [
     "claude-code",
     "codex"
   ]);

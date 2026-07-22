@@ -225,6 +225,15 @@ test("singleton daemon exposes authenticated control and a stable reloadable dat
       { idempotencyKey: "remove-work" }
     );
     assert.equal(removed.removed, true);
+    await assert.rejects(
+      client.call(
+        "accounts.remove",
+        { kind: "github", label: "work" },
+        { idempotencyKey: "remove-unknown" }
+      ),
+      (error: unknown) =>
+        error instanceof ControlError && /unknown subscription kind/.test(error.message)
+    );
   } finally {
     await daemon.close();
     await upstream.close();

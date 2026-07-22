@@ -33,11 +33,18 @@ test("method-specific validators reject malformed mutations at the protocol edge
     () => validateRouteKitParams("launcher.prepare", { tool: "shell" }),
     /must be one of/
   );
+  // `accounts.remove` kinds are connector-routed by the daemon; the protocol
+  // edge still requires the identifying fields.
+  assert.throws(
+    () => validateRouteKitParams("accounts.remove", { label: "work" }),
+    /kind/
+  );
   assert.throws(
     () =>
-      validateRouteKitParams("accounts.remove", {
+      validateRouteKitParams("accounts.enroll", {
         kind: "github",
-        label: "work"
+        label: "work",
+        credential: {}
       }),
     /must be one of/
   );

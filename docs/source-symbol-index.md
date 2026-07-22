@@ -12,10 +12,12 @@ Use it with the narrative references when you need to find the module that owns 
 - `packages/accounts/src/account-source.ts`: SubscriptionAccountSource (type), ResolvedSubscriptionAccounts (type), resolveSubscriptionAccounts (function)
 - `packages/accounts/src/backend.ts`: SubscriptionAccountBackendOptions (type), SubscriptionAccountBackend (class)
 - `packages/accounts/src/client.ts`: SubscriptionProxyClientOptions (type), SubscriptionProxyClient (class), SubscriptionProxyClientError (class)
-- `packages/accounts/src/cliproxy.ts`: CLIPROXY_PINNED_VERSION (const), CLIPROXY_API_KEY_ENV (const), CLIPROXY_BASE_URL_ENV (const), CLIPROXY_HOME_ENV (const), cliproxyHome (function), cliproxyBaseUrl (function), cliproxyConfigPath (function), cliproxyBinaryPath (function), cliproxyAssetName (function), cliproxyApiKey (function), ensureCliproxyConfig (function), CliproxyInstallResult (type), installCliproxy (function), CLIPROXY_LOGIN_FLAGS (const), runCliproxyLogin (function), spawnCliproxy (function), CliproxyStatus (type), cliproxyStatus (function)
+- `packages/accounts/src/cliproxy.ts`: CLIPROXY_PINNED_VERSION (const), CLIPROXY_API_KEY_ENV (const), CLIPROXY_BASE_URL_ENV (const), CLIPROXY_HOME_ENV (const), cliproxyHome (function), cliproxyBaseUrl (function), cliproxyConfigPath (function), cliproxyManagedPort (function), cliproxyBinaryPath (function), cliproxyAssetName (function), cliproxyApiKey (function), ensureCliproxyConfig (function), CliproxyInstallResult (type), installCliproxy (function), spawnCliproxy (function), CliproxyStatus (type), cliproxyStatus (function)
 - `packages/accounts/src/codex-relay.ts`: CodexCatalogEntry (type), ProviderRelayLogger (type), CodexStockEntry (type), CodexRelayOptions (type), CodexRelayAuthSource (type), CodexRelayAuth (type), codexRelayAuth (function), CodexBackendRelay (class)
+- `packages/accounts/src/connector.ts`: ResolvedAccountKind (type), resolveAccountKind (function), CliproxyAccountEntry (type), cliproxyAccountEntries (function), removeCliproxyAccount (function), CliproxyLoginInvocation (type), CliproxyLoginOptions (type), loginCliproxyAccount (function)
 - `packages/accounts/src/credentials.ts`: defaultSubscriptionAccountDirectory (function), defaultSubscriptionCredentialPath (function), loadSubscriptionCredential (function), persistSubscriptionCredential (function), sanitizeSubscriptionLabel (function), enrollCurrentSubscription (function), RemoveSubscriptionAccountResult (type), removeSubscriptionAccount (function), subscriptionCredentialLabel (function)
 - `packages/accounts/src/gateway.ts`: SubscriptionAccountConfigs (type), OpenSubscriptionRelaysOptions (type), OpenSubscriptionRelaysResult (type), SubscriptionAccountSets (type), openSubscriptionAccountSets (function), subscriptionRelaysFromAccountSets (function), openSubscriptionRelays (function)
+- `packages/accounts/src/managed-login.ts`: parseAccountMode (function), ManagedAccountLoginInvocation (type), ManagedLoginKeychain (type), ManagedAccountLoginOptions (type), claudeProfileKeychainService (function), captureLoginCredential (function)
 - `packages/accounts/src/provider.ts`: AdminUsageRange (type), AdminUsageCost (type), SubscriptionProvider (type), canonicalRateLimitWindowKey (function), codexModelsSearch (function), subscriptionProvider (function)
 - `packages/accounts/src/proxy.ts`: StartSubscriptionProxyOptions (type), SubscriptionProxy (type), NoSubscriptionAccountsError (class), startSubscriptionProxy (function)
 - `packages/accounts/src/relay.ts`: SubscriptionRelayDialect (type), SubscriptionRelay (type), forwardRelayHeaders (function), AnthropicRelayOptions (type), RelayOnlyBackend (class), AnthropicBackendRelay (class)
@@ -271,7 +273,7 @@ Use it with the narrative references when you need to find the module that owns 
 
 ### `packages/routekit-cli`
 
-- `packages/routekit-cli/src/accounts.ts`: parseAccountMode (function), AccountListEntry (type), listAccounts (function), addAccount (function), ManagedAccountLoginInvocation (type), ManagedLoginKeychain (type), ManagedAccountLoginOptions (type), claudeProfileKeychainService (function), loginAccount (function), captureLoginCredential (function), removeAccount (function), AccountsStatus (type), accountsStatus (function), serveAccounts (function), stopAccounts (function)
+- `packages/routekit-cli/src/accounts.ts`: AccountListEntry (type), listAccounts (function)
 - `packages/routekit-cli/src/catalog.ts`: LiveModel (type), LiveCatalog (type), fetchLiveCatalog (function)
 - `packages/routekit-cli/src/cli.ts`: routekitVersion (function), buildProgram (function)
 - `packages/routekit-cli/src/client.ts`: daemonDataTokenPath (function), ensureDaemonDataToken (function), daemonStore (function), readDaemonRecord (function), controlClientForRecord (function), daemonRecordHealthy (function), canonicalConfigOrMigrationError (function), daemonServeArgs (function), ensureDaemon (function), routekitClient (function), connectDaemon (function), daemonLogPath (function), daemonLifecycleLockPath (function)
@@ -290,7 +292,7 @@ Use it with the narrative references when you need to find the module that owns 
 - `packages/routekit-cli/src/commands/serve-options.ts`: GatewayServeCliOptions (type), DEFAULT_DRAIN_GRACE_SECONDS (const), attachServeOptions (function), drainGraceMs (function), serveArgvFrom (function)
 - `packages/routekit-cli/src/commands/serve.ts`: registerServe (function)
 - `packages/routekit-cli/src/commands/start.ts`: registerStart (function), registerRestart (function)
-- `packages/routekit-cli/src/commands/status.ts`: RouteKitOverview (type), routeKitOverview (function), renderOverviewLines (function), registerStatus (function)
+- `packages/routekit-cli/src/commands/status.ts`: registerStatus (function)
 - `packages/routekit-cli/src/commands/stop.ts`: registerStop (function)
 - `packages/routekit-cli/src/commands/telemetry.ts`: registerTelemetry (function)
 - `packages/routekit-cli/src/commands/upgrade.ts`: argsWithPort (function), registerUpgrade (function)
@@ -315,12 +317,13 @@ Use it with the narrative references when you need to find the module that owns 
 
 ### `packages/routekit-daemon`
 
+- `packages/routekit-daemon/src/cliproxy-sidecar.ts`: CliproxySidecar (type), cliproxyManagedLocally (function), createCliproxySidecar (function)
 - `packages/routekit-daemon/src/index.ts`: ROUTEKIT_DAEMON_KIND (const), ROUTEKIT_PRODUCT (const), RouteKitDaemonOptions (type), RunningRouteKitDaemon (type), startRouteKitDaemon (function)
 
 ### `packages/routekit-registry`
 
 - `packages/routekit-registry/src/generated/data.ts`: REGISTRY (const)
-- `packages/routekit-registry/src/index.ts`: ProviderAuthStyle (type), ProviderKeyProbe (type), ProviderDiscovery (type), ProviderDiscoveryResponseShape (type), ProviderWireProtocol (type), ProviderWire (type), ProviderInfo (type), PROVIDERS (const), providerDefaultBaseUrl (function), defaultKeyEnv (function), providerKeyProbe (function), providerDiscovery (function), SubscriptionMode (type), SubscriptionOAuthInfo (type), SubscriptionRateLimitInfo (type), SubscriptionAdminInfo (type), SubscriptionInfo (type), SUBSCRIPTIONS (const), subscriptionInfo (function), providerForAuthMode (function), DEFAULT_REASONING_MODEL (const), catalogDefaultModel (function), curatedModels (function), smokeModelForTool (function), samplingOverridesForModel (function), chatTemplateKwargsForModel (function), RegistryModelPricing (type), PRICING_ALIASES (const), DEFAULT_MODEL_PRICING (const), LocalModelRole (type), LocalCatalogModel (type), LOCAL_CATALOG_ENTRIES (const), PreferredLocalModel (type), PREFERRED_LOCAL_MODELS (const), GATEWAY_DEFAULT_MLX_MODEL (const), LOCAL_PROBE_MODEL (const)
+- `packages/routekit-registry/src/index.ts`: ProviderAuthStyle (type), ProviderKeyProbe (type), ProviderDiscovery (type), ProviderDiscoveryResponseShape (type), ProviderWireProtocol (type), ProviderWire (type), ProviderInfo (type), PROVIDERS (const), providerDefaultBaseUrl (function), defaultKeyEnv (function), providerKeyProbe (function), providerDiscovery (function), SubscriptionMode (type), SubscriptionOAuthInfo (type), SubscriptionRateLimitInfo (type), SubscriptionAdminInfo (type), SubscriptionInfo (type), SUBSCRIPTIONS (const), subscriptionInfo (function), providerForAuthMode (function), AccountConnector (type), AccountConnectorInfo (type), ACCOUNT_CONNECTORS (const), accountKinds (function), resolveAccountConnector (function), accountKindForCliproxyAuthType (function), DEFAULT_REASONING_MODEL (const), catalogDefaultModel (function), curatedModels (function), smokeModelForTool (function), samplingOverridesForModel (function), chatTemplateKwargsForModel (function), RegistryModelPricing (type), PRICING_ALIASES (const), DEFAULT_MODEL_PRICING (const), LocalModelRole (type), LocalCatalogModel (type), LOCAL_CATALOG_ENTRIES (const), PreferredLocalModel (type), PREFERRED_LOCAL_MODELS (const), GATEWAY_DEFAULT_MLX_MODEL (const), LOCAL_PROBE_MODEL (const)
 
 ### `packages/routekit-router`
 
