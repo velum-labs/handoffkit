@@ -32,14 +32,21 @@ export function registerStop(program: Command): void {
         }
         let requested = false;
         if (record.supervisor === "systemd" || record.supervisor === "launchd") {
-          await supervisorController(
+          const controller = supervisorController(
             record.supervisor,
             "routekit",
             "daemon"
-          ).stop({
-            timeoutMs: supervisorOperationTimeoutMs(record.drainGraceMs)
-          });
-          requested = true;
+          );
+          const timeoutMs = supervisorOperationTimeoutMs(record.drainGraceMs);
+          try {
+            await controller.stop({ timeoutMs });
+            requested = true;
+          } catch (error) {
+            if (options.force !== true) throw error;
+            // Prevent the supervisor from immediately respawning a process
+            // that the force fallback terminates.
+            requested = await controller.uninstall({ timeoutMs });
+          }
         } else {
           try {
             await controlClientForRecord(record).call(

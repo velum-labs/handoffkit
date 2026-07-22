@@ -21,7 +21,12 @@ export function isCompletionShell(value: string): value is CompletionShell {
 }
 
 function visible(commands: readonly Command[]): Command[] {
-  return commands.filter((command) => command.name() !== "help" && !command.name().startsWith("__"));
+  return commands.filter(
+    (command) =>
+      command.name() !== "help" &&
+      !command.name().startsWith("__") &&
+      (command as Command & { _hidden?: boolean })._hidden !== true
+  );
 }
 
 /** Visible canonical command names and aliases, in Commander registration order. */

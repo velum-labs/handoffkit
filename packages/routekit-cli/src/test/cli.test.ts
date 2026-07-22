@@ -117,6 +117,12 @@ test("top-level help presents one public RouteKit lifecycle", () => {
 
 test("dynamic completion follows the command tree", () => {
   const program = buildProgram();
+  const topLevel = completionCandidates(program, [""]);
+  assert.ok(topLevel.includes("start"));
+  assert.ok(topLevel.includes("status"));
+  assert.ok(topLevel.includes("stop"));
+  assert.equal(topLevel.includes("daemon"), false);
+  assert.equal(topLevel.includes("gateway"), false);
   assert.ok(completionCandidates(program, ["co"]).includes("config"));
   assert.deepEqual(completionCandidates(program, ["gateway", "s"]), [
     "serve"

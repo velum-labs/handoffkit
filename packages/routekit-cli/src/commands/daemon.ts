@@ -5,13 +5,14 @@ import { readFileSync } from "node:fs";
 import { startRouteKitDaemon } from "@routekit/daemon";
 
 import {
+  connectDaemon,
   daemonDataTokenPath,
-  ensureDaemon
+  ensureDaemon,
+  readDaemonRecord
 } from "../client.js";
 import { routekitVersion } from "../state.js";
 import { registerDaemonService, registerLogs } from "./gateway-service.js";
 import { registerRestart, registerStart } from "./start.js";
-import { registerStatus } from "./status.js";
 import { registerStop } from "./stop.js";
 import { registerUpgrade } from "./upgrade.js";
 
@@ -93,6 +94,43 @@ function registerReload(group: Command): void {
       else {
         ctx.presenter.success(
           `RouteKit daemon reloaded (config revision ${result.configRevision})`
+        );
+      }
+    });
+}
+
+function registerStatus(group: Command): void {
+  group
+    .command("status")
+    .description("show singleton daemon and data-plane status")
+    .action(async (_options: unknown, command: Command) => {
+      const ctx = contextFor(command);
+      const connected = await connectDaemon();
+      if (connected === undefined) {
+        const record = readDaemonRecord();
+        if (ctx.json) {
+          ctx.emit({
+            running: record !== undefined,
+            healthy: false,
+            ...(record !== undefined ? { pid: record.pid } : {})
+          });
+        } else {
+          ctx.presenter.note(
+            record === undefined ? "RouteKit daemon is stopped" : "RouteKit daemon is unhealthy"
+          );
+        }
+        return;
+      }
+      const status = await connected.client.call("daemon.status", {});
+      if (ctx.json) ctx.emit(status);
+      else {
+        ctx.presenter.success(
+          `RouteKit daemon v${status.packageVersion} is running (pid ${status.pid})`
+        );
+        ctx.presenter.line(`  gateway: ${status.dataUrl}`);
+        ctx.presenter.line(
+          `  generation ${status.generation} · config revision ${status.configRevision} · ` +
+            `account revision ${status.accountRevision}`
         );
       }
     });

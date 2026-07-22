@@ -508,7 +508,7 @@
     {
       "id": "process.routekit-cli-lifecycle",
       "category": "process",
-      "expectation": "The public RouteKit start, status, and stop commands operate one daemon-backed lifecycle with idempotent startup and graceful request draining.",
+      "expectation": "The public RouteKit start, status, and stop commands operate one daemon-backed lifecycle with idempotent startup and graceful request draining, while hidden legacy daemon commands retain their machine contracts.",
       "status": "required",
       "testFile": "packages/routekit-cli/src/test/service-lifecycle-e2e.test.ts",
       "anchor": "public RouteKit lifecycle: start, idempotency, upgrade, drain-on-stop"
@@ -516,7 +516,7 @@
     {
       "id": "process.routekit-singleton-clients",
       "category": "process",
-      "expectation": "Concurrent product commands race-safely start exactly one daemon, while status observes without starting and legacy daemon commands delegate to the canonical lifecycle.",
+      "expectation": "Concurrent product commands race-safely join one authoritative daemon record and gateway, while status observes without starting.",
       "status": "required",
       "testFile": "packages/routekit-cli/src/test/singleton-client-e2e.test.ts",
       "anchor": "concurrent product commands auto-start exactly one daemon and all use its gateway"

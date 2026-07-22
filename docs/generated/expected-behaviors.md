@@ -154,8 +154,8 @@ environment-gated rows name the reason and exact live command.
 | ID | Expected behavior | Status | Evidence |
 |---|---|---|---|
 | `process.product-cli-boot` | The real FusionKit CLI loads config, starts RouteKit and the internal Python sidecar, then serves fusion. | required | `packages/cli/src/test/stack-npm-cli-e2e.test.ts` — `boots its production stack` |
-| `process.routekit-cli-lifecycle` | The public RouteKit start, status, and stop commands operate one daemon-backed lifecycle with idempotent startup and graceful request draining. | required | `packages/routekit-cli/src/test/service-lifecycle-e2e.test.ts` — `public RouteKit lifecycle: start, idempotency, upgrade, drain-on-stop` |
-| `process.routekit-singleton-clients` | Concurrent product commands race-safely start exactly one daemon, while status observes without starting and legacy daemon commands delegate to the canonical lifecycle. | required | `packages/routekit-cli/src/test/singleton-client-e2e.test.ts` — `concurrent product commands auto-start exactly one daemon and all use its gateway` |
+| `process.routekit-cli-lifecycle` | The public RouteKit start, status, and stop commands operate one daemon-backed lifecycle with idempotent startup and graceful request draining, while hidden legacy daemon commands retain their machine contracts. | required | `packages/routekit-cli/src/test/service-lifecycle-e2e.test.ts` — `public RouteKit lifecycle: start, idempotency, upgrade, drain-on-stop` |
+| `process.routekit-singleton-clients` | Concurrent product commands race-safely join one authoritative daemon record and gateway, while status observes without starting. | required | `packages/routekit-cli/src/test/singleton-client-e2e.test.ts` — `concurrent product commands auto-start exactly one daemon and all use its gateway` |
 | `process.routekit-cli-serve` | The advanced foreground RouteKit process reports machine-readable readiness and serves model discovery plus every supported gateway dialect against a local upstream. | required | `packages/routekit-cli/src/test/serve-process-e2e.test.ts` — `reports JSON readiness and serves every supported door` |
 
 ## cli

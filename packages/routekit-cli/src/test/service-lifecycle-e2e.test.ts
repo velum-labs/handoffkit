@@ -57,6 +57,10 @@ test("public RouteKit lifecycle: start, idempotency, upgrade, drain-on-stop", as
 
   // A mock upstream whose /slow completion takes 2.5s: long enough to still be
   // in flight when the stop begins, short enough to finish within the drain.
+  let markSlowRequestStarted!: () => void;
+  const slowRequestStarted = new Promise<void>((resolveStarted) => {
+    markSlowRequestStarted = resolveStarted;
+  });
   const upstream = createServer((request, response) => {
     if (request.url === "/v1/models") {
       response.setHeader("content-type", "application/json");
@@ -67,6 +71,7 @@ test("public RouteKit lifecycle: start, idempotency, upgrade, drain-on-stop", as
     }
     request.on("data", () => {});
     request.on("end", () => {
+      markSlowRequestStarted();
       const respond = (): void => {
         response.setHeader("content-type", "application/json");
         response.end(
@@ -178,8 +183,31 @@ test("public RouteKit lifecycle: start, idempotency, upgrade, drain-on-stop", as
         messages: [{ role: "user", content: "slow" }]
       })
     });
-    await new Promise((resolveWait) => setTimeout(resolveWait, 300));
+    await slowRequestStarted;
     const stopRun = runCli(["stop", "--json"], cli);
+    let healthStatus = 200;
+    const drainDeadline = Date.now() + 2_000;
+    while (healthStatus !== 503 && Date.now() < drainDeadline) {
+      await new Promise((resolveWait) => setTimeout(resolveWait, 20));
+      try {
+        healthStatus = (await fetch(`${upgradedUrl}/health`)).status;
+      } catch {
+        healthStatus = 0;
+      }
+    }
+    assert.equal(healthStatus, 503);
+    const rejected = await fetch(`${upgradedUrl}/v1/chat/completions`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${dataToken}`
+      },
+      body: JSON.stringify({
+        model: "openai/mock-model",
+        messages: [{ role: "user", content: "new work during drain" }]
+      })
+    });
+    assert.equal(rejected.status, 503);
     const inflightResponse = await inflight;
     assert.equal(inflightResponse.status, 200);
     assert.match(await inflightResponse.text(), /drained answer/);
@@ -200,6 +228,20 @@ test("public RouteKit lifecycle: start, idempotency, upgrade, drain-on-stop", as
     daemonPid = undefined;
     const stoppedAgain = json(await runCli(["stop", "--json"], cli));
     assert.equal(stoppedAgain.stopped, false);
+
+    // Hidden legacy commands remain compatible for existing automation.
+    const legacyStarted = json(
+      await runCli(["daemon", "start", "--port", "0", "--no-portless", "--json"], cli)
+    );
+    daemonPid = legacyStarted.pid as number;
+    const legacyStatus = json(await runCli(["daemon", "status", "--json"], cli));
+    assert.equal(legacyStatus.pid, daemonPid);
+    assert.equal(legacyStatus.dataUrl, legacyStarted.url);
+    const legacyStopped = json(await runCli(["daemon", "stop", "--json"], cli));
+    assert.equal(legacyStopped.stopped, true);
+    assert.equal(legacyStopped.pid, daemonPid);
+    assert.equal(alive(daemonPid), false);
+    daemonPid = undefined;
   } finally {
     if (daemonPid !== undefined && alive(daemonPid)) {
       try {

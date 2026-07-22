@@ -118,10 +118,7 @@ test("concurrent product commands auto-start exactly one daemon and all use its 
     assert.equal(typeof record.dataUrl, "string");
     const status = await run(["daemon", "status", "--json"], project, env);
     assert.equal(status.code, 0, status.stderr);
-    assert.equal(
-      (JSON.parse(status.stdout) as { daemon?: { pid?: number } }).daemon?.pid,
-      pid
-    );
+    assert.equal((JSON.parse(status.stdout) as { pid?: number }).pid, pid);
     const overviewResult = await run(["status", "--json"], project, env);
     assert.equal(overviewResult.code, 0, overviewResult.stderr);
     const overview = JSON.parse(overviewResult.stdout) as {
