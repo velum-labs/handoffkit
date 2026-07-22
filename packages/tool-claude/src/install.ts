@@ -21,6 +21,7 @@ export type ClaudeInstallOwner = {
 
 export type ClaudeInstallInput = {
   gatewayUrl: string;
+  authToken?: string;
   owner: ClaudeInstallOwner;
   modelId?: string;
   claudeConfigDir?: string;
@@ -140,7 +141,7 @@ function serialize(value: unknown): string {
 function managedEnv(input: ClaudeInstallInput): Record<string, string> {
   return {
     ANTHROPIC_BASE_URL: trimTrailingSlashes(input.gatewayUrl),
-    ANTHROPIC_AUTH_TOKEN: "routekit",
+    ANTHROPIC_AUTH_TOKEN: input.authToken ?? "routekit",
     CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY: "1",
     ...(input.modelId !== undefined ? { ANTHROPIC_MODEL: input.modelId } : {})
   };

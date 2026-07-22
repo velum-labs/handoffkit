@@ -25,9 +25,14 @@ const OWNER: ClaudeInstallOwner = {
   startCommand: "example serve"
 };
 
-function install(configDirectory: string, gatewayUrl = "http://127.0.0.1:9999/") {
+function install(
+  configDirectory: string,
+  gatewayUrl = "http://127.0.0.1:9999/",
+  authToken?: string
+) {
   return installClaudeIntegration({
     gatewayUrl,
+    ...(authToken !== undefined ? { authToken } : {}),
     modelId: "claude-code/claude-sonnet",
     owner: OWNER,
     claudeConfigDir: configDirectory
@@ -40,7 +45,7 @@ test("Claude managed install updates and restores the exact original settings", 
   const original = '{ "permissions": { "allow": ["Bash(git status)"] } }\n';
   writeFileSync(configPath, original);
   try {
-    const installed = install(configDirectory);
+    const installed = install(configDirectory, "http://127.0.0.1:9999/", "gateway-secret");
     assert.equal(installed.action, "installed");
     assert.deepEqual(installed.managedKeys.sort(), [
       "ANTHROPIC_AUTH_TOKEN",
@@ -51,9 +56,12 @@ test("Claude managed install updates and restores the exact original settings", 
     const settings = JSON.parse(readFileSync(configPath, "utf8"));
     assert.deepEqual(settings.permissions, { allow: ["Bash(git status)"] });
     assert.equal(settings.env.ANTHROPIC_BASE_URL, "http://127.0.0.1:9999");
-    assert.equal(settings.env.ANTHROPIC_AUTH_TOKEN, "routekit");
+    assert.equal(settings.env.ANTHROPIC_AUTH_TOKEN, "gateway-secret");
 
-    assert.equal(install(configDirectory, "http://127.0.0.1:8888").action, "updated");
+    assert.equal(
+      install(configDirectory, "http://127.0.0.1:8888", "updated-secret").action,
+      "updated"
+    );
     assert.equal(
       JSON.parse(readFileSync(configPath, "utf8")).env.ANTHROPIC_BASE_URL,
       "http://127.0.0.1:8888"

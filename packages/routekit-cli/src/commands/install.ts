@@ -104,15 +104,15 @@ export function registerClaudeIntegration(claude: Command): void {
       ) => {
         const ctx = contextFor(command);
         const client = await routekitClient();
-        const [daemon, catalog] = await Promise.all([
-          client.call("daemon.status", {}),
-          client.call("models.list", {})
-        ]);
-        const modelId = catalog.models[0]?.id;
+        const prepared = await client.call("launcher.prepare", {
+          tool: "claude",
+          cwd: process.cwd()
+        });
         const result = installClaudeIntegration({
-          gatewayUrl: trimTrailingSlashes(options.gatewayUrl ?? daemon.dataUrl),
+          gatewayUrl: trimTrailingSlashes(options.gatewayUrl ?? prepared.gatewayUrl),
+          authToken: prepared.authToken,
           owner: CLAUDE_OWNER,
-          ...(modelId !== undefined ? { modelId } : {}),
+          modelId: prepared.model,
           ...(options.claudeConfigDir !== undefined
             ? { claudeConfigDir: options.claudeConfigDir }
             : {})
