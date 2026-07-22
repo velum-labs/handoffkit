@@ -76,11 +76,15 @@ test("public RouteKit lifecycle: start, idempotency, upgrade, drain-on-stop", as
   mkdirSync(join(home, ".config", "routekit"), { recursive: true });
   mkdirSync(project, { recursive: true });
 
-  // A mock upstream whose /slow completion takes 2.5s: long enough to still be
-  // in flight when the stop begins, short enough to finish within the drain.
+  // Keep the mock completion in flight until the test observes draining. This
+  // avoids coupling the assertion to CLI process startup time under load.
   let markSlowRequestStarted!: () => void;
   const slowRequestStarted = new Promise<void>((resolveStarted) => {
     markSlowRequestStarted = resolveStarted;
+  });
+  let releaseSlowResponse!: () => void;
+  const slowResponseReleased = new Promise<void>((resolveReleased) => {
+    releaseSlowResponse = resolveReleased;
   });
   const upstream = createServer((request, response) => {
     if (request.url === "/v1/models") {
@@ -112,7 +116,7 @@ test("public RouteKit lifecycle: start, idempotency, upgrade, drain-on-stop", as
           })
         );
       };
-      setTimeout(respond, 2_500);
+      void slowResponseReleased.then(respond);
     });
   });
   await new Promise<void>((resolveListen) => upstream.listen(0, "127.0.0.1", resolveListen));
@@ -207,7 +211,9 @@ test("public RouteKit lifecycle: start, idempotency, upgrade, drain-on-stop", as
     await within(slowRequestStarted, 5_000, "slow upstream request");
     const stopRun = runCli(["stop", "--json"], cli);
     let healthStatus = 200;
-    const drainDeadline = Date.now() + 2_000;
+    // Starting a fresh Node CLI can take several seconds when the workspace
+    // test matrix saturates a small CI runner.
+    const drainDeadline = Date.now() + 10_000;
     while (healthStatus !== 503 && Date.now() < drainDeadline) {
       await new Promise((resolveWait) => setTimeout(resolveWait, 20));
       try {
@@ -229,6 +235,7 @@ test("public RouteKit lifecycle: start, idempotency, upgrade, drain-on-stop", as
       })
     });
     assert.equal(rejected.status, 503);
+    releaseSlowResponse();
     const inflightResponse = await inflight;
     assert.equal(inflightResponse.status, 200);
     assert.match(await inflightResponse.text(), /drained answer/);
@@ -264,6 +271,7 @@ test("public RouteKit lifecycle: start, idempotency, upgrade, drain-on-stop", as
     assert.equal(alive(daemonPid), false);
     daemonPid = undefined;
   } finally {
+    releaseSlowResponse();
     if (daemonPid !== undefined && alive(daemonPid)) {
       try {
         process.kill(daemonPid, "SIGKILL");
