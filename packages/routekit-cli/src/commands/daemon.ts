@@ -6,6 +6,7 @@ import { startRouteKitDaemon } from "@routekit/daemon";
 
 import {
   daemonDataTokenPath,
+  ensureDaemon
 } from "../client.js";
 import { routekitVersion } from "../state.js";
 import { registerDaemonService, registerLogs } from "./gateway-service.js";
