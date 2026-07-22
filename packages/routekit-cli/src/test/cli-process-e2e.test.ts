@@ -94,6 +94,7 @@ test("real routekit command surfaces execute independently of FusionKit", () => 
     const claudeInstallHelp = runCli(["claude", "install", "--help"], input);
     assert.equal(claudeInstallHelp.status, 0, claudeInstallHelp.stderr);
     assert.match(claudeInstallHelp.stdout, /--gateway-url/);
+    assert.match(claudeInstallHelp.stdout, /--auth-token-env/);
     assert.match(claudeInstallHelp.stdout, /--claude-config-dir/);
 
     const legacyInstall = runCli(["install", "codex"], input);

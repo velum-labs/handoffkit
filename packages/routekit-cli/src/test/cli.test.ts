@@ -15,6 +15,7 @@ import { fileURLToPath } from "node:url";
 
 import { buildProgram } from "../cli.js";
 import { completionCandidates } from "../completion.js";
+import { claudeInstallTarget } from "../commands/install.js";
 
 function command(program: ReturnType<typeof buildProgram>, name: string) {
   const found = program.commands.find((entry) => entry.name() === name);
@@ -170,6 +171,57 @@ test("dynamic completion follows the command tree", () => {
     "claude-code",
     "codex"
   ]);
+});
+
+test("Claude gateway overrides never reuse the local daemon token", () => {
+  const prepared = {
+    preparedGatewayUrl: "http://127.0.0.1:8080/",
+    preparedAuthToken: "local-daemon-secret"
+  };
+  assert.deepEqual(claudeInstallTarget(prepared), {
+    gatewayUrl: "http://127.0.0.1:8080",
+    authToken: "local-daemon-secret"
+  });
+  assert.throws(
+    () =>
+      claudeInstallTarget({
+        ...prepared,
+        gatewayUrl: "https://external.example"
+      }),
+    /requires --auth-token-env/
+  );
+  assert.throws(
+    () =>
+      claudeInstallTarget({
+        ...prepared,
+        gatewayUrl: "http://external.example",
+        authTokenEnv: "EXTERNAL_TOKEN",
+        env: { EXTERNAL_TOKEN: "external-secret" }
+      }),
+    /require HTTPS/
+  );
+  assert.deepEqual(
+    claudeInstallTarget({
+      ...prepared,
+      gatewayUrl: "https://external.example/",
+      authTokenEnv: "EXTERNAL_TOKEN",
+      env: { EXTERNAL_TOKEN: "external-secret" }
+    }),
+    {
+      gatewayUrl: "https://external.example",
+      authToken: "external-secret"
+    }
+  );
+  assert.throws(
+    () =>
+      claudeInstallTarget({
+        ...prepared,
+        gatewayUrl: "http://127.0.0.1:9090",
+        authTokenEnv: "MISSING_TOKEN",
+        env: {}
+      }),
+    /credential environment variable is not set/
+  );
 });
 
 test("start CLI documents explicit data-plane authentication", () => {

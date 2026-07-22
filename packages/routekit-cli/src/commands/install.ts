@@ -1,5 +1,8 @@
 import { contextFor } from "@routekit/cli-core";
-import { trimTrailingSlashes } from "@routekit/runtime";
+import {
+  isLoopbackHost,
+  trimTrailingSlashes
+} from "@routekit/runtime";
 import {
   installClaudeIntegration,
   installCodexIntegration,
@@ -38,6 +41,42 @@ function codexProfileId(modelId: string, index: number): string {
     !modelId.startsWith(".")
     ? modelId
     : `routekit-model-${index + 1}`;
+}
+
+export function claudeInstallTarget(input: {
+  preparedGatewayUrl: string;
+  preparedAuthToken: string;
+  gatewayUrl?: string;
+  authTokenEnv?: string;
+  env?: NodeJS.ProcessEnv;
+}): { gatewayUrl: string; authToken: string } {
+  const preparedGatewayUrl = trimTrailingSlashes(input.preparedGatewayUrl);
+  if (input.gatewayUrl === undefined) {
+    if (input.authTokenEnv !== undefined) {
+      throw new Error("--auth-token-env requires --gateway-url");
+    }
+    return { gatewayUrl: preparedGatewayUrl, authToken: input.preparedAuthToken };
+  }
+
+  const gatewayUrl = trimTrailingSlashes(input.gatewayUrl);
+  const parsed = new URL(gatewayUrl);
+  if (parsed.protocol !== "https:" && !isLoopbackHost(parsed.hostname)) {
+    throw new Error("external Claude gateways require HTTPS");
+  }
+  if (gatewayUrl === preparedGatewayUrl && input.authTokenEnv === undefined) {
+    return { gatewayUrl, authToken: input.preparedAuthToken };
+  }
+  if (input.authTokenEnv === undefined) {
+    throw new Error(
+      "an overridden Claude gateway requires --auth-token-env; " +
+        "the local daemon token will not be forwarded"
+    );
+  }
+  const authToken = (input.env ?? process.env)[input.authTokenEnv];
+  if (authToken === undefined || authToken.length === 0) {
+    throw new Error(`credential environment variable is not set: ${input.authTokenEnv}`);
+  }
+  return { gatewayUrl, authToken };
 }
 
 export function registerCodexIntegration(codex: Command): void {
@@ -96,10 +135,18 @@ export function registerClaudeIntegration(claude: Command): void {
     .command("install")
     .description("install RouteKit-owned Claude Code gateway settings")
     .option("--gateway-url <url>", "override the singleton daemon gateway URL")
+    .option(
+      "--auth-token-env <name>",
+      "read an overridden gateway token from an environment variable"
+    )
     .option("--claude-config-dir <dir>", "Claude Code configuration directory")
     .action(
       async (
-        options: { gatewayUrl?: string; claudeConfigDir?: string },
+        options: {
+          gatewayUrl?: string;
+          authTokenEnv?: string;
+          claudeConfigDir?: string;
+        },
         command: Command
       ) => {
         const ctx = contextFor(command);
@@ -108,11 +155,23 @@ export function registerClaudeIntegration(claude: Command): void {
           tool: "claude",
           cwd: process.cwd()
         });
-        const result = installClaudeIntegration({
-          gatewayUrl: trimTrailingSlashes(options.gatewayUrl ?? prepared.gatewayUrl),
-          authToken: prepared.authToken,
+        if (prepared.authToken === undefined) {
+          throw new Error("the RouteKit daemon did not provide a Claude gateway token");
+        }
+        const target = claudeInstallTarget({
+          preparedGatewayUrl: prepared.gatewayUrl,
+          preparedAuthToken: prepared.authToken,
+          ...(options.gatewayUrl !== undefined
+            ? { gatewayUrl: options.gatewayUrl }
+            : {}),
+          ...(options.authTokenEnv !== undefined
+            ? { authTokenEnv: options.authTokenEnv }
+            : {})
+        });
+        const result = await installClaudeIntegration({
+          gatewayUrl: target.gatewayUrl,
+          authToken: target.authToken,
           owner: CLAUDE_OWNER,
-          modelId: prepared.model,
           ...(options.claudeConfigDir !== undefined
             ? { claudeConfigDir: options.claudeConfigDir }
             : {})
@@ -129,7 +188,7 @@ export function registerClaudeIntegration(claude: Command): void {
     .action(async (options: { claudeConfigDir?: string }, command: Command) => {
       const ctx = contextFor(command);
       await (await routekitClient()).call("daemon.status", {});
-      const result = uninstallClaudeIntegration({
+      const result = await uninstallClaudeIntegration({
         ownerId: CLAUDE_OWNER.id,
         ...(options.claudeConfigDir !== undefined
           ? { claudeConfigDir: options.claudeConfigDir }
