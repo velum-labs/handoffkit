@@ -860,7 +860,12 @@ export async function startRouteKitDaemon(
               existsSync(entry.path) &&
               readFileSync(entry.path, "utf8") === entry.content
           );
-          if (unchanged && currentConfig.providers[provider] !== undefined) return;
+          if (
+            unchanged &&
+            (currentConfig.providers as Record<string, unknown>)[provider] !== undefined
+          ) {
+            return;
+          }
 
           const raw = parseYaml(currentDocument) as Record<string, unknown>;
           const providers =
@@ -1075,7 +1080,7 @@ export async function startRouteKitDaemon(
         ];
         const providerOnly = ["claude-code", "codex", "cliproxy"].filter(
           (provider) =>
-            currentConfig.providers[provider] !== undefined &&
+            (currentConfig.providers as Record<string, unknown>)[provider] !== undefined &&
             !accounts.some((entry) =>
               provider === "cliproxy"
                 ? entry.connector === "cliproxy"
