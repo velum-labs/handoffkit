@@ -11,8 +11,6 @@ const root = fileURLToPath(new URL("../../../../", import.meta.url));
 const routekitCli = join(root, "packages", "routekit-cli", "dist", "index.js");
 const cliEnv = { ...process.env, FUSIONKIT_NO_TUI: "1", ROUTEKIT_NO_TUI: "1" };
 const routeDisclosuresPath = "apps/docs/content/docs/reference/routes-and-billing.mdx";
-const routeDisclosuresUrl =
-  "https://fusionkit.velum-labs.com/docs/reference/routes-and-billing";
 
 function help(args: readonly string[]): string {
   return execFileSync(process.execPath, [routekitCli, ...args], {
@@ -222,7 +220,10 @@ test("every first-launch route has a complete public disclosure", () => {
 
 test("public onboarding links to the route disclosure contract", () => {
   const packageReadme = readFileSync(join(root, "packages/routekit-cli/README.md"), "utf8");
-  assert.ok(packageReadme.includes(routeDisclosuresUrl));
+  assert.match(
+    packageReadme,
+    /\]\(https:\/\/fusionkit\.velum-labs\.com\/docs\/reference\/routes-and-billing\)/
+  );
 
   for (const path of [
     "apps/docs/content/docs/getting-started/installation.mdx",
