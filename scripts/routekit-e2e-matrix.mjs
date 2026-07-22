@@ -10,6 +10,7 @@ import {
   readFileSync,
   readdirSync,
   rmSync,
+  symlinkSync,
   writeFileSync
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -1110,6 +1111,18 @@ function liveRouteInfo(configPath, chosen, tempRoot) {
   const canonicalConfig = join(home, ".config", "routekit", "router.yaml");
   mkdirSync(dirname(canonicalConfig), { recursive: true });
   writeFileSync(canonicalConfig, readFileSync(configPath, "utf8"));
+  for (const provider of ["codex", "claude-code"]) {
+    if (chosen[provider] === undefined) continue;
+    const source = defaultSubscriptionAccountDirectory(provider, process.env);
+    if (!existsSync(source)) {
+      throw new Error(`live route info account directory is missing: ${source}`);
+    }
+    const target = join(stateHome, "subscriptions", provider);
+    mkdirSync(dirname(target), { recursive: true });
+    // Keep the isolated daemon's service/config state separate while reading
+    // the same enrolled accounts as the already-qualified live gateway.
+    symlinkSync(source, target, "dir");
+  }
   const env = {
     ...process.env,
     HOME: home,

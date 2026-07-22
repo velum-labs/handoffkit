@@ -1,7 +1,7 @@
 # RouteKit route explanation evidence
 
-Date: 2026-07-22  
-Issue: [ENG-678](https://linear.app/velum-labs/issue/ENG-678/expose-and-verify-routekit-route-and-billing-information)  
+Date: 2026-07-22
+Issue: [ENG-678](https://linear.app/velum-labs/issue/ENG-678/expose-and-verify-routekit-route-and-billing-information)
 Pull request: [#161](https://github.com/velum-labs/handoffkit/pull/161)
 Implementation revision tested: `ec810142`
 
