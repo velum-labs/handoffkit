@@ -16,7 +16,7 @@ import {
 
 /**
  * A minimal daemon fixture: serves /health on an ephemeral loopback port and
- * writes its own service record — the same contract a real `gateway serve`
+ * writes its own service record — the same contract a real `daemon run`
  * process fulfils. In "crash" mode it logs and exits before becoming ready.
  */
 const FIXTURE = `
