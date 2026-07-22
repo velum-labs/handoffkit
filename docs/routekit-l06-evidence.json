@@ -1,14 +1,14 @@
 {
   "schemaVersion": 1,
   "routekitVersion": "0.8.0",
-  "testedRevision": "4e090a1a1496140ab4e7df0b50bed66d07f1a85d",
+  "testedRevision": "be81fa847d74c64fa8720c9ecf1d0c6abebd58fa",
   "evidenceDate": "2026-07-22",
   "routes": {
     "route-openai-api": {
       "title": "OpenAI API",
       "qualificationStatus": "pending",
-      "credentialMode": "User-owned OPENAI_API_KEY; no credential value is recorded.",
-      "clientProviderVersion": "Pending ENG-679 live provider record.",
+      "credentialMode": "Pending reviewed credential/account mode for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa; no credential value is recorded.",
+      "clientProviderVersion": "Pending reviewed client/provider versions for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa.",
       "evidence": [
         {
           "type": "automated",
@@ -29,21 +29,21 @@
           "status": "pending",
           "caseId": "live.openai.openai-chat",
           "reference": "matrix:live.openai.openai-chat",
-          "summary": "Case was not present in the promoted report for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d."
+          "summary": "Case was not present in the promoted report for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa."
         }
       ],
       "outcomes": {
         "protocolBehavior": {
           "status": "pending",
-          "summary": "Awaiting reviewed protocolBehavior outcome for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d."
+          "summary": "Awaiting reviewed protocolBehavior outcome for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa."
         },
         "billingAttribution": {
           "status": "pending",
-          "summary": "Awaiting reviewed billingAttribution outcome for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d."
+          "summary": "Awaiting reviewed billingAttribution outcome for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa."
         },
         "failureBehavior": {
           "status": "pending",
-          "summary": "Awaiting reviewed failureBehavior outcome for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d."
+          "summary": "Awaiting reviewed failureBehavior outcome for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa."
         },
         "setupRestore": {
           "status": "not-applicable",
@@ -54,8 +54,8 @@
     "route-anthropic-api": {
       "title": "Anthropic API",
       "qualificationStatus": "pending",
-      "credentialMode": "User-owned ANTHROPIC_API_KEY; no credential value is recorded.",
-      "clientProviderVersion": "Pending ENG-679 live provider record.",
+      "credentialMode": "Pending reviewed credential/account mode for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa; no credential value is recorded.",
+      "clientProviderVersion": "Pending reviewed client/provider versions for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa.",
       "evidence": [
         {
           "type": "automated",
@@ -66,7 +66,7 @@
             "phase": "deterministic",
             "provider": "anthropic",
             "door": "anthropic-messages",
-            "durationMs": 92,
+            "durationMs": 93,
             "billedCalls": 0,
             "artifact": null
           }
@@ -76,21 +76,21 @@
           "status": "pending",
           "caseId": "live.anthropic.anthropic-messages",
           "reference": "matrix:live.anthropic.anthropic-messages",
-          "summary": "Case was not present in the promoted report for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d."
+          "summary": "Case was not present in the promoted report for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa."
         }
       ],
       "outcomes": {
         "protocolBehavior": {
           "status": "pending",
-          "summary": "Awaiting reviewed protocolBehavior outcome for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d."
+          "summary": "Awaiting reviewed protocolBehavior outcome for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa."
         },
         "billingAttribution": {
           "status": "pending",
-          "summary": "Awaiting reviewed billingAttribution outcome for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d."
+          "summary": "Awaiting reviewed billingAttribution outcome for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa."
         },
         "failureBehavior": {
           "status": "pending",
-          "summary": "Awaiting reviewed failureBehavior outcome for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d."
+          "summary": "Awaiting reviewed failureBehavior outcome for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa."
         },
         "setupRestore": {
           "status": "not-applicable",
@@ -101,8 +101,8 @@
     "route-openrouter-api": {
       "title": "OpenRouter API",
       "qualificationStatus": "pending",
-      "credentialMode": "User-owned OPENROUTER_API_KEY; no credential value is recorded.",
-      "clientProviderVersion": "Pending ENG-679 OpenRouter and upstream model record.",
+      "credentialMode": "Pending reviewed credential/account mode for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa; no credential value is recorded.",
+      "clientProviderVersion": "Pending reviewed client/provider versions for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa.",
       "evidence": [
         {
           "type": "automated",
@@ -137,21 +137,21 @@
           "status": "pending",
           "caseId": "live.openrouter.openai-chat",
           "reference": "matrix:live.openrouter.openai-chat",
-          "summary": "Case was not present in the promoted report for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d."
+          "summary": "Case was not present in the promoted report for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa."
         }
       ],
       "outcomes": {
         "protocolBehavior": {
           "status": "pending",
-          "summary": "Awaiting reviewed protocolBehavior outcome for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d."
+          "summary": "Awaiting reviewed protocolBehavior outcome for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa."
         },
         "billingAttribution": {
           "status": "pending",
-          "summary": "Awaiting reviewed billingAttribution outcome for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d."
+          "summary": "Awaiting reviewed billingAttribution outcome for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa."
         },
         "failureBehavior": {
           "status": "pending",
-          "summary": "Awaiting reviewed failureBehavior outcome for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d."
+          "summary": "Awaiting reviewed failureBehavior outcome for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa."
         },
         "setupRestore": {
           "status": "not-applicable",
@@ -162,8 +162,8 @@
     "route-codex-subscription": {
       "title": "Codex subscription",
       "qualificationStatus": "pending",
-      "credentialMode": "User-owned Codex OAuth subscription; no credential value is recorded.",
-      "clientProviderVersion": "Pending ENG-679 Codex CLI and provider record.",
+      "credentialMode": "Pending reviewed credential/account mode for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa; no credential value is recorded.",
+      "clientProviderVersion": "Pending reviewed client/provider versions for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa.",
       "evidence": [
         {
           "type": "automated",
@@ -199,47 +199,47 @@
           "status": "pending",
           "caseId": "live.codex.codex-responses",
           "reference": "matrix:live.codex.codex-responses",
-          "summary": "Case was not present in the promoted report for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d."
+          "summary": "Case was not present in the promoted report for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa."
         },
         {
           "type": "automated",
           "status": "pending",
           "caseId": "live.codex.codex",
           "reference": "matrix:live.codex.codex",
-          "summary": "Case was not present in the promoted report for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d."
+          "summary": "Case was not present in the promoted report for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa."
         },
         {
           "type": "manual",
           "status": "pending",
           "label": "Codex setup and restore review",
           "reference": "https://linear.app/velum-labs/issue/ENG-679",
-          "summary": "Manual evidence must be reviewed for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d."
+          "summary": "Manual evidence must be reviewed for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa."
         }
       ],
       "outcomes": {
         "protocolBehavior": {
           "status": "pending",
-          "summary": "Awaiting reviewed protocolBehavior outcome for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d."
+          "summary": "Awaiting reviewed protocolBehavior outcome for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa."
         },
         "billingAttribution": {
           "status": "pending",
-          "summary": "Awaiting reviewed billingAttribution outcome for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d."
+          "summary": "Awaiting reviewed billingAttribution outcome for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa."
         },
         "failureBehavior": {
           "status": "pending",
-          "summary": "Awaiting reviewed failureBehavior outcome for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d."
+          "summary": "Awaiting reviewed failureBehavior outcome for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa."
         },
         "setupRestore": {
           "status": "pending",
-          "summary": "Awaiting reviewed setupRestore outcome for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d."
+          "summary": "Awaiting reviewed setupRestore outcome for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa."
         }
       }
     },
     "route-claude-code-subscription": {
       "title": "Claude Code subscription",
       "qualificationStatus": "pending",
-      "credentialMode": "User-owned Claude Code OAuth subscription; no credential value is recorded.",
-      "clientProviderVersion": "Pending ENG-679 Claude Code and provider record.",
+      "credentialMode": "Pending reviewed credential/account mode for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa; no credential value is recorded.",
+      "clientProviderVersion": "Pending reviewed client/provider versions for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa.",
       "evidence": [
         {
           "type": "automated",
@@ -250,7 +250,7 @@
             "phase": "deterministic",
             "provider": "claude-code",
             "door": "anthropic-messages",
-            "durationMs": 92,
+            "durationMs": 91,
             "billedCalls": 0,
             "artifact": null
           }
@@ -264,7 +264,7 @@
             "phase": "deterministic",
             "provider": "claude-code",
             "door": "anthropic-thinking",
-            "durationMs": 149,
+            "durationMs": 147,
             "billedCalls": 0,
             "artifact": null
           }
@@ -289,87 +289,87 @@
           "status": "pending",
           "caseId": "live.claude-code.anthropic-messages",
           "reference": "matrix:live.claude-code.anthropic-messages",
-          "summary": "Case was not present in the promoted report for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d."
+          "summary": "Case was not present in the promoted report for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa."
         },
         {
           "type": "automated",
           "status": "pending",
           "caseId": "live.claude-code.claude",
           "reference": "matrix:live.claude-code.claude",
-          "summary": "Case was not present in the promoted report for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d."
+          "summary": "Case was not present in the promoted report for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa."
         },
         {
           "type": "automated",
           "status": "pending",
           "caseId": "live.claude-code.pool",
           "reference": "matrix:live.claude-code.pool",
-          "summary": "Case was not present in the promoted report for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d."
+          "summary": "Case was not present in the promoted report for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa."
         },
         {
           "type": "manual",
           "status": "pending",
           "label": "Claude setup, restore, and recovery review",
           "reference": "https://linear.app/velum-labs/issue/ENG-679",
-          "summary": "Manual evidence must be reviewed for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d."
+          "summary": "Manual evidence must be reviewed for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa."
         }
       ],
       "outcomes": {
         "protocolBehavior": {
           "status": "pending",
-          "summary": "Awaiting reviewed protocolBehavior outcome for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d."
+          "summary": "Awaiting reviewed protocolBehavior outcome for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa."
         },
         "billingAttribution": {
           "status": "pending",
-          "summary": "Awaiting reviewed billingAttribution outcome for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d."
+          "summary": "Awaiting reviewed billingAttribution outcome for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa."
         },
         "failureBehavior": {
           "status": "pending",
-          "summary": "Awaiting reviewed failureBehavior outcome for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d."
+          "summary": "Awaiting reviewed failureBehavior outcome for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa."
         },
         "setupRestore": {
           "status": "pending",
-          "summary": "Awaiting reviewed setupRestore outcome for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d."
+          "summary": "Awaiting reviewed setupRestore outcome for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa."
         }
       }
     },
     "route-cursor-ide": {
       "title": "Cursor IDE custom OpenAI endpoint",
       "qualificationStatus": "pending",
-      "credentialMode": "Logged-in Cursor desktop account and isolated local endpoint; no credential is recorded.",
-      "clientProviderVersion": "Pending ENG-679 authenticated Cursor IDE record.",
+      "credentialMode": "Pending reviewed credential/account mode for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa; no credential value is recorded.",
+      "clientProviderVersion": "Pending reviewed client/provider versions for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa.",
       "evidence": [
         {
           "type": "manual",
           "status": "pending",
           "label": "Cursor IDE custom-endpoint walkthrough",
           "reference": "https://linear.app/velum-labs/issue/ENG-679",
-          "summary": "Manual evidence must be reviewed for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d."
+          "summary": "Manual evidence must be reviewed for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa."
         }
       ],
       "outcomes": {
         "protocolBehavior": {
           "status": "pending",
-          "summary": "Awaiting reviewed protocolBehavior outcome for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d."
+          "summary": "Awaiting reviewed protocolBehavior outcome for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa."
         },
         "billingAttribution": {
           "status": "pending",
-          "summary": "Awaiting reviewed billingAttribution outcome for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d."
+          "summary": "Awaiting reviewed billingAttribution outcome for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa."
         },
         "failureBehavior": {
           "status": "pending",
-          "summary": "Awaiting reviewed failureBehavior outcome for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d."
+          "summary": "Awaiting reviewed failureBehavior outcome for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa."
         },
         "setupRestore": {
           "status": "pending",
-          "summary": "Awaiting reviewed setupRestore outcome for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d."
+          "summary": "Awaiting reviewed setupRestore outcome for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa."
         }
       }
     },
     "route-cursor-agent": {
       "title": "cursor-agent custom OpenAI endpoint",
       "qualificationStatus": "pending",
-      "credentialMode": "Logged-in cursor-agent account and local endpoint; no credential is recorded.",
-      "clientProviderVersion": "Pending ENG-679 authenticated cursor-agent record.",
+      "credentialMode": "Pending reviewed credential/account mode for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa; no credential value is recorded.",
+      "clientProviderVersion": "Pending reviewed client/provider versions for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa.",
       "evidence": [
         {
           "type": "automated",
@@ -391,32 +391,32 @@
           "status": "pending",
           "caseId": "live.openrouter.cursor",
           "reference": "matrix:live.openrouter.cursor",
-          "summary": "Case was not present in the promoted report for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d."
+          "summary": "Case was not present in the promoted report for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa."
         },
         {
           "type": "manual",
           "status": "pending",
           "label": "Authenticated cursor-agent setup and restore review",
           "reference": "https://linear.app/velum-labs/issue/ENG-679",
-          "summary": "Manual evidence must be reviewed for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d."
+          "summary": "Manual evidence must be reviewed for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa."
         }
       ],
       "outcomes": {
         "protocolBehavior": {
           "status": "pending",
-          "summary": "Awaiting reviewed protocolBehavior outcome for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d."
+          "summary": "Awaiting reviewed protocolBehavior outcome for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa."
         },
         "billingAttribution": {
           "status": "pending",
-          "summary": "Awaiting reviewed billingAttribution outcome for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d."
+          "summary": "Awaiting reviewed billingAttribution outcome for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa."
         },
         "failureBehavior": {
           "status": "pending",
-          "summary": "Awaiting reviewed failureBehavior outcome for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d."
+          "summary": "Awaiting reviewed failureBehavior outcome for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa."
         },
         "setupRestore": {
           "status": "pending",
-          "summary": "Awaiting reviewed setupRestore outcome for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d."
+          "summary": "Awaiting reviewed setupRestore outcome for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa."
         }
       }
     }
