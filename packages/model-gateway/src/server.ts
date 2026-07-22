@@ -568,11 +568,9 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
         rawBody.model,
         backend.listModelIds?.()
       );
-      const route = resolveNativeModelRoute(
-        backend,
-        "claude-code",
-        resolvedModel
-      );
+      // Defer an unknown Claude model to the Anthropic adapter so it can emit
+      // the native Anthropic error envelope instead of the generic gateway one.
+      const route = backend.resolveModelRoute?.(resolvedModel, "claude-code");
       const canonicalModel = route?.publicId ?? resolvedModel;
       const body =
         canonicalModel === rawBody.model || canonicalModel === undefined
