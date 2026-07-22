@@ -2275,7 +2275,9 @@ async function main() {
     status:
       topLevelError === undefined &&
       caseCounts.fail === 0 &&
-      (options.routes === undefined || qualification.status === "pass")
+      (!options.live ||
+        options.routes === undefined ||
+        qualification.status === "pass")
         ? "pass"
         : "fail",
     caseCounts,
