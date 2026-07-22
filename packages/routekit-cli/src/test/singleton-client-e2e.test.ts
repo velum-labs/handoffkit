@@ -44,7 +44,13 @@ test("concurrent product commands auto-start exactly one daemon and all use its 
   mkdirSync(project, { recursive: true });
   writeFileSync(
     join(home, ".config", "routekit", "router.yaml"),
-    "providers:\n  openai: {}\ndefaultModel: openai/mock-model\n"
+    [
+      "providers:",
+      "  openai:",
+      "    fallbackCooldownSeconds: 17",
+      "defaultModel: openai/mock-model",
+      ""
+    ].join("\n")
   );
   const upstream = createServer((req, res) => {
     res.setHeader("content-type", "application/json");
@@ -124,6 +130,41 @@ test("concurrent product commands auto-start exactly one daemon and all use its 
     );
     assert.equal(warmOverride.code, 1);
     assert.match(warmOverride.stderr, /not supported by singleton daemon operations/);
+    const explicitOverride = await run(
+      ["--config", join(project, "other.yaml"), "models", "list"],
+      project,
+      env
+    );
+    assert.equal(explicitOverride.code, 1);
+    assert.match(explicitOverride.stderr, /not supported by singleton daemon operations/);
+
+    const projectConfig = join(project, ".routekit", "router.yaml");
+    mkdirSync(dirname(projectConfig), { recursive: true });
+    writeFileSync(
+      projectConfig,
+      "providers:\n  openai: {}\ndefaultModel: openai/mock-model\n"
+    );
+    const imported = await run(
+      ["config", "import", "--from", projectConfig, "--json"],
+      project,
+      env
+    );
+    assert.equal(imported.code, 0, imported.stderr);
+    assert.equal((JSON.parse(imported.stdout) as { imported?: boolean }).imported, true);
+    const canonicalDocument = readFileSync(
+      join(home, ".config", "routekit", "router.yaml"),
+      "utf8"
+    );
+    assert.doesNotMatch(canonicalDocument, /fallbackCooldownSeconds/);
+    const shown = await run(["config", "show", "--json"], project, env);
+    assert.equal(shown.code, 0, shown.stderr);
+    const snapshot = JSON.parse(shown.stdout) as {
+      sources?: string[];
+      config?: { defaultModel?: string };
+    };
+    assert.deepEqual(snapshot.sources, ["global"]);
+    assert.equal(snapshot.config?.defaultModel, "openai/mock-model");
+
     const serviceStatus = await run(
       ["daemon", "service", "status", "--json"],
       project,

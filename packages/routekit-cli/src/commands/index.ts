@@ -20,7 +20,10 @@ import { registerUsage } from "./usage.js";
 
 export function registerCommands(program: Command): void {
   attachGlobalFlags(program);
-  program.option("--config <path>", "router config path (overrides project and global config)");
+  program.option(
+    "--config <path>",
+    "router config path for foreground doctor and migration recovery only"
+  );
   program.commandsGroup("Setup");
   registerAccounts(program);
   registerProviders(program);

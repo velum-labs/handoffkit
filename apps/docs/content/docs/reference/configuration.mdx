@@ -54,6 +54,27 @@ catalog, and account commands; FusionKit does not depend on that executable.
 - `url` plus optional `authEnv`: connect to an external RouteKit gateway.
   FusionKit validates its `/v1/models` list and never stops it.
 
+## Standalone RouteKit configuration
+
+The standalone `routekit` CLI is a thin client of one singleton daemon. That
+daemon reads exactly one canonical document:
+`~/.config/routekit/router.yaml`. It never discovers or layers a project file
+from the caller's working directory because concurrent projects share the same
+gateway.
+
+Project `.routekit/router.yaml` files remain valid as explicit inputs to
+FusionKit embedded mode and the embeddable RouteKit SDK. To migrate one into
+the singleton daemon, replace the complete canonical document explicitly:
+
+```bash
+routekit config import --from .routekit/router.yaml
+```
+
+Import validates and atomically replaces the canonical document; it does not
+merge project and global files. Daemon-backed commands reject `--config` and
+`ROUTEKIT_CONFIG`; those selectors are limited to documented foreground,
+doctor, migration, and SDK recovery paths.
+
 Ensemble `members`, `judge`, and optional `synthesizer` values are namespaced
 IDs advertised by RouteKit's live catalog. Provider policy, credentials,
 registry URLs, pricing, and subscription-account enrollment are rejected here.
@@ -91,7 +112,7 @@ routekit claude claude-code/claude-sonnet-4-5
 ```
 
 The first successful managed login or explicit `routekit accounts add` import
-enables that provider in the effective router config. RouteKit discovers each
+enables that provider in the singleton's canonical router config. RouteKit discovers each
 healthy member, publishes the union, and routes a model only to accounts that
 advertise it. Quotas, refresh, cooldowns, and reset windows remain per account.
 

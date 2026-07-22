@@ -104,6 +104,24 @@ test("independent command surface is complete and has no compatibility aliases",
   assert.equal(program.commands.some((entry) => entry.aliases().length > 0), false);
 });
 
+test("config help describes import-only singleton policy", () => {
+  const program = buildProgram();
+  const globalConfig = program.options.find((option) => option.long === "--config");
+  assert.ok(globalConfig);
+  assert.match(globalConfig.description, /foreground doctor and migration recovery only/);
+
+  const config = command(program, "config");
+  const init = config.commands.find((entry) => entry.name() === "init");
+  const edit = config.commands.find((entry) => entry.name() === "edit");
+  const importCommand = config.commands.find((entry) => entry.name() === "import");
+  assert.ok(init);
+  assert.ok(edit);
+  assert.ok(importCommand);
+  assert.equal(init.options.some((option) => option.long === "--global"), false);
+  assert.equal(edit.options.some((option) => option.long === "--global"), false);
+  assert.match(importCommand.description(), /replace the canonical singleton config/);
+});
+
 test("dynamic completion follows the command tree", () => {
   const program = buildProgram();
   assert.ok(completionCandidates(program, ["co"]).includes("config"));

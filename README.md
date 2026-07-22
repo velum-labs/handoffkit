@@ -37,8 +37,11 @@ fusionkit doctor                     # verifies configs, live model IDs, uv, and
 fusionkit codex                      # or: fusionkit claude | fusionkit cursor | fusionkit serve
 ```
 
-Then enable providers in `.routekit/router.yaml`; RouteKit discovers their live
-models and advertises source-qualified `provider/model` IDs.
+Then enable providers in `.routekit/router.yaml`; FusionKit loads that file as
+an explicit embedded RouteKit configuration and discovers source-qualified
+`provider/model` IDs. The standalone RouteKit singleton does not discover it
+by working directory; use `routekit config import --from .routekit/router.yaml`
+to replace the singleton's canonical configuration when that is intended.
 `.fusionkit/fusion.json` composes those IDs into ensembles. Every selected
 model must be present in the live catalog.
 This checkout's committed router uses OpenRouter

@@ -17,8 +17,8 @@ fusionkit init
 ```
 
 If `.routekit/router.yaml` does not exist, `init` creates a provider-based
-placeholder. Edit that file directly or install the independent
-`@routekit/cli` and use `routekit providers`.
+placeholder for FusionKit's embedded router. Edit that file directly. The
+independent `@routekit/cli` manages its singleton daemon separately.
 
 ## FusionKit v4
 
@@ -76,7 +76,8 @@ enrollment are invalid in this file.
 The standalone `routekit` CLI daemon uses exactly one canonical config:
 `~/.config/routekit/router.yaml`. It does not vary routing policy by the
 caller's working directory; that would make one gateway ambiguous when two
-projects run concurrently. Import an existing project overlay explicitly:
+projects run concurrently. To migrate a project file into the daemon, replace
+the canonical document explicitly:
 
 ```sh
 routekit config import --from .routekit/router.yaml
@@ -86,7 +87,8 @@ Project `.routekit/router.yaml` discovery remains part of the embeddable
 `@routekit/config` / `@routekit/router` SDK contract and therefore remains
 valid for FusionKit's `{ "config": ... }` embedded mode. `--config` and
 `ROUTEKIT_CONFIG` are recovery/foreground SDK paths, not daemon-backed command
-scope selectors.
+scope selectors. `config import` validates and atomically replaces the complete
+canonical document; it does not merge project and global files.
 
 Enable each provider explicitly. RouteKit obtains API URLs and credential
 environment-variable names from its registry, performs live discovery at

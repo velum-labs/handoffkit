@@ -45,7 +45,7 @@ export function registerConfig(program: Command): void {
 
   config
     .command("show")
-    .description("show the validated effective router config")
+    .description("show the validated canonical singleton router config")
     .action(async (_options: unknown, command: Command) => {
       const ctx = contextFor(command);
       const result = await (await routekitClient()).call("config.get", {});
@@ -61,10 +61,9 @@ export function registerConfig(program: Command): void {
 
   config
     .command("init")
-    .description("create a safe router config template")
-    .option("--global", "write the global config")
+    .description("create the canonical singleton router config")
     .option("--force", "replace an existing config")
-    .action(async (options: { global?: boolean; force?: boolean }, command: Command) => {
+    .action(async (options: { force?: boolean }, command: Command) => {
       const ctx = contextFor(command);
       const path = globalRouterConfigPath();
       if (existsSync(path) && options.force !== true) {
@@ -113,9 +112,8 @@ export function registerConfig(program: Command): void {
 
   config
     .command("edit")
-    .description("edit and atomically validate the router config")
-    .option("--global", "edit the global config")
-    .action(async (_options: { global?: boolean }, command: Command) => {
+    .description("edit and atomically validate the canonical singleton router config")
+    .action(async (_options: unknown, command: Command) => {
       const ctx = contextFor(command);
       if (ctx.json) {
         throw new Error("`config edit` is interactive and does not support --json");
@@ -151,8 +149,8 @@ export function registerConfig(program: Command): void {
 
   config
     .command("import")
-    .description("import a router file into the canonical singleton config")
-    .requiredOption("--from <path>", "router YAML to import")
+    .description("validate a router file and replace the canonical singleton config")
+    .requiredOption("--from <path>", "router YAML to import as the complete canonical config")
     .action(async (options: { from: string }, command: Command) => {
       const ctx = contextFor(command);
       const source = resolve(options.from);

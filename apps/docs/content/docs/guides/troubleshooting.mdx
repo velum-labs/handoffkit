@@ -27,7 +27,8 @@ Run fusionkit from inside your project's git repo, or pass `--repo <dir>`.
 ## A panel model won't start
 
 If a RouteKit provider cannot authenticate, discover models, or route the
-selected model, inspect the provider and live catalog:
+selected model, start with `fusionkit doctor` for an embedded project router.
+For the standalone singleton, inspect the provider and live catalog:
 
 ```bash
 routekit providers status <provider>
@@ -35,7 +36,11 @@ routekit models list
 routekit doctor
 ```
 
-Then correct the provider entry or its registry-defined credential/base-URL
+These daemon-backed commands use `~/.config/routekit/router.yaml`; they do not
+discover `.routekit/router.yaml` by working directory. Import a project policy
+explicitly with `routekit config import --from .routekit/router.yaml` when you
+intend to replace the singleton's canonical document. Then correct the
+provider entry or its registry-defined credential/base-URL
 environment variable. For subscription providers, inspect
 `routekit accounts status`. FusionKit does not own provider retries or
 credential resolution.

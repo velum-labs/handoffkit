@@ -171,11 +171,11 @@ export function canonicalConfigOrMigrationError(): string {
   if (project !== undefined) {
     throw new Error(
       `the singleton RouteKit daemon uses the canonical global config ${global}; ` +
-        `import this project overlay explicitly with \`routekit config import --from ${project}\``
+        `replace it from this project config explicitly with \`routekit config import --from ${project}\``
     );
   }
   throw new Error(
-    `canonical router config not found: ${global}; run \`routekit config init --global\``
+    `canonical router config not found: ${global}; run \`routekit config init\``
   );
 }
 

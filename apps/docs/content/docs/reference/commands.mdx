@@ -75,7 +75,9 @@ direct/single-model mode. Use RouteKit for those responsibilities.
 | `--fusionkit-dir <dir>` | Use a local Python engine checkout. |
 
 Provider/model/key flags and `--direct` do not exist. Routing is configured in
-`.routekit/router.yaml`.
+`.routekit/router.yaml` for an embedded Fusion router. The standalone RouteKit
+singleton uses its canonical global document; project files affect it only
+through an explicit `routekit config import --from <path>` replacement.
 
 ## Ownership and shutdown
 
