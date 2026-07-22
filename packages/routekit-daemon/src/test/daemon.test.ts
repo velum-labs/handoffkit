@@ -466,6 +466,53 @@ test("daemon owns the cliproxy sidecar: spawn, restart, account routing, shutdow
     );
     assert.equal(orphanRemoved.removed, true);
     assert.equal(existsSync(join(authDirectory, "legacy-claude@example.com.json")), false);
+    const beforeActivation = await client.call("daemon.status", {});
+    const activationParams = {
+      kind: "grok",
+      accounts: [
+        {
+          label: "xai-transaction@example.com",
+          credential: {
+            type: "xai",
+            token: {
+              access_token: "transaction-access",
+              expires_at: Math.floor(Date.now() / 1_000) + 3_600
+            }
+          }
+        }
+      ]
+    };
+    const activated = await client.call(
+      "accounts.enrollActivate",
+      activationParams,
+      { idempotencyKey: "activate-grok" }
+    );
+    assert.equal(activated.activated, true);
+    assert.equal(activated.configRevision, beforeActivation.configRevision + 1);
+    assert.equal(activated.accountRevision, beforeActivation.accountRevision + 1);
+    assert.equal(
+      existsSync(join(authDirectory, "xai-transaction@example.com.json")),
+      true
+    );
+    assert.doesNotMatch(JSON.stringify(activated), /transaction-access/);
+    assert.equal(existsSync(join(stateHome, "account-transactions")), false);
+
+    // A fresh transport retry converges on the committed state without
+    // incrementing either revision again.
+    const replayed = await client.call(
+      "accounts.enrollActivate",
+      activationParams,
+      { idempotencyKey: "activate-grok-retry" }
+    );
+    assert.equal(replayed.configRevision, activated.configRevision);
+    assert.equal(replayed.accountRevision, activated.accountRevision);
+    const activatedStatus = await client.call("accounts.status", {});
+    assert.equal(
+      activatedStatus.accounts.find(
+        (entry) => entry.label === "xai-transaction@example.com"
+      )?.configured,
+      true
+    );
     const removed = await client.call(
       "accounts.remove",
       { kind: "gemini", label: "antigravity-user@example.com" },

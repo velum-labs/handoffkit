@@ -356,7 +356,13 @@ export async function startRouteKitDaemon(
         : undefined;
     }
   });
-  const accountRecovery = recoverAccountTransactions(home, configPath);
+  let accountRecovery;
+  try {
+    accountRecovery = recoverAccountTransactions(home, configPath);
+  } catch (error) {
+    authority.release();
+    throw error;
+  }
 
   let control: RunningControlServer | undefined;
   let proxy: SwitchingGatewayProxy | undefined;
