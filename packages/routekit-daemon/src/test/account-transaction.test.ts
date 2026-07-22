@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { spawn } from "node:child_process";
 import {
   existsSync,
   mkdirSync,
@@ -121,6 +122,59 @@ test("orphaned pre-prepare transaction directories are safe cleanup only", () =>
         : [],
       []
     );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("SIGKILL after account/config writes is rolled back from the prepared journal", async () => {
+  const root = mkdtempSync(join(tmpdir(), "routekit-account-sigkill-"));
+  const home = join(root, "state");
+  const account = join(home, "subscriptions", "codex", "killed.json");
+  const config = join(root, "router.yaml");
+  const oldConfig = "providers:\n  openai: {}\n";
+  writeFileSync(config, oldConfig);
+  const moduleUrl = new URL("../account-transaction.js", import.meta.url).href;
+  const input = JSON.stringify({ home, account, config });
+  const script = `
+    import { mkdirSync, writeFileSync } from "node:fs";
+    import { dirname } from "node:path";
+    import { prepareAccountTransaction } from ${JSON.stringify(moduleUrl)};
+    const input = JSON.parse(process.env.ROUTEKIT_TX_INPUT);
+    prepareAccountTransaction({
+      home: input.home,
+      configPath: input.config,
+      accountPaths: [input.account],
+      kind: "codex",
+      provider: "codex",
+      labels: ["killed"]
+    });
+    mkdirSync(dirname(input.account), { recursive: true });
+    writeFileSync(input.account, '{"tokens":{"access_token":"killed-access"}}\\n');
+    writeFileSync(input.config, 'providers:\\n  openai: {}\\n  codex: {}\\n');
+    process.kill(process.pid, "SIGKILL");
+  `;
+  try {
+    const child = spawn(process.execPath, ["--input-type=module", "-e", script], {
+      env: { ...process.env, ROUTEKIT_TX_INPUT: input },
+      stdio: "ignore"
+    });
+    const result = await new Promise<{ code: number | null; signal: NodeJS.Signals | null }>(
+      (resolve, reject) => {
+        child.once("error", reject);
+        child.once("exit", (code, signal) => resolve({ code, signal }));
+      }
+    );
+    assert.equal(result.code, null);
+    assert.equal(result.signal, "SIGKILL");
+    assert.equal(existsSync(account), true);
+
+    assert.deepEqual(recoverAccountTransactions(home, config), {
+      recovered: 1,
+      cleaned: 0
+    });
+    assert.equal(existsSync(account), false);
+    assert.equal(readFileSync(config, "utf8"), oldConfig);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
