@@ -124,6 +124,39 @@ test("SDK serves an empty catalog when no providers are configured", async () =>
       }
     });
 
+    const responsesUnknown = await fetch(`${running.url}/v1/responses`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ model: "openai/not-configured", input: "hello" })
+    });
+    assert.equal(responsesUnknown.status, 400);
+    assert.deepEqual(await responsesUnknown.json(), {
+      error: {
+        type: "invalid_request_error",
+        code: "model_not_found",
+        param: "model",
+        message: "unknown model: openai/not-configured"
+      }
+    });
+
+    const anthropicUnknown = await fetch(`${running.url}/v1/messages`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        model: "anthropic/not-configured",
+        max_tokens: 64,
+        messages: [{ role: "user", content: "hello" }]
+      })
+    });
+    assert.equal(anthropicUnknown.status, 400);
+    assert.deepEqual(await anthropicUnknown.json(), {
+      type: "error",
+      error: {
+        type: "invalid_request_error",
+        message: "unknown model: anthropic/not-configured"
+      }
+    });
+
     const unknown = await fetch(`${running.url}/v1/chat/completions`, {
       method: "POST",
       headers: { "content-type": "application/json" },

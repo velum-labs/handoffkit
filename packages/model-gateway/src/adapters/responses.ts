@@ -861,7 +861,22 @@ export async function handleResponses(
   backendOptions: BackendRequestOptions = {}
 ): Promise<Response> {
   const requestedModel = body.model ?? backend.defaultModel ?? "";
-  const upstreamModel = backend.resolveModel?.(body.model) ?? backend.defaultModel;
+  const resolvedModel = backend.resolveModel?.(body.model);
+  if (
+    body.model !== undefined &&
+    backend.resolveModel !== undefined &&
+    resolvedModel === undefined
+  ) {
+    return jsonResponse(400, {
+      error: {
+        type: "invalid_request_error",
+        code: "model_not_found",
+        param: "model",
+        message: `unknown model: ${body.model}`
+      }
+    });
+  }
+  const upstreamModel = resolvedModel ?? backend.defaultModel;
   if (upstreamModel === undefined) {
     return jsonResponse(503, {
       error: {
