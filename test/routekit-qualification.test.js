@@ -100,6 +100,30 @@ test("route results cannot persist free-form secrets or exceed their route budge
   assert.match(serialized, /manual-preflight/);
 });
 
+test("manual evidence requirement takes precedence over setup and restore failures", () => {
+  const route = ROUTE_CASES.find(
+    (candidate) => candidate.routeId === "route-codex-subscription"
+  );
+  const result = makeRouteResult(route, {
+    status: "pass",
+    credentialAvailable: true,
+    model: "codex/gpt-test",
+    clientVersion: "codex 1.0.0",
+    protocol: { streaming: "pass", tools: "pass", reasoning: "pass" },
+    behavior: {
+      cancellation: "pass",
+      failurePropagation: "pass",
+      routekitFallback: "none"
+    },
+    attributionBasis: "namespaced-route-success",
+    gatewayRequestsObserved: 1,
+    setupRestore: { setup: "fail", restore: "fail" },
+    evidence: ["automated-codex-run"]
+  });
+  assert.equal(result.status, "fail");
+  assert.equal(result.reasonCode, "manual-evidence-unavailable");
+});
+
 test("budget reservation and completeness are strict", () => {
   assert.throws(() => reserveRouteBudget(ROUTE_CASES, 1), /above budget/);
   const budget = reserveRouteBudget(ROUTE_CASES, 32);
