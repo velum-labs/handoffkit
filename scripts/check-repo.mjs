@@ -254,6 +254,7 @@ const requiredFiles = [
   "release/workspace.release.json",
   "release/desired.json",
   "docs/privacy.md",
+  "docs/routekit-claude-recovery-evidence.md",
   "docs/routekit-routes-and-billing.md",
   "docs/subscription-pooling.md",
   "apps/docs/content/docs/guides/subscription-pooling.mdx",

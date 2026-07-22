@@ -76,7 +76,7 @@ not block fusion.
 
 ## Removed surfaces
 
-FusionKit no longer contains proxy/account/CLIProxy management, Codex
-install/uninstall (`routekit codex install|uninstall`), provider/model/key
-launch flags, or `--direct`. Install the independent `@routekit/cli` for those
-RouteKit responsibilities.
+FusionKit no longer contains proxy/account/CLIProxy management, coding-tool
+install/uninstall (`routekit codex install|uninstall` and `routekit claude
+install|uninstall`), provider/model/key launch flags, or `--direct`. Install
+the independent `@routekit/cli` for those RouteKit responsibilities.

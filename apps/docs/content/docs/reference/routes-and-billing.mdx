@@ -144,8 +144,10 @@ availability still apply.
 ## Claude Code subscription
 
 - **Status and evidence:** Planned Supported after L06. RouteKit 0.8.0,
-  revision `2f9914d5`, reviewed 2026-07-22. Exact Claude Code version, live
-  account result, and restore/recovery result are pending.
+  revision [`4bcd8212`](https://github.com/velum-labs/handoffkit/commit/4bcd821248b420ac3bd058607b580db72fe7a179),
+  reviewed 2026-07-22. Managed setup, exact settings restore, interruption
+  recovery, and final-account removal passed automated qualification. Exact
+  Claude Code version and the live account result remain pending under ENG-679.
 - **Credential:** Your Claude Code OAuth credential, captured with `routekit
   accounts login claude-code --name <label>` in an isolated temporary profile
   or imported with `accounts add`. RouteKit stores the enrolled copy under
@@ -163,8 +165,9 @@ availability still apply.
   the client's body. When an OpenAI-compatible client uses the subscription
   backend, RouteKit inserts the required Claude Code identity and rewrites
   other caller `system` and `developer` messages as `user` messages. Streaming,
-  tools, and thinking are supported, but managed restore/recovery parity is not
-  yet qualified and must not be assumed.
+  tools, and thinking are supported. `routekit claude install` owns only its
+  gateway `env` keys in Claude Code settings; uninstall restores untouched
+  settings byte-for-byte and preserves post-install user edits.
 - **Unlimited use:** RouteKit makes no unlimited-use claim. Subscription plan,
   fair-use, model, and reset-window limits apply to every pooled account.
 

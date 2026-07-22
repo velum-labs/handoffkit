@@ -602,6 +602,30 @@
       "anchor": "accounts login captures isolated Codex auth without writing daemon-owned state"
     },
     {
+      "id": "accounts.claude-managed-config-restore",
+      "category": "accounts",
+      "expectation": "Managed Claude Code setup owns only RouteKit gateway environment keys, updates atomically, preserves unrelated user settings and post-install edits, and restores the exact original settings when untouched.",
+      "status": "required",
+      "testFile": "packages/tool-claude/src/test/install.test.ts",
+      "anchor": "Claude managed install updates and restores the exact original settings"
+    },
+    {
+      "id": "accounts.claude-interruption-recovery",
+      "category": "accounts",
+      "expectation": "Interrupted native Claude enrollment rolls back its credential and provider config before router startup without exposing OAuth values.",
+      "status": "required",
+      "testFile": "packages/routekit-daemon/src/test/daemon.test.ts",
+      "anchor": "daemon recovers interrupted Claude activation before loading config or starting routers"
+    },
+    {
+      "id": "accounts.last-native-removal",
+      "category": "accounts",
+      "expectation": "Removing the last native subscription account atomically disables its provider and matching default route, while failed router replacement restores credentials, config, and revisions.",
+      "status": "required",
+      "testFile": "packages/routekit-daemon/src/test/daemon.test.ts",
+      "anchor": "native provider stays enabled until its last account is removed"
+    },
+    {
       "id": "accounts.native-backend-translation",
       "category": "accounts",
       "expectation": "Managed Claude and Codex subscriptions translate OpenAI Chat Completions, inject pool credentials only at egress, and normalize usage.",
