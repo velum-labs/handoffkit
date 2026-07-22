@@ -6,9 +6,9 @@ Run the credential-free matrix:
 pnpm test:e2e:matrix
 ```
 
-It exercises the configured provider classes (`openrouter`, `codex`, and
-`claude-code`) through the OpenAI Chat, Anthropic Messages, and Responses HTTP
-boundaries. It also launches every installed coding-agent CLI through the real
+It exercises the five launch provider classes (`openai`, `anthropic`,
+`openrouter`, `codex`, and `claude-code`) through the OpenAI Chat, Anthropic
+Messages, and Responses HTTP boundaries. It also launches every installed coding-agent CLI through the real
 `routekit` command in a tmux PTY. Each CLI case selects a non-default
 namespaced model, types a deterministic prompt, waits for a response, and
 checks the model that reached the gateway. Claude Code and Codex additionally
@@ -49,7 +49,7 @@ Live mode first reruns the deterministic matrix, then starts RouteKit with
 `.routekit/router.yaml`. Failure to discover any configured provider is a
 failure. An installed CLI that cannot complete is also a failure; a missing
 optional CLI is an explicit skip. Prompts and HTTP output limits are kept
-small. The default hard budget is 32 provider requests, including extra agent
+small. The default hard budget is 48 provider requests, including extra agent
 turns such as a tool result or OpenCode title generation.
 
 Live mode repeats the native-picker assertions for configured Claude Code and
@@ -90,7 +90,11 @@ The equivalent environment filters are `ROUTEKIT_E2E_PROVIDER`,
 Each run writes a timestamped `report.json` and sanitized PTY transcripts under
 `.artifacts/routekit-e2e/`. This directory is ignored by Git. The report has
 exact pass/fail/skip counts, per-case duration and billed-call counts, and the
-total number of live model requests observed at the local counting proxy.
+total number of live model requests observed at the local counting proxy. Every
+result has a stable `caseId` and the applicable L05 `routeIds`; cases for
+not-offered doors such as OpenCode deliberately have an empty `routeIds` list.
+The report also records the exact Git revision and whether its worktree was
+dirty.
 PTY cases isolate RouteKit and XDG runtime state and disable CLI auto-updaters
 so test runs cannot rewrite user-level executable links.
 
@@ -101,3 +105,24 @@ so test runs cannot rewrite user-level executable links.
 
 Provider credentials are never copied into artifacts. Review the report before
 using a wider filter or increasing the call budget.
+
+After a reviewed run, promote its sanitized results into the durable report:
+
+```bash
+node scripts/generate-routekit-l06-evidence.mjs \
+  --matrix-report .artifacts/routekit-e2e/<run>/report.json \
+  --revision <full-tested-sha> \
+  --manual-records <reviewed-manual-records.json>
+```
+
+The command rejects dirty, incomplete, stale-mapping, count-inconsistent, or
+identity-forged reports and credential-shaped content, then regenerates
+`docs/routekit-l06-evidence.{json,md}`. Cases absent from a filtered run and
+manual records not supplied with that promotion revert to `pending`; prior
+passes and revision-specific client, provider, and credential metadata are
+never carried to a new revision. Manual-record files must name the same full
+`testedRevision` as the matrix report plus an ISO `evidenceDate`. CI reruns the
+generator with `--check`, so a mapping change or hand-edited report fails
+closed. Promotion never changes a row to `qualified` unless the reviewed source
+also records passing evidence, exact versions, and outcomes for every required
+dimension.

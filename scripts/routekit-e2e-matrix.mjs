@@ -34,10 +34,20 @@ import {
   doorFrames,
   startProviderSim
 } from "../packages/testkit/dist/index.js";
+import {
+  caseIdFor,
+  loadEvidenceMap,
+  mappingDigest,
+  routeIdsForCase
+} from "./lib/routekit-l06-evidence.mjs";
 import { processAlive } from "../packages/runtime-utils/dist/index.js";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const ROUTEKIT_ENTRY = join(ROOT, "packages", "routekit-cli", "dist", "index.js");
+const ROUTEKIT_VERSION = JSON.parse(
+  readFileSync(join(ROOT, "packages", "routekit-cli", "package.json"), "utf8")
+).version;
+const EVIDENCE_MAP = loadEvidenceMap(ROOT);
 const API_DOORS = DOOR_PROFILES.filter((door) =>
   ["openai-chat", "anthropic-messages", "codex-responses"].includes(door.id)
 );
@@ -47,7 +57,7 @@ const CLI_DOORS = [
   { id: "cursor", binary: "cursor-agent" },
   { id: "opencode", binary: "opencode" }
 ];
-const PROVIDERS = ["openrouter", "codex", "claude-code"];
+const PROVIDERS = Object.keys(EVIDENCE_MAP.providerRouteIds);
 const MODEL_CALL_PATHS = new Set([
   "/v1/chat/completions",
   "/chat/completions",
@@ -63,7 +73,7 @@ function parseArgs(argv) {
     providers: undefined,
     doors: undefined,
     timeoutMs: Number(process.env.ROUTEKIT_E2E_TIMEOUT_MS ?? 120_000),
-    maxLiveCalls: Number(process.env.ROUTEKIT_E2E_MAX_LIVE_CALLS ?? 32),
+    maxLiveCalls: Number(process.env.ROUTEKIT_E2E_MAX_LIVE_CALLS ?? 48),
     models: {}
   };
   for (let index = 0; index < argv.length; index += 1) {
@@ -163,8 +173,13 @@ function sanitize(raw) {
     .replace(/\u001b\[[0-?]*[ -/]*[@-~]/g, "")
     .replace(/\r/g, "")
     .replaceAll(process.env.HOME ?? "\0", "~")
+    .replace(
+      /("(?:authorization|proxy-authorization|x-api-key|api[_-]?key|apiKey|token|accessToken|refreshToken|secret|password)"\s*:\s*")([^"]*)(")/gi,
+      "$1[REDACTED]$3"
+    )
     .replace(/(authorization|x-api-key|api[_-]?key|token)\s*[:=]\s*\S+/gi, "$1=[REDACTED]")
-    .replace(/Bearer\s+\S+/gi, "Bearer [REDACTED]");
+    .replace(/Bearer\s+\S+/gi, "Bearer [REDACTED]")
+    .replace(/Basic\s+[A-Za-z0-9+/=]{8,}/gi, "Basic [REDACTED]");
 }
 
 function commandAvailable(binary) {
@@ -181,9 +196,7 @@ function writeRouterConfig(path, defaultModel) {
     path,
     [
       "providers:",
-      "  openrouter: {}",
-      "  codex: {}",
-      "  claude-code: {}",
+      ...PROVIDERS.map((provider) => `  ${provider}: {}`),
       `defaultModel: ${defaultModel}`,
       ""
     ].join("\n")
@@ -200,7 +213,7 @@ function sourceFor(simUrl, provider, nativeModels) {
   const backend =
     provider === "codex"
       ? new CodexResponsesBackend(options)
-      : provider === "claude-code"
+      : provider === "claude-code" || provider === "anthropic"
         ? new AnthropicBackend(options)
         : new OpenAiBackend(options);
   return {
@@ -349,6 +362,8 @@ async function startCountingProxy(targetUrl, options = {}) {
 
 async function startDeterministicStack(tempRoot) {
   const nativeModels = {
+    openai: "matrix-openai",
+    anthropic: "matrix-anthropic",
     openrouter: "matrix-openrouter",
     codex: "matrix-codex",
     "claude-code": "claude-matrix"
@@ -365,6 +380,8 @@ async function startDeterministicStack(tempRoot) {
   const backend = await CatalogBackend.create({
     config: {
       providers: {
+        openai: {},
+        anthropic: {},
         openrouter: {},
         codex: {},
         "claude-code": {}
@@ -1060,6 +1077,11 @@ async function catalogModels(gatewayUrl) {
 
 function chooseLiveModels(models, overrides, providers = PROVIDERS) {
   const preferences = {
+    openai: ["openai/gpt-5.5", "openai/gpt-4.1-mini"],
+    anthropic: [
+      "anthropic/claude-sonnet-4-6",
+      "anthropic/claude-3-5-haiku-latest"
+    ],
     openrouter: [
       "openrouter/openai/gpt-4o-mini",
       "openrouter/openai/gpt-4.1-nano"
@@ -1312,10 +1334,15 @@ async function runLivePoolFailover(tempRoot) {
 }
 
 function resultEntry(input) {
-  return {
+  const identity = {
     phase: input.phase,
     provider: input.provider ?? null,
-    door: input.door,
+    door: input.door
+  };
+  return {
+    caseId: caseIdFor(identity),
+    routeIds: routeIdsForCase(EVIDENCE_MAP, identity),
+    ...identity,
     status: input.status,
     reason: input.reason ?? null,
     durationMs: input.durationMs,
@@ -1362,6 +1389,25 @@ function skipCase(results, input, reason) {
   });
   results.push(entry);
   process.stdout.write(`SKIP ${input.phase} ${input.provider ?? "-"} ${input.door}: ${reason}\n`);
+}
+
+function gitSourceState() {
+  const revision = spawnSync("git", ["rev-parse", "HEAD"], {
+    cwd: ROOT,
+    encoding: "utf8"
+  });
+  if (revision.status !== 0 || !/^[0-9a-f]{40}$/.test(revision.stdout.trim())) {
+    throw new Error("cannot determine the matrix source revision");
+  }
+  const status = spawnSync("git", ["status", "--porcelain"], {
+    cwd: ROOT,
+    encoding: "utf8"
+  });
+  if (status.status !== 0) throw new Error("cannot determine whether matrix sources are clean");
+  return {
+    revision: revision.stdout.trim(),
+    dirty: status.stdout.trim().length > 0
+  };
 }
 
 async function runDeterministic(options, results, artifactDir, tempRoot) {
@@ -1682,6 +1728,7 @@ async function runLive(options, results, artifactDir, tempRoot) {
 
 async function main() {
   const options = parseArgs(process.argv.slice(2));
+  const sourceState = gitSourceState();
   if (!existsSync(ROUTEKIT_ENTRY)) {
     throw new Error("RouteKit is not built; run pnpm build:routekit");
   }
@@ -1727,7 +1774,12 @@ async function main() {
     skip: results.filter((entry) => entry.status === "skip").length
   };
   const report = {
-    schemaVersion: 1,
+    schemaVersion: 2,
+    routekitVersion: ROUTEKIT_VERSION,
+    evidenceMappingSchemaVersion: EVIDENCE_MAP.schemaVersion,
+    evidenceMappingDigest: mappingDigest(EVIDENCE_MAP),
+    sourceRevision: sourceState.revision,
+    sourceDirty: sourceState.dirty,
     startedAt,
     finishedAt: new Date().toISOString(),
     liveAuthorized: options.live,

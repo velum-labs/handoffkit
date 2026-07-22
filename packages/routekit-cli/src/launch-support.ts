@@ -17,6 +17,18 @@ export const LAUNCH_PROVIDER_IDS = [
 
 export type LaunchProviderId = (typeof LAUNCH_PROVIDER_IDS)[number];
 
+export const LAUNCH_ROUTE_IDS = [
+  "route-openai-api",
+  "route-anthropic-api",
+  "route-openrouter-api",
+  "route-codex-subscription",
+  "route-claude-code-subscription",
+  "route-cursor-ide",
+  "route-cursor-agent"
+] as const;
+
+export type LaunchRouteId = (typeof LAUNCH_ROUTE_IDS)[number];
+
 export const LAUNCH_ACCOUNT_KINDS = ["claude-code", "codex"] as const;
 export const LAUNCH_ACCOUNT_KIND_CHOICES = ["claude-code", "claude", "codex"] as const;
 

@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { LAUNCH_PROVIDER_IDS } from "../launch-support.js";
+import { LAUNCH_ROUTE_IDS } from "../launch-support.js";
 
 const root = fileURLToPath(new URL("../../../../", import.meta.url));
 const routekitCli = join(root, "packages", "routekit-cli", "dist", "index.js");
@@ -122,15 +122,35 @@ test("every first-launch route has a complete public disclosure", () => {
   const packageJson = JSON.parse(
     readFileSync(join(root, "packages/routekit-cli/package.json"), "utf8")
   ) as { version: string };
-  const routeIds = [
-    ...LAUNCH_PROVIDER_IDS.map((provider) =>
-      provider === "codex" || provider === "claude-code"
-        ? `route-${provider}-subscription`
-        : `route-${provider}-api`
-    ),
-    "route-cursor-ide",
-    "route-cursor-agent"
-  ];
+  const routeIds = [...LAUNCH_ROUTE_IDS];
+  const evidenceMapping = JSON.parse(
+    readFileSync(join(root, "spec/routekit/l06-evidence-map.json"), "utf8")
+  ) as { routes: Array<{ id: string; requiredCaseIds: string[] }> };
+  const evidenceReport = JSON.parse(
+    readFileSync(join(root, "docs/routekit-l06-evidence.json"), "utf8")
+  ) as {
+    mappingDigest: string;
+    routes: Record<
+      string,
+      {
+        qualificationStatus: "pending" | "qualified" | "failed";
+        evidence: Array<{ caseId?: string; reference: string; status: string; type: string }>;
+      }
+    >;
+  };
+  const evidenceMarkdown = readFileSync(join(root, "docs/routekit-l06-evidence.md"), "utf8");
+  assert.deepEqual(
+    evidenceMapping.routes.map((route) => route.id),
+    routeIds,
+    "L06 evidence mapping drifted from the launch route contract"
+  );
+  assert.deepEqual(
+    Object.keys(evidenceReport.routes),
+    routeIds,
+    "durable L06 report must cover exactly the launch routes"
+  );
+  assert.match(evidenceReport.mappingDigest, /^[0-9a-f]{64}$/);
+  assert.match(evidenceMarkdown, new RegExp(evidenceReport.mappingDigest));
   const requiredFields = [
     "**Status and evidence:**",
     "**Credential:**",
@@ -161,6 +181,13 @@ test("every first-launch route has a complete public disclosure", () => {
     for (const field of requiredFields) {
       assert.ok(section.includes(field), `${routeId} is missing ${field}`);
     }
+    assert.match(
+      section,
+      new RegExp(
+        `github\\.com/velum-labs/handoffkit/blob/main/docs/routekit-l06-evidence\\.md#${routeId}`
+      ),
+      `${routeId} does not link its stable durable evidence row`
+    );
     assert.match(section, new RegExp(`RouteKit ${packageJson.version.replaceAll(".", "\\.")}`));
     assert.match(section, /\b20\d{2}-\d{2}-\d{2}\b/);
     assert.match(section, /makes no unlimited-use claim/i);
@@ -180,9 +207,33 @@ test("every first-launch route has a complete public disclosure", () => {
     }
     assert.match(
       mirrorSection,
+      new RegExp(`routekit-l06-evidence\\.md#${routeId}`),
+      `maintainer mirror ${routeId} does not link its durable evidence row`
+    );
+    assert.match(
+      mirrorSection,
       new RegExp(`RouteKit ${packageJson.version.replaceAll(".", "\\.")}`)
     );
     assert.match(mirrorSection, /\b20\d{2}-\d{2}-\d{2}\b/);
+
+    const mapped = evidenceMapping.routes[index];
+    assert.equal(mapped?.id, routeId);
+    const evidence = evidenceReport.routes[routeId];
+    assert.ok(evidence !== undefined, `${routeId} has no durable evidence`);
+    const caseIds = new Set(evidence.evidence.flatMap((item) => item.caseId ?? []));
+    for (const caseId of mapped.requiredCaseIds) {
+      assert.ok(caseIds.has(caseId), `${routeId} lacks mapped evidence ${caseId}`);
+    }
+    assert.ok(
+      evidence.evidence.every(
+        (item) =>
+          ["automated", "manual"].includes(item.type) &&
+          ["pending", "pass", "fail"].includes(item.status) &&
+          item.reference.length > 0
+      ),
+      `${routeId} contains incomplete evidence`
+    );
+    assert.match(evidenceMarkdown, new RegExp(`<a id="${routeId}"></a>`));
   }
 
   const registry = JSON.parse(

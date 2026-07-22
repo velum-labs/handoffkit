@@ -1,0 +1,112 @@
+{
+  "schemaVersion": 1,
+  "description": "Stable L05 route IDs and their L06 qualification evidence contract.",
+  "routes": [
+    {
+      "id": "route-openai-api",
+      "title": "OpenAI API",
+      "requiredCaseIds": [
+        "deterministic.openai.openai-chat",
+        "live.openai.openai-chat"
+      ],
+      "manualEvidenceRequired": false
+    },
+    {
+      "id": "route-anthropic-api",
+      "title": "Anthropic API",
+      "requiredCaseIds": [
+        "deterministic.anthropic.anthropic-messages",
+        "live.anthropic.anthropic-messages"
+      ],
+      "manualEvidenceRequired": false
+    },
+    {
+      "id": "route-openrouter-api",
+      "title": "OpenRouter API",
+      "requiredCaseIds": [
+        "deterministic.openrouter.openai-chat",
+        "deterministic.openrouter.dynamic-reasoning-capabilities",
+        "live.openrouter.openai-chat"
+      ],
+      "manualEvidenceRequired": false
+    },
+    {
+      "id": "route-codex-subscription",
+      "title": "Codex subscription",
+      "requiredCaseIds": [
+        "deterministic.codex.codex-responses",
+        "deterministic.codex.codex",
+        "live.codex.codex-responses",
+        "live.codex.codex"
+      ],
+      "manualEvidenceRequired": true
+    },
+    {
+      "id": "route-claude-code-subscription",
+      "title": "Claude Code subscription",
+      "requiredCaseIds": [
+        "deterministic.claude-code.anthropic-messages",
+        "deterministic.claude-code.anthropic-thinking",
+        "deterministic.claude-code.claude",
+        "live.claude-code.anthropic-messages",
+        "live.claude-code.claude",
+        "live.claude-code.pool"
+      ],
+      "manualEvidenceRequired": true
+    },
+    {
+      "id": "route-cursor-ide",
+      "title": "Cursor IDE custom OpenAI endpoint",
+      "requiredCaseIds": [],
+      "manualEvidenceRequired": true
+    },
+    {
+      "id": "route-cursor-agent",
+      "title": "cursor-agent custom OpenAI endpoint",
+      "requiredCaseIds": [
+        "deterministic.openrouter.cursor",
+        "live.openrouter.cursor"
+      ],
+      "manualEvidenceRequired": true
+    }
+  ],
+  "providerRouteIds": {
+    "openai": "route-openai-api",
+    "anthropic": "route-anthropic-api",
+    "openrouter": "route-openrouter-api",
+    "codex": "route-codex-subscription",
+    "claude-code": "route-claude-code-subscription"
+  },
+  "doorRouteIds": {
+    "cursor": [
+      "route-cursor-agent"
+    ]
+  },
+  "specialCaseRouteIds": {
+    "native-pickers": [
+      "route-codex-subscription",
+      "route-claude-code-subscription"
+    ],
+    "anthropic-thinking": [
+      "route-claude-code-subscription"
+    ],
+    "dynamic-reasoning-capabilities": [
+      "route-openrouter-api"
+    ],
+    "pool": [
+      "route-codex-subscription",
+      "route-claude-code-subscription"
+    ]
+  },
+  "excludedDoors": [
+    "opencode"
+  ],
+  "excludedRouteNames": [
+    "google",
+    "gemini",
+    "grok",
+    "kimi",
+    "cliproxy",
+    "opencode"
+  ]
+}
