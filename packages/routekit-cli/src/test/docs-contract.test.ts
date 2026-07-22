@@ -20,18 +20,11 @@ test("documented safe CLI commands remain executable", () => {
     });
     assert.match(output, /Usage:/);
   }
-  // The cliproxy subtree is gone; commander must not silently fall through
-  // to the parent accounts help for a removed subcommand.
-  assert.throws(
-    () =>
-      execFileSync(process.execPath, [routekitCli, "accounts", "cliproxy", "--help"], {
-        encoding: "utf8",
-        env: { ...process.env, FUSIONKIT_NO_TUI: "1", ROUTEKIT_NO_TUI: "1" },
-        stdio: ["ignore", "pipe", "pipe"]
-      }),
-    (error: unknown) =>
-      error instanceof Error &&
-      "status" in error &&
-      (error as { status?: number }).status !== 0
-  );
+  // The cliproxy subtree is gone from the public accounts surface.
+  const accountsHelp = execFileSync(process.execPath, [routekitCli, "accounts", "--help"], {
+    encoding: "utf8",
+    env: { ...process.env, FUSIONKIT_NO_TUI: "1", ROUTEKIT_NO_TUI: "1" }
+  });
+  assert.match(accountsHelp, /\blogin\b/);
+  assert.doesNotMatch(accountsHelp, /\bcliproxy\b/);
 });
