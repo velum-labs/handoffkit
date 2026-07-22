@@ -3,6 +3,7 @@ import { Command } from "commander";
 import { completionCandidates as coreCompletionCandidates } from "@routekit/cli-core";
 import { configuredProviderIds } from "@routekit/config";
 import { PROVIDER_IDS } from "@routekit/gateway";
+import { accountKinds } from "@routekit/registry";
 
 import { listAccounts } from "./accounts.js";
 import { globalRouterConfigPath, loadRouterConfig } from "./config.js";
@@ -69,12 +70,15 @@ function dynamicValues(
   ) {
     return modelIds();
   }
+  if (group === "accounts" && subcommand === "add" && argumentDepth === 0) {
+    return ["claude-code", "codex"];
+  }
   if (
     group === "accounts" &&
-    (subcommand === "add" || subcommand === "remove") &&
+    (subcommand === "login" || subcommand === "remove") &&
     argumentDepth === 0
   ) {
-    return ["claude-code", "codex"];
+    return [...accountKinds()];
   }
   if (group === "accounts" && subcommand === "remove" && argumentDepth === 1) {
     const subscriptionKind =

@@ -17,7 +17,13 @@ import {
 import { dirname, join } from "node:path";
 
 import {
+  CLIPROXY_API_KEY_ENV,
+  CLIPROXY_BASE_URL_ENV,
+  cliproxyAccountEntries,
+  cliproxyApiKey,
+  cliproxyBaseUrl,
   defaultSubscriptionAccountDirectory,
+  removeCliproxyAccount,
   removeSubscriptionAccount,
   sanitizeSubscriptionLabel
 } from "@routekit/accounts";
@@ -46,7 +52,7 @@ import type {
   RouterConfig,
   SwitchingGatewayProxy
 } from "@routekit/gateway";
-import { PROVIDERS } from "@routekit/registry";
+import { PROVIDERS, resolveAccountConnector } from "@routekit/registry";
 import { startRouter } from "@routekit/router";
 import type { RunningRouter } from "@routekit/router";
 import {
@@ -72,6 +78,8 @@ import type {
 } from "@routekit/runtime";
 import { createConsentManager } from "@routekit/telemetry-core";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
+
+import { createCliproxySidecar } from "./cliproxy-sidecar.js";
 
 export const ROUTEKIT_DAEMON_KIND = "daemon";
 export const ROUTEKIT_PRODUCT = "routekit";
@@ -206,21 +214,34 @@ function revisionConflict(expected: number, actual: number): never {
   });
 }
 
-function accountEntries(env: NodeJS.ProcessEnv): Array<{
-  subscriptionKind: "claude-code" | "codex";
-  label: string;
-}> {
-  return (["claude-code", "codex"] as const).flatMap((subscriptionKind) => {
-    const directory = defaultSubscriptionAccountDirectory(subscriptionKind, env);
-    if (!existsSync(directory)) return [];
-    return readdirSync(directory)
-      .filter((name) => name.endsWith(".json") && !name.startsWith("."))
-      .sort()
-      .map((name) => ({
-        subscriptionKind,
-        label: name.slice(0, -".json".length)
-      }));
-  });
+type AccountEntry =
+  | { subscriptionKind: "claude-code" | "codex"; label: string; connector: "native" }
+  | { subscriptionKind: string; label: string; connector: "cliproxy"; localOnly: boolean };
+
+function accountEntries(env: NodeJS.ProcessEnv): AccountEntry[] {
+  const native = (["claude-code", "codex"] as const).flatMap(
+    (subscriptionKind): AccountEntry[] => {
+      const directory = defaultSubscriptionAccountDirectory(subscriptionKind, env);
+      if (!existsSync(directory)) return [];
+      return readdirSync(directory)
+        .filter((name) => name.endsWith(".json") && !name.startsWith("."))
+        .sort()
+        .map((name) => ({
+          subscriptionKind,
+          label: name.slice(0, -".json".length),
+          connector: "native" as const
+        }));
+    }
+  );
+  const cliproxy = cliproxyAccountEntries(env).map(
+    (entry): AccountEntry => ({
+      subscriptionKind: entry.kind,
+      label: entry.label,
+      connector: "cliproxy",
+      localOnly: resolveAccountConnector(entry.kind)?.info.localOnly ?? true
+    })
+  );
+  return [...native, ...cliproxy];
 }
 
 function providerCredentialAvailable(
@@ -230,6 +251,11 @@ function providerCredentialAvailable(
 ): boolean {
   if (provider === "claude-code" || provider === "codex") {
     return accounts.some((entry) => entry.subscriptionKind === provider);
+  }
+  if (provider === "cliproxy") {
+    return (
+      (env[CLIPROXY_API_KEY_ENV] ?? "").length > 0 || cliproxyApiKey(env) !== undefined
+    );
   }
   const info = PROVIDERS[provider];
   if (info?.keyEnv === undefined) return true;
@@ -301,6 +327,7 @@ export async function startRouteKitDaemon(
   let control: RunningControlServer | undefined;
   let proxy: SwitchingGatewayProxy | undefined;
   let portless: PortlessSession | undefined;
+  let sidecarRef: ReturnType<typeof createCliproxySidecar> | undefined;
   let activeRouter: RunningRouter | undefined;
   let record: ServiceRecord | undefined;
   let closed = false;
@@ -350,14 +377,33 @@ export async function startRouteKitDaemon(
     );
     revisions.daemon = generation;
     writeRevisions(home, revisions);
+    const sidecar = createCliproxySidecar({ env });
+    sidecarRef = sidecar;
+    const wantsCliproxySidecar = (config: RouterConfig): boolean =>
+      config.providers["cliproxy"] !== undefined;
+    // Router generations reach the managed sidecar with its own ingress key
+    // and configured listen address; resolved per generation so state created
+    // by the first login (key, config) is seen without a daemon restart.
+    const routerEnv = (): NodeJS.ProcessEnv => {
+      const injected: NodeJS.ProcessEnv = { ...env };
+      if ((env[CLIPROXY_API_KEY_ENV] ?? "").length === 0) {
+        const key = cliproxyApiKey(env);
+        if (key !== undefined) injected[CLIPROXY_API_KEY_ENV] = key;
+      }
+      if ((env[CLIPROXY_BASE_URL_ENV] ?? "").length === 0) {
+        injected[CLIPROXY_BASE_URL_ENV] = cliproxyBaseUrl(env);
+      }
+      return injected;
+    };
     const startGeneration = async (config: RouterConfig): Promise<RunningRouter> =>
       await startRouter({
         config,
         host: "127.0.0.1",
         port: 0,
-        env,
+        env: routerEnv(),
         drainGraceMs
       });
+    await sidecar.reconcile(wantsCliproxySidecar(currentConfig));
     activeRouter = await startGeneration(currentConfig);
     proxy = await startSwitchingGatewayProxy({
       target: activeRouter.url,
@@ -378,6 +424,7 @@ export async function startRouteKitDaemon(
       nextDocument: string,
       input: { write: boolean; configRevision?: boolean; accountRevision?: boolean }
     ): Promise<void> => {
+      await sidecar.reconcile(wantsCliproxySidecar(nextConfig));
       const candidate = await startGeneration(nextConfig);
       const previousDocument = currentDocument;
       const previousRevisions = { ...revisions };
@@ -592,27 +639,49 @@ export async function startRouteKitDaemon(
         accounts: accountEntries(env),
         revision: revisions.accounts
       }),
-      "accounts.status": async () => ({
-        accounts: accountEntries(env).map((entry) => {
-          const member = activeRouter!
-            .accountSnapshots()
-            .find((snapshot) => snapshot.mode === entry.subscriptionKind)
-            ?.members.find((candidate) => candidate.label === entry.label);
-          return {
-            subscriptionKind: entry.subscriptionKind,
-            label: entry.label,
-            credentialValid: member?.credentialValid ?? false,
-            configured: currentConfig.providers[entry.subscriptionKind] !== undefined,
-            relayOpen:
-              member?.relayReady === true &&
-              currentConfig.providers[entry.subscriptionKind] !== undefined,
-            active: member?.active ?? false,
-            models: member?.models ?? [],
-            ...(member?.limits !== undefined ? { limits: member.limits } : {})
-          };
-        }),
-        revision: revisions.accounts
-      }),
+      "accounts.status": async () => {
+        const entries = accountEntries(env);
+        const cliproxyConfigured = currentConfig.providers["cliproxy"] !== undefined;
+        const cliproxyReachable =
+          entries.some((entry) => entry.connector === "cliproxy") && cliproxyConfigured
+            ? await sidecar.reachable()
+            : false;
+        return {
+          accounts: entries.map((entry) => {
+            if (entry.connector === "cliproxy") {
+              return {
+                subscriptionKind: entry.subscriptionKind,
+                label: entry.label,
+                connector: entry.connector,
+                ...(entry.localOnly === true ? { localOnly: true } : {}),
+                credentialValid: true,
+                configured: cliproxyConfigured,
+                relayOpen: cliproxyConfigured && cliproxyReachable,
+                active: cliproxyConfigured && cliproxyReachable,
+                models: []
+              };
+            }
+            const member = activeRouter!
+              .accountSnapshots()
+              .find((snapshot) => snapshot.mode === entry.subscriptionKind)
+              ?.members.find((candidate) => candidate.label === entry.label);
+            return {
+              subscriptionKind: entry.subscriptionKind,
+              label: entry.label,
+              connector: entry.connector,
+              credentialValid: member?.credentialValid ?? false,
+              configured: currentConfig.providers[entry.subscriptionKind] !== undefined,
+              relayOpen:
+                member?.relayReady === true &&
+                currentConfig.providers[entry.subscriptionKind] !== undefined,
+              active: member?.active ?? false,
+              models: member?.models ?? [],
+              ...(member?.limits !== undefined ? { limits: member.limits } : {})
+            };
+          }),
+          revision: revisions.accounts
+        };
+      },
       "accounts.enroll": async (params) => {
         await serializeMutation(async () => {
           const label = sanitizeSubscriptionLabel(params.label);
@@ -655,12 +724,37 @@ export async function startRouteKitDaemon(
         return { enrolled: true, revision: revisions.accounts };
       },
       "accounts.remove": async (params) => {
+        const resolved = resolveAccountConnector(params.kind);
+        if (resolved !== undefined && resolved.info.connector === "cliproxy") {
+          let removed = false;
+          await serializeMutation(async () => {
+            const entry = cliproxyAccountEntries(env).find(
+              (candidate) =>
+                candidate.label === params.label && candidate.kind === resolved.kind
+            );
+            if (entry === undefined) return;
+            removed = removeCliproxyAccount(params.label, env).removed;
+            if (!removed) return;
+            await replaceRouter(currentConfig, currentDocument, {
+              write: false,
+              accountRevision: true
+            });
+          });
+          return { removed, revision: revisions.accounts };
+        }
+        if (params.kind !== "claude-code" && params.kind !== "codex") {
+          throw new ControlError({
+            code: "bad_request",
+            message: `unknown subscription kind: ${params.kind}`
+          });
+        }
+        const kind = params.kind;
         let removed = false;
         await serializeMutation(async () => {
-          const directory = defaultSubscriptionAccountDirectory(params.kind, env);
+          const directory = defaultSubscriptionAccountDirectory(kind, env);
           const path = join(directory, `${params.label}.json`);
           const previous = existsSync(path) ? readFileSync(path) : undefined;
-          const result = removeSubscriptionAccount(params.kind, params.label, {
+          const result = removeSubscriptionAccount(kind, params.label, {
             accountsDirectory: directory
           });
           removed = result.removed;
@@ -680,6 +774,18 @@ export async function startRouteKitDaemon(
         });
         return { removed, revision: revisions.accounts };
       },
+      "accounts.sync": async () => {
+        // A connector login wrote new account state outside the control
+        // channel (the cliproxy auth store); rebuild the router generation and
+        // reconcile the managed sidecar against the rescanned stores.
+        await serializeMutation(async () => {
+          await replaceRouter(currentConfig, currentDocument, {
+            write: false,
+            accountRevision: true
+          });
+        });
+        return { synced: true, revision: revisions.accounts };
+      },
       "accounts.usage": async (_params, context) => {
         return await activeRouter!.usage(context.signal);
       },
@@ -698,6 +804,19 @@ export async function startRouteKitDaemon(
             { name: "canonical config", ok: existsSync(configPath), detail: configPath },
             { name: "control plane", ok: control !== undefined },
             { name: "model gateway", ok: proxy !== undefined, detail: dataUrl },
+            ...(wantsCliproxySidecar(currentConfig)
+              ? [
+                  {
+                    name: "cliproxy sidecar",
+                    ok: await sidecar.reachable(),
+                    detail: sidecar.managed()
+                      ? sidecar.running()
+                        ? "managed; running"
+                        : "managed; not running"
+                      : "external"
+                  }
+                ]
+              : []),
             ...providers.map((provider) => ({
               name: `${provider.provider} live discovery`,
               ok: provider.ok,
@@ -770,6 +889,7 @@ export async function startRouteKitDaemon(
       lifecycle = "draining";
       await proxy?.drain(drainGraceMs);
       await activeRouter?.close();
+      await sidecar.close();
       await control?.close();
       if (portless?.enabled) portless.unregister("gateway");
       store.remove(ROUTEKIT_DAEMON_KIND, { ifPid: process.pid });
@@ -806,6 +926,7 @@ export async function startRouteKitDaemon(
   } catch (error) {
     await proxy?.close();
     await activeRouter?.close();
+    await sidecarRef?.close();
     await control?.close();
     if (portless?.enabled) portless.unregister("gateway");
     if (record !== undefined) store.remove(ROUTEKIT_DAEMON_KIND, { ifPid: process.pid });

@@ -5,7 +5,6 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
-  realpathSync,
   rmSync,
   writeFileSync
 } from "node:fs";
@@ -15,9 +14,10 @@ import { test } from "node:test";
 
 import {
   captureLoginCredential,
-  claudeProfileKeychainService,
-  loginAccount
-} from "../accounts.js";
+  claudeProfileKeychainService
+} from "@routekit/accounts";
+import type { ManagedAccountLoginInvocation } from "@routekit/accounts";
+
 import { buildProgram } from "../cli.js";
 
 test("accounts login captures isolated Codex auth without writing daemon-owned state", async () => {
@@ -83,6 +83,17 @@ test("accounts login captures isolated Codex auth without writing daemon-owned s
     assert.deepEqual(marker.args, ["login"]);
     assert.equal(marker.config, 'cli_auth_credentials_store = "file"\n');
     assert.equal(existsSync(marker.home), false);
+
+    // Browserless logins ask Codex for its device-code flow explicitly.
+    const device = await captureLoginCredential("codex", "device", {
+      temporaryParent: root,
+      noBrowser: true
+    });
+    assert.equal(device.label, "device");
+    const deviceMarker = JSON.parse(readFileSync(markerPath, "utf8")) as {
+      args: string[];
+    };
+    assert.deepEqual(deviceMarker.args, ["login", "--device-auth"]);
   } finally {
     process.stderr.write = originalErrorWrite;
     if (previousHome === undefined) delete process.env.HOME;
@@ -94,20 +105,19 @@ test("accounts login captures isolated Codex auth without writing daemon-owned s
     rmSync(root, { recursive: true, force: true });
   }
 });
+
 test("managed Claude login uses isolated state and rejects failures and duplicate labels", async () => {
   const root = mkdtempSync(join(tmpdir(), "routekit-claude-login-"));
   const stateHome = join(root, "state");
   const previousStateHome = process.env.ROUTEKIT_HOME;
   const previousAnthropicKey = process.env.ANTHROPIC_API_KEY;
-  const originalFetch = globalThis.fetch;
   process.env.ROUTEKIT_HOME = stateHome;
   process.env.ANTHROPIC_API_KEY = "must-not-leak";
-  globalThis.fetch = async () => Response.json({ account: { uuid: "acct-claude" } });
   let profileDirectory = "";
   try {
-    const enrolled = await loginAccount("claude-code", "secondary", {
+    const captured = await captureLoginCredential("claude-code", "secondary", {
       temporaryParent: root,
-      runLogin: async (invocation) => {
+      runLogin: async (invocation: ManagedAccountLoginInvocation) => {
         profileDirectory = invocation.profileDirectory;
         assert.equal(invocation.command, "claude");
         assert.deepEqual(invocation.args, ["auth", "login", "--claudeai"]);
@@ -127,13 +137,21 @@ test("managed Claude login uses isolated state and rejects failures and duplicat
         return 0;
       }
     });
-    assert.equal(enrolled.label, "secondary");
-    assert.equal(existsSync(enrolled.path), true);
+    assert.equal(captured.label, "secondary");
+    assert.equal(
+      (captured.credential as { claudeAiOauth?: { accessToken?: string } })
+        .claudeAiOauth?.accessToken,
+      "managed-claude"
+    );
     assert.equal(existsSync(profileDirectory), false);
 
+    // A label already enrolled in the daemon-owned store never starts OAuth.
+    const enrolledDirectory = join(stateHome, "subscriptions", "claude-code");
+    mkdirSync(enrolledDirectory, { recursive: true, mode: 0o700 });
+    writeFileSync(join(enrolledDirectory, "taken.json"), "{}");
     let duplicateLoginRan = false;
     await assert.rejects(
-      loginAccount("claude-code", "secondary", {
+      captureLoginCredential("claude-code", "taken", {
         temporaryParent: root,
         runLogin: async () => {
           duplicateLoginRan = true;
@@ -146,9 +164,9 @@ test("managed Claude login uses isolated state and rejects failures and duplicat
 
     let failedProfile = "";
     await assert.rejects(
-      loginAccount("claude-code", "failed", {
+      captureLoginCredential("claude-code", "failed", {
         temporaryParent: root,
-        runLogin: async (invocation) => {
+        runLogin: async (invocation: ManagedAccountLoginInvocation) => {
           failedProfile = invocation.profileDirectory;
           return 130;
         }
@@ -163,15 +181,15 @@ test("managed Claude login uses isolated state and rejects failures and duplicat
 
     let keychainService = "";
     let removedService = "";
-    const keychainAccount = await loginAccount("claude-code", "keychain", {
+    const keychainCapture = await captureLoginCredential("claude-code", "keychain", {
       temporaryParent: root,
       platform: "darwin",
-      runLogin: async (invocation) => {
+      runLogin: async (invocation: ManagedAccountLoginInvocation) => {
         keychainService = claudeProfileKeychainService(invocation.profileDirectory);
         return 0;
       },
       keychain: {
-        read: async (service) => {
+        read: async (service: string) => {
           assert.equal(service, keychainService);
           return JSON.stringify({
             claudeAiOauth: {
@@ -181,15 +199,18 @@ test("managed Claude login uses isolated state and rejects failures and duplicat
             }
           });
         },
-        remove: async (service) => {
+        remove: async (service: string) => {
           removedService = service;
         }
       }
     });
     assert.equal(removedService, keychainService);
-    assert.equal(existsSync(keychainAccount.path), true);
+    assert.equal(
+      (keychainCapture.credential as { claudeAiOauth?: { accessToken?: string } })
+        .claudeAiOauth?.accessToken,
+      "keychain-claude"
+    );
   } finally {
-    globalThis.fetch = originalFetch;
     if (previousStateHome === undefined) delete process.env.ROUTEKIT_HOME;
     else process.env.ROUTEKIT_HOME = previousStateHome;
     if (previousAnthropicKey === undefined) delete process.env.ANTHROPIC_API_KEY;
@@ -214,6 +235,21 @@ test("accounts login rejects non-interactive modes before starting OAuth", async
   );
 });
 
+test("accounts login rejects unknown kinds before contacting the daemon", async () => {
+  await assert.rejects(
+    buildProgram().parseAsync([
+      "node",
+      "routekit",
+      "accounts",
+      "login",
+      "not-a-kind",
+      "--name",
+      "x"
+    ]),
+    /unknown subscription kind/
+  );
+});
+
 test("daemon enrollment rejects hidden and duplicate account labels before OAuth", async () => {
   await assert.rejects(
     captureLoginCredential("codex", ".hidden", {
@@ -223,4 +259,16 @@ test("daemon enrollment rejects hidden and duplicate account labels before OAuth
     }),
     /account name/
   );
+});
+
+test("one unified accounts surface: no connector subcommands leak to the CLI", () => {
+  const program = buildProgram();
+  const accounts = program.commands.find((command) => command.name() === "accounts");
+  assert.ok(accounts);
+  const subcommands = accounts.commands.map((command) => command.name()).sort();
+  assert.deepEqual(subcommands, ["add", "list", "login", "remove", "status"]);
+  const login = accounts.commands.find((command) => command.name() === "login");
+  assert.ok(login);
+  assert.match(login.helpInformation(), /--no-browser/);
+  assert.match(login.description(), /gemini/);
 });
