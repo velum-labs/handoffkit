@@ -4,9 +4,10 @@ description: Credential, billing, egress, failover, limitation, and qualificatio
 ---
 
 RouteKit sends model traffic only to the namespaced `provider/model` route you
-configure or request. The first-launch contract below is **planned Supported
-after L06 qualification**; it is not a claim that live qualification has
-finished.
+configure or request. The first-launch contract below remains **planned
+Supported until L06 closes**. The dated matrix has three API-route Pass results
+and four subscription/client Fail results, so it is not a claim that launch
+qualification has finished.
 
 Every row names who supplies the credential, who bills usage, where requests
 go, and what RouteKit does when capacity is unavailable. A provider or
@@ -26,26 +27,27 @@ availability still apply.
 - FusionKit's separately configured `onRateLimit: fusion` policy can expand a
   failed passthrough turn to its configured panel. That is FusionKit behavior,
   not a RouteKit route fallback; use `passthrough` or `fail` to disable it.
-- The evidence baseline reviewed for this page is `@routekit/cli` **0.8.0** at
-  source revision
-  [`2f9914d5`](https://github.com/velum-labs/handoffkit/commit/2f9914d5dc04f4f7d604737b3085345572ac6226),
-  dated **2026-07-22**. Exact live account, provider, and client versions are
-  still pending the L06 real-account matrix. Each route remains Planned
-  Supported until that dated evidence is linked below.
+- The evidence baseline for this page is `@routekit/cli` **0.8.0** at source
+  revision
+  [`dad16c53`](https://github.com/velum-labs/handoffkit/commit/dad16c53c0e083a51d41df59149a21964d27cc12),
+  dated **2026-07-22**. Each route remains Planned Supported until L06 clears
+  the four recorded Fail rows.
 
 <a id="route-openai-api"></a>
 
 ## OpenAI API
 
-- **Status and evidence:** Planned Supported after L06. RouteKit 0.8.0,
-  revision `2f9914d5`, reviewed 2026-07-22. Exact live model/API qualification
-  is pending. [Durable L06 evidence](https://github.com/velum-labs/handoffkit/blob/main/docs/routekit-l06-evidence.md#route-openai-api).
+- **Status and evidence:** Planned Supported until L06 closes. Qualification
+  **Pass** at RouteKit 0.8.0 revision `dad16c53`, 2026-07-22, using
+  `openai/gpt-5.5`; one real-account request and all required deterministic
+  behaviors passed. [Stable L05 mapping; canonical import pending](https://github.com/velum-labs/handoffkit/blob/main/docs/routekit-l06-evidence.md#route-openai-api).
 - **Credential:** Your `OPENAI_API_KEY` from your OpenAI API account. An
   operator may explicitly set `OPENAI_BASE_URL`; RouteKit does not accept an
   inline key in router YAML.
 - **Billing:** RouteKit treats this as an API-key route, separate from the
   Codex subscription route. OpenAI determines charges on the API account that
-  owns the key; exact live billing attribution remains an L06 check.
+  owns the key. The qualification observed a successful request on this
+  isolated namespaced route and zero cross-provider fallback.
 - **Egress and aggregator:** Direct to `api.openai.com` by default. There is no
   aggregator. An explicit base-URL override changes the destination and makes
   its operator responsible for handling the request.
@@ -62,15 +64,17 @@ availability still apply.
 
 ## Anthropic API
 
-- **Status and evidence:** Planned Supported after L06. RouteKit 0.8.0,
-  revision `2f9914d5`, reviewed 2026-07-22. Exact live model/API qualification
-  is pending. [Durable L06 evidence](https://github.com/velum-labs/handoffkit/blob/main/docs/routekit-l06-evidence.md#route-anthropic-api).
+- **Status and evidence:** Planned Supported until L06 closes. Qualification
+  **Pass** at RouteKit 0.8.0 revision `dad16c53`, 2026-07-22, using
+  `anthropic/claude-sonnet-4-6`; one real-account request and all required
+  deterministic behaviors passed. [Stable L05 mapping; canonical import pending](https://github.com/velum-labs/handoffkit/blob/main/docs/routekit-l06-evidence.md#route-anthropic-api).
 - **Credential:** Your `ANTHROPIC_API_KEY` from the Anthropic API account.
   `ANTHROPIC_BASE_URL` is an explicit destination override. RouteKit does not
   currently use `ANTHROPIC_AUTH_TOKEN` for provider requests.
 - **Billing:** RouteKit treats this as an API-key route, separate from the
   Claude Code subscription route. Anthropic determines charges on the API
-  account; exact live billing attribution remains an L06 check.
+  account. The qualification observed a successful request on this isolated
+  namespaced route and zero cross-provider fallback.
 - **Egress and aggregator:** Direct to `api.anthropic.com` by default. There is
   no aggregator. A base-URL override changes that destination.
 - **Quota and failover:** No RouteKit account pool and no cross-provider
@@ -88,13 +92,15 @@ availability still apply.
 
 ## OpenRouter API
 
-- **Status and evidence:** Planned Supported after L06. RouteKit 0.8.0,
-  revision `2f9914d5`, reviewed 2026-07-22. Exact live model/upstream
-  qualification is pending. [Durable L06 evidence](https://github.com/velum-labs/handoffkit/blob/main/docs/routekit-l06-evidence.md#route-openrouter-api).
+- **Status and evidence:** Planned Supported until L06 closes. Qualification
+  **Pass** at RouteKit 0.8.0 revision `dad16c53`, 2026-07-22, using
+  `openrouter/openai/gpt-4o-mini`; one real-account request and all required
+  deterministic behaviors passed. [Stable L05 mapping; canonical import pending](https://github.com/velum-labs/handoffkit/blob/main/docs/routekit-l06-evidence.md#route-openrouter-api).
 - **Credential:** Your `OPENROUTER_API_KEY` from your OpenRouter account.
 - **Billing:** RouteKit treats this as an OpenRouter API-key/credit route, not a
   native subscription route. OpenRouter determines charges and credit usage;
-  exact live billing attribution remains an L06 check.
+  the qualification observed a successful OpenRouter-route request. OpenRouter
+  retains control of upstream routing and credit attribution.
 - **Egress and aggregator:** **OpenRouter is an aggregator.** RouteKit sends
   prompts, code, tool data, and model requests to `openrouter.ai`; OpenRouter
   then sends them to the upstream provider selected for the requested model
@@ -115,10 +121,11 @@ availability still apply.
 
 ## Codex subscription
 
-- **Status and evidence:** Planned Supported after L06. RouteKit 0.8.0,
-  revision `2f9914d5`, reviewed 2026-07-22. Exact Codex CLI version, live
-  account result, and setup/restore result are pending.
-  [Durable L06 evidence](https://github.com/velum-labs/handoffkit/blob/main/docs/routekit-l06-evidence.md#route-codex-subscription).
+- **Status and evidence:** Planned Supported until L06 closes. Qualification
+  **Fail — `account-unavailable`** at RouteKit 0.8.0 revision `dad16c53`,
+  2026-07-22. No Codex client or enrolled account was available; live billing,
+  setup, and restore were not observed.
+  [Stable L05 mapping; canonical import pending](https://github.com/velum-labs/handoffkit/blob/main/docs/routekit-l06-evidence.md#route-codex-subscription).
 - **Credential:** Your Codex OAuth credential, captured with `routekit accounts
   login codex --name <label>` in an isolated temporary profile or imported
   from the official CLI with `accounts add`. RouteKit stores the enrolled copy
@@ -144,10 +151,11 @@ availability still apply.
 
 ## Claude Code subscription
 
-- **Status and evidence:** Planned Supported after L06. RouteKit 0.8.0,
-  revision `2f9914d5`, reviewed 2026-07-22. Exact Claude Code version, live
-  account result, and restore/recovery result are pending.
-  [Durable L06 evidence](https://github.com/velum-labs/handoffkit/blob/main/docs/routekit-l06-evidence.md#route-claude-code-subscription).
+- **Status and evidence:** Planned Supported until L06 closes. Qualification
+  **Fail — `account-unavailable`** at RouteKit 0.8.0 revision `dad16c53`,
+  2026-07-22. No Claude client or enrolled account was available; live
+  billing, setup, and restore were not observed.
+  [Stable L05 mapping; canonical import pending](https://github.com/velum-labs/handoffkit/blob/main/docs/routekit-l06-evidence.md#route-claude-code-subscription).
 - **Credential:** Your Claude Code OAuth credential, captured with `routekit
   accounts login claude-code --name <label>` in an isolated temporary profile
   or imported with `accounts add`. RouteKit stores the enrolled copy under
@@ -174,10 +182,11 @@ availability still apply.
 
 ## Cursor IDE custom OpenAI endpoint
 
-- **Status and evidence:** Planned Supported after L06. RouteKit 0.8.0,
-  revision `2f9914d5`, reviewed 2026-07-22. Exact Cursor IDE version and
-  authenticated desktop qualification are pending.
-  [Durable L06 evidence](https://github.com/velum-labs/handoffkit/blob/main/docs/routekit-l06-evidence.md#route-cursor-ide).
+- **Status and evidence:** Planned Supported until L06 closes. Qualification
+  **Fail — `manual-evidence-unavailable`** at RouteKit 0.8.0 revision
+  `dad16c53`, 2026-07-22. The Linux worker had no Cursor desktop and could not
+  run the macOS-oriented IDE launcher.
+  [Stable L05 mapping; canonical import pending](https://github.com/velum-labs/handoffkit/blob/main/docs/routekit-l06-evidence.md#route-cursor-ide).
 - **Credential:** A logged-in Cursor desktop account plus the local gateway
   token used by the isolated custom-endpoint profile. The selected RouteKit
   model separately uses the API or subscription credential disclosed in its
@@ -204,10 +213,11 @@ availability still apply.
 
 ## `cursor-agent` custom OpenAI endpoint
 
-- **Status and evidence:** Planned Supported after L06. RouteKit 0.8.0,
-  revision `2f9914d5`, reviewed 2026-07-22. Exact `cursor-agent` version and
-  authenticated CLI qualification are pending.
-  [Durable L06 evidence](https://github.com/velum-labs/handoffkit/blob/main/docs/routekit-l06-evidence.md#route-cursor-agent).
+- **Status and evidence:** Planned Supported until L06 closes. Qualification
+  **Fail — `client-unavailable`** at RouteKit 0.8.0 revision `dad16c53`,
+  2026-07-22. `cursor-agent` was not installed, so authenticated traffic,
+  billing, setup, and restore were not observed.
+  [Stable L05 mapping; canonical import pending](https://github.com/velum-labs/handoffkit/blob/main/docs/routekit-l06-evidence.md#route-cursor-agent).
 - **Credential:** A logged-in `cursor-agent` account plus its local endpoint
   connection. The selected RouteKit model separately uses the credential in
   its provider row.
@@ -242,10 +252,15 @@ account details.
 ## Qualification evidence
 
 The deterministic matrix and its interpretation are documented in the
-[RouteKit end-to-end verification matrix](https://github.com/velum-labs/handoffkit/blob/2f9914d5dc04f4f7d604737b3085345572ac6226/docs/routekit-e2e-matrix.md).
+[RouteKit end-to-end verification matrix](https://github.com/velum-labs/handoffkit/blob/dad16c53c0e083a51d41df59149a21964d27cc12/docs/routekit-e2e-matrix.md).
+The [sanitized L06 real-account report](https://github.com/velum-labs/handoffkit/blob/26361e3d40bb8c8a380ebf95cefe39bb01b50b1c/docs/evidence/routekit-real-account/2026-07-22-dad16c53.md)
+records exact RouteKit revision, credential mode, client/provider version,
+evidence date, protocol behavior, billing attribution, failure behavior, and
+setup/restore for every anchor. Four rows are Fail, so all seven labels remain
+conditional.
 Route-explanation contract and redaction evidence is tracked in
 [`docs/routekit-route-info-evidence.md`](https://github.com/velum-labs/handoffkit/blob/main/docs/routekit-route-info-evidence.md).
-Public Supported labels require the separate sanitized L06 real-account report
-to record exact RouteKit revision, credential mode, client/provider version,
-evidence date, protocol behavior, billing attribution, and setup/restore
-results for every anchor above. Until then, all seven labels remain conditional.
+The generated stable-map rows remain `pending` because this historical run
+predates the mapping digest and case IDs; they do not override the immutable
+ENG-679 report. Importing legacy runs into that generated format remains
+separate ENG-680 work and must not fabricate modern case identities.
