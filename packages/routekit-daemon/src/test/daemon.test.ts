@@ -551,6 +551,87 @@ test("daemon owns the cliproxy sidecar: spawn, restart, account routing, shutdow
       )?.configured,
       true
     );
+
+    const beforeClaude = await client.call("daemon.status", {});
+    const claudeActivation = {
+      kind: "claude-code" as const,
+      accounts: [
+        {
+          label: "claude-work",
+          credential: {
+            claudeAiOauth: {
+              accessToken: "claude-transaction-access",
+              refreshToken: "claude-transaction-refresh",
+              expiresAt: Date.now() + 3_600_000
+            }
+          }
+        }
+      ]
+    };
+    failActivation = true;
+    await assert.rejects(
+      client.call("accounts.enrollActivate", claudeActivation, {
+        idempotencyKey: "activate-claude-failure"
+      }),
+      /injected activation failure/
+    );
+    failActivation = false;
+    const claudePath = join(
+      stateHome,
+      "subscriptions",
+      "claude-code",
+      "claude-work.json"
+    );
+    assert.equal(existsSync(claudePath), false);
+    assert.equal(existsSync(join(stateHome, "account-transactions")), false);
+    assert.equal(
+      (await client.call("daemon.status", {})).configRevision,
+      beforeClaude.configRevision
+    );
+    assert.equal(
+      (await client.call("daemon.status", {})).accountRevision,
+      beforeClaude.accountRevision
+    );
+
+    const claudeActivated = await client.call(
+      "accounts.enrollActivate",
+      claudeActivation,
+      { idempotencyKey: "activate-claude" }
+    );
+    assert.equal(claudeActivated.activated, true);
+    assert.equal(claudeActivated.configRevision, beforeClaude.configRevision + 1);
+    assert.equal(claudeActivated.accountRevision, beforeClaude.accountRevision + 1);
+    assert.equal(existsSync(claudePath), true);
+    assert.match(readFileSync(configPath, "utf8"), /claude-code:/);
+    assert.doesNotMatch(
+      JSON.stringify(claudeActivated),
+      /claude-transaction-access|claude-transaction-refresh/
+    );
+    const claudeReplay = await client.call(
+      "accounts.enrollActivate",
+      claudeActivation,
+      { idempotencyKey: "activate-claude-retry" }
+    );
+    assert.equal(claudeReplay.configRevision, claudeActivated.configRevision);
+    assert.equal(claudeReplay.accountRevision, claudeActivated.accountRevision);
+    assert.equal(
+      (await client.call("accounts.status", {})).accounts.find(
+        (entry) => entry.subscriptionKind === "claude-code" && entry.label === "claude-work"
+      )?.configured,
+      true
+    );
+    assert.equal(
+      (
+        await client.call(
+          "accounts.remove",
+          { kind: "claude-code", label: "claude-work" },
+          { idempotencyKey: "remove-claude-work" }
+        )
+      ).removed,
+      true
+    );
+    assert.equal(existsSync(claudePath), false);
+
     const removed = await client.call(
       "accounts.remove",
       { kind: "gemini", label: "antigravity-user@example.com" },
@@ -626,14 +707,16 @@ test("second daemon cannot claim authority and generations remain monotonic", as
   }
 });
 
-test("daemon recovers interrupted activation before loading config or starting routers", async () => {
+async function assertInterruptedNativeActivationRecovery(
+  kind: "claude-code" | "codex"
+): Promise<void> {
   const root = mkdtempSync(join(tmpdir(), "routekit-daemon-recovery-"));
   const stateHome = join(root, "state");
   const configPath = join(root, "router.yaml");
   const accountPath = join(
     stateHome,
     "subscriptions",
-    "codex",
+    kind,
     "interrupted.json"
   );
   const priorConfig =
@@ -643,23 +726,32 @@ test("daemon recovers interrupted activation before loading config or starting r
     home: stateHome,
     configPath,
     accountPaths: [accountPath],
-    kind: "codex",
-    provider: "codex",
+    kind,
+    provider: kind,
     labels: ["interrupted"]
   });
   mkdirSync(dirname(accountPath), { recursive: true });
   writeFileSync(
     accountPath,
-    JSON.stringify({
-      tokens: {
-        access_token: "interrupted-access",
-        refresh_token: "interrupted-refresh"
-      }
-    })
+    JSON.stringify(
+      kind === "claude-code"
+        ? {
+            claudeAiOauth: {
+              accessToken: "interrupted-access",
+              refreshToken: "interrupted-refresh"
+            }
+          }
+        : {
+            tokens: {
+              access_token: "interrupted-access",
+              refresh_token: "interrupted-refresh"
+            }
+          }
+    )
   );
   writeFileSync(
     configPath,
-    "providers:\n  openai: {}\n  codex: {}\ndefaultModel: openai/mock-model\n"
+    `providers:\n  openai: {}\n  ${kind}: {}\ndefaultModel: openai/mock-model\n`
   );
   writeFileSync(
     join(stateHome, "daemon-revisions.json"),
@@ -708,4 +800,12 @@ test("daemon recovers interrupted activation before loading config or starting r
     await upstream.close();
     rmSync(root, { recursive: true, force: true });
   }
+}
+
+test("daemon recovers interrupted activation before loading config or starting routers", async () => {
+  await assertInterruptedNativeActivationRecovery("codex");
+});
+
+test("daemon recovers interrupted Claude activation before loading config or starting routers", async () => {
+  await assertInterruptedNativeActivationRecovery("claude-code");
 });

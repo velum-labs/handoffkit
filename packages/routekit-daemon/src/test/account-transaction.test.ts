@@ -20,17 +20,32 @@ import {
   recoverAccountTransactions
 } from "../account-transaction.js";
 
-test("prepared account transactions restore exact prior files without secrets in the journal", () => {
+function nativeCredential(kind: "claude-code" | "codex", prefix: string): string {
+  return kind === "claude-code"
+    ? `${JSON.stringify({
+        claudeAiOauth: {
+          accessToken: `${prefix}-access`,
+          refreshToken: `${prefix}-refresh`
+        }
+      })}\n`
+    : `${JSON.stringify({
+        tokens: {
+          access_token: `${prefix}-access`,
+          refresh_token: `${prefix}-refresh`
+        }
+      })}\n`;
+}
+
+function assertPreparedNativeTransactionRestores(kind: "claude-code" | "codex"): void {
   const root = mkdtempSync(join(tmpdir(), "routekit-account-transaction-"));
   const home = join(root, "state");
-  const account = join(home, "subscriptions", "codex", "work.json");
+  const account = join(home, "subscriptions", kind, "work.json");
   const config = join(root, "router.yaml");
   const revisions = join(home, "daemon-revisions.json");
-  const oldAccount =
-    '{"tokens":{"access_token":"old-access","refresh_token":"old-refresh"}}\n';
+  const oldAccount = nativeCredential(kind, "old");
   const oldConfig = "providers:\n  openai: {}\n";
   const oldRevisions = '{"config":2,"accounts":3,"daemon":1}\n';
-  mkdirSync(join(home, "subscriptions", "codex"), { recursive: true });
+  mkdirSync(join(home, "subscriptions", kind), { recursive: true });
   writeFileSync(account, oldAccount, { mode: 0o600 });
   writeFileSync(config, oldConfig, { mode: 0o600 });
   writeFileSync(revisions, oldRevisions, { mode: 0o600 });
@@ -39,21 +54,21 @@ test("prepared account transactions restore exact prior files without secrets in
       home,
       configPath: config,
       accountPaths: [account],
-      kind: "codex",
-      provider: "codex",
+      kind,
+      provider: kind,
       labels: ["work"]
     });
     const journal = readFileSync(
       join(transaction.directory, "transaction.json"),
       "utf8"
     );
-    assert.doesNotMatch(journal, /old-access|old-refresh|access_token|refresh_token/);
-
-    writeFileSync(
-      account,
-      '{"tokens":{"access_token":"new-access","refresh_token":"new-refresh"}}\n'
+    assert.doesNotMatch(
+      journal,
+      /old-access|old-refresh|accessToken|refreshToken|access_token|refresh_token/
     );
-    writeFileSync(config, "providers:\n  openai: {}\n  codex: {}\n");
+
+    writeFileSync(account, nativeCredential(kind, "new"));
+    writeFileSync(config, `providers:\n  openai: {}\n  ${kind}: {}\n`);
     writeFileSync(revisions, '{"config":3,"accounts":4,"daemon":1}\n');
 
     assert.deepEqual(recoverAccountTransactions(home), {
@@ -68,6 +83,14 @@ test("prepared account transactions restore exact prior files without secrets in
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+}
+
+test("prepared account transactions restore exact prior files without secrets in the journal", () => {
+  assertPreparedNativeTransactionRestores("codex");
+});
+
+test("prepared Claude transactions restore exact prior files without secrets in the journal", () => {
+  assertPreparedNativeTransactionRestores("claude-code");
 });
 
 test("committed transactions preserve new state and only clean rollback data", () => {
@@ -127,15 +150,21 @@ test("orphaned pre-prepare transaction directories are safe cleanup only", () =>
   }
 });
 
-test("SIGKILL after account/config writes is rolled back from the prepared journal", async () => {
+async function assertNativeSigkillRecovery(kind: "claude-code" | "codex"): Promise<void> {
   const root = mkdtempSync(join(tmpdir(), "routekit-account-sigkill-"));
   const home = join(root, "state");
-  const account = join(home, "subscriptions", "codex", "killed.json");
+  const account = join(home, "subscriptions", kind, "killed.json");
   const config = join(root, "router.yaml");
   const oldConfig = "providers:\n  openai: {}\n";
   writeFileSync(config, oldConfig);
   const moduleUrl = new URL("../account-transaction.js", import.meta.url).href;
-  const input = JSON.stringify({ home, account, config });
+  const input = JSON.stringify({
+    home,
+    account,
+    config,
+    kind,
+    credential: nativeCredential(kind, "killed")
+  });
   const script = `
     import { mkdirSync, writeFileSync } from "node:fs";
     import { dirname } from "node:path";
@@ -145,13 +174,13 @@ test("SIGKILL after account/config writes is rolled back from the prepared journ
       home: input.home,
       configPath: input.config,
       accountPaths: [input.account],
-      kind: "codex",
-      provider: "codex",
+      kind: input.kind,
+      provider: input.kind,
       labels: ["killed"]
     });
     mkdirSync(dirname(input.account), { recursive: true });
-    writeFileSync(input.account, '{"tokens":{"access_token":"killed-access"}}\\n');
-    writeFileSync(input.config, 'providers:\\n  openai: {}\\n  codex: {}\\n');
+    writeFileSync(input.account, input.credential);
+    writeFileSync(input.config, 'providers:\\n  openai: {}\\n  ' + input.kind + ': {}\\n');
     process.kill(process.pid, "SIGKILL");
   `;
   try {
@@ -178,4 +207,12 @@ test("SIGKILL after account/config writes is rolled back from the prepared journ
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+}
+
+test("SIGKILL after account/config writes is rolled back from the prepared journal", async () => {
+  await assertNativeSigkillRecovery("codex");
+});
+
+test("SIGKILL after Claude account/config writes is rolled back from the prepared journal", async () => {
+  await assertNativeSigkillRecovery("claude-code");
 });
