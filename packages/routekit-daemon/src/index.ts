@@ -45,7 +45,7 @@ import {
 import type {
   ConfigSnapshot,
   DaemonStatus,
-  ModelInfo,
+  ModelCatalogEntry,
   RouteKitControlHandlers
 } from "@routekit/control";
 import {
@@ -664,7 +664,7 @@ export async function startRouteKitDaemon(
             message: `gateway model discovery failed (${response.status})`
           });
         }
-        const body = (await response.json()) as { data?: ModelInfo[] };
+        const body = (await response.json()) as { data?: ModelCatalogEntry[] };
         const models = (body.data ?? []).filter(
           (model) => params.provider === undefined || model.id.startsWith(`${params.provider}/`)
         );
@@ -683,18 +683,18 @@ export async function startRouteKitDaemon(
         return result;
       },
       "models.info": async (params) => {
-        const listed = await handlers["models.list"]({}, {
-          signal: new AbortController().signal,
-          requestId: "internal"
-        });
-        const model = listed.models.find((entry) => entry.id === params.model);
+        const model = activeRouter!.modelInfo(params.model);
         if (model === undefined) {
           throw new ControlError({
             code: "not_found",
             message: `unknown model: ${params.model}`
           });
         }
-        return model;
+        return {
+          ...model,
+          capabilities: { ...model.capabilities },
+          reasoning: model.reasoning === null ? null : { ...model.reasoning }
+        };
       },
       "accounts.list": async () => ({
         accounts: accountEntries(env).map((entry) => {

@@ -130,8 +130,58 @@ test("providers and models commands use the live namespaced catalog", async () =
       "info",
       "openai/gpt-live"
     ]);
-    assert.equal(info.provider, "openai");
-    assert.equal(info.default, true);
+    assert.deepEqual(info, {
+      id: "openai/gpt-live",
+      provider: "openai",
+      nativeModel: "gpt-live",
+      accountClass: "api-key",
+      billingMode: "metered-api",
+      default: true,
+      capabilities: { streaming: "supported", tools: "degraded" },
+      reasoning: null
+    });
+    assert.doesNotMatch(JSON.stringify(info), /test-key/);
+
+    const human = await execFileAsync(
+      process.execPath,
+      [CLI_ENTRY, "models", "info", "openai/gpt-live"],
+      { env: { ...process.env, NO_COLOR: "1" }, encoding: "utf8" }
+    );
+    assert.match(human.stdout, /openai\/gpt-live/);
+    assert.match(human.stdout, /provider\s+openai/);
+    assert.match(human.stdout, /native model\s+gpt-live/);
+    assert.match(human.stdout, /account class\s+api-key/);
+    assert.match(human.stdout, /billing mode\s+metered-api/);
+    assert.match(human.stdout, /default\s+yes/);
+    assert.match(human.stdout, /streaming=supported, tools=degraded/);
+    assert.match(human.stdout, /reasoning\s+not reported/);
+    assert.doesNotMatch(`${human.stdout}\n${human.stderr}`, /test-key/);
+
+    await assert.rejects(
+      execFileAsync(
+        process.execPath,
+        [CLI_ENTRY, "--json", "models", "info", "openai/not-real"],
+        { env: process.env, encoding: "utf8" }
+      ),
+      (error: unknown) => {
+        const output =
+          typeof error === "object" && error !== null && "stdout" in error
+            ? String((error as { stdout?: unknown }).stdout)
+            : "";
+        const failure = JSON.parse(output) as {
+          error?: { code?: string; message?: string; try?: string };
+        };
+        assert.deepEqual(failure, {
+          error: {
+            code: "model_not_found",
+            message: "model is not in the live catalog: openai/not-real",
+            try: "routekit models list"
+          }
+        });
+        assert.doesNotMatch(output, /test-key/);
+        return true;
+      }
+    );
 
     const status = await runJson([
       "--json",

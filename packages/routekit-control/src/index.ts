@@ -102,11 +102,34 @@ export type ConfigSnapshot = {
   sources: readonly ["global"];
 };
 
-export type ModelInfo = {
+export type ModelCatalogEntry = {
   id: string;
   provider?: string;
   capabilities?: Record<string, unknown>;
   reasoning?: Record<string, unknown>;
+};
+
+export type ModelAccountClass = "api-key" | "subscription" | "proxy";
+export type ModelBillingMode =
+  | "metered-api"
+  | "subscription"
+  | "upstream-managed";
+
+/**
+ * Secret-free explanation of one effective RouteKit model route.
+ *
+ * The contract deliberately excludes account labels, filesystem paths,
+ * credential environment values, and transport authentication material.
+ */
+export type ModelInfo = {
+  id: string;
+  provider: string;
+  nativeModel: string;
+  accountClass: ModelAccountClass;
+  billingMode: ModelBillingMode;
+  default: boolean;
+  capabilities: Record<string, unknown>;
+  reasoning: Record<string, unknown> | null;
 };
 
 export type LaunchPreparation = {
@@ -134,7 +157,7 @@ export type RouteKitControlResults = {
     }>;
   };
   "providers.set": ConfigSnapshot;
-  "models.list": { models: ModelInfo[]; defaultModel?: string; revision: number };
+  "models.list": { models: ModelCatalogEntry[]; defaultModel?: string; revision: number };
   "models.info": ModelInfo;
   "accounts.list": { accounts: unknown[]; revision: number };
   "accounts.status": {

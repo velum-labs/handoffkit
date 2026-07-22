@@ -1092,6 +1092,74 @@ function chooseLiveModels(models, overrides, providers = PROVIDERS) {
   );
 }
 
+function assertNoConfiguredSecrets(value) {
+  for (const [name, secret] of Object.entries(process.env)) {
+    if (
+      secret !== undefined &&
+      secret.length >= 8 &&
+      /(KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL)/i.test(name)
+    ) {
+      assert.ok(!value.includes(secret), `route info exposed ${name}`);
+    }
+  }
+}
+
+function liveRouteInfo(configPath, chosen, tempRoot) {
+  const home = join(tempRoot, "route-info-home");
+  const stateHome = join(tempRoot, "route-info-state");
+  const canonicalConfig = join(home, ".config", "routekit", "router.yaml");
+  mkdirSync(dirname(canonicalConfig), { recursive: true });
+  writeFileSync(canonicalConfig, readFileSync(configPath, "utf8"));
+  const env = {
+    ...process.env,
+    HOME: home,
+    ROUTEKIT_HOME: stateHome,
+    ROUTEKIT_PORTLESS: "0",
+    ROUTEKIT_DAEMON_PORT: "0",
+    ROUTEKIT_NO_SUPERVISOR: "1",
+    NO_COLOR: "1"
+  };
+  delete env.ROUTEKIT_CONFIG;
+  const records = {};
+  try {
+    for (const [provider, model] of Object.entries(chosen)) {
+      const result = spawnSync(
+        process.execPath,
+        [ROUTEKIT_ENTRY, "--json", "models", "info", model],
+        { cwd: ROOT, env, encoding: "utf8", timeout: 90_000 }
+      );
+      if (result.status !== 0) {
+        throw new Error(
+          `route info failed for ${model}\n${sanitize(result.stdout)}\n${sanitize(result.stderr)}`
+        );
+      }
+      assertNoConfiguredSecrets(`${result.stdout}\n${result.stderr}`);
+      const info = JSON.parse(result.stdout);
+      assert.equal(info.id, model);
+      assert.equal(info.provider, provider);
+      assert.equal(info.nativeModel, model.slice(provider.length + 1));
+      for (const field of [
+        "accountClass",
+        "billingMode",
+        "default",
+        "capabilities",
+        "reasoning"
+      ]) {
+        assert.ok(Object.hasOwn(info, field), `${model} route info is missing ${field}`);
+      }
+      records[provider] = info;
+    }
+    return records;
+  } finally {
+    spawnSync(process.execPath, [ROUTEKIT_ENTRY, "--json", "stop"], {
+      cwd: ROOT,
+      env,
+      encoding: "utf8",
+      timeout: 90_000
+    });
+  }
+}
+
 function poolCasesEnabled(options) {
   return selected("pool", options.doors);
 }
@@ -1427,6 +1495,19 @@ async function runLive(options, results, artifactDir, tempRoot) {
       selected(provider, options.providers)
     );
     const chosen = chooseLiveModels(models, options.models, activeProviders);
+    await recordCase(
+      results,
+      { phase: "live", door: "route-info" },
+      async () => {
+        const routeInfo = liveRouteInfo(configPath, chosen, tempRoot);
+        const artifact = "live-route-info.json";
+        writeFileSync(
+          join(artifactDir, artifact),
+          `${JSON.stringify(routeInfo, null, 2)}\n`
+        );
+        return { billedCalls: 0, artifact };
+      }
+    );
     const pickerPublicModels = Object.fromEntries(
       ["codex", "claude-code"].flatMap((provider) =>
         chosen[provider] === undefined ? [] : [[provider, chosen[provider]]]

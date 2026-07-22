@@ -164,6 +164,19 @@ results remain pending the L06 real-account matrix.
 - **Evidence:** RouteKit 0.8.0 / `2f9914d5` / 2026-07-22 repository review.
   Exact authenticated `cursor-agent` qualification pending L06.
 
+## Route explanation
+
+`routekit models info <provider/model>` reports the live route's namespaced and
+native model IDs, provider, account class, billing mode, default status,
+capabilities, and reasoning metadata. API-key routes are classified as
+`api-key` / `metered-api`; managed Codex and Claude Code routes as
+`subscription` / `subscription`; and retained proxy routes as `proxy` /
+`upstream-managed`. Unknown models fail and the response contract excludes
+credentials, account labels, credential paths, and environment values.
+
+The automated and zero-billed matrix evidence is recorded in
+[RouteKit route explanation evidence](routekit-route-info-evidence.md).
+
 ## Qualification requirement
 
 The deterministic harness is documented in

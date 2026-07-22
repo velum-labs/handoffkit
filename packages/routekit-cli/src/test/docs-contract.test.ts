@@ -231,6 +231,30 @@ test("every first-launch route has a complete public disclosure", () => {
   );
 });
 
+test("route explanation contract is documented in public and maintainer surfaces", () => {
+  const publicDoc = readFileSync(join(root, routeDisclosuresPath), "utf8");
+  const mirror = readFileSync(
+    join(root, "docs/routekit-routes-and-billing.md"),
+    "utf8"
+  );
+  const readme = readFileSync(
+    join(root, "packages/routekit-cli/README.md"),
+    "utf8"
+  );
+  for (const source of [publicDoc, mirror, readme]) {
+    assert.match(source, /routekit models info <provider\/model>/);
+    assert.match(source, /native model/i);
+    assert.match(source, /account class/i);
+    assert.match(source, /billing mode/i);
+    assert.match(source, /api-key[\s\S]{0,80}metered-api/);
+    assert.match(source, /subscription[\s\S]{0,80}subscription/);
+    assert.match(source, /unknown models? fail|unknown[\s\S]{0,80}rejected/i);
+    assert.match(source, /credential/i);
+  }
+  assert.match(mirror, /routekit-route-info-evidence\.md/);
+  assert.match(publicDoc, /routekit-route-info-evidence\.md/);
+});
+
 test("public onboarding links to the route disclosure contract", () => {
   const packageReadme = readFileSync(join(root, "packages/routekit-cli/README.md"), "utf8");
   assert.match(

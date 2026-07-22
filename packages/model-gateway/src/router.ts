@@ -205,6 +205,39 @@ type CatalogEntry = {
   reasoning?: ModelReasoningCapabilities;
 };
 
+export type CatalogModelInfo = {
+  id: string;
+  provider: ProviderId;
+  nativeModel: string;
+  accountClass: "api-key" | "subscription" | "proxy";
+  billingMode: "metered-api" | "subscription" | "upstream-managed";
+  default: boolean;
+  capabilities: Readonly<Record<string, string>>;
+  reasoning: ModelReasoningCapabilities | null;
+};
+
+function routeBilling(provider: ProviderId): Pick<
+  CatalogModelInfo,
+  "accountClass" | "billingMode"
+> {
+  switch (provider) {
+    case "openai":
+    case "anthropic":
+    case "google":
+    case "openrouter":
+      return { accountClass: "api-key", billingMode: "metered-api" };
+    case "codex":
+    case "claude-code":
+      return { accountClass: "subscription", billingMode: "subscription" };
+    case "cliproxy":
+      return { accountClass: "proxy", billingMode: "upstream-managed" };
+    default: {
+      const unreachable: never = provider;
+      throw new Error(`unsupported route provider: ${String(unreachable)}`);
+    }
+  }
+}
+
 export type CatalogBackendOptions = {
   config: RouterConfig | unknown;
   env?: Readonly<Record<string, string | undefined>>;
@@ -321,6 +354,20 @@ export class CatalogBackend implements Backend {
 
   listModelIds(): readonly string[] {
     return [...this.#entries.keys()];
+  }
+
+  modelInfo(model: string): CatalogModelInfo | undefined {
+    const entry = this.#entries.get(model);
+    if (entry === undefined) return undefined;
+    return {
+      id: entry.publicId,
+      provider: entry.provider,
+      nativeModel: entry.nativeId,
+      ...routeBilling(entry.provider),
+      default: entry.publicId === this.defaultModel,
+      capabilities: entry.capabilities,
+      reasoning: entry.reasoning ?? null
+    };
   }
 
   async providerStatuses(
