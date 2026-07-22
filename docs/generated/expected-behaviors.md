@@ -109,6 +109,7 @@ environment-gated rows name the reason and exact live command.
 |---|---|---|---|
 | `harness.path-confinement` | Managed file tools reject worktree path traversal and record the failure as trajectory evidence. | required | `packages/cli/src/test/stack-harness-k-e2e.test.ts` — `reject path traversal` |
 | `security.gateway-auth` | Missing or incorrect gateway bearer credentials fail every door before provider spend. | required | `packages/cli/src/test/stack-auth-e2e.test.ts` — `rejects every door before provider spend` |
+| `accounts.claude-external-gateway-token-isolation` | A Claude gateway override never reuses the singleton daemon token; non-loopback overrides require HTTPS and an explicit environment-sourced credential. | required | `packages/routekit-cli/src/test/cli.test.ts` — `Claude gateway overrides never reuse the local daemon token` |
 
 ## robustness
 
