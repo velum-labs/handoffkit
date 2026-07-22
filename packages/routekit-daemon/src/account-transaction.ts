@@ -218,7 +218,7 @@ export function rollbackAccountTransaction(
   configPath: string
 ): void {
   restorePreparedTransaction(transaction, home, configPath);
-  rmSync(transaction.directory, { recursive: true, force: true });
+  cleanupAccountTransaction(transaction);
 }
 
 export function markAccountTransactionCommitted(
@@ -232,6 +232,14 @@ export function cleanupAccountTransaction(
   transaction: PreparedAccountTransaction
 ): void {
   rmSync(transaction.directory, { recursive: true, force: true });
+  const root = dirname(transaction.directory);
+  try {
+    if (readdirSync(root).length === 0) {
+      rmSync(root, { recursive: true, force: true });
+    }
+  } catch {
+    // Cleanup is retried on daemon startup when a committed manifest remains.
+  }
 }
 
 /**
@@ -265,7 +273,9 @@ export function recoverAccountTransactions(
     rmSync(directory, { recursive: true, force: true });
   }
   try {
-    if (readdirSync(root).length === 0) rmSync(root, { force: true });
+    if (readdirSync(root).length === 0) {
+      rmSync(root, { recursive: true, force: true });
+    }
   } catch {
     // A concurrent observer or filesystem cleanup race is harmless.
   }

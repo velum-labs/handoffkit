@@ -279,7 +279,12 @@ test("cliproxy login capture keeps OAuth files out of daemon-owned state", async
         .access_token,
       "captured-access"
     );
-    assert.equal(existsSync(join(home, "cliproxy", "auth")), false);
+    assert.deepEqual(
+      existsSync(join(home, "cliproxy", "auth"))
+        ? readdirSync(join(home, "cliproxy", "auth"))
+        : [],
+      []
+    );
     assert.equal(existsSync(isolatedHome), false);
   } finally {
     rmSync(home, { recursive: true, force: true });
