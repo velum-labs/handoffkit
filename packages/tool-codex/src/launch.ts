@@ -8,7 +8,7 @@ import {
   rmSync,
   writeFileSync
 } from "node:fs";
-import { homedir, tmpdir } from "node:os";
+import { homedir } from "node:os";
 import { join } from "node:path";
 
 import { stringify as tomlStringify } from "smol-toml";
@@ -69,6 +69,27 @@ export function codexAuthPath(home: string = homedir()): string {
 
 export function hasCodexLogin(home: string = homedir()): boolean {
   return existsSync(codexAuthPath(home));
+}
+
+/**
+ * Create an isolated Codex home outside the operating-system temp directory.
+ *
+ * Recent Codex releases refuse to install their process-scoped PATH helpers
+ * beneath `tmpdir()`. RouteKit still needs an isolated home so a gateway turn
+ * cannot read or mutate the user's real Codex configuration.
+ */
+export function createIsolatedCodexHome(
+  prefix: string,
+  env: Record<string, string | undefined> = process.env
+): string {
+  const userHome = env.HOME ?? env.USERPROFILE ?? homedir();
+  const cacheRoot =
+    env.XDG_CACHE_HOME ??
+    (process.platform === "win32" ? env.LOCALAPPDATA : undefined) ??
+    join(userHome, ".cache");
+  const parent = join(cacheRoot, "routekit", "codex");
+  mkdirSync(parent, { recursive: true, mode: 0o700 });
+  return mkdtempSync(join(parent, prefix));
 }
 
 function presetSlug(entry: CodexModelPreset): string | undefined {
@@ -347,7 +368,7 @@ function spawnCodex(
 
 export async function launchCodex(ctx: ToolLaunchContext): Promise<number> {
   const { spec } = ctx;
-  const home = mkdtempSync(join(tmpdir(), "routekit-codex-"));
+  const home = createIsolatedCodexHome("routekit-codex-");
   ctx.registerDisposer(() => rmSync(home, { recursive: true, force: true }));
   if (hasCodexLogin() && spec.auth?.token === undefined) {
     copyFileSync(codexAuthPath(), join(home, "auth.json"));

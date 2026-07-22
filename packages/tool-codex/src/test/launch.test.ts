@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { test } from "node:test";
 
 import type { AgentProfile, ToolLaunchSpec } from "@routekit/tools";
@@ -6,6 +9,7 @@ import type { AgentProfile, ToolLaunchSpec } from "@routekit/tools";
 import {
   codexAgentRoleToml,
   codexCatalogEntries,
+  createIsolatedCodexHome,
   codexLaunchConfigToml,
   codexModelCatalogJson
 } from "../launch.js";
@@ -213,4 +217,18 @@ test("Codex launcher projects codex models to native picker ids", () => {
     }),
     /model = "gpt-5\.5"/
   );
+});
+
+test("isolated Codex homes live under the user cache instead of the system temp root", () => {
+  const root = mkdtempSync(join(tmpdir(), "routekit-codex-home-test-"));
+  const userHome = join(root, "home");
+  try {
+    const isolated = createIsolatedCodexHome("driver-", { HOME: userHome });
+    assert.ok(
+      isolated.startsWith(join(userHome, ".cache", "routekit", "codex", "driver-"))
+    );
+    assert.equal(existsSync(isolated), true);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
