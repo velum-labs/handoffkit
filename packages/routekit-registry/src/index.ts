@@ -128,6 +128,50 @@ export function providerForAuthMode(mode: SubscriptionMode): string {
   return SUBSCRIPTIONS[mode].provider;
 }
 
+export type AccountConnector = "native" | "cliproxy";
+
+export type AccountConnectorInfo = {
+  connector: AccountConnector;
+  /** CLIProxyAPI login flag (cliproxy-backed kinds only). */
+  cliproxyLoginFlag?: string;
+  /** CLIProxyAPI auth-store `type` values that classify as this kind. */
+  cliproxyAuthTypes?: readonly string[];
+  /** ToS restriction: reverse-engineered upstream, personal/local use only. */
+  localOnly?: boolean;
+  aliases?: readonly string[];
+};
+
+export const ACCOUNT_CONNECTORS: Readonly<Record<string, AccountConnectorInfo>> =
+  REGISTRY.connectors as Readonly<Record<string, AccountConnectorInfo>>;
+
+/** Canonical account kinds accepted by `routekit accounts login <kind>`. */
+export function accountKinds(): readonly string[] {
+  return Object.keys(ACCOUNT_CONNECTORS);
+}
+
+/**
+ * Resolve a user-supplied account kind (canonical name or alias) to its
+ * canonical kind and connector metadata.
+ */
+export function resolveAccountConnector(
+  value: string
+): { kind: string; info: AccountConnectorInfo } | undefined {
+  const direct = ACCOUNT_CONNECTORS[value];
+  if (direct !== undefined) return { kind: value, info: direct };
+  for (const [kind, info] of Object.entries(ACCOUNT_CONNECTORS)) {
+    if (info.aliases?.includes(value) === true) return { kind, info };
+  }
+  return undefined;
+}
+
+/** Classify a CLIProxyAPI auth-store `type` value back to a canonical kind. */
+export function accountKindForCliproxyAuthType(type: string): string | undefined {
+  for (const [kind, info] of Object.entries(ACCOUNT_CONNECTORS)) {
+    if (info.cliproxyAuthTypes?.includes(type) === true) return kind;
+  }
+  return undefined;
+}
+
 export const DEFAULT_REASONING_MODEL: string = REGISTRY.modelCatalog.defaultReasoningModel;
 
 export function catalogDefaultModel(choice: string): string | undefined {

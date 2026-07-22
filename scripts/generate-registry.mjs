@@ -20,6 +20,7 @@ import { dirname } from "node:path";
 const NEUTRAL_SPEC_FILES = [
   ["providers", "spec/registry/providers.json"],
   ["subscriptions", "spec/registry/subscriptions.json"],
+  ["connectors", "spec/registry/connectors.json"],
   ["modelCatalog", "spec/registry/model-catalog.json"],
   ["modelCapabilities", "spec/registry/model-capabilities.json"],
   ["pricing", "spec/registry/pricing.json"],

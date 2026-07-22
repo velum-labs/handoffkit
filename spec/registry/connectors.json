@@ -1,0 +1,32 @@
+{
+  "$comment": "Account connector map: which mechanism backs each `routekit accounts login <kind>` (a native RouteKit relay or the RouteKit-managed CLIProxyAPI sidecar), the sidecar login flag, auth-store classification types, and the local-only policy marker. Consumed via the generated @routekit/registry binding; regenerate with `node scripts/generate-registry.mjs`.",
+  "connectors": {
+    "claude-code": {
+      "connector": "native",
+      "aliases": ["claude"]
+    },
+    "codex": {
+      "connector": "native"
+    },
+    "gemini": {
+      "connector": "cliproxy",
+      "cliproxyLoginFlag": "-antigravity-login",
+      "cliproxyAuthTypes": ["antigravity", "gemini", "gemini-cli"],
+      "localOnly": true,
+      "aliases": ["antigravity"]
+    },
+    "grok": {
+      "connector": "cliproxy",
+      "cliproxyLoginFlag": "-xai-login",
+      "cliproxyAuthTypes": ["xai", "grok"],
+      "localOnly": true,
+      "aliases": ["xai"]
+    },
+    "kimi": {
+      "connector": "cliproxy",
+      "cliproxyLoginFlag": "-kimi-login",
+      "cliproxyAuthTypes": ["kimi"],
+      "localOnly": true
+    }
+  }
+}
