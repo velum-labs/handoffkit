@@ -20,6 +20,7 @@ import {
   CLIPROXY_API_KEY_ENV,
   CLIPROXY_BASE_URL_ENV,
   cliproxyAccountEntries,
+  cliproxyAccountMatchesKind,
   cliproxyApiKey,
   cliproxyBaseUrl,
   defaultSubscriptionAccountDirectory,
@@ -52,7 +53,12 @@ import type {
   RouterConfig,
   SwitchingGatewayProxy
 } from "@routekit/gateway";
-import { PROVIDERS, resolveAccountConnector } from "@routekit/registry";
+import {
+  ACCOUNT_CONNECTORS,
+  PROVIDERS,
+  resolveAccountConnector
+} from "@routekit/registry";
+import type { SubscriptionMode } from "@routekit/registry";
 import { startRouter } from "@routekit/router";
 import type { RunningRouter } from "@routekit/router";
 import {
@@ -215,11 +221,17 @@ function revisionConflict(expected: number, actual: number): never {
 }
 
 type AccountEntry =
-  | { subscriptionKind: "claude-code" | "codex"; label: string; connector: "native" }
+  | { subscriptionKind: SubscriptionMode; label: string; connector: "native" }
   | { subscriptionKind: string; label: string; connector: "cliproxy"; localOnly: boolean };
 
+function nativeSubscriptionKinds(): SubscriptionMode[] {
+  return Object.entries(ACCOUNT_CONNECTORS)
+    .filter(([, info]) => info.connector === "native")
+    .map(([kind]) => kind as SubscriptionMode);
+}
+
 function accountEntries(env: NodeJS.ProcessEnv): AccountEntry[] {
-  const native = (["claude-code", "codex"] as const).flatMap(
+  const native = nativeSubscriptionKinds().flatMap(
     (subscriptionKind): AccountEntry[] => {
       const directory = defaultSubscriptionAccountDirectory(subscriptionKind, env);
       if (!existsSync(directory)) return [];
@@ -424,8 +436,16 @@ export async function startRouteKitDaemon(
       nextDocument: string,
       input: { write: boolean; configRevision?: boolean; accountRevision?: boolean }
     ): Promise<void> => {
+      // Sidecar reconcile runs before the generation commits; any failure
+      // below must put the sidecar back to the still-live currentConfig.
       await sidecar.reconcile(wantsCliproxySidecar(nextConfig));
-      const candidate = await startGeneration(nextConfig);
+      let candidate: RunningRouter;
+      try {
+        candidate = await startGeneration(nextConfig);
+      } catch (error) {
+        await sidecar.reconcile(wantsCliproxySidecar(currentConfig));
+        throw error;
+      }
       const previousDocument = currentDocument;
       const previousRevisions = { ...revisions };
       const nextRevisions = { ...revisions };
@@ -442,6 +462,7 @@ export async function startRouteKitDaemon(
         revisions = previousRevisions;
         writeRevisions(home, previousRevisions);
         await candidate.close();
+        await sidecar.reconcile(wantsCliproxySidecar(currentConfig));
         throw error;
       }
       const previousRouter = activeRouter;
@@ -725,38 +746,56 @@ export async function startRouteKitDaemon(
       },
       "accounts.remove": async (params) => {
         const resolved = resolveAccountConnector(params.kind);
-        if (resolved !== undefined && resolved.info.connector === "cliproxy") {
-          let removed = false;
-          await serializeMutation(async () => {
-            const entry = cliproxyAccountEntries(env).find(
-              (candidate) =>
-                candidate.label === params.label && candidate.kind === resolved.kind
-            );
-            if (entry === undefined) return;
-            removed = removeCliproxyAccount(params.label, env).removed;
-            if (!removed) return;
-            await replaceRouter(currentConfig, currentDocument, {
-              write: false,
-              accountRevision: true
-            });
-          });
-          return { removed, revision: revisions.accounts };
-        }
-        if (params.kind !== "claude-code" && params.kind !== "codex") {
+        if (resolved === undefined) {
           throw new ControlError({
             code: "bad_request",
             message: `unknown subscription kind: ${params.kind}`
           });
         }
-        const kind = params.kind;
+        const kind = resolved.kind;
         let removed = false;
         await serializeMutation(async () => {
-          const directory = defaultSubscriptionAccountDirectory(kind, env);
-          const path = join(directory, `${params.label}.json`);
-          const previous = existsSync(path) ? readFileSync(path) : undefined;
-          const result = removeSubscriptionAccount(kind, params.label, {
-            accountsDirectory: directory
-          });
+          // Prefer the native account store when both connectors have a file
+          // for the same label (claude-code/codex). Fall back to the cliproxy
+          // store so legacy orphan auth files (type: claude|codex) and the
+          // gemini/grok/kimi kinds remain removable through one surface.
+          const nativeDirectory =
+            resolved.info.connector === "native"
+              ? defaultSubscriptionAccountDirectory(kind as SubscriptionMode, env)
+              : undefined;
+          const nativePath =
+            nativeDirectory !== undefined
+              ? join(nativeDirectory, `${params.label}.json`)
+              : undefined;
+          if (nativePath !== undefined && existsSync(nativePath)) {
+            const previous = readFileSync(nativePath);
+            const result = removeSubscriptionAccount(
+              kind as SubscriptionMode,
+              params.label,
+              { accountsDirectory: nativeDirectory }
+            );
+            removed = result.removed;
+            if (!result.removed) return;
+            try {
+              await replaceRouter(currentConfig, currentDocument, {
+                write: false,
+                accountRevision: true
+              });
+            } catch (error) {
+              writeFileAtomic(nativePath, previous.toString("utf8"), { mode: 0o600 });
+              chmodSync(nativePath, 0o600);
+              throw error;
+            }
+            return;
+          }
+          const entry = cliproxyAccountEntries(env).find(
+            (candidate) =>
+              candidate.label === params.label &&
+              cliproxyAccountMatchesKind(candidate, kind)
+          );
+          if (entry === undefined) return;
+          const previous = readFileSync(entry.path);
+          const result = removeCliproxyAccount(params.label, env);
           removed = result.removed;
           if (!result.removed) return;
           try {
@@ -765,10 +804,8 @@ export async function startRouteKitDaemon(
               accountRevision: true
             });
           } catch (error) {
-            if (previous !== undefined) {
-              writeFileAtomic(path, previous.toString("utf8"), { mode: 0o600 });
-              chmodSync(path, 0o600);
-            }
+            writeFileAtomic(entry.path, previous.toString("utf8"), { mode: 0o600 });
+            chmodSync(entry.path, 0o600);
             throw error;
           }
         });

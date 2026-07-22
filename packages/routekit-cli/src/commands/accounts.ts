@@ -14,7 +14,7 @@ import {
   resolveAccountKind
 } from "@routekit/accounts";
 import { contextFor } from "@routekit/cli-core";
-import { accountKinds } from "@routekit/registry";
+import { accountKinds, resolveAccountConnector } from "@routekit/registry";
 import { randomId } from "@routekit/runtime";
 import type { Command } from "commander";
 import { readFileSync } from "node:fs";
@@ -24,6 +24,15 @@ import { routekitClient } from "../client.js";
 /** The router provider a subscription kind routes through. */
 function providerForKind(kind: string, connector: "native" | "cliproxy"): string {
   return connector === "cliproxy" ? "cliproxy" : kind;
+}
+
+function isCliproxyAccount(entry: {
+  subscriptionKind?: string;
+  connector?: string;
+}): boolean {
+  if (entry.connector === "cliproxy") return true;
+  if (entry.subscriptionKind === undefined) return false;
+  return resolveAccountConnector(entry.subscriptionKind)?.info.connector === "cliproxy";
 }
 
 async function activateAccount(provider: string): Promise<string> {
@@ -174,12 +183,16 @@ export function registerAccounts(program: Command): void {
       } else if (result.removed) {
         ctx.presenter.success(`removed ${resolved.kind}/${name}`);
         const remaining = await (await routekitClient()).call("accounts.list", {});
-        if (
-          (remaining.accounts as Array<{ subscriptionKind?: string }>).every(
-            (entry) => entry.subscriptionKind !== resolved.kind
-          )
-        ) {
-          const routerProvider = providerForKind(resolved.kind, resolved.connector);
+        const accounts = remaining.accounts as Array<{
+          subscriptionKind?: string;
+          connector?: string;
+        }>;
+        const routerProvider = providerForKind(resolved.kind, resolved.connector);
+        const shouldSuggestProviderRemove =
+          resolved.connector === "cliproxy"
+            ? !accounts.some((entry) => isCliproxyAccount(entry))
+            : accounts.every((entry) => entry.subscriptionKind !== resolved.kind);
+        if (shouldSuggestProviderRemove) {
           ctx.presenter.note(
             `run \`routekit providers remove ${routerProvider}\` to stop subscription routing`
           );

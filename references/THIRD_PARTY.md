@@ -8,11 +8,11 @@
 | --- | --- | --- | --- |
 | `references/opencode/` | `sst/opencode` | `https://github.com/sst/opencode/tree/3adfb970bf071419599ca016ebd2b08361fa28e9` | MIT |
 | `references/t3code/` | `pingdotgg/t3code` | `https://github.com/pingdotgg/t3code/tree/7b9eef7ac29f9d4819c6411dfb1c5f04fef50264/apps/server/src/provider` | MIT |
-| `references/cliproxyapi/` | `router-for-me/CLIProxyAPI` | `https://github.com/router-for-me/CLIProxyAPI/tree/6279bb8a4c2835ff6ed99c6b85083b2afbefa681` (= release `v7.2.72`, the version pinned by `routekit accounts cliproxy install`) | MIT |
+| `references/cliproxyapi/` | `router-for-me/CLIProxyAPI` | `https://github.com/router-for-me/CLIProxyAPI/tree/6279bb8a4c2835ff6ed99c6b85083b2afbefa681` (= release `v7.2.72`, the sidecar binary pinned by `routekit accounts login <gemini|grok|kimi>`) | MIT |
 
 The upstream license texts are copied into `references/opencode/LICENSE`, `references/t3code/LICENSE`, and `references/cliproxyapi/LICENSE`.
 
-`references/cliproxyapi/` snapshots the source of the CLIProxyAPI sidecar consumed by the `cliproxy` panel provider (see `docs/cliproxy-upstream.md`): `internal/` (executors, translators, auth flows), `sdk/` (the embeddable Go SDK), `cmd/`, `test/`, `docs/`, the `custom-provider` example, and root metadata (`README.md`, `AGENTS.md`, `config.example.yaml`, `go.mod`, `go.sum`, `LICENSE`). Deliberately not vendored: `assets/` (sponsor images), localized READMEs, `.github/`, and Docker files. It is study material for the wire formats, OAuth flows, and rotation behavior our integration relies on — never built or imported.
+`references/cliproxyapi/` snapshots the source of the CLIProxyAPI sidecar consumed by the `cliproxy` panel provider (see `docs/subscription-pooling.md`): `internal/` (executors, translators, auth flows), `sdk/` (the embeddable Go SDK), `cmd/`, `test/`, `docs/`, the `custom-provider` example, and root metadata (`README.md`, `AGENTS.md`, `config.example.yaml`, `go.mod`, `go.sum`, `LICENSE`). Deliberately not vendored: `assets/` (sponsor images), localized READMEs, `.github/`, and Docker files. It is study material for the wire formats, OAuth flows, and rotation behavior our integration relies on — never built or imported.
 
 ## Local redactions
 

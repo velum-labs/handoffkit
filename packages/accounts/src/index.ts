@@ -124,6 +124,7 @@ export type { CliproxyInstallResult, CliproxyStatus } from "./cliproxy.js";
 // Account connectors: one login surface over native + cliproxy mechanisms
 export {
   cliproxyAccountEntries,
+  cliproxyAccountMatchesKind,
   loginCliproxyAccount,
   removeCliproxyAccount,
   resolveAccountKind

@@ -383,6 +383,19 @@ test("daemon owns the cliproxy sidecar: spawn, restart, account routing, shutdow
     // accounts.sync rescans the store; accounts.remove routes by connector.
     const synced = await client.call("accounts.sync", {}, { idempotencyKey: "sync-1" });
     assert.equal(synced.synced, true);
+    // Legacy cliproxy claude auth files list under the raw type but remove
+    // through the native kind alias (`claude` → `claude-code`).
+    writeFileSync(
+      join(authDirectory, "legacy-claude@example.com.json"),
+      JSON.stringify({ type: "claude" })
+    );
+    const orphanRemoved = await client.call(
+      "accounts.remove",
+      { kind: "claude-code", label: "legacy-claude@example.com" },
+      { idempotencyKey: "remove-legacy-claude" }
+    );
+    assert.equal(orphanRemoved.removed, true);
+    assert.equal(existsSync(join(authDirectory, "legacy-claude@example.com.json")), false);
     const removed = await client.call(
       "accounts.remove",
       { kind: "gemini", label: "antigravity-user@example.com" },

@@ -3,7 +3,7 @@ import { Command } from "commander";
 import { completionCandidates as coreCompletionCandidates } from "@routekit/cli-core";
 import { configuredProviderIds } from "@routekit/config";
 import { PROVIDER_IDS } from "@routekit/gateway";
-import { accountKinds } from "@routekit/registry";
+import { accountKinds, resolveAccountConnector } from "@routekit/registry";
 
 import { listAccounts } from "./accounts.js";
 import { globalRouterConfigPath, loadRouterConfig } from "./config.js";
@@ -81,10 +81,13 @@ function dynamicValues(
     return [...accountKinds()];
   }
   if (group === "accounts" && subcommand === "remove" && argumentDepth === 1) {
-    const subscriptionKind =
-      positional[0] === "claude" ? "claude-code" : positional[0];
+    const resolved = resolveAccountConnector(positional[0] ?? "");
+    if (resolved === undefined) return [];
     return listAccounts()
-      .filter((entry) => entry.subscriptionKind === subscriptionKind)
+      .filter((entry) => {
+        if (entry.subscriptionKind === resolved.kind) return true;
+        return resolveAccountConnector(entry.subscriptionKind)?.kind === resolved.kind;
+      })
       .map((entry) => entry.label);
   }
   if (group === "completion" && argumentDepth === 0) return ["bash", "zsh", "fish"];

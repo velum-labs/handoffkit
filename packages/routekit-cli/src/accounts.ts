@@ -11,6 +11,7 @@ import {
   cliproxyAccountEntries,
   defaultSubscriptionAccountDirectory
 } from "@routekit/accounts";
+import { ACCOUNT_CONNECTORS } from "@routekit/registry";
 import type { SubscriptionMode } from "@routekit/registry";
 
 export type AccountListEntry = {
@@ -20,9 +21,14 @@ export type AccountListEntry = {
   connector: "native" | "cliproxy";
 };
 
+function nativeSubscriptionKinds(): SubscriptionMode[] {
+  return Object.entries(ACCOUNT_CONNECTORS)
+    .filter(([, info]) => info.connector === "native")
+    .map(([kind]) => kind as SubscriptionMode);
+}
+
 export function listAccounts(): AccountListEntry[] {
-  const subscriptionKinds: readonly SubscriptionMode[] = ["claude-code", "codex"];
-  const native = subscriptionKinds.flatMap((subscriptionKind) => {
+  const native = nativeSubscriptionKinds().flatMap((subscriptionKind) => {
     const directory = defaultSubscriptionAccountDirectory(subscriptionKind);
     if (!existsSync(directory)) return [];
     return readdirSync(directory)

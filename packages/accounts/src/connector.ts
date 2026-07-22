@@ -106,18 +106,31 @@ export function cliproxyAccountEntries(
   });
 }
 
+/**
+ * Whether a cliproxy auth-store entry belongs to a canonical account kind.
+ * Matches the classified kind and aliases (including legacy orphan files whose
+ * raw `type` is an alias of a native kind, e.g. `claude` → `claude-code`).
+ */
+export function cliproxyAccountMatchesKind(
+  entry: CliproxyAccountEntry,
+  kind: string
+): boolean {
+  if (entry.kind === kind) return true;
+  return resolveAccountConnector(entry.kind)?.kind === kind;
+}
+
 /** Remove one CLIProxyAPI account by its label (auth-store file stem). */
 export function removeCliproxyAccount(
   label: string,
   env: Readonly<Record<string, string | undefined>> = process.env
-): { removed: boolean } {
+): { removed: boolean; path?: string } {
   const entry = cliproxyAccountEntries(env).find(
     (candidate) => candidate.label === label
   );
   if (entry === undefined) return { removed: false };
   if (basename(entry.path) !== `${label}.json`) return { removed: false };
   rmSync(entry.path, { force: true });
-  return { removed: true };
+  return { removed: true, path: entry.path };
 }
 
 export type CliproxyLoginInvocation = {
@@ -180,9 +193,14 @@ export async function loginCliproxyAccount(
   };
   const code = await (options.runLogin ?? spawnCliproxyLogin)(invocation);
   if (code !== 0) throw new Error(`CLIProxyAPI login exited with code ${code}`);
-  const added = cliproxyAccountEntries(env).filter((entry) => !before.has(entry.path));
-  if (added.length === 0) {
-    throw new Error("CLIProxyAPI login completed without adding an account");
-  }
-  return { added };
+  const after = cliproxyAccountEntries(env);
+  const added = after.filter((entry) => !before.has(entry.path));
+  if (added.length > 0) return { added };
+  // Re-login often overwrites the same auth file in place; treat a still-
+  // present account of this kind as a successful refresh rather than a miss.
+  const refreshed = after.filter((entry) =>
+    cliproxyAccountMatchesKind(entry, resolved.kind)
+  );
+  if (refreshed.length > 0) return { added: refreshed };
+  throw new Error("CLIProxyAPI login completed without adding an account");
 }

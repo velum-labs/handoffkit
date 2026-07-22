@@ -142,7 +142,12 @@ test("account removal completion only suggests managed labels for its provider",
   const root = mkdtempSync(join(tmpdir(), "routekit-account-completion-"));
   const previousHome = process.env.ROUTEKIT_HOME;
   mkdirSync(join(root, "subscriptions", "codex"), { recursive: true });
+  mkdirSync(join(root, "cliproxy", "auth"), { recursive: true });
   writeFileSync(join(root, "subscriptions", "codex", "work.json"), "{}\n");
+  writeFileSync(
+    join(root, "cliproxy", "auth", "antigravity-user@example.com.json"),
+    JSON.stringify({ type: "antigravity" })
+  );
   process.env.ROUTEKIT_HOME = root;
   try {
     assert.deepEqual(
@@ -152,6 +157,20 @@ test("account removal completion only suggests managed labels for its provider",
     assert.deepEqual(
       completionCandidates(buildProgram(), ["accounts", "remove", "claude", "w"]),
       []
+    );
+    // Aliases resolve to the canonical kind's labels.
+    assert.deepEqual(
+      completionCandidates(buildProgram(), [
+        "accounts",
+        "remove",
+        "antigravity",
+        "a"
+      ]),
+      ["antigravity-user@example.com"]
+    );
+    assert.deepEqual(
+      completionCandidates(buildProgram(), ["accounts", "remove", "gemini", "a"]),
+      ["antigravity-user@example.com"]
     );
   } finally {
     if (previousHome === undefined) delete process.env.ROUTEKIT_HOME;

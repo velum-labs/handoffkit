@@ -42,7 +42,7 @@ contract. Product CLIs can wrap this module without owning account logic.
 - `export type { SubscriptionUsageSource } from "./usage.js";`
 - `export { CLIPROXY_API_KEY_ENV, CLIPROXY_BASE_URL_ENV, CLIPROXY_HOME_ENV, CLIPROXY_PINNED_VERSION, cliproxyAssetName, cliproxyApiKey, cliproxyBaseUrl, cliproxyBinaryPath, cliproxyConfigPath, cliproxyHome, cliproxyManagedPort, cliproxyStatus, ensureCliproxyConfig, installCliproxy, spawnCliproxy } from "./cliproxy.js";`
 - `export type { CliproxyInstallResult, CliproxyStatus } from "./cliproxy.js";`
-- `export { cliproxyAccountEntries, loginCliproxyAccount, removeCliproxyAccount, resolveAccountKind } from "./connector.js";`
+- `export { cliproxyAccountEntries, cliproxyAccountMatchesKind, loginCliproxyAccount, removeCliproxyAccount, resolveAccountKind } from "./connector.js";`
 - `export type { CliproxyAccountEntry, CliproxyLoginInvocation, CliproxyLoginOptions, ResolvedAccountKind } from "./connector.js";`
 - `export { captureLoginCredential, claudeProfileKeychainService, parseAccountMode } from "./managed-login.js";`
 - `export type { ManagedAccountLoginInvocation, ManagedAccountLoginOptions, ManagedLoginKeychain } from "./managed-login.js";`
