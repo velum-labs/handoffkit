@@ -187,7 +187,11 @@ function resolveNativeModelRoute(
   requested: string | undefined
 ): BackendModelRoute | undefined {
   if (backend.resolveModelRoute === undefined) return undefined;
-  return backend.resolveModelRoute(requested, provider);
+  const route = backend.resolveModelRoute(requested, provider);
+  if (route === undefined && requested !== undefined) {
+    throw new UnknownModelError(requested);
+  }
+  return route;
 }
 
 function initialAttribution(
@@ -630,11 +634,33 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
         rawBody.model,
         backend.listModelIds?.()
       );
-      const route = resolveNativeModelRoute(
-        backend,
-        "claude-code",
-        resolvedModel
-      );
+      let route: BackendModelRoute | undefined;
+      try {
+        route = resolveNativeModelRoute(
+          backend,
+          "claude-code",
+          resolvedModel
+        );
+      } catch (error) {
+        const rejectedBody =
+          resolvedModel === undefined || resolvedModel === rawBody.model
+            ? rawBody
+            : withModel(rawBody, resolvedModel);
+        await handleModelCall(res, provenance, {
+          dialect: "anthropic-messages",
+          body: rejectedBody,
+          defaultModel: backend.defaultModel,
+          attribution: initialAttribution(
+            backend,
+            resolvedModel,
+            "claude-code"
+          ),
+          invoke: async () => {
+            throw error;
+          }
+        });
+        return;
+      }
       const canonicalModel = route?.publicId ?? resolvedModel;
       const body =
         canonicalModel === rawBody.model || canonicalModel === undefined
@@ -722,10 +748,28 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
       // auth — forward it verbatim to the Codex backend instead of silently
       // folding it into the default.
       const requestedModel = typeof body.model === "string" ? body.model : undefined;
-      const route =
-        codexProviderRelay === undefined
-          ? backend.resolveModelRoute?.(requestedModel)
-          : resolveNativeModelRoute(backend, "codex", requestedModel);
+      let route: BackendModelRoute | undefined;
+      try {
+        route =
+          codexProviderRelay === undefined
+            ? backend.resolveModelRoute?.(requestedModel)
+            : resolveNativeModelRoute(backend, "codex", requestedModel);
+      } catch (error) {
+        await handleModelCall(res, provenance, {
+          dialect: "openai-responses",
+          body,
+          defaultModel: backend.defaultModel,
+          attribution: initialAttribution(
+            backend,
+            requestedModel,
+            "codex"
+          ),
+          invoke: async () => {
+            throw error;
+          }
+        });
+        return;
+      }
       const routedBody = withoutStaleCodexIdentity(body, route);
       const canonicalBody =
         route === undefined || route.publicId === requestedModel
