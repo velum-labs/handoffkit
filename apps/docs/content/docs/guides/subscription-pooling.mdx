@@ -57,6 +57,15 @@ model only to members that advertise it. Quota windows, refresh, cooldowns, and
 reset times remain independent per account. Use the advertised namespaced ID
 in `.fusionkit/fusion.json`:
 
+Capability conflicts are deterministic. Explicit `reasoningCapabilities`
+configuration wins first. Otherwise, native pools use the first successfully
+discovered account in configured order that reports reasoning metadata for the
+model. Directory-backed accounts are ordered by account filename; explicit
+paths retain caller order. Failed accounts and accounts without that metadata
+are skipped. Gemini, Grok, and Kimi expose one CLIProxy-aggregated catalog, so
+RouteKit performs no per-account capability merge for those connector-backed
+accounts; explicit configuration still overrides the discovered catalog.
+
 ```json
 {
   "version": "fusionkit.fusion.v4",
