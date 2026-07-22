@@ -284,7 +284,7 @@ Use it with the narrative references when you need to find the module that owns 
 - `packages/routekit-cli/src/commands/doctor.ts`: registerDoctor (function)
 - `packages/routekit-cli/src/commands/gateway-service.ts`: daemonSupervisorController (function), platformSupervisor (function), registerDaemonService (function), registerLogs (function)
 - `packages/routekit-cli/src/commands/index.ts`: registerCommands (function)
-- `packages/routekit-cli/src/commands/install.ts`: registerCodexIntegration (function)
+- `packages/routekit-cli/src/commands/install.ts`: registerCodexIntegration (function), registerClaudeIntegration (function)
 - `packages/routekit-cli/src/commands/launchers.ts`: registerLaunchers (function)
 - `packages/routekit-cli/src/commands/models.ts`: registerModels (function)
 - `packages/routekit-cli/src/commands/providers.ts`: registerProviders (function)
@@ -372,6 +372,7 @@ Use it with the narrative references when you need to find the module that owns 
 
 - `packages/tool-claude/src/driver.ts`: claudeDriverConfigSchema (const), ClaudeDriverConfig (type), ClaudeQueryFn (type), ClaudeDriverOptions (type), createClaudeDriver (function)
 - `packages/tool-claude/src/index.ts`: claudeTool (const)
+- `packages/tool-claude/src/install.ts`: ClaudeInstallOwner (type), ClaudeInstallInput (type), ClaudeInstallResult (type), installClaudeIntegration (function), uninstallClaudeIntegration (function)
 - `packages/tool-claude/src/launch.ts`: claudeEnv (function), claudeAgentsJson (function), claudeLaunchArgs (function), launchClaude (function)
 
 ### `packages/tool-codex`

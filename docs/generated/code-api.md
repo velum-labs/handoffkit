@@ -705,6 +705,8 @@ No module JSDoc was found.
 - `export const claudeTool: ToolIntegration ...`
 - `export { claudeDriverConfigSchema, createClaudeDriver } from "./driver.js";`
 - `export type { ClaudeDriverConfig, ClaudeDriverOptions, ClaudeQueryFn } from "./driver.js";`
+- `export { installClaudeIntegration, uninstallClaudeIntegration } from "./install.js";`
+- `export type { ClaudeInstallInput, ClaudeInstallOwner, ClaudeInstallResult } from "./install.js";`
 - `export { claudeAgentsJson, claudeEnv, claudeLaunchArgs, launchClaude } from "./launch.js";`
 
 ### `packages/tool-codex/src/index.ts`
@@ -750,6 +752,8 @@ Canonical registry of the coding-tool integrations shipped by RouteKit.
 Add a new integration to `toolIntegrations`; consumers receive it through
 `toolRegistry` without maintaining their own package imports or lists.
 
+- `export { installClaudeIntegration, uninstallClaudeIntegration } from "@routekit/tool-claude";`
+- `export type { ClaudeInstallInput, ClaudeInstallOwner, ClaudeInstallResult } from "@routekit/tool-claude";`
 - `export { codexIntegrationBlock, installCodexIntegration, uninstallCodexIntegration } from "@routekit/tool-codex";`
 - `export type { CodexInstallInput, CodexInstallOwner, CodexInstallProfile, CodexInstallResult } from "@routekit/tool-codex";`
 - `export const toolIntegrations: readonly ToolIntegration[] ...`
