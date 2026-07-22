@@ -122,7 +122,7 @@ results remain pending the L06 real-account matrix.
   install/uninstall, exact settings restore, last-account removal, and
   interruption recovery passed the credential-free
   [ENG-682 qualification](routekit-claude-recovery-evidence.md).
-- **Evidence:** RouteKit 0.8.0 / `b05434ab` / 2026-07-22 automated recovery
+- **Evidence:** RouteKit 0.8.0 / `4e5a45b9` / 2026-07-22 automated recovery
   review. Exact Claude Code version and real-account qualification remain
   pending L06 under ENG-679.
 

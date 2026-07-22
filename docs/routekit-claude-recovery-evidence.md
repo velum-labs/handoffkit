@@ -3,7 +3,7 @@
 - Date: 2026-07-22
 - Issue: [ENG-682](https://linear.app/velum-labs/issue/ENG-682/restore-claude-enrollment-and-recovery-parity)
 - Pull request: [#162](https://github.com/velum-labs/handoffkit/pull/162)
-- Implementation revision tested: [`b05434ab`](https://github.com/velum-labs/handoffkit/commit/b05434aba74ef0a49871a1165c979239bb686549)
+- Implementation revision tested: [`4e5a45b9`](https://github.com/velum-labs/handoffkit/commit/4e5a45b927715d220f5362e79146761f7413252e)
 
 ## Result
 
