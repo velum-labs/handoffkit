@@ -1,10 +1,15 @@
 import { contextFor } from "@routekit/cli-core";
 import { trimTrailingSlashes } from "@routekit/runtime";
 import {
+  installClaudeIntegration,
   installCodexIntegration,
+  uninstallClaudeIntegration,
   uninstallCodexIntegration
 } from "@routekit/tool-registry";
-import type { CodexInstallOwner } from "@routekit/tool-registry";
+import type {
+  ClaudeInstallOwner,
+  CodexInstallOwner
+} from "@routekit/tool-registry";
 import type { Command } from "commander";
 
 import { routekitClient } from "../client.js";
@@ -15,6 +20,14 @@ const CODEX_OWNER: CodexInstallOwner = {
   providerId: "routekit",
   installCommand: "routekit codex install",
   uninstallCommand: "routekit codex uninstall",
+  startCommand: "routekit start"
+};
+
+const CLAUDE_OWNER: ClaudeInstallOwner = {
+  id: "routekit",
+  displayName: "RouteKit",
+  installCommand: "routekit claude install",
+  uninstallCommand: "routekit claude uninstall",
   startCommand: "routekit start"
 };
 
@@ -75,5 +88,55 @@ export function registerCodexIntegration(codex: Command): void {
       if (ctx.json) ctx.emit(result);
       else if (result.removed) ctx.presenter.success(`removed RouteKit from ${result.configPath}`);
       else ctx.presenter.note(`no RouteKit block found in ${result.configPath}`);
+    });
+}
+
+export function registerClaudeIntegration(claude: Command): void {
+  claude
+    .command("install")
+    .description("install RouteKit-owned Claude Code gateway settings")
+    .option("--gateway-url <url>", "override the singleton daemon gateway URL")
+    .option("--claude-config-dir <dir>", "Claude Code configuration directory")
+    .action(
+      async (
+        options: { gatewayUrl?: string; claudeConfigDir?: string },
+        command: Command
+      ) => {
+        const ctx = contextFor(command);
+        const client = await routekitClient();
+        const [daemon, catalog] = await Promise.all([
+          client.call("daemon.status", {}),
+          client.call("models.list", {})
+        ]);
+        const modelId = catalog.models[0]?.id;
+        const result = installClaudeIntegration({
+          gatewayUrl: trimTrailingSlashes(options.gatewayUrl ?? daemon.dataUrl),
+          owner: CLAUDE_OWNER,
+          ...(modelId !== undefined ? { modelId } : {}),
+          ...(options.claudeConfigDir !== undefined
+            ? { claudeConfigDir: options.claudeConfigDir }
+            : {})
+        });
+        if (ctx.json) ctx.emit(result);
+        else ctx.presenter.success(`${result.action} RouteKit in ${result.configPath}`);
+      }
+    );
+
+  claude
+    .command("uninstall")
+    .description("remove RouteKit-owned Claude Code gateway settings")
+    .option("--claude-config-dir <dir>", "Claude Code configuration directory")
+    .action(async (options: { claudeConfigDir?: string }, command: Command) => {
+      const ctx = contextFor(command);
+      await (await routekitClient()).call("daemon.status", {});
+      const result = uninstallClaudeIntegration({
+        ownerId: CLAUDE_OWNER.id,
+        ...(options.claudeConfigDir !== undefined
+          ? { claudeConfigDir: options.claudeConfigDir }
+          : {})
+      });
+      if (ctx.json) ctx.emit(result);
+      else if (result.removed) ctx.presenter.success(`removed RouteKit from ${result.configPath}`);
+      else ctx.presenter.note(`no RouteKit settings found in ${result.configPath}`);
     });
 }

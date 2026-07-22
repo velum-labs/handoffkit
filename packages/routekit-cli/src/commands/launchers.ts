@@ -11,7 +11,10 @@ import {
   type LaunchToolId
 } from "../launch-support.js";
 
-import { registerCodexIntegration } from "./install.js";
+import {
+  registerClaudeIntegration,
+  registerCodexIntegration
+} from "./install.js";
 
 export function registerLaunchers(program: Command): void {
   for (const integration of routekitToolRegistry
@@ -32,6 +35,9 @@ export function registerLaunchers(program: Command): void {
     }
     if (integration.id === "codex") {
       registerCodexIntegration(command);
+    }
+    if (integration.id === "claude") {
+      registerClaudeIntegration(command);
     }
     command.action(
       async (
