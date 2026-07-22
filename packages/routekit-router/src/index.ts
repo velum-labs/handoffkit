@@ -52,6 +52,7 @@ export type RunningRouter = {
   url: string;
   close(): Promise<void>;
   providerStatuses(signal?: AbortSignal): ReturnType<CatalogBackend["providerStatuses"]>;
+  modelInfo(model: string): ReturnType<CatalogBackend["modelInfo"]>;
   accountSnapshots(): SubscriptionAccountSetSnapshot[];
   usage(signal?: AbortSignal): Promise<SubscriptionUsageResponse>;
 };
@@ -217,6 +218,7 @@ export async function startRouter(options: StartRouterOptions): Promise<RunningR
     url: gateway.url(),
     close,
     providerStatuses: async (signal) => await backend.providerStatuses(signal),
+    modelInfo: (model) => backend.modelInfo(model),
     accountSnapshots: () =>
       Object.values(accountSets).map((accountSet) => accountSet.statusSnapshot()),
     usage: async (signal) => {

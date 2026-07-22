@@ -29,7 +29,18 @@ async function mockProvider(): Promise<{
   const server = createServer((req, res) => {
     if (req.url === "/v1/models") {
       res.setHeader("content-type", "application/json");
-      res.end(JSON.stringify({ data: [{ id: "mock-model", object: "model" }] }));
+      res.end(
+        JSON.stringify({
+          data: [
+            {
+              id: "mock-model",
+              object: "model",
+              capabilities: { streaming: "supported", tools: "degraded" },
+              supported_reasoning_levels: ["high"]
+            }
+          ]
+        })
+      );
       return;
     }
     req.resume();
@@ -113,6 +124,26 @@ test("singleton daemon exposes authenticated control and a stable reloadable dat
     assert.equal(status.dataUrl, daemon.dataUrl);
     const models = await client.call("models.list", {});
     assert.deepEqual(models.models.map((model) => model.id), ["openai/mock-model"]);
+    const modelInfo = await client.call("models.info", { model: "openai/mock-model" });
+    assert.equal(modelInfo.id, "openai/mock-model");
+    assert.equal(modelInfo.provider, "openai");
+    assert.equal(modelInfo.nativeModel, "mock-model");
+    assert.equal(modelInfo.accountClass, "api-key");
+    assert.equal(modelInfo.billingMode, "metered-api");
+    assert.equal(modelInfo.default, true);
+    assert.deepEqual(modelInfo.capabilities, {
+      streaming: "supported",
+      tools: "degraded"
+    });
+    assert.deepEqual(modelInfo.reasoning?.efforts, [{ id: "high" }]);
+    assert.doesNotMatch(JSON.stringify(modelInfo), /test-key/);
+    await assert.rejects(
+      client.call("models.info", { model: "openai/not-real" }),
+      (error: unknown) =>
+        error instanceof ControlError &&
+        error.code === "not_found" &&
+        /unknown model/.test(error.message)
+    );
 
     const beforeUrl = status.dataUrl;
     const snapshot = await client.call("config.get", {});

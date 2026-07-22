@@ -39,7 +39,7 @@ availability still apply.
 
 - **Status and evidence:** Planned Supported after L06. RouteKit 0.8.0,
   revision `2f9914d5`, reviewed 2026-07-22. Exact live model/API qualification
-  is pending.
+  is pending. [Durable L06 evidence](https://github.com/velum-labs/handoffkit/blob/main/docs/routekit-l06-evidence.md#route-openai-api).
 - **Credential:** Your `OPENAI_API_KEY` from your OpenAI API account. An
   operator may explicitly set `OPENAI_BASE_URL`; RouteKit does not accept an
   inline key in router YAML.
@@ -64,7 +64,7 @@ availability still apply.
 
 - **Status and evidence:** Planned Supported after L06. RouteKit 0.8.0,
   revision `2f9914d5`, reviewed 2026-07-22. Exact live model/API qualification
-  is pending.
+  is pending. [Durable L06 evidence](https://github.com/velum-labs/handoffkit/blob/main/docs/routekit-l06-evidence.md#route-anthropic-api).
 - **Credential:** Your `ANTHROPIC_API_KEY` from the Anthropic API account.
   `ANTHROPIC_BASE_URL` is an explicit destination override. RouteKit does not
   currently use `ANTHROPIC_AUTH_TOKEN` for provider requests.
@@ -90,7 +90,7 @@ availability still apply.
 
 - **Status and evidence:** Planned Supported after L06. RouteKit 0.8.0,
   revision `2f9914d5`, reviewed 2026-07-22. Exact live model/upstream
-  qualification is pending.
+  qualification is pending. [Durable L06 evidence](https://github.com/velum-labs/handoffkit/blob/main/docs/routekit-l06-evidence.md#route-openrouter-api).
 - **Credential:** Your `OPENROUTER_API_KEY` from your OpenRouter account.
 - **Billing:** RouteKit treats this as an OpenRouter API-key/credit route, not a
   native subscription route. OpenRouter determines charges and credit usage;
@@ -118,6 +118,7 @@ availability still apply.
 - **Status and evidence:** Planned Supported after L06. RouteKit 0.8.0,
   revision `2f9914d5`, reviewed 2026-07-22. Exact Codex CLI version, live
   account result, and setup/restore result are pending.
+  [Durable L06 evidence](https://github.com/velum-labs/handoffkit/blob/main/docs/routekit-l06-evidence.md#route-codex-subscription).
 - **Credential:** Your Codex OAuth credential, captured with `routekit accounts
   login codex --name <label>` in an isolated temporary profile or imported
   from the official CLI with `accounts add`. RouteKit stores the enrolled copy
@@ -146,6 +147,7 @@ availability still apply.
 - **Status and evidence:** Planned Supported after L06. RouteKit 0.8.0,
   revision `2f9914d5`, reviewed 2026-07-22. Exact Claude Code version, live
   account result, and restore/recovery result are pending.
+  [Durable L06 evidence](https://github.com/velum-labs/handoffkit/blob/main/docs/routekit-l06-evidence.md#route-claude-code-subscription).
 - **Credential:** Your Claude Code OAuth credential, captured with `routekit
   accounts login claude-code --name <label>` in an isolated temporary profile
   or imported with `accounts add`. RouteKit stores the enrolled copy under
@@ -175,6 +177,7 @@ availability still apply.
 - **Status and evidence:** Planned Supported after L06. RouteKit 0.8.0,
   revision `2f9914d5`, reviewed 2026-07-22. Exact Cursor IDE version and
   authenticated desktop qualification are pending.
+  [Durable L06 evidence](https://github.com/velum-labs/handoffkit/blob/main/docs/routekit-l06-evidence.md#route-cursor-ide).
 - **Credential:** A logged-in Cursor desktop account plus the local gateway
   token used by the isolated custom-endpoint profile. The selected RouteKit
   model separately uses the API or subscription credential disclosed in its
@@ -204,6 +207,7 @@ availability still apply.
 - **Status and evidence:** Planned Supported after L06. RouteKit 0.8.0,
   revision `2f9914d5`, reviewed 2026-07-22. Exact `cursor-agent` version and
   authenticated CLI qualification are pending.
+  [Durable L06 evidence](https://github.com/velum-labs/handoffkit/blob/main/docs/routekit-l06-evidence.md#route-cursor-agent).
 - **Credential:** A logged-in `cursor-agent` account plus its local endpoint
   connection. The selected RouteKit model separately uses the credential in
   its provider row.
@@ -225,10 +229,22 @@ availability still apply.
 - **Unlimited use:** RouteKit makes no unlimited-use claim for either the
   selected provider route or Cursor services.
 
+## Inspect the effective route
+
+Run `routekit models info <provider/model>` to inspect the live route's
+namespaced and native model IDs, provider, account class, billing mode, default
+status, capabilities, and reasoning metadata. API-key routes report
+`api-key` / `metered-api`; managed Codex and Claude Code routes report
+`subscription` / `subscription`. Unknown models fail instead of falling through
+to a default, and the response does not include credentials or sensitive
+account details.
+
 ## Qualification evidence
 
 The deterministic matrix and its interpretation are documented in the
 [RouteKit end-to-end verification matrix](https://github.com/velum-labs/handoffkit/blob/2f9914d5dc04f4f7d604737b3085345572ac6226/docs/routekit-e2e-matrix.md).
+Route-explanation contract and redaction evidence is tracked in
+[`docs/routekit-route-info-evidence.md`](https://github.com/velum-labs/handoffkit/blob/main/docs/routekit-route-info-evidence.md).
 Public Supported labels require the separate sanitized L06 real-account report
 to record exact RouteKit revision, credential mode, client/provider version,
 evidence date, protocol behavior, billing attribution, and setup/restore

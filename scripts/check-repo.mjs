@@ -245,6 +245,9 @@ const requiredFiles = [
   "scripts/generate-model-fusion-openapi-sdk.mjs",
   "scripts/generate-code-docs.mjs",
   "scripts/generate-expected-behaviors.mjs",
+  "scripts/generate-routekit-l06-evidence.mjs",
+  "scripts/lib/routekit-l06-evidence.mjs",
+  "scripts/test/routekit-l06-evidence.test.mjs",
   "scripts/publish-npm-workspaces.mjs",
   "scripts/release.mjs",
   "scripts/lib/changelog.mjs",
@@ -254,6 +257,8 @@ const requiredFiles = [
   "release/workspace.release.json",
   "release/desired.json",
   "docs/privacy.md",
+  "docs/routekit-l06-evidence.json",
+  "docs/routekit-l06-evidence.md",
   "docs/routekit-routes-and-billing.md",
   "docs/subscription-pooling.md",
   "apps/docs/content/docs/guides/subscription-pooling.mdx",
@@ -265,6 +270,8 @@ const requiredFiles = [
   "docs/planning/ensemble-product-plan.md",
   "docs/specs/harness-prompt-passthrough.md",
   "docs/generated/code-api.md",
+  "spec/routekit/l06-evidence-map.json",
+  "spec/routekit/l06-evidence.json",
   "spec/testing/expected-behaviors.json",
   "docs/generated/expected-behaviors.md",
   "references/trackcn.json",
@@ -460,6 +467,36 @@ if (expectedBehaviorsCheck.stderr.trim()) {
 }
 if (expectedBehaviorsCheck.status !== 0) {
   fail("expected behavior documentation check failed");
+}
+
+const routekitEvidenceCheck = spawnSync(
+  process.execPath,
+  ["scripts/generate-routekit-l06-evidence.mjs", "--check"],
+  { encoding: "utf8" }
+);
+if (routekitEvidenceCheck.stdout.trim()) {
+  console.log(routekitEvidenceCheck.stdout.trim());
+}
+if (routekitEvidenceCheck.stderr.trim()) {
+  console.error(routekitEvidenceCheck.stderr.trim());
+}
+if (routekitEvidenceCheck.status !== 0) {
+  fail("RouteKit L06 evidence mapping or generated report is stale");
+}
+
+const routekitEvidenceTests = spawnSync(
+  process.execPath,
+  ["--test", "scripts/test/routekit-l06-evidence.test.mjs"],
+  { encoding: "utf8" }
+);
+if (routekitEvidenceTests.stdout.trim()) {
+  console.log(routekitEvidenceTests.stdout.trim());
+}
+if (routekitEvidenceTests.stderr.trim()) {
+  console.error(routekitEvidenceTests.stderr.trim());
+}
+if (routekitEvidenceTests.status !== 0) {
+  fail("RouteKit L06 evidence contract tests failed");
 }
 
 // The docs-site changelog page is generated from CHANGELOG.md; fail when it

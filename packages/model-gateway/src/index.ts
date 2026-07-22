@@ -37,6 +37,7 @@ export {
 } from "./router.js";
 export type {
   CatalogBackendOptions,
+  CatalogModelInfo,
   ProviderPolicy,
   RouterConfig,
 } from "./router.js";
