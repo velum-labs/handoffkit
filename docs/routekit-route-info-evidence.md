@@ -2,15 +2,17 @@
 
 Date: 2026-07-22  
 Issue: [ENG-678](https://linear.app/velum-labs/issue/ENG-678/expose-and-verify-routekit-route-and-billing-information)  
-Pull request: pending  
-Implementation revision tested: pending
+Pull request: [#161](https://github.com/velum-labs/handoffkit/pull/161)
+Implementation revision tested: `ec810142`
 
 ## Result
 
-Pending verification. The acceptance target is a secret-free
+Pass. RouteKit now exposes a secret-free
 `routekit models info <provider/model>` contract covering provider, native
 model, account class, billing mode, default status, capabilities, and reasoning
-metadata, with structured unknown-model rejection.
+metadata, with structured unknown-model rejection. Both JSON and human output
+were exercised against an isolated local provider and daemon; the injected API
+credential was absent from stdout and stderr.
 
 ## Automated evidence
 
@@ -27,16 +29,16 @@ remains owned by ENG-679.
 
 ## Verification
 
-The following commands will be recorded after the implementation revision is
-committed:
-
 ```text
-pnpm check
-pnpm build
-pnpm test
-pnpm test:e2e:matrix
+pnpm check             PASS
+pnpm build             PASS
+pnpm test              PASS
+pnpm test:e2e:matrix   PASS (13 pass, 0 fail, 12 optional-tool skips, billed=0)
 ```
 
-Manual process evidence will run both human and `--json` model inspection
-against an isolated local fixture daemon. Only sanitized output will be
-retained.
+The manual process check returned `openai/demo-model`, native model
+`demo-model`, account class `api-key`, billing mode `metered-api`, default
+`true` / `yes`, discovered streaming/tool capabilities, and provider reasoning
+metadata in both renderers. The fixture credential
+`demo-secret-should-not-leak` was checked against the captured output and was
+absent. No provider generation request or billed call was made.
