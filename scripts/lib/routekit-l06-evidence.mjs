@@ -231,7 +231,7 @@ export function promoteMatrixResults(mapping, source, matrixReport, revision) {
       assert.ok(result.routeIds.includes(route.id), `${item.caseId} does not map to ${route.id}`);
       return {
         ...item,
-        status: result.status,
+        status: result.status === "skip" ? "pending" : result.status,
         reference: `matrix:${result.caseId}`,
         result: {
           phase: result.phase,
@@ -241,7 +241,14 @@ export function promoteMatrixResults(mapping, source, matrixReport, revision) {
           billedCalls: result.billedCalls,
           artifact: result.artifact
         },
-        ...(result.reason === null ? {} : { summary: result.reason })
+        ...(result.reason === null
+          ? {}
+          : {
+              summary:
+                result.status === "skip"
+                  ? `Skipped; qualification remains pending: ${result.reason}`
+                  : result.reason
+            })
       };
     });
   }
