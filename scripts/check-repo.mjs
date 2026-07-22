@@ -601,7 +601,7 @@ const TRUSTED_THIRD_PARTY = new Map([
   ["pino", "10.3.1"],
   // Product telemetry engine: official PostHog server SDK (batched, async,
   // shutdown flush). Only the CLI's opt-in telemetry module uses it.
-  ["posthog-node", "5.39.4"],
+  ["posthog-node", "5.46.0"],
   // TOML parser/serializer used by RouteKit-owned Codex configuration.
   ["smol-toml", "1.7.0"],
   ["string-width", "8.2.1"],
