@@ -531,9 +531,9 @@ panel presets are deliberately excluded.
 - `export type AccountConnectorInfo ...`
 - `export const ACCOUNT_CONNECTORS: Readonly<Record<string, AccountConnectorInfo>> ...`
 - `export function accountKinds(): readonly string[] ...`
-  Canonical account kinds accepted by `routekit accounts login <kind>`.
+  Canonical account kinds known to the neutral registry (not a support contract).
 - `export function accountKindChoices(): readonly string[] ...`
-  Canonical account kinds plus every accepted user-facing alias.
+  Canonical registry kinds plus their aliases (not necessarily public CLI choices).
 - `export function resolveAccountConnector(`
   Resolve a user-supplied account kind (canonical name or alias) to its canonical kind and connector metadata.
 - `export function accountKindForCliproxyAuthType(type: string): string | undefined ...`
