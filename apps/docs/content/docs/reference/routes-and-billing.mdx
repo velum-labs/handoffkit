@@ -229,10 +229,22 @@ availability still apply.
 - **Unlimited use:** RouteKit makes no unlimited-use claim for either the
   selected provider route or Cursor services.
 
+## Inspect the effective route
+
+Run `routekit models info <provider/model>` to inspect the live route's
+namespaced and native model IDs, provider, account class, billing mode, default
+status, capabilities, and reasoning metadata. API-key routes report
+`api-key` / `metered-api`; managed Codex and Claude Code routes report
+`subscription` / `subscription`. Unknown models fail instead of falling through
+to a default, and the response does not include credentials or sensitive
+account details.
+
 ## Qualification evidence
 
 The deterministic matrix and its interpretation are documented in the
 [RouteKit end-to-end verification matrix](https://github.com/velum-labs/handoffkit/blob/2f9914d5dc04f4f7d604737b3085345572ac6226/docs/routekit-e2e-matrix.md).
+Route-explanation contract and redaction evidence is tracked in
+[`docs/routekit-route-info-evidence.md`](https://github.com/velum-labs/handoffkit/blob/main/docs/routekit-route-info-evidence.md).
 Public Supported labels require the separate sanitized L06 real-account report
 to record exact RouteKit revision, credential mode, client/provider version,
 evidence date, protocol behavior, billing attribution, and setup/restore

@@ -327,7 +327,7 @@ Product-neutral RouteKit gateway and router.
 - `export { AnthropicBackend, CodexResponsesBackend, GoogleGenAiBackend } from "./provider-backends.js";`
 - `export type { ProviderBackendOptions, ProviderTransport } from "./provider-backends.js";`
 - `export { CatalogBackend, isSubscriptionProvider, normalizeRouterConfigAliases, parseRouterConfig, routerConfigSchema, splitNamespacedModel, UnknownModelError } from "./router.js";`
-- `export type { CatalogBackendOptions, ProviderPolicy, RouterConfig, } from "./router.js";`
+- `export type { CatalogBackendOptions, CatalogModelInfo, ProviderPolicy, RouterConfig, } from "./router.js";`
 - `export { API_PROVIDER_IDS, ApiProviderSource, parseDiscoveredModels, parseReasoningCapabilities, PROVIDER_IDS, SUBSCRIPTION_PROVIDER_IDS } from "./provider-source.js";`
 - `export type { ApiProviderId, ApiProviderSourceOptions, DiscoveredModel, ProviderId, ProviderSource, ProviderSourceTransport, SubscriptionProviderId } from "./provider-source.js";`
 - `export { endpointHealthProbe, probeEndpointHealth, providerAuthHeaders } from "./endpoint-health.js";`
@@ -475,6 +475,10 @@ No module JSDoc was found.
 - `export type DaemonStatus ...`
 - `export type ConfigSnapshot ...`
 - `export type ModelInfo ...`
+- `export type ModelAccountClass ...`
+- `export type ModelBillingMode ...`
+- `export type ModelRouteInfo ...`
+  Secret-free explanation of one effective RouteKit model route.  The contract deliberately excludes account labels, filesystem paths, credential environment values, and transport authentication material.
 - `export type LaunchPreparation ...`
 - `export type RouteKitControlResults ...`
 - `export type RouteKitMethodHandler<M extends RouteKitControlMethod> ...`
