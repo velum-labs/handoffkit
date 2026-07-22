@@ -377,7 +377,7 @@ Use it with the narrative references when you need to find the module that owns 
 - `packages/tool-codex/src/driver.ts`: codexDriverConfigSchema (const), CodexDriverConfig (type), createCodexDriver (function)
 - `packages/tool-codex/src/index.ts`: codexTool (const)
 - `packages/tool-codex/src/install.ts`: CodexInstallProfile (type), CodexInstallOwner (type), CodexInstallInput (type), CodexInstallResult (type), codexIntegrationBlock (function), installCodexIntegration (function), uninstallCodexIntegration (function)
-- `packages/tool-codex/src/launch.ts`: CodexModelPreset (type), isCodexConfigFailure (function), tomlKey (function), readCodexModelsCache (function), readCodexCatalogTemplate (function), codexAuthPath (function), hasCodexLogin (function), codexListedStockSlugs (function), codexCatalogEntries (function), codexModelCatalogJson (function), codexProfileFileToml (function), codexProfileFiles (function), CodexAgentRole (type), codexAgentRoles (function), codexAgentRoleToml (function), codexLaunchConfigToml (function), launchCodex (function)
+- `packages/tool-codex/src/launch.ts`: CodexModelPreset (type), isCodexConfigFailure (function), tomlKey (function), readCodexModelsCache (function), readCodexCatalogTemplate (function), codexAuthPath (function), hasCodexLogin (function), createIsolatedCodexHome (function), codexListedStockSlugs (function), codexCatalogEntries (function), codexModelCatalogJson (function), codexProfileFileToml (function), codexProfileFiles (function), CodexAgentRole (type), codexAgentRoles (function), codexAgentRoleToml (function), codexLaunchConfigToml (function), launchCodex (function)
 
 ### `packages/tool-cursor`
 

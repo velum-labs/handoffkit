@@ -78,7 +78,7 @@ export type ResponsesRequest = {
    * member slug (e.g. `grok-4`, `deepseek`) resolves to Codex's fallback model
    * info, which has none. Null must translate as "no reasoning", never throw.
    */
-  reasoning?: { effort?: string; [key: string]: unknown } | null;
+  reasoning?: { effort?: string | null; [key: string]: unknown } | null;
   text?: { format?: { type?: string; name?: string; schema?: unknown; strict?: boolean; [key: string]: unknown } } | null;
   previous_response_id?: string | null;
   truncation?: string | unknown;
@@ -551,7 +551,10 @@ export function responsesToChat(
   // than treating it as an untranslatable field, and never dereference it.
   if (body.reasoning != null) {
     const effort = body.reasoning.effort;
-    if (typeof effort === "string" && effort.length > 0) {
+    if (effort == null) {
+      // Current Codex releases send `{ effort: null }` when no reasoning
+      // control was selected. Treat it exactly like `reasoning: null`.
+    } else if (typeof effort === "string" && effort.length > 0) {
       chat.reasoning_effort = effort;
       attachReasoningSelection(chat, { mode: "effort", effort });
     } else {

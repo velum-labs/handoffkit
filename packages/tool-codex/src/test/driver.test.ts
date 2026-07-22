@@ -10,14 +10,14 @@ import type { HarnessEvent } from "@routekit/harness-core";
 import { createCodexDriver } from "../driver.js";
 
 /**
- * A fake `codex` CLI: honors `--version`, and for `exec --experimental-json`
+ * A fake `codex` CLI: honors `--version`, and for `exec --json`
  * reads the prompt from stdin and emits the JSONL event stream the codex-sdk
  * parses (thread.started, turn.started, item, turn.completed). `resume <id>`
  * reuses the given thread id so resume round-trips are observable.
  */
 const FAKE_CODEX_CLI = `#!/usr/bin/env node
 const args = process.argv.slice(2);
-if (args[0] === "--version") { console.log("codex-cli 0.142.5"); process.exit(0); }
+if (args[0] === "--version") { console.log("codex-cli 0.145.0"); process.exit(0); }
 const resumeIdx = args.indexOf("resume");
 const threadId = resumeIdx >= 0 ? args[resumeIdx + 1] : "thread_fake_1";
 let input = "";

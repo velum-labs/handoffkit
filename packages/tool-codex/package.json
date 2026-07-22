@@ -26,11 +26,11 @@
     "provenance": true
   },
   "dependencies": {
+    "@openai/codex-sdk": "0.145.0",
     "@routekit/harness-core": "workspace:*",
     "@routekit/registry": "workspace:*",
     "@routekit/runtime": "workspace:*",
     "@routekit/tools": "workspace:*",
-    "@openai/codex-sdk": "0.142.5",
     "smol-toml": "1.7.0",
     "zod": "4.4.3"
   },

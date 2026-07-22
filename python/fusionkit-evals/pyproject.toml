@@ -28,7 +28,7 @@ dependencies = [
   "hyperkit==0.1.0",
   "pydantic>=2.12.5",
   "pyyaml>=6.0.3",
-  "typer>=0.26.8",
+  "typer>=0.27.0",
 ]
 
 [project.scripts]
@@ -54,5 +54,5 @@ livecodebench = [
 ]
 
 [build-system]
-requires = ["uv_build>=0.11.21,<0.12.0"]
+requires = ["uv_build>=0.11.29,<0.12.0"]
 build-backend = "uv_build"

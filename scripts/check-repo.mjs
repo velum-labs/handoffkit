@@ -557,7 +557,7 @@ const TRUSTED_THIRD_PARTY = new Map([
   // trimmed FusionKit CLI dependency closure. Downloads the official
   // cloudflared binary at runtime (no install scripts).
   ["untun", "0.1.3"],
-  ["@openai/codex-sdk", "0.142.5"],
+  ["@openai/codex-sdk", "0.145.0"],
   // OpenTelemetry: the tracing engine behind @fusionkit/tracing (spans + log
   // events, W3C propagation, batching, OTLP export). The exporter/logs line is
   // 0.x upstream; both lines are pinned exactly and bumped only as reviewed
@@ -601,7 +601,7 @@ const TRUSTED_THIRD_PARTY = new Map([
   ["pino", "10.3.1"],
   // Product telemetry engine: official PostHog server SDK (batched, async,
   // shutdown flush). Only the CLI's opt-in telemetry module uses it.
-  ["posthog-node", "5.39.4"],
+  ["posthog-node", "5.46.0"],
   // TOML parser/serializer used by RouteKit-owned Codex configuration.
   ["smol-toml", "1.7.0"],
   ["string-width", "8.2.1"],

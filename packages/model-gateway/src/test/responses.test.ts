@@ -212,6 +212,14 @@ test("responsesToChat tolerates reasoning: null and text: null (Codex custom-pro
   assert.equal(chat.response_format, undefined);
 });
 
+test("responsesToChat treats Codex reasoning effort null as absent", () => {
+  const chat = responsesToChat(
+    { model: "gpt-5.5", input: "say OK", reasoning: { effort: null } },
+    "gpt-5.5"
+  );
+  assert.equal(chat.reasoning_effort, undefined);
+});
+
 test("responsesToChat still maps a real reasoning effort", () => {
   const chat = responsesToChat(
     { model: "gpt-5.5", input: "say OK", reasoning: { effort: "medium" } },

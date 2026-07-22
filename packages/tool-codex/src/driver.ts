@@ -1,6 +1,4 @@
-import { mkdtempSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { rmSync } from "node:fs";
 
 import { z } from "zod";
 
@@ -34,6 +32,9 @@ import type {
   SessionTurnInput,
   StartSessionOptions
 } from "@routekit/harness-core";
+import { registerCleanup } from "@routekit/runtime";
+
+import { createIsolatedCodexHome } from "./launch.js";
 
 const RESUME_CURSOR_VERSION = 1;
 const DEFAULT_COMMAND = "codex";
@@ -49,8 +50,15 @@ const DEFAULT_COMMAND = "codex";
  */
 let sharedIsolatedHome: string | undefined;
 
-function isolatedCodexHome(): string {
-  sharedIsolatedHome ??= mkdtempSync(join(tmpdir(), "routekit-codex-driver-"));
+function isolatedCodexHome(env: Record<string, string | undefined>): string {
+  if (sharedIsolatedHome === undefined) {
+    const home = createIsolatedCodexHome("routekit-codex-driver-", env);
+    sharedIsolatedHome = home;
+    registerCleanup(() => {
+      rmSync(home, { recursive: true, force: true });
+      if (sharedIsolatedHome === home) sharedIsolatedHome = undefined;
+    });
+  }
   return sharedIsolatedHome;
 }
 
@@ -419,8 +427,9 @@ class CodexInstance implements HarnessInstance {
   /** An explicit `CODEX_HOME` in the driver env wins over the isolation. */
   #homeFor(): string | undefined {
     if (this.#config.provider.baseUrl === undefined) return undefined;
-    if (resolveDriverEnv(this.#context).CODEX_HOME !== undefined) return undefined;
-    return isolatedCodexHome();
+    const env = resolveDriverEnv(this.#context);
+    if (env.CODEX_HOME !== undefined) return undefined;
+    return isolatedCodexHome(env);
   }
 
   async startSession(options: StartSessionOptions): Promise<SessionHandle> {
