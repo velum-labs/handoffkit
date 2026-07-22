@@ -5,7 +5,7 @@
 Audience: maintainers reviewing the first-launch RouteKit support contract.
 
 - **RouteKit version:** 0.8.0
-- **Tested revision:** [`40271dc4906089d54108b910f45ba0852a47cb20`](https://github.com/velum-labs/handoffkit/commit/40271dc4906089d54108b910f45ba0852a47cb20)
+- **Tested revision:** [`4e090a1a1496140ab4e7df0b50bed66d07f1a85d`](https://github.com/velum-labs/handoffkit/commit/4e090a1a1496140ab4e7df0b50bed66d07f1a85d)
 - **Evidence date:** 2026-07-22
 - **Mapping schema:** 1
 - **Mapping digest:** `6882999e378bba583e2743349c7227539092737802337dcdccafa249b8108ebe`
@@ -24,14 +24,14 @@ sanitized record.
 
 | Evidence | Type | Status | Reference | Result details |
 | --- | --- | --- | --- | --- |
-| deterministic.openai.openai-chat | automated | pass | matrix:deterministic.openai.openai-chat | deterministic/openai/openai-chat; 92 ms; 0 billed calls |
-| live.openai.openai-chat | automated | pending | ENG-679 real-account matrix | — |
+| deterministic.openai.openai-chat | automated | pass | matrix:deterministic.openai.openai-chat | deterministic/openai/openai-chat; 91 ms; 0 billed calls |
+| live.openai.openai-chat | automated | pending | matrix:live.openai.openai-chat | Case was not present in the promoted report for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d. |
 
 | Required outcome | Status | Sanitized result |
 | --- | --- | --- |
-| protocolBehavior | pending | OpenAI Chat streaming and tool behavior awaits the mapped matrix cases. |
-| billingAttribution | pending | Live API-account attribution awaits ENG-679. |
-| failureBehavior | pending | Live quota and provider-error behavior awaits ENG-679. |
+| protocolBehavior | pending | Awaiting reviewed protocolBehavior outcome for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d. |
+| billingAttribution | pending | Awaiting reviewed billingAttribution outcome for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d. |
+| failureBehavior | pending | Awaiting reviewed failureBehavior outcome for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d. |
 | setupRestore | not-applicable | API-key routes do not provide provider-session restore. |
 
 <a id="route-anthropic-api"></a>
@@ -44,14 +44,14 @@ sanitized record.
 
 | Evidence | Type | Status | Reference | Result details |
 | --- | --- | --- | --- | --- |
-| deterministic.anthropic.anthropic-messages | automated | pass | matrix:deterministic.anthropic.anthropic-messages | deterministic/anthropic/anthropic-messages; 93 ms; 0 billed calls |
-| live.anthropic.anthropic-messages | automated | pending | ENG-679 real-account matrix | — |
+| deterministic.anthropic.anthropic-messages | automated | pass | matrix:deterministic.anthropic.anthropic-messages | deterministic/anthropic/anthropic-messages; 92 ms; 0 billed calls |
+| live.anthropic.anthropic-messages | automated | pending | matrix:live.anthropic.anthropic-messages | Case was not present in the promoted report for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d. |
 
 | Required outcome | Status | Sanitized result |
 | --- | --- | --- |
-| protocolBehavior | pending | Native Messages streaming, tools, and thinking await the mapped matrix cases. |
-| billingAttribution | pending | Live API-account attribution awaits ENG-679. |
-| failureBehavior | pending | Live quota and provider-error behavior awaits ENG-679. |
+| protocolBehavior | pending | Awaiting reviewed protocolBehavior outcome for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d. |
+| billingAttribution | pending | Awaiting reviewed billingAttribution outcome for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d. |
+| failureBehavior | pending | Awaiting reviewed failureBehavior outcome for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d. |
 | setupRestore | not-applicable | API-key routes do not provide provider-session restore. |
 
 <a id="route-openrouter-api"></a>
@@ -64,15 +64,15 @@ sanitized record.
 
 | Evidence | Type | Status | Reference | Result details |
 | --- | --- | --- | --- | --- |
-| deterministic.openrouter.openai-chat | automated | pass | matrix:deterministic.openrouter.openai-chat | deterministic/openrouter/openai-chat; 93 ms; 0 billed calls |
+| deterministic.openrouter.openai-chat | automated | pass | matrix:deterministic.openrouter.openai-chat | deterministic/openrouter/openai-chat; 89 ms; 0 billed calls |
 | deterministic.openrouter.dynamic-reasoning-capabilities | automated | pass | matrix:deterministic.openrouter.dynamic-reasoning-capabilities | deterministic/openrouter/dynamic-reasoning-capabilities; 48 ms; 0 billed calls |
-| live.openrouter.openai-chat | automated | pending | ENG-679 real-account matrix | — |
+| live.openrouter.openai-chat | automated | pending | matrix:live.openrouter.openai-chat | Case was not present in the promoted report for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d. |
 
 | Required outcome | Status | Sanitized result |
 | --- | --- | --- |
-| protocolBehavior | pending | Chat, streaming, tools, and capability-gated reasoning await the mapped cases. |
-| billingAttribution | pending | OpenRouter credit and upstream attribution await ENG-679. |
-| failureBehavior | pending | Live OpenRouter and upstream failure behavior awaits ENG-679. |
+| protocolBehavior | pending | Awaiting reviewed protocolBehavior outcome for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d. |
+| billingAttribution | pending | Awaiting reviewed billingAttribution outcome for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d. |
+| failureBehavior | pending | Awaiting reviewed failureBehavior outcome for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d. |
 | setupRestore | not-applicable | The API route has no provider-session restore. |
 
 <a id="route-codex-subscription"></a>
@@ -85,18 +85,18 @@ sanitized record.
 
 | Evidence | Type | Status | Reference | Result details |
 | --- | --- | --- | --- | --- |
-| deterministic.codex.codex-responses | automated | pass | matrix:deterministic.codex.codex-responses | deterministic/codex/codex-responses; 95 ms; 0 billed calls |
+| deterministic.codex.codex-responses | automated | pass | matrix:deterministic.codex.codex-responses | deterministic/codex/codex-responses; 91 ms; 0 billed calls |
 | deterministic.codex.codex | automated | pending | matrix:deterministic.codex.codex | deterministic/codex/codex; 0 ms; 0 billed calls; Skipped; qualification remains pending: codex is not installed |
-| live.codex.codex-responses | automated | pending | ENG-679 real-account matrix | — |
-| live.codex.codex | automated | pending | ENG-679 real-account matrix | — |
-| Codex setup and restore review | manual | pending | https://linear.app/velum-labs/issue/ENG-679 | — |
+| live.codex.codex-responses | automated | pending | matrix:live.codex.codex-responses | Case was not present in the promoted report for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d. |
+| live.codex.codex | automated | pending | matrix:live.codex.codex | Case was not present in the promoted report for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d. |
+| Codex setup and restore review | manual | pending | https://linear.app/velum-labs/issue/ENG-679 | Manual evidence must be reviewed for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d. |
 
 | Required outcome | Status | Sanitized result |
 | --- | --- | --- |
-| protocolBehavior | pending | Responses streaming, tools, and reasoning await the mapped cases. |
-| billingAttribution | pending | Subscription rather than API-key attribution awaits ENG-679. |
-| failureBehavior | pending | Quota exhaustion and zero-paid-API fallback await the live record. |
-| setupRestore | pending | Enrollment, official-client import, and restore await manual review. |
+| protocolBehavior | pending | Awaiting reviewed protocolBehavior outcome for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d. |
+| billingAttribution | pending | Awaiting reviewed billingAttribution outcome for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d. |
+| failureBehavior | pending | Awaiting reviewed failureBehavior outcome for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d. |
+| setupRestore | pending | Awaiting reviewed setupRestore outcome for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d. |
 
 <a id="route-claude-code-subscription"></a>
 
@@ -108,20 +108,20 @@ sanitized record.
 
 | Evidence | Type | Status | Reference | Result details |
 | --- | --- | --- | --- | --- |
-| deterministic.claude-code.anthropic-messages | automated | pass | matrix:deterministic.claude-code.anthropic-messages | deterministic/claude-code/anthropic-messages; 90 ms; 0 billed calls |
-| deterministic.claude-code.anthropic-thinking | automated | pass | matrix:deterministic.claude-code.anthropic-thinking | deterministic/claude-code/anthropic-thinking; 151 ms; 0 billed calls |
+| deterministic.claude-code.anthropic-messages | automated | pass | matrix:deterministic.claude-code.anthropic-messages | deterministic/claude-code/anthropic-messages; 92 ms; 0 billed calls |
+| deterministic.claude-code.anthropic-thinking | automated | pass | matrix:deterministic.claude-code.anthropic-thinking | deterministic/claude-code/anthropic-thinking; 149 ms; 0 billed calls |
 | deterministic.claude-code.claude | automated | pending | matrix:deterministic.claude-code.claude | deterministic/claude-code/claude; 0 ms; 0 billed calls; Skipped; qualification remains pending: claude is not installed |
-| live.claude-code.anthropic-messages | automated | pending | ENG-679 real-account matrix | — |
-| live.claude-code.claude | automated | pending | ENG-679 real-account matrix | — |
-| live.claude-code.pool | automated | pending | ENG-679 real-account matrix | — |
-| Claude setup, restore, and recovery review | manual | pending | https://linear.app/velum-labs/issue/ENG-679 | — |
+| live.claude-code.anthropic-messages | automated | pending | matrix:live.claude-code.anthropic-messages | Case was not present in the promoted report for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d. |
+| live.claude-code.claude | automated | pending | matrix:live.claude-code.claude | Case was not present in the promoted report for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d. |
+| live.claude-code.pool | automated | pending | matrix:live.claude-code.pool | Case was not present in the promoted report for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d. |
+| Claude setup, restore, and recovery review | manual | pending | https://linear.app/velum-labs/issue/ENG-679 | Manual evidence must be reviewed for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d. |
 
 | Required outcome | Status | Sanitized result |
 | --- | --- | --- |
-| protocolBehavior | pending | Messages streaming, tools, thinking, and signatures await mapped evidence. |
-| billingAttribution | pending | Subscription rather than API-key attribution awaits ENG-679. |
-| failureBehavior | pending | Pool exhaustion and zero-paid-API fallback await the live record. |
-| setupRestore | pending | Enrollment, restore, and recovery parity await manual review. |
+| protocolBehavior | pending | Awaiting reviewed protocolBehavior outcome for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d. |
+| billingAttribution | pending | Awaiting reviewed billingAttribution outcome for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d. |
+| failureBehavior | pending | Awaiting reviewed failureBehavior outcome for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d. |
+| setupRestore | pending | Awaiting reviewed setupRestore outcome for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d. |
 
 <a id="route-cursor-ide"></a>
 
@@ -133,14 +133,14 @@ sanitized record.
 
 | Evidence | Type | Status | Reference | Result details |
 | --- | --- | --- | --- | --- |
-| Cursor IDE custom-endpoint walkthrough | manual | pending | https://linear.app/velum-labs/issue/ENG-679 | — |
+| Cursor IDE custom-endpoint walkthrough | manual | pending | https://linear.app/velum-labs/issue/ENG-679 | Manual evidence must be reviewed for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d. |
 
 | Required outcome | Status | Sanitized result |
 | --- | --- | --- |
-| protocolBehavior | pending | Agent chat/plan streaming and tools require an authenticated desktop walkthrough. |
-| billingAttribution | pending | Selected RouteKit route versus Cursor-service attribution awaits review. |
-| failureBehavior | pending | Custom-endpoint and Cursor-cloud failure boundaries await review. |
-| setupRestore | pending | Isolated profile setup and relaunch behavior await review. |
+| protocolBehavior | pending | Awaiting reviewed protocolBehavior outcome for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d. |
+| billingAttribution | pending | Awaiting reviewed billingAttribution outcome for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d. |
+| failureBehavior | pending | Awaiting reviewed failureBehavior outcome for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d. |
+| setupRestore | pending | Awaiting reviewed setupRestore outcome for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d. |
 
 <a id="route-cursor-agent"></a>
 
@@ -153,15 +153,15 @@ sanitized record.
 | Evidence | Type | Status | Reference | Result details |
 | --- | --- | --- | --- | --- |
 | deterministic.openrouter.cursor | automated | pending | matrix:deterministic.openrouter.cursor | deterministic/openrouter/cursor; 0 ms; 0 billed calls; Skipped; qualification remains pending: cursor-agent is not installed |
-| live.openrouter.cursor | automated | pending | ENG-679 real-account matrix | — |
-| Authenticated cursor-agent setup and restore review | manual | pending | https://linear.app/velum-labs/issue/ENG-679 | — |
+| live.openrouter.cursor | automated | pending | matrix:live.openrouter.cursor | Case was not present in the promoted report for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d. |
+| Authenticated cursor-agent setup and restore review | manual | pending | https://linear.app/velum-labs/issue/ENG-679 | Manual evidence must be reviewed for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d. |
 
 | Required outcome | Status | Sanitized result |
 | --- | --- | --- |
-| protocolBehavior | pending | OpenAI Chat translation, streaming, and tools await mapped evidence. |
-| billingAttribution | pending | Selected RouteKit route versus Cursor-service attribution awaits ENG-679. |
-| failureBehavior | pending | Endpoint and Cursor upstream error boundaries await ENG-679. |
-| setupRestore | pending | Authenticated CLI setup and session restore await manual review. |
+| protocolBehavior | pending | Awaiting reviewed protocolBehavior outcome for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d. |
+| billingAttribution | pending | Awaiting reviewed billingAttribution outcome for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d. |
+| failureBehavior | pending | Awaiting reviewed failureBehavior outcome for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d. |
+| setupRestore | pending | Awaiting reviewed setupRestore outcome for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d. |
 
 ## Excluded from launch qualification
 

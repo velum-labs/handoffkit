@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "routekitVersion": "0.8.0",
-  "testedRevision": "40271dc4906089d54108b910f45ba0852a47cb20",
+  "testedRevision": "4e090a1a1496140ab4e7df0b50bed66d07f1a85d",
   "evidenceDate": "2026-07-22",
   "routes": {
     "route-openai-api": {
@@ -19,7 +19,7 @@
             "phase": "deterministic",
             "provider": "openai",
             "door": "openai-chat",
-            "durationMs": 92,
+            "durationMs": 91,
             "billedCalls": 0,
             "artifact": null
           }
@@ -28,21 +28,22 @@
           "type": "automated",
           "status": "pending",
           "caseId": "live.openai.openai-chat",
-          "reference": "ENG-679 real-account matrix"
+          "reference": "matrix:live.openai.openai-chat",
+          "summary": "Case was not present in the promoted report for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d."
         }
       ],
       "outcomes": {
         "protocolBehavior": {
           "status": "pending",
-          "summary": "OpenAI Chat streaming and tool behavior awaits the mapped matrix cases."
+          "summary": "Awaiting reviewed protocolBehavior outcome for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d."
         },
         "billingAttribution": {
           "status": "pending",
-          "summary": "Live API-account attribution awaits ENG-679."
+          "summary": "Awaiting reviewed billingAttribution outcome for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d."
         },
         "failureBehavior": {
           "status": "pending",
-          "summary": "Live quota and provider-error behavior awaits ENG-679."
+          "summary": "Awaiting reviewed failureBehavior outcome for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d."
         },
         "setupRestore": {
           "status": "not-applicable",
@@ -65,7 +66,7 @@
             "phase": "deterministic",
             "provider": "anthropic",
             "door": "anthropic-messages",
-            "durationMs": 93,
+            "durationMs": 92,
             "billedCalls": 0,
             "artifact": null
           }
@@ -74,21 +75,22 @@
           "type": "automated",
           "status": "pending",
           "caseId": "live.anthropic.anthropic-messages",
-          "reference": "ENG-679 real-account matrix"
+          "reference": "matrix:live.anthropic.anthropic-messages",
+          "summary": "Case was not present in the promoted report for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d."
         }
       ],
       "outcomes": {
         "protocolBehavior": {
           "status": "pending",
-          "summary": "Native Messages streaming, tools, and thinking await the mapped matrix cases."
+          "summary": "Awaiting reviewed protocolBehavior outcome for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d."
         },
         "billingAttribution": {
           "status": "pending",
-          "summary": "Live API-account attribution awaits ENG-679."
+          "summary": "Awaiting reviewed billingAttribution outcome for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d."
         },
         "failureBehavior": {
           "status": "pending",
-          "summary": "Live quota and provider-error behavior awaits ENG-679."
+          "summary": "Awaiting reviewed failureBehavior outcome for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d."
         },
         "setupRestore": {
           "status": "not-applicable",
@@ -111,7 +113,7 @@
             "phase": "deterministic",
             "provider": "openrouter",
             "door": "openai-chat",
-            "durationMs": 93,
+            "durationMs": 89,
             "billedCalls": 0,
             "artifact": null
           }
@@ -134,21 +136,22 @@
           "type": "automated",
           "status": "pending",
           "caseId": "live.openrouter.openai-chat",
-          "reference": "ENG-679 real-account matrix"
+          "reference": "matrix:live.openrouter.openai-chat",
+          "summary": "Case was not present in the promoted report for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d."
         }
       ],
       "outcomes": {
         "protocolBehavior": {
           "status": "pending",
-          "summary": "Chat, streaming, tools, and capability-gated reasoning await the mapped cases."
+          "summary": "Awaiting reviewed protocolBehavior outcome for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d."
         },
         "billingAttribution": {
           "status": "pending",
-          "summary": "OpenRouter credit and upstream attribution await ENG-679."
+          "summary": "Awaiting reviewed billingAttribution outcome for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d."
         },
         "failureBehavior": {
           "status": "pending",
-          "summary": "Live OpenRouter and upstream failure behavior awaits ENG-679."
+          "summary": "Awaiting reviewed failureBehavior outcome for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d."
         },
         "setupRestore": {
           "status": "not-applicable",
@@ -171,7 +174,7 @@
             "phase": "deterministic",
             "provider": "codex",
             "door": "codex-responses",
-            "durationMs": 95,
+            "durationMs": 91,
             "billedCalls": 0,
             "artifact": null
           }
@@ -195,37 +198,40 @@
           "type": "automated",
           "status": "pending",
           "caseId": "live.codex.codex-responses",
-          "reference": "ENG-679 real-account matrix"
+          "reference": "matrix:live.codex.codex-responses",
+          "summary": "Case was not present in the promoted report for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d."
         },
         {
           "type": "automated",
           "status": "pending",
           "caseId": "live.codex.codex",
-          "reference": "ENG-679 real-account matrix"
+          "reference": "matrix:live.codex.codex",
+          "summary": "Case was not present in the promoted report for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d."
         },
         {
           "type": "manual",
           "status": "pending",
           "label": "Codex setup and restore review",
-          "reference": "https://linear.app/velum-labs/issue/ENG-679"
+          "reference": "https://linear.app/velum-labs/issue/ENG-679",
+          "summary": "Manual evidence must be reviewed for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d."
         }
       ],
       "outcomes": {
         "protocolBehavior": {
           "status": "pending",
-          "summary": "Responses streaming, tools, and reasoning await the mapped cases."
+          "summary": "Awaiting reviewed protocolBehavior outcome for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d."
         },
         "billingAttribution": {
           "status": "pending",
-          "summary": "Subscription rather than API-key attribution awaits ENG-679."
+          "summary": "Awaiting reviewed billingAttribution outcome for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d."
         },
         "failureBehavior": {
           "status": "pending",
-          "summary": "Quota exhaustion and zero-paid-API fallback await the live record."
+          "summary": "Awaiting reviewed failureBehavior outcome for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d."
         },
         "setupRestore": {
           "status": "pending",
-          "summary": "Enrollment, official-client import, and restore await manual review."
+          "summary": "Awaiting reviewed setupRestore outcome for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d."
         }
       }
     },
@@ -244,7 +250,7 @@
             "phase": "deterministic",
             "provider": "claude-code",
             "door": "anthropic-messages",
-            "durationMs": 90,
+            "durationMs": 92,
             "billedCalls": 0,
             "artifact": null
           }
@@ -258,7 +264,7 @@
             "phase": "deterministic",
             "provider": "claude-code",
             "door": "anthropic-thinking",
-            "durationMs": 151,
+            "durationMs": 149,
             "billedCalls": 0,
             "artifact": null
           }
@@ -282,43 +288,47 @@
           "type": "automated",
           "status": "pending",
           "caseId": "live.claude-code.anthropic-messages",
-          "reference": "ENG-679 real-account matrix"
+          "reference": "matrix:live.claude-code.anthropic-messages",
+          "summary": "Case was not present in the promoted report for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d."
         },
         {
           "type": "automated",
           "status": "pending",
           "caseId": "live.claude-code.claude",
-          "reference": "ENG-679 real-account matrix"
+          "reference": "matrix:live.claude-code.claude",
+          "summary": "Case was not present in the promoted report for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d."
         },
         {
           "type": "automated",
           "status": "pending",
           "caseId": "live.claude-code.pool",
-          "reference": "ENG-679 real-account matrix"
+          "reference": "matrix:live.claude-code.pool",
+          "summary": "Case was not present in the promoted report for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d."
         },
         {
           "type": "manual",
           "status": "pending",
           "label": "Claude setup, restore, and recovery review",
-          "reference": "https://linear.app/velum-labs/issue/ENG-679"
+          "reference": "https://linear.app/velum-labs/issue/ENG-679",
+          "summary": "Manual evidence must be reviewed for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d."
         }
       ],
       "outcomes": {
         "protocolBehavior": {
           "status": "pending",
-          "summary": "Messages streaming, tools, thinking, and signatures await mapped evidence."
+          "summary": "Awaiting reviewed protocolBehavior outcome for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d."
         },
         "billingAttribution": {
           "status": "pending",
-          "summary": "Subscription rather than API-key attribution awaits ENG-679."
+          "summary": "Awaiting reviewed billingAttribution outcome for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d."
         },
         "failureBehavior": {
           "status": "pending",
-          "summary": "Pool exhaustion and zero-paid-API fallback await the live record."
+          "summary": "Awaiting reviewed failureBehavior outcome for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d."
         },
         "setupRestore": {
           "status": "pending",
-          "summary": "Enrollment, restore, and recovery parity await manual review."
+          "summary": "Awaiting reviewed setupRestore outcome for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d."
         }
       }
     },
@@ -332,25 +342,26 @@
           "type": "manual",
           "status": "pending",
           "label": "Cursor IDE custom-endpoint walkthrough",
-          "reference": "https://linear.app/velum-labs/issue/ENG-679"
+          "reference": "https://linear.app/velum-labs/issue/ENG-679",
+          "summary": "Manual evidence must be reviewed for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d."
         }
       ],
       "outcomes": {
         "protocolBehavior": {
           "status": "pending",
-          "summary": "Agent chat/plan streaming and tools require an authenticated desktop walkthrough."
+          "summary": "Awaiting reviewed protocolBehavior outcome for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d."
         },
         "billingAttribution": {
           "status": "pending",
-          "summary": "Selected RouteKit route versus Cursor-service attribution awaits review."
+          "summary": "Awaiting reviewed billingAttribution outcome for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d."
         },
         "failureBehavior": {
           "status": "pending",
-          "summary": "Custom-endpoint and Cursor-cloud failure boundaries await review."
+          "summary": "Awaiting reviewed failureBehavior outcome for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d."
         },
         "setupRestore": {
           "status": "pending",
-          "summary": "Isolated profile setup and relaunch behavior await review."
+          "summary": "Awaiting reviewed setupRestore outcome for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d."
         }
       }
     },
@@ -379,31 +390,33 @@
           "type": "automated",
           "status": "pending",
           "caseId": "live.openrouter.cursor",
-          "reference": "ENG-679 real-account matrix"
+          "reference": "matrix:live.openrouter.cursor",
+          "summary": "Case was not present in the promoted report for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d."
         },
         {
           "type": "manual",
           "status": "pending",
           "label": "Authenticated cursor-agent setup and restore review",
-          "reference": "https://linear.app/velum-labs/issue/ENG-679"
+          "reference": "https://linear.app/velum-labs/issue/ENG-679",
+          "summary": "Manual evidence must be reviewed for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d."
         }
       ],
       "outcomes": {
         "protocolBehavior": {
           "status": "pending",
-          "summary": "OpenAI Chat translation, streaming, and tools await mapped evidence."
+          "summary": "Awaiting reviewed protocolBehavior outcome for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d."
         },
         "billingAttribution": {
           "status": "pending",
-          "summary": "Selected RouteKit route versus Cursor-service attribution awaits ENG-679."
+          "summary": "Awaiting reviewed billingAttribution outcome for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d."
         },
         "failureBehavior": {
           "status": "pending",
-          "summary": "Endpoint and Cursor upstream error boundaries await ENG-679."
+          "summary": "Awaiting reviewed failureBehavior outcome for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d."
         },
         "setupRestore": {
           "status": "pending",
-          "summary": "Authenticated CLI setup and session restore await manual review."
+          "summary": "Awaiting reviewed setupRestore outcome for revision 4e090a1a1496140ab4e7df0b50bed66d07f1a85d."
         }
       }
     }
