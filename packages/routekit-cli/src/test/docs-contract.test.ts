@@ -5,9 +5,12 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
+import { LAUNCH_PROVIDER_IDS } from "../launch-support.js";
+
 const root = fileURLToPath(new URL("../../../../", import.meta.url));
 const routekitCli = join(root, "packages", "routekit-cli", "dist", "index.js");
 const cliEnv = { ...process.env, FUSIONKIT_NO_TUI: "1", ROUTEKIT_NO_TUI: "1" };
+const routeDisclosuresPath = "apps/docs/content/docs/reference/routes-and-billing.mdx";
 
 function help(args: readonly string[]): string {
   return execFileSync(process.execPath, [routekitCli, ...args], {
@@ -97,5 +100,136 @@ test("retained implementation references are explicitly non-contractual", () => 
       /retained internal Google[\s\S]{0,120}outside RouteKit's public\s+support contract/i,
       `${path} does not distinguish the retained Google backend from public support`
     );
+  }
+});
+
+test("every first-launch route has a complete public disclosure", () => {
+  const source = readFileSync(join(root, routeDisclosuresPath), "utf8");
+  const mirror = readFileSync(join(root, "docs/routekit-routes-and-billing.md"), "utf8");
+  const packageJson = JSON.parse(
+    readFileSync(join(root, "packages/routekit-cli/package.json"), "utf8")
+  ) as { version: string };
+  const routeIds = [
+    ...LAUNCH_PROVIDER_IDS.map((provider) =>
+      provider === "codex" || provider === "claude-code"
+        ? `route-${provider}-subscription`
+        : `route-${provider}-api`
+    ),
+    "route-cursor-ide",
+    "route-cursor-agent"
+  ];
+  const requiredFields = [
+    "**Status and evidence:**",
+    "**Credential:**",
+    "**Billing:**",
+    "**Egress and aggregator:**",
+    "**Quota and failover:**",
+    "**Protocol and limitations:**",
+    "**Unlimited use:**"
+  ];
+  const requiredMirrorFields = [
+    "**Credential / owner:**",
+    "**Billing / egress:**",
+    "**Quota / fallback:**",
+    "**Protocol / limitations:**",
+    "**Evidence:**"
+  ];
+
+  for (const [index, routeId] of routeIds.entries()) {
+    const anchor = `<a id="${routeId}"></a>`;
+    const start = source.indexOf(anchor);
+    assert.notEqual(start, -1, `${routeDisclosuresPath} is missing ${routeId}`);
+    const nextAnchor =
+      index + 1 < routeIds.length ? `<a id="${routeIds[index + 1]}"></a>` : "## Qualification evidence";
+    const end = source.indexOf(nextAnchor, start + anchor.length);
+    assert.notEqual(end, -1, `${routeDisclosuresPath} cannot delimit ${routeId}`);
+    const section = source.slice(start, end);
+
+    for (const field of requiredFields) {
+      assert.ok(section.includes(field), `${routeId} is missing ${field}`);
+    }
+    assert.match(section, new RegExp(`RouteKit ${packageJson.version.replaceAll(".", "\\.")}`));
+    assert.match(section, /\b20\d{2}-\d{2}-\d{2}\b/);
+    assert.match(section, /makes no unlimited-use claim/i);
+
+    const mirrorAnchor = `<a id="${routeId}"></a>`;
+    const mirrorStart = mirror.indexOf(mirrorAnchor);
+    assert.notEqual(mirrorStart, -1, `maintainer mirror is missing ${routeId}`);
+    const nextMirrorAnchor =
+      index + 1 < routeIds.length
+        ? `<a id="${routeIds[index + 1]}"></a>`
+        : "## Qualification requirement";
+    const mirrorEnd = mirror.indexOf(nextMirrorAnchor, mirrorStart + mirrorAnchor.length);
+    assert.notEqual(mirrorEnd, -1, `maintainer mirror cannot delimit ${routeId}`);
+    const mirrorSection = mirror.slice(mirrorStart, mirrorEnd);
+    for (const field of requiredMirrorFields) {
+      assert.ok(mirrorSection.includes(field), `maintainer mirror ${routeId} is missing ${field}`);
+    }
+    assert.match(
+      mirrorSection,
+      new RegExp(`RouteKit ${packageJson.version.replaceAll(".", "\\.")}`)
+    );
+    assert.match(mirrorSection, /\b20\d{2}-\d{2}-\d{2}\b/);
+  }
+
+  const registry = JSON.parse(
+    readFileSync(join(root, "spec/registry/providers.json"), "utf8")
+  ) as {
+    providers: Record<string, { baseUrl?: string; keyEnv?: string }>;
+  };
+  for (const [routeId, providerId] of [
+    ["route-openai-api", "openai"],
+    ["route-anthropic-api", "anthropic"],
+    ["route-openrouter-api", "openrouter"]
+  ] as const) {
+    const start = source.indexOf(`<a id="${routeId}"></a>`);
+    const end = source.indexOf("<a id=", start + 1);
+    const section = source.slice(start, end);
+    const provider = registry.providers[providerId];
+    assert.ok(provider?.keyEnv !== undefined);
+    assert.ok(provider.baseUrl !== undefined);
+    assert.match(section, new RegExp(provider.keyEnv));
+    assert.match(section, new RegExp(new URL(provider.baseUrl).hostname.replaceAll(".", "\\.")));
+  }
+  const anthropic = source.slice(
+    source.indexOf('<a id="route-anthropic-api"></a>'),
+    source.indexOf('<a id="route-openrouter-api"></a>')
+  );
+  assert.match(anthropic, /does not\s+currently use `ANTHROPIC_AUTH_TOKEN`/);
+
+  const openRouter = source.slice(
+    source.indexOf('<a id="route-openrouter-api"></a>'),
+    source.indexOf('<a id="route-codex-subscription"></a>')
+  );
+  assert.match(openRouter, /OpenRouter is an aggregator/i);
+  assert.match(openRouter, /upstream provider/i);
+  assert.match(openRouter, /prompts, code, tool data, and model requests/i);
+
+  const evidenceRevision = source.match(
+    /github\.com\/velum-labs\/handoffkit\/commit\/([0-9a-f]{40})/
+  )?.[1];
+  assert.ok(evidenceRevision !== undefined, "public disclosure lacks an immutable evidence revision");
+  assert.match(mirror, new RegExp(evidenceRevision));
+  assert.match(
+    source,
+    new RegExp(
+      `github\\.com/velum-labs/handoffkit/blob/${evidenceRevision}/docs/routekit-e2e-matrix\\.md`
+    )
+  );
+});
+
+test("public onboarding links to the route disclosure contract", () => {
+  const packageReadme = readFileSync(join(root, "packages/routekit-cli/README.md"), "utf8");
+  assert.match(
+    packageReadme,
+    /\]\(https:\/\/fusionkit\.velum-labs\.com\/docs\/reference\/routes-and-billing\)/
+  );
+
+  for (const path of [
+    "apps/docs/content/docs/getting-started/installation.mdx",
+    "apps/docs/content/docs/concepts/privacy.mdx"
+  ]) {
+    const source = readFileSync(join(root, path), "utf8");
+    assert.match(source, /\]\(\/docs\/reference\/routes-and-billing(?:#[^)]+)?\)/);
   }
 });

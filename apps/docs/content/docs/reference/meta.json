@@ -1,4 +1,10 @@
 {
   "title": "Reference",
-  "pages": ["commands", "configuration", "models-and-panels", "packages"]
+  "pages": [
+    "commands",
+    "configuration",
+    "routes-and-billing",
+    "models-and-panels",
+    "packages"
+  ]
 }

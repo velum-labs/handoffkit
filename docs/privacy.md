@@ -74,6 +74,11 @@ external router with `routekit config show`, `routekit providers status`, and
 `routekit models list`. Daemon-backed RouteKit commands never infer a project
 file from the current working directory.
 
+See [RouteKit routes, billing, and provider disclosures](routekit-routes-and-billing.md)
+for the credential owner, billing mode, egress destination, aggregator,
+failover boundary, limitations, and qualification evidence of every
+first-launch route.
+
 The committed `.fusionkit/fusion.json` contains namespaced model IDs only. This
 repository explicitly enables OpenRouter in `.routekit/router.yaml` and
 requires `OPENROUTER_API_KEY`. OpenRouter is an aggregator, so requests sent
