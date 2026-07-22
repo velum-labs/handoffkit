@@ -5,6 +5,7 @@ import {
   rmSync,
   writeFileSync
 } from "node:fs";
+import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -31,6 +32,22 @@ import {
 import { missingServiceCredentialVariables } from "../daemon.js";
 
 import { configOverride } from "./context.js";
+
+export function configImportIdempotencyKey(input: {
+  revision: number;
+  document: string;
+  source: string;
+}): string {
+  const fingerprint = createHash("sha256")
+    .update(String(input.revision))
+    .update("\0")
+    .update(input.source)
+    .update("\0")
+    .update(input.document)
+    .digest("hex")
+    .slice(0, 24);
+  return `config-import-${input.revision}-${fingerprint}`;
+}
 
 export function registerConfig(program: Command): void {
   const config = program.command("config").description("manage router configuration");
@@ -214,7 +231,13 @@ export function registerConfig(program: Command): void {
             document,
             source
           },
-          { idempotencyKey: `config-import-${current.revision}` }
+          {
+            idempotencyKey: configImportIdempotencyKey({
+              revision: current.revision,
+              document,
+              source
+            })
+          }
         );
         return imported.revision;
       };

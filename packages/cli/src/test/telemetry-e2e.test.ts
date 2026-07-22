@@ -120,7 +120,7 @@ test("a SIGINT-terminated CLI run still ships a cli.command event before exiting
     // `doctor` is async long enough to interrupt mid-run, needs no provider
     // keys, and keeps the event loop responsive so the signal handler fires.
     const child = spawn(process.execPath, [CLI, "doctor"], {
-      stdio: ["ignore", "ignore", "ignore"],
+      stdio: ["ignore", "ignore", "ignore", "ipc"],
       env: {
         ...process.env,
         FUSIONKIT_TELEMETRY: "1",
@@ -131,10 +131,29 @@ test("a SIGINT-terminated CLI run still ships a cli.command event before exiting
       }
     });
     const exited = new Promise<number | null>((resolve) => child.on("exit", (code) => resolve(code)));
-    // Give the CLI time to boot and enter the command, then interrupt it. If
-    // doctor happens to finish first the run still ships an event; the
-    // interesting assertion is that SIGINT mid-run does not lose it.
-    setTimeout(() => child.kill("SIGINT"), 1_500);
+    const ready = new Promise<void>((resolve, reject) => {
+      const timeout = setTimeout(
+        () => reject(new Error("CLI did not install its signal cleanup handler")),
+        30_000
+      );
+      child.on("message", (message: unknown) => {
+        if (
+          typeof message === "object" &&
+          message !== null &&
+          "type" in message &&
+          message.type === "fusionkit.cli.signal-ready"
+        ) {
+          clearTimeout(timeout);
+          resolve();
+        }
+      });
+      child.on("error", (error) => {
+        clearTimeout(timeout);
+        reject(error);
+      });
+    });
+    await ready;
+    child.kill("SIGINT");
     const guard = setTimeout(() => child.kill("SIGKILL"), 30_000);
     await exited;
     clearTimeout(guard);

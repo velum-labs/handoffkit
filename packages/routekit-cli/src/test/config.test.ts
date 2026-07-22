@@ -20,6 +20,7 @@ import {
   projectRouterConfigPath,
   writeRouterConfig
 } from "../config.js";
+import { configImportIdempotencyKey } from "../commands/config.js";
 
 function config(
   provider: "openai" | "anthropic" | "codex",
@@ -32,6 +33,29 @@ function config(
     ...extra
   };
 }
+
+test("config import idempotency keys include the full operation identity", () => {
+  const input = {
+    revision: 4,
+    document: "providers:\n  openai: {}\n",
+    source: "/tmp/first.yaml"
+  };
+  assert.equal(
+    configImportIdempotencyKey(input),
+    configImportIdempotencyKey({ ...input })
+  );
+  assert.notEqual(
+    configImportIdempotencyKey(input),
+    configImportIdempotencyKey({
+      ...input,
+      document: "providers:\n  anthropic: {}\n"
+    })
+  );
+  assert.notEqual(
+    configImportIdempotencyKey(input),
+    configImportIdempotencyKey({ ...input, source: "/tmp/second.yaml" })
+  );
+});
 
 test("project config overrides global and explicit config overrides both", () => {
   const root = mkdtempSync(join(tmpdir(), "routekit-config-test-"));
