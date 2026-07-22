@@ -61,6 +61,25 @@ async function mockProvider(): Promise<{
   };
 }
 
+async function withMockAnthropicDiscovery<T>(run: () => Promise<T>): Promise<T> {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input: string | URL | Request, init?: RequestInit) => {
+    const url = new URL(input instanceof Request ? input.url : input.toString());
+    if (url.hostname === "api.anthropic.com" && url.pathname === "/v1/models") {
+      return new Response(
+        JSON.stringify({ data: [{ id: "claude-test-model", type: "model" }] }),
+        { headers: { "content-type": "application/json" } }
+      );
+    }
+    return await originalFetch(input, init);
+  };
+  try {
+    return await run();
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+}
+
 test("singleton daemon exposes authenticated control and a stable reloadable data plane", async () => {
   const root = mkdtempSync(join(tmpdir(), "routekit-daemon-"));
   const stateHome = join(root, "state");
@@ -593,44 +612,47 @@ test("daemon owns the cliproxy sidecar: spawn, restart, account routing, shutdow
       beforeClaude.accountRevision
     );
 
-    const claudeActivated = await client.call(
-      "accounts.enrollActivate",
-      claudeActivation,
-      { idempotencyKey: "activate-claude" }
-    );
-    assert.equal(claudeActivated.activated, true);
-    assert.equal(claudeActivated.configRevision, beforeClaude.configRevision + 1);
-    assert.equal(claudeActivated.accountRevision, beforeClaude.accountRevision + 1);
-    assert.equal(existsSync(claudePath), true);
-    assert.match(readFileSync(configPath, "utf8"), /claude-code:/);
-    assert.doesNotMatch(
-      JSON.stringify(claudeActivated),
-      /claude-transaction-access|claude-transaction-refresh/
-    );
-    const claudeReplay = await client.call(
-      "accounts.enrollActivate",
-      claudeActivation,
-      { idempotencyKey: "activate-claude-retry" }
-    );
-    assert.equal(claudeReplay.configRevision, claudeActivated.configRevision);
-    assert.equal(claudeReplay.accountRevision, claudeActivated.accountRevision);
-    assert.equal(
-      (await client.call("accounts.status", {})).accounts.find(
-        (entry) => entry.subscriptionKind === "claude-code" && entry.label === "claude-work"
-      )?.configured,
-      true
-    );
-    assert.equal(
-      (
-        await client.call(
-          "accounts.remove",
-          { kind: "claude-code", label: "claude-work" },
-          { idempotencyKey: "remove-claude-work" }
-        )
-      ).removed,
-      true
-    );
-    assert.equal(existsSync(claudePath), false);
+    await withMockAnthropicDiscovery(async () => {
+      const claudeActivated = await client.call(
+        "accounts.enrollActivate",
+        claudeActivation,
+        { idempotencyKey: "activate-claude" }
+      );
+      assert.equal(claudeActivated.activated, true);
+      assert.equal(claudeActivated.configRevision, beforeClaude.configRevision + 1);
+      assert.equal(claudeActivated.accountRevision, beforeClaude.accountRevision + 1);
+      assert.equal(existsSync(claudePath), true);
+      assert.match(readFileSync(configPath, "utf8"), /claude-code:/);
+      assert.doesNotMatch(
+        JSON.stringify(claudeActivated),
+        /claude-transaction-access|claude-transaction-refresh/
+      );
+      const claudeReplay = await client.call(
+        "accounts.enrollActivate",
+        claudeActivation,
+        { idempotencyKey: "activate-claude-retry" }
+      );
+      assert.equal(claudeReplay.configRevision, claudeActivated.configRevision);
+      assert.equal(claudeReplay.accountRevision, claudeActivated.accountRevision);
+      assert.equal(
+        (await client.call("accounts.status", {})).accounts.find(
+          (entry) =>
+            entry.subscriptionKind === "claude-code" && entry.label === "claude-work"
+        )?.configured,
+        true
+      );
+      assert.equal(
+        (
+          await client.call(
+            "accounts.remove",
+            { kind: "claude-code", label: "claude-work" },
+            { idempotencyKey: "remove-claude-work" }
+          )
+        ).removed,
+        true
+      );
+      assert.equal(existsSync(claudePath), false);
+    });
 
     const removed = await client.call(
       "accounts.remove",
