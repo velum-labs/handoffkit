@@ -245,6 +245,8 @@ function stepsForCall(call: RawCall): CapturedStep[] {
   const body = asObject(call.requestBody);
   if (body === undefined) return [];
   switch (call.dialect) {
+    case "openai-embeddings":
+      return [];
     case "openai-chat":
       return fromOpenAiChat(asArray(body.messages));
     case "openai-responses":
@@ -354,6 +356,8 @@ function finalOutputFromSse(call: RawCall): string {
   const events = parseSseEvents(call.responseText);
   if (events.length === 0) return "";
   switch (call.dialect) {
+    case "openai-embeddings":
+      return "";
     case "openai-responses":
       return finalOutputFromResponsesSse(events);
     case "openai-chat":

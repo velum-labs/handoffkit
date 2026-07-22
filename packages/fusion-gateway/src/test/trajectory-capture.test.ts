@@ -33,6 +33,16 @@ function responsesSse(events: Array<Record<string, unknown>>): string {
   );
 }
 
+test("ignores embedding calls when reconstructing chat trajectories", () => {
+  const { steps, finalOutput } = feed(
+    "openai-embeddings",
+    { input: "not a chat prompt" },
+    { data: [{ embedding: [0.1, 0.2] }] }
+  );
+  assert.deepEqual(steps, []);
+  assert.equal(finalOutput, "");
+});
+
 test("reconstructs an openai-chat tool loop into steps", () => {
   const { steps, finalOutput } = feed(
     "openai-chat",
