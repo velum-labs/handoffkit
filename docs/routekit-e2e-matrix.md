@@ -56,6 +56,13 @@ Live mode repeats the native-picker assertions for configured Claude Code and
 Codex providers. Catalog checks do not issue model-generation requests and
 therefore add zero billed calls.
 
+Before generation cases, live mode also runs
+`routekit --json models info <provider/model>` for one discovered model from
+every configured provider. It writes the secret-free contract fields to
+`live-route-info.json`, verifies the native model and provider, and rejects any
+configured credential value in command output. This route-explanation check
+starts an isolated singleton daemon and adds zero model-generation calls.
+
 When `claude-code` and the `pool` door are selected, live mode also loads the
 real enrolled account set, injects a quota response for the first selected
 member, and asserts that the second member succeeds and becomes active. The
