@@ -41,6 +41,39 @@ test("control server authenticates health/calls and negotiates control.v1", asyn
     await server.close();
   }
 });
+
+test("control server reports unexpected handler errors without exposing details", async () => {
+  const failure = new Error("provider token leaked into an internal failure");
+  const observed: Array<{
+    error: unknown;
+    context: { requestId: string; method?: string };
+  }> = [];
+  const server = await startControlServer({
+    handler: async () => {
+      throw failure;
+    },
+    onError: (error, context) => observed.push({ error, context })
+  });
+  try {
+    const client = new ControlClient({ url: server.url, token: server.token });
+    await assert.rejects(
+      client.call("models.list", {}, { requestId: "diagnostic-request" }),
+      (error: unknown) =>
+        error instanceof ControlError &&
+        error.code === "internal" &&
+        error.message === "control operation failed"
+    );
+    assert.equal(observed.length, 1);
+    assert.equal(observed[0]?.error, failure);
+    assert.deepEqual(observed[0]?.context, {
+      requestId: "diagnostic-request",
+      method: "models.list"
+    });
+  } finally {
+    await server.close();
+  }
+});
+
 test("control transport rejects wrong tokens, hosts, protocols, and content types", async () => {
   let calls = 0;
   const server = await startControlServer({

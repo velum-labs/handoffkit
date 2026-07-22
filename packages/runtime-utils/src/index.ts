@@ -80,6 +80,7 @@ export type {
   ControlHandlerContext,
   ControlRequest,
   ControlResponse,
+  ControlServerErrorContext,
   ControlSuccess,
   RunningControlServer
 } from "./service/control.js";

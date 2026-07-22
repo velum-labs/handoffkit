@@ -217,6 +217,45 @@ test("launchd controller creates log directories and manages the agent lifecycle
   }
 });
 
+test("launchd restart retries a transient bootstrap EIO after bootout", async () => {
+  const home = mkdtempSync(join(tmpdir(), "launchd-restart-"));
+  const calls: string[][] = [];
+  let bootstrapAttempts = 0;
+  const runner: CommandRunner = async (command, args) => {
+    calls.push([command, ...args]);
+    if (args[0] === "bootstrap" && bootstrapAttempts++ === 0) {
+      return {
+        exitCode: 5,
+        stdout: "",
+        stderr: "Bootstrap failed: 5: Input/output error"
+      };
+    }
+    return { exitCode: 0, stdout: "", stderr: "" };
+  };
+  try {
+    const controller = await detectSupervisor("routekit", "daemon", {
+      platform: "darwin",
+      runner,
+      home,
+      uid: 501
+    });
+    assert.ok(controller !== undefined);
+    await controller.restart({ timeoutMs: 5_000 });
+    assert.equal(bootstrapAttempts, 2);
+    assert.deepEqual(
+      calls.map((call) => call.slice(1)),
+      [
+        ["version"],
+        ["bootout", "gui/501/com.routekit.daemon"],
+        ["bootstrap", "gui/501", controller.unitPath],
+        ["bootstrap", "gui/501", controller.unitPath]
+      ]
+    );
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
 test("supervisor detection uses the platform and a live user manager", async () => {
   const calls: string[][] = [];
   const runnerFor =

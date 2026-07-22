@@ -589,7 +589,9 @@ export async function startRouteKitDaemon(
         return configSnapshot();
       },
       "models.list": async (params) => {
-        const response = await fetch(`${dataUrl}/v1/models`, {
+        // Self-call over the loopback listener: the public dataUrl may be a
+        // portless HTTPS route whose local CA Node does not trust.
+        const response = await fetch(`${proxy!.url()}/v1/models`, {
           headers: { authorization: `Bearer ${dataAuth.token}` }
         });
         if (!response.ok) {
@@ -885,7 +887,14 @@ export async function startRouteKitDaemon(
       token: generateControlToken(),
       product: ROUTEKIT_PRODUCT,
       packageVersion: options.packageVersion,
-      capabilities: [ROUTEKIT_CONTROL_CAPABILITY]
+      capabilities: [ROUTEKIT_CONTROL_CAPABILITY],
+      onError: (error, context) => {
+        const operation = context.method ?? "control transport";
+        console.error(
+          `RouteKit ${operation} failed (request ${context.requestId}):`,
+          error
+        );
+      }
     });
     record = store.write({
       kind: ROUTEKIT_DAEMON_KIND,

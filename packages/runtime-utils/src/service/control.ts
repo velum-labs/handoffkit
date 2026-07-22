@@ -112,6 +112,11 @@ export type RunningControlServer = {
   close(): Promise<void>;
 };
 
+export type ControlServerErrorContext = {
+  requestId: string;
+  method?: string;
+};
+
 export function generateControlToken(): string {
   return randomBytes(32).toString("base64url");
 }
@@ -251,9 +256,18 @@ export async function startControlServer(input: {
   product?: string;
   packageVersion?: string;
   capabilities?: readonly string[];
+  /** Observe unexpected handler/transport failures without exposing them to clients. */
+  onError?: (error: unknown, context: ControlServerErrorContext) => void;
 }): Promise<RunningControlServer> {
   const host = input.host ?? "127.0.0.1";
   const token = input.token ?? generateControlToken();
+  const reportError = (error: unknown, context: ControlServerErrorContext): void => {
+    try {
+      input.onError?.(error, context);
+    } catch {
+      // Observability must never change the control response or crash the server.
+    }
+  };
   const server = createServer((req, res) => {
     void (async () => {
       if (!loopbackHost(req)) {
@@ -279,9 +293,11 @@ export async function startControlServer(input: {
         return;
       }
       let requestId = "unknown";
+      let requestMethod: string | undefined;
       try {
         const request = parseRequest(await readJson(req));
         requestId = request.id;
+        requestMethod = request.method;
         if (request.protocol !== CONTROL_PROTOCOL_VERSION) {
           throw new ControlError({
             code: "upgrade_required",
@@ -370,6 +386,12 @@ export async function startControlServer(input: {
           res.off("close", onClose);
         }
       } catch (error) {
+        if (!(error instanceof ControlError)) {
+          reportError(error, {
+            requestId,
+            ...(requestMethod !== undefined ? { method: requestMethod } : {})
+          });
+        }
         const failure = asFailure(requestId, error);
         if (!res.headersSent) writeJson(res, failure.status, failure.body);
         else if (!res.writableEnded) {
@@ -382,7 +404,8 @@ export async function startControlServer(input: {
           res.end();
         }
       }
-    })().catch(() => {
+    })().catch((error: unknown) => {
+      reportError(error, { requestId: "unknown" });
       if (!res.headersSent) {
         writeJson(res, 500, {
           error: { code: "internal", message: "control request failed" }
