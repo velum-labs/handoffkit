@@ -557,7 +557,7 @@ const TRUSTED_THIRD_PARTY = new Map([
   // trimmed FusionKit CLI dependency closure. Downloads the official
   // cloudflared binary at runtime (no install scripts).
   ["untun", "0.1.3"],
-  ["@openai/codex-sdk", "0.142.5"],
+  ["@openai/codex-sdk", "0.145.0"],
   // OpenTelemetry: the tracing engine behind @fusionkit/tracing (spans + log
   // events, W3C propagation, batching, OTLP export). The exporter/logs line is
   // 0.x upstream; both lines are pinned exactly and bumped only as reviewed
