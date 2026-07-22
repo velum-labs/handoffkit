@@ -24,7 +24,7 @@ sanitized record.
 
 | Evidence | Type | Status | Reference | Result details |
 | --- | --- | --- | --- | --- |
-| deterministic.openai.openai-chat | automated | pass | matrix:deterministic.openai.openai-chat | deterministic/openai/openai-chat; 91 ms; 0 billed calls |
+| deterministic.openai.openai-chat | automated | pass | matrix:deterministic.openai.openai-chat | deterministic/openai/openai-chat; 91 ms; 0 gateway requests |
 | live.openai.openai-chat | automated | pending | matrix:live.openai.openai-chat | Case was not present in the promoted report for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa. |
 
 | Required outcome | Status | Sanitized result |
@@ -44,7 +44,7 @@ sanitized record.
 
 | Evidence | Type | Status | Reference | Result details |
 | --- | --- | --- | --- | --- |
-| deterministic.anthropic.anthropic-messages | automated | pass | matrix:deterministic.anthropic.anthropic-messages | deterministic/anthropic/anthropic-messages; 93 ms; 0 billed calls |
+| deterministic.anthropic.anthropic-messages | automated | pass | matrix:deterministic.anthropic.anthropic-messages | deterministic/anthropic/anthropic-messages; 93 ms; 0 gateway requests |
 | live.anthropic.anthropic-messages | automated | pending | matrix:live.anthropic.anthropic-messages | Case was not present in the promoted report for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa. |
 
 | Required outcome | Status | Sanitized result |
@@ -64,8 +64,8 @@ sanitized record.
 
 | Evidence | Type | Status | Reference | Result details |
 | --- | --- | --- | --- | --- |
-| deterministic.openrouter.openai-chat | automated | pass | matrix:deterministic.openrouter.openai-chat | deterministic/openrouter/openai-chat; 89 ms; 0 billed calls |
-| deterministic.openrouter.dynamic-reasoning-capabilities | automated | pass | matrix:deterministic.openrouter.dynamic-reasoning-capabilities | deterministic/openrouter/dynamic-reasoning-capabilities; 48 ms; 0 billed calls |
+| deterministic.openrouter.openai-chat | automated | pass | matrix:deterministic.openrouter.openai-chat | deterministic/openrouter/openai-chat; 89 ms; 0 gateway requests |
+| deterministic.openrouter.dynamic-reasoning-capabilities | automated | pass | matrix:deterministic.openrouter.dynamic-reasoning-capabilities | deterministic/openrouter/dynamic-reasoning-capabilities; 48 ms; 0 gateway requests |
 | live.openrouter.openai-chat | automated | pending | matrix:live.openrouter.openai-chat | Case was not present in the promoted report for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa. |
 
 | Required outcome | Status | Sanitized result |
@@ -85,8 +85,8 @@ sanitized record.
 
 | Evidence | Type | Status | Reference | Result details |
 | --- | --- | --- | --- | --- |
-| deterministic.codex.codex-responses | automated | pass | matrix:deterministic.codex.codex-responses | deterministic/codex/codex-responses; 91 ms; 0 billed calls |
-| deterministic.codex.codex | automated | pending | matrix:deterministic.codex.codex | deterministic/codex/codex; 0 ms; 0 billed calls; Skipped; qualification remains pending: codex is not installed |
+| deterministic.codex.codex-responses | automated | pass | matrix:deterministic.codex.codex-responses | deterministic/codex/codex-responses; 91 ms; 0 gateway requests |
+| deterministic.codex.codex | automated | pending | matrix:deterministic.codex.codex | deterministic/codex/codex; 0 ms; 0 gateway requests; Skipped; qualification remains pending: codex is not installed |
 | live.codex.codex-responses | automated | pending | matrix:live.codex.codex-responses | Case was not present in the promoted report for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa. |
 | live.codex.codex | automated | pending | matrix:live.codex.codex | Case was not present in the promoted report for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa. |
 | Codex setup and restore review | manual | pending | https://linear.app/velum-labs/issue/ENG-679 | Manual evidence must be reviewed for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa. |
@@ -108,9 +108,9 @@ sanitized record.
 
 | Evidence | Type | Status | Reference | Result details |
 | --- | --- | --- | --- | --- |
-| deterministic.claude-code.anthropic-messages | automated | pass | matrix:deterministic.claude-code.anthropic-messages | deterministic/claude-code/anthropic-messages; 91 ms; 0 billed calls |
-| deterministic.claude-code.anthropic-thinking | automated | pass | matrix:deterministic.claude-code.anthropic-thinking | deterministic/claude-code/anthropic-thinking; 147 ms; 0 billed calls |
-| deterministic.claude-code.claude | automated | pending | matrix:deterministic.claude-code.claude | deterministic/claude-code/claude; 0 ms; 0 billed calls; Skipped; qualification remains pending: claude is not installed |
+| deterministic.claude-code.anthropic-messages | automated | pass | matrix:deterministic.claude-code.anthropic-messages | deterministic/claude-code/anthropic-messages; 91 ms; 0 gateway requests |
+| deterministic.claude-code.anthropic-thinking | automated | pass | matrix:deterministic.claude-code.anthropic-thinking | deterministic/claude-code/anthropic-thinking; 147 ms; 0 gateway requests |
+| deterministic.claude-code.claude | automated | pending | matrix:deterministic.claude-code.claude | deterministic/claude-code/claude; 0 ms; 0 gateway requests; Skipped; qualification remains pending: claude is not installed |
 | live.claude-code.anthropic-messages | automated | pending | matrix:live.claude-code.anthropic-messages | Case was not present in the promoted report for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa. |
 | live.claude-code.claude | automated | pending | matrix:live.claude-code.claude | Case was not present in the promoted report for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa. |
 | live.claude-code.pool | automated | pending | matrix:live.claude-code.pool | Case was not present in the promoted report for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa. |
@@ -152,7 +152,7 @@ sanitized record.
 
 | Evidence | Type | Status | Reference | Result details |
 | --- | --- | --- | --- | --- |
-| deterministic.openrouter.cursor | automated | pending | matrix:deterministic.openrouter.cursor | deterministic/openrouter/cursor; 0 ms; 0 billed calls; Skipped; qualification remains pending: cursor-agent is not installed |
+| deterministic.openrouter.cursor | automated | pending | matrix:deterministic.openrouter.cursor | deterministic/openrouter/cursor; 0 ms; 0 gateway requests; Skipped; qualification remains pending: cursor-agent is not installed |
 | live.openrouter.cursor | automated | pending | matrix:live.openrouter.cursor | Case was not present in the promoted report for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa. |
 | Authenticated cursor-agent setup and restore review | manual | pending | https://linear.app/velum-labs/issue/ENG-679 | Manual evidence must be reviewed for revision be81fa847d74c64fa8720c9ecf1d0c6abebd58fa. |
 
