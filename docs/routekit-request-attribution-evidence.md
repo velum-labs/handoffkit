@@ -3,7 +3,7 @@
 Date: 2026-07-22
 Issue: [ENG-681](https://linear.app/velum-labs/issue/ENG-681/close-routekit-request-attribution-gap)
 Pull request: [#163](https://github.com/velum-labs/handoffkit/pull/163)
-Implementation revision tested: `efc47e9e`
+Implementation revision tested: `cc585def`
 
 ## Result
 
@@ -48,6 +48,8 @@ the separate sanitized real-account qualification matrix.
 - The request-accounting unit test feeds two successful provider-operation IDs
   through the collector and proves they are not mislabeled as retries or seat
   failovers.
+- Buffered and streaming server-tool-loop tests prove usage and estimated cost
+  include every provider step rather than only the terminal response.
 - Daemon integration tests prove failed model selection and embeddings
   correlation IDs remain inspectable.
 - Provenance tests inject a credential-shaped secret into a thrown upstream
