@@ -239,7 +239,7 @@ Use it with the narrative references when you need to find the module that owns 
 - `packages/model-gateway/src/provenance.ts`: GatewayDialect (type), MODEL_CALL_ID_HEADER (const), UNKNOWN_GIT_SHA (const), resolveProducerGitSha (function), readProducerVersion (function), ModelGatewayCallContext (type), ModelGatewayCallResult (type), ModelCallRecord (type), ProvenanceSink (type), buildModelCallRecord (function), modelCallId (function), responseBodyHash (function)
 - `packages/model-gateway/src/provider-backends.ts`: ProviderBackendOptions (type), ProviderTransport (type), AnthropicBackend (class), GoogleGenAiBackend (class), CodexResponsesBackend (class)
 - `packages/model-gateway/src/provider-source.ts`: API_PROVIDER_IDS (const), SUBSCRIPTION_PROVIDER_IDS (const), PROVIDER_IDS (const), ApiProviderId (type), SubscriptionProviderId (type), ProviderId (type), DiscoveredModel (type), ProviderSource (type), ProviderSourceTransport (type), parseReasoningCapabilities (function), parseDiscoveredModels (function), ApiProviderSourceOptions (type), ApiProviderSource (class)
-- `packages/model-gateway/src/router.ts`: UnknownModelError (class), routerConfigSchema (const), ProviderPolicy (type), RouterConfig (type), normalizeRouterConfigAliases (function), splitNamespacedModel (function), parseRouterConfig (function), CatalogBackendOptions (type), CatalogBackend (class), isSubscriptionProvider (function)
+- `packages/model-gateway/src/router.ts`: UnknownModelError (class), routerConfigSchema (const), ProviderPolicy (type), RouterConfig (type), normalizeRouterConfigAliases (function), splitNamespacedModel (function), parseRouterConfig (function), CatalogModelInfo (type), CatalogBackendOptions (type), CatalogBackend (class), isSubscriptionProvider (function)
 - `packages/model-gateway/src/server.ts`: GatewayOptions (type), ProviderRelayDialect (type), ProviderRelay (type), Gateway (type), startGateway (function)
 - `packages/model-gateway/src/sse-wire.ts`: noticeChunk (function), errorEvent (function), finishChunk (function), reasoningChunk (function), sseResponse (function)
 - `packages/model-gateway/src/sse/chat-assembler.ts`: AssembledToolCall (type), AssembledTurn (type), ChatStreamAssembler (class)
@@ -311,7 +311,7 @@ Use it with the narrative references when you need to find the module that owns 
 
 ### `packages/routekit-control`
 
-- `packages/routekit-control/src/index.ts`: ROUTEKIT_CONTROL_CAPABILITY (const), RouteKitControlMethod (type), RouteKitControlParams (type), DaemonStatus (type), ConfigSnapshot (type), ModelInfo (type), LaunchPreparation (type), RouteKitControlResults (type), RouteKitMethodHandler (type), RouteKitControlHandlers (type), MUTATING_ROUTEKIT_METHODS (const), validateRouteKitParams (function), createRouteKitControlHandler (function), RouteKitControlClient (class)
+- `packages/routekit-control/src/index.ts`: ROUTEKIT_CONTROL_CAPABILITY (const), RouteKitControlMethod (type), RouteKitControlParams (type), DaemonStatus (type), ConfigSnapshot (type), ModelCatalogEntry (type), ModelAccountClass (type), ModelBillingMode (type), ModelInfo (type), LaunchPreparation (type), RouteKitControlResults (type), RouteKitMethodHandler (type), RouteKitControlHandlers (type), MUTATING_ROUTEKIT_METHODS (const), validateRouteKitParams (function), createRouteKitControlHandler (function), RouteKitControlClient (class)
 
 ### `packages/routekit-daemon`
 
