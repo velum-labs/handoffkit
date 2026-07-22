@@ -9,6 +9,12 @@ onlyBuiltDependencies:
   - esbuild
   - sharp
 
+# Keep security overrides in the workspace manifest so both the pinned pnpm 10
+# install and CI's pnpm 11 audit apply them.
+overrides:
+  "brace-expansion@>=3.0.0 <5.0.7": ">=5.0.7 <6"
+  "undici@>=7.0.0 <7.28.0": ">=7.28.0 <8"
+
 # @ai-sdk/harness-claude-code declares @anthropic-ai/claude-agent-sdk as a
 # peer, but never executes it on the host: the adapter ships a bridge bundle
 # whose pinned dependencies (including the agent SDK) are installed *inside*

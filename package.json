@@ -45,10 +45,5 @@
     "@velum-labs/model-fusion-protocol": "file:spec/model-fusion-contract",
     "turbo": "2.10.5",
     "typescript": "6.0.3"
-  },
-  "pnpm": {
-    "overrides": {
-      "undici@>=7.0.0 <7.28.0": ">=7.28.0 <8"
-    }
   }
 }
