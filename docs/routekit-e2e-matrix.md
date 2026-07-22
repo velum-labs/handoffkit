@@ -112,7 +112,10 @@ The command rejects dirty, incomplete, stale-mapping, count-inconsistent, or
 identity-forged reports and credential-shaped content, then regenerates
 `docs/routekit-l06-evidence.{json,md}`. Cases absent from a filtered run and
 manual records not supplied with that promotion revert to `pending`; prior
-passes are never carried to a new revision. CI reruns the generator with
-`--check`, so a mapping change or hand-edited report fails closed. Promotion
-never changes a row to `qualified` unless the reviewed source also records
-passing evidence, exact versions, and outcomes for every required dimension.
+passes and revision-specific client, provider, and credential metadata are
+never carried to a new revision. Manual-record files must name the same full
+`testedRevision` as the matrix report plus an ISO `evidenceDate`. CI reruns the
+generator with `--check`, so a mapping change or hand-edited report fails
+closed. Promotion never changes a row to `qualified` unless the reviewed source
+also records passing evidence, exact versions, and outcomes for every required
+dimension.

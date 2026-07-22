@@ -5,6 +5,7 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
 import {
+  applyManualRecords,
   caseIdFor,
   durableEvidence,
   loadEvidenceMap,
@@ -173,6 +174,10 @@ test("matrix promotion updates only exact mapped cases", () => {
   );
   assert.equal(promoted.routes["route-openai-api"].outcomes.protocolBehavior.status, "pending");
   assert.equal(promoted.routes["route-openai-api"].qualificationStatus, "pending");
+  assert.match(
+    promoted.routes["route-openai-api"].clientProviderVersion,
+    new RegExp(REVISION)
+  );
 });
 
 test("matrix promotion rejects incomplete, dirty, and forged reports", () => {
@@ -248,6 +253,43 @@ test("rendered reports preserve skip reasons and one final newline", () => {
   assert.match(markdown, /Skipped; qualification remains pending: client is not installed/);
   assert.ok(markdown.endsWith("\n"));
   assert.ok(!markdown.endsWith("\n\n"));
+});
+
+test("manual evidence is bound to the exact tested revision", () => {
+  const manualRecords = {
+    schemaVersion: 1,
+    testedRevision: REVISION,
+    evidenceDate: "2026-07-23",
+    routes: {
+      "route-cursor-ide": {
+        credentialMode: "Logged-in Cursor desktop account with an isolated local endpoint.",
+        clientProviderVersion: "Cursor IDE 1.99; OpenRouter provider snapshot 2026-07-23.",
+        evidence: [
+          {
+            status: "pending",
+            label: "Revision-bound Cursor IDE review",
+            reference: "review:cursor-ide-2026-07-23"
+          }
+        ]
+      }
+    }
+  };
+  assert.throws(
+    () =>
+      applyManualRecords(mapping, source, {
+        ...manualRecords,
+        testedRevision: "f".repeat(40)
+      }),
+    /different revision/
+  );
+  const revisionSource = structuredClone(source);
+  revisionSource.testedRevision = REVISION;
+  const applied = applyManualRecords(mapping, revisionSource, manualRecords);
+  assert.equal(applied.evidenceDate, "2026-07-23");
+  assert.equal(
+    applied.routes["route-cursor-ide"].clientProviderVersion,
+    "Cursor IDE 1.99; OpenRouter provider snapshot 2026-07-23."
+  );
 });
 
 test("the unfiltered live matrix budget covers all five providers", () => {

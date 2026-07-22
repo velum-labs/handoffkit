@@ -319,6 +319,11 @@ export function promoteMatrixResults(mapping, source, matrixReport, revision) {
   next.evidenceDate = matrixReport.finishedAt.slice(0, 10);
   for (const route of mapping.routes) {
     const row = next.routes[route.id];
+    row.credentialMode =
+      `Pending reviewed credential/account mode for revision ${revision}; ` +
+      "no credential value is recorded.";
+    row.clientProviderVersion =
+      `Pending reviewed client/provider versions for revision ${revision}.`;
     row.evidence = row.evidence.map((item) => {
       if (item.caseId === undefined) {
         return {
@@ -376,8 +381,24 @@ export function promoteMatrixResults(mapping, source, matrixReport, revision) {
 
 export function applyManualRecords(mapping, source, manualRecords) {
   assert.equal(manualRecords.schemaVersion, 1, "manual records must use schemaVersion 1");
+  assert.match(
+    manualRecords.testedRevision,
+    /^[0-9a-f]{40}$/,
+    "manual records must name a full testedRevision"
+  );
+  assert.equal(
+    manualRecords.testedRevision,
+    source.testedRevision,
+    "manual records were reviewed against a different revision"
+  );
+  assert.match(
+    manualRecords.evidenceDate,
+    /^20\d{2}-\d{2}-\d{2}$/,
+    "manual records must name an ISO-8601 evidenceDate"
+  );
   assertSanitized(manualRecords);
   const next = structuredClone(source);
+  next.evidenceDate = manualRecords.evidenceDate;
   for (const [routeId, record] of Object.entries(manualRecords.routes ?? {})) {
     assert.ok(
       mapping.routes.some((route) => route.id === routeId),
