@@ -19,7 +19,7 @@ export function registerStop(program: Command): void {
   program
     .command("stop")
     .description("gracefully stop RouteKit")
-    .option("--force", "SIGKILL if the control plane cannot drain")
+    .option("--force", "SIGKILL a detached daemon if its control plane cannot drain")
     .action(async (options: { force?: boolean }, command: Command) => {
       const ctx = contextFor(command);
       const lock = await acquireLifecycleLock(daemonLifecycleLockPath());
@@ -32,21 +32,17 @@ export function registerStop(program: Command): void {
         }
         let requested = false;
         if (record.supervisor === "systemd" || record.supervisor === "launchd") {
-          const controller = supervisorController(
+          // Let the supervisor own termination. A direct SIGKILL while the
+          // unit is still active can be immediately undone by its restart
+          // policy, so --force only applies to detached processes.
+          await supervisorController(
             record.supervisor,
             "routekit",
             "daemon"
-          );
-          const timeoutMs = supervisorOperationTimeoutMs(record.drainGraceMs);
-          try {
-            await controller.stop({ timeoutMs });
-            requested = true;
-          } catch (error) {
-            if (options.force !== true) throw error;
-            // Prevent the supervisor from immediately respawning a process
-            // that the force fallback terminates.
-            requested = await controller.uninstall({ timeoutMs });
-          }
+          ).stop({
+            timeoutMs: supervisorOperationTimeoutMs(record.drainGraceMs)
+          });
+          requested = true;
         } else {
           try {
             await controlClientForRecord(record).call(

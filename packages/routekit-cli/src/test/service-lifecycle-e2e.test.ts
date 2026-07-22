@@ -47,6 +47,27 @@ function alive(pid: number): boolean {
   }
 }
 
+async function within<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  label: string
+): Promise<T> {
+  let timer!: NodeJS.Timeout;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(
+          () => reject(new Error(`${label} did not occur within ${timeoutMs}ms`)),
+          timeoutMs
+        );
+      })
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 test("public RouteKit lifecycle: start, idempotency, upgrade, drain-on-stop", async () => {
   const root = mkdtempSync(join(tmpdir(), "routekit-service-e2e-"));
   const project = join(root, "project");
@@ -183,7 +204,7 @@ test("public RouteKit lifecycle: start, idempotency, upgrade, drain-on-stop", as
         messages: [{ role: "user", content: "slow" }]
       })
     });
-    await slowRequestStarted;
+    await within(slowRequestStarted, 5_000, "slow upstream request");
     const stopRun = runCli(["stop", "--json"], cli);
     let healthStatus = 200;
     const drainDeadline = Date.now() + 2_000;
