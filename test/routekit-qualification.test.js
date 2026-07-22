@@ -1,0 +1,118 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+
+import {
+  classifyFailure,
+  makeRouteResult,
+  qualificationCompleteness,
+  reserveRouteBudget,
+  ROUTE_CASES,
+  ROUTE_IDS,
+  selectedRoutes,
+  validateManualEvidence
+} from "../scripts/routekit-qualification.mjs";
+
+test("qualification declares exactly the seven launch routes", () => {
+  assert.equal(ROUTE_CASES.length, 7);
+  assert.equal(new Set(ROUTE_IDS).size, 7);
+  assert.deepEqual(ROUTE_IDS, [
+    "route-openai-api",
+    "route-anthropic-api",
+    "route-openrouter-api",
+    "route-codex-subscription",
+    "route-claude-code-subscription",
+    "route-cursor-ide",
+    "route-cursor-agent"
+  ]);
+  assert.throws(() => selectedRoutes(["route-not-offered"]), /unknown route filter/);
+});
+
+test("route result is allowlisted and cannot serialize prompts or credentials", () => {
+  const route = ROUTE_CASES[0];
+  const secret = "sk-secret-value-that-must-not-appear";
+  const prompt = "private prompt that must not appear";
+  const result = makeRouteResult(route, {
+    status: "fail",
+    reasonCode: "unexpected-raw-error",
+    model: "openai/gpt-test",
+    clientVersion: "0.8.0",
+    protocol: { streaming: "pass", tools: "pass", reasoning: "degraded" },
+    behavior: {
+      cancellation: "pass",
+      failurePropagation: "pass",
+      routekitFallback: "none"
+    },
+    setupRestore: { setup: "not-applicable", restore: "not-applicable" },
+    rawError: `${secret}: ${prompt}`,
+    messages: [{ role: "user", content: prompt }],
+    credentialValue: secret
+  });
+  const serialized = JSON.stringify(result);
+  assert.doesNotMatch(serialized, new RegExp(secret));
+  assert.doesNotMatch(serialized, new RegExp(prompt));
+  assert.equal(result.reasonCode, "provider-request-failed");
+});
+
+test("manual evidence accepts only a known route and fixed outcomes", () => {
+  const evidence = validateManualEvidence({
+    routeId: "route-cursor-ide",
+    status: "fail",
+    reasonCode: "client-unavailable",
+    clientVersion: "unavailable",
+    evidence: ["manual-preflight"]
+  });
+  assert.equal(evidence.status, "fail");
+  assert.equal(evidence.reasonCode, "client-unavailable");
+  assert.throws(
+    () =>
+      validateManualEvidence({
+        routeId: "route-cursor-ide",
+        status: "skip",
+        reasonCode: "client-unavailable"
+      }),
+    /pass or fail/
+  );
+});
+
+test("budget reservation and completeness are strict", () => {
+  assert.throws(() => reserveRouteBudget(ROUTE_CASES, 1), /above budget/);
+  const budget = reserveRouteBudget(ROUTE_CASES, 32);
+  assert.ok(budget.plannedMaximum <= budget.authorizedMaximum);
+
+  const routes = ROUTE_CASES.map((route) =>
+    makeRouteResult(route, {
+      status: "pass",
+      credentialAvailable: true,
+      clientVersion: "test",
+      protocol: { streaming: "pass", tools: "pass", reasoning: "pass" },
+      behavior: {
+        cancellation: "pass",
+        failurePropagation: "pass",
+        routekitFallback: "none"
+      },
+      setupRestore: {
+        setup: route.setupRestore === "required" ? "pass" : "not-applicable",
+        restore: route.setupRestore === "required" ? "pass" : "not-applicable"
+      }
+    })
+  );
+  assert.deepEqual(qualificationCompleteness(routes), {
+    complete: true,
+    allPassed: true,
+    expectedRouteIds: ROUTE_IDS,
+    missingRouteIds: [],
+    duplicateRouteIds: [],
+    failedRouteIds: []
+  });
+  const incomplete = qualificationCompleteness(routes.slice(1));
+  assert.equal(incomplete.complete, false);
+  assert.deepEqual(incomplete.missingRouteIds, ["route-openai-api"]);
+});
+
+test("raw runtime failures collapse to stable reason codes", () => {
+  assert.equal(classifyFailure(new Error("OPENAI_API_KEY missing")), "api-credential-unavailable");
+  assert.equal(classifyFailure(new Error("cursor-agent is not installed")), "client-unavailable");
+  assert.equal(classifyFailure(new Error("no subscription accounts")), "account-unavailable");
+  assert.equal(classifyFailure(new Error("catalog returned 500")), "provider-discovery-failed");
+  assert.equal(classifyFailure(new Error("arbitrary private detail")), "provider-request-failed");
+});

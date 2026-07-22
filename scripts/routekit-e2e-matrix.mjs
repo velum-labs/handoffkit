@@ -12,7 +12,7 @@ import {
   rmSync,
   writeFileSync
 } from "node:fs";
-import { tmpdir } from "node:os";
+import { arch, platform, tmpdir } from "node:os";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -33,6 +33,15 @@ import {
   doorFrames,
   startProviderSim
 } from "../packages/testkit/dist/index.js";
+import {
+  classifyFailure,
+  makeRouteResult,
+  qualificationCompleteness,
+  reserveRouteBudget,
+  ROUTE_CASES,
+  selectedRoutes,
+  validateManualEvidence
+} from "./routekit-qualification.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const ROUTEKIT_ENTRY = join(ROOT, "packages", "routekit-cli", "dist", "index.js");
@@ -45,7 +54,7 @@ const CLI_DOORS = [
   { id: "cursor", binary: "cursor-agent" },
   { id: "opencode", binary: "opencode" }
 ];
-const PROVIDERS = ["openrouter", "codex", "claude-code"];
+const PROVIDERS = [...new Set(ROUTE_CASES.map((route) => route.provider))];
 const MODEL_CALL_PATHS = new Set([
   "/v1/chat/completions",
   "/chat/completions",
@@ -62,7 +71,9 @@ function parseArgs(argv) {
     doors: undefined,
     timeoutMs: Number(process.env.ROUTEKIT_E2E_TIMEOUT_MS ?? 120_000),
     maxLiveCalls: Number(process.env.ROUTEKIT_E2E_MAX_LIVE_CALLS ?? 32),
-    models: {}
+    models: {},
+    routes: undefined,
+    cursorIdeEvidence: undefined
   };
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
@@ -74,8 +85,10 @@ function parseArgs(argv) {
     };
     if (arg === "--") continue;
     if (arg === "--live") options.live = true;
+    else if (arg === "--route") options.routes = csv(value());
     else if (arg === "--provider") options.providers = csv(value());
     else if (arg === "--door") options.doors = csv(value());
+    else if (arg === "--cursor-ide-evidence") options.cursorIdeEvidence = value();
     else if (arg === "--timeout-ms") options.timeoutMs = positiveInteger(value(), arg);
     else if (arg === "--max-live-calls") options.maxLiveCalls = positiveInteger(value(), arg);
     else if (arg === "--model") {
@@ -89,8 +102,10 @@ function parseArgs(argv) {
           "Usage: pnpm test:e2e:matrix -- [options]",
           "",
           "  --live                    run billed cases (also ROUTEKIT_LIVE_E2E=1)",
+          "  --route <ids>             comma-separated L05 route-anchor filter",
           "  --provider <ids>          comma-separated provider filter",
           "  --door <ids>              API/CLI door filter",
+          "  --cursor-ide-evidence <p> prompt-free manual evidence JSON",
           "  --model <provider=id>     override one live namespaced model",
           "  --timeout-ms <ms>         per-PTY timeout",
           "  --max-live-calls <count>  hard billed-request budget",
@@ -108,6 +123,22 @@ function parseArgs(argv) {
   if (options.doors === undefined && process.env.ROUTEKIT_E2E_DOOR !== undefined) {
     options.doors = csv(process.env.ROUTEKIT_E2E_DOOR);
   }
+  if (options.routes !== undefined) {
+    if (options.providers !== undefined || options.doors !== undefined) {
+      throw new Error("--route cannot be combined with --provider or --door");
+    }
+    const routes = selectedRoutes(options.routes);
+    options.providers = [...new Set(routes.map((route) => route.provider))];
+    options.doors = [
+      ...new Set(
+        routes.flatMap((route) => {
+          if (route.manual === true) return ["openai-chat"];
+          if (route.door === "cursor") return ["cursor", "openai-chat"];
+          return [route.door];
+        })
+      )
+    ];
+  }
   for (const provider of options.providers ?? []) {
     if (!PROVIDERS.includes(provider)) {
       throw new Error(`unknown provider filter "${provider}"`);
@@ -122,6 +153,32 @@ function parseArgs(argv) {
     if (!knownDoors.has(door)) throw new Error(`unknown door filter "${door}"`);
   }
   return options;
+}
+
+function qualificationRoutes(options) {
+  return selectedRoutes(options.routes);
+}
+
+function caseSelected(provider, door, options) {
+  if (options.routes === undefined) {
+    return selected(provider, options.providers) && selected(door, options.doors);
+  }
+  return qualificationRoutes(options).some(
+    (route) =>
+      route.manual !== true &&
+      route.provider === provider &&
+      route.door === door
+  );
+}
+
+function routeIdForCase(provider, door, options) {
+  if (options.routes === undefined) return undefined;
+  return qualificationRoutes(options).find(
+    (route) =>
+      route.manual !== true &&
+      route.provider === provider &&
+      route.door === door
+  )?.routeId;
 }
 
 function csv(value) {
@@ -179,6 +236,8 @@ function writeRouterConfig(path, defaultModel) {
     path,
     [
       "providers:",
+      "  openai: {}",
+      "  anthropic: {}",
       "  openrouter: {}",
       "  codex: {}",
       "  claude-code: {}",
@@ -198,7 +257,7 @@ function sourceFor(simUrl, provider, nativeModels) {
   const backend =
     provider === "codex"
       ? new CodexResponsesBackend(options)
-      : provider === "claude-code"
+      : provider === "claude-code" || provider === "anthropic"
         ? new AnthropicBackend(options)
         : new OpenAiBackend(options);
   return {
@@ -347,6 +406,8 @@ async function startCountingProxy(targetUrl, options = {}) {
 
 async function startDeterministicStack(tempRoot) {
   const nativeModels = {
+    openai: "matrix-openai",
+    anthropic: "claude-matrix-api",
     openrouter: "matrix-openrouter",
     codex: "matrix-codex",
     "claude-code": "claude-matrix"
@@ -363,6 +424,8 @@ async function startDeterministicStack(tempRoot) {
   const backend = await CatalogBackend.create({
     config: {
       providers: {
+        openai: {},
+        anthropic: {},
         openrouter: {},
         codex: {},
         "claude-code": {}
@@ -373,6 +436,16 @@ async function startDeterministicStack(tempRoot) {
           efforts: [{ id: "quick", aliases: ["high"] }, { id: "deep" }],
           defaultEffort: "quick",
           wireShape: "openrouter"
+        },
+        [publicModels.openai]: {
+          efforts: [{ id: "quick", aliases: ["high"] }, { id: "deep" }],
+          defaultEffort: "quick",
+          wireShape: "openai"
+        },
+        [publicModels.anthropic]: {
+          efforts: [{ id: "quick" }, { id: "deep" }],
+          defaultEffort: "quick",
+          wireShape: "anthropic"
         },
         [publicModels.codex]: {
           efforts: [{ id: "quick", aliases: ["high"] }, { id: "deep" }],
@@ -448,6 +521,153 @@ async function callApiDoor(gatewayUrl, door, model, prompt, stream = false) {
   }
   const body = JSON.parse(text);
   return door.textOf(body);
+}
+
+async function verifyFailureNoFallback(stack, provider, door) {
+  await stack.simulator.reset();
+  await stack.simulator.queue(stack.nativeModels[provider], [
+    {
+      error: {
+        status: 500,
+        code: "internal_error",
+        error_type: "api_error",
+        message: "simulated provider error"
+      }
+    }
+  ]);
+  await assert.rejects(
+    callApiDoor(
+      stack.proxy.url,
+      door,
+      stack.publicModels[provider],
+      "Deterministic failure propagation probe."
+    ),
+    /returned 5\d\d/
+  );
+  const selectedCalls = await stack.simulator.calls({
+    model: stack.nativeModels[provider]
+  });
+  assert.equal(selectedCalls.length, 1, await stack.simulator.describeJournal());
+  for (const [otherProvider, nativeModel] of Object.entries(stack.nativeModels)) {
+    if (otherProvider === provider) continue;
+    const calls = await stack.simulator.calls({ model: nativeModel });
+    assert.equal(
+      calls.length,
+      0,
+      `failure on ${provider} unexpectedly reached ${otherProvider}`
+    );
+  }
+}
+
+async function verifyToolsAndReasoning(stack, provider, door) {
+  await stack.simulator.reset();
+  await stack.simulator.queue(stack.nativeModels[provider], [
+    {
+      tool_calls: [
+        {
+          id: "matrix-tool-call",
+          name: "read_file",
+          arguments: '{"path":"qualification.txt"}'
+        }
+      ],
+      reasoning: "deterministic qualification reasoning"
+    },
+    {
+      reply: "CAPABILITY_OK",
+      reasoning: "deterministic qualification reasoning"
+    }
+  ]);
+  const toolResponse = await fetch(`${stack.proxy.url}${door.path}`, {
+    method: "POST",
+    headers: { "content-type": "application/json", ...(door.headers ?? {}) },
+    body: JSON.stringify(
+      door.buildRequest({
+        model: stack.publicModels[provider],
+        user: "Deterministic tool capability probe.",
+        withTools: true
+      })
+    )
+  });
+  assert.equal(toolResponse.status, 200);
+  const toolCall = door.toolCallOf(await toolResponse.json());
+  assert.equal(toolCall?.name, "read_file");
+
+  const reasoningResponse = await fetch(`${stack.proxy.url}${door.path}`, {
+    method: "POST",
+    headers: { "content-type": "application/json", ...(door.headers ?? {}) },
+    body: JSON.stringify(
+      door.buildRequest({
+        model: stack.publicModels[provider],
+        user: "Deterministic reasoning capability probe.",
+        stream: true
+      })
+    )
+  });
+  assert.equal(reasoningResponse.status, 200);
+  const parsed = await doorFrames(reasoningResponse);
+  assert.ok(door.streamClosed(parsed.frames), `${door.id} capability stream did not close`);
+  assert.match(door.streamTextOf(parsed.frames), /CAPABILITY_OK/);
+  assert.ok(
+    door.streamReasoningOf(parsed.frames).length > 0,
+    `${door.id} omitted deterministic reasoning`
+  );
+}
+
+async function verifyCancellationPropagation() {
+  let cancelled = false;
+  let upstreamController;
+  const backend = {
+    defaultModel: "matrix-cancellation",
+    chat: async () =>
+      new Response(
+        new ReadableStream({
+          start(controller) {
+            upstreamController = controller;
+            controller.enqueue(
+              Buffer.from('data: {"choices":[{"delta":{"content":"first"}}]}\n\n')
+            );
+          },
+          cancel() {
+            cancelled = true;
+          }
+        }),
+        { status: 200, headers: { "content-type": "text/event-stream" } }
+      ),
+    models: async () =>
+      Response.json({ object: "list", data: [{ id: "matrix-cancellation" }] }),
+    embeddings: async () => Response.json({ data: [] })
+  };
+  const gateway = await startGateway({ backend });
+  const aborter = new AbortController();
+  try {
+    const response = await fetch(`${gateway.url()}/v1/chat/completions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        model: "matrix-cancellation",
+        stream: true,
+        messages: [{ role: "user", content: "cancellation probe" }]
+      }),
+      signal: aborter.signal
+    });
+    const reader = response.body?.getReader();
+    assert.ok(reader !== undefined);
+    await reader.read();
+    aborter.abort();
+    const deadline = Date.now() + 1_000;
+    while (!cancelled && Date.now() < deadline) {
+      await new Promise((resolveWait) => setTimeout(resolveWait, 10));
+    }
+    if (!cancelled) upstreamController?.close();
+    assert.equal(cancelled, true, "client disconnect did not cancel the upstream body");
+  } finally {
+    try {
+      upstreamController?.close();
+    } catch {
+      // The stream was already cancelled.
+    }
+    await gateway.close();
+  }
 }
 
 async function nativePickerAliases(gatewayUrl, nativeModels, publicModels) {
@@ -1058,6 +1278,15 @@ async function catalogModels(gatewayUrl) {
 
 function chooseLiveModels(models, overrides, providers = PROVIDERS) {
   const preferences = {
+    openai: [
+      "openai/gpt-5.5",
+      "openai/gpt-4.1-nano",
+      "openai/gpt-4o-mini"
+    ],
+    anthropic: [
+      "anthropic/claude-sonnet-4-6",
+      "anthropic/claude-sonnet-4-5"
+    ],
     openrouter: [
       "openrouter/openai/gpt-4o-mini",
       "openrouter/openai/gpt-4.1-nano"
@@ -1080,7 +1309,7 @@ function chooseLiveModels(models, overrides, providers = PROVIDERS) {
         }
         return [provider, override];
       }
-      const preferred = preferences[provider].find((model) =>
+      const preferred = (preferences[provider] ?? []).find((model) =>
         available.includes(model)
       );
       const fallback = preferred ?? available[0];
@@ -1198,13 +1427,18 @@ async function runLivePoolFailover(tempRoot) {
 function resultEntry(input) {
   return {
     phase: input.phase,
+    routeId: input.routeId ?? null,
     provider: input.provider ?? null,
     door: input.door,
     status: input.status,
-    reason: input.reason ?? null,
+    reasonCode:
+      input.status === "pass"
+        ? "qualified"
+        : input.reasonCode ?? classifyFailure(input.reason ?? "provider request failed"),
     durationMs: input.durationMs,
     billedCalls: input.billedCalls ?? 0,
-    artifact: input.artifact ?? null
+    artifact: input.artifact ?? null,
+    model: input.model ?? null
   };
 }
 
@@ -1226,12 +1460,12 @@ async function recordCase(results, input, run) {
     const entry = resultEntry({
       ...input,
       status: "fail",
-      reason: sanitize(reason),
+      reasonCode: classifyFailure(reason),
       durationMs: Date.now() - started
     });
     results.push(entry);
     process.stderr.write(
-      `FAIL ${input.phase} ${input.provider ?? "-"} ${input.door}: ${entry.reason}\n`
+      `FAIL ${input.phase} ${input.provider ?? "-"} ${input.door}: ${entry.reasonCode} (${sanitize(reason)})\n`
     );
     return entry;
   }
@@ -1241,7 +1475,7 @@ function skipCase(results, input, reason) {
   const entry = resultEntry({
     ...input,
     status: "skip",
-    reason,
+    reasonCode: classifyFailure(reason),
     durationMs: 0
   });
   results.push(entry);
@@ -1251,6 +1485,54 @@ function skipCase(results, input, reason) {
 async function runDeterministic(options, results, artifactDir, tempRoot) {
   const stack = await startDeterministicStack(tempRoot);
   try {
+    await recordCase(
+      results,
+      { phase: "deterministic", door: "cancellation" },
+      async () => {
+        await verifyCancellationPropagation();
+        return {};
+      }
+    );
+    const failureCases = new Map();
+    for (const route of qualificationRoutes(options)) {
+      if (!selected(route.provider, options.providers)) continue;
+      const protocolDoorId =
+        route.door === "cursor" || route.door === "cursor-ide"
+          ? "openai-chat"
+          : route.door;
+      if (!selected(protocolDoorId, options.doors)) continue;
+      failureCases.set(`${route.provider}:${protocolDoorId}`, {
+        provider: route.provider,
+        door: API_DOORS.find((candidate) => candidate.id === protocolDoorId)
+      });
+    }
+    for (const { provider, door } of failureCases.values()) {
+      assert.ok(door !== undefined, `missing deterministic door for ${provider}`);
+      await recordCase(
+        results,
+        {
+          phase: "deterministic",
+          provider,
+          door: `failure-no-fallback-${door.id}`
+        },
+        async () => {
+          await verifyFailureNoFallback(stack, provider, door);
+          return {};
+        }
+      );
+      await recordCase(
+        results,
+        {
+          phase: "deterministic",
+          provider,
+          door: `tools-reasoning-${door.id}`
+        },
+        async () => {
+          await verifyToolsAndReasoning(stack, provider, door);
+          return {};
+        }
+      );
+    }
     await recordCase(
       results,
       { phase: "deterministic", door: "native-pickers" },
@@ -1301,10 +1583,15 @@ async function runDeterministic(options, results, artifactDir, tempRoot) {
     for (const provider of PROVIDERS) {
       if (!selected(provider, options.providers)) continue;
       for (const door of API_DOORS) {
-        if (!selected(door.id, options.doors)) continue;
+        if (!caseSelected(provider, door.id, options)) continue;
         await recordCase(
           results,
-          { phase: "deterministic", provider, door: door.id },
+          {
+            phase: "deterministic",
+            routeId: routeIdForCase(provider, door.id, options),
+            provider,
+            door: door.id
+          },
           async () => {
             await stack.simulator.reset();
             const marker = `API_${provider.replaceAll("-", "_").toUpperCase()}_${door.id
@@ -1330,11 +1617,16 @@ async function runDeterministic(options, results, artifactDir, tempRoot) {
     for (const provider of PROVIDERS) {
       if (!selected(provider, options.providers)) continue;
       for (const door of CLI_DOORS) {
-        if (!selected(door.id, options.doors)) continue;
+        if (!caseSelected(provider, door.id, options)) continue;
         if (!commandAvailable(door.binary)) {
           skipCase(
             results,
-            { phase: "deterministic", provider, door: door.id },
+            {
+              phase: "deterministic",
+              routeId: routeIdForCase(provider, door.id, options),
+              provider,
+              door: door.id
+            },
             `${door.binary} is not installed`
           );
           continue;
@@ -1346,7 +1638,12 @@ async function runDeterministic(options, results, artifactDir, tempRoot) {
         );
         const entry = await recordCase(
           results,
-          { phase: "deterministic", provider, door: door.id },
+          {
+            phase: "deterministic",
+            routeId: routeIdForCase(provider, door.id, options),
+            provider,
+            door: door.id
+          },
           async () => {
             const toolCase =
               provider === "openrouter" &&
@@ -1397,6 +1694,8 @@ async function runDeterministic(options, results, artifactDir, tempRoot) {
 }
 
 async function runLive(options, results, artifactDir, tempRoot) {
+  const routes = qualificationRoutes(options);
+  reserveRouteBudget(routes, options.maxLiveCalls);
   const configuredPath = join(ROOT, ".routekit", "router.yaml");
   if (!existsSync(configuredPath)) {
     throw new Error(`live RouteKit config not found: ${configuredPath}`);
@@ -1457,9 +1756,11 @@ async function runLive(options, results, artifactDir, tempRoot) {
       );
     }
     const estimatedMinimum =
-      activeProviders.length *
-      (API_DOORS.filter((door) => selected(door.id, options.doors)).length +
-        CLI_DOORS.filter((door) => selected(door.id, options.doors)).length);
+      PROVIDERS.flatMap((provider) =>
+        [...API_DOORS, ...CLI_DOORS].filter((door) =>
+          caseSelected(provider, door.id, options)
+        )
+      ).length;
     if (estimatedMinimum > options.maxLiveCalls) {
       throw new Error(
         `selected live matrix needs at least ${estimatedMinimum} calls, above budget ${options.maxLiveCalls}`
@@ -1468,10 +1769,15 @@ async function runLive(options, results, artifactDir, tempRoot) {
     for (const provider of PROVIDERS) {
       if (!selected(provider, options.providers)) continue;
       for (const door of API_DOORS) {
-        if (!selected(door.id, options.doors)) continue;
+        if (!caseSelected(provider, door.id, options)) continue;
         await recordCase(
           results,
-          { phase: "live", provider, door: door.id },
+          {
+            phase: "live",
+            routeId: routeIdForCase(provider, door.id, options),
+            provider,
+            door: door.id
+          },
           async () => {
             const before = proxy.calls.length;
             const answer = await callApiDoor(
@@ -1482,7 +1788,10 @@ async function runLive(options, results, artifactDir, tempRoot) {
               true
             );
             assert.match(answer, /ROUTEKIT_OK/i);
-            return { billedCalls: proxy.calls.length - before };
+            return {
+              billedCalls: proxy.calls.length - before,
+              model: chosen[provider]
+            };
           }
         );
       }
@@ -1490,11 +1799,16 @@ async function runLive(options, results, artifactDir, tempRoot) {
     for (const provider of PROVIDERS) {
       if (!selected(provider, options.providers)) continue;
       for (const door of CLI_DOORS) {
-        if (!selected(door.id, options.doors)) continue;
+        if (!caseSelected(provider, door.id, options)) continue;
         if (!commandAvailable(door.binary)) {
           skipCase(
             results,
-            { phase: "live", provider, door: door.id },
+            {
+              phase: "live",
+              routeId: routeIdForCase(provider, door.id, options),
+              provider,
+              door: door.id
+            },
             `${door.binary} is not installed`
           );
           continue;
@@ -1502,7 +1816,12 @@ async function runLive(options, results, artifactDir, tempRoot) {
         const transcriptPath = join(artifactDir, `live-${provider}-${door.id}.txt`);
         await recordCase(
           results,
-          { phase: "live", provider, door: door.id },
+          {
+            phase: "live",
+            routeId: routeIdForCase(provider, door.id, options),
+            provider,
+            door: door.id
+          },
           async () => {
             const output = await runPtyCase({
               tempRoot,
@@ -1519,7 +1838,8 @@ async function runLive(options, results, artifactDir, tempRoot) {
             writeFileSync(transcriptPath, `${sanitize(output.transcript).trim()}\n`);
             return {
               billedCalls: output.billedCalls,
-              artifact: relative(ROOT, transcriptPath)
+              artifact: relative(ROOT, transcriptPath),
+              model: chosen[provider]
             };
           }
         );
@@ -1549,6 +1869,206 @@ async function runLive(options, results, artifactDir, tempRoot) {
     await routekit.close();
   }
   return billedCalls;
+}
+
+function commandVersion(binary) {
+  const result = spawnSync(binary, ["--version"], {
+    encoding: "utf8",
+    timeout: 15_000,
+    stdio: ["ignore", "pipe", "ignore"]
+  });
+  if (result.error !== undefined || result.status !== 0) return "unavailable";
+  return result.stdout.trim().replaceAll(/[\r\n\t]/g, " ").slice(0, 160) || "unavailable";
+}
+
+function repositoryMetadata() {
+  const revision = spawnSync("git", ["rev-parse", "HEAD"], {
+    cwd: ROOT,
+    encoding: "utf8"
+  });
+  const dirty = spawnSync("git", ["status", "--porcelain"], {
+    cwd: ROOT,
+    encoding: "utf8"
+  });
+  const packageJson = JSON.parse(
+    readFileSync(join(ROOT, "packages", "routekit-cli", "package.json"), "utf8")
+  );
+  return {
+    routekitVersion: packageJson.version,
+    routekitGitSha:
+      revision.status === 0 ? revision.stdout.trim() : "unavailable",
+    gitDirty: dirty.status !== 0 || dirty.stdout.trim() !== "",
+    nodeVersion: process.version,
+    platform: platform(),
+    architecture: arch(),
+    clients: {
+      claude: commandVersion("claude"),
+      codex: commandVersion("codex"),
+      cursorAgent: commandVersion("cursor-agent"),
+      cursorIde: commandVersion("cursor")
+    }
+  };
+}
+
+function deterministicCheck(results, provider, protocolDoor, prefix) {
+  return results.find(
+    (entry) =>
+      entry.phase === "deterministic" &&
+      entry.provider === provider &&
+      entry.door === `${prefix}-${protocolDoor}`
+  );
+}
+
+function buildQualification(options, results, topLevelError, billedLiveCallsMade) {
+  if (!options.live) {
+    return {
+      status: "not-run",
+      expectedRouteIds: qualificationRoutes(options).map((route) => route.routeId),
+      routes: []
+    };
+  }
+  let cursorIdeEvidence;
+  if (options.cursorIdeEvidence !== undefined) {
+    cursorIdeEvidence = validateManualEvidence(
+      JSON.parse(readFileSync(resolve(options.cursorIdeEvidence), "utf8"))
+    );
+  }
+  const cancellation = results.find(
+    (entry) => entry.phase === "deterministic" && entry.door === "cancellation"
+  );
+  const routes = qualificationRoutes(options).map((route) => {
+    if (route.manual === true) {
+      return makeRouteResult(
+        route,
+        cursorIdeEvidence ?? {
+          status: "fail",
+          reasonCode: "manual-evidence-unavailable",
+          credentialAvailable: false,
+          clientVersion: commandVersion("cursor"),
+          protocol: {
+            streaming: "fail",
+            tools: "fail",
+            reasoning: "fail"
+          },
+          behavior: {
+            cancellation: cancellation?.status === "pass" ? "pass" : "fail",
+            failurePropagation: "fail",
+            routekitFallback: "unverified"
+          },
+          setupRestore: { setup: "fail", restore: "fail" },
+          evidence: ["manual-evidence-unavailable"]
+        }
+      );
+    }
+    const live = results.find(
+      (entry) => entry.phase === "live" && entry.routeId === route.routeId
+    );
+    const protocolDoor =
+      route.door === "cursor" ? "openai-chat" : route.door;
+    const failure = deterministicCheck(
+      results,
+      route.provider,
+      protocolDoor,
+      "failure-no-fallback"
+    );
+    const capabilities = deterministicCheck(
+      results,
+      route.provider,
+      protocolDoor,
+      "tools-reasoning"
+    );
+    const livePassed = live?.status === "pass";
+    const deterministicPassed =
+      cancellation?.status === "pass" &&
+      failure?.status === "pass" &&
+      capabilities?.status === "pass";
+    const requiredClientAvailable =
+      route.client === "routekit-http" || commandVersion(route.client) !== "unavailable";
+    const passed =
+      livePassed &&
+      deterministicPassed &&
+      requiredClientAvailable &&
+      route.setupRestore !== "required";
+    const clientVersion =
+      route.client === "routekit-http"
+        ? repositoryMetadata().routekitVersion
+        : commandVersion(route.client);
+    return makeRouteResult(route, {
+      status: passed ? "pass" : "fail",
+      reasonCode:
+        topLevelError !== undefined
+          ? classifyFailure(topLevelError)
+          : live === undefined
+            ? "matrix-case-missing"
+            : live.status === "skip" || !requiredClientAvailable
+              ? "client-unavailable"
+              : route.setupRestore === "required" && livePassed
+                ? "setup-restore-failed"
+                : live.reasonCode,
+      durationMs: live?.durationMs,
+      model: live?.model,
+      apiRevision: route.provider === "anthropic" ? "2023-06-01" : "not-advertised",
+      egressHost:
+        route.provider === "openai"
+          ? "api.openai.com"
+          : route.provider === "anthropic" || route.provider === "claude-code"
+            ? "api.anthropic.com"
+            : route.provider === "openrouter"
+              ? "openrouter.ai"
+              : route.provider === "codex"
+                ? "chatgpt.com"
+                : "not-observed",
+      credentialAvailable: live !== undefined && live.status !== "skip",
+      clientVersion,
+      protocol: {
+        streaming: livePassed ? "pass" : "fail",
+        tools: capabilities?.status === "pass" ? "pass" : "fail",
+        reasoning: capabilities?.status === "pass" ? "pass" : "fail"
+      },
+      behavior: {
+        cancellation: cancellation?.status === "pass" ? "pass" : "fail",
+        failurePropagation: failure?.status === "pass" ? "pass" : "fail",
+        routekitFallback: failure?.status === "pass" ? "none" : "unverified"
+      },
+      attributionBasis:
+        livePassed && (live?.billedCalls ?? 0) > 0
+          ? "local-counting-proxy"
+          : "not-observed",
+      providerRequestsObserved: live?.billedCalls ?? 0,
+      setupRestore:
+        route.setupRestore === "not-applicable"
+          ? { setup: "not-applicable", restore: "not-applicable" }
+          : {
+              setup: livePassed ? "pass" : "fail",
+              restore: "fail"
+            },
+      evidence: [
+        `deterministic-failure-no-fallback-${route.provider}-${protocolDoor}`,
+        `deterministic-tools-reasoning-${route.provider}-${protocolDoor}`,
+        "deterministic-cancellation",
+        live?.artifact
+      ].filter(Boolean)
+    });
+  });
+  const completeness = qualificationCompleteness(
+    routes,
+    qualificationRoutes(options).map((route) => route.routeId)
+  );
+  return {
+    status: completeness.allPassed ? "pass" : "fail",
+    completeness,
+    budget: {
+      authorizedMaximum: options.maxLiveCalls,
+      plannedMaximum: qualificationRoutes(options).reduce(
+        (sum, route) => sum + route.maxProviderCalls,
+        0
+      ),
+      providerRequestsObserved: billedLiveCallsMade,
+      remaining: Math.max(0, options.maxLiveCalls - billedLiveCallsMade),
+      exhausted: billedLiveCallsMade >= options.maxLiveCalls
+    },
+    routes
+  };
 }
 
 async function main() {
@@ -1597,12 +2117,20 @@ async function main() {
     fail: results.filter((entry) => entry.status === "fail").length,
     skip: results.filter((entry) => entry.status === "skip").length
   };
+  const qualification = buildQualification(
+    options,
+    results,
+    topLevelError,
+    billedLiveCallsMade
+  );
   const report = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     startedAt,
     finishedAt: new Date().toISOString(),
+    metadata: repositoryMetadata(),
     liveAuthorized: options.live,
     filters: {
+      routes: qualificationRoutes(options).map((route) => route.routeId),
       providers: options.providers ?? PROVIDERS,
       doors:
         options.doors ??
@@ -1613,7 +2141,9 @@ async function main() {
     counts,
     billedLiveCallsMade,
     results,
-    topLevelError: topLevelError === undefined ? null : sanitize(topLevelError)
+    qualification,
+    topLevelError:
+      topLevelError === undefined ? null : classifyFailure(topLevelError)
   };
   const reportPath = join(artifactDir, "report.json");
   writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`);
@@ -1621,7 +2151,13 @@ async function main() {
     `RESULT pass=${counts.pass} fail=${counts.fail} skip=${counts.skip} billed=${report.billedLiveCallsMade}\n`
   );
   process.stdout.write(`REPORT ${relative(ROOT, reportPath)}\n`);
-  if (counts.fail > 0 || topLevelError !== undefined) process.exitCode = 1;
+  if (
+    counts.fail > 0 ||
+    topLevelError !== undefined ||
+    (options.live && qualification.status !== "pass")
+  ) {
+    process.exitCode = 1;
+  }
 }
 
 await main();
