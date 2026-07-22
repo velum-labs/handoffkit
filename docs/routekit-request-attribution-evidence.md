@@ -3,7 +3,7 @@
 Date: 2026-07-22
 Issue: [ENG-681](https://linear.app/velum-labs/issue/ENG-681/close-routekit-request-attribution-gap)
 Pull request: [#163](https://github.com/velum-labs/handoffkit/pull/163)
-Implementation revision tested: `bb5bec5a`
+Implementation revision tested: `6551fb65`
 
 ## Result
 
