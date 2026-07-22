@@ -222,7 +222,7 @@ test("every first-launch route has a complete public disclosure", () => {
 
 test("public onboarding links to the route disclosure contract", () => {
   const packageReadme = readFileSync(join(root, "packages/routekit-cli/README.md"), "utf8");
-  assert.match(packageReadme, new RegExp(routeDisclosuresUrl.replaceAll(".", "\\.")));
+  assert.ok(packageReadme.includes(routeDisclosuresUrl));
 
   for (const path of [
     "apps/docs/content/docs/getting-started/installation.mdx",
