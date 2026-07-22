@@ -1,0 +1,229 @@
+---
+title: RouteKit routes, billing, and provider disclosures
+description: Credential, billing, egress, failover, limitation, and qualification disclosures for every first-launch RouteKit route.
+---
+
+RouteKit sends model traffic only to the namespaced `provider/model` route you
+configure or request. The first-launch contract below is **planned Supported
+after L06 qualification**; it is not a claim that live qualification has
+finished.
+
+Every row names who supplies the credential, who bills usage, where requests
+go, and what RouteKit does when capacity is unavailable. A provider or
+subscription saying that a quota is “unlimited” does not make RouteKit usage
+unlimited. Provider terms, plan limits, fair-use controls, and model
+availability still apply.
+
+## Rules shared by all routes
+
+- A requested namespaced model never falls through to a different provider.
+  Unknown routes fail. `defaultModel` is used only when the client omits a
+  model; configuring it is an explicit routing decision.
+- API routes do not have RouteKit account-pool failover. Their provider errors
+  return to the caller.
+- Subscription pools may rotate only among eligible enrolled accounts of the
+  same subscription kind. Exhaustion does not switch to an API-key provider.
+- FusionKit's separately configured `onRateLimit: fusion` policy can expand a
+  failed passthrough turn to its configured panel. That is FusionKit behavior,
+  not a RouteKit route fallback; use `passthrough` or `fail` to disable it.
+- The evidence baseline reviewed for this page is `@routekit/cli` **0.8.0** at
+  source revision
+  [`85a984e9`](https://github.com/velum-labs/handoffkit/commit/85a984e90b30b8780ffa03d1ba7115d41e575ab5),
+  dated **2026-07-22**. Exact live account, provider, and client versions are
+  still pending the L06 real-account matrix. Each route remains Planned
+  Supported until that dated evidence is linked below.
+
+<a id="route-openai-api"></a>
+
+## OpenAI API
+
+- **Status and evidence:** Planned Supported after L06. RouteKit 0.8.0,
+  revision `85a984e9`, reviewed 2026-07-22. Exact live model/API qualification
+  is pending.
+- **Credential:** Your `OPENAI_API_KEY` from your OpenAI API account. An
+  operator may explicitly set `OPENAI_BASE_URL`; RouteKit does not accept an
+  inline key in router YAML.
+- **Billing:** Metered OpenAI API usage billed to the API account that owns the
+  key. A ChatGPT or Codex subscription is not used by this route.
+- **Egress and aggregator:** Direct to `api.openai.com` by default. There is no
+  aggregator. An explicit base-URL override changes the destination and makes
+  its operator responsible for handling the request.
+- **Quota and failover:** No RouteKit account pool and no cross-provider
+  fallback. OpenAI quota, billing, and rate-limit errors return to the caller.
+- **Protocol and limitations:** OpenAI Chat Completions with streaming and
+  tools. Model-specific reasoning, image, and tool support follows the
+  discovered model and OpenAI API behavior. RouteKit does not provide
+  provider-session restore for this API route.
+- **Unlimited use:** RouteKit makes no unlimited-use claim. OpenAI account
+  limits and terms apply.
+
+<a id="route-anthropic-api"></a>
+
+## Anthropic API
+
+- **Status and evidence:** Planned Supported after L06. RouteKit 0.8.0,
+  revision `85a984e9`, reviewed 2026-07-22. Exact live model/API qualification
+  is pending.
+- **Credential:** Your `ANTHROPIC_API_KEY` or `ANTHROPIC_AUTH_TOKEN` from the
+  Anthropic API account. `ANTHROPIC_BASE_URL` is an explicit destination
+  override.
+- **Billing:** Metered Anthropic API usage billed to the API account. A Claude
+  subscription is not used by this route.
+- **Egress and aggregator:** Direct to `api.anthropic.com` by default. There is
+  no aggregator. A base-URL override changes that destination.
+- **Quota and failover:** No RouteKit account pool and no cross-provider
+  fallback. Anthropic quota, billing, and rate-limit errors return to the
+  caller.
+- **Protocol and limitations:** Native Anthropic Messages, including tools,
+  streaming, thinking blocks, signatures, and redacted-thinking blocks where
+  the selected model supplies them. Client-to-provider translation can only
+  preserve fields supported by both dialects. RouteKit does not provide
+  provider-session restore for this API route.
+- **Unlimited use:** RouteKit makes no unlimited-use claim. Anthropic account
+  limits and terms apply.
+
+<a id="route-openrouter-api"></a>
+
+## OpenRouter API
+
+- **Status and evidence:** Planned Supported after L06. RouteKit 0.8.0,
+  revision `85a984e9`, reviewed 2026-07-22. Exact live model/upstream
+  qualification is pending.
+- **Credential:** Your `OPENROUTER_API_KEY` from your OpenRouter account.
+- **Billing:** Metered OpenRouter API credit usage billed by OpenRouter. This
+  route is not a model-provider subscription route.
+- **Egress and aggregator:** **OpenRouter is an aggregator.** RouteKit sends
+  prompts, code, tool data, and model requests to `openrouter.ai`; OpenRouter
+  then sends them to the upstream provider selected for the requested model
+  and its routing policy. The model slug does not guarantee one fixed upstream
+  host. RouteKit includes `HTTP-Referer` and `X-Title` attribution headers.
+- **Quota and failover:** No RouteKit account pool and no silent switch to a
+  direct provider. OpenRouter can apply its own upstream routing and provider
+  selection under your OpenRouter settings and terms.
+- **Protocol and limitations:** OpenAI Chat Completions. Tools, streaming,
+  images, context limits, and reasoning controls depend on both OpenRouter and
+  the selected upstream model. RouteKit forwards OpenRouter reasoning controls
+  only when the model advertises compatible capabilities. There is no
+  provider-session restore.
+- **Unlimited use:** RouteKit makes no unlimited-use claim. OpenRouter credits,
+  upstream availability, limits, and terms apply.
+
+<a id="route-codex-subscription"></a>
+
+## Codex subscription
+
+- **Status and evidence:** Planned Supported after L06. RouteKit 0.8.0,
+  revision `85a984e9`, reviewed 2026-07-22. Exact Codex CLI version, live
+  account result, and setup/restore result are pending.
+- **Credential:** Your Codex OAuth credential, captured with `routekit accounts
+  login codex --name <label>` in an isolated temporary profile or imported
+  from the official CLI with `accounts add`. RouteKit stores the enrolled copy
+  under `~/.routekit/subscriptions/codex/`.
+- **Billing:** Usage is charged against the terms and quota of the ChatGPT/Codex
+  subscription that issued the OAuth credential. It is not billed to
+  `OPENAI_API_KEY`.
+- **Egress and aggregator:** Direct provider-native relay to
+  `chatgpt.com/backend-api/codex`. There is no third-party aggregator.
+- **Quota and failover:** Quota exhaustion can rotate to another eligible
+  enrolled Codex account. A transient throttle gets at most one retry on the
+  same account and one alternate eligible account. Pool exhaustion returns an
+  explicit quota error and never calls a paid OpenAI API-key route.
+- **Protocol and limitations:** OpenAI Responses with streaming, tools, and
+  discovered reasoning efforts. The official Codex client may change its
+  catalog or profile schema between releases. Enrollment is transactional;
+  exact client setup and session-restore behavior remains an L06 qualification
+  item.
+- **Unlimited use:** RouteKit makes no unlimited-use claim. Subscription plan,
+  fair-use, model, and reset-window limits apply to every pooled account.
+
+<a id="route-claude-code-subscription"></a>
+
+## Claude Code subscription
+
+- **Status and evidence:** Planned Supported after L06. RouteKit 0.8.0,
+  revision `85a984e9`, reviewed 2026-07-22. Exact Claude Code version, live
+  account result, and restore/recovery result are pending.
+- **Credential:** Your Claude Code OAuth credential, captured with `routekit
+  accounts login claude-code --name <label>` in an isolated temporary profile
+  or imported with `accounts add`. RouteKit stores the enrolled copy under
+  `~/.routekit/subscriptions/claude-code/`.
+- **Billing:** Usage is charged against the terms and quota of the Claude
+  subscription that issued the OAuth credential. It is not billed to
+  `ANTHROPIC_API_KEY`.
+- **Egress and aggregator:** Direct provider-native Anthropic relay. There is
+  no third-party aggregator.
+- **Quota and failover:** Quota exhaustion can rotate to another eligible
+  enrolled Claude Code account. Transient retries are bounded in the same way
+  as Codex pools. Exhaustion returns an explicit quota error and never calls a
+  paid Anthropic API-key route.
+- **Protocol and limitations:** Anthropic Messages with streaming, tools, and
+  thinking. The subscription relay supplies the Claude Code system identity
+  required by the provider and rewrites unsupported developer-role messages.
+  Managed restore/recovery parity is not yet qualified and must not be assumed.
+- **Unlimited use:** RouteKit makes no unlimited-use claim. Subscription plan,
+  fair-use, model, and reset-window limits apply to every pooled account.
+
+<a id="route-cursor-ide"></a>
+
+## Cursor IDE custom OpenAI endpoint
+
+- **Status and evidence:** Planned Supported after L06. RouteKit 0.8.0,
+  revision `85a984e9`, reviewed 2026-07-22. Exact Cursor IDE version and
+  authenticated desktop qualification are pending.
+- **Credential:** A logged-in Cursor desktop account plus the local gateway
+  token used by the isolated custom-endpoint profile. The selected RouteKit
+  model separately uses the API or subscription credential disclosed in its
+  provider row.
+- **Billing:** Agent model inference through the custom endpoint is billed by
+  the selected RouteKit route. Cursor may separately require and bill the
+  user's Cursor account for Cursor-owned features.
+- **Egress and aggregator:** Agent requests for the selected custom model pass
+  through the local Cursorkit bridge to RouteKit, then to that model's disclosed
+  provider. Composer, inline edit, apply, autocomplete, authentication, and
+  other Cursor-owned features can still contact Cursor's cloud services.
+- **Quota and failover:** This harness adds no provider fallback. The selected
+  RouteKit route's quota and failover rules apply. Cursor-cloud failures are not
+  handed off to another RouteKit provider.
+- **Protocol and limitations:** Custom OpenAI endpoint for the Agent chat/plan
+  panel. Tools and streaming are supported by the bridge; images and reasoning
+  controls are degraded. Composer, inline edit, apply, and autocomplete do not
+  use the custom model. Re-launching recreates the isolated setup; exact restore
+  behavior is pending qualification.
+- **Unlimited use:** RouteKit makes no unlimited-use claim for either the
+  selected provider route or Cursor services.
+
+<a id="route-cursor-agent"></a>
+
+## `cursor-agent` custom OpenAI endpoint
+
+- **Status and evidence:** Planned Supported after L06. RouteKit 0.8.0,
+  revision `85a984e9`, reviewed 2026-07-22. Exact `cursor-agent` version and
+  authenticated CLI qualification are pending.
+- **Credential:** A logged-in `cursor-agent` account plus its local endpoint
+  connection. The selected RouteKit model separately uses the credential in
+  its provider row.
+- **Billing:** Model inference through the endpoint is billed by the selected
+  RouteKit API or subscription route. Cursor account requirements and any
+  Cursor-owned service billing remain separate.
+- **Egress and aggregator:** The CLI uses the local Cursorkit bridge for model
+  calls, which forwards to RouteKit and then the selected provider. Cursor can
+  still process authentication, session, and product-service traffic required
+  by the logged-in client.
+- **Quota and failover:** This harness adds no provider fallback. The selected
+  RouteKit route's rules apply, and Cursor upstream errors are not silently
+  expanded to another paid route.
+- **Protocol and limitations:** Cursor's bridge translates to RouteKit's
+  OpenAI Chat surface. Streaming and tools are supported; images and reasoning
+  controls are degraded. CLI session restore and exact client compatibility
+  remain version-specific L06 evidence.
+- **Unlimited use:** RouteKit makes no unlimited-use claim for either the
+  selected provider route or Cursor services.
+
+## Qualification evidence
+
+The deterministic matrix and its interpretation are documented in the
+[RouteKit end-to-end verification matrix](https://github.com/velum-labs/handoffkit/blob/main/docs/routekit-e2e-matrix.md).
+Public Supported labels require the separate sanitized L06 real-account report
+to record exact RouteKit revision, credential mode, client/provider version,
+evidence date, protocol behavior, billing attribution, and setup/restore
+results for every anchor above. Until then, all seven labels remain conditional.

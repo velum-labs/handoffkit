@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 const root = fileURLToPath(new URL("../../../../", import.meta.url));
 const routekitCli = join(root, "packages", "routekit-cli", "dist", "index.js");
 const cliEnv = { ...process.env, FUSIONKIT_NO_TUI: "1", ROUTEKIT_NO_TUI: "1" };
+const routeDisclosuresPath = "apps/docs/content/docs/reference/routes-and-billing.mdx";
 
 function help(args: readonly string[]): string {
   return execFileSync(process.execPath, [routekitCli, ...args], {
@@ -96,6 +97,72 @@ test("retained implementation references are explicitly non-contractual", () => 
       source,
       /retained internal Google[\s\S]{0,120}outside RouteKit's public\s+support contract/i,
       `${path} does not distinguish the retained Google backend from public support`
+    );
+  }
+});
+
+test("every first-launch route has a complete public disclosure", () => {
+  const source = readFileSync(join(root, routeDisclosuresPath), "utf8");
+  const packageJson = JSON.parse(
+    readFileSync(join(root, "packages/routekit-cli/package.json"), "utf8")
+  ) as { version: string };
+  const routeIds = [
+    "route-openai-api",
+    "route-anthropic-api",
+    "route-openrouter-api",
+    "route-codex-subscription",
+    "route-claude-code-subscription",
+    "route-cursor-ide",
+    "route-cursor-agent"
+  ];
+  const requiredFields = [
+    "**Status and evidence:**",
+    "**Credential:**",
+    "**Billing:**",
+    "**Egress and aggregator:**",
+    "**Quota and failover:**",
+    "**Protocol and limitations:**",
+    "**Unlimited use:**"
+  ];
+
+  for (const [index, routeId] of routeIds.entries()) {
+    const anchor = `<a id="${routeId}"></a>`;
+    const start = source.indexOf(anchor);
+    assert.notEqual(start, -1, `${routeDisclosuresPath} is missing ${routeId}`);
+    const nextAnchor =
+      index + 1 < routeIds.length ? `<a id="${routeIds[index + 1]}"></a>` : "## Qualification evidence";
+    const end = source.indexOf(nextAnchor, start + anchor.length);
+    assert.notEqual(end, -1, `${routeDisclosuresPath} cannot delimit ${routeId}`);
+    const section = source.slice(start, end);
+
+    for (const field of requiredFields) {
+      assert.ok(section.includes(field), `${routeId} is missing ${field}`);
+    }
+    assert.match(section, new RegExp(`RouteKit ${packageJson.version.replaceAll(".", "\\.")}`));
+    assert.match(section, /\b20\d{2}-\d{2}-\d{2}\b/);
+    assert.match(section, /makes no unlimited-use claim/i);
+  }
+
+  const openRouter = source.slice(
+    source.indexOf('<a id="route-openrouter-api"></a>'),
+    source.indexOf('<a id="route-codex-subscription"></a>')
+  );
+  assert.match(openRouter, /OpenRouter is an aggregator/i);
+  assert.match(openRouter, /upstream provider/i);
+  assert.match(openRouter, /prompts, code, tool data, and model requests/i);
+});
+
+test("public onboarding links to the route disclosure contract", () => {
+  for (const path of [
+    "packages/routekit-cli/README.md",
+    "apps/docs/content/docs/getting-started/installation.mdx",
+    "apps/docs/content/docs/concepts/privacy.mdx"
+  ]) {
+    const source = readFileSync(join(root, path), "utf8");
+    assert.match(
+      source,
+      /routes-and-billing/,
+      `${path} does not link to the public route disclosure contract`
     );
   }
 });

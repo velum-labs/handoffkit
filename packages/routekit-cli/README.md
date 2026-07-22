@@ -111,6 +111,11 @@ RouteKit's public first-launch set is:
 - harnesses: Codex CLI, Claude Code, Cursor IDE, and `cursor-agent` through
   Cursor's custom OpenAI endpoint.
 
+Read the
+[per-route credential, billing, egress, failover, and limitation disclosures](../../apps/docs/content/docs/reference/routes-and-billing.mdx)
+before enabling a route. OpenRouter is an aggregator; API-key and subscription
+routes have different billing and quota boundaries.
+
 Public support remains conditional on L06 qualification. The neutral registry
 and internal packages may retain additional providers, connectors, and tool
 integrations for compatibility and development. Those retained implementations

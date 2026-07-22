@@ -87,6 +87,11 @@ model IDs and never reads provider credentials. This repository's committed
 router uses `OPENROUTER_API_KEY`. `fusionkit doctor` reports missing model IDs;
 `routekit doctor` owns provider credential checks.
 
+Before enabling a provider or subscription, review its
+[credential, billing, egress, failover, and limitation disclosure](/docs/reference/routes-and-billing).
+OpenRouter is an aggregator, while the direct API and native subscription
+routes have different credential and billing boundaries.
+
 ### A git repository (required)
 
 The panel fuses over the code in your current repo. Run fusionkit from inside
