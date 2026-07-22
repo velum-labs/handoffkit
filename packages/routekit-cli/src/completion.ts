@@ -3,6 +3,10 @@ import { Command } from "commander";
 import { completionCandidates as coreCompletionCandidates } from "@routekit/cli-core";
 import { configuredProviderIds } from "@routekit/config";
 import { PROVIDER_IDS } from "@routekit/gateway";
+import {
+  accountKindChoices,
+  resolveAccountConnector
+} from "@routekit/registry";
 
 import { listAccounts } from "./accounts.js";
 import { globalRouterConfigPath, loadRouterConfig } from "./config.js";
@@ -69,18 +73,42 @@ function dynamicValues(
   ) {
     return modelIds();
   }
+  if (group === "accounts" && subcommand === "add" && argumentDepth === 0) {
+    return accountKindChoices().filter(
+      (kind) => resolveAccountConnector(kind)?.info.connector === "native"
+    );
+  }
   if (
     group === "accounts" &&
-    (subcommand === "add" || subcommand === "remove") &&
+    subcommand === "login" &&
     argumentDepth === 0
   ) {
-    return ["claude-code", "codex"];
+    return [...accountKindChoices()];
+  }
+  if (
+    group === "accounts" &&
+    subcommand === "remove" &&
+    argumentDepth === 0
+  ) {
+    return [
+      ...new Set([
+        ...accountKindChoices(),
+        ...listAccounts().map((entry) => entry.subscriptionKind)
+      ])
+    ];
   }
   if (group === "accounts" && subcommand === "remove" && argumentDepth === 1) {
-    const subscriptionKind =
-      positional[0] === "claude" ? "claude-code" : positional[0];
+    const suppliedKind = positional[0] ?? "";
+    const resolved = resolveAccountConnector(suppliedKind);
+    const kind = resolved?.kind ?? suppliedKind;
     return listAccounts()
-      .filter((entry) => entry.subscriptionKind === subscriptionKind)
+      .filter((entry) => {
+        if (entry.subscriptionKind === kind) return true;
+        return (
+          resolved !== undefined &&
+          resolveAccountConnector(entry.subscriptionKind)?.kind === resolved.kind
+        );
+      })
       .map((entry) => entry.label);
   }
   if (group === "completion" && argumentDepth === 0) return ["bash", "zsh", "fish"];

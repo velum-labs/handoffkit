@@ -40,8 +40,12 @@ contract. Product CLIs can wrap this module without owning account logic.
 - `export type { SubscriptionProxyClientOptions } from "./client.js";`
 - `export { collectSubscriptionUsage, DEFAULT_SUBSCRIPTION_USAGE_REFRESH_MS, openLocalSubscriptionUsage } from "./usage.js";`
 - `export type { SubscriptionUsageSource } from "./usage.js";`
-- `export { CLIPROXY_API_KEY_ENV, CLIPROXY_BASE_URL_ENV, CLIPROXY_HOME_ENV, CLIPROXY_LOGIN_FLAGS, CLIPROXY_PINNED_VERSION, cliproxyAssetName, cliproxyApiKey, cliproxyBaseUrl, cliproxyBinaryPath, cliproxyConfigPath, cliproxyHome, cliproxyStatus, ensureCliproxyConfig, installCliproxy, runCliproxyLogin, spawnCliproxy } from "./cliproxy.js";`
+- `export { CLIPROXY_API_KEY_ENV, CLIPROXY_BASE_URL_ENV, CLIPROXY_HOME_ENV, CLIPROXY_PINNED_VERSION, cliproxyAssetName, cliproxyApiKey, cliproxyBaseUrl, cliproxyBinaryPath, cliproxyConfigPath, cliproxyHome, cliproxyManagedPort, cliproxyStatus, ensureCliproxyConfig, installCliproxy, spawnCliproxy } from "./cliproxy.js";`
 - `export type { CliproxyInstallResult, CliproxyStatus } from "./cliproxy.js";`
+- `export { accountStoreEntries, cliproxyAccountEntries, cliproxyAccountMatchesKind, loginCliproxyAccount, removeCliproxyAccount, resolveAccountKind } from "./connector.js";`
+- `export type { AccountStoreEntry, CliproxyAccountEntry, CliproxyLoginInvocation, CliproxyLoginOptions, ResolvedAccountKind } from "./connector.js";`
+- `export { captureLoginCredential, claudeProfileKeychainService, parseAccountMode } from "./managed-login.js";`
+- `export type { ManagedAccountLoginInvocation, ManagedAccountLoginOptions, ManagedLoginKeychain } from "./managed-login.js";`
 - `export { snapshotsToUsage, SUBSCRIPTION_USAGE_PATH, subscriptionUsageResponseSchema } from "./wire.js";`
 - `export type { SubscriptionUsageResponse } from "./wire.js";`
 - `export type { AccountLimits, CreditSnapshot, RateLimitObservationSource, RateLimitWindow, SubscriptionAccountSetSnapshot, SubscriptionCredential, SubscriptionFailure, SubscriptionMemberStatus, SubscriptionSelectionStrategy } from "./types.js";`
@@ -523,6 +527,17 @@ panel presets are deliberately excluded.
 - `export const SUBSCRIPTIONS: Readonly<Record<SubscriptionMode, SubscriptionInfo>> ...`
 - `export function subscriptionInfo(mode: SubscriptionMode): SubscriptionInfo ...`
 - `export function providerForAuthMode(mode: SubscriptionMode): string ...`
+- `export type AccountConnector ...`
+- `export type AccountConnectorInfo ...`
+- `export const ACCOUNT_CONNECTORS: Readonly<Record<string, AccountConnectorInfo>> ...`
+- `export function accountKinds(): readonly string[] ...`
+  Canonical account kinds accepted by `routekit accounts login <kind>`.
+- `export function accountKindChoices(): readonly string[] ...`
+  Canonical account kinds plus every accepted user-facing alias.
+- `export function resolveAccountConnector(`
+  Resolve a user-supplied account kind (canonical name or alias) to its canonical kind and connector metadata.
+- `export function accountKindForCliproxyAuthType(type: string): string | undefined ...`
+  Classify a CLIProxyAPI auth-store `type` value back to a canonical kind.
 - `export const DEFAULT_REASONING_MODEL: string ...`
 - `export function catalogDefaultModel(choice: string): string | undefined ...`
 - `export function curatedModels(choice: string): readonly string[] ...`

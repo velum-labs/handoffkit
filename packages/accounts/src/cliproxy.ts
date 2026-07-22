@@ -41,15 +41,30 @@ export function cliproxyBaseUrl(
   env: Readonly<Record<string, string | undefined>> = process.env
 ): string {
   const override = env[CLIPROXY_BASE_URL_ENV];
-  return override !== undefined && override.length > 0
-    ? trimTrailingSlashes(override)
-    : "http://127.0.0.1:8317";
+  if (override !== undefined && override.length > 0) return trimTrailingSlashes(override);
+  return `http://127.0.0.1:${cliproxyManagedPort(env) ?? 8317}`;
 }
 
 export function cliproxyConfigPath(
   env: Readonly<Record<string, string | undefined>> = process.env
 ): string {
   return join(cliproxyHome(env), "config.yaml");
+}
+
+/** The listen port of the RouteKit-managed sidecar config, when present. */
+export function cliproxyManagedPort(
+  env: Readonly<Record<string, string | undefined>> = process.env
+): number | undefined {
+  const path = cliproxyConfigPath(env);
+  if (!existsSync(path)) return undefined;
+  try {
+    const parsed = parseYaml(readFileSync(path, "utf8")) as { port?: unknown };
+    return typeof parsed.port === "number" && Number.isInteger(parsed.port)
+      ? parsed.port
+      : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 export function cliproxyBinaryPath(
@@ -193,54 +208,18 @@ export async function installCliproxy(
   };
 }
 
-export const CLIPROXY_LOGIN_FLAGS: Readonly<Record<string, string>> = {
-  claude: "-claude-login",
-  codex: "-codex-login",
-  "codex-device": "-codex-device-login",
-  gemini: "-antigravity-login",
-  antigravity: "-antigravity-login",
-  kimi: "-kimi-login",
-  grok: "-xai-login",
-  xai: "-xai-login"
-};
-
-export async function runCliproxyLogin(
-  provider: string,
-  options: {
-    noBrowser?: boolean;
-    env?: Readonly<Record<string, string | undefined>>;
-  } = {}
-): Promise<number> {
-  const flag = CLIPROXY_LOGIN_FLAGS[provider];
-  if (flag === undefined) {
-    throw new Error(
-      `unknown login provider ${JSON.stringify(provider)}; expected one of ${Object.keys(CLIPROXY_LOGIN_FLAGS).join(", ")}`
-    );
-  }
-  const env = options.env ?? process.env;
-  const binary = cliproxyBinaryPath(CLIPROXY_PINNED_VERSION, env);
-  if (binary === undefined) {
-    throw new Error("CLIProxyAPI is not installed; run `routekit accounts cliproxy install`");
-  }
-  ensureCliproxyConfig(env);
-  const args = ["--config", cliproxyConfigPath(env), flag];
-  if (options.noBrowser === true) args.push("-no-browser");
-  const child = spawn(binary, args, { stdio: "inherit" });
-  return await new Promise<number>((resolve, reject) => {
-    child.once("error", reject);
-    child.once("exit", (code) => resolve(code ?? 1));
-  });
-}
-
 export function spawnCliproxy(
-  env: Readonly<Record<string, string | undefined>> = process.env
+  env: Readonly<Record<string, string | undefined>> = process.env,
+  options: { stdio?: "inherit" | "ignore" } = {}
 ): ReturnType<typeof spawn> {
   const binary = cliproxyBinaryPath(CLIPROXY_PINNED_VERSION, env);
   if (binary === undefined) {
-    throw new Error("CLIProxyAPI is not installed; run `routekit accounts cliproxy install`");
+    throw new Error("CLIProxyAPI is not installed; run `routekit accounts login <kind>`");
   }
   ensureCliproxyConfig(env);
-  return spawn(binary, ["--config", cliproxyConfigPath(env)], { stdio: "inherit" });
+  return spawn(binary, ["--config", cliproxyConfigPath(env)], {
+    stdio: options.stdio ?? "inherit"
+  });
 }
 
 export type CliproxyStatus = {

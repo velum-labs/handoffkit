@@ -83,16 +83,11 @@ test("independent command surface is complete and has no compatibility aliases",
   for (const launcher of ["claude", "cursor", "opencode"]) {
     assert.deepEqual(command(program, launcher).commands, []);
   }
+  // One connector-neutral account surface: no cliproxy (or other
+  // implementation-detail) subtree is exposed.
   assert.deepEqual(
     command(program, "accounts").commands.map((entry) => entry.name()).sort(),
-    ["add", "cliproxy", "list", "login", "remove", "status"]
-  );
-  assert.deepEqual(
-    command(program, "accounts")
-      .commands.find((entry) => entry.name() === "cliproxy")
-      ?.commands.map((entry) => entry.name())
-      .sort(),
-    ["install", "login", "serve", "status"]
+    ["add", "list", "login", "remove", "status"]
   );
   assert.deepEqual(
     command(program, "providers").commands.map((entry) => entry.name()).sort(),
@@ -123,6 +118,20 @@ test("dynamic completion follows the command tree", () => {
     completionCandidates(program, ["gateway", "serve", "--p"]).includes("--port")
   );
   assert.deepEqual(completionCandidates(program, ["accounts", "remove", ""]), [
+    "antigravity",
+    "claude",
+    "claude-code",
+    "codex",
+    "gemini",
+    "grok",
+    "kimi",
+    "xai"
+  ]);
+  assert.deepEqual(completionCandidates(program, ["accounts", "login", "a"]), [
+    "antigravity"
+  ]);
+  assert.deepEqual(completionCandidates(program, ["accounts", "add", ""]), [
+    "claude",
     "claude-code",
     "codex"
   ]);
@@ -140,7 +149,16 @@ test("account removal completion only suggests managed labels for its provider",
   const root = mkdtempSync(join(tmpdir(), "routekit-account-completion-"));
   const previousHome = process.env.ROUTEKIT_HOME;
   mkdirSync(join(root, "subscriptions", "codex"), { recursive: true });
+  mkdirSync(join(root, "cliproxy", "auth"), { recursive: true });
   writeFileSync(join(root, "subscriptions", "codex", "work.json"), "{}\n");
+  writeFileSync(
+    join(root, "cliproxy", "auth", "antigravity-user@example.com.json"),
+    JSON.stringify({ type: "antigravity" })
+  );
+  writeFileSync(
+    join(root, "cliproxy", "auth", "mystery-blob.json"),
+    "{not-json"
+  );
   process.env.ROUTEKIT_HOME = root;
   try {
     assert.deepEqual(
@@ -150,6 +168,29 @@ test("account removal completion only suggests managed labels for its provider",
     assert.deepEqual(
       completionCandidates(buildProgram(), ["accounts", "remove", "claude", "w"]),
       []
+    );
+    // Aliases resolve to the canonical kind's labels.
+    assert.deepEqual(
+      completionCandidates(buildProgram(), [
+        "accounts",
+        "remove",
+        "antigravity",
+        "a"
+      ]),
+      ["antigravity-user@example.com"]
+    );
+    assert.deepEqual(
+      completionCandidates(buildProgram(), ["accounts", "remove", "gemini", "a"]),
+      ["antigravity-user@example.com"]
+    );
+    assert.ok(
+      completionCandidates(buildProgram(), ["accounts", "remove", "m"]).includes(
+        "mystery"
+      )
+    );
+    assert.deepEqual(
+      completionCandidates(buildProgram(), ["accounts", "remove", "mystery", "m"]),
+      ["mystery-blob"]
     );
   } finally {
     if (previousHome === undefined) delete process.env.ROUTEKIT_HOME;

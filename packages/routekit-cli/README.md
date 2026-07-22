@@ -54,10 +54,9 @@ Set `ROUTEKIT_DEV_SKIP_BUILD=1` after a build for a faster local check.
 | `codex install`, `codex uninstall` | Add or remove RouteKit-owned Codex provider/profile blocks. |
 | `providers add`, `remove`, `status` | Manage explicit providers and run live discovery without printing credentials. |
 | `models list` | Discover and list the live namespaced model catalog. |
-| `accounts login` | Run an isolated official Claude Code or Codex login, enroll the credential into the native pool, and enable that provider. |
-| `accounts add`, `remove`, `list`, `status` | Import the current official CLI login or manage enrolled native subscription accounts. |
+| `accounts login` | Enroll any subscription kind (`claude-code`, `codex`, `gemini`, `grok`, `kimi`): run the right connector's OAuth flow, enroll the credential, and enable the matching provider. `--no-browser` prefers a device-code / copyable-URL flow for headless hosts. |
+| `accounts add`, `remove`, `list`, `status` | Import the current official CLI login (native kinds) or manage enrolled subscription accounts across every connector. |
 | `usage` | Show subscription rate limits, credits, and reset windows from the running gateway or enrolled local accounts. |
-| `accounts cliproxy install`, `login`, `serve`, `status` | Manage RouteKit's pinned CLIProxyAPI integration. |
 | `config path`, `show`, `init`, `edit`, `import`, `migrate` | Manage the daemon's canonical global router config with revision-checked writes. |
 | `doctor` | Check router configuration, referenced credential variables, and installed coding-agent binaries. |
 | `telemetry status`, `on`, `off` | Control RouteKit's anonymous, opt-in product telemetry. |
@@ -72,9 +71,9 @@ Provider activation, live model catalogs, account relays, and registry-defined
 credential environment variables are RouteKit-owned. Fusion policy, panels,
 judging, synthesis, and Fusion sessions are intentionally outside this package.
 
-Subscription kinds are `claude-code` and `codex`; the Claude Code launcher
-command remains `routekit claude [provider/model]`. Pool policy uses the same
-provider map as API-key sources:
+Subscription kinds are `claude-code`, `codex`, `gemini`, `grok`, and `kimi`;
+the Claude Code launcher command remains `routekit claude [provider/model]`.
+Pool policy uses the same provider map as API-key sources:
 
 ```yaml
 providers:
@@ -87,11 +86,17 @@ providers:
 defaultModel: codex/gpt-5.5
 ```
 
-The default enrollment path is
-`routekit accounts login <kind> --name <label>`. RouteKit gives the official provider CLI a private temporary profile,
-atomically imports the resulting credential, and removes the temporary profile
-without changing the user's normal login. `accounts add` is the explicit
-current-login import path.
+The one enrollment path for every kind is
+`routekit accounts login <kind>`. Each kind is backed by a connector the user
+never manages directly: `claude-code` and `codex` run the official provider
+CLI in a private temporary profile, atomically import the resulting
+credential, and remove the temporary profile without changing the user's
+normal login (`accounts add` is the explicit current-login import path);
+`gemini`, `grok`, and `kimi` run the OAuth flow of RouteKit's pinned,
+daemon-supervised CLIProxyAPI sidecar (see
+[CLIProxyAPI connector](../../docs/subscription-pooling.md)). `--no-browser`
+prefers a device-code / copyable-URL flow so a headless host only needs a
+browser on some other device.
 
 API providers infer their key and optional base URL from registry-defined
 environment variables. Subscription providers discover the union of models

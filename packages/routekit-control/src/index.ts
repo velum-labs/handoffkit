@@ -34,6 +34,7 @@ export type RouteKitControlMethod =
   | "accounts.status"
   | "accounts.enroll"
   | "accounts.remove"
+  | "accounts.sync"
   | "accounts.usage"
   | "telemetry.get"
   | "telemetry.set"
@@ -58,7 +59,10 @@ export type RouteKitControlParams = {
     label: string;
     credential: unknown;
   };
-  "accounts.remove": { kind: "claude-code" | "codex"; label: string };
+  /** Registry kind or the raw kind returned by accounts.list for an unclassified file. */
+  "accounts.remove": { kind: string; label: string };
+  /** Rescan connector account stores and reconcile the managed sidecar. */
+  "accounts.sync": Record<string, never>;
   "accounts.usage": Record<string, never>;
   "telemetry.get": Record<string, never>;
   "telemetry.set": { enabled: boolean };
@@ -129,8 +133,10 @@ export type RouteKitControlResults = {
   "accounts.list": { accounts: unknown[]; revision: number };
   "accounts.status": {
     accounts: Array<{
-      subscriptionKind: "claude-code" | "codex";
+      subscriptionKind: string;
       label: string;
+      connector: "native" | "cliproxy";
+      localOnly?: boolean;
       credentialValid: boolean;
       configured: boolean;
       relayOpen: boolean;
@@ -142,6 +148,7 @@ export type RouteKitControlResults = {
   };
   "accounts.enroll": { enrolled: true; revision: number };
   "accounts.remove": { removed: boolean; revision: number };
+  "accounts.sync": { synced: true; revision: number };
   "accounts.usage": unknown;
   "telemetry.get": { enabled: boolean };
   "telemetry.set": { enabled: boolean };
@@ -173,6 +180,7 @@ const METHODS: ReadonlySet<string> = new Set<RouteKitControlMethod>([
   "accounts.status",
   "accounts.enroll",
   "accounts.remove",
+  "accounts.sync",
   "accounts.usage",
   "telemetry.get",
   "telemetry.set",
@@ -188,6 +196,7 @@ export const MUTATING_ROUTEKIT_METHODS: ReadonlySet<RouteKitControlMethod> = new
   "providers.set",
   "accounts.enroll",
   "accounts.remove",
+  "accounts.sync",
   "telemetry.set"
 ]);
 
@@ -275,7 +284,8 @@ export function validateRouteKitParams<M extends RouteKitControlMethod>(
       }
       break;
     case "accounts.remove":
-      requiredEnum(params, "kind", method, ["claude-code", "codex"] as const);
+      // Registry kinds and raw stored kinds are resolved by the daemon.
+      requiredString(params, "kind", method);
       requiredString(params, "label", method);
       break;
     case "telemetry.set":

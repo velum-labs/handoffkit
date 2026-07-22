@@ -106,7 +106,6 @@ export {
   CLIPROXY_API_KEY_ENV,
   CLIPROXY_BASE_URL_ENV,
   CLIPROXY_HOME_ENV,
-  CLIPROXY_LOGIN_FLAGS,
   CLIPROXY_PINNED_VERSION,
   cliproxyAssetName,
   cliproxyApiKey,
@@ -114,13 +113,42 @@ export {
   cliproxyBinaryPath,
   cliproxyConfigPath,
   cliproxyHome,
+  cliproxyManagedPort,
   cliproxyStatus,
   ensureCliproxyConfig,
   installCliproxy,
-  runCliproxyLogin,
   spawnCliproxy
 } from "./cliproxy.js";
 export type { CliproxyInstallResult, CliproxyStatus } from "./cliproxy.js";
+
+// Account connectors: one login surface over native + cliproxy mechanisms
+export {
+  accountStoreEntries,
+  cliproxyAccountEntries,
+  cliproxyAccountMatchesKind,
+  loginCliproxyAccount,
+  removeCliproxyAccount,
+  resolveAccountKind
+} from "./connector.js";
+export type {
+  AccountStoreEntry,
+  CliproxyAccountEntry,
+  CliproxyLoginInvocation,
+  CliproxyLoginOptions,
+  ResolvedAccountKind
+} from "./connector.js";
+
+// Native-connector managed logins (official CLI in an isolated profile)
+export {
+  captureLoginCredential,
+  claudeProfileKeychainService,
+  parseAccountMode
+} from "./managed-login.js";
+export type {
+  ManagedAccountLoginInvocation,
+  ManagedAccountLoginOptions,
+  ManagedLoginKeychain
+} from "./managed-login.js";
 
 // Wire contract for the proxy usage endpoint
 export {

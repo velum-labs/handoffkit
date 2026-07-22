@@ -267,6 +267,50 @@ export const REGISTRY = {
       }
     }
   },
+  "connectors": {
+    "claude-code": {
+      "connector": "native",
+      "aliases": [
+        "claude"
+      ]
+    },
+    "codex": {
+      "connector": "native"
+    },
+    "gemini": {
+      "connector": "cliproxy",
+      "cliproxyLoginFlag": "-antigravity-login",
+      "cliproxyAuthTypes": [
+        "antigravity",
+        "gemini",
+        "gemini-cli"
+      ],
+      "localOnly": true,
+      "aliases": [
+        "antigravity"
+      ]
+    },
+    "grok": {
+      "connector": "cliproxy",
+      "cliproxyLoginFlag": "-xai-login",
+      "cliproxyAuthTypes": [
+        "xai",
+        "grok"
+      ],
+      "localOnly": true,
+      "aliases": [
+        "xai"
+      ]
+    },
+    "kimi": {
+      "connector": "cliproxy",
+      "cliproxyLoginFlag": "-kimi-login",
+      "cliproxyAuthTypes": [
+        "kimi"
+      ],
+      "localOnly": true
+    }
+  },
   "modelCatalog": {
     "defaultReasoningModel": "mlx-community/Qwen3-1.7B-4bit",
     "defaultModelByAuthChoice": {
