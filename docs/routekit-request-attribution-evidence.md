@@ -3,7 +3,7 @@
 Date: 2026-07-22
 Issue: [ENG-681](https://linear.app/velum-labs/issue/ENG-681/close-routekit-request-attribution-gap)
 Pull request: [#163](https://github.com/velum-labs/handoffkit/pull/163)
-Implementation revision tested: `6551fb65`
+Implementation revision tested: `efc47e9e`
 
 ## Result
 
@@ -63,8 +63,8 @@ the separate sanitized real-account qualification matrix.
 ## Repository verification
 
 ```text
-Focused attribution build  PASS (23/23 tasks)
-Focused attribution tests  PASS (29/29 tasks)
+Focused attribution build  PASS (28/28 tasks)
+Focused attribution tests  PASS (35/35 tasks)
 pnpm check                PASS
 pnpm build                PASS (38/38 tasks)
 pnpm test                 PASS (73/73 workspace tasks; 20/20 root tests)
