@@ -180,6 +180,26 @@ test("matrix promotion updates only exact mapped cases", () => {
   );
 });
 
+test("matrix promotion accepts schemaVersion 4 gateway request reports", () => {
+  const report = matrixReport([
+    matrixResult({
+      gatewayRequests: 1,
+      billedCalls: undefined,
+      reason: undefined,
+      reasonCode: "qualified"
+    })
+  ]);
+  report.schemaVersion = 4;
+  report.summary = { caseCounts: report.counts };
+  delete report.counts;
+  const promoted = promoteMatrixResults(mapping, source, report, REVISION);
+  const item = promoted.routes["route-openai-api"].evidence.find(
+    (evidence) => evidence.caseId === "deterministic.openai.openai-chat"
+  );
+  assert.equal(item.result.gatewayRequests, 1);
+  assert.equal(item.summary, undefined);
+});
+
 test("matrix promotion rejects incomplete, dirty, and forged reports", () => {
   assert.throws(
     () =>
@@ -292,9 +312,9 @@ test("manual evidence is bound to the exact tested revision", () => {
   );
 });
 
-test("the unfiltered live matrix budget covers all five providers", () => {
+test("the unfiltered live matrix gateway limit covers all five providers", () => {
   const script = readFileSync(join(ROOT, "scripts", "routekit-e2e-matrix.mjs"), "utf8");
   const docs = readFileSync(join(ROOT, "docs", "routekit-e2e-matrix.md"), "utf8");
   assert.match(script, /ROUTEKIT_E2E_MAX_LIVE_CALLS \?\? 48/);
-  assert.match(docs, /default hard budget is 48 provider requests/);
+  assert.match(docs, /default hard limit is 48 client-to-RouteKit model requests/);
 });

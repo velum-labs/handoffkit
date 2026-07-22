@@ -244,7 +244,7 @@ export function renderEvidenceMarkdown(mapping, source) {
           const resultDetails =
             item.result === undefined
               ? undefined
-              : `${item.result.phase}/${item.result.provider ?? "shared"}/${item.result.door}; ${item.result.durationMs} ms; ${item.result.billedCalls} billed calls${item.result.artifact === null ? "" : `; ${item.result.artifact}`}`;
+              : `${item.result.phase}/${item.result.provider ?? "shared"}/${item.result.door}; ${item.result.durationMs} ms; ${item.result.gatewayRequests} gateway requests${item.result.artifact === null ? "" : `; ${item.result.artifact}`}`;
           const result = [resultDetails, item.summary].filter(Boolean).join("; ") || "—";
           return `| ${escapeCell(item.caseId ?? item.label)} | ${item.type} | ${item.status} | ${escapeCell(item.reference)} | ${escapeCell(result)} |`;
         }
@@ -270,7 +270,10 @@ export function renderEvidenceMarkdown(mapping, source) {
 }
 
 export function promoteMatrixResults(mapping, source, matrixReport, revision) {
-  assert.equal(matrixReport.schemaVersion, 2, "matrix report must use schemaVersion 2");
+  assert.ok(
+    matrixReport.schemaVersion === 2 || matrixReport.schemaVersion === 4,
+    "matrix report must use schemaVersion 2 or 4"
+  );
   assert.equal(
     matrixReport.evidenceMappingDigest,
     mappingDigest(mapping),
@@ -292,7 +295,11 @@ export function promoteMatrixResults(mapping, source, matrixReport, revision) {
       matrixReport.results.filter((result) => result.status === status).length
     ])
   );
-  assert.deepEqual(matrixReport.counts, counts, "matrix report counts do not match its results");
+  const reportedCounts =
+    matrixReport.schemaVersion === 4
+      ? matrixReport.summary?.caseCounts
+      : matrixReport.counts;
+  assert.deepEqual(reportedCounts, counts, "matrix report counts do not match its results");
   const byCaseId = new Map();
   for (const result of matrixReport.results) {
     assert.ok(["pass", "fail", "skip"].includes(result.status), "invalid matrix result status");
@@ -351,16 +358,18 @@ export function promoteMatrixResults(mapping, source, matrixReport, revision) {
           provider: result.provider,
           door: result.door,
           durationMs: result.durationMs,
-          billedCalls: result.billedCalls,
+          gatewayRequests: result.gatewayRequests ?? result.billedCalls ?? 0,
           artifact: result.artifact
         },
-        ...(result.reason === null
+        ...((result.reasonCode ?? result.reason) === null ||
+        (result.reasonCode ?? result.reason) === undefined ||
+        result.reasonCode === "qualified"
           ? {}
           : {
               summary:
                 result.status === "skip"
-                  ? `Skipped; qualification remains pending: ${result.reason}`
-                  : result.reason
+                  ? `Skipped; qualification remains pending: ${result.reasonCode ?? result.reason}`
+                  : result.reasonCode ?? result.reason
             })
       };
     });

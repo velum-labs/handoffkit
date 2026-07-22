@@ -5,12 +5,13 @@ user-facing source of truth is
 [`/docs/reference/routes-and-billing`](../apps/docs/content/docs/reference/routes-and-billing.mdx).
 Keep this mirror aligned when route behavior or qualification evidence changes.
 
-All seven routes are **Planned Supported after L06 qualification**, not
-currently claimed as qualified. The reviewed repository baseline is
-`@routekit/cli` 0.8.0 at
-[`2f9914d5`](https://github.com/velum-labs/handoffkit/commit/2f9914d5dc04f4f7d604737b3085345572ac6226),
-dated 2026-07-22. The exact live client/provider versions and dated account
-results remain pending the L06 real-account matrix.
+All seven routes remain **Planned Supported until L06 closes**. The 2026-07-22
+[real-account report](evidence/routekit-real-account/2026-07-22-dad16c53.md)
+records three API-route Pass results and four subscription/client Fail results
+at `@routekit/cli` 0.8.0 revision
+[`dad16c53`](https://github.com/velum-labs/handoffkit/commit/dad16c53c0e083a51d41df59149a21964d27cc12).
+The Fail rows must be rerun with the required accounts and clients before the
+public labels can change.
 
 ## Shared contract
 
@@ -40,8 +41,10 @@ results remain pending the L06 real-account matrix.
 - **Protocol / limitations:** OpenAI Chat Completions, streaming, and tools;
   model-specific reasoning and images depend on OpenAI. No provider-session
   restore.
-- **Evidence:** RouteKit 0.8.0 / `2f9914d5` / 2026-07-22 repository review.
-  Exact live model/API qualification pending L06. [Durable L06
+- **Evidence:** **L06 qualification Pass** for `openai/gpt-5.5`, RouteKit 0.8.0
+  / `dad16c53` / 2026-07-22. One real-account request was observed; tools,
+  streaming, reasoning, cancellation, failure propagation, and no RouteKit
+  fallback passed. Public status stays Planned until L06 closes. [Stable L05 mapping; canonical import pending
   evidence](routekit-l06-evidence.md#route-openai-api).
 
 <a id="route-anthropic-api"></a>
@@ -59,8 +62,11 @@ results remain pending the L06 real-account matrix.
 - **Protocol / limitations:** Native Messages with streaming, tools, thinking,
   signatures, and redacted-thinking where supported. Cross-dialect translation
   can preserve only shared fields. No provider-session restore.
-- **Evidence:** RouteKit 0.8.0 / `2f9914d5` / 2026-07-22 repository review.
-  Exact live model/API qualification pending L06. [Durable L06
+- **Evidence:** **L06 qualification Pass** for
+  `anthropic/claude-sonnet-4-6`, RouteKit 0.8.0 / `dad16c53` / 2026-07-22.
+  One real-account request was observed; tools, streaming, reasoning,
+  cancellation, failure propagation, and no RouteKit fallback passed. Public
+  status stays Planned until L06 closes. [Stable L05 mapping; canonical import pending
   evidence](routekit-l06-evidence.md#route-anthropic-api).
 
 <a id="route-openrouter-api"></a>
@@ -80,8 +86,12 @@ results remain pending the L06 real-account matrix.
 - **Protocol / limitations:** OpenAI Chat Completions; tools, streaming, images,
   context, and reasoning depend on OpenRouter and the upstream model. No
   provider-session restore.
-- **Evidence:** RouteKit 0.8.0 / `2f9914d5` / 2026-07-22 repository review.
-  Exact live model/upstream qualification pending L06. [Durable L06
+- **Evidence:** **L06 qualification Pass** for
+  `openrouter/openai/gpt-4o-mini`, RouteKit 0.8.0 / `dad16c53` / 2026-07-22.
+  One real-account request was observed; tools, streaming, reasoning,
+  cancellation, failure propagation, and no RouteKit fallback passed.
+  OpenRouter remains the upstream-routing aggregator. Public status stays
+  Planned until L06 closes. [Stable L05 mapping; canonical import pending
   evidence](routekit-l06-evidence.md#route-openrouter-api).
 
 <a id="route-codex-subscription"></a>
@@ -101,8 +111,11 @@ results remain pending the L06 real-account matrix.
 - **Protocol / limitations:** OpenAI Responses with streaming, tools, and
   discovered reasoning efforts. Official client catalog/profile compatibility
   is version-sensitive; setup and restore remain pending L06.
-- **Evidence:** RouteKit 0.8.0 / `2f9914d5` / 2026-07-22 repository review.
-  Exact Codex CLI and real-account qualification pending L06. [Durable L06
+- **Evidence:** **L06 qualification Fail — `account-unavailable`**, RouteKit 0.8.0
+  / `dad16c53` / 2026-07-22. The worker had no enrolled Codex account or
+  Codex client, so live streaming, billing attribution, setup, and restore were
+  not observed. Deterministic tools, reasoning, cancellation, failure
+  propagation, and zero API-key fallback passed. [Stable L05 mapping; canonical import pending
   evidence](routekit-l06-evidence.md#route-codex-subscription).
 
 <a id="route-claude-code-subscription"></a>
@@ -126,9 +139,13 @@ results remain pending the L06 real-account matrix.
   install/uninstall, exact settings restore, last-account removal, and
   interruption recovery passed the credential-free
   [ENG-682 qualification](routekit-claude-recovery-evidence.md).
-- **Evidence:** RouteKit 0.8.0 / `4e5a45b9` / 2026-07-22 automated recovery
-  review. Exact Claude Code version and real-account qualification remain
-  pending L06 under ENG-679; see the [durable L06
+- **Evidence:** **L06 qualification Fail — `account-unavailable`**, RouteKit 0.8.0
+  / `dad16c53` / 2026-07-22. The worker had no enrolled Claude Code
+  account or Claude client, so live streaming, billing attribution, and
+  real-account/provider-session setup and restore were not observed. The
+  credential-free managed lifecycle passed separately at `4e5a45b9`.
+  Deterministic tools, reasoning, cancellation, failure propagation, and zero
+  API-key fallback passed. [Stable L05 mapping; canonical import pending
   evidence](routekit-l06-evidence.md#route-claude-code-subscription).
 
 <a id="route-cursor-ide"></a>
@@ -149,8 +166,11 @@ results remain pending the L06 real-account matrix.
   Streaming and tools are supported; images and reasoning controls are
   degraded. Other editor features do not use the custom model. Restore remains
   version-specific.
-- **Evidence:** RouteKit 0.8.0 / `2f9914d5` / 2026-07-22 repository review.
-  Exact authenticated Cursor IDE qualification pending L06. [Durable L06
+- **Evidence:** **L06 qualification Fail — `manual-evidence-unavailable`**,
+  RouteKit 0.8.0 / `dad16c53` / 2026-07-22. This Linux worker had no Cursor
+  desktop and could not run Cursorkit's macOS-oriented IDE launcher. No
+  authenticated traffic, billing attribution, setup, or restore was observed.
+  [Stable L05 mapping; canonical import pending
   evidence](routekit-l06-evidence.md#route-cursor-ide).
 
 <a id="route-cursor-agent"></a>
@@ -170,8 +190,11 @@ results remain pending the L06 real-account matrix.
 - **Protocol / limitations:** Cursor bridge to OpenAI Chat. Streaming and tools
   are supported; images and reasoning controls are degraded. Session restore
   and compatibility are client-version-specific.
-- **Evidence:** RouteKit 0.8.0 / `2f9914d5` / 2026-07-22 repository review.
-  Exact authenticated `cursor-agent` qualification pending L06. [Durable L06
+- **Evidence:** **L06 qualification Fail — `client-unavailable`**, RouteKit 0.8.0
+  / `dad16c53` / 2026-07-22. `cursor-agent` was not installed, so no
+  authenticated traffic, billing attribution, setup, or restore was observed.
+  Deterministic bridge-protocol tools, reasoning, cancellation, failure
+  propagation, and no RouteKit fallback passed. [Stable L05 mapping; canonical import pending
   evidence](routekit-l06-evidence.md#route-cursor-agent).
 
 ## Route explanation
@@ -190,9 +213,12 @@ The automated and zero-billed matrix evidence is recorded in
 ## Qualification requirement
 
 The deterministic harness is documented in
-[RouteKit end-to-end verification matrix](routekit-e2e-matrix.md). A public
-Supported label additionally requires the sanitized L06 report to map every
-stable route anchor above to exact RouteKit revision, credential mode,
-client/provider version, evidence date, protocol behavior, billing attribution,
-failure behavior, and setup/restore results. Until those links exist, the
-labels stay conditional.
+[RouteKit end-to-end verification matrix](routekit-e2e-matrix.md). The
+[sanitized L06 report](evidence/routekit-real-account/2026-07-22-dad16c53.md)
+maps every stable route anchor above to exact RouteKit revision, credential
+mode, client/provider version, evidence date, protocol behavior, billing
+attribution, failure behavior, and setup/restore results. Four rows are Fail,
+so all public labels stay conditional.
+The generated stable-map rows remain `pending` because this historical run
+predates the mapping digest and case IDs; they do not override the immutable
+ENG-679 report. A legacy importer must not fabricate modern case identities.

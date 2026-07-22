@@ -20,7 +20,7 @@
             "provider": "openai",
             "door": "openai-chat",
             "durationMs": 91,
-            "billedCalls": 0,
+            "gatewayRequests": 0,
             "artifact": null
           }
         },
@@ -67,7 +67,7 @@
             "provider": "anthropic",
             "door": "anthropic-messages",
             "durationMs": 93,
-            "billedCalls": 0,
+            "gatewayRequests": 0,
             "artifact": null
           }
         },
@@ -114,7 +114,7 @@
             "provider": "openrouter",
             "door": "openai-chat",
             "durationMs": 89,
-            "billedCalls": 0,
+            "gatewayRequests": 0,
             "artifact": null
           }
         },
@@ -128,7 +128,7 @@
             "provider": "openrouter",
             "door": "dynamic-reasoning-capabilities",
             "durationMs": 48,
-            "billedCalls": 0,
+            "gatewayRequests": 0,
             "artifact": null
           }
         },
@@ -175,7 +175,7 @@
             "provider": "codex",
             "door": "codex-responses",
             "durationMs": 91,
-            "billedCalls": 0,
+            "gatewayRequests": 0,
             "artifact": null
           }
         },
@@ -189,7 +189,7 @@
             "provider": "codex",
             "door": "codex",
             "durationMs": 0,
-            "billedCalls": 0,
+            "gatewayRequests": 0,
             "artifact": null
           },
           "summary": "Skipped; qualification remains pending: codex is not installed"
@@ -251,7 +251,7 @@
             "provider": "claude-code",
             "door": "anthropic-messages",
             "durationMs": 91,
-            "billedCalls": 0,
+            "gatewayRequests": 0,
             "artifact": null
           }
         },
@@ -265,7 +265,7 @@
             "provider": "claude-code",
             "door": "anthropic-thinking",
             "durationMs": 147,
-            "billedCalls": 0,
+            "gatewayRequests": 0,
             "artifact": null
           }
         },
@@ -279,7 +279,7 @@
             "provider": "claude-code",
             "door": "claude",
             "durationMs": 0,
-            "billedCalls": 0,
+            "gatewayRequests": 0,
             "artifact": null
           },
           "summary": "Skipped; qualification remains pending: claude is not installed"
@@ -381,7 +381,7 @@
             "provider": "openrouter",
             "door": "cursor",
             "durationMs": 0,
-            "billedCalls": 0,
+            "gatewayRequests": 0,
             "artifact": null
           },
           "summary": "Skipped; qualification remains pending: cursor-agent is not installed"

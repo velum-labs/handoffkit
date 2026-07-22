@@ -2,8 +2,11 @@
 
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
+import { createHash, randomBytes } from "node:crypto";
 import { createServer } from "node:http";
 import {
+  chmodSync,
+  copyFileSync,
   cpSync,
   existsSync,
   mkdirSync,
@@ -11,9 +14,10 @@ import {
   readFileSync,
   readdirSync,
   rmSync,
+  statSync,
   writeFileSync
 } from "node:fs";
-import { tmpdir } from "node:os";
+import { arch, platform, tmpdir } from "node:os";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -34,6 +38,14 @@ import {
   doorFrames,
   startProviderSim
 } from "../packages/testkit/dist/index.js";
+import {
+  classifyFailure,
+  makeRouteResult,
+  qualificationCompleteness,
+  reserveRouteBudget,
+  ROUTE_CASES,
+  selectedRoutes
+} from "./routekit-qualification.mjs";
 import {
   caseIdFor,
   loadEvidenceMap,
@@ -57,7 +69,8 @@ const CLI_DOORS = [
   { id: "cursor", binary: "cursor-agent" },
   { id: "opencode", binary: "opencode" }
 ];
-const PROVIDERS = Object.keys(EVIDENCE_MAP.providerRouteIds);
+const PROVIDERS = [...new Set(ROUTE_CASES.map((route) => route.provider))];
+const ACTIVE_LIVE_CHILDREN = new Set();
 const MODEL_CALL_PATHS = new Set([
   "/v1/chat/completions",
   "/chat/completions",
@@ -74,7 +87,8 @@ function parseArgs(argv) {
     doors: undefined,
     timeoutMs: Number(process.env.ROUTEKIT_E2E_TIMEOUT_MS ?? 120_000),
     maxLiveCalls: Number(process.env.ROUTEKIT_E2E_MAX_LIVE_CALLS ?? 48),
-    models: {}
+    models: {},
+    routes: undefined
   };
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
@@ -86,6 +100,7 @@ function parseArgs(argv) {
     };
     if (arg === "--") continue;
     if (arg === "--live") options.live = true;
+    else if (arg === "--route") options.routes = csv(value());
     else if (arg === "--provider") options.providers = csv(value());
     else if (arg === "--door") options.doors = csv(value());
     else if (arg === "--timeout-ms") options.timeoutMs = positiveInteger(value(), arg);
@@ -100,12 +115,13 @@ function parseArgs(argv) {
         [
           "Usage: pnpm test:e2e:matrix -- [options]",
           "",
-          "  --live                    run billed cases (also ROUTEKIT_LIVE_E2E=1)",
+          "  --live                    run live cases (also ROUTEKIT_LIVE_E2E=1)",
+          "  --route <ids>             comma-separated L05 route-anchor filter",
           "  --provider <ids>          comma-separated provider filter",
           "  --door <ids>              API/CLI door filter",
           "  --model <provider=id>     override one live namespaced model",
           "  --timeout-ms <ms>         per-PTY timeout",
-          "  --max-live-calls <count>  hard billed-request budget",
+          "  --max-live-calls <count>  hard client-to-gateway request budget",
           ""
         ].join("\n")
       );
@@ -119,6 +135,25 @@ function parseArgs(argv) {
   }
   if (options.doors === undefined && process.env.ROUTEKIT_E2E_DOOR !== undefined) {
     options.doors = csv(process.env.ROUTEKIT_E2E_DOOR);
+  }
+  if (options.routes !== undefined) {
+    if (options.providers !== undefined || options.doors !== undefined) {
+      throw new Error("--route cannot be combined with --provider or --door");
+    }
+    const routes = selectedRoutes(options.routes);
+    options.providers = [...new Set(routes.map((route) => route.provider))];
+    options.doors = [
+      ...new Set(
+        routes.flatMap((route) => {
+          if (route.manual === true) return ["openai-chat"];
+          return [
+            route.door,
+            ...(route.additionalDoors ?? []),
+            ...(route.door === "cursor" ? ["openai-chat"] : [])
+          ];
+        })
+      )
+    ];
   }
   for (const provider of options.providers ?? []) {
     if (!PROVIDERS.includes(provider)) {
@@ -134,6 +169,32 @@ function parseArgs(argv) {
     if (!knownDoors.has(door)) throw new Error(`unknown door filter "${door}"`);
   }
   return options;
+}
+
+function qualificationRoutes(options) {
+  return selectedRoutes(options.routes);
+}
+
+function caseSelected(provider, door, options) {
+  if (options.routes === undefined) {
+    return selected(provider, options.providers) && selected(door, options.doors);
+  }
+  return qualificationRoutes(options).some(
+    (route) =>
+      route.manual !== true &&
+      route.provider === provider &&
+      (route.door === door || (route.additionalDoors ?? []).includes(door))
+  );
+}
+
+function routeIdForCase(provider, door, options) {
+  if (options.routes === undefined) return undefined;
+  return qualificationRoutes(options).find(
+    (route) =>
+      route.manual !== true &&
+      route.provider === provider &&
+      (route.door === door || (route.additionalDoors ?? []).includes(door))
+  )?.routeId;
 }
 
 function csv(value) {
@@ -153,7 +214,7 @@ function selected(value, filter) {
 }
 
 function timestamp() {
-  return new Date().toISOString().replaceAll(":", "-").replace(/\.\d{3}Z$/, "Z");
+  return `${new Date().toISOString().replaceAll(":", "-").replace(".", "-")}-${process.pid}`;
 }
 
 function sanitize(raw) {
@@ -300,6 +361,9 @@ async function startCountingProxy(targetUrl, options = {}) {
       const headers = { ...request.headers };
       delete headers.host;
       delete headers["content-length"];
+      if (options.upstreamAuthorization !== undefined) {
+        headers.authorization = options.upstreamAuthorization;
+      }
       const upstream = await fetch(url, {
         method: request.method,
         headers,
@@ -393,6 +457,16 @@ async function startDeterministicStack(tempRoot) {
           defaultEffort: "quick",
           wireShape: "openrouter"
         },
+        [publicModels.openai]: {
+          efforts: [{ id: "quick", aliases: ["high"] }, { id: "deep" }],
+          defaultEffort: "quick",
+          wireShape: "openai"
+        },
+        [publicModels.anthropic]: {
+          efforts: [{ id: "quick" }, { id: "deep" }],
+          defaultEffort: "quick",
+          wireShape: "anthropic"
+        },
         [publicModels.codex]: {
           efforts: [{ id: "quick", aliases: ["high"] }, { id: "deep" }],
           defaultEffort: "quick",
@@ -444,7 +518,7 @@ async function startDeterministicStack(tempRoot) {
 
 function liveRequestBody(door, model, prompt, stream) {
   const body = door.buildRequest({ model, user: prompt, stream });
-  if (door.id === "openai-chat") body.max_tokens = 16;
+  if (door.id === "openai-chat") body.max_completion_tokens = 64;
   else if (door.id === "anthropic-messages") body.max_tokens = 16;
   else if (door.id === "codex-responses") body.max_output_tokens = 16;
   return body;
@@ -467,6 +541,153 @@ async function callApiDoor(gatewayUrl, door, model, prompt, stream = false) {
   }
   const body = JSON.parse(text);
   return door.textOf(body);
+}
+
+async function verifyFailureNoFallback(stack, provider, door) {
+  await stack.simulator.reset();
+  await stack.simulator.queue(stack.nativeModels[provider], [
+    {
+      error: {
+        status: 500,
+        code: "internal_error",
+        error_type: "api_error",
+        message: "simulated provider error"
+      }
+    }
+  ]);
+  await assert.rejects(
+    callApiDoor(
+      stack.proxy.url,
+      door,
+      stack.publicModels[provider],
+      "Deterministic failure propagation probe."
+    ),
+    /returned 5\d\d/
+  );
+  const selectedCalls = await stack.simulator.calls({
+    model: stack.nativeModels[provider]
+  });
+  assert.equal(selectedCalls.length, 1, await stack.simulator.describeJournal());
+  for (const [otherProvider, nativeModel] of Object.entries(stack.nativeModels)) {
+    if (otherProvider === provider) continue;
+    const calls = await stack.simulator.calls({ model: nativeModel });
+    assert.equal(
+      calls.length,
+      0,
+      `failure on ${provider} unexpectedly reached ${otherProvider}`
+    );
+  }
+}
+
+async function verifyToolsAndReasoning(stack, provider, door) {
+  await stack.simulator.reset();
+  await stack.simulator.queue(stack.nativeModels[provider], [
+    {
+      tool_calls: [
+        {
+          id: "matrix-tool-call",
+          name: "read_file",
+          arguments: '{"path":"qualification.txt"}'
+        }
+      ],
+      reasoning: "deterministic qualification reasoning"
+    },
+    {
+      reply: "CAPABILITY_OK",
+      reasoning: "deterministic qualification reasoning"
+    }
+  ]);
+  const toolResponse = await fetch(`${stack.proxy.url}${door.path}`, {
+    method: "POST",
+    headers: { "content-type": "application/json", ...(door.headers ?? {}) },
+    body: JSON.stringify(
+      door.buildRequest({
+        model: stack.publicModels[provider],
+        user: "Deterministic tool capability probe.",
+        withTools: true
+      })
+    )
+  });
+  assert.equal(toolResponse.status, 200);
+  const toolCall = door.toolCallOf(await toolResponse.json());
+  assert.equal(toolCall?.name, "read_file");
+
+  const reasoningResponse = await fetch(`${stack.proxy.url}${door.path}`, {
+    method: "POST",
+    headers: { "content-type": "application/json", ...(door.headers ?? {}) },
+    body: JSON.stringify(
+      door.buildRequest({
+        model: stack.publicModels[provider],
+        user: "Deterministic reasoning capability probe.",
+        stream: true
+      })
+    )
+  });
+  assert.equal(reasoningResponse.status, 200);
+  const parsed = await doorFrames(reasoningResponse);
+  assert.ok(door.streamClosed(parsed.frames), `${door.id} capability stream did not close`);
+  assert.match(door.streamTextOf(parsed.frames), /CAPABILITY_OK/);
+  assert.ok(
+    door.streamReasoningOf(parsed.frames).length > 0,
+    `${door.id} omitted deterministic reasoning`
+  );
+}
+
+async function verifyCancellationPropagation() {
+  let cancelled = false;
+  let upstreamController;
+  const backend = {
+    defaultModel: "matrix-cancellation",
+    chat: async () =>
+      new Response(
+        new ReadableStream({
+          start(controller) {
+            upstreamController = controller;
+            controller.enqueue(
+              Buffer.from('data: {"choices":[{"delta":{"content":"first"}}]}\n\n')
+            );
+          },
+          cancel() {
+            cancelled = true;
+          }
+        }),
+        { status: 200, headers: { "content-type": "text/event-stream" } }
+      ),
+    models: async () =>
+      Response.json({ object: "list", data: [{ id: "matrix-cancellation" }] }),
+    embeddings: async () => Response.json({ data: [] })
+  };
+  const gateway = await startGateway({ backend });
+  const aborter = new AbortController();
+  try {
+    const response = await fetch(`${gateway.url()}/v1/chat/completions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        model: "matrix-cancellation",
+        stream: true,
+        messages: [{ role: "user", content: "cancellation probe" }]
+      }),
+      signal: aborter.signal
+    });
+    const reader = response.body?.getReader();
+    assert.ok(reader !== undefined);
+    await reader.read();
+    aborter.abort();
+    const deadline = Date.now() + 1_000;
+    while (!cancelled && Date.now() < deadline) {
+      await new Promise((resolveWait) => setTimeout(resolveWait, 10));
+    }
+    if (!cancelled) upstreamController?.close();
+    assert.equal(cancelled, true, "client disconnect did not cancel the upstream body");
+  } finally {
+    try {
+      upstreamController?.close();
+    } catch {
+      // The stream was already cancelled.
+    }
+    await gateway.close();
+  }
 }
 
 async function nativePickerAliases(gatewayUrl, nativeModels, publicModels) {
@@ -675,6 +896,14 @@ function tmux(...args) {
       TERM: "xterm-256color"
     }
   });
+}
+
+function cleanupMatrixTmuxSessions() {
+  for (const session of tmux("list-sessions", "-F", "#{session_name}").stdout
+    .split("\n")
+    .filter((name) => name.startsWith(`routekit-e2e-${process.pid}-`))) {
+    tmux("kill-session", "-t", session);
+  }
 }
 
 function capturePane(session) {
@@ -984,7 +1213,7 @@ async function runPtyCase(input) {
       );
       assert.equal(readFileSync(proofPath, "utf8"), "ROUTEKIT_TOOL_OK");
     }
-    return { transcript, billedCalls: caseCalls.length };
+    return { transcript, gatewayRequests: caseCalls.length };
   } finally {
     tmux("send-keys", "-t", session, "C-c");
     tmux("send-keys", "-t", session, "C-c");
@@ -992,29 +1221,112 @@ async function runPtyCase(input) {
   }
 }
 
-async function startLiveRoutekit(configPath) {
+function accountStoreSnapshot(directory) {
+  if (!existsSync(directory)) return [];
+  return readdirSync(directory)
+    .filter((name) => name.endsWith(".json") && !name.startsWith("."))
+    .sort()
+    .map((name) => {
+      const path = join(directory, name);
+      const stat = statSync(path);
+      return {
+        name,
+        size: stat.size,
+        sha256: createHash("sha256").update(readFileSync(path)).digest("hex")
+      };
+    });
+}
+
+function stageSubscriptionAccounts(isolatedStateHome, providers) {
+  const snapshots = {};
+  for (const provider of ["codex", "claude-code"]) {
+    if (!providers.includes(provider)) continue;
+    const source = defaultSubscriptionAccountDirectory(provider);
+    const before = accountStoreSnapshot(source);
+    const destination = join(isolatedStateHome, "subscriptions", provider);
+    mkdirSync(destination, { recursive: true, mode: 0o700 });
+    for (const { name } of before) {
+      const destinationPath = join(destination, name);
+      copyFileSync(join(source, name), destinationPath);
+      chmodSync(destinationPath, 0o600);
+    }
+    snapshots[provider] = { source, before, stagedCount: before.length };
+  }
+  return snapshots;
+}
+
+function subscriptionStoresUnchanged(snapshots) {
+  return Object.fromEntries(
+    Object.entries(snapshots).map(([provider, snapshot]) => [
+      provider,
+      JSON.stringify(accountStoreSnapshot(snapshot.source)) ===
+        JSON.stringify(snapshot.before)
+    ])
+  );
+}
+
+function killProcessGroup(child, signal) {
+  if (child.exitCode !== null) return;
+  try {
+    process.kill(-child.pid, signal);
+  } catch {
+    child.kill(signal);
+  }
+}
+
+async function terminateChild(child) {
+  try {
+    if (child.exitCode !== null) return;
+    killProcessGroup(child, "SIGTERM");
+    await Promise.race([
+      new Promise((resolveExit) => child.once("exit", resolveExit)),
+      new Promise((resolveWait) => setTimeout(resolveWait, 5_000))
+    ]);
+    if (child.exitCode === null) killProcessGroup(child, "SIGKILL");
+  } finally {
+    ACTIVE_LIVE_CHILDREN.delete(child);
+  }
+}
+
+async function startLiveRoutekit(configPath, tempRoot, providers) {
+  const isolatedStateHome = join(tempRoot, "live-routekit-state");
+  const authTokenFile = join(isolatedStateHome, "data-token");
+  mkdirSync(isolatedStateHome, { recursive: true, mode: 0o700 });
+  const subscriptionSnapshots = stageSubscriptionAccounts(
+    isolatedStateHome,
+    providers
+  );
+  const dataToken = randomBytes(32).toString("hex");
+  writeFileSync(authTokenFile, `${dataToken}\n`, { mode: 0o600 });
   const child = spawn(
     process.execPath,
     [
       ROUTEKIT_ENTRY,
-      "--config",
+      "daemon",
+      "run",
+      "--config-path",
       configPath,
-      "gateway",
-      "serve",
       "--host",
       "127.0.0.1",
       "--port",
       "0",
       "--no-portless",
+      "--auth-token-file",
+      authTokenFile,
       "--json"
     ],
     {
       cwd: ROOT,
-      env: process.env,
+      env: {
+        ...process.env,
+        ROUTEKIT_HOME: isolatedStateHome,
+        ROUTEKIT_PORTLESS: "0"
+      },
       detached: true,
       stdio: ["ignore", "pipe", "pipe"]
     }
   );
+  ACTIVE_LIVE_CHILDREN.add(child);
   let stdout = "";
   let stderr = "";
   child.stdout.on("data", (chunk) => {
@@ -1027,27 +1339,20 @@ async function startLiveRoutekit(configPath) {
   while (Date.now() < deadline) {
     try {
       const readiness = JSON.parse(stdout.trim());
-      if (typeof readiness.url === "string") {
+      if (readiness.event === "listening" && typeof readiness.dataUrl === "string") {
         return {
-          url: readiness.url,
+          url: readiness.dataUrl,
+          dataToken,
+          stagedAccounts: Object.fromEntries(
+            Object.entries(subscriptionSnapshots).map(([provider, snapshot]) => [
+              provider,
+              snapshot.stagedCount
+            ])
+          ),
+          verifySubscriptionStores: () =>
+            subscriptionStoresUnchanged(subscriptionSnapshots),
           close: async () => {
-            if (child.exitCode !== null) return;
-            try {
-              process.kill(-child.pid, "SIGTERM");
-            } catch {
-              child.kill("SIGTERM");
-            }
-            await Promise.race([
-              new Promise((resolveExit) => child.once("exit", resolveExit)),
-              new Promise((resolveWait) => setTimeout(resolveWait, 5_000))
-            ]);
-            if (child.exitCode === null) {
-              try {
-                process.kill(-child.pid, "SIGKILL");
-              } catch {
-                child.kill("SIGKILL");
-              }
-            }
+            await terminateChild(child);
           }
         };
       }
@@ -1055,12 +1360,14 @@ async function startLiveRoutekit(configPath) {
       // Readiness JSON is pretty-printed; keep waiting for the closing brace.
     }
     if (child.exitCode !== null) {
+      ACTIVE_LIVE_CHILDREN.delete(child);
       throw new Error(
         `routekit live gateway exited ${child.exitCode}\n${sanitize(stdout)}\n${sanitize(stderr)}`
       );
     }
     await new Promise((resolveWait) => setTimeout(resolveWait, 100));
   }
+  await terminateChild(child);
   throw new Error(
     `timed out starting live RouteKit gateway\n${sanitize(stdout)}\n${sanitize(stderr)}`
   );
@@ -1077,9 +1384,15 @@ async function catalogModels(gatewayUrl) {
 
 function chooseLiveModels(models, overrides, providers = PROVIDERS) {
   const preferences = {
-    openai: ["openai/gpt-5.5", "openai/gpt-4.1-mini"],
+    openai: [
+      "openai/gpt-5.5",
+      "openai/gpt-4.1-mini",
+      "openai/gpt-4.1-nano",
+      "openai/gpt-4o-mini"
+    ],
     anthropic: [
       "anthropic/claude-sonnet-4-6",
+      "anthropic/claude-sonnet-4-5",
       "anthropic/claude-3-5-haiku-latest"
     ],
     openrouter: [
@@ -1104,7 +1417,7 @@ function chooseLiveModels(models, overrides, providers = PROVIDERS) {
         }
         return [provider, override];
       }
-      const preferred = preferences[provider].find((model) =>
+      const preferred = (preferences[provider] ?? []).find((model) =>
         available.includes(model)
       );
       const fallback = preferred ?? available[0];
@@ -1258,10 +1571,18 @@ function runPoolCoverage() {
 
 async function runLivePoolFailover(tempRoot) {
   const directory = defaultSubscriptionAccountDirectory("claude-code");
+  const sourceSnapshot = accountStoreSnapshot(directory);
+  const stagedDirectory = join(tempRoot, "live-pool-credentials");
+  mkdirSync(stagedDirectory, { recursive: true, mode: 0o700 });
   const paths = readdirSync(directory)
     .filter((name) => name.endsWith(".json") && !name.startsWith("."))
     .sort()
-    .map((name) => join(directory, name));
+    .map((name) => {
+      const target = join(stagedDirectory, name);
+      copyFileSync(join(directory, name), target);
+      chmodSync(target, 0o600);
+      return target;
+    });
   assert.ok(paths.length >= 2, "live pool failover needs at least two enrolled Claude accounts");
   const accounts = await SubscriptionAccountSet.open(
     subscriptionProvider("claude-code"),
@@ -1322,20 +1643,29 @@ async function runLivePoolFailover(tempRoot) {
     assert.notEqual(attempts[0], attempts[1]);
     const active = accounts.snapshot().members.find((member) => member.active);
     assert.equal(active?.id, attempts[1]);
+    const memberOrdinals = new Map(
+      before.members.map((member, index) => [member.id, `member-${index + 1}`])
+    );
     return {
       model: sharedModel,
-      members: before.members.map((member) => member.id),
-      attempts,
-      active: active?.id
+      memberCount: before.members.length,
+      attempts: attempts.map((member) => memberOrdinals.get(member)),
+      active: memberOrdinals.get(active?.id)
     };
   } finally {
     await accounts.close();
+    assert.deepEqual(
+      accountStoreSnapshot(directory),
+      sourceSnapshot,
+      "live pool qualification mutated the enrolled Claude account store"
+    );
   }
 }
 
 function resultEntry(input) {
   const identity = {
     phase: input.phase,
+    routeId: input.routeId ?? null,
     provider: input.provider ?? null,
     door: input.door
   };
@@ -1344,11 +1674,35 @@ function resultEntry(input) {
     routeIds: routeIdsForCase(EVIDENCE_MAP, identity),
     ...identity,
     status: input.status,
-    reason: input.reason ?? null,
+    reasonCode:
+      input.status === "pass"
+        ? "qualified"
+        : input.reasonCode ?? classifyFailure(input.reason ?? "provider request failed"),
     durationMs: input.durationMs,
-    billedCalls: input.billedCalls ?? 0,
-    artifact: input.artifact ?? null
+    gatewayRequests: input.gatewayRequests ?? 0,
+    artifact: input.artifact ?? null,
+    model: input.model ?? null,
+    setupRestore: input.setupRestore ?? null
   };
+}
+
+async function observeGatewayRequests(proxy, run) {
+  const before = proxy.calls.length;
+  try {
+    return {
+      ...(await run()),
+      gatewayRequests: proxy.calls.length - before
+    };
+  } catch (error) {
+    const observed = proxy.calls.length - before;
+    if (error instanceof Error) {
+      error.gatewayRequests = observed;
+      throw error;
+    }
+    const wrapped = new Error(String(error));
+    wrapped.gatewayRequests = observed;
+    throw wrapped;
+  }
 }
 
 async function recordCase(results, input, run) {
@@ -1369,12 +1723,16 @@ async function recordCase(results, input, run) {
     const entry = resultEntry({
       ...input,
       status: "fail",
-      reason: sanitize(reason),
-      durationMs: Date.now() - started
+      reasonCode: classifyFailure(reason),
+      durationMs: Date.now() - started,
+      gatewayRequests:
+        error instanceof Error && Number.isInteger(error.gatewayRequests)
+          ? error.gatewayRequests
+          : 0
     });
     results.push(entry);
     process.stderr.write(
-      `FAIL ${input.phase} ${input.provider ?? "-"} ${input.door}: ${entry.reason}\n`
+      `FAIL ${input.phase} ${input.provider ?? "-"} ${input.door}: ${entry.reasonCode} (${sanitize(reason)})\n`
     );
     return entry;
   }
@@ -1384,7 +1742,7 @@ function skipCase(results, input, reason) {
   const entry = resultEntry({
     ...input,
     status: "skip",
-    reason,
+    reasonCode: classifyFailure(reason),
     durationMs: 0
   });
   results.push(entry);
@@ -1413,6 +1771,54 @@ function gitSourceState() {
 async function runDeterministic(options, results, artifactDir, tempRoot) {
   const stack = await startDeterministicStack(tempRoot);
   try {
+    await recordCase(
+      results,
+      { phase: "deterministic", door: "cancellation" },
+      async () => {
+        await verifyCancellationPropagation();
+        return {};
+      }
+    );
+    const failureCases = new Map();
+    for (const route of qualificationRoutes(options)) {
+      if (!selected(route.provider, options.providers)) continue;
+      const protocolDoorId =
+        route.door === "cursor" || route.door === "cursor-ide"
+          ? "openai-chat"
+          : route.door;
+      if (!selected(protocolDoorId, options.doors)) continue;
+      failureCases.set(`${route.provider}:${protocolDoorId}`, {
+        provider: route.provider,
+        door: API_DOORS.find((candidate) => candidate.id === protocolDoorId)
+      });
+    }
+    for (const { provider, door } of failureCases.values()) {
+      assert.ok(door !== undefined, `missing deterministic door for ${provider}`);
+      await recordCase(
+        results,
+        {
+          phase: "deterministic",
+          provider,
+          door: `failure-no-fallback-${door.id}`
+        },
+        async () => {
+          await verifyFailureNoFallback(stack, provider, door);
+          return {};
+        }
+      );
+      await recordCase(
+        results,
+        {
+          phase: "deterministic",
+          provider,
+          door: `tools-reasoning-${door.id}`
+        },
+        async () => {
+          await verifyToolsAndReasoning(stack, provider, door);
+          return {};
+        }
+      );
+    }
     await recordCase(
       results,
       { phase: "deterministic", door: "native-pickers" },
@@ -1463,10 +1869,15 @@ async function runDeterministic(options, results, artifactDir, tempRoot) {
     for (const provider of PROVIDERS) {
       if (!selected(provider, options.providers)) continue;
       for (const door of API_DOORS) {
-        if (!selected(door.id, options.doors)) continue;
+        if (!caseSelected(provider, door.id, options)) continue;
         await recordCase(
           results,
-          { phase: "deterministic", provider, door: door.id },
+          {
+            phase: "deterministic",
+            routeId: routeIdForCase(provider, door.id, options),
+            provider,
+            door: door.id
+          },
           async () => {
             await stack.simulator.reset();
             const marker = `API_${provider.replaceAll("-", "_").toUpperCase()}_${door.id
@@ -1492,11 +1903,16 @@ async function runDeterministic(options, results, artifactDir, tempRoot) {
     for (const provider of PROVIDERS) {
       if (!selected(provider, options.providers)) continue;
       for (const door of CLI_DOORS) {
-        if (!selected(door.id, options.doors)) continue;
+        if (!caseSelected(provider, door.id, options)) continue;
         if (!commandAvailable(door.binary)) {
           skipCase(
             results,
-            { phase: "deterministic", provider, door: door.id },
+            {
+              phase: "deterministic",
+              routeId: routeIdForCase(provider, door.id, options),
+              provider,
+              door: door.id
+            },
             `${door.binary} is not installed`
           );
           continue;
@@ -1508,7 +1924,12 @@ async function runDeterministic(options, results, artifactDir, tempRoot) {
         );
         const entry = await recordCase(
           results,
-          { phase: "deterministic", provider, door: door.id },
+          {
+            phase: "deterministic",
+            routeId: routeIdForCase(provider, door.id, options),
+            provider,
+            door: door.id
+          },
           async () => {
             const toolCase =
               provider === "openrouter" &&
@@ -1535,12 +1956,12 @@ async function runDeterministic(options, results, artifactDir, tempRoot) {
               `selected provider ${provider} received no simulator call`
             );
             return {
-              billedCalls: 0,
+              gatewayRequests: 0,
               artifact: relative(ROOT, transcriptPath)
             };
           }
         );
-        if (entry.status === "pass") entry.billedCalls = 0;
+        if (entry.status === "pass") entry.gatewayRequests = 0;
       }
     }
     if (poolCasesEnabled(options)) {
@@ -1559,6 +1980,8 @@ async function runDeterministic(options, results, artifactDir, tempRoot) {
 }
 
 async function runLive(options, results, artifactDir, tempRoot) {
+  const routes = options.routes === undefined ? [] : qualificationRoutes(options);
+  if (routes.length > 0) reserveRouteBudget(routes, options.maxLiveCalls);
   const configuredPath = join(ROOT, ".routekit", "router.yaml");
   if (!existsSync(configuredPath)) {
     throw new Error(`live RouteKit config not found: ${configuredPath}`);
@@ -1577,16 +2000,24 @@ async function runLive(options, results, artifactDir, tempRoot) {
       ].join("\n")
     );
   }
-  const routekit = await startLiveRoutekit(configPath);
+  const routekit = await startLiveRoutekit(
+    configPath,
+    tempRoot,
+    options.providers ?? ["codex", "claude-code"]
+  );
   let proxy;
-  let billedCalls = 0;
+  let gatewayRequests = 0;
   try {
     proxy = await startCountingProxy(routekit.url, {
-      maxCalls: options.maxLiveCalls
+      maxCalls: options.maxLiveCalls,
+      upstreamAuthorization: `Bearer ${routekit.dataToken}`
     });
     const models = await catalogModels(proxy.url);
-    const activeProviders = PROVIDERS.filter((provider) =>
-      selected(provider, options.providers)
+    const activeProviders = PROVIDERS.filter(
+      (provider) =>
+        selected(provider, options.providers) &&
+        (options.providers !== undefined ||
+          models.some((model) => model.startsWith(`${provider}/`)))
     );
     const chosen = chooseLiveModels(models, options.models, activeProviders);
     await recordCase(
@@ -1627,49 +2058,61 @@ async function runLive(options, results, artifactDir, tempRoot) {
             join(artifactDir, "live-native-pickers.json"),
             `${JSON.stringify(aliases, null, 2)}\n`
           );
-          return { billedCalls: 0, artifact: "live-native-pickers.json" };
+          return { gatewayRequests: 0, artifact: "live-native-pickers.json" };
         }
       );
     }
     const estimatedMinimum =
-      activeProviders.length *
-      (API_DOORS.filter((door) => selected(door.id, options.doors)).length +
-        CLI_DOORS.filter((door) => selected(door.id, options.doors)).length);
+      activeProviders.flatMap((provider) =>
+        [...API_DOORS, ...CLI_DOORS].filter((door) =>
+          caseSelected(provider, door.id, options)
+        )
+      ).length;
     if (estimatedMinimum > options.maxLiveCalls) {
       throw new Error(
         `selected live matrix needs at least ${estimatedMinimum} calls, above budget ${options.maxLiveCalls}`
       );
     }
-    for (const provider of PROVIDERS) {
-      if (!selected(provider, options.providers)) continue;
+    for (const provider of activeProviders) {
       for (const door of API_DOORS) {
-        if (!selected(door.id, options.doors)) continue;
+        if (!caseSelected(provider, door.id, options)) continue;
         await recordCase(
           results,
-          { phase: "live", provider, door: door.id },
-          async () => {
-            const before = proxy.calls.length;
-            const answer = await callApiDoor(
-              proxy.url,
-              door,
-              chosen[provider],
-              "Reply exactly with ROUTEKIT_OK.",
-              true
-            );
-            assert.match(answer, /ROUTEKIT_OK/i);
-            return { billedCalls: proxy.calls.length - before };
-          }
+          {
+            phase: "live",
+            routeId: routeIdForCase(provider, door.id, options),
+            provider,
+            door: door.id
+          },
+          async () =>
+            await observeGatewayRequests(proxy, async () => {
+              const answer = await callApiDoor(
+                proxy.url,
+                door,
+                chosen[provider],
+                "Reply exactly with ROUTEKIT_OK.",
+                true
+              );
+              assert.match(answer, /ROUTEKIT_OK/i);
+              return {
+                model: chosen[provider]
+              };
+            })
         );
       }
     }
-    for (const provider of PROVIDERS) {
-      if (!selected(provider, options.providers)) continue;
+    for (const provider of activeProviders) {
       for (const door of CLI_DOORS) {
-        if (!selected(door.id, options.doors)) continue;
+        if (!caseSelected(provider, door.id, options)) continue;
         if (!commandAvailable(door.binary)) {
           skipCase(
             results,
-            { phase: "live", provider, door: door.id },
+            {
+              phase: "live",
+              routeId: routeIdForCase(provider, door.id, options),
+              provider,
+              door: door.id
+            },
             `${door.binary} is not installed`
           );
           continue;
@@ -1677,26 +2120,35 @@ async function runLive(options, results, artifactDir, tempRoot) {
         const transcriptPath = join(artifactDir, `live-${provider}-${door.id}.txt`);
         await recordCase(
           results,
-          { phase: "live", provider, door: door.id },
-          async () => {
-            const output = await runPtyCase({
-              tempRoot,
-              provider,
-              door: door.id,
-              model: chosen[provider],
-              nativeModel: chosen[provider].slice(provider.length + 1),
-              configPath,
-              proxy,
-              timeoutMs: options.timeoutMs,
-              toolCase: provider === "openrouter" && door.id === "claude",
-              live: true
-            });
-            writeFileSync(transcriptPath, `${sanitize(output.transcript).trim()}\n`);
-            return {
-              billedCalls: output.billedCalls,
-              artifact: relative(ROOT, transcriptPath)
-            };
-          }
+          {
+            phase: "live",
+            routeId: routeIdForCase(provider, door.id, options),
+            provider,
+            door: door.id
+          },
+          async () =>
+            await observeGatewayRequests(proxy, async () => {
+              const output = await runPtyCase({
+                tempRoot,
+                provider,
+                door: door.id,
+                model: chosen[provider],
+                nativeModel: chosen[provider].slice(provider.length + 1),
+                configPath,
+                proxy,
+                timeoutMs: options.timeoutMs,
+                toolCase: provider === "openrouter" && door.id === "claude",
+                live: true
+              });
+              writeFileSync(
+                transcriptPath,
+                `${sanitize(output.transcript).trim()}\n`
+              );
+              return {
+                artifact: relative(ROOT, transcriptPath),
+                model: chosen[provider]
+              };
+            })
         );
       }
     }
@@ -1712,18 +2164,221 @@ async function runLive(options, results, artifactDir, tempRoot) {
           const result = await runLivePoolFailover(tempRoot);
           writeFileSync(artifactPath, `${JSON.stringify(result, null, 2)}\n`);
           return {
-            billedCalls: 0,
+            gatewayRequests: 0,
             artifact: relative(ROOT, artifactPath)
           };
         }
       );
     }
+  } catch (error) {
+    const observed = proxy?.calls.length ?? 0;
+    if (error instanceof Error) {
+      error.gatewayRequests = observed;
+      throw error;
+    }
+    const wrapped = new Error(String(error));
+    wrapped.gatewayRequests = observed;
+    throw wrapped;
   } finally {
-    billedCalls = proxy?.calls.length ?? 0;
-    await proxy?.close();
-    await routekit.close();
+    gatewayRequests = proxy?.calls.length ?? 0;
+    try {
+      await proxy?.close();
+    } finally {
+      await routekit.close();
+    }
+    const unchangedStores = routekit.verifySubscriptionStores();
+    for (const entry of results.filter(
+      (candidate) =>
+        candidate.phase === "live" &&
+        (candidate.provider === "codex" || candidate.provider === "claude-code")
+    )) {
+      entry.setupRestore = {
+        setup: (routekit.stagedAccounts[entry.provider] ?? 0) > 0 ? "pass" : "fail",
+        restore: unchangedStores[entry.provider] === true ? "pass" : "fail"
+      };
+    }
   }
-  return billedCalls;
+  return gatewayRequests;
+}
+
+function commandVersion(binary) {
+  const result = spawnSync(binary, ["--version"], {
+    encoding: "utf8",
+    timeout: 15_000,
+    stdio: ["ignore", "pipe", "ignore"]
+  });
+  if (result.error !== undefined || result.status !== 0) return "unavailable";
+  return result.stdout.trim().replaceAll(/[\r\n\t]/g, " ").slice(0, 160) || "unavailable";
+}
+
+function repositoryMetadata() {
+  const revision = spawnSync("git", ["rev-parse", "HEAD"], {
+    cwd: ROOT,
+    encoding: "utf8"
+  });
+  const dirty = spawnSync("git", ["status", "--porcelain"], {
+    cwd: ROOT,
+    encoding: "utf8"
+  });
+  const packageJson = JSON.parse(
+    readFileSync(join(ROOT, "packages", "routekit-cli", "package.json"), "utf8")
+  );
+  return {
+    routekitVersion: packageJson.version,
+    routekitGitSha:
+      revision.status === 0 ? revision.stdout.trim() : "unavailable",
+    gitDirty: dirty.status !== 0 || dirty.stdout.trim() !== "",
+    nodeVersion: process.version,
+    platform: platform(),
+    architecture: arch(),
+    clients: {
+      claude: commandVersion("claude"),
+      codex: commandVersion("codex"),
+      cursorAgent: commandVersion("cursor-agent"),
+      cursorIde: commandVersion("cursor")
+    }
+  };
+}
+
+function deterministicCheck(results, provider, protocolDoor, prefix) {
+  return results.find(
+    (entry) =>
+      entry.phase === "deterministic" &&
+      entry.provider === provider &&
+      entry.door === `${prefix}-${protocolDoor}`
+  );
+}
+
+function buildQualification(options, results, topLevelError, liveGatewayRequestsObserved) {
+  if (!options.live || options.routes === undefined) {
+    return {
+      status: "not-run",
+      expectedRouteIds: [],
+      routes: []
+    };
+  }
+  const cancellation = results.find(
+    (entry) => entry.phase === "deterministic" && entry.door === "cancellation"
+  );
+  const routes = qualificationRoutes(options).map((route) => {
+    if (route.manual === true) {
+      return makeRouteResult(
+        route,
+        {
+          status: "fail",
+          reasonCode: "manual-evidence-unavailable",
+          credentialAvailable: false,
+          clientVersion: commandVersion("cursor"),
+          protocol: {
+            streaming: "fail",
+            tools: "fail",
+            reasoning: "fail"
+          },
+          behavior: {
+            cancellation: cancellation?.status === "pass" ? "pass" : "fail",
+            failurePropagation: "fail",
+            routekitFallback: "unverified"
+          },
+          setupRestore: { setup: "fail", restore: "fail" },
+          evidence: ["manual-evidence-unavailable"]
+        }
+      );
+    }
+    const live = results.find(
+      (entry) => entry.phase === "live" && entry.routeId === route.routeId
+    );
+    const protocolDoor =
+      route.door === "cursor" ? "openai-chat" : route.door;
+    const failure = deterministicCheck(
+      results,
+      route.provider,
+      protocolDoor,
+      "failure-no-fallback"
+    );
+    const capabilities = deterministicCheck(
+      results,
+      route.provider,
+      protocolDoor,
+      "tools-reasoning"
+    );
+    const livePassed = live?.status === "pass";
+    const deterministicPassed =
+      cancellation?.status === "pass" &&
+      failure?.status === "pass" &&
+      capabilities?.status === "pass";
+    const requiredClientAvailable =
+      route.client === "routekit-http" || commandVersion(route.client) !== "unavailable";
+    const passed = livePassed && deterministicPassed && requiredClientAvailable;
+    const clientVersion =
+      route.client === "routekit-http"
+        ? repositoryMetadata().routekitVersion
+        : commandVersion(route.client);
+    return makeRouteResult(route, {
+      status: passed ? "pass" : "fail",
+      reasonCode:
+        topLevelError !== undefined
+          ? classifyFailure(topLevelError)
+          : live === undefined
+            ? "matrix-case-missing"
+            : live.status === "skip" || !requiredClientAvailable
+              ? "client-unavailable"
+              : !livePassed
+                ? live.reasonCode
+                : !deterministicPassed
+                  ? "provider-request-failed"
+                  : "setup-restore-failed",
+      durationMs: live?.durationMs,
+      model: live?.model,
+      apiRevision: route.provider === "anthropic" ? "2023-06-01" : "not-advertised",
+      credentialAvailable: livePassed,
+      clientVersion,
+      protocol: {
+        streaming: livePassed ? "pass" : "fail",
+        tools: capabilities?.status === "pass" ? "pass" : "fail",
+        reasoning: capabilities?.status === "pass" ? "pass" : "fail"
+      },
+      behavior: {
+        cancellation: cancellation?.status === "pass" ? "pass" : "fail",
+        failurePropagation: failure?.status === "pass" ? "pass" : "fail",
+        routekitFallback: failure?.status === "pass" ? "none" : "unverified"
+      },
+      attributionBasis:
+        livePassed && (live?.gatewayRequests ?? 0) > 0
+          ? "namespaced-route-success"
+          : "not-observed",
+      gatewayRequestsObserved: live?.gatewayRequests ?? 0,
+      setupRestore:
+        route.setupRestore === "not-applicable"
+          ? { setup: "not-applicable", restore: "not-applicable" }
+          : live?.setupRestore ?? { setup: "fail", restore: "fail" },
+      evidence: [
+        `deterministic-failure-no-fallback-${route.provider}-${protocolDoor}`,
+        `deterministic-tools-reasoning-${route.provider}-${protocolDoor}`,
+        "deterministic-cancellation",
+        live?.artifact
+      ].filter(Boolean)
+    });
+  });
+  const completeness = qualificationCompleteness(
+    routes,
+    qualificationRoutes(options).map((route) => route.routeId)
+  );
+  const totalGatewayRequests = liveGatewayRequestsObserved;
+  return {
+    status: completeness.allPassed ? "pass" : "fail",
+    completeness,
+    budget: {
+      authorizedMaximum: options.maxLiveCalls,
+      plannedMaximum: qualificationRoutes(options).reduce(
+        (sum, route) => sum + route.maxGatewayRequests,
+        0
+      ),
+      gatewayRequestsObserved: totalGatewayRequests,
+      remaining: Math.max(0, options.maxLiveCalls - totalGatewayRequests),
+      exhausted: totalGatewayRequests >= options.maxLiveCalls
+    },
+    routes
+  };
 }
 
 async function main() {
@@ -1740,13 +2395,36 @@ async function main() {
   const artifactDir = join(ROOT, ".artifacts", "routekit-e2e", runTimestamp);
   const tempRoot = mkdtempSync(join(tmpdir(), "routekit-e2e-matrix-"));
   mkdirSync(artifactDir, { recursive: true });
+  let signalCleanupStarted = false;
+  const cleanupForSignal = async (signal) => {
+    if (signalCleanupStarted) return;
+    signalCleanupStarted = true;
+    removeSignalHandlers();
+    try {
+      await Promise.all(
+        [...ACTIVE_LIVE_CHILDREN].map(async (child) => await terminateChild(child))
+      );
+    } finally {
+      cleanupMatrixTmuxSessions();
+      rmSync(tempRoot, { recursive: true, force: true });
+      process.kill(process.pid, signal);
+    }
+  };
+  const onSigint = () => void cleanupForSignal("SIGINT");
+  const onSigterm = () => void cleanupForSignal("SIGTERM");
+  process.once("SIGINT", onSigint);
+  process.once("SIGTERM", onSigterm);
+  const removeSignalHandlers = () => {
+    process.off("SIGINT", onSigint);
+    process.off("SIGTERM", onSigterm);
+  };
   const results = [];
   let topLevelError;
-  let billedLiveCallsMade = 0;
+  let liveGatewayRequestsObserved = 0;
   try {
     await runDeterministic(options, results, artifactDir, tempRoot);
     if (options.live) {
-      billedLiveCallsMade = await runLive(
+      liveGatewayRequestsObserved = await runLive(
         options,
         results,
         artifactDir,
@@ -1754,27 +2432,50 @@ async function main() {
       );
     } else {
       process.stdout.write(
-        "LIVE SKIPPED: set ROUTEKIT_LIVE_E2E=1 to authorize billed provider calls\n"
+        "LIVE SKIPPED: set ROUTEKIT_LIVE_E2E=1 to authorize live account calls\n"
       );
     }
   } catch (error) {
     topLevelError = error instanceof Error ? error.message : String(error);
+    if (error instanceof Error && Number.isInteger(error.gatewayRequests)) {
+      liveGatewayRequestsObserved = error.gatewayRequests;
+    }
     process.stderr.write(`MATRIX ERROR: ${sanitize(topLevelError)}\n`);
   } finally {
-    for (const session of tmux("list-sessions", "-F", "#{session_name}").stdout
-      .split("\n")
-      .filter((name) => name.startsWith(`routekit-e2e-${process.pid}-`))) {
-      tmux("kill-session", "-t", session);
-    }
+    removeSignalHandlers();
+    cleanupMatrixTmuxSessions();
     rmSync(tempRoot, { recursive: true, force: true });
   }
-  const counts = {
+  const caseCounts = {
     pass: results.filter((entry) => entry.status === "pass").length,
     fail: results.filter((entry) => entry.status === "fail").length,
     skip: results.filter((entry) => entry.status === "skip").length
   };
+  const qualification = buildQualification(
+    options,
+    results,
+    topLevelError,
+    liveGatewayRequestsObserved
+  );
+  const routeCounts = {
+    pass: qualification.routes.filter((route) => route.status === "pass").length,
+    fail: qualification.routes.filter((route) => route.status === "fail").length
+  };
+  const summary = {
+    status:
+      topLevelError === undefined &&
+      caseCounts.fail === 0 &&
+      (!options.live ||
+        options.routes === undefined ||
+        qualification.status === "pass")
+        ? "pass"
+        : "fail",
+    caseCounts,
+    topLevelFailures: topLevelError === undefined ? 0 : 1,
+    routeCounts
+  };
   const report = {
-    schemaVersion: 2,
+    schemaVersion: 4,
     routekitVersion: ROUTEKIT_VERSION,
     evidenceMappingSchemaVersion: EVIDENCE_MAP.schemaVersion,
     evidenceMappingDigest: mappingDigest(EVIDENCE_MAP),
@@ -1782,8 +2483,13 @@ async function main() {
     sourceDirty: sourceState.dirty,
     startedAt,
     finishedAt: new Date().toISOString(),
+    metadata: repositoryMetadata(),
     liveAuthorized: options.live,
     filters: {
+      routes:
+        options.routes === undefined
+          ? []
+          : qualificationRoutes(options).map((route) => route.routeId),
       providers: options.providers ?? PROVIDERS,
       doors:
         options.doors ??
@@ -1791,18 +2497,28 @@ async function main() {
       timeoutMs: options.timeoutMs,
       maxLiveCalls: options.maxLiveCalls
     },
-    counts,
-    billedLiveCallsMade,
+    summary,
+    liveGatewayRequestsObserved,
     results,
-    topLevelError: topLevelError === undefined ? null : sanitize(topLevelError)
+    qualification,
+    topLevelError:
+      topLevelError === undefined ? null : classifyFailure(topLevelError)
   };
   const reportPath = join(artifactDir, "report.json");
   writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`);
   process.stdout.write(
-    `RESULT pass=${counts.pass} fail=${counts.fail} skip=${counts.skip} billed=${report.billedLiveCallsMade}\n`
+    `RESULT status=${summary.status} cases_pass=${caseCounts.pass} cases_fail=${caseCounts.fail} cases_skip=${caseCounts.skip} top_level_failures=${summary.topLevelFailures} routes_pass=${routeCounts.pass} routes_fail=${routeCounts.fail} gateway_requests=${report.liveGatewayRequestsObserved}\n`
   );
   process.stdout.write(`REPORT ${relative(ROOT, reportPath)}\n`);
-  if (counts.fail > 0 || topLevelError !== undefined) process.exitCode = 1;
+  if (
+    caseCounts.fail > 0 ||
+    topLevelError !== undefined ||
+    (options.live &&
+      options.routes !== undefined &&
+      qualification.status !== "pass")
+  ) {
+    process.exitCode = 1;
+  }
 }
 
 await main();
