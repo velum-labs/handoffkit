@@ -58,6 +58,7 @@ const CLI_DOORS = [
   { id: "opencode", binary: "opencode" }
 ];
 const PROVIDERS = [...new Set(ROUTE_CASES.map((route) => route.provider))];
+const ACTIVE_LIVE_CHILDREN = new Set();
 const MODEL_CALL_PATHS = new Set([
   "/v1/chat/completions",
   "/chat/completions",
@@ -1258,13 +1259,17 @@ function killProcessGroup(child, signal) {
 }
 
 async function terminateChild(child) {
-  if (child.exitCode !== null) return;
-  killProcessGroup(child, "SIGTERM");
-  await Promise.race([
-    new Promise((resolveExit) => child.once("exit", resolveExit)),
-    new Promise((resolveWait) => setTimeout(resolveWait, 5_000))
-  ]);
-  if (child.exitCode === null) killProcessGroup(child, "SIGKILL");
+  try {
+    if (child.exitCode !== null) return;
+    killProcessGroup(child, "SIGTERM");
+    await Promise.race([
+      new Promise((resolveExit) => child.once("exit", resolveExit)),
+      new Promise((resolveWait) => setTimeout(resolveWait, 5_000))
+    ]);
+    if (child.exitCode === null) killProcessGroup(child, "SIGKILL");
+  } finally {
+    ACTIVE_LIVE_CHILDREN.delete(child);
+  }
 }
 
 async function startLiveRoutekit(configPath, tempRoot, providers) {
@@ -1305,6 +1310,7 @@ async function startLiveRoutekit(configPath, tempRoot, providers) {
       stdio: ["ignore", "pipe", "pipe"]
     }
   );
+  ACTIVE_LIVE_CHILDREN.add(child);
   let stdout = "";
   let stderr = "";
   child.stdout.on("data", (chunk) => {
@@ -1313,27 +1319,6 @@ async function startLiveRoutekit(configPath, tempRoot, providers) {
   child.stderr.on("data", (chunk) => {
     stderr += chunk.toString("utf8");
   });
-  let signalCleanupStarted = false;
-  const exitForSignal = async (signal) => {
-    if (signalCleanupStarted) return;
-    signalCleanupStarted = true;
-    removeSignalHandlers();
-    try {
-      await terminateChild(child);
-    } finally {
-      cleanupMatrixTmuxSessions();
-      rmSync(isolatedStateHome, { recursive: true, force: true });
-      process.kill(process.pid, signal);
-    }
-  };
-  const onSigint = () => void exitForSignal("SIGINT");
-  const onSigterm = () => void exitForSignal("SIGTERM");
-  process.once("SIGINT", onSigint);
-  process.once("SIGTERM", onSigterm);
-  const removeSignalHandlers = () => {
-    process.off("SIGINT", onSigint);
-    process.off("SIGTERM", onSigterm);
-  };
   const deadline = Date.now() + 90_000;
   while (Date.now() < deadline) {
     try {
@@ -1351,7 +1336,6 @@ async function startLiveRoutekit(configPath, tempRoot, providers) {
           verifySubscriptionStores: () =>
             subscriptionStoresUnchanged(subscriptionSnapshots),
           close: async () => {
-            removeSignalHandlers();
             await terminateChild(child);
           }
         };
@@ -1360,14 +1344,13 @@ async function startLiveRoutekit(configPath, tempRoot, providers) {
       // Readiness JSON is pretty-printed; keep waiting for the closing brace.
     }
     if (child.exitCode !== null) {
-      removeSignalHandlers();
+      ACTIVE_LIVE_CHILDREN.delete(child);
       throw new Error(
         `routekit live gateway exited ${child.exitCode}\n${sanitize(stdout)}\n${sanitize(stderr)}`
       );
     }
     await new Promise((resolveWait) => setTimeout(resolveWait, 100));
   }
-  removeSignalHandlers();
   await terminateChild(child);
   throw new Error(
     `timed out starting live RouteKit gateway\n${sanitize(stdout)}\n${sanitize(stderr)}`
@@ -2229,6 +2212,29 @@ async function main() {
   const artifactDir = join(ROOT, ".artifacts", "routekit-e2e", runTimestamp);
   const tempRoot = mkdtempSync(join(tmpdir(), "routekit-e2e-matrix-"));
   mkdirSync(artifactDir, { recursive: true });
+  let signalCleanupStarted = false;
+  const cleanupForSignal = async (signal) => {
+    if (signalCleanupStarted) return;
+    signalCleanupStarted = true;
+    removeSignalHandlers();
+    try {
+      await Promise.all(
+        [...ACTIVE_LIVE_CHILDREN].map(async (child) => await terminateChild(child))
+      );
+    } finally {
+      cleanupMatrixTmuxSessions();
+      rmSync(tempRoot, { recursive: true, force: true });
+      process.kill(process.pid, signal);
+    }
+  };
+  const onSigint = () => void cleanupForSignal("SIGINT");
+  const onSigterm = () => void cleanupForSignal("SIGTERM");
+  process.once("SIGINT", onSigint);
+  process.once("SIGTERM", onSigterm);
+  const removeSignalHandlers = () => {
+    process.off("SIGINT", onSigint);
+    process.off("SIGTERM", onSigterm);
+  };
   const results = [];
   let topLevelError;
   let liveGatewayRequestsObserved = 0;
@@ -2253,6 +2259,7 @@ async function main() {
     }
     process.stderr.write(`MATRIX ERROR: ${sanitize(topLevelError)}\n`);
   } finally {
+    removeSignalHandlers();
     cleanupMatrixTmuxSessions();
     rmSync(tempRoot, { recursive: true, force: true });
   }
