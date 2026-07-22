@@ -147,6 +147,9 @@ test("budget reservation and completeness are strict", () => {
     qualificationCompleteness(automated, ROUTE_IDS.slice(0, 3)).allPassed,
     true
   );
+  for (const route of routes.slice(3)) {
+    assert.equal(route.reasonCode, "manual-evidence-unavailable");
+  }
   const incomplete = qualificationCompleteness(routes.slice(1));
   assert.equal(incomplete.complete, false);
   assert.deepEqual(incomplete.missingRouteIds, ["route-openai-api"]);

@@ -269,6 +269,8 @@ export function makeRouteResult(route, input) {
   const reasonCode =
     status === "pass"
       ? "qualified"
+      : requestedPass && route.manualEvidenceRequired === true
+        ? "manual-evidence-unavailable"
       : requestedPass && route.setupRestore === "required" &&
           (setupRestore.setup !== "pass" || setupRestore.restore !== "pass")
         ? "setup-restore-failed"
