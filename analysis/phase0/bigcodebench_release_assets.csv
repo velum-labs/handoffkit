@@ -1,0 +1,11 @@
+tag,published_at,name,size,url
+v0.2.5,2025-04-11T09:01:49Z,deepcoder.zip,1842819,https://github.com/bigcode-project/bigcodebench/releases/download/v0.2.5/deepcoder.zip
+v0.2.5,2025-04-11T09:01:49Z,sanitized_calibrated_samples.zip,165188552,https://github.com/bigcode-project/bigcodebench/releases/download/v0.2.5/sanitized_calibrated_samples.zip
+v0.2.4,2025-03-02T12:27:00Z,sanitized_calibrated_samples.zip,94704640,https://github.com/bigcode-project/bigcodebench/releases/download/v0.2.4/sanitized_calibrated_samples.zip
+v0.2.1.post7,2024-12-20T20:57:42Z,sanitized_calibrated_samples.zip,77872470,https://github.com/bigcode-project/bigcodebench/releases/download/v0.2.1.post7/sanitized_calibrated_samples.zip
+v0.2.1.post7,2024-12-20T20:57:42Z,sanitized_samples.zip,60465284,https://github.com/bigcode-project/bigcodebench/releases/download/v0.2.1.post7/sanitized_samples.zip
+v0.2.0.post3,2024-10-06T08:28:57Z,sanitized_calibrated_samples.zip,60113918,https://github.com/bigcode-project/bigcodebench/releases/download/v0.2.0.post3/sanitized_calibrated_samples.zip
+v0.1.5,2024-06-18T13:31:20Z,sanitized_calibrated_samples.zip,28164040,https://github.com/bigcode-project/bigcodebench/releases/download/v0.1.5/sanitized_calibrated_samples.zip
+v0.1.5,2024-06-18T13:31:20Z,sanitized_samples.zip,41491336,https://github.com/bigcode-project/bigcodebench/releases/download/v0.1.5/sanitized_samples.zip
+v0.1.2,2024-06-08T13:16:23Z,sanitized_calibrated_samples.zip,22162855,https://github.com/bigcode-project/bigcodebench/releases/download/v0.1.2/sanitized_calibrated_samples.zip
+v0.1.2,2024-06-08T13:16:23Z,sanitized_samples.zip,34354494,https://github.com/bigcode-project/bigcodebench/releases/download/v0.1.2/sanitized_samples.zip

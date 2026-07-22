@@ -1,0 +1,22 @@
+{
+  "openrouter/deepseek/deepseek-v3.1-terminus": {
+    "input_cost_per_token": 2.7e-7,
+    "output_cost_per_token": 9.5e-7,
+    "max_input_tokens": 163840,
+    "max_output_tokens": 163840,
+    "max_tokens": 163840,
+    "litellm_provider": "openrouter",
+    "mode": "chat",
+    "supports_function_calling": true
+  },
+  "openrouter/qwen/qwen3-coder": {
+    "input_cost_per_token": 2.2e-7,
+    "output_cost_per_token": 1.8e-6,
+    "max_input_tokens": 1048576,
+    "max_output_tokens": 1048576,
+    "max_tokens": 1048576,
+    "litellm_provider": "openrouter",
+    "mode": "chat",
+    "supports_function_calling": true
+  }
+}

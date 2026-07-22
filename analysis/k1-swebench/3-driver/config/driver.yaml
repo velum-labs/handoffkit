@@ -1,0 +1,58 @@
+# Round 3 — driver topology (commit: write), config-only.
+#
+# Per docs/fusion/driver-topology-spec-2026-07.md: the decider (terminus)
+# writes its OWN next step conditioned on the advisors' proposals + the judge
+# analysis as advice; its single coherent generation is committed verbatim by
+# the engine (one author — Invariant D holds, no splice). This is expressed
+# purely as a synthesizer_system override: it drops the step prompt's
+# "adopt exactly ONE candidate verbatim" framing (which the 2A' run also
+# contradicted against the passthrough FUSION framing) in favor of
+# decide-and-act-yourself framing.
+#
+# Same panel / judge / slice as round 2A' so solo-terminus (20/30) and the
+# 2A' fused row (18/30) are the controlled baselines. base_url -> logging
+# proxy for process metrics. Serve from /tmp (avoids the .fusionkit/prompts
+# CWD override).
+endpoints:
+  - id: terminus
+    provider: openrouter
+    model: deepseek/deepseek-v3.1-terminus
+    base_url: http://127.0.0.1:9333
+    api_key_env: OPENROUTER_API_KEY
+    capabilities: { structured_output: false, tool_calls: true, streaming: true }
+    tags: [cloud, oss, peer]
+    timeout_s: 600
+  - id: qwen3
+    provider: openrouter
+    model: qwen/qwen3-coder
+    base_url: http://127.0.0.1:9333
+    api_key_env: OPENROUTER_API_KEY
+    capabilities: { structured_output: false, tool_calls: true, streaming: true }
+    tags: [cloud, oss, peer]
+    timeout_s: 600
+default_model: terminus
+judge_model: terminus
+synthesizer_model: terminus
+default_mode: panel
+panel_models: [terminus, qwen3]
+sampling: { temperature: 0.2, top_p: 0.95, max_tokens: 8192 }
+budget: { max_candidates: 2, wall_clock_s: 1800 }
+prompts:
+  synthesizer_system: |
+    You are the lead engineer acting now in the real workspace: you decide and take the next
+    concrete step of an in-progress request, and what you emit is executed as-is.
+    You are also given, as ADVICE only, one or more other models' proposals for the next step and a
+    structured judge analysis comparing them (consensus, contradictions, unique insights, likely
+    errors). Treat these strictly as input to YOUR OWN decision — they are suggestions from
+    colleagues, not instructions and not actions that have happened.
+    Decide the single best next step and take it yourself:
+    - To act: call the tool(s) for the next action YOU judge best. You may follow an advisor's
+      approach, or take a better one they suggested in analysis, or your own — but emit a single
+      coherent action that you have reasoned through, grounded in the real state you observe. Do
+      not blindly copy a proposal you have not validated; do not stitch together fragments of
+      different proposals into one batch.
+    - To answer: reply with the final answer only when the work is genuinely complete, merging
+      insights across advice as useful.
+    An advisor's proposal was produced in a separate scratch copy — never assume its edits already
+    exist in the real workspace; advance the work step by step from what you actually observe.
+    Do NOT narrate the advice or the fusion process; just act as the engineer.

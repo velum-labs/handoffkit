@@ -1,0 +1,32 @@
+provider,model,base_group,sources
+anthropic,claude-3-7-sonnet-latest,anthropic/claude-3.7-sonnet,modelCatalog.curated.anthropic
+anthropic,claude-haiku-4-5,anthropic/claude-haiku-4 family,modelCatalog.curated.claude-code; modelCatalog.curated.anthropic
+anthropic,claude-opus-4-8,anthropic/claude-opus-4 family,modelCatalog.curated.claude-code; modelCatalog.curated.anthropic; modelCatalog.benchmarkPanels.gpt-opus-smoke
+anthropic,claude-opus-4.8,anthropic/claude-opus-4 family,modelCatalog.benchmarkPanels.decorrelated-peers
+anthropic,claude-sonnet-4-5,anthropic/claude-sonnet-4 family,modelCatalog.defaultModelByAuthChoice.claude-code; modelCatalog.defaultModelByAuthChoice.anthropic; modelCatalog.curated.claude-code; modelCatalog.curated.anthropic
+anthropic,claude-sonnet-4-6,anthropic/claude-sonnet-4 family,modelCatalog.defaultCloudPanel; modelCatalog.curated.claude-code; modelCatalog.curated.anthropic; modelCatalog.benchmarkPanels.lopsided-default
+claude,claude-sonnet-4-6,anthropic/claude-sonnet-4 family,modelCatalog.smokeModels.claude
+openrouter,anthropic/claude-sonnet-4.5,anthropic/claude-sonnet-4 family,modelCatalog.defaultModelByAuthChoice.openrouter; modelCatalog.curated.openrouter
+openrouter,deepseek/deepseek-chat,deepseek/deepseek-v3-chat,modelCatalog.curated.openrouter
+google,gemini-2.0-flash,google/gemini-2.0-flash,modelCatalog.curated.google
+google,gemini-2.5-flash,google/gemini-2.5-flash,modelCatalog.defaultModelByAuthChoice.google; modelCatalog.curated.google
+google,gemini-2.5-pro,google/gemini-2.5-pro,modelCatalog.defaultCloudPanel; modelCatalog.curated.google
+openrouter,google/gemini-2.5-pro,google/gemini-2.5-pro,modelCatalog.curated.openrouter
+google,gemini-3-pro,google/gemini-3-pro,modelCatalog.benchmarkPanels.decorrelated-peers
+openrouter,meta-llama/llama-3.3-70b-instruct,meta/llama-3.3-70b-instruct,modelCatalog.curated.openrouter
+openrouter,moonshotai/kimi-k2,moonshot/kimi-k2 family,modelCatalog.curated.openrouter
+openrouter,moonshotai/kimi-k2-thinking,moonshot/kimi-k2 family,.fusionkit/fusion.json.panel; .fusionkit/fusion.json.judgeModel
+openai,gpt-4.1,openai/gpt-4.1 family,modelCatalog.curated.openai
+openai,gpt-4.1-mini,openai/gpt-4.1 family,modelCatalog.curated.openai
+codex,gpt-5.1-codex,openai/gpt-5 family,modelCatalog.curated.codex
+codex,gpt-5.3-codex,openai/gpt-5 family,modelCatalog.curated.codex
+codex,gpt-5.5,openai/gpt-5 family,modelCatalog.defaultModelByAuthChoice.codex; modelCatalog.curated.codex
+codex,gpt-5.5-codex,openai/gpt-5 family,modelCatalog.curated.codex; modelCatalog.smokeModels.codex
+openai,gpt-5,openai/gpt-5 family,modelCatalog.curated.openai
+openai,gpt-5.1,openai/gpt-5 family,modelCatalog.curated.openai
+openai,gpt-5.5,openai/gpt-5 family,modelCatalog.defaultCloudPanel; modelCatalog.defaultModelByAuthChoice.openai; modelCatalog.curated.openai; modelCatalog.benchmarkPanels.decorrelated-peers; modelCatalog.benchmarkPanels.lopsided-default; modelCatalog.benchmarkPanels.gpt-opus-smoke
+openrouter,openai/gpt-5.5,openai/gpt-5 family,modelCatalog.curated.openrouter
+openai,o4-mini,openai/o4-mini,modelCatalog.curated.openai
+openrouter,qwen/qwen3-coder,qwen/qwen3-coder family,modelCatalog.curated.openrouter; .fusionkit/fusion.json.panel
+local,mlx-community/Qwen3-1.7B-4bit,qwen/qwen3-local-small,modelCatalog.defaultModelByAuthChoice.local
+openrouter,x-ai/grok-4,xai/grok-4,modelCatalog.curated.openrouter

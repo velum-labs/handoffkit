@@ -38,6 +38,11 @@ until a concrete search-state policy is supplied around it.
 
 ## Install / import surface
 
+The dependency-free runtime substrate lives in `@fusionkit/kernel`
+(`packages/kernel`); `@fusionkit/ensemble` re-exports it
+(`packages/ensemble/src/runtime.ts`) and owns the operators, workflow recipes,
+and schedulers on top. The imports below go through ensemble and work as shown.
+
 ```ts
 import { FusionRuntime } from "@fusionkit/ensemble/runtime";
 import { graph, refs } from "@fusionkit/ensemble/kernel";
@@ -125,21 +130,12 @@ hidden fanout or silently choose candidates.
 Register them when you want workflow IDs:
 
 ```ts
-import { getWorkflow, registerBuiltInWorkflows, runWorkflow } from "@fusionkit/ensemble";
+import { getWorkflow, listWorkflows, registerBuiltInWorkflows } from "@fusionkit/ensemble";
 
 registerBuiltInWorkflows();
+console.log(listWorkflows());
 console.log(getWorkflow("rank-fuse"));
 ```
-
-## CLI discovery
-
-```bash
-fusionkit runtime list
-fusionkit runtime explain panel-judge-synth
-```
-
-The CLI commands are intentionally discovery-oriented. Running arbitrary graphs from JSON requires a
-serializable operator registry; application code should use the TypeScript composition API.
 
 ## Type and graph helpers
 

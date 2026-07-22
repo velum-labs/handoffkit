@@ -1,0 +1,42 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist"
+  },
+  "include": [
+    "src/**/*.ts"
+  ],
+  "references": [
+    {
+      "path": "../adapter-ai-sdk"
+    },
+    {
+      "path": "../kernel"
+    },
+    {
+      "path": "../protocol"
+    },
+    {
+      "path": "../registry"
+    },
+    {
+      "path": "../tracing"
+    },
+    {
+      "path": "../contracts"
+    },
+    {
+      "path": "../model-gateway"
+    },
+    {
+      "path": "../routekit-registry"
+    },
+    {
+      "path": "../runtime-utils"
+    },
+    {
+      "path": "../routekit-tracing"
+    }
+  ]
+}

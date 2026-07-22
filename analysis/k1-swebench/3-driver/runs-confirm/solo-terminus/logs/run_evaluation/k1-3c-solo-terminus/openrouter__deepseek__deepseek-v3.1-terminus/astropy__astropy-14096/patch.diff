@@ -1,0 +1,19 @@
+diff --git a/astropy/coordinates/sky_coordinate.py b/astropy/coordinates/sky_coordinate.py
+index ab475f7d0..c5ae52e3a 100644
+--- a/astropy/coordinates/sky_coordinate.py
++++ b/astropy/coordinates/sky_coordinate.py
+@@ -894,6 +894,14 @@ class SkyCoord(ShapedLikeNDArray):
+             if frame_cls is not None and self.frame.is_transformable_to(frame_cls):
+                 return self.transform_to(attr)
+ 
++        # Check if the attribute actually exists on the class
++        # If it exists but raises AttributeError when accessed, let that error propagate
++        if hasattr(type(self), attr):
++            # The attribute exists on the class, so we should try to access it normally
++            # This will let any AttributeError from the attribute itself propagate
++            # We need to use the normal attribute lookup mechanism
++            return object.__getattribute__(self, attr)
++
+         # Fail
+         raise AttributeError(
+             f"'{self.__class__.__name__}' object has no attribute '{attr}'"

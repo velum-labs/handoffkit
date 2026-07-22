@@ -9,8 +9,9 @@ generated model-fusion harness-executor contract used by protocol consumers.
 
 ## Runtime gateway routes
 
-The gateway routes are served by `@fusionkit/model-gateway` when you run
-`fusionkit codex`, `fusionkit claude`, `fusionkit cursor`, or `fusionkit serve`.
+The neutral routes are implemented by `@routekit/gateway` and composed with
+`@fusionkit/gateway` when you run `fusionkit codex`, `fusionkit claude`,
+`fusionkit cursor`, or `fusionkit serve`.
 
 | Route | Purpose |
 | --- | --- |
@@ -19,6 +20,8 @@ The gateway routes are served by `@fusionkit/model-gateway` when you run
 | `/v1/messages` | Anthropic Messages dialect used by Claude Code. |
 | `/v1/messages/count_tokens` | Anthropic token-count helper. |
 | `/v1/models` | Model listing in OpenAI or Anthropic shape. |
+| `/v1/cursor/chat/completions` | Cursor BYOK hybrid: accepts Cursor's Responses-shaped body posted to a Chat Completions path (set Cursor's base URL override to `.../v1/cursor`). Plain Chat Completions bodies pass through untranslated. |
+| `/v1/cursor/models` | Mirror of `/v1/models` for Cursor probing relative to its BYOK base URL. |
 | `/v1/embeddings` | Embeddings when the backend supports it. |
 | `/health` | Unauthenticated health check. |
 

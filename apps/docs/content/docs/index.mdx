@@ -8,8 +8,8 @@ description: What FusionKit is, how the CLI and Python fusion engine fit togethe
 FusionKit runs ensembles of local and cloud models as a raw inference endpoint
 and behind your existing coding agent. On every fused turn it:
 
-1. Sends the request to a **panel** of models, usually a decorrelated cloud trio
-   or an Apple-Silicon local MLX panel.
+1. Sends the request to the **panel** of live namespaced RouteKit model IDs configured
+   for the selected ensemble.
 2. Captures each model's candidate response or harness trajectory.
 3. Runs a **judge** that synthesizes the candidates into the answer returned to
    your client, Codex, Claude Code, or Cursor.
@@ -20,6 +20,7 @@ You run one command and your agent is transparently backed by the panel:
 npm install -g @fusionkit/cli
 fusionkit setup
 cd your-project        # a git repo
+fusionkit init         # scaffold Fusion v4 + RouteKit config
 fusionkit doctor       # verify prerequisites
 fusionkit codex        # launch Codex backed by the panel
 ```
@@ -27,9 +28,10 @@ fusionkit codex        # launch Codex backed by the panel
 ## Two supported product paths
 
 The Node `@fusionkit/cli` is the front door. It launches coding harnesses, owns
-configuration, sessions, cost controls, and model management, and starts the
-Python `fusionkit serve` engine when needed. The Python engine is also the raw
-OpenAI-compatible endpoint for inference clients.
+Fusion configuration, sessions, cost controls, and local-model management, and
+starts the internal Python `fusionkit-sidecar` when synthesis is needed. The
+Node Fusion gateway owns the public OpenAI-compatible endpoint; the sidecar has
+only internal fusion/run routes.
 
 <Cards>
   <Card title="Install the CLI" href="/docs/getting-started/installation">
@@ -57,9 +59,10 @@ but it is not the normal FusionKit product path and the shipped `fusionkit` CLI
 does not ask you to run a legacy plane or runner.
 
 <Callout type="info">
-  Two packages share the name "fusionkit": the npm CLI (`@fusionkit/cli`) and
-  the Python synthesizer (`fusionkit` on PyPI), which the CLI fetches
-  automatically via `uvx`. `fusionkit --version` prints both.
+  The user-facing `fusionkit` executable comes only from `@fusionkit/cli`.
+  The PyPI `fusionkit` distribution is provisioned automatically via `uvx` and
+  exposes the internal `fusionkit-sidecar` executable, not a second
+  `fusionkit` command. `fusionkit --version` reports both package versions.
 </Callout>
 
 ## How these docs are organized

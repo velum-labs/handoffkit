@@ -1,6 +1,6 @@
 import type { ZodType } from "zod";
 
-import type { JsonValue } from "@fusionkit/protocol";
+import type { JsonValue, ReasoningSelection } from "@routekit/contracts";
 
 import type { ApprovalDecision, ApprovalPolicy } from "./approvals.js";
 import type { HarnessEvent } from "./events.js";
@@ -21,6 +21,8 @@ export type ResumeCursor = {
 
 export type SessionTurnInput = {
   prompt: string;
+  /** Optional model reasoning control validated by the RouteKit host. */
+  reasoning?: ReasoningSelection;
   /** Kills/interrupts the in-flight turn; drivers MUST honor it. */
   signal?: AbortSignal;
 };
@@ -43,6 +45,8 @@ export interface SessionHandle {
 export type StartSessionOptions = {
   cwd: string;
   model?: string;
+  /** Session default; a turn-level selection may override it. */
+  reasoning?: ReasoningSelection;
   /** Resume a previously persisted native session when possible. */
   resume?: ResumeCursor;
   approvalPolicy?: ApprovalPolicy;

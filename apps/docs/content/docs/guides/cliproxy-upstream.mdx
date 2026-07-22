@@ -1,0 +1,82 @@
+---
+title: CLIProxyAPI upstream
+description: Put Gemini, Grok, and Kimi subscription models on a fusion panel through a local CLIProxyAPI sidecar.
+---
+
+[CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) is an MIT-licensed
+local proxy that fronts OAuth subscription accounts — ChatGPT/Codex, Claude
+Code, Gemini (Antigravity), Grok, Kimi — behind an OpenAI-compatible API with
+multi-account rotation. RouteKit owns its binary, config, and OAuth state and
+exposes its live models under the `cliproxy/` namespace.
+
+Use native `claude-code` and `codex` providers for those subscriptions; they are
+provider-native, multi-account, and quota-aware without a separate proxy. `routekit accounts
+serve` is advanced external-proxy mode. Use `cliproxy` for Gemini, Grok, Kimi,
+or when you already run CLIProxyAPI for another tool.
+
+## Install and sign in
+
+```bash
+routekit config init
+routekit accounts cliproxy install
+routekit accounts cliproxy login gemini   # or claude / codex / grok / kimi
+routekit accounts cliproxy serve
+```
+
+`install` downloads the pinned release, verifies its SHA-256 against the
+release checksums, and writes a loopback-only managed config under
+`~/.routekit/cliproxy/` (or `ROUTEKIT_HOME`). `login` runs the proxy's own
+OAuth flow; each account you add joins its rotation pool. `status` shows
+install state, reachability, and enrolled accounts without printing credential
+values.
+
+Already running CLIProxyAPI yourself? Skip all of this: export
+`ROUTEKIT_CLIPROXY_API_KEY` (one of the proxy's `api-keys`) and, for a
+non-default host/port, `ROUTEKIT_CLIPROXY_BASE_URL`.
+
+In another shell, enable the explicit provider and verify its live catalog:
+
+```bash
+routekit providers add cliproxy
+routekit providers status cliproxy
+routekit models list
+routekit accounts cliproxy status
+```
+
+Login does not enable the provider. Keep CLIProxyAPI serving while RouteKit
+uses the registry-defined URL and credential. The router entry is:
+
+```yaml
+providers:
+  cliproxy: {}
+```
+
+## Add a live model to an ensemble
+
+Fusion config v4 contains namespaced model IDs only:
+
+```json
+{
+  "version": "fusionkit.fusion.v4",
+  "router": { "config": ".routekit/router.yaml" },
+  "ensembles": {
+    "default": {
+      "members": [
+        "cliproxy/gemini-3.1-pro-preview",
+        "openai/gpt-5.5"
+      ],
+      "judge": "openai/gpt-5.5"
+    }
+  }
+}
+```
+
+`fusionkit doctor` checks that all referenced namespaced model IDs are advertised by
+RouteKit.
+
+## Terms-of-service caveat
+
+CLIProxyAPI reuses subscription OAuth tokens through reverse-engineered
+endpoints, which the providers' terms restrict. This integration is for
+personal, local use only; the proxy binds loopback by default and is never a
+hosted feature. Use at your own risk.

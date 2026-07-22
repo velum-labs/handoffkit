@@ -2,7 +2,7 @@
 // Day-to-day monorepo tooling for handoffkit (distinct from releasing).
 //
 //   node scripts/monorepo.mjs graph                 # internal @fusionkit/* dep graph + manifest-order check
-//   node scripts/monorepo.mjs affected [base]       # scoped build + test for packages changed vs base
+//   node scripts/monorepo.mjs affected [base]       # Turbo build + test for changed projects and dependents
 //   node scripts/monorepo.mjs clean [--all]         # purge stale release-artifacts tarballs
 //
 // Version-sync / drift is handled by `node scripts/release.mjs plan`; this file
@@ -110,75 +110,32 @@ function cmdGraph() {
   if (violations) process.exit(1);
 }
 
-function changedFiles(base) {
-  const files = new Set();
-  const diff = run("git", ["-C", REPO_ROOT, "diff", "--name-only", `${base}...HEAD`]);
-  if (diff.ok) diff.stdout.split("\n").filter(Boolean).forEach((f) => files.add(f));
-  // Include uncommitted (staged, unstaged, untracked) changes too.
-  const status = run("git", ["-C", REPO_ROOT, "status", "--porcelain"]);
-  if (status.ok) {
-    status.stdout
-      .split("\n")
-      .filter(Boolean)
-      .map((line) => line.slice(3))
-      .forEach((f) => files.add(f));
-  }
-  return [...files];
-}
-
 function cmdAffected(args) {
   const base = args.find((a) => !a.startsWith("--")) ?? "origin/main";
   const noBuild = args.includes("--no-build");
   const noTest = args.includes("--no-test");
-
-  const byName = loadGraph();
-  const dirToName = new Map([...byName.values()].map((n) => [n.dir, n.name]));
-
-  const directly = new Set();
-  for (const file of changedFiles(base)) {
-    const m = file.match(/^(?:packages|legacy\/packages)\/[^/]+/);
-    if (m && dirToName.has(m[0])) directly.add(dirToName.get(m[0]));
-  }
-
-  // Expand to dependents (reverse graph closure): a change in X affects
-  // everything that (transitively) depends on X.
-  const dependents = new Map([...byName.keys()].map((k) => [k, []]));
-  for (const node of byName.values()) {
-    for (const dep of node.deps) dependents.get(dep).push(node.name);
-  }
-  const affected = new Set(directly);
-  const stack = [...directly];
-  while (stack.length) {
-    const name = stack.pop();
-    for (const dependent of dependents.get(name) ?? []) {
-      if (!affected.has(dependent)) {
-        affected.add(dependent);
-        stack.push(dependent);
-      }
-    }
-  }
-
-  if (!affected.size) {
-    log(`No @fusionkit/* packages affected vs ${base}.`);
+  const tasks = [];
+  if (!noBuild) tasks.push("build");
+  if (!noTest) tasks.push("test");
+  if (tasks.length === 0) {
+    log("Nothing to run: both --no-build and --no-test were supplied.");
     return;
   }
-  const affectedNodes = [...affected].map((name) => byName.get(name));
-  log(`Affected packages vs ${base} (${affected.size}):`);
-  for (const node of affectedNodes) log(`  ${node.name} (${node.dir})`);
 
-  if (!noBuild) {
-    const dirs = affectedNodes.map((n) => n.dir);
-    log(`\nBuilding: tsc -b ${dirs.join(" ")}`);
-    const build = run("corepack", ["pnpm", "exec", "tsc", "-b", ...dirs], { cwd: REPO_ROOT, stdio: "inherit" });
-    if (!build.ok) die("scoped build failed");
-  }
-  if (!noTest) {
-    const globs = affectedNodes.map((n) => `${n.dir}/dist/test/*.test.js`).filter((g) => existsSync(join(REPO_ROOT, dirname(dirname(g)))));
-    log(`\nTesting: node --test ${globs.join(" ")}`);
-    const test = run("node", ["--test", ...globs], { cwd: REPO_ROOT, stdio: "inherit", env: { ...process.env, PORTLESS: "0" } });
-    if (!test.ok) die("scoped tests failed");
-  }
-  log("\nAffected build + test complete.");
+  const filter = `--filter=...[${base}]`;
+  const turboArgs = ["pnpm", "exec", "turbo", "run", ...tasks, filter];
+  // `--no-build` retains the old helper's meaning: use already-built outputs
+  // instead of following the test task's normal build dependency.
+  if (noBuild && !noTest) turboArgs.push("--only");
+
+  log(`Running affected ${tasks.join(" + ")} tasks vs ${base} with Turborepo.`);
+  const result = run("corepack", turboArgs, {
+    cwd: REPO_ROOT,
+    stdio: "inherit",
+    env: { ...process.env, PORTLESS: "0" }
+  });
+  if (!result.ok) die("affected Turborepo tasks failed");
+  log("\nAffected Turborepo tasks complete.");
 }
 
 function cmdClean(args) {
@@ -217,6 +174,6 @@ switch (command) {
     log("handoffkit monorepo tooling");
     log("");
     log("  node scripts/monorepo.mjs graph             # dep graph + manifest order check");
-    log("  node scripts/monorepo.mjs affected [base]   # scoped build + test for changed packages");
+    log("  node scripts/monorepo.mjs affected [base]   # Turbo build + test for changed projects");
     log("  node scripts/monorepo.mjs clean [--all]     # purge stale release-artifacts tarballs");
 }

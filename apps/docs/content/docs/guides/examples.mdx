@@ -18,13 +18,14 @@ pnpm mlx         # Apple-Silicon managed-MLX smoke, when supported
 
 | Example | What it proves |
 | --- | --- |
-| `examples/runtime-kernel` | Explicit model-fusion operator graphs: direct fast path, rank/fuse workflow, trace, outcome, and replay record. |
-| `examples/mlx` | Managed MLX local serving and stress paths on supported Apple-Silicon machines. |
-| `examples/bench` | Maintainer performance-budget checks. |
+| `examples/runtime-kernel` | Explicit model-fusion operator graphs: direct fast path, rank/fuse workflow, trace, outcome, and replay record. Runs as `pnpm demo 15`. |
+| `examples/mlx` | Managed MLX local serving and stress paths on supported Apple-Silicon machines. Runs as `pnpm mlx`. |
+
+`examples/manifest.json` is the single source of truth for the registered examples.
 
 ## Legacy examples
 
-Demos for the retained legacy platform live in `legacy/examples/` and are documented in `legacy/docs/guides/examples.md` for contributors. They are outside the FusionKit user path and require the legacy stack.
+Demos for the retained legacy platform live in `legacy/examples/` (including the `legacy/examples/bench` performance-budget checks) and are documented in `legacy/docs/guides/examples.md` for contributors. They are outside the FusionKit user path and require the legacy stack.
 
 ## Adding a product example
 

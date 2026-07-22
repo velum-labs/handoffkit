@@ -1,0 +1,45 @@
+[build-system]
+requires = ["uv_build>=0.11.29,<0.13"]
+build-backend = "uv_build"
+
+[project]
+name = "fusionkit-testkit"
+version = "0.8.0"
+description = "Scriptable RouteKit-upstream simulator for FusionKit tests (never published)."
+readme = "README.md"
+requires-python = ">=3.11"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+authors = [{ name = "Velum Labs" }]
+# The simulator itself (server/behaviors/wire_*) is stdlib-only on purpose: no
+# web framework in the test trust surface, and hand-rolled HTTP gives
+# byte-level control over the wire (chunked SSE pacing, truncated streams)
+# that a framework would hide. fusionkit-core is needed only by the config /
+# engine-process helpers (endpoints.py, engine.py).
+dependencies = ["fusionkit-core==0.8.0"]
+
+[project.scripts]
+fusionkit-sim = "fusionkit_testkit.cli:main"
+
+# Workspace-wide pytest fixtures (routekit_sim, sim_stack): any member's tests
+# can use them with zero conftest wiring.
+[project.entry-points.pytest11]
+fusionkit_testkit = "fusionkit_testkit.pytest_plugin"
+
+[dependency-groups]
+dev = [
+  "pytest>=9.1.1",
+  "pytest-asyncio>=1.3.0",
+  "fusionkit-server==0.8.0",
+  "fusionkit==0.8.0",
+  "httpx>=0.28.1",
+]
+
+[tool.uv.sources]
+fusionkit-core = { workspace = true }
+fusionkit-server = { workspace = true }
+fusionkit = { workspace = true }
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"

@@ -1,13 +1,17 @@
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+import asyncio
+import time
+from collections.abc import AsyncIterator, Mapping, Sequence
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from threading import Barrier
 from typing import Any
 
 import pytest
 from fusionkit_core.artifacts import LocalArtifactStore
 from fusionkit_core.clients import FakeModelClient
-from fusionkit_core.config import FusionConfig, ModelEndpoint, SamplingConfig
+from fusionkit_core.config import FusionConfig, RunBudget, SamplingConfig
 from fusionkit_core.contracts import (
     FusionRunRequestV1,
     ModelCallRecordV1,
@@ -16,12 +20,13 @@ from fusionkit_core.contracts import (
 from fusionkit_core.fusion import FusionEngine
 from fusionkit_core.run import CreateRunResult, FusionRunManager, RunInspection
 from fusionkit_core.run_store import FileSystemRunStore
-from fusionkit_core.types import ChatMessage, ModelResponse
+from fusionkit_core.types import ChatMessage, ModelResponse, StreamChunk
 
 
 class _FailingChatClient:
     def __init__(self, model_id: str) -> None:
         self.model_id = model_id
+        self.max_context: int | None = None
 
     async def chat(
         self,
@@ -73,8 +78,9 @@ async def test_tracked_fusion_run_completes_and_is_inspectable(tmp_path) -> None
 @pytest.mark.asyncio
 async def test_tracked_fusion_run_records_failure(tmp_path) -> None:
     config = FusionConfig(
-        endpoints=[ModelEndpoint(id="fast", model="fake-fast", base_url="http://localhost:8101")],
-        default_model="fast",
+        routekit_url="http://routekit.test",
+        routekit_model_ids=["test/fast"],
+        default_model="test/fast",
         default_mode="single",
     )
     engine = FusionEngine(config=config, clients={})
@@ -92,21 +98,18 @@ async def test_tracked_fusion_run_records_failure(tmp_path) -> None:
 @pytest.mark.asyncio
 async def test_tracked_panel_run_completes_with_failed_model_call(tmp_path) -> None:
     config = FusionConfig(
-        endpoints=[
-            ModelEndpoint(id="fast", model="fake-fast", base_url="http://localhost:8101"),
-            ModelEndpoint(id="broken", model="fake-broken", base_url="http://localhost:8103"),
-            ModelEndpoint(id="judge", model="fake-judge", base_url="http://localhost:8102"),
-        ],
-        default_model="fast",
-        judge_model="judge",
+        routekit_url="http://routekit.test",
+        routekit_model_ids=["test/fast", "test/broken", "test/judge"],
+        default_model="test/fast",
+        judge_model="test/judge",
         default_mode="panel",
-        panel_models=["fast", "broken"],
+        panel_models=["test/fast", "test/broken"],
     )
     clients = {
-        "fast": FakeModelClient("fast", ["fast candidate with evidence"]),
-        "broken": _FailingChatClient("broken"),
-        "judge": FakeModelClient(
-            "judge",
+        "test/fast": FakeModelClient("test/fast", ["fast candidate with evidence"]),
+        "test/broken": _FailingChatClient("test/broken"),
+        "test/judge": FakeModelClient(
+            "test/judge",
             [
                 '{"consensus":["candidate has evidence"],"contradictions":[],'
                 '"unique_insights":[],"coverage_gaps":[],"likely_errors":[],'
@@ -129,7 +132,7 @@ async def test_tracked_panel_run_completes_with_failed_model_call(tmp_path) -> N
                 )
             ],
             "sampling": {},
-            "requested_models": ["fast", "broken"],
+            "requested_models": ["test/fast", "test/broken"],
         }
     )
 
@@ -145,36 +148,35 @@ async def test_tracked_panel_run_completes_with_failed_model_call(tmp_path) -> N
         if event.event_type == "model_call_recorded"
     ]
     # Every model call is a ledger entry, tagged with its role: the two panel
-    # members plus the judge and synthesizer turns (both served by "judge").
+    # members plus the judge and synthesizer turns (both served by test/judge).
     by_role_and_model = {
         ((record.metadata or {}).get("role"), record.model): record.status for record in records
     }
     assert by_role_and_model == {
-        ("panel", "fast"): "succeeded",
-        ("panel", "broken"): "failed",
-        ("judge", "judge"): "succeeded",
-        ("synthesizer", "judge"): "succeeded",
+        ("panel", "test/fast"): "succeeded",
+        ("panel", "test/broken"): "failed",
+        ("judge", "test/judge"): "succeeded",
+        ("synthesizer", "test/judge"): "succeeded",
     }
-    broken_record = next(record for record in records if record.model == "broken")
+    broken_record = next(record for record in records if record.model == "test/broken")
     assert broken_record.error is not None
-    assert broken_record.error.kind == "provider_error"
+    assert broken_record.error.kind == "internal_error"
+    assert broken_record.error.retryable is False
 
 
 @pytest.mark.asyncio
 async def test_tracked_panel_run_fails_when_all_models_fail(tmp_path) -> None:
     config = FusionConfig(
-        endpoints=[
-            ModelEndpoint(id="broken", model="fake-broken", base_url="http://localhost:8103"),
-            ModelEndpoint(id="judge", model="fake-judge", base_url="http://localhost:8102"),
-        ],
-        default_model="broken",
-        judge_model="judge",
+        routekit_url="http://routekit.test",
+        routekit_model_ids=["test/broken", "test/judge"],
+        default_model="test/broken",
+        judge_model="test/judge",
         default_mode="panel",
-        panel_models=["broken"],
+        panel_models=["test/broken"],
     )
     clients = {
-        "broken": _FailingChatClient("broken"),
-        "judge": FakeModelClient("judge", ["unused"]),
+        "test/broken": _FailingChatClient("test/broken"),
+        "test/judge": FakeModelClient("test/judge", ["unused"]),
     }
     engine = FusionEngine(config=config, clients=clients)
     store = FileSystemRunStore(tmp_path / "runs")
@@ -190,7 +192,7 @@ async def test_tracked_panel_run_fails_when_all_models_fail(tmp_path) -> None:
                 )
             ],
             "sampling": {},
-            "requested_models": ["broken"],
+            "requested_models": ["test/broken"],
         }
     )
 
@@ -251,6 +253,46 @@ def test_tracked_fusion_run_idempotency_conflict_is_explicit(tmp_path) -> None:
     assert second.terminal_error.error_code == "idempotency_conflict"
 
 
+def test_concurrent_idempotency_claims_create_exactly_one_run(tmp_path, monkeypatch) -> None:
+    manager, store = _manager(tmp_path)
+    request = _request(mode="panel", request_id="fusion_req_race_001")
+    original_get = store.get_idempotency
+    barrier = Barrier(2)
+    calls = 0
+
+    def synchronized_get(key: str):
+        nonlocal calls
+        result = original_get(key)
+        if calls < 2:
+            calls += 1
+            barrier.wait(timeout=5)
+        return result
+
+    monkeypatch.setattr(store, "get_idempotency", synchronized_get)
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(
+            pool.map(
+                lambda _index: manager.create_run(
+                    request,
+                    idempotency_key="concurrent-key",
+                ),
+                range(2),
+            )
+        )
+
+    assert {result.run_id for result in results} == {results[0].run_id}
+    assert sorted(result.idempotency_outcome for result in results) == [
+        "created",
+        "replayed",
+    ]
+    run_dirs = [
+        path
+        for path in (tmp_path / "runs").iterdir()
+        if path.is_dir() and path.name != "_idempotency"
+    ]
+    assert len(run_dirs) == 1
+
+
 def test_tracked_fusion_run_requires_action_placeholder_is_inspectable(tmp_path) -> None:
     manager, store = _manager(tmp_path)
     created = manager.create_run(_request(mode="panel", request_id="fusion_req_tool_001"))
@@ -272,21 +314,98 @@ def test_tracked_fusion_run_requires_action_placeholder_is_inspectable(tmp_path)
     assert inspection.judge_synthesis_record is None
 
 
+@pytest.mark.asyncio
+async def test_execute_run_does_not_restart_a_requires_action_run(tmp_path) -> None:
+    manager, store = _manager(tmp_path)
+    created = manager.create_run(_request(mode="panel", request_id="fusion_req_paused_001"))
+    assert created.run_id is not None
+    manager.record_requires_action(
+        created.run_id,
+        trajectory_id="trajectory_tool_001",
+        tool_call_id="tool_call_read_001",
+    )
+
+    result = await manager.execute_run(created.run_id)
+
+    assert result.state == "requires_action"
+    assert not [
+        event
+        for event in store.list_events(created.run_id)
+        if event.event_type == "model_call_recorded"
+    ]
+
+
+@pytest.mark.asyncio
+async def test_wall_clock_budget_cancels_an_in_flight_provider_call(tmp_path) -> None:
+    class SlowClient:
+        model_id = "test/slow"
+        max_context: int | None = None
+
+        async def chat(
+            self,
+            messages: Sequence[ChatMessage],
+            sampling: SamplingConfig | None = None,
+            tools: Sequence[Any] | None = None,
+            tool_choice: Any | None = None,
+            extra: Mapping[str, Any] | None = None,
+        ) -> ModelResponse:
+            await asyncio.sleep(2)
+            return ModelResponse(model_id=self.model_id, content="too late")
+
+        async def stream_chat(
+            self,
+            messages: Sequence[ChatMessage],
+            sampling: SamplingConfig | None = None,
+            tools: Sequence[Any] | None = None,
+            tool_choice: Any | None = None,
+            extra: Mapping[str, Any] | None = None,
+        ) -> AsyncIterator[StreamChunk]:
+            await asyncio.sleep(2)
+            yield StreamChunk(delta="too late", finish_reason="stop")
+
+        async def aclose(self) -> None:
+            return None
+
+    config = FusionConfig(
+        routekit_url="http://routekit.test",
+        routekit_model_ids=["test/slow"],
+        default_model="test/slow",
+        default_mode="single",
+        budget=RunBudget(wall_clock_s=0.05),
+    )
+    store = FileSystemRunStore(tmp_path / "runs")
+    manager = FusionRunManager(
+        FusionEngine(config=config, clients={"test/slow": SlowClient()}),
+        store,
+        LocalArtifactStore(tmp_path / "runs"),
+    )
+
+    started = time.perf_counter()
+    result = await manager.create_and_run(
+        _request(mode="single", request_id="fusion_req_wall_clock_001")
+    )
+    elapsed = time.perf_counter() - started
+
+    assert isinstance(result, RunInspection)
+    assert result.state == "failed"
+    assert result.terminal_error is not None
+    assert result.terminal_error.terminal_reason == "budget_exceeded:wall_clock_s"
+    assert elapsed < 0.5, f"wall-clock budget returned after {elapsed:.3f}s"
+
+
 def _manager(tmp_path) -> tuple[FusionRunManager, FileSystemRunStore]:
     config = FusionConfig(
-        endpoints=[
-            ModelEndpoint(id="fast", model="fake-fast", base_url="http://localhost:8101"),
-            ModelEndpoint(id="judge", model="fake-judge", base_url="http://localhost:8102"),
-        ],
-        default_model="fast",
-        judge_model="judge",
+        routekit_url="http://routekit.test",
+        routekit_model_ids=["test/fast", "test/judge"],
+        default_model="test/fast",
+        judge_model="test/judge",
         default_mode="panel",
-        panel_models=["fast"],
+        panel_models=["test/fast"],
     )
     clients = {
-        "fast": FakeModelClient("fast", ["fast candidate with evidence"]),
-        "judge": FakeModelClient(
-            "judge",
+        "test/fast": FakeModelClient("test/fast", ["fast candidate with evidence"]),
+        "test/judge": FakeModelClient(
+            "test/judge",
             [
                 '{"consensus":["candidate has evidence"],"contradictions":[],'
                 '"unique_insights":[],"coverage_gaps":[],"likely_errors":[],'
@@ -312,6 +431,6 @@ def _request(mode: str, request_id: str) -> FusionRunRequestV1:
                 )
             ],
             "sampling": {},
-            "requested_models": ["fast"] if mode == "panel" else None,
+            "requested_models": ["test/fast"] if mode == "panel" else None,
         }
     )

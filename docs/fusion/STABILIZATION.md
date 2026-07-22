@@ -36,7 +36,7 @@ protocol-level interposition** â€” a hybrid of the two substrates described in Â
 
 Supporting stack (`packages/cli/src/fusion/stack.ts`):
 
-- One `fusionkit serve` router fronts every panel model (routing by endpoint id)
+- One `fusionkit serve` router fronts every panel model (routing by namespaced model ID)
   plus judge/synthesis; discover-or-spawn with identity token for warm reuse.
 - MLX members get in-process loopback gateways; cloud members call providers
   directly. Narration writer, budget caps (WS7), rate-limit failover (WS5),

@@ -26,14 +26,55 @@ class FileSystemRunStore:
 
     def get_idempotency(self, idempotency_key: str) -> IdempotencyRecord | None:
         path = self._idempotency_path(idempotency_key)
-        if not path.exists():
-            return None
-        return IdempotencyRecord.model_validate(_read_json(path))
+        lock_path = self._idempotency_lock_path(idempotency_key)
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+        with lock_path.open("a", encoding="utf-8") as lock_handle:
+            fcntl.flock(lock_handle, fcntl.LOCK_SH)
+            try:
+                if not path.exists():
+                    return None
+                return IdempotencyRecord.model_validate(_read_json(path))
+            finally:
+                fcntl.flock(lock_handle, fcntl.LOCK_UN)
 
     def write_idempotency(self, record: IdempotencyRecord) -> None:
         path = self._idempotency_path(record.idempotency_key)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        _write_json(path, record.model_dump(mode="json"))
+        lock_path = self._idempotency_lock_path(record.idempotency_key)
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+        with lock_path.open("a", encoding="utf-8") as lock_handle:
+            fcntl.flock(lock_handle, fcntl.LOCK_EX)
+            try:
+                _write_json(path, record.model_dump(mode="json"))
+            finally:
+                fcntl.flock(lock_handle, fcntl.LOCK_UN)
+
+    def initialize_idempotent_run(
+        self,
+        record: IdempotencyRecord,
+        event: FusionRunEvent,
+        summary: RunStateSummary,
+    ) -> tuple[IdempotencyRecord, bool]:
+        """Atomically claim an idempotency key and initialize its run.
+
+        The key lock spans the existence check, first event, summary, and index
+        write. Concurrent callers therefore either create the one canonical run
+        or observe it only after its summary is readable.
+        """
+
+        path = self._idempotency_path(record.idempotency_key)
+        lock_path = self._idempotency_lock_path(record.idempotency_key)
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+        with lock_path.open("a", encoding="utf-8") as lock_handle:
+            fcntl.flock(lock_handle, fcntl.LOCK_EX)
+            try:
+                if path.exists():
+                    return IdempotencyRecord.model_validate(_read_json(path)), False
+                sequenced = self.append_event(event)
+                self.write_summary(summary.model_copy(update={"event_cursor": sequenced.event_seq}))
+                _write_json(path, record.model_dump(mode="json"))
+                return record, True
+            finally:
+                fcntl.flock(lock_handle, fcntl.LOCK_UN)
 
     def append_event(self, event: FusionRunEvent) -> FusionRunEvent:
         run_dir = self._run_dir(event.run_id)
@@ -104,7 +145,7 @@ class FileSystemRunStore:
         final_output_artifact = None
         judge_synthesis_record = None
         pending_tool_actions: dict[str, ToolPausePlaceholder] = {}
-        provider_metadata = []
+        model_call_metadata = []
         call_usages: list[dict[str, Any]] = []
 
         for event in events:
@@ -131,7 +172,7 @@ class FileSystemRunStore:
                 model_call_payload = event.payload.get("model_call_record")
                 if isinstance(model_call_payload, dict):
                     if isinstance(model_call_payload.get("metadata"), dict):
-                        provider_metadata.append(model_call_payload["metadata"])
+                        model_call_metadata.append(model_call_payload["metadata"])
                     if isinstance(model_call_payload.get("usage"), dict):
                         call_usages.append(model_call_payload["usage"])
             elif event.event_type == "artifact_recorded":
@@ -175,7 +216,7 @@ class FileSystemRunStore:
             judge_synthesis_record=judge_synthesis_record,
             requires_action=_latest_pending_action(pending_tool_actions),
             terminal_error=summary.terminal_error,
-            provider_metadata=provider_metadata,
+            model_call_metadata=model_call_metadata,
             usage=_sum_call_usages(call_usages),
         )
 
@@ -225,7 +266,10 @@ class FileSystemRunStore:
         seq_path.write_text(str(value), encoding="utf-8")
 
     def _run_dir(self, run_id: str) -> Path:
-        return self.root / run_id
+        # Run ids arrive through HTTP path parameters. Persist under a
+        # fixed-width digest so no caller-controlled path component reaches the
+        # filesystem, while the original id remains in every stored record.
+        return self.root / "_runs" / hash_text(run_id)
 
     def _event_path(self, run_id: str) -> Path:
         return self._run_dir(run_id) / "events.jsonl"
@@ -241,6 +285,9 @@ class FileSystemRunStore:
 
     def _idempotency_path(self, idempotency_key: str) -> Path:
         return self.root / "_idempotency" / f"{hash_text(idempotency_key)}.json"
+
+    def _idempotency_lock_path(self, idempotency_key: str) -> Path:
+        return self.root / "_idempotency" / f"{hash_text(idempotency_key)}.lock"
 
 
 def _read_json(path: Path) -> Any:

@@ -1,0 +1,5 @@
+task_id,cluster_key,contest_date,difficulty,endpoint_id,provider,model,call_status,passed,prompt_tokens,completion_tokens,total_tokens,estimated_cost_usd,provider_cost_usd,charged_cost_usd,latency_s,error_message
+arc196_b,2025-04-06T00:00:00,2025-04-06T00:00:00,hard,gpt55,openai,gpt-5.5,succeeded,0,919,4096,5015,0.04210875,,0.04210875,80.43699263798771,
+arc196_b,2025-04-06T00:00:00,2025-04-06T00:00:00,hard,sonnet,anthropic,claude-sonnet-4-6,succeeded,0,1003,4096,5099,0.064449,,0.064449,69.31314830400515,
+arc196_c,2025-04-06T00:00:00,2025-04-06T00:00:00,hard,gpt55,openai,gpt-5.5,succeeded,0,599,4096,4695,0.04170875,,0.04170875,83.98142048701993,
+arc196_c,2025-04-06T00:00:00,2025-04-06T00:00:00,hard,sonnet,anthropic,claude-sonnet-4-6,succeeded,0,662,1540,2202,0.025085999999999997,,0.025085999999999997,27.195302779000485,

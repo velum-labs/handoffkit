@@ -1,0 +1,16 @@
+# k=1 round-1 task manifest — FROZEN (see preregistration.md).
+# Dataset: terminal-bench-core==0.1.1 (80 tasks; sorted id list SHA-256:
+# ba23ee7c8fef02ca200580f2e9af947c72baaed8dff86a8f3073cbd980eeb2b9)
+# Selection rule: random.Random(42).sample(sorted_ids, 12), sorted.
+blind-maze-explorer-algorithm.hard
+build-initramfs-qemu
+count-dataset-tokens
+crack-7z-hash.easy
+crack-7z-hash.hard
+csv-to-parquet
+get-bitcoin-nodes
+gpt2-codegolf
+hf-model-inference
+pytorch-model-cli
+sqlite-db-truncate
+vim-terminal-task

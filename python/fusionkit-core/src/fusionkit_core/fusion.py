@@ -12,7 +12,8 @@ from fusionkit_core.judge import (
     warn_malformed_tool_calls,
 )
 from fusionkit_core.producers import ChatTrajectoryProducer
-from fusionkit_core.router import HeuristicRouter
+from fusionkit_core.router import FusionModeRouter
+from fusionkit_core.trace import TraceContext
 from fusionkit_core.types import (
     ChatMessage,
     FusionAnalysis,
@@ -30,12 +31,12 @@ class FusionEngine:
         self,
         config: FusionConfig,
         clients: Mapping[str, ChatClient],
-        router: HeuristicRouter | None = None,
+        router: FusionModeRouter | None = None,
     ) -> None:
         self.config = config
         self.clients = dict(clients)
         self.producer = ChatTrajectoryProducer(self.clients)
-        self.router = router or HeuristicRouter()
+        self.router = router or FusionModeRouter()
         self.judge_synthesizer = judge_synthesizer_for(config)
         # Native panel members are single completions (k = 1 by construction),
         # so a tool-carrying fuse judges step *proposals*: adopt one candidate's
@@ -120,7 +121,7 @@ class FusionEngine:
         if mode == "panel":
             models = list(panel_models or self.config.panel_models)
             if not models:
-                models = [endpoint.id for endpoint in self.config.endpoints]
+                models = list(self.config.routekit_model_ids)
             return await self.producer.generate_panel(models, messages, sampling, tools=tools)
         raise ValueError(f"Unsupported fusion generation mode: {mode}")
 
@@ -134,6 +135,7 @@ class FusionEngine:
         sample_count: int | None = None,
         tools: Sequence[ToolDefinition] | None = None,
         tool_choice: ToolChoice | None = None,
+        trace: TraceContext | None = None,
     ) -> FuseResult:
         """One OpenAI-compatible fusion *step* that may emit tool calls.
 
@@ -176,6 +178,7 @@ class FusionEngine:
             sampling=selected_sampling,
             tools=tools,
             tool_choice=tool_choice,
+            trace=trace,
         )
 
     def _fuse_synthesizer(self, tools: Sequence[ToolDefinition] | None) -> JudgeSynthesizer:
@@ -197,6 +200,7 @@ class FusionEngine:
         sample_count: int | None = None,
         tools: Sequence[ToolDefinition] | None = None,
         tool_choice: ToolChoice | None = None,
+        trace: TraceContext | None = None,
     ) -> AsyncIterator[StreamChunk | FuseResult]:
         """Stream the fused answer: real token streaming on the synthesizer turn.
 
@@ -236,26 +240,9 @@ class FusionEngine:
             sampling=selected_sampling,
             tools=tools,
             tool_choice=tool_choice,
+            trace=trace,
         ):
             yield item
-
-    def stream_passthrough(
-        self,
-        model_id: str,
-        messages: Sequence[ChatMessage],
-        sampling: SamplingConfig,
-        *,
-        tools: Sequence[ToolDefinition] | None = None,
-        tool_choice: ToolChoice | None = None,
-    ) -> AsyncIterator[StreamChunk | FuseResult]:
-        """Real token streaming for a single configured endpoint (no fusion).
-
-        Shares the chunk-collection seam with single-mode fusion streaming so
-        passthrough and fused streams normalize tool-call fragments identically.
-        """
-        return self._stream_client(
-            self._client(model_id), messages, sampling, tools, tool_choice
-        )
 
     async def _stream_client(
         self,
@@ -270,7 +257,6 @@ class FusionEngine:
         seen_tool_ids: set[str] = set()
         finish_reason: str | None = None
         usage = Usage()
-        provider_cost = None
         async for chunk in client.stream_chat(
             messages, sampling, tools=tools, tool_choice=tool_choice
         ):
@@ -282,8 +268,6 @@ class FusionEngine:
                 finish_reason = chunk.finish_reason
             if chunk.usage is not None:
                 usage = chunk.usage
-            if chunk.provider_cost is not None:
-                provider_cost = chunk.provider_cost
             yield chunk
         tool_calls = [
             ToolCall(id=item["id"], name=item["name"], arguments=item["arguments"] or "{}")
@@ -299,7 +283,6 @@ class FusionEngine:
                 finish_reason=finish_reason or ("tool_calls" if tool_calls else "stop"),
                 usage=usage,
                 tool_calls=tool_calls,
-                provider_cost=provider_cost,
             ),
             terminal=not tool_calls,
             analysis=FusionAnalysis(),
@@ -372,16 +355,6 @@ def _trajectory_metrics(trajectories: Sequence[Trajectory]) -> dict[str, object]
         completion_tokens += _optional_int(usage.get("completion_tokens"))
         prompt_tokens += _optional_int(usage.get("prompt_tokens"))
     succeeded_count = sum(1 for trajectory in trajectories if trajectory.status == "succeeded")
-    # Why each failed member dropped out, by taxonomy category (recorded by
-    # ``failed_trajectory``). Makes a chronically overflowing/throttled panel
-    # member visible in run metrics instead of blending into a bare fail count.
-    failed_categories: dict[str, int] = {}
-    for trajectory in trajectories:
-        if trajectory.status == "succeeded":
-            continue
-        category = trajectory.metadata.get("error_category")
-        key = category if isinstance(category, str) else "unclassified"
-        failed_categories[key] = failed_categories.get(key, 0) + 1
     metrics: dict[str, object] = {
         "trajectory_count": len(trajectories),
         "succeeded_trajectory_count": succeeded_count,
@@ -392,8 +365,6 @@ def _trajectory_metrics(trajectories: Sequence[Trajectory]) -> dict[str, object]
         "trajectory_prompt_tokens": prompt_tokens,
         "trajectory_completion_tokens": completion_tokens,
     }
-    if failed_categories:
-        metrics["failed_trajectory_categories"] = failed_categories
     return metrics
 
 

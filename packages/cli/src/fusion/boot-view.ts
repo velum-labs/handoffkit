@@ -5,8 +5,8 @@
  * elapsed time, check marks) instead of staring at a silent pause — and the
  * checklist settles cleanly before the coding agent inherits the terminal.
  */
-import { createPresenter } from "@fusionkit/cli-ui";
-import type { Presenter, StepInput } from "@fusionkit/cli-ui";
+import { createPresenter } from "@routekit/cli-ui";
+import type { Presenter, StepInput } from "@routekit/cli-ui";
 
 import type { StackEvent, StackReporter } from "./env.js";
 

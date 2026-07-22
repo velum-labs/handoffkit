@@ -3,6 +3,8 @@
   "pages": [
     "inference-endpoint",
     "rate-limit-handoff",
+    "subscription-pooling",
+    "cliproxy-upstream",
     "cost-and-models",
     "observability",
     "troubleshooting",

@@ -1,5 +1,9 @@
 # OSS Release Audit — Consolidated Findings
 
+> **Historical audit snapshot:** Findings below describe commit `dc2c8e4`
+> before the RouteKit/FusionKit split. Resolved command and ownership claims are
+> retained as evidence, not current product guidance.
+
 Date: 2026-07-05. Scope: entire repository at commit `dc2c8e4` on `main`.
 Method: six parallel deep audits (repo hygiene, TypeScript workspace, Python
 workspace, CLI UX/DX, documentation, public surface/security) plus git-history
@@ -81,11 +85,11 @@ fixtures; no `.env` files; no `ghp_`/`AKIA`/private-key matches). Remaining issu
 | ID | Finding | Evidence | Sev |
 | --- | --- | --- | --- |
 | 4.1 | **`SECURITY.md` states the repo is "design-stage and private… no released versions"** — false (npm/PyPI 0.8.0 shipped) and dangerous as public policy | `SECURITY.md:5-24` | P0 |
-| 4.2 | Two *published* packages lack a shipped LICENSE file: `@fusionkit/harness-core`, `@fusionkit/runtime-utils` (`files: ["dist", "LICENSE"]` but no LICENSE present) | `packages/harness-core/`, `packages/runtime-utils/` | P0 |
+| 4.2 | Resolved: published package license payloads, including `@routekit/harness-core` and `@routekit/runtime`, now match their manifests. | `packages/harness-core/`, `packages/runtime-utils/` | Resolved |
 | 4.3 | No root `NOTICE`; `spec/model-fusion-contract/package.json` missing a `license` field; `python/uniroute*` are `UNLICENSED` inside an Apache-2.0 repo | multiple | P1 |
 | 4.4 | **Committed `.fusionkit/fusion.json` routes this repo's default panel through OpenRouter** (third-party aggregator) — anyone cloning and running `fusionkit codex` in-repo sends code to OpenRouter, undisclosed; also diverges from the documented default frontier trio | `.fusionkit/fusion.json` | P0 |
-| 4.5 | Sessions persist **full prompt/message arrays** (user code included) to `~/.fusionkit/sessions/<id>/turns.jsonl` — mentioned in passing, no privacy/data-handling doc | `packages/model-gateway/src/session-store.ts:12-18` | P1 |
-| 4.6 | Rate-limit failover (`onRateLimit: fusion`, the default) re-sends the current turn to *additional* providers beyond the one the user selected — privacy implication undocumented | `packages/model-gateway/src/fusion-backend.ts:966-975`, `packages/cli/src/fusion/effective-config.ts:38` | P1 |
+| 4.5 | Sessions persist **full prompt/message arrays** (user code included) to `~/.fusionkit/sessions/<id>/turns.jsonl` — mentioned in passing, no privacy/data-handling doc | `packages/fusion-gateway/src/session-store.ts:12-18` | P1 |
+| 4.6 | Rate-limit failover (`onRateLimit: fusion`, the default) re-sends the current turn to *additional* providers beyond the one the user selected — privacy implication undocumented | `packages/fusion-gateway/src/fusion-backend.ts:966-975`, `packages/cli/src/fusion/effective-config.ts:38` | P1 |
 | 4.7 | No product telemetry / phone-home (verified) — a strength; should be stated affirmatively in the privacy doc. `HF_HUB_DISABLE_TELEMETRY` is set for MLX downloads | `packages/adapter-ai-sdk/src/mlx-env.ts` | P2 |
 | 4.8 | `.github/CODEOWNERS` is an unfilled placeholder referencing `@velum-labs/<team>` | `.github/CODEOWNERS` | P1 |
 | 4.9 | Supply chain posture is strong (exact-pin allowlist in `check-repo.mjs`, `.npmrc` with `ignore-scripts`/`minimum-release-age`/provenance publishing, committed lockfiles) — keep; document in CONTRIBUTING | `.npmrc`, `scripts/check-repo.mjs:326-427` | — |
@@ -112,10 +116,10 @@ by `check-repo.mjs` in `cli`/`cli-ui`.
 
 | ID | Finding | Evidence | Sev |
 | --- | --- | --- | --- |
-| 6.1 | **God file:** `packages/model-gateway/src/fusion-backend.ts` — 2,041 lines mixing public types, session state, vendor proxy/failover, SSE assembly, cost metering, trace emission, and the `FusionBackend` class. Partially superseded by `frontdoor/`; also contains 11 raw `console.*` calls (gateway is outside the lint ban) | file | P1 |
+| 6.1 | **God file:** `packages/fusion-gateway/src/fusion-backend.ts` — 2,041 lines mixing public types, session state, vendor proxy/failover, SSE assembly, cost metering, trace emission, and the `FusionBackend` class. Partially superseded by `frontdoor/`; also contains 11 raw `console.*` calls (gateway is outside the lint ban) | file | P1 |
 | 6.2 | **God file:** `packages/kernel/src/runtime.ts` — 1,421 lines (type system + graph engine + scheduling + streaming) and **zero tests** for the whole `kernel` package | file | P1 |
 | 6.3 | **God file:** `packages/ensemble/src/unified.ts` — 949 lines (harness kind registry + panel orchestration + factories + judge hooks) | file | P1 |
-| 6.4 | **Dual harness implementations:** legacy `harness.ts` vs new `driver.ts` coexist in tool-codex (932 vs 445 lines), tool-claude, tool-cursor, gated by `FUSIONKIT_HARNESS_DRIVERS` env flag — two code paths to maintain and test | `packages/tool-*/src/` | P1 |
+| 6.4 | Resolved: each tool package now owns one launcher and one canonical driver; legacy harness and trajectory implementations were deleted. | `packages/tool-*/src/` | Resolved |
 | 6.5 | DRY: near-identical stream-json trajectory parsers in `tool-claude/src/stream-trajectory.ts` (222 ln) and `tool-cursor/src/stream-trajectory.ts` (184 ln) — same helpers (`truncate`, `asObject`, `asArray`, …) | files | P1 |
 | 6.6 | DRY: OpenAI chat wire types (`OpenAiToolCall`, `OpenAiDelta`, `OpenAiChoice`) duplicated in `model-gateway/src/adapters/responses.ts:61-80` and `adapters/anthropic.ts:67-80`; SSE chunk builders duplicated between `frontdoor/sse.ts` and inline in `fusion-backend.ts` (~638–662) | files | P2 |
 | 6.7 | DRY: fused sub-agent provisioning implemented 3× (`tool-codex/src/launch.ts` TOML, `tool-claude/src/launch.ts` JSON, `tool-cursor/src/subagents.ts` markdown) with no shared builder | files | P2 |
@@ -140,13 +144,13 @@ exception handlers with narrow intent; single-source registry generated from
 | 7.6 | 32 FusionKit test files at repo root `tests/` instead of per-package `python/*/tests/`; `python/fusionkit-cli/tests/` has only a version smoke test | `tests/`, `pyproject.toml` | P1 |
 | 7.7 | Version drift: FastAPI app metadata hardcodes `version="0.2.0"` while packages are 0.8.0; five pyprojects pin `==0.8.0` on each other requiring lockstep bumps (works, but document it) | `python/fusionkit-server/src/fusionkit_server/app.py:146` | P2 |
 | 7.8 | Pyright is standard mode (not strict) and excludes uniroute entirely; ~50 `type: ignore` concentrated at MLX/generated-registry edges — acceptable, document the policy | root `pyproject.toml:45-58` | P2 |
-| 7.9 | Python users of `fusionkit serve -c config.yaml` don't get `.fusionkit/prompts/*.md` auto-loading (Node-only concern today) — parity gap | `fusionkit_core/config.py` | P2 |
+| 7.9 | The former Python config-file serving path did not get `.fusionkit/prompts/*.md` auto-loading (Node-only concern at that snapshot) — parity gap | `fusionkit_core/config.py` | P2 |
 | 7.10 | Internal references: `HandoffKitExecutor*` naming in `fusion_bench.py`, `/opt/velum/repos/handoffkit/...` and `fusionkit@velum.local` in tests, hardcoded external baseline scores for `gpt-5.5`/`gpt-5.3-codex` in `public_bench.py` (fine if labeled) | files | P2 |
 
 ## 8. CLI UX/DX
 
-The product spine (`fusionkit codex` cold start → preflight with copy-paste
-install hints → adaptive key skipping → cost consent → boot checklist → session
+The historical product spine (`fusionkit codex` cold start → preflight with copy-paste
+install hints → adaptive key skipping → boot checklist → session
 receipt with resume hint) is genuinely good. What breaks the magic:
 
 | ID | Finding | Evidence | Sev |
@@ -157,7 +161,7 @@ receipt with resume hint) is genuinely good. What breaks the magic:
 | 8.4 | **Same command, different products:** Node `fusionkit serve` (full stack orchestration) vs Python `fusionkit serve` (raw uvicorn router) share a name | `fusion-quickstart.ts:689-697` vs `main.py:150-169` | P1 |
 | 8.5 | Python `--help` lists 10 maintainer/benchmark commands (`fusion-hillclimb`, `tune-prompts`, `public-bench`, …) as top-level peers of `serve`/`init`; root help string is "Local model fusion toolkit." (undersells) | `python/fusionkit-cli/src/fusionkit_cli/main.py:63,447-1168` | P1 |
 | 8.6 | `doctor` prints "ready. Try: fusionkit codex" (exit 0) even when all provider keys are missing — only uv absence is a hard fail | `packages/cli/src/commands/doctor.ts:272-283` | P1 |
-| 8.7 | Naming confusion: `fusionkit local <tool>` (single local model, no fusion) vs `--local` flag (MLX *panel* with fusion) | `docs/cli.md` | P2 |
+| 8.7 | Resolved: the single-model path is now `fusionkit <tool> --direct`; `--local` remains the fused MLX panel flag. | `docs/cli.md` | — |
 | 8.8 | No shell completions; no update notifications; flag-order rule ("fusionkit flags before tool name") is a recurring paper cut; several env vars (`FUSIONKIT_NO_TUI`, `FUSIONKIT_SKIP_KEY_VALIDATION`, `FUSIONKIT_CONFIG`) undocumented in help | CLI sources | P2 |
 | 8.9 | Good bones worth keeping/extending: stderr/stdout contract (human UI vs machine payloads), `--json` on most inspection commands, Ink TTY / plain non-TTY split, exit codes 0/1/2/130 | `packages/cli-ui/` | — |
 

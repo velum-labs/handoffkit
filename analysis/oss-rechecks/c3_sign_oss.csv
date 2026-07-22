@@ -1,0 +1,4 @@
+pair,public_phi,public_sign,public_n,calibrated_phi,calibrated_sign,calibrated_n,agreement,mapping_note
+deepseek / kimi,0.6597,positive,1055,0.3944,positive,57,True,public deepseek-v3.1-terminus vs calibrated deepseek-chat; public kimi-k2-0905 vs calibrated kimi-k2-thinking
+deepseek / qwen3,0.594,positive,1055,0.5712,positive,59,True,public deepseek-v3.1-terminus vs calibrated deepseek-chat; public Qwen3-8B vs calibrated qwen3-coder
+kimi / qwen3,0.594,positive,1055,0.3784,positive,58,True,public kimi-k2-0905 vs calibrated kimi-k2-thinking; public Qwen3-8B vs calibrated qwen3-coder

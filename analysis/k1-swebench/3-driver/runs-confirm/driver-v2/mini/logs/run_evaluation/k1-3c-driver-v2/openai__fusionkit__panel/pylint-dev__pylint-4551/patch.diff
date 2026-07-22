@@ -1,0 +1,59 @@
+diff --git a/pylint/pyreverse/inspector.py b/pylint/pyreverse/inspector.py
+index 8fa12202..1a28fc2e 100644
+--- a/pylint/pyreverse/inspector.py
++++ b/pylint/pyreverse/inspector.py
+@@ -160,7 +160,20 @@ class Linker(IdGeneratorMixIn, utils.LocalsVisitor):
+             specializations = getattr(baseobj, "specializations", [])
+             specializations.append(node)
+             baseobj.specializations = specializations
+-        # resolve instance attributes
++                # Collect parameter annotations from methods before processing assignments
++        node._param_annotations = {}
++        for method in node.values():
++            # Filter for only FunctionDef nodes
++            if isinstance(method, astroid.FunctionDef) and method.name == '__init__':
++                # Process __init__ method parameters
++                if method.args is not None and method.args.args is not None:
++                    for i, arg in enumerate(method.args.args):
++                        if i == 0:  # Skip self
++                            continue
++                        if i < len(method.args.annotations) and method.args.annotations[i] is not None:
++                            node._param_annotations[arg.name] = method.args.annotations[i]
++    
++    # resolve instance attributes
+         node.instance_attrs_type = collections.defaultdict(list)
+         for assignattrs in node.instance_attrs.values():
+             for assignattr in assignattrs:
+@@ -223,13 +236,30 @@ class Linker(IdGeneratorMixIn, utils.LocalsVisitor):
+         except astroid.InferenceError:
+             pass
+ 
+-    @staticmethod
+-    def handle_assignattr_type(node, parent):
++    def handle_assignattr_type(self, node, parent):
+         """handle an astroid.assignattr node
+ 
+         handle instance_attrs_type
+         """
+         try:
++            # Check if this assignment comes from a function parameter with type annotation
++            if hasattr(parent, '_param_annotations'):
++                # Look for assignments of the form self.attr = param
++                if isinstance(node.parent, astroid.Assign):
++                    assign_node = node.parent
++                    if (len(assign_node.targets) == 1 and 
++                        isinstance(assign_node.value, astroid.Name) and
++                        assign_node.value.name in parent._param_annotations):
++                        
++                        # Use the parameter annotation instead of inferring from value
++                        annotation = parent._param_annotations[assign_node.value.name]
++                        # Infer the annotation type
++                        annotation_values = set(annotation.infer())
++                        current = set(parent.instance_attrs_type[node.attrname])
++                        parent.instance_attrs_type[node.attrname] = list(current | annotation_values)
++                        return
++            
++            # Fall back to original behavior
+             values = set(node.infer())
+             current = set(parent.instance_attrs_type[node.attrname])
+             parent.instance_attrs_type[node.attrname] = list(current | values)

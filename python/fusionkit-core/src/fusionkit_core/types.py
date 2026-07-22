@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import json
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from fusionkit_core.contracts import Status, SynthesisDecision, TrajectoryItem
 
@@ -73,26 +74,38 @@ class ChatMessage(BaseModel):
                 flattened.append(call)
         return flattened
 
+    @model_validator(mode="after")
+    def _validate_tool_protocol(self) -> ChatMessage:
+        if self.role == "tool" and not self.tool_call_id:
+            raise ValueError("tool messages require a tool_call_id")
+        if not self.tool_calls:
+            return self
+        if self.role != "assistant":
+            raise ValueError("tool_calls are only valid on assistant messages")
+        for call in self.tool_calls:
+            try:
+                arguments = json.loads(call.arguments or "{}")
+            except json.JSONDecodeError as exc:
+                raise ValueError("tool-call arguments must be valid JSON") from exc
+            if not isinstance(arguments, dict):
+                raise ValueError("tool-call arguments must be a JSON object")
+        return self
+
 
 class Usage(BaseModel):
     prompt_tokens: int | None = None
     completion_tokens: int | None = None
     total_tokens: int | None = None
 
-
-class ProviderCost(BaseModel):
-    source: Literal["provider", "estimate"] = "provider"
-    cost_usd: float | None = None
-    generation_id: str | None = None
-    provider_name: str | None = None
-    upstream_inference_cost: float | None = None
-    cache_discount: float | None = None
-    lookup_status: str = "unavailable"
-    tokens_prompt: int | None = None
-    tokens_completion: int | None = None
-    native_tokens_prompt: int | None = None
-    native_tokens_completion: int | None = None
-    raw: dict[str, Any] = Field(default_factory=dict)
+    @model_validator(mode="after")
+    def _derive_total_tokens(self) -> Usage:
+        if (
+            self.total_tokens is None
+            and self.prompt_tokens is not None
+            and self.completion_tokens is not None
+        ):
+            self.total_tokens = self.prompt_tokens + self.completion_tokens
+        return self
 
 
 class CallMetrics(BaseModel):
@@ -110,11 +123,9 @@ class ModelResponse(BaseModel):
     latency_s: float = 0.0
     tool_calls: list[ToolCall] = Field(default_factory=list)
     raw: dict[str, Any] = Field(default_factory=dict)
-    provider_cost: ProviderCost | None = None
     # Out-of-band reasoning text (never part of the answer). Populated from
-    # upstream ``message.reasoning`` / ``message.reasoning_content`` fields
-    # (local MLX and vLLM/SGLang-style servers); the server surfaces it as
-    # ``reasoning_content`` so coding agents render it on their thinking channel.
+    # RouteKit's optional ``message.reasoning`` / ``message.reasoning_content``
+    # extension fields; the caller can surface it on a thinking channel.
     reasoning: str | None = None
 
 
@@ -123,7 +134,6 @@ class StreamChunk(BaseModel):
     tool_call_delta: ToolCall | None = None
     finish_reason: str | None = None
     usage: Usage | None = None
-    provider_cost: ProviderCost | None = None
     # Out-of-band reasoning text (never part of the answer). The fused stream
     # uses it to surface the judge's analysis before content tokens; the server
     # maps it to the OpenAI ``delta.reasoning_content`` field, which coding

@@ -28,18 +28,18 @@ let forcedNonInteractive = false;
 
 /**
  * Force non-interactive mode for the rest of the process (the `--no-input` /
- * `--json` global flags). Also exports `FUSIONKIT_NO_TUI=1` so spawned children
+ * `--json` global flags). Also exports `ROUTEKIT_NO_TUI=1` so spawned children
  * inherit the same posture.
  */
 export function forceNonInteractive(): void {
   forcedNonInteractive = true;
-  process.env.FUSIONKIT_NO_TUI = "1";
+  process.env.ROUTEKIT_NO_TUI = "1";
 }
 
 /** True when we should render rich, animated UI to `stream`. */
 export function isInteractive(stream: NodeJS.WriteStream = uiStream()): boolean {
   if (forcedNonInteractive) return false;
-  if (process.env.FUSIONKIT_NO_TUI === "1") return false;
+  if (process.env.ROUTEKIT_NO_TUI === "1") return false;
   if (isCI()) return false;
   return Boolean(stream.isTTY);
 }
@@ -47,5 +47,5 @@ export function isInteractive(stream: NodeJS.WriteStream = uiStream()): boolean 
 /** True when we can read interactive keypresses (raw mode) from stdin. */
 export function canPromptInteractively(): boolean {
   if (forcedNonInteractive) return false;
-  return Boolean(process.stdin.isTTY) && !isCI() && process.env.FUSIONKIT_NO_TUI !== "1";
+  return Boolean(process.stdin.isTTY) && !isCI() && process.env.ROUTEKIT_NO_TUI !== "1";
 }

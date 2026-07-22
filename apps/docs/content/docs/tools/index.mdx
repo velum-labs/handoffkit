@@ -5,51 +5,44 @@ description: The coding agents FusionKit can launch, and the behavior they share
 
 FusionKit launches an unmodified coding agent and backs it with a fused model
 panel. The agent speaks its normal wire protocol to a local gateway and never
-learns that fusion happened. Three agents have first-class launchers:
+learns that fusion happened. Four agents share the neutral launcher path:
 
 | Tool | Command | Gateway dialect | Install |
 | --- | --- | --- | --- |
 | [Codex](/docs/tools/codex) | `fusionkit codex` | OpenAI Responses (`/v1/responses`) | [openai/codex](https://github.com/openai/codex) |
 | [Claude Code](/docs/tools/claude-code) | `fusionkit claude` | Anthropic Messages (`/v1/messages`) | [Claude Code docs](https://docs.anthropic.com/en/docs/claude-code/overview) |
 | [Cursor](/docs/tools/cursor) | `fusionkit cursor` | OpenAI Chat, via the bundled Cursorkit bridge | [cursor.com/cli](https://cursor.com/cli) |
+| OpenCode | `fusionkit opencode` | OpenAI Chat through the generic driver | [opencode.ai](https://opencode.ai) |
 
 You only need the agent you plan to launch. `fusionkit doctor` checks which
 binaries are on your PATH before a run.
 
-opencode is also supported in local mode (`fusionkit local opencode`), which
-backs it with a single local model and no fusion. It does not have a fused
-top-level launcher yet.
-
 ## What every launcher shares
 
-Each launcher starts the same stack: the model panel, the Python synthesizer,
-and the Fusion Harness Gateway. The tool is then spawned pre-wired to the
-gateway. One `Ctrl+C` tears everything down.
+Each launcher composes the configured RouteKit router, Python synthesizer, and
+Fusion Harness Gateway, then receives the same neutral `ToolLaunchSpec`. One
+`Ctrl+C` tears down Fusion-owned processes. External RouteKit daemons remain.
 
 FusionKit's own flags come first; everything after the first forwarded
 argument (or after `--`) goes to the agent untouched:
 
 ```bash
-fusionkit codex --local                    # --local is a FusionKit flag
 fusionkit claude --repo /path              # --repo is a FusionKit flag
-fusionkit codex --yes -- "fix the build"   # "fix the build" goes to codex
+fusionkit codex -- "fix the build"         # forwarded to codex
 ```
 
-With the generic launcher, `fusionkit fusion [tool]`, FusionKit flags must
-also come before the tool name.
-
-The behavior below works the same way in all three tools:
+The behavior below works the same way in all four tools:
 
 | Behavior | How |
 | --- | --- |
 | Fused model | The agent sees `fusion-panel` as a normal model. |
-| Passthrough models | Panel member ids (`gpt`, `sonnet`, `gemini`) route directly to one provider. |
+| Ensemble models | Each ensemble is `fusion-<name>`; the default is `fusion-panel`. |
 | Rate-limit handoff | A throttled passthrough turn reruns on the panel by default. See [Rate-limit handoff](/docs/guides/rate-limit-handoff). |
 | Durable sessions | `--continue` and `--resume <id>` restore a prior session. |
 | Cost controls | `--budget <usd>` caps gateway-observed spend. See [Cost and models](/docs/guides/cost-and-models). |
 | Observability | `--observe` boots the local trace dashboard. |
 | Sub-agents | Each named ensemble becomes a delegable sub-agent unless you pass `--no-subagents`. |
-| Local panel | `--local` swaps the cloud panel for on-device MLX models on Apple Silicon. |
+| Routing boundary | Ensemble members are live namespaced RouteKit model IDs. Use RouteKit for single-model launches. |
 
 The per-tool pages cover what differs: how each agent is wired to the gateway,
 which environment the launcher sets, how the model picker is populated, and the

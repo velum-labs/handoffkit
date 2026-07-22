@@ -1,0 +1,23 @@
+{
+  "name": "@fusionkit/testkit",
+  "private": true,
+  "version": "0.8.0",
+  "description": "Cross-stack test tooling for FusionKit: spawn the RouteKit-upstream simulator and internal Python sidecar, script behaviors, and observe the wire journal.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "dependencies": {
+    "@routekit/runtime": "workspace:*",
+    "yaml": "2.9.0"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "clean": "tsc -b --clean",
+    "test": "node --test \"dist/test/*.test.js\""
+  }
+}

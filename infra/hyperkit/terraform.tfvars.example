@@ -1,0 +1,65 @@
+aws_region  = "us-east-1"
+project_name = "hyperkit"
+environment  = "production"
+
+# Pin AZs to keep subnet placement stable. Leave empty to select the first two
+# currently available AZs.
+availability_zones = ["us-east-1a", "us-east-1b"]
+vpc_cidr           = "10.42.0.0/16"
+single_nat_gateway = false
+
+# Must be globally unique. Leave null to let AWS generate a suffix.
+artifact_bucket_name          = null
+artifact_retention_days       = 90
+force_destroy_artifact_bucket = false
+
+runner_image_tag     = "2026-07-09"
+controller_image_tag = "2026-07-09"
+grafana_image_tag    = "2026-07-09"
+
+controller_desired_count = 1
+controller_poll_interval = 30
+controller_s3_prefix     = "runs/"
+# Set to one sweep ID to restrict aggregation, or leave null to aggregate all
+# sweeps and rely on each object's runs/<sweep_id>/results/ key.
+controller_sweep_id = null
+
+# Terraform creates only empty containers. Populate their values separately
+# with aws secretsmanager put-secret-value.
+secret_names         = []
+external_secret_arns = []
+runner_managed_secret_environment = {
+  OPENAI_API_KEY    = "hyperkit/production/openai-api-key"
+  ANTHROPIC_API_KEY = "hyperkit/production/anthropic-api-key"
+}
+runner_external_secret_environment = {}
+controller_managed_secret_environment = {}
+controller_external_secret_environment = {}
+
+batch_instance_types      = ["r7i.2xlarge", "r7i.4xlarge", "m7i.2xlarge", "m7i.4xlarge"]
+batch_max_vcpus           = 256
+batch_root_volume_gib     = 500
+batch_default_vcpus       = 2
+batch_default_memory_mib  = 8192
+batch_job_timeout_seconds = 21600
+
+# This existing SSM SecureString must contain a tagged reusable Tailscale auth
+# key. Terraform references its ARN but never reads its value into state.
+tailscale_auth_parameter_name     = "/hypergrid-obs/tailscale-auth-key"
+tailscale_grafana_hostname        = "hyperkit-grafana"
+tailscale_dns_suffix              = "example-tailnet.ts.net"
+tailscale_connector_instance_type = "t3.nano"
+grafana_desired_count             = 1
+
+budget_limit_usd               = 2500
+budget_alert_threshold_percent = 80
+budget_alert_email             = "platform@example.com"
+
+tags = {
+  Owner      = "platform"
+  CostCenter = "hyperkit"
+}
+
+# Required when deploying as a principal that may only create bounded IAM roles
+# (e.g. the Cursor Cloud Agent's cursor-agent-infra role). Leave null otherwise.
+iam_permissions_boundary_arn = "arn:aws:iam::052777341990:policy/cursor-agent-boundary"

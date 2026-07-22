@@ -1,0 +1,48 @@
+{
+  "name": "@routekit/tool-registry",
+  "private": false,
+  "version": "0.8.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/velum-labs/handoffkit.git",
+    "directory": "packages/tool-registry"
+  },
+  "description": "Canonical product-neutral registry of RouteKit coding-tool integrations.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org",
+    "access": "public",
+    "provenance": true
+  },
+  "dependencies": {
+    "@routekit/tool-claude": "workspace:*",
+    "@routekit/tool-codex": "workspace:*",
+    "@routekit/tool-cursor": "workspace:*",
+    "@routekit/tool-opencode": "workspace:*",
+    "@routekit/tools": "workspace:*"
+  },
+  "keywords": [
+    "routekit",
+    "llm",
+    "coding-agent",
+    "tooling",
+    "registry"
+  ],
+  "scripts": {
+    "build": "tsc -b",
+    "clean": "tsc -b --clean",
+    "test": "node --test \"dist/test/*.test.js\""
+  }
+}

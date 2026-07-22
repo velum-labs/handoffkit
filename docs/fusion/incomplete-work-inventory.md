@@ -29,7 +29,7 @@ kernel-native). Still open:
 | Item | Status |
 | --- | --- |
 | **Phase 3** — Decompose `runEnsemble` into a native `ensemble-run` workflow (today: `legacy-ensemble-run` + `LegacyRunEnsembleOperator`) | Wrapper only |
-| **Phase 4** — `fusionkit local` on native `direct-model-turn` (today: kernel-wrapped via `KernelBackend`) | Partially integrated |
+| **Phase 4** — `fusionkit <tool> --direct` on native `direct-model-turn` (today: kernel-wrapped via `KernelBackend`) | Partially integrated |
 | **Phase 5** — Python synthesis only via `python-fusion-legacy-step` operator (today: shared `createKernelFuseStepRunner`, but Python remains the implementation) | Compatibility path |
 | **Phase 6** — TS-native fusion orchestration; port or replace Python `FusionEngine` | Not started |
 | **Phase 7** — Real adaptive schedulers (execution-guided select/repair, tree search, learned routing, offline architecture search) | Scaffold only |

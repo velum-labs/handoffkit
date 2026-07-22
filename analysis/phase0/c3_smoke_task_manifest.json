@@ -1,0 +1,21 @@
+{
+  "version": "release_v6",
+  "tasks": [
+    {
+      "task_id": "arc196_b",
+      "question_id": "arc196_b",
+      "contest_date": "2025-04-06T00:00:00",
+      "cluster_key": "2025-04-06T00:00:00",
+      "difficulty": "hard",
+      "version": "release_v6"
+    },
+    {
+      "task_id": "arc196_c",
+      "question_id": "arc196_c",
+      "contest_date": "2025-04-06T00:00:00",
+      "cluster_key": "2025-04-06T00:00:00",
+      "difficulty": "hard",
+      "version": "release_v6"
+    }
+  ]
+}

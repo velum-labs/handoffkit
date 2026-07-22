@@ -1,0 +1,6 @@
+# mini-swe-agent config overlay: hard per-container memory cap so SWE-bench
+# build containers get OOM-killed individually instead of taking down the
+# host (15 GB VM; two host crashes without this). Used with:
+#   -c swebench.yaml -c <this file>
+environment:
+  run_args: ["--rm", "--memory=5g", "--memory-swap=5g"]

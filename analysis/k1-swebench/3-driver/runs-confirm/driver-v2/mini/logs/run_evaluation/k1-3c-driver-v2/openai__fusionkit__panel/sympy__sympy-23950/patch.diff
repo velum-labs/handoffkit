@@ -1,0 +1,43 @@
+diff --git a/sympy/sets/contains.py b/sympy/sets/contains.py
+index b2d4268d12..6c26928265 100644
+--- a/sympy/sets/contains.py
++++ b/sympy/sets/contains.py
+@@ -45,4 +45,18 @@ def binary_symbols(self):
+             isinstance(i, (Eq, Ne))])
+ 
+     def as_set(self):
+-        raise NotImplementedError()
++        """
++        Return the set for which this condition is true.
++        
++        For Contains(x, S), this returns S since the condition
++        x ∈ S is equivalent to x being in the set S.
++        
++        Examples
++        ========
++        
++        >>> from sympy import Contains, Symbol, Reals
++        >>> x = Symbol('x')
++        >>> Contains(x, Reals).as_set()
++        Reals
++        """
++        return self.args[1]
+diff --git a/sympy/sets/tests/test_contains.py b/sympy/sets/tests/test_contains.py
+index 1973fed19c..98c856b23d 100644
+--- a/sympy/sets/tests/test_contains.py
++++ b/sympy/sets/tests/test_contains.py
+@@ -41,10 +41,10 @@ def test_binary_symbols():
+ def test_as_set():
+     x = Symbol('x')
+     y = Symbol('y')
+-    # Contains is a BooleanFunction whose value depends on an arg's
+-    # containment in a Set -- rewriting as a Set is not yet implemented
+-    raises(NotImplementedError, lambda:
+-           Contains(x, FiniteSet(y)).as_set())
++    # Contains.as_set() should return the set itself
++    assert Contains(x, FiniteSet(y)).as_set() == FiniteSet(y)
++    assert Contains(x, Interval(0, 1)).as_set() == Interval(0, 1)
++    assert Contains(x, S.Reals).as_set() == S.Reals
+ 
+ def test_type_error():
+     # Pass in a parameter not of type "set"

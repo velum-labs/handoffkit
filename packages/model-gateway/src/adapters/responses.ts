@@ -13,10 +13,15 @@
  * completion chunks.
  */
 
-import type { Backend } from "../backend.js";
-import { randomId } from "@fusionkit/runtime-utils";
-import type { OpenAiChoice } from "./openai-chat-wire.js";
+import type { Backend, BackendRequestOptions } from "../backend.js";
+import { randomId } from "@routekit/runtime";
+import {
+  attachReasoningSelection,
+  attachReasoningSelectionError,
+  type OpenAiChoice
+} from "./openai-chat-wire.js";
 import { droppedField } from "./dropped.js";
+import { unwrapUpstreamError } from "./upstream-error.js";
 import { openAiSseToResponses } from "./responses-stream.js";
 import { composeServerToolStream, runBufferedServerToolLoop } from "./server-tool-loop.js";
 import type { ExecutedSearch } from "./server-tool-loop.js";
@@ -53,9 +58,9 @@ type ResponsesTool = {
 /**
  * Codex encodes "unset" as an explicit JSON `null` for several optional fields
  * (e.g. `"reasoning": null` whenever the selected model's metadata advertises
- * no reasoning levels — the default for a custom-provider model like the fused
- * panel). Every nullable field below must be read with a null-tolerant guard;
- * reading `.effort` off a null `reasoning` 502'd every fused Codex turn.
+ * no reasoning levels — the default for many custom-provider models). Every
+ * nullable field below must be read with a null-tolerant guard; reading
+ * `.effort` off a null `reasoning` previously failed every such Codex turn.
  */
 export type ResponsesRequest = {
   model?: string;
@@ -69,11 +74,11 @@ export type ResponsesRequest = {
   parallel_tool_calls?: boolean;
   /**
    * Codex serializes `reasoning: null` (not an absent key) for models whose
-   * catalog metadata carries no reasoning level — every custom-provider panel
+   * catalog metadata carries no reasoning level — every custom provider
    * member slug (e.g. `grok-4`, `deepseek`) resolves to Codex's fallback model
    * info, which has none. Null must translate as "no reasoning", never throw.
    */
-  reasoning?: { effort?: string; [key: string]: unknown } | null;
+  reasoning?: { effort?: string | null; [key: string]: unknown } | null;
   text?: { format?: { type?: string; name?: string; schema?: unknown; strict?: boolean; [key: string]: unknown } } | null;
   previous_response_id?: string | null;
   truncation?: string | unknown;
@@ -191,7 +196,7 @@ const EMPTY_TOOL_REGISTRY: ResponsesToolRegistry = new Map();
  * by its `type` (no `name`) and executed by the caller (`execution: "client"`,
  * e.g. Codex's `tool_search` for deferred-tool discovery). Server-executed
  * typed tools (e.g. `web_search`, which OpenAI's backend runs) are excluded —
- * the gateway cannot honor them, so advertising them to the fused model would
+ * the gateway cannot honor them, so advertising them to the upstream model would
  * produce calls nobody executes.
  */
 function isClientTypedTool(tool: ResponsesTool): boolean {
@@ -279,7 +284,7 @@ function collectDiscovered(entries: unknown[], namespace: string | undefined, ou
  * array — their definitions ride inside the echoed `tool_search_output` items
  * (possibly grouped under namespaces) and Codex dispatches subsequent calls by
  * name + namespace. Harvesting them here is what closes the discovery loop:
- * the follow-up fused turn can advertise and call `spawn_agent` etc.
+ * the follow-up model turn can advertise and call `spawn_agent` etc.
  */
 function discoveredToolsFromInput(body: ResponsesRequest): DiscoveredTool[] {
   const found: DiscoveredTool[] = [];
@@ -446,7 +451,7 @@ export function responsesToChat(
       // A prior gateway-executed web search echoed back. Codex echoes these
       // items with no id/call_id and no results (on the real API results live
       // server-side), so the exchange cannot round-trip as a chat tool call —
-      // fold it into the transcript as assistant context so the fused model
+      // fold it into the transcript as assistant context so the upstream model
       // remembers the search happened and does not blindly repeat it.
       if (item.type === "web_search_call") {
         flushToolCalls();
@@ -485,9 +490,9 @@ export function responsesToChat(
         continue;
       }
       flushToolCalls();
-      // Reasoning items round-trip: Codex echoes the fusion narration item back
+      // Reasoning items round-trip: Codex echoes the reasoning item back
       // verbatim on the next request (with `summary`, and `content` that may be
-      // null). Drop it — narration must never leak into the panel prompt
+      // null). Drop it — narration must never leak into the provider prompt
       // (mirrors the Anthropic adapter dropping thinking blocks). A reasoning
       // item may sit between an assistant message and its function calls, so
       // dropping it must not break their adjacency (`pendingAssistantText`
@@ -542,14 +547,21 @@ export function responsesToChat(
   if (typeof body.top_p === "number") chat.top_p = body.top_p;
   if (typeof body.parallel_tool_calls === "boolean") chat.parallel_tool_calls = body.parallel_tool_calls;
   // `reasoning: null` means "this model has no reasoning config" (Codex sends
-  // it for every custom-provider panel member slug) — skip silently rather
+  // it for every custom provider model slug) — skip silently rather
   // than treating it as an untranslatable field, and never dereference it.
   if (body.reasoning != null) {
     const effort = body.reasoning.effort;
-    if (effort === "low" || effort === "medium" || effort === "high") {
+    if (effort == null) {
+      // Current Codex releases send `{ effort: null }` when no reasoning
+      // control was selected. Treat it exactly like `reasoning: null`.
+    } else if (typeof effort === "string" && effort.length > 0) {
       chat.reasoning_effort = effort;
+      attachReasoningSelection(chat, { mode: "effort", effort });
     } else {
-      droppedField("responses", "reasoning");
+      attachReasoningSelectionError(
+        chat,
+        "reasoning.effort must be a non-empty string"
+      );
     }
   }
   if (body.text != null) {
@@ -609,7 +621,7 @@ export function responsesToChat(
         });
       } else if (options.serverTools === true && isServerWebSearchTool(tool)) {
         // Server-executed web search, honored by the gateway's server-tool
-        // loop: projected as an ordinary function tool the fused model can
+        // loop: projected as an ordinary function tool the upstream model can
         // call; the loop intercepts and executes the calls.
         if (!tools.some((t) => (t.function as { name?: string } | undefined)?.name === WEB_SEARCH_TOOL_NAME)) {
           tools.push({
@@ -846,7 +858,7 @@ export async function handleResponses(
   body: ResponsesRequest,
   modelCallId?: string,
   signal?: AbortSignal,
-  panelDepth?: number
+  backendOptions: BackendRequestOptions = {}
 ): Promise<Response> {
   const requestedModel = body.model ?? backend.defaultModel ?? "";
   const upstreamModel = backend.resolveModel?.(body.model) ?? backend.defaultModel;
@@ -861,8 +873,8 @@ export async function handleResponses(
   const toolRegistry = responsesToolRegistry(body, { serverTools });
   const chat = responsesToChat(body, upstreamModel, { serverTools });
   const requestOptions = {
+    ...backendOptions,
     modelCallId,
-    ...(panelDepth !== undefined ? { panelDepth } : {}),
     // The streamed response is translated to Responses SSE by
     // openAiSseToResponses, which emits its own keepalive.
     ...(body.stream === true ? { translated: true } : {})
@@ -871,7 +883,7 @@ export async function handleResponses(
 
   if (!upstream.ok) {
     const detail = await upstream.text();
-    return jsonResponse(upstream.status, { error: { type: "api_error", message: detail.slice(0, 2000) } });
+    return jsonResponse(upstream.status, { error: unwrapUpstreamError(detail) });
   }
 
   if (executor !== undefined) {

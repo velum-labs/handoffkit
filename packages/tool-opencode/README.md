@@ -1,17 +1,17 @@
-# @fusionkit/tool-opencode
+# @routekit/tool-opencode
 
-opencode launcher integration for FusionKit.
+Product-neutral OpenCode launcher and canonical harness driver.
 
 ## Architecture
 
-This package provides the opencode local-model launcher config path; it does not currently include the full ensemble harness path.
+This package owns the one OpenCode configuration serializer, launcher, and routed driver.
 
 ## Usage
 
-Most users should start with `@fusionkit/cli` and the documented harness commands.
+Register `opencodeTool` in an `@routekit/tools` registry.
 
 ```ts
-import * as fusionkitPackage from "@fusionkit/tool-opencode";
+import { opencodeTool } from "@routekit/tool-opencode";
 ```
 
 ## Docs

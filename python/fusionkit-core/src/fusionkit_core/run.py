@@ -4,14 +4,14 @@ import asyncio
 import json
 import time
 import uuid
-from collections.abc import Mapping, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, TypeVar
 
 from pydantic import BaseModel
 
 from fusionkit_core.artifacts import hash_text
-from fusionkit_core.config import FusionConfig, ModelEndpoint, SamplingConfig, merge_sampling
+from fusionkit_core.config import SamplingConfig, merge_sampling
 from fusionkit_core.contracts import (
     ContractArtifactRef,
     ContractError,
@@ -28,7 +28,6 @@ from fusionkit_core.contracts import (
 )
 from fusionkit_core.fusion import FusionEngine
 from fusionkit_core.producers import PanelExhaustedError
-from fusionkit_core.providers import provider_metadata
 from fusionkit_core.run_models import (
     ArtifactWriter,
     CreateRunResult,
@@ -72,6 +71,9 @@ __all__ = [
     "make_id",
 ]
 
+_ResultT = TypeVar("_ResultT")
+
+
 class _BudgetExceededSignal(Exception):
     """Raised by the mid-turn budget guard to abort a run between phases."""
 
@@ -98,14 +100,47 @@ class FusionRunManager:
         idempotency_key: str | None = None,
     ) -> CreateRunResult:
         request_hash = hash_json(request.model_dump(mode="json"))
+        run_id = make_id("run")
+        trace_id = make_id("trace")
+        queued_event = FusionRunEvent(
+            event_seq=1,
+            run_id=run_id,
+            trace_id=trace_id,
+            state="queued",
+            status=status_for_run_state("queued"),
+            event_type="run_queued",
+            idempotency_key=idempotency_key,
+            request_hash=request_hash,
+            payload={"request": request.model_dump(mode="json")},
+        )
+        queued_summary = RunStateSummary(
+            run_id=run_id,
+            trace_id=trace_id,
+            state="queued",
+            status=status_for_run_state("queued"),
+            event_cursor=1,
+            idempotency_key=idempotency_key,
+            request_hash=request_hash,
+        )
+
         if idempotency_key is not None:
-            existing = self.store.get_idempotency(idempotency_key)
-            if existing is not None:
-                if existing.request_hash == request_hash:
-                    summary = self.store.read_summary(existing.run_id)
+            proposed = IdempotencyRecord(
+                idempotency_key=idempotency_key,
+                request_hash=request_hash,
+                run_id=run_id,
+                trace_id=trace_id,
+            )
+            canonical, created = self.store.initialize_idempotent_run(
+                proposed,
+                queued_event,
+                queued_summary,
+            )
+            if not created:
+                if canonical.request_hash == request_hash:
+                    summary = self.store.read_summary(canonical.run_id)
                     return CreateRunResult(
-                        run_id=existing.run_id,
-                        trace_id=existing.trace_id,
+                        run_id=canonical.run_id,
+                        trace_id=canonical.trace_id,
                         state=summary.state,
                         status=summary.status,
                         event_cursor=summary.event_cursor,
@@ -113,8 +148,8 @@ class FusionRunManager:
                         terminal_error=summary.terminal_error,
                     )
                 return CreateRunResult(
-                    run_id=existing.run_id,
-                    trace_id=existing.trace_id,
+                    run_id=canonical.run_id,
+                    trace_id=canonical.trace_id,
                     state=None,
                     status=None,
                     event_cursor=None,
@@ -127,49 +162,18 @@ class FusionRunManager:
                         terminal_reason="idempotency_key_reused_with_different_request",
                     ),
                 )
-
-        run_id = make_id("run")
-        trace_id = make_id("trace")
-        if idempotency_key is not None:
-            self.store.write_idempotency(
-                IdempotencyRecord(
-                    idempotency_key=idempotency_key,
-                    request_hash=request_hash,
-                    run_id=run_id,
-                    trace_id=trace_id,
-                )
+        else:
+            event = self.store.append_event(queued_event)
+            self.store.write_summary(
+                queued_summary.model_copy(update={"event_cursor": event.event_seq})
             )
 
-        event = self.store.append_event(
-            FusionRunEvent(
-                event_seq=1,
-                run_id=run_id,
-                trace_id=trace_id,
-                state="queued",
-                status=status_for_run_state("queued"),
-                event_type="run_queued",
-                idempotency_key=idempotency_key,
-                request_hash=request_hash,
-                payload={"request": request.model_dump(mode="json")},
-            )
-        )
-        self.store.write_summary(
-            RunStateSummary(
-                run_id=run_id,
-                trace_id=trace_id,
-                state="queued",
-                status=status_for_run_state("queued"),
-                event_cursor=event.event_seq,
-                idempotency_key=idempotency_key,
-                request_hash=request_hash,
-            )
-        )
         return CreateRunResult(
             run_id=run_id,
             trace_id=trace_id,
             state="queued",
             status=status_for_run_state("queued"),
-            event_cursor=event.event_seq,
+            event_cursor=1,
             idempotency_outcome="created",
         )
 
@@ -190,7 +194,7 @@ class FusionRunManager:
 
     async def execute_run(self, run_id: str) -> RunInspection:
         summary = await asyncio.to_thread(self.store.read_summary, run_id)
-        if summary.state in ("cancelled", "completed", "failed", "expired"):
+        if summary.state != "queued":
             return await asyncio.to_thread(self.store.inspect_run, run_id)
 
         events = await asyncio.to_thread(self.store.list_events, run_id)
@@ -210,7 +214,17 @@ class FusionRunManager:
             budget_error = self._check_wall_clock_budget(started)
             if budget_error is not None:
                 return await asyncio.to_thread(self._fail_run, summary, budget_error)
-            trajectories = await self._generate_trajectories(request, selected_mode, sampling)
+            try:
+                trajectories = await self._run_with_wall_clock(
+                    lambda: self._generate_trajectories(
+                        request,
+                        selected_mode,
+                        sampling,
+                    ),
+                    started,
+                )
+            except _BudgetExceededSignal as signal:
+                return await asyncio.to_thread(self._fail_run, summary, signal.error)
             trajectory_infos, model_call_ids, trajectory_artifacts = await asyncio.to_thread(
                 self._record_trajectories,
                 run_id,
@@ -218,11 +232,8 @@ class FusionRunManager:
                 request,
                 trajectories,
             )
-            # Phase boundary: panel settled, judge not yet called. Both budgets
-            # are re-checked before any more money or time is spent.
-            budget_error = self._check_cost_budget(run_id) or self._check_wall_clock_budget(
-                started
-            )
+            # Phase boundary: panel settled, judge not yet called.
+            budget_error = self._check_wall_clock_budget(started)
             if budget_error is not None:
                 return await asyncio.to_thread(self._fail_run, summary, budget_error)
 
@@ -247,7 +258,6 @@ class FusionRunManager:
 
                 def after_judge(judge_response: ModelResponse | None) -> None:
                     # Phase boundary: judge done, synthesizer not yet called.
-                    # Ledger the judge's spend first so the budget check sees it.
                     if judge_response is not None:
                         model_call_ids.append(
                             self._record_response_call(
@@ -259,19 +269,20 @@ class FusionRunManager:
                                 state="judging",
                             )
                         )
-                    error = self._check_cost_budget(run_id) or self._check_wall_clock_budget(
-                        started
-                    )
+                    error = self._check_wall_clock_budget(started)
                     if error is not None:
                         raise _BudgetExceededSignal(error)
 
                 await asyncio.to_thread(self._append_state, summary, "synthesizing")
                 try:
-                    fused = await self.engine._judge_synthesize(
-                        _runtime_messages(request.messages),
-                        trajectories,
-                        sampling=sampling,
-                        after_judge=after_judge,
+                    fused = await self._run_with_wall_clock(
+                        lambda: self.engine._judge_synthesize(
+                            _runtime_messages(request.messages),
+                            trajectories,
+                            sampling=sampling,
+                            after_judge=after_judge,
+                        ),
+                        started,
                     )
                 except _BudgetExceededSignal as signal:
                     return await asyncio.to_thread(self._fail_run, summary, signal.error)
@@ -340,7 +351,6 @@ class FusionRunManager:
                     ),
                 )
 
-            run_events = await asyncio.to_thread(self.store.list_events, run_id)
             fusion_record = FusionRecordV1.model_validate(
                 {
                     **contract_metadata("fusion-record.v1"),
@@ -361,7 +371,6 @@ class FusionRunManager:
                     "finished_at": datetime.now(UTC),
                     "metrics": {
                         **_run_metrics(trajectories, selected_mode, analysis),
-                        "cost_estimate": _run_cost_estimate(run_events),
                     },
                     "artifacts": [artifact.model_dump(mode="json") for artifact in artifacts],
                 }
@@ -394,9 +403,9 @@ class FusionRunManager:
             return await asyncio.to_thread(self.store.inspect_run, run_id)
         except PanelExhaustedError as exc:
             error = NativeRunError(
-                error_kind="provider_error",
+                error_kind="internal_error",
                 error_code=exc.__class__.__name__,
-                retryable=True,
+                retryable=False,
                 owner="fusionkit",
                 terminal_reason="all_models_failed",
                 message=str(exc),
@@ -917,7 +926,7 @@ class FusionRunManager:
         elif selected_mode == "panel":
             candidate_count = len(request.requested_models or self.engine.config.panel_models)
             if candidate_count == 0:
-                candidate_count = len(self.engine.config.endpoints)
+                candidate_count = len(self.engine.config.routekit_model_ids)
         else:
             candidate_count = request.sample_count or self.engine.config.sample_count
         if candidate_count <= budget.max_candidates:
@@ -932,14 +941,26 @@ class FusionRunManager:
             return None
         return _budget_error("wall_clock_s", "wall-clock budget exceeded")
 
-    def _check_cost_budget(self, run_id: str) -> NativeRunError | None:
-        budget = self.engine.config.budget
-        if budget.max_cost is None:
-            return None
-        cost = _run_cost_estimate(self.store.list_events(run_id))
-        if cost is None or cost <= budget.max_cost:
-            return None
-        return _budget_error("max_cost", f"estimated cost {cost:.8f} exceeded budget")
+    async def _run_with_wall_clock(
+        self,
+        operation: Callable[[], Awaitable[_ResultT]],
+        started: float,
+    ) -> _ResultT:
+        limit = self.engine.config.budget.wall_clock_s
+        if limit is None:
+            return await operation()
+        remaining = limit - (time.perf_counter() - started)
+        if remaining <= 0:
+            raise _BudgetExceededSignal(
+                _budget_error("wall_clock_s", "wall-clock budget exceeded")
+            )
+        try:
+            async with asyncio.timeout(remaining):
+                return await operation()
+        except TimeoutError as exc:
+            raise _BudgetExceededSignal(
+                _budget_error("wall_clock_s", "wall-clock budget exceeded")
+            ) from exc
 
     def _check_tool_budget(self, run_id: str) -> NativeRunError | None:
         budget = self.engine.config.budget
@@ -1016,15 +1037,10 @@ def _model_call_record(
 ) -> ModelCallRecordV1:
     latency_s = trajectory.metadata.get("latency_s")
     usage = trajectory.metadata.get("usage")
-    provider_cost = trajectory.metadata.get("provider_cost")
     latency_ms = latency_s * 1000 if isinstance(latency_s, int | float) else None
-    endpoint = _endpoint_for_trajectory(config, trajectory.model_id)
     metadata = {
-        **provider_metadata(
-            endpoint,
-            usage if isinstance(usage, dict) else None,
-            provider_cost if isinstance(provider_cost, dict) else None,
-        ),
+        "routekit_model_id": trajectory.model_id,
+        "unknown_usage": not isinstance(usage, dict),
         "finish_reason": trajectory.metadata.get("finish_reason"),
         "role": "panel",
     }
@@ -1032,9 +1048,9 @@ def _model_call_record(
     error = None
     if failed:
         error = ContractError(
-            kind="provider_error",
+            kind="internal_error",
             message=trajectory.metadata.get("error_message"),
-            retryable=True,
+            retryable=False,
         )
     started_at, finished_at = _call_window(latency_ms)
     return ModelCallRecordV1.model_validate(
@@ -1075,12 +1091,15 @@ def _response_call_record(
 ) -> ModelCallRecordV1:
     """A ``model-call-record.v1`` for a judge/synthesizer model turn."""
     latency_ms = response.latency_s * 1000 if response.latency_s > 0 else None
-    endpoint = _endpoint_for_trajectory(config, response.model_id)
     metadata = {
-        **provider_metadata(
-            endpoint,
-            response.usage,
-            response.provider_cost,
+        "routekit_model_id": response.model_id,
+        "unknown_usage": all(
+            value is None
+            for value in (
+                response.usage.prompt_tokens,
+                response.usage.completion_tokens,
+                response.usage.total_tokens,
+            )
         ),
         "finish_reason": response.finish_reason,
         "role": role,
@@ -1128,32 +1147,6 @@ def _pending_tool_actions_from_events(
         elif event.event_type == "tool_execution_recorded" and event.tool_call_id is not None:
             pending.pop(event.tool_call_id, None)
     return pending
-
-
-def _endpoint_for_trajectory(config: FusionConfig, model_id: str) -> ModelEndpoint | None:
-    try:
-        return config.endpoint_for(model_id)
-    except KeyError:
-        return None
-
-
-def _run_cost_estimate(events: Sequence[FusionRunEvent]) -> float | None:
-    costs = []
-    for event in events:
-        if event.event_type != "model_call_recorded":
-            continue
-        record = event.payload.get("model_call_record")
-        if not isinstance(record, dict):
-            continue
-        metadata = record.get("metadata")
-        if not isinstance(metadata, dict):
-            continue
-        cost = metadata.get("cost_estimate")
-        if isinstance(cost, int | float):
-            costs.append(float(cost))
-    if not costs:
-        return None
-    return sum(costs)
 
 
 def _budget_error(field: str, message: str) -> NativeRunError:

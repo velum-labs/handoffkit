@@ -7,7 +7,7 @@
     "url": "git+https://github.com/velum-labs/handoffkit.git",
     "directory": "packages/cli"
   },
-  "description": "fusionkit — real model fusion behind your coding agent (codex, claude, cursor).",
+  "description": "fusionkit — real model fusion behind your coding agent (Codex, Claude Code, Cursor, OpenCode).",
   "license": "Apache-2.0",
   "type": "module",
   "bin": {
@@ -31,30 +31,33 @@
   },
   "dependencies": {
     "@fusionkit/adapter-ai-sdk": "workspace:*",
-    "@fusionkit/cli-ui": "workspace:*",
+    "@fusionkit/config": "workspace:*",
+    "@routekit/cli-core": "workspace:*",
+    "@routekit/cli-ui": "workspace:*",
+    "@routekit/config-core": "workspace:*",
+    "@routekit/config": "workspace:*",
+    "@routekit/telemetry-core": "workspace:*",
     "@fusionkit/ensemble": "workspace:*",
-    "@fusionkit/harness-core": "workspace:*",
-    "@fusionkit/model-gateway": "workspace:*",
+    "@routekit/harness-core": "workspace:*",
+    "@fusionkit/gateway": "workspace:*",
     "@fusionkit/protocol": "workspace:*",
     "@fusionkit/registry": "workspace:*",
-    "@fusionkit/runtime-utils": "workspace:*",
-    "@fusionkit/tool-claude": "workspace:*",
-    "@fusionkit/tool-codex": "workspace:*",
-    "@fusionkit/tool-cursor": "workspace:*",
-    "@fusionkit/tool-opencode": "workspace:*",
-    "@fusionkit/tools": "workspace:*",
+    "@routekit/runtime": "workspace:*",
+    "@routekit/tool-registry": "workspace:*",
+    "@routekit/tools": "workspace:*",
     "@fusionkit/tracing": "workspace:*",
     "@fusionkit/workspace": "workspace:*",
+    "@routekit/contracts": "workspace:*",
+    "@routekit/gateway": "workspace:*",
+    "@routekit/registry": "workspace:*",
+    "@routekit/router": "workspace:*",
     "commander": "14.0.3",
     "figlet": "1.11.0",
     "posthog-node": "5.39.4",
-    "untun": "0.1.3",
     "yaml": "2.9.0"
   },
-  "optionalDependencies": {
-    "portless": "0.15.1"
-  },
   "devDependencies": {
+    "@fusionkit/testkit": "workspace:*",
     "@types/figlet": "1.7.0"
   },
   "keywords": [
@@ -66,9 +69,12 @@
     "cli",
     "codex",
     "claude-code",
-    "cursor"
+    "cursor",
+    "opencode"
   ],
   "scripts": {
+    "build": "tsc -b",
+    "clean": "tsc -b --clean",
     "test": "node --test \"dist/test/*.test.js\""
   }
 }

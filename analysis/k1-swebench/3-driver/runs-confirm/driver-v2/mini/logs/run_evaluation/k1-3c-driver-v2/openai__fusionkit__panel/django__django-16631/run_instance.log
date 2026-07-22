@@ -1,0 +1,194 @@
+2026-07-09 05:02:10,221 - INFO - Creating container for django__django-16631...
+2026-07-09 05:02:10,233 - INFO - Container for django__django-16631 created: 8d101e28ced8eb3f74585796392209979514a01db6672b92a48e60e924e1b2fa
+2026-07-09 05:02:10,326 - INFO - Container for django__django-16631 started: 8d101e28ced8eb3f74585796392209979514a01db6672b92a48e60e924e1b2fa
+2026-07-09 05:02:10,326 - INFO - Intermediate patch for django__django-16631 written to logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/django__django-16631/patch.diff, now applying to container...
+2026-07-09 05:02:10,421 - INFO - >>>>> Applied Patch:
+/tmp/patch.diff:74: trailing whitespace.
+        
+/tmp/patch.diff:79: trailing whitespace.
+        
+Checking patch django/contrib/auth/__init__.py...
+Checking patch django/contrib/auth/base_user.py...
+Applied patch django/contrib/auth/__init__.py cleanly.
+Applied patch django/contrib/auth/base_user.py cleanly.
+warning: 2 lines add whitespace errors.
+
+2026-07-09 05:02:11,331 - INFO - Git diff before:
+diff --git a/django/contrib/auth/__init__.py b/django/contrib/auth/__init__.py
+index 155330c596..0ea75b7449 100644
+--- a/django/contrib/auth/__init__.py
++++ b/django/contrib/auth/__init__.py
+@@ -199,12 +199,18 @@ def get_user(request):
+             # Verify the session
+             if hasattr(user, "get_session_auth_hash"):
+                 session_hash = request.session.get(HASH_SESSION_KEY)
+-                session_hash_verified = session_hash and constant_time_compare(
+-                    session_hash, user.get_session_auth_hash()
+-                )
+-                if not session_hash_verified:
+-                    request.session.flush()
+-                    user = None
++                if session_hash:
++                    # Use the new verification method that supports SECRET_KEY_FALLBACKS
++                    if hasattr(user, "verify_session_auth_hash"):
++                        session_hash_verified = user.verify_session_auth_hash(session_hash)
++                    else:
++                        # Fallback for backward compatibility
++                        session_hash_verified = constant_time_compare(
++                            session_hash, user.get_session_auth_hash()
++                        )
++                    if not session_hash_verified:
++                        request.session.flush()
++                        user = None
+ 
+     return user or AnonymousUser()
+ 
+diff --git a/django/contrib/auth/base_user.py b/django/contrib/auth/base_user.py
+index 5ee30bf59c..faa34adb0b 100644
+--- a/django/contrib/auth/base_user.py
++++ b/django/contrib/auth/base_user.py
+@@ -5,6 +5,7 @@ not in INSTALLED_APPS.
+ import unicodedata
+ import warnings
+ 
++from django.conf import settings
+ from django.contrib.auth import password_validation
+ from django.contrib.auth.hashers import (
+     check_password,
+@@ -12,7 +13,7 @@ from django.contrib.auth.hashers import (
+     make_password,
+ )
+ from django.db import models
+-from django.utils.crypto import get_random_string, salted_hmac
++from django.utils.crypto import constant_time_compare, get_random_string, salted_hmac
+ from django.utils.deprecation import RemovedInDjango51Warning
+ from django.utils.translation import gettext_lazy as _
+ 
+@@ -142,6 +143,33 @@ class AbstractBaseUser(models.Model):
+             algorithm="sha256",
+         ).hexdigest()
+ 
++    def get_session_auth_hash_with_secret(self, secret):
++        """
++        Return an HMAC of the password field using the specified secret.
++        """
++        key_salt = "django.contrib.auth.models.AbstractBaseUser.get_session_auth_hash"
++        return salted_hmac(
++            key_salt,
++            self.password,
++            secret=secret,
++            algorithm="sha256",
++        ).hexdigest()
++
++    def verify_session_auth_hash(self, session_hash):
++        """
++        Verify a session hash against the current SECRET_KEY and SECRET_KEY_FALLBACKS.
++        """
++        # Check against current SECRET_KEY first
++        if constant_time_compare(session_hash, self.get_session_auth_hash()):
++            return True
++        
++        # Check against SECRET_KEY_FALLBACKS
++        for secret in settings.SECRET_KEY_FALLBACKS:
++            if constant_time_compare(session_hash, self.get_session_auth_hash_with_secret(secret)):
++                return True
++        
++        return False
++
+     @classmethod
+     def get_email_field_name(cls):
+         try:
+2026-07-09 05:02:11,331 - INFO - Eval script for django__django-16631 written to logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/django__django-16631/eval.sh; copying to container...
+2026-07-09 05:02:15,570 - INFO - Test runtime: 4.18 seconds
+2026-07-09 05:02:15,570 - INFO - Test output for django__django-16631 written to logs/run_evaluation/k1-3c-driver-v2/openai__fusionkit__panel/django__django-16631/test_output.txt
+2026-07-09 05:02:15,627 - INFO - Git diff after:
+diff --git a/django/contrib/auth/__init__.py b/django/contrib/auth/__init__.py
+index 155330c596..0ea75b7449 100644
+--- a/django/contrib/auth/__init__.py
++++ b/django/contrib/auth/__init__.py
+@@ -199,12 +199,18 @@ def get_user(request):
+             # Verify the session
+             if hasattr(user, "get_session_auth_hash"):
+                 session_hash = request.session.get(HASH_SESSION_KEY)
+-                session_hash_verified = session_hash and constant_time_compare(
+-                    session_hash, user.get_session_auth_hash()
+-                )
+-                if not session_hash_verified:
+-                    request.session.flush()
+-                    user = None
++                if session_hash:
++                    # Use the new verification method that supports SECRET_KEY_FALLBACKS
++                    if hasattr(user, "verify_session_auth_hash"):
++                        session_hash_verified = user.verify_session_auth_hash(session_hash)
++                    else:
++                        # Fallback for backward compatibility
++                        session_hash_verified = constant_time_compare(
++                            session_hash, user.get_session_auth_hash()
++                        )
++                    if not session_hash_verified:
++                        request.session.flush()
++                        user = None
+ 
+     return user or AnonymousUser()
+ 
+diff --git a/django/contrib/auth/base_user.py b/django/contrib/auth/base_user.py
+index 5ee30bf59c..faa34adb0b 100644
+--- a/django/contrib/auth/base_user.py
++++ b/django/contrib/auth/base_user.py
+@@ -5,6 +5,7 @@ not in INSTALLED_APPS.
+ import unicodedata
+ import warnings
+ 
++from django.conf import settings
+ from django.contrib.auth import password_validation
+ from django.contrib.auth.hashers import (
+     check_password,
+@@ -12,7 +13,7 @@ from django.contrib.auth.hashers import (
+     make_password,
+ )
+ from django.db import models
+-from django.utils.crypto import get_random_string, salted_hmac
++from django.utils.crypto import constant_time_compare, get_random_string, salted_hmac
+ from django.utils.deprecation import RemovedInDjango51Warning
+ from django.utils.translation import gettext_lazy as _
+ 
+@@ -142,6 +143,33 @@ class AbstractBaseUser(models.Model):
+             algorithm="sha256",
+         ).hexdigest()
+ 
++    def get_session_auth_hash_with_secret(self, secret):
++        """
++        Return an HMAC of the password field using the specified secret.
++        """
++        key_salt = "django.contrib.auth.models.AbstractBaseUser.get_session_auth_hash"
++        return salted_hmac(
++            key_salt,
++            self.password,
++            secret=secret,
++            algorithm="sha256",
++        ).hexdigest()
++
++    def verify_session_auth_hash(self, session_hash):
++        """
++        Verify a session hash against the current SECRET_KEY and SECRET_KEY_FALLBACKS.
++        """
++        # Check against current SECRET_KEY first
++        if constant_time_compare(session_hash, self.get_session_auth_hash()):
++            return True
++        
++        # Check against SECRET_KEY_FALLBACKS
++        for secret in settings.SECRET_KEY_FALLBACKS:
++            if constant_time_compare(session_hash, self.get_session_auth_hash_with_secret(secret)):
++                return True
++        
++        return False
++
+     @classmethod
+     def get_email_field_name(cls):
+         try:
+2026-07-09 05:02:15,627 - INFO - Grading answer for django__django-16631...
+2026-07-09 05:02:15,628 - INFO - report: {'django__django-16631': {'patch_is_None': False, 'patch_exists': True, 'patch_successfully_applied': True, 'resolved': False, 'tests_status': {'FAIL_TO_PASS': {'success': [], 'failure': ['test_get_user_fallback_secret (auth_tests.test_basic.TestGetUser.test_get_user_fallback_secret)']}, 'PASS_TO_PASS': {'success': ['test_get_user (auth_tests.test_basic.TestGetUser.test_get_user)', 'test_get_user_anonymous (auth_tests.test_basic.TestGetUser.test_get_user_anonymous)', 'The current user model can be retrieved', 'Check the creation and properties of a superuser', 'test_superuser_no_email_or_password (auth_tests.test_basic.BasicTestCase.test_superuser_no_email_or_password)', 'The current user model can be swapped out for another', 'The alternate user setting must point to something in the format app.model', 'The current user model must point to an installed model', 'test_unicode_username (auth_tests.test_basic.BasicTestCase.test_unicode_username)', 'Users can be created and can set their password', 'Users can be created without an email', 'Default User model verbose names are translatable (#19945)'], 'failure': []}, 'FAIL_TO_FAIL': {'success': [], 'failure': []}, 'PASS_TO_FAIL': {'success': [], 'failure': []}}}}
+Result for django__django-16631: resolved: False
+2026-07-09 05:02:15,628 - INFO - Attempting to stop container sweb.eval.django__django-16631.k1-3c-driver-v2...
+2026-07-09 05:02:30,746 - INFO - Attempting to remove container sweb.eval.django__django-16631.k1-3c-driver-v2...
+2026-07-09 05:02:30,766 - INFO - Container sweb.eval.django__django-16631.k1-3c-driver-v2 removed.

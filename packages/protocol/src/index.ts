@@ -1,10 +1,11 @@
 /**
  * @fusionkit/protocol is the open, versioned data contract layer.
  *
- * It exports signed run contracts, receipts, hash-chained event logs, workspace
- * manifests, policy snapshots, checkpoints, handoff envelopes, model-fusion
- * schemas, generated OpenAPI clients, hashing, signing, verification, trace
- * events, validators, and normalization helpers.
+ * It exports FusionKit wire/panel/model-fusion schemas and generated clients.
+ * The signed-run governance contracts below are unrelated legacy Warrant
+ * surface retained here for compatibility during this phase; they are
+ * intentionally guarded as FusionKit protocol, not RouteKit contracts.
+ * Generic hashing/JCS and model-call primitives come from @routekit/contracts.
  *
  * Everything here is stable protocol surface. Packages should consume these
  * interfaces instead of recreating local string lists or proof logic.
@@ -54,8 +55,8 @@ export type {
   ToolPolicyDecision,
   ToolSideEffectClass
 } from "./tool-executor.js";
-export { canonicalize } from "./jcs.js";
-export type { JsonValue } from "./jcs.js";
+export { canonicalize } from "@routekit/contracts";
+export type { JsonValue } from "@routekit/contracts";
 export {
   assertWireTrajectory,
   isWireTrajectory,
@@ -74,7 +75,7 @@ export {
   SHA256_PREFIX,
   sha256Hex,
   sha256PrefixedHex
-} from "./hash.js";
+} from "@routekit/contracts";
 export {
   MODEL_FUSION_SCHEMA_BUNDLE_HASH,
   assertArtifactRefV1,

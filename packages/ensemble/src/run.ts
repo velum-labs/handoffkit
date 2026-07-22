@@ -2,18 +2,18 @@ import {
   assertHarnessCandidateRecordV1,
   assertHarnessRunRequestV1,
   assertHarnessRunResultV1,
-  MODEL_FUSION_SCHEMA_BUNDLE_HASH,
-  requestHash
+  MODEL_FUSION_SCHEMA_BUNDLE_HASH
 } from "@fusionkit/protocol";
-import { CANDIDATE_ISOLATION_DEFAULTS, registerCleanup } from "@fusionkit/runtime-utils";
+import { CANDIDATE_ISOLATION_DEFAULTS, registerCleanup } from "@routekit/runtime";
 import type {
   HarnessCandidateRecordV1,
   HarnessRunRequestV1,
   HarnessRunResultV1,
-  JsonValue,
   ModelCallRecordV1,
   ModelFusionStatus
 } from "@fusionkit/protocol";
+import { requestHash } from "@routekit/contracts";
+import type { JsonValue } from "@routekit/contracts";
 
 import { createArtifactStore } from "./artifacts.js";
 import { hardeningToJson } from "./harness.js";
@@ -94,7 +94,11 @@ function isAbandonedStraggler(output: HarnessCandidateOutput): boolean {
  * (harnesses kill their children on abort, so this is prompt). Without
  * `graceMs` this is exactly `Promise.allSettled`.
  */
-async function settleWithStragglerGrace<T>(
+/**
+ * Shared by managed harnesses and raw k=1 proposal panels: straggler policy is
+ * a panel semantic, not an execution-mechanism detail.
+ */
+export async function settleWithStragglerGrace<T>(
   runs: readonly Promise<T>[],
   options: {
     graceMs: number | undefined;

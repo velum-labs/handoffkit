@@ -1,0 +1,9 @@
+domain,rank,system_id,model,avg_score,gap_to_1,n_common,tier,oss_classification_note,lineage,base_model,teacher
+repo_bugfix_model,1,deepseek-r1-0528,deepseek-r1-0528,0.286,0.0,500,A,all tagged models are OSS/open-weights,base=DeepSeek-R1; teacher=none; DeepSeek-R1 open-weights reasoning family,DeepSeek-R1,none
+repo_bugfix_model,2,deepseek-v3.1-terminus,deepseek-v3.1-terminus,0.254,0.032,500,A,all tagged models are OSS/open-weights,base=DeepSeek-V3; teacher=none; DeepSeek-V3 open-weights family,DeepSeek-V3,none
+repo_bugfix_model,3,deepseek-v3-0324,deepseek-v3-0324,0.25,0.036,500,A,all tagged models are OSS/open-weights,base=DeepSeek-V3; teacher=none; DeepSeek-V3 open-weights family,DeepSeek-V3,none
+repo_bugfix_model,4,kimi-k2-0905,kimi-k2-0905,0.234,0.052,500,A,all tagged models are OSS/open-weights,base=Kimi K2; teacher=none; Moonshot Kimi K2 open-weights MoE,Kimi K2,none
+repo_bugfix_model,5,glm-4.6,glm-4.6,0.218,0.068,500,A,all tagged models are OSS/open-weights,base=GLM-4.6; teacher=none; Z.ai GLM open-weights family,GLM-4.6,none
+repo_bugfix_model,6,qwen3-235b-a22b-thinking-2507,qwen3-235b-a22b-thinking-2507,0.214,0.072,500,A,all tagged models are OSS/open-weights,base=Qwen3-235B-A22B; teacher=none; Qwen3 MoE open-weights family,Qwen3-235B-A22B,none
+repo_bugfix_model,7,qwen3-235b-a22b-2507,qwen3-235b-a22b-2507,0.162,0.124,500,A,all tagged models are OSS/open-weights,base=Qwen3-235B-A22B; teacher=none; Qwen3 MoE open-weights family,Qwen3-235B-A22B,none
+repo_bugfix_model,8,intern-s1,intern-s1,0.078,0.208,500,A,all tagged models are OSS/open-weights,base=Intern-S1; teacher=none; InternLM open-weights family,Intern-S1,none

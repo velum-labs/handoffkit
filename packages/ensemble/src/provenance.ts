@@ -10,17 +10,17 @@
  * Here we resolve the *real* values once at module load:
  *   - `PRODUCER_GIT_SHA`  — a build-time stamp, else a checkout `git rev-parse`,
  *     else the `"unknown"` sentinel (never 40 zeros). See
- *     {@link resolveProducerGitSha} in `@fusionkit/model-gateway`.
+ *     {@link resolveProducerGitSha} in `@fusionkit/gateway`.
  *   - `PRODUCER_VERSION`  — this package's own `package.json` version.
  *
- * The resolver lives in `@fusionkit/model-gateway` (an existing ensemble
+ * The resolver lives in `@fusionkit/gateway` (an existing ensemble
  * dependency) so the gateway's `model-call-record` producer and the ensemble's
  * record producers share one strategy rather than duplicating it.
  */
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { readProducerVersion, resolveProducerGitSha } from "@fusionkit/model-gateway";
+import { readProducerVersion, resolveProducerGitSha } from "@routekit/gateway";
 
 const PACKAGE_DIR = dirname(fileURLToPath(import.meta.url));
 

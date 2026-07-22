@@ -16,7 +16,7 @@ FusionKit's product concepts start with model fusion: a single request is routed
 | Fused model | A model id that runs panel fanout + judge + synthesis. In the Node gateway, the default fused id is `fusion-panel`. |
 | Passthrough model | A direct model id for one panel member, such as `gpt`, `sonnet`, or `kimi`; it skips synthesis unless rate-limit handoff fires. |
 | `fusion-panel` | The gateway model id exposed to Codex, Claude Code, Cursor, and OpenAI-compatible clients through the Node gateway. |
-| `fusionkit/panel` | The Python router model id for `/v1/chat/completions` when calling `fusionkit serve` directly. |
+| Internal fusion aliases | Names such as `fusionkit/panel` remain internal engine mode aliases and benchmark compatibility values. Public clients use `fusion-panel` or `fusion-<name>` on the Node gateway. |
 | Handoff | Rate-limit failover from a failed passthrough turn to the fused panel. See [Rate-limit handoff](/docs/guides/rate-limit-handoff). |
 
 ## Product concepts
@@ -26,7 +26,7 @@ FusionKit's product concepts start with model fusion: a single request is routed
 | Candidate | One panel member's answer or harness trajectory before synthesis. | [Model fusion](/docs/concepts/model-fusion) |
 | Trajectory | A structured record of a harness attempt: messages, tool calls, observations, failures, and final answer. | [Model fusion](/docs/concepts/model-fusion) |
 | Fusion gateway | The local HTTP gateway that speaks the caller's native dialect while routing fused and passthrough models. | [Command reference](/docs/reference/commands) |
-| Python engine | The PyPI `fusionkit` package that serves `/v1/chat/completions` and fusion APIs. The CLI provisions it through `uvx`. | [Inference endpoint](/docs/guides/inference-endpoint) |
+| Python sidecar | The PyPI `fusionkit` package, provisioned through `uvx`, that accepts internal trajectory-fusion and native-run requests. It has no public chat or model routes. | [Package map](/docs/reference/packages) |
 | `.fusionkit/` config | The committed per-repo source of truth for panels, judge, tool defaults, run defaults, and prompts. | [Configuration](/docs/reference/configuration) |
 | Durable session | Gateway state that can be resumed with `--resume <id>` or `--continue`. | [Command reference](/docs/reference/commands) |
 | Rate-limit handoff | Fallback from a throttled vendor passthrough model to the fused panel. | [Rate-limit handoff](/docs/guides/rate-limit-handoff) |

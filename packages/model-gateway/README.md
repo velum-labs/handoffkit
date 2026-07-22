@@ -1,20 +1,28 @@
-# @fusionkit/model-gateway
+# @routekit/gateway
 
-FusionKit harness gateway and durable session store.
+Product-neutral model routing and provider egress for RouteKit.
 
-## Architecture
+The package owns the `Backend` interface, HTTP gateway, OpenAI Chat,
+Responses, Anthropic Messages and Cursor adapters, SSE handling, ACP support,
+normalized call provenance, runtime-validated router configuration, model
+catalogs, provider sources, and provider-native egress.
 
-This package translates OpenAI Responses, OpenAI Chat, Anthropic Messages, and ACP-style harness traffic into FusionKit panel or passthrough model calls.
-
-## Usage
-
-Most users should run it through `@fusionkit/cli`; library users can import `startGateway` for embedded tests or custom launchers.
+At startup `CatalogBackend` authenticates every explicitly configured provider,
+performs live model discovery, and publishes source-qualified
+`provider/model` IDs. Dispatch removes the source prefix before provider-native
+egress. An unavailable provider fails startup rather than silently shrinking
+the catalog.
 
 ```ts
-import * as fusionkitPackage from "@fusionkit/model-gateway";
+import {
+  CatalogBackend,
+  parseRouterConfig,
+  startGateway
+} from "@routekit/gateway";
 ```
 
-## Docs
-
-- Product docs: https://fusionkit.velum-labs.com
-- Maintainer reference: [../../docs/typescript-reference.md](../../docs/typescript-reference.md)
+API-key providers use registry-defined credentials and URLs. Multi-account
+subscription providers and relays are in `@routekit/accounts`; they expose the
+same source interface with per-model account eligibility and quota-aware
+selection.
+Product-specific orchestration is in `@fusionkit/gateway`.

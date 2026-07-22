@@ -1,0 +1,27 @@
+apiVersion: 1
+
+deleteDatasources:
+  - name: Amazon Managed Prometheus
+    orgId: 1
+  - name: CloudWatch
+    orgId: 1
+  - name: Athena
+    orgId: 1
+  - name: X-Ray
+    orgId: 1
+  - name: Local seeded Prometheus
+    orgId: 1
+
+datasources:
+  - name: Hypergrid Prometheus
+    uid: amp
+    type: prometheus
+    access: proxy
+    # Direct over the compose network (not the auth proxy), so Grafana needs
+    # no credential material at all.
+    url: http://prometheus:9090
+    isDefault: true
+    editable: false
+    jsonData:
+      httpMethod: POST
+      timeInterval: 5s

@@ -16,12 +16,17 @@ See also: [coding harness](quickstart-harness.md) ·
 ```bash
 pnpm add -g @fusionkit/cli      # or: npm i -g @fusionkit/cli
 fusionkit setup                 # pre-provision the Python engine (warm the uv cache)
-export OPENAI_API_KEY=...  ANTHROPIC_API_KEY=...  GEMINI_API_KEY=...
+fusionkit init                  # scaffold Fusion v4 + RouteKit config
+export PROVIDER_API_KEY=...     # whichever apiKeyEnv your router references
 ```
 
 `fusionkit setup` pulls and caches the pinned `fusionkit` synthesizer engine via
 `uvx` so the first real request is instant. Prerequisites: `uv` (ships `uvx`) and
 `git`. Run `fusionkit doctor` to verify them.
+
+Provider variables are referenced by `.routekit/router.yaml`; FusionKit v4
+reads only namespaced RouteKit model IDs. This repository's router needs
+`OPENROUTER_API_KEY`.
 
 ## 2. Start the endpoint
 
@@ -32,16 +37,15 @@ fusionkit serve --port 8787     # bring up the fused OpenAI-compatible gateway
 export FUSION_URL=http://127.0.0.1:8787
 ```
 
-`fusionkit serve` spawns the model panel, the `fusionkit serve` router (which
-fronts each model and performs synthesis), and the gateway, then prints
-front-door setup snippets and stays up until `Ctrl+C`. Add `--local` for an
-Apple-Silicon MLX panel, or `--model ID=PROVIDER:MODEL` to pick the panel
-(see the [model catalog](model-catalog.md)).
+`fusionkit serve` composes the configured RouteKit router, Python synthesis
+sidecar, and Fusion gateway, then prints front-door setup snippets and stays up
+until `Ctrl+C`.
 
 The gateway exposes the usual surface under `/v1`:
 `/v1/chat/completions`, `/v1/responses`, `/v1/messages`, `/v1/models`,
-`/v1/embeddings`, and `/health`. The fused model id is **`fusion-panel`**; each
-panel member is also addressable as a direct (non-fused) passthrough by its id.
+`/v1/embeddings`, and `/health`, plus a Cursor surface at
+`/v1/cursor/chat/completions` and `/v1/cursor/models`. The default fused model
+id is **`fusion-panel`**; named ensembles are `fusion-<name>`.
 
 ## 3. Call it with streaming
 
@@ -91,10 +95,8 @@ continue the turn, exactly as you would against the OpenAI API.
 ## Notes
 
 - **Auth.** Add `--auth-token <token>` to require `Authorization: Bearer <token>`
-  (or `x-api-key: <token>`) on every request. This is recommended if you bind beyond
-  loopback.
-- **Raw router (advanced).** `fusionkit config export-yaml` prints the derived
-  `fusionkit serve` router config if you want to run the Python router directly;
-  see [configuration](configuration.md).
+  (or `x-api-key: <token>`) on every request. It is required when `--host` binds
+  beyond loopback.
+- **Routing.** Provider-facing configuration is `.routekit/router.yaml`; see
+  [configuration](configuration.md).
 - **Cross-platform.** The cloud endpoint works on Linux, Windows, and macOS.
-  `--local` (MLX) is Apple-Silicon-only; `fusionkit doctor` reports this.

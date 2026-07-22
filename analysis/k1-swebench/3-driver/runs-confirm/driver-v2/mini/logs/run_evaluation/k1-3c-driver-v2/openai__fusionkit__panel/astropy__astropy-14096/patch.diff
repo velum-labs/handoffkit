@@ -1,0 +1,21 @@
+diff --git a/astropy/coordinates/sky_coordinate.py b/astropy/coordinates/sky_coordinate.py
+index ab475f7d0..1e5a47989 100644
+--- a/astropy/coordinates/sky_coordinate.py
++++ b/astropy/coordinates/sky_coordinate.py
+@@ -894,6 +894,16 @@ class SkyCoord(ShapedLikeNDArray):
+             if frame_cls is not None and self.frame.is_transformable_to(frame_cls):
+                 return self.transform_to(attr)
+ 
++        # Check if this attribute is a property on the class
++        # If it is, then we're likely being called as a fallback from a property error
++        # In this case, we should not mask the original error from inside the property
++        if isinstance(getattr(type(self), attr, None), property):
++            # This attribute exists as a property, so the error likely comes from
++            # inside the property's getter method. We raise a more informative error.
++            raise AttributeError(
++                f"'{self.__class__.__name__}' object raised AttributeError inside property '{attr}'"
++            )
++
+         # Fail
+         raise AttributeError(
+             f"'{self.__class__.__name__}' object has no attribute '{attr}'"

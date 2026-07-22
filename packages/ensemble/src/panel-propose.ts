@@ -19,6 +19,7 @@ import type { FusionTraceCarrier } from "@fusionkit/tracing";
 
 import { PanelGenerateOperator } from "./fusion-operators.js";
 import { FusionRuntime, StaticDAGScheduler, createArtifact } from "./runtime.js";
+import { STRAGGLER_ABANDONED, settleWithStragglerGrace } from "./run.js";
 import { chatCompletionsUrl } from "./unified-url.js";
 import type { EnsembleModel } from "./harness.js";
 
@@ -34,12 +35,15 @@ export type ProposalPanelOptions = {
   /** The caller's tool definitions / tool_choice, verbatim. */
   tools?: unknown;
   toolChoice?: unknown;
+  reasoningEffort?: string;
   /** Fallback OpenAI-compatible base URL (the shared router). */
   fusionBackendUrl: string;
   /** Per-member endpoint base URLs keyed by `EnsembleModel.id`. */
   modelEndpoints?: Record<string, string>;
   fusionApiKey?: string;
   timeoutMs?: number;
+  /** Abort unfinished siblings this long after the first successful proposal. */
+  stragglerGraceMs?: number;
   signal?: AbortSignal;
   /** Trace carrier of the enclosing turn; proposer spans nest under it. */
   trace?: FusionTraceCarrier;
@@ -48,6 +52,10 @@ export type ProposalPanelOptions = {
 
 type ChatCompletionMessage = {
   content?: unknown;
+  /** Out-of-band reasoning returned by the member router (provider-normalized). */
+  reasoning_content?: unknown;
+  /** Token-stream reasoning spelling used by local/OpenAI-compatible servers. */
+  reasoning?: unknown;
   tool_calls?: Array<{
     id?: unknown;
     function?: { name?: unknown; arguments?: unknown };
@@ -77,6 +85,15 @@ function completionToWire(input: {
 }): WireTrajectory {
   const items: Array<Record<string, unknown>> = [];
   let index = 0;
+  const reasoning =
+    typeof input.message?.reasoning_content === "string"
+      ? input.message.reasoning_content
+      : typeof input.message?.reasoning === "string"
+        ? input.message.reasoning
+        : "";
+  if (reasoning.length > 0) {
+    items.push({ index: index++, type: "reasoning", text: reasoning });
+  }
   const text = asText(input.message?.content);
   if (text.length > 0) items.push({ index: index++, type: "message", text });
   for (const call of input.message?.tool_calls ?? []) {
@@ -164,11 +181,14 @@ async function proposeOne(
         ...(options.fusionApiKey !== undefined ? { authorization: `Bearer ${options.fusionApiKey}` } : {})
       },
       body: JSON.stringify({
-        // The shared router routes by endpoint id; a dedicated endpoint ignores it.
+        // The shared router routes by namespaced model id; a dedicated backend ignores it.
         model: model.id,
         messages: options.messages,
         ...(options.tools !== undefined ? { tools: options.tools } : {}),
         ...(options.toolChoice !== undefined ? { tool_choice: options.toolChoice } : {}),
+        ...(options.reasoningEffort !== undefined
+          ? { reasoning_effort: options.reasoningEffort }
+          : {}),
         stream: false
       }),
       signal
@@ -242,9 +262,39 @@ export async function runProposalPanels(options: ProposalPanelOptions): Promise<
     // Proposal members execute nothing: the completion call is the only effect.
     sideEffects: "external_tool",
     runner: async () => {
-      const wires = await Promise.all(
-        options.models.map((model, ordinal) => proposeOne(model, ordinal, options))
-      );
+      const candidateAborts = options.models.map(() => new AbortController());
+      const wiresInFlight = options.models.map((model, ordinal) => {
+        const candidateSignal = candidateAborts[ordinal]?.signal;
+        const signal =
+          options.signal !== undefined && candidateSignal !== undefined
+            ? AbortSignal.any([options.signal, candidateSignal])
+            : (candidateSignal ?? options.signal);
+        return proposeOne(model, ordinal, {
+          ...options,
+          ...(signal !== undefined ? { signal } : {})
+        });
+      });
+      const { settled, abandonedOrdinals } = await settleWithStragglerGrace(wiresInFlight, {
+        graceMs: options.stragglerGraceMs,
+        isUsable: (wire) => wire.status === "succeeded",
+        abandon: (ordinal) =>
+          candidateAborts[ordinal]?.abort(new Error(STRAGGLER_ABANDONED))
+      });
+      const wires = settled.map((result, ordinal) => {
+        const model = options.models[ordinal];
+        if (model === undefined) throw new Error(`missing proposal model at ordinal ${ordinal}`);
+        const candidateId = `${options.id ?? "propose"}_${model.id}_${ordinal}`;
+        if (abandonedOrdinals.has(ordinal)) {
+          return failedWire(candidateId, model, STRAGGLER_ABANDONED);
+        }
+        return result.status === "fulfilled"
+          ? result.value
+          : failedWire(
+              candidateId,
+              model,
+              result.reason instanceof Error ? result.reason.message : String(result.reason)
+            );
+      });
       return wires.map((wire) => ({
         candidateId: wire.candidate_id ?? wire.trajectory_id,
         modelId: wire.model_id,

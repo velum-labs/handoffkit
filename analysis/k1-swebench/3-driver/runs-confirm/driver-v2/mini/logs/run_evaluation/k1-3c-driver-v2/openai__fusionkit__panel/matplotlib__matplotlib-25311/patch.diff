@@ -1,0 +1,27 @@
+diff --git a/lib/matplotlib/offsetbox.py b/lib/matplotlib/offsetbox.py
+index 1dee8a23d9..76033a5849 100644
+--- a/lib/matplotlib/offsetbox.py
++++ b/lib/matplotlib/offsetbox.py
+@@ -1500,6 +1500,22 @@ class DraggableBase:
+     coordinate and set a relevant attribute.
+     """
+ 
++    def __getstate__(self):
++        """Get the state of the object for pickling."""
++        state = self.__dict__.copy()
++        # Remove the canvas reference as it cannot be pickled in some backends
++        state.pop("canvas", None)
++        # Remove callback IDs as they are recreated on unpickling
++        state.pop("cids", None)
++        state.pop("_c1", None)
++        return state
++
++    def __setstate__(self, state):
++        """Restore the state of the object after unpickling."""
++        self.__dict__ = state
++        # Canvas and callbacks will be recreated when needed
++        # through normal draggable operation
++
+     def __init__(self, ref_artist, use_blit=False):
+         self.ref_artist = ref_artist
+         if not ref_artist.pickable():

@@ -1,17 +1,17 @@
-# @fusionkit/tool-codex
+# @routekit/tool-codex
 
-Codex integration for FusionKit.
+Product-neutral Codex launcher and canonical harness driver.
 
 ## Architecture
 
-This package wires the Codex CLI into FusionKit through launcher configuration and the Codex harness adapter used by panel runs.
+This package owns the one Codex configuration serializer, launcher, and driver.
 
 ## Usage
 
-Most users should run `fusionkit codex` from `@fusionkit/cli`.
+Register `codexTool` in an `@routekit/tools` registry.
 
 ```ts
-import * as fusionkitPackage from "@fusionkit/tool-codex";
+import { codexTool } from "@routekit/tool-codex";
 ```
 
 ## Docs

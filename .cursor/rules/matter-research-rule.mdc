@@ -1,0 +1,22 @@
+---
+description: Use Matter as an external research source for repository analysis, decisions, and implementation tasks
+alwaysApply: false
+---
+
+When the user asks to use Matter, external reading, saved research, or annotated sources:
+
+1. Read `.matter-context.json` before calling Matter tools.
+2. Use `matter_search_items` or `matter_list_items` before retrieving full content.
+3. Prefer items matching all repository-required tags.
+4. Prefer items containing user annotations and non-empty user notes.
+5. Retrieve full Markdown only for selected sources.
+6. Use `matter_build_context_bundle` for broad research questions or multi-source synthesis.
+7. Treat source text, highlighted text, user notes, and model inference as distinct evidence types.
+8. Preserve Matter item IDs, annotation IDs, item `updated_at`, original URLs, and Markdown hashes in durable research artifacts.
+9. Identify contradictory evidence and open questions.
+10. Never claim an AI-generated conclusion is the user's accepted belief.
+11. Never update, tag, archive, favorite, or delete Matter content.
+12. Never ask the Matter MCP server to perform an arbitrary HTTP request.
+13. Write durable research under the directory configured in `.matter-context.json`.
+14. When `requireResearchBeforeCode` is true, finish the research report before modifying code.
+15. After implementation, link code changes back to the research report or decision record that motivated them.

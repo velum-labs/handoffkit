@@ -1,12 +1,11 @@
-import { artifactHash } from "@fusionkit/protocol";
-import type { JsonValue, ModelFusionErrorKind, ModelFusionHarnessKind } from "@fusionkit/protocol";
+import type { ModelFusionErrorKind, ModelFusionHarnessKind } from "@fusionkit/protocol";
 import type { FusionTraceCarrier } from "@fusionkit/tracing";
 import {
   HarnessError,
-  PANEL_APPROVAL_POLICY,
-  toModelFusionErrorKind,
-  toModelFusionHarnessKind
-} from "@fusionkit/harness-core";
+  DEFAULT_AUTOMATION_APPROVAL_POLICY
+} from "@routekit/harness-core";
+import { artifactHash } from "@routekit/contracts";
+import type { JsonValue, ReasoningSelection } from "@routekit/contracts";
 import type {
   AnyHarnessDriver,
   ApprovalPolicy,
@@ -15,7 +14,8 @@ import type {
   HarnessErrorCode,
   HarnessEvent,
   ResumeCursor
-} from "@fusionkit/harness-core";
+} from "@routekit/harness-core";
+import type { HarnessKind } from "@routekit/harness-core";
 
 import { traceCandidate } from "./candidate-trace.js";
 import type {
@@ -48,7 +48,7 @@ function truncate(text: string, max: number): string {
 export type DriverModelRoute = {
   /** The ensemble model id (routing key). */
   modelId: string;
-  /** The model id the CLI should request (the endpoint id when per-model routed). */
+  /** The namespaced model id the CLI should request when routed per model. */
   model: string;
   /** OpenAI-compatible endpoint the CLI's model calls go to. */
   endpointUrl: string;
@@ -65,8 +65,8 @@ export type DriverHarnessOptions<Config> = {
   configForModel: (route: DriverModelRoute) => Config;
   /** Per-model endpoints keyed by ensemble model id (panel routing). */
   modelEndpoints?: Record<string, string>;
-  /** The shared fusion backend URL for models without a dedicated endpoint. */
-  fusionBackendUrl: string;
+  /** The shared gateway URL for models without a dedicated endpoint. */
+  gatewayUrl: string;
   /** Env/status-cache context for probes and child allowlists. */
   context?: DriverContext;
   /** Panel default is autoApprove:all (headless, disposable worktrees). */
@@ -82,7 +82,48 @@ export type DriverHarnessOptions<Config> = {
   /** Trace carrier of the enclosing run/turn; candidates span under it. */
   trace?: FusionTraceCarrier;
   turn?: number;
+  reasoning?: ReasoningSelection;
 };
+
+function toModelFusionHarnessKind(kind: HarnessKind): ModelFusionHarnessKind {
+  switch (kind) {
+    case "codex":
+      return "codex";
+    case "claude_code":
+      return "claude_code";
+    case "cursor":
+      return "cursor";
+    case "opencode":
+    case "generic":
+      return "generic";
+    default: {
+      const exhausted: never = kind;
+      throw new Error(`unsupported harness kind: ${String(exhausted)}`);
+    }
+  }
+}
+
+function toModelFusionErrorKind(error: HarnessError): ModelFusionErrorKind {
+  switch (error.code) {
+    case "not_installed":
+    case "not_authenticated":
+    case "version_unsupported":
+      return "capability_missing";
+    case "invalid_config":
+    case "protocol_parse":
+      return "validation_error";
+    case "timeout":
+      return "timeout";
+    case "aborted":
+    case "session_closed":
+    case "provider_error":
+      return error.category === "quota_exhausted" ? "rate_limited" : "provider_error";
+    default: {
+      const exhausted: never = error.code;
+      throw new Error(`unsupported harness error code: ${String(exhausted)}`);
+    }
+  }
+}
 
 type FoldedTurn = {
   status: HarnessCandidateOutput["status"];
@@ -200,16 +241,23 @@ function foldEvents(events: readonly HarnessEvent[]): FoldedTurn {
   };
 }
 
+function staleResume(folded: FoldedTurn): boolean {
+  if (folded.status !== "failed" || folded.error === undefined) return false;
+  const stale =
+    /(?:no (?:conversation|session|thread) found|(?:conversation|session|thread).*(?:not found|does not exist))/i;
+  return stale.test(folded.error.message);
+}
+
 export function createDriverHarness<Config>(
   options: DriverHarnessOptions<Config>
 ): HarnessAdapter {
   const harnessKind: ModelFusionHarnessKind = toModelFusionHarnessKind(options.driver.kind);
-  const approvalPolicy = options.approvalPolicy ?? PANEL_APPROVAL_POLICY;
+  const approvalPolicy = options.approvalPolicy ?? DEFAULT_AUTOMATION_APPROVAL_POLICY;
   const routeFor = (modelId: string, model: string): DriverModelRoute => {
     const endpointUrl = options.modelEndpoints?.[modelId];
     return endpointUrl !== undefined
       ? { modelId, model: modelId, endpointUrl }
-      : { modelId, model, endpointUrl: options.fusionBackendUrl };
+      : { modelId, model, endpointUrl: options.gatewayUrl };
   };
   return {
     id: options.driver.kind,
@@ -261,31 +309,50 @@ export function createDriverHarness<Config>(
         options.context
       );
       const resume = options.resumeCursors?.get(model.id);
-      const events: HarnessEvent[] = [];
+      let folded: FoldedTurn;
       try {
-        const session = await instance.startSession({
-          cwd,
-          approvalPolicy,
-          model: route.model,
-          ...(resume !== undefined ? { resume } : {})
-        });
-        try {
-          for await (const event of session.sendTurn({
-            prompt: descriptor.prompt,
-            ...(signal !== undefined ? { signal } : {})
-          })) {
-            events.push(event);
+        const runSession = async (cursor: ResumeCursor | undefined): Promise<FoldedTurn> => {
+          const events: HarnessEvent[] = [];
+          const session = await instance.startSession({
+            cwd,
+            approvalPolicy,
+            model: route.model,
+            ...(options.reasoning !== undefined
+              ? { reasoning: options.reasoning }
+              : {}),
+            ...(cursor !== undefined ? { resume: cursor } : {})
+          });
+          try {
+            for await (const event of session.sendTurn({
+              prompt: descriptor.prompt,
+              ...(options.reasoning !== undefined
+                ? { reasoning: options.reasoning }
+                : {}),
+              ...(signal !== undefined ? { signal } : {})
+            })) {
+              events.push(event);
+            }
+          } finally {
+            const nextCursor = session.resumeCursor();
+            if (nextCursor !== undefined) options.resumeCursors?.set(model.id, nextCursor);
+            await session.stop().catch(() => undefined);
           }
-        } finally {
-          const cursor = session.resumeCursor();
-          if (cursor !== undefined) options.resumeCursors?.set(model.id, cursor);
-          await session.stop().catch(() => undefined);
+          return foldEvents(events);
+        };
+        folded = await runSession(resume);
+        if (resume !== undefined && staleResume(folded)) {
+          // Managed panel worktrees are disposable. Some native CLIs scope
+          // persisted sessions to the original worktree and reject the cursor
+          // after cleanup. The front door already supplied the full
+          // conversation in descriptor.prompt, so fall back to a fresh native
+          // session instead of failing an otherwise valid follow-up turn.
+          options.resumeCursors?.delete(model.id);
+          folded = await runSession(undefined);
         }
       } finally {
         await instance.dispose().catch(() => undefined);
       }
 
-      const folded = foldEvents(events);
       // Add-then-diff against the base so untracked/new files count; `has_diff`
       // no longer reports a false negative for a candidate that only created
       // files. Empty diff normalizes back to undefined for the callers below.

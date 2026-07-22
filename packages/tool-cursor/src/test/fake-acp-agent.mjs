@@ -45,6 +45,17 @@ class FakeAgent {
     return {};
   }
 
+  async extMethod(method, params) {
+    if (
+      method !== "session/set_config_option" ||
+      params?.configId !== "reasoning" ||
+      params?.value !== "deep"
+    ) {
+      throw new Error(`unexpected extension request: ${method}`);
+    }
+    return { configOptions: [] };
+  }
+
   async prompt(params) {
     const text = params.prompt.map((block) => (block.type === "text" ? block.text : "")).join("");
     if (text.includes("APPROVE")) {

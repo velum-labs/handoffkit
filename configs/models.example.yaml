@@ -1,174 +1,30 @@
-endpoints:
-  - id: qwen-fast
-    provider: mlx-lm
-    model: mlx-community/Qwen3.5-9B-MLX-4bit
-    base_url: http://127.0.0.1:8101
-    api_key: not-needed
-    max_context: 32768
-    estimated_memory_gb: 6.0
-    capabilities:
-      structured_output: false
-      tool_calls: false
-      streaming: true
-    pricing:
-      input_per_1m_tokens: null
-      output_per_1m_tokens: null
-      currency: USD
-    tags: [fast, reasoning]
-  - id: gemma-writer
-    provider: mlx-lm
-    model: mlx-community/gemma-4-4b-it-4bit
-    base_url: http://127.0.0.1:8102
-    api_key: not-needed
-    max_context: 8192
-    estimated_memory_gb: 3.0
-    capabilities:
-      structured_output: false
-      tool_calls: false
-      streaming: true
-    pricing:
-      input_per_1m_tokens: null
-      output_per_1m_tokens: null
-      currency: USD
-    tags: [writer]
-  - id: openai-example
-    provider: openai
-    model: gpt-4.1-mini
-    base_url: https://api.openai.com
-    api_key_env: OPENAI_API_KEY
-    max_context: 128000
-    timeout_s: 120.0
-    capabilities:
-      structured_output: true
-      tool_calls: true
-      streaming: true
-    pricing:
-      input_per_1m_tokens: 0.4
-      output_per_1m_tokens: 1.6
-      currency: USD
-    tags: [cloud, example]
-  - id: anthropic-example
-    provider: anthropic
-    model: claude-sonnet-4-5
-    base_url: https://api.anthropic.com
-    api_key_env: ANTHROPIC_API_KEY
-    max_context: 200000
-    capabilities:
-      structured_output: false
-      tool_calls: true
-      streaming: true
-    pricing:
-      input_per_1m_tokens: 3.0
-      output_per_1m_tokens: 15.0
-      currency: USD
-    tags: [cloud, example]
-  - id: google-example
-    provider: google
-    model: gemini-2.5-flash
-    base_url: https://generativelanguage.googleapis.com
-    api_key_env: GEMINI_API_KEY
-    max_context: 1000000
-    capabilities:
-      structured_output: true
-      tool_calls: true
-      streaming: true
-    pricing:
-      input_per_1m_tokens: 0.35
-      output_per_1m_tokens: 1.05
-      currency: USD
-    tags: [cloud, example]
-  # OpenRouter fronts hundreds of models behind one OpenAI-compatible API; the
-  # `model` is OpenRouter's `vendor/model` id (optionally with a `:variant`
-  # suffix such as `:free`). No `/v1` in the base_url -- the client appends it.
-  - id: openrouter-example
-    provider: openrouter
-    model: anthropic/claude-sonnet-4.5
-    base_url: https://openrouter.ai/api
-    api_key_env: OPENROUTER_API_KEY
-    max_context: 200000
-    capabilities:
-      structured_output: true
-      tool_calls: true
-      streaming: true
-    pricing:
-      input_per_1m_tokens: 3.0
-      output_per_1m_tokens: 15.0
-      currency: USD
-    tags: [cloud, example]
-  - id: openai-compatible-example
-    provider: openai-compatible
-    model: compatible-model
-    base_url: http://127.0.0.1:9000
-    api_key_env: COMPATIBLE_API_KEY
-    max_context: 32768
-    capabilities:
-      structured_output: null
-      tool_calls: null
-      streaming: null
-    pricing:
-      input_per_1m_tokens: null
-      output_per_1m_tokens: null
-      currency: USD
-    tags: [compatible, example]
-  # --- Subscription endpoints ----------------------------------------------
-  # These reuse the OAuth login already stored by the Claude Code / Codex CLIs
-  # (read-only; FusionKit never refreshes or writes the tokens back). The CLI
-  # owns the token lifecycle: if requests start failing with an auth error, run
-  # `claude` or `codex login` to refresh.
-  #
-  # ToS CAVEAT: Anthropic and OpenAI restrict reusing subscription OAuth tokens
-  # in third-party tooling (Anthropic's 2026 policy may block this for Claude).
-  # This is intended for personal/local use only -- use at your own risk.
-  #
-  # `pricing` is left null on purpose: a subscription has no per-token billing,
-  # so cost estimates stay "unknown" rather than reporting a wrong dollar amount.
-  - id: claude-code-subscription
-    provider: anthropic
-    model: claude-sonnet-4-5
-    auth:
-      mode: claude-code
-    max_context: 200000
-    capabilities:
-      structured_output: false
-      tool_calls: true
-      streaming: true
-    pricing:
-      input_per_1m_tokens: null
-      output_per_1m_tokens: null
-      currency: USD
-    tags: [subscription, claude-code]
-  - id: codex-subscription
-    provider: codex
-    model: gpt-5.5-codex
-    auth:
-      mode: codex
-    max_context: 256000
-    capabilities:
-      structured_output: false
-      tool_calls: false
-      streaming: true
-    pricing:
-      input_per_1m_tokens: null
-      output_per_1m_tokens: null
-      currency: USD
-    tags: [subscription, codex]
-default_model: qwen-fast
-judge_model: qwen-fast
-synthesizer_model: qwen-fast
-default_mode: router
-sample_count: 4
-self_temperatures: [0.2, 0.4, 0.6, 0.8]
-# Subscription endpoints are first-class panel members: once configured they
-# are selectable by id at the unified `fusionkit serve` endpoint and can join
-# any router/panel/judge/synth role alongside API-key and local models.
-panel_models: [qwen-fast, gemma-writer, claude-code-subscription]
-sampling:
-  temperature: 0.2
-  top_p: 0.95
-  max_tokens: 1024
-budget:
-  max_candidates: 8
-  wall_clock_s: 300
-  max_cost: null
-  max_tool_rounds: 4
-  max_tool_calls: 16
+# Current RouteKit router schema. Use with:
+#
+#   routekit --config configs/models.example.yaml serve --no-portless --port 8787
+#
+# Fusion v4 references live namespaced provider/model ids. Provider URLs,
+# credentials, wire protocols, and discovery metadata come from the registry.
+providers:
+  openai: {}
+  anthropic: {}
+  google: {}
+  openrouter: {}
+
+  # Start CLIProxyAPI separately, then enable its live catalog with:
+  #   routekit providers add cliproxy
+  cliproxy: {}
+
+  # Log in any number of named accounts through isolated official CLI profiles:
+  #   routekit accounts login claude-code --name personal
+  #   routekit accounts login claude-code --name work
+  claude-code:
+    strategy: capacity_weighted
+    switchThreshold: 0.9
+
+  #   routekit accounts login codex --name personal
+  #   routekit accounts login codex --name work
+  codex:
+    strategy: capacity_weighted
+    switchThreshold: 0.9
+
+defaultModel: openai/gpt-5.5

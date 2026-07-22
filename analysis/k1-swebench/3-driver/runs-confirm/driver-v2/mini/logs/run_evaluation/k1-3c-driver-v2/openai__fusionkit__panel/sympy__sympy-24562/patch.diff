@@ -1,0 +1,49 @@
+diff --git a/sympy/core/numbers.py b/sympy/core/numbers.py
+index 52f7ea45ad..2b3819cad1 100644
+--- a/sympy/core/numbers.py
++++ b/sympy/core/numbers.py
+@@ -1625,17 +1625,38 @@ def __new__(cls, p, q=None, gcd=None):
+             q = 1
+             gcd = 1
+ 
++        # Handle string conversion for p using fractions.Fraction
+         if not isinstance(p, SYMPY_INTS):
+-            p = Rational(p)
+-            q *= p.q
+-            p = p.p
++            if isinstance(p, str):
++                # Use fractions.Fraction to convert string to rational number
++                p_frac = fractions.Fraction(p)
++                p = p_frac.numerator
++                # Convert q to integer before multiplication if q is string
++                if isinstance(q, str):
++                    q = int(q)
++                q *= p_frac.denominator
++            else:
++                # For non-string, non-SYMPY_INTS types (like float)
++                p_rational = Rational(p)
++                # Convert q to integer before multiplication if q is string
++                if isinstance(q, str):
++                    q = int(q)
++                q *= p_rational.q
++                p = p_rational.p
+         else:
+             p = int(p)
+ 
++        # Handle string conversion for q using fractions.Fraction
+         if not isinstance(q, SYMPY_INTS):
+-            q = Rational(q)
+-            p *= q.q
+-            q = q.p
++            if isinstance(q, str):
++                # Use fractions.Fraction to convert string to rational number
++                q_frac = fractions.Fraction(q)
++                p *= q_frac.denominator
++                q = q_frac.numerator
++            else:
++                q_rational = Rational(q)
++                p *= q_rational.q
++                q = q_rational.p
+         else:
+             q = int(q)
+ 

@@ -9,11 +9,20 @@ import {
   chatToAnthropicMessage,
   claudeModelAlias,
   mapStopReason,
-  openAiSseToAnthropic
+  openAiSseToAnthropic,
+  resolveClaudeModelAlias
 } from "../adapters/anthropic.js";
 import { OpenAiBackend } from "../backend.js";
+import { CatalogBackend } from "../router.js";
 import { MODEL_CALL_ID_HEADER } from "../provenance.js";
 import { startGateway } from "../server.js";
+import type { ProviderRelay } from "../server.js";
+import {
+  ANTHROPIC_MESSAGE_CONTENT,
+  ANTHROPIC_REQUEST_METADATA,
+  type AnthropicNativeContentBlock,
+  type AnthropicRequestMetadata
+} from "../adapters/openai-chat-wire.js";
 
 /**
  * M2 coverage: the Anthropic Messages adapter against a mock OpenAI backend.
@@ -22,8 +31,8 @@ import { startGateway } from "../server.js";
  */
 
 test("anthropicModelsResponse aliases every model past Claude Code's claude/anthropic filter", async () => {
-  const res = anthropicModelsResponse("fusion-panel", [
-    "fusion-panel",
+  const res = anthropicModelsResponse("route-primary", [
+    "route-primary",
     "claude-opus-4-8",
     "gpt-5.5",
     "mlx-community/Qwen3-1.7B-4bit"
@@ -33,7 +42,7 @@ test("anthropicModelsResponse aliases every model past Claude Code's claude/anth
   assert.ok(body.data.every((model) => model.id.startsWith("claude") || model.id.startsWith("anthropic")));
   // ...non-Anthropic ids are aliased, Anthropic-family ids pass through as-is.
   assert.deepEqual(body.data.map((model) => model.id), [
-    "claude-fusion-panel",
+    "claude-route-primary",
     "claude-opus-4-8",
     "claude-gpt-5.5",
     "claude-mlx-community/Qwen3-1.7B-4bit"
@@ -42,6 +51,68 @@ test("anthropicModelsResponse aliases every model past Claude Code's claude/anth
   const gpt = body.data.find((model) => model.id === "claude-gpt-5.5");
   assert.equal(gpt?.display_name, "gpt-5.5");
   assert.equal(claudeModelAlias("claude-opus-4-8"), "claude-opus-4-8");
+  assert.equal(
+    resolveClaudeModelAlias("claude-gpt-5.5", [
+      "route-primary",
+      "gpt-5.5"
+    ]),
+    "gpt-5.5"
+  );
+  assert.equal(
+    resolveClaudeModelAlias("claude-opus-4-8", ["gpt-5.5"]),
+    "claude-opus-4-8"
+  );
+});
+
+test("anthropicModelsResponse exposes Claude subscription models as bare native ids", async () => {
+  const response = anthropicModelsResponse(
+    "claude-code/claude-sonnet-4-6",
+    [
+      "claude-code/claude-sonnet-4-6",
+      "codex/gpt-5.5",
+      "anthropic/claude-opus-4-8"
+    ],
+    [
+      {
+        publicId: "claude-code/claude-sonnet-4-6",
+        nativeId: "claude-sonnet-4-6",
+        provider: "claude-code"
+      },
+      {
+        publicId: "codex/gpt-5.5",
+        nativeId: "gpt-5.5",
+        provider: "codex"
+      },
+      {
+        publicId: "anthropic/claude-opus-4-8",
+        nativeId: "claude-opus-4-8",
+        provider: "anthropic"
+      }
+    ]
+  );
+  const body = (await response.json()) as {
+    data: Array<{ id: string; display_name: string }>;
+  };
+  assert.deepEqual(body.data, [
+    {
+      id: "claude-sonnet-4-6",
+      display_name: "claude-sonnet-4-6",
+      created_at: new Date(0).toISOString(),
+      type: "model"
+    },
+    {
+      id: "claude-codex/gpt-5.5",
+      display_name: "codex/gpt-5.5",
+      created_at: new Date(0).toISOString(),
+      type: "model"
+    },
+    {
+      id: "anthropic/claude-opus-4-8",
+      display_name: "anthropic/claude-opus-4-8",
+      created_at: new Date(0).toISOString(),
+      type: "model"
+    }
+  ]);
 });
 
 test("anthropicToChat tolerates thinking: null (same failure class as Responses reasoning: null)", () => {
@@ -171,6 +242,94 @@ test("anthropicToChat treats explicit null optional fields as absent", () => {
   assert.equal(chat.tool_choice, undefined);
 });
 
+test("anthropicToChat keeps disabled thinking disabled despite output effort", () => {
+  const chat = anthropicToChat(
+    {
+      max_tokens: 4096,
+      thinking: { type: "disabled" },
+      output_config: { effort: "max" },
+      messages: [{ role: "user", content: "answer directly" }]
+    },
+    "gpt-route"
+  );
+  assert.equal(chat.reasoning_effort, undefined);
+});
+
+test("anthropicToChat preserves exact controls and signed/redacted history in-process", () => {
+  const chat = anthropicToChat(
+    {
+      model: "claude-x",
+      max_tokens: 4096,
+      thinking: { type: "adaptive", display: "omitted" },
+      output_config: { effort: "xhigh" },
+      messages: [
+        { role: "user", content: "continue" },
+        {
+          role: "assistant",
+          content: [
+            {
+              type: "thinking",
+              thinking: "private",
+              signature: "sig-valid"
+            },
+            { type: "redacted_thinking", data: "opaque" },
+            {
+              type: "tool_use",
+              id: "tool_1",
+              name: "read",
+              input: { path: "a.ts" }
+            }
+          ]
+        }
+      ]
+    },
+    "claude-x"
+  ) as Record<PropertyKey, unknown>;
+  const metadata = chat[ANTHROPIC_REQUEST_METADATA] as
+    | AnthropicRequestMetadata
+    | undefined;
+  assert.deepEqual(metadata, {
+    thinking: { type: "adaptive", display: "omitted" },
+    output_config: { effort: "xhigh" }
+  });
+  assert.equal(chat.reasoning_effort, "xhigh");
+  const assistant = (chat.messages as Array<Record<PropertyKey, unknown>>)[1];
+  const native = assistant?.[ANTHROPIC_MESSAGE_CONTENT] as
+    | AnthropicNativeContentBlock[]
+    | undefined;
+  assert.deepEqual(native?.map((block) => block.type), [
+    "thinking",
+    "redacted_thinking",
+    "tool_use"
+  ]);
+  assert.equal(
+    (native?.[0] as { signature?: string } | undefined)?.signature,
+    "sig-valid"
+  );
+});
+
+test("anthropicToChat never replays synthetic thinking with an empty signature", () => {
+  const chat = anthropicToChat(
+    {
+      messages: [
+        {
+          role: "assistant",
+          content: [
+            { type: "thinking", thinking: "display only", signature: "" },
+            { type: "text", text: "answer" }
+          ]
+        }
+      ]
+    },
+    "claude-x"
+  ) as { messages: Array<Record<PropertyKey, unknown>> };
+  assert.equal(
+    chat.messages[0]?.[ANTHROPIC_MESSAGE_CONTENT],
+    undefined
+  );
+  assert.equal(chat.messages[0]?.content, "answer");
+});
+
 test("anthropicToChat projects typed client tools but excludes server-executed tools", () => {
   const chat = anthropicToChat(
     {
@@ -235,9 +394,8 @@ test("anthropicToChat groups parallel tool_use into one assistant message", () =
   );
 });
 
-test("anthropic streaming starts eagerly and pings during the panel phase", async () => {
-  // A never-ending upstream simulates the silent fusion panel phase before the
-  // judge's first token.
+test("anthropic streaming starts eagerly and pings while the upstream is silent", async () => {
+  // A never-ending upstream simulates a slow provider before its first token.
   let upstreamController!: ReadableStreamDefaultController<Uint8Array>;
   const upstream = new ReadableStream<Uint8Array>({
     start(controller) {
@@ -275,7 +433,7 @@ test("anthropic streaming starts eagerly and pings during the panel phase", asyn
   }
 });
 
-test("streams a fused tool call end to end as Anthropic tool_use blocks", async () => {
+test("streams a routed tool call end to end as Anthropic tool_use blocks", async () => {
   // OpenAI-chat SSE with a tool call whose arguments arrive fragmented across
   // chunks, then a tool_calls finish. The adapter must reconstruct one tool_use
   // block with the fully-merged JSON input.
@@ -331,6 +489,28 @@ test("truncated stream (no finish_reason) surfaces an Anthropic error, not end_t
   assert.ok(!out.includes('"stop_reason":"end_turn"'), "truncation must not fabricate a clean end_turn");
 });
 
+test("an OpenAI mid-stream error becomes a native Anthropic error event", async () => {
+  const encoder = new TextEncoder();
+  const upstream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(
+        encoder.encode(
+          'data: {"error":{"message":"provider overloaded","type":"provider_error"}}\n\n'
+        )
+      );
+      controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+      controller.close();
+    }
+  });
+  const output = await new Response(openAiSseToAnthropic(upstream, "claude-x")).text();
+
+  assert.match(output, /event: error/);
+  assert.match(output, /provider overloaded/);
+  assert.match(output, /provider_error/);
+  assert.doesNotMatch(output, /incomplete_stream/);
+  assert.doesNotMatch(output, /"stop_reason":"end_turn"/);
+});
+
 test("chatToAnthropicMessage produces a text content block", () => {
   const message = chatToAnthropicMessage(
     {
@@ -345,6 +525,186 @@ test("chatToAnthropicMessage produces a text content block", () => {
   assert.equal(content[0]?.type, "text");
   assert.equal(content[0]?.text, "hi");
   assert.equal(message.stop_reason, "end_turn");
+});
+
+test("chatToAnthropicMessage restores signed and redacted native reasoning blocks", () => {
+  const message = chatToAnthropicMessage(
+    {
+      id: "cmpl-native",
+      choices: [
+        {
+          message: {
+            content: "answer",
+            reasoning: "visible thought",
+            reasoning_content: "**gateway narration**",
+            reasoning_details: [
+              {
+                type: "thinking",
+                index: 0,
+                thinking: "visible thought",
+                signature: "sig-native"
+              },
+              {
+                type: "redacted_thinking",
+                index: 1,
+                data: "opaque-native"
+              }
+            ]
+          },
+          finish_reason: "stop"
+        }
+      ]
+    },
+    "claude-x"
+  );
+  const content = message.content as Array<Record<string, unknown>>;
+  assert.deepEqual(content.map((block) => block.type), [
+    "thinking",
+    "redacted_thinking",
+    "thinking",
+    "text"
+  ]);
+  assert.equal(content[0]?.signature, "sig-native");
+  assert.equal(content[1]?.data, "opaque-native");
+  assert.equal(content[2]?.thinking, "gateway narration");
+});
+
+test("Anthropic response conversion ignores malformed untrusted reasoning details", () => {
+  const message = chatToAnthropicMessage(
+    {
+      choices: [
+        {
+          message: {
+            content: "safe",
+            reasoning_details: [
+              { type: "attacker_block", index: 0, phase: "start", data: "leak" },
+              { type: "redacted_thinking", index: 1, data: 42 }
+            ] as never
+          },
+          finish_reason: "stop"
+        }
+      ]
+    },
+    "claude-x"
+  );
+  assert.deepEqual(
+    (message.content as Array<Record<string, unknown>>).map((block) => block.type),
+    ["text"]
+  );
+});
+
+test("chatToAnthropicMessage restores provider-native stop metadata", () => {
+  const message = chatToAnthropicMessage(
+    {
+      choices: [
+        {
+          message: { content: "bounded" },
+          finish_reason: "stop",
+          anthropic_stop_reason: "stop_sequence",
+          anthropic_stop_sequence: "<END>"
+        }
+      ]
+    },
+    "claude-x"
+  );
+  assert.equal(message.stop_reason, "stop_sequence");
+  assert.equal(message.stop_sequence, "<END>");
+});
+
+test("openAiSseToAnthropic restores native thinking lifecycle and signature deltas", async () => {
+  const encoder = new TextEncoder();
+  const chunks = [
+    {
+      reasoning_details: [
+        { type: "thinking", index: 0, phase: "start", signature: "" }
+      ]
+    },
+    {
+      reasoning: "native thought",
+      reasoning_details: [
+        {
+          type: "thinking",
+          index: 0,
+          phase: "delta",
+          thinking: "native thought"
+        }
+      ]
+    },
+    { reasoning_content: "**gateway narration**\n\n" },
+    {
+      reasoning_details: [
+        {
+          type: "thinking",
+          index: 0,
+          phase: "signature",
+          signature: "sig-stream"
+        }
+      ]
+    },
+    {
+      reasoning_details: [
+        { type: "thinking", index: 0, phase: "stop" }
+      ]
+    },
+    {
+      reasoning_details: [
+        {
+          type: "redacted_thinking",
+          index: 1,
+          phase: "block",
+          data: "opaque-stream"
+        }
+      ]
+    },
+    { content: "answer" }
+  ];
+  const upstream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      for (const delta of chunks) {
+        controller.enqueue(
+          encoder.encode(
+            `data: ${JSON.stringify({
+              choices: [{ delta, finish_reason: null }]
+            })}\n\n`
+          )
+        );
+      }
+      controller.enqueue(
+        encoder.encode(
+          'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}\n\n'
+        )
+      );
+      controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+      controller.close();
+    }
+  });
+  const text = await new Response(
+    openAiSseToAnthropic(upstream, "claude-x")
+  ).text();
+  assert.match(text, /"type":"thinking_delta","thinking":"native thought"/);
+  assert.match(text, /"type":"signature_delta","signature":"sig-stream"/);
+  assert.match(
+    text,
+    /"type":"thinking_delta","thinking":"gateway narration\\n\\n"/
+  );
+  assert.match(text, /"type":"redacted_thinking","data":"opaque-stream"/);
+  assert.equal(
+    text.match(/"type":"thinking_delta","thinking":"native thought"/g)?.length,
+    1,
+    "portable reasoning must not duplicate the native detail delta"
+  );
+  assert.ok(
+    text.indexOf('"type":"signature_delta"') <
+      text.indexOf('"thinking":"gateway narration')
+  );
+  assert.ok(
+    text.indexOf('"thinking":"gateway narration') <
+      text.indexOf('"type":"redacted_thinking"')
+  );
+  assert.ok(
+    text.indexOf('"type":"redacted_thinking"') <
+      text.indexOf('"type":"text_delta"')
+  );
 });
 
 test("mapStopReason maps tool_calls to tool_use", () => {
@@ -372,6 +732,34 @@ test("serves a non-streaming Anthropic message end to end", async () => {
     assert.equal(json.content[0]?.text, "Hello there");
     // Upstream got the backend model, not the claude id.
     assert.equal(mock.lastChatBody()?.model, "local-model");
+  } finally {
+    await gateway.close();
+    await mock.close();
+  }
+});
+
+test("rejects impossible Anthropic thinking budgets before provider routing", async () => {
+  const mock = await startMock();
+  const gateway = await startGateway({
+    backend: new OpenAiBackend({ baseUrl: `${mock.url}/v1`, defaultModel: "gpt-route" })
+  });
+  try {
+    const response = await fetch(`${gateway.url()}/v1/messages`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "anthropic-version": "2023-06-01"
+      },
+      body: JSON.stringify({
+        model: "claude-gpt-route",
+        max_tokens: 2048,
+        thinking: { type: "enabled", budget_tokens: 2048 },
+        messages: [{ role: "user", content: "think" }]
+      })
+    });
+    assert.equal(response.status, 400);
+    assert.equal(mock.lastChatBody(), undefined);
+    assert.match(await response.text(), /budget_tokens must be less than max_tokens/);
   } finally {
     await gateway.close();
     await mock.close();
@@ -425,5 +813,139 @@ test("estimates tokens and serves Anthropic discovery", async () => {
   } finally {
     await gateway.close();
     await mock.close();
+  }
+});
+
+test("Claude picker aliases use the canonical catalog and pooled native relay", async () => {
+  const sourceCalls: string[] = [];
+  const source = (sourceId: "claude-code" | "codex") => ({
+    sourceId,
+    discoverModels: async () => [
+      {
+        id:
+          sourceId === "claude-code"
+            ? "claude-sonnet-4-6"
+            : "gpt-5.5"
+      }
+    ],
+    chat: async (body: unknown) => {
+      sourceCalls.push((body as { model: string }).model);
+      return Response.json({
+        id: "chatcmpl_cross_provider",
+        choices: [
+          {
+            index: 0,
+            message: { role: "assistant", content: "CROSS_PROVIDER_OK" },
+            finish_reason: "stop"
+          }
+        ],
+        usage: { prompt_tokens: 1, completion_tokens: 1 }
+      });
+    },
+    embeddings: async () => Response.json({})
+  });
+  const backend = await CatalogBackend.create({
+    config: {
+      providers: { "claude-code": {}, codex: {} },
+      defaultModel: "claude-code/claude-sonnet-4-6"
+    },
+    sources: {
+      "claude-code": source("claude-code"),
+      codex: source("codex")
+    }
+  });
+  const relayedBodies: Array<Record<string, unknown>> = [];
+  const relay: ProviderRelay = {
+    dialect: "anthropic",
+    shouldRelay: () => false,
+    relay: async (_headers, body) => {
+      relayedBodies.push(body as unknown as Record<string, unknown>);
+      return Response.json({
+        id: "msg_native",
+        type: "message",
+        role: "assistant",
+        model: (body as { model: string }).model,
+        content: [{ type: "text", text: "NATIVE_OK" }],
+        stop_reason: "end_turn",
+        stop_sequence: null,
+        usage: { input_tokens: 1, output_tokens: 1 }
+      });
+    }
+  };
+  const gateway = await startGateway({
+    backend,
+    providerRelays: { anthropic: relay }
+  });
+  try {
+    const catalog = (await (
+      await fetch(`${gateway.url()}/v1/models`, {
+        headers: { "anthropic-version": "2023-06-01" }
+      })
+    ).json()) as {
+      data: Array<{ id: string; display_name: string }>;
+    };
+    assert.deepEqual(
+      catalog.data.map(({ id, display_name }) => [id, display_name]),
+      [
+        ["claude-codex/gpt-5.5", "codex/gpt-5.5"],
+        ["claude-sonnet-4-6", "claude-sonnet-4-6"]
+      ]
+    );
+
+    for (const model of [
+      "claude-sonnet-4-6",
+      "claude-code/claude-sonnet-4-6"
+    ]) {
+      const response = await fetch(`${gateway.url()}/v1/messages`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "anthropic-version": "2023-06-01"
+        },
+        body: JSON.stringify({
+          model,
+          max_tokens: 32,
+          system: "Preserve native Anthropic fields.",
+          messages: [{ role: "user", content: "hi" }]
+        })
+      });
+      assert.equal(response.status, 200);
+      assert.equal(
+        ((await response.json()) as { content: Array<{ text: string }> })
+          .content[0]?.text,
+        "NATIVE_OK"
+      );
+    }
+    assert.deepEqual(relayedBodies.map((body) => body.model), [
+      "claude-sonnet-4-6",
+      "claude-sonnet-4-6"
+    ]);
+    assert.ok(
+      relayedBodies.every(
+        (body) => body.system === "Preserve native Anthropic fields."
+      )
+    );
+    assert.deepEqual(sourceCalls, []);
+
+    const unknown = await fetch(`${gateway.url()}/v1/messages`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "anthropic-version": "2023-06-01"
+      },
+      body: JSON.stringify({
+        model: "claude-not-real",
+        max_tokens: 32,
+        messages: [{ role: "user", content: "hi" }]
+      })
+    });
+    assert.equal(unknown.status, 400);
+    assert.match(await unknown.text(), /unknown model/);
+    assert.deepEqual(relayedBodies.map((body) => body.model), [
+      "claude-sonnet-4-6",
+      "claude-sonnet-4-6"
+    ]);
+  } finally {
+    await gateway.close();
   }
 });

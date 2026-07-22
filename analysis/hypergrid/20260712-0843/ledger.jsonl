@@ -1,0 +1,4 @@
+{"ts": "2026-07-12T07:10Z", "action": "smoke", "family": "smoke-*", "shards": 9, "est_usd": 0.1, "metered_usd_after": 0.0093}
+{"ts": "2026-07-12T08:20Z", "action": "key-smokes", "family": "preflight", "shards": 5, "est_usd": 0.01, "metered_usd_after": 0.011}
+{"ts": "2026-07-12T08:47Z", "action": "apply", "family": "solo-* (11 cells x 110)", "shards": 1210, "est_usd": 22.0, "metered_usd_after": null}
+{"ts": "2026-07-12T08:48Z", "action": "apply", "family": "anchor-* rung 60", "shards": 120, "est_usd": 21.0, "metered_usd_after": null}

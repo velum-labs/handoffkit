@@ -8,16 +8,16 @@ import {
 import type {
   ArtifactRef,
   HarnessRunResultV1,
-  JsonValue,
-  ModelFusionCapabilityStatus,
   ModelFusionHarnessKind,
   ModelFusionSideEffects
 } from "@fusionkit/protocol";
 import { gitText } from "@fusionkit/workspace";
+import type { CapabilityStatus, JsonValue } from "@routekit/contracts";
 
 import {
   COMMAND_DASHBOARD_CAPABILITIES,
   createCommandHarness,
+  createDriverHarness,
   createMockHarness,
   MOCK_DASHBOARD_CAPABILITIES,
   MOCK_DASHBOARD_IDENTITY,
@@ -29,11 +29,45 @@ import type {
   HarnessAdapter,
   HarnessCapabilities
 } from "@fusionkit/ensemble";
-import { ensureRunOutputDir } from "@fusionkit/runtime-utils";
-import { envFlagEnabled, markdownTable, readEnv } from "@fusionkit/tools";
-import type { ToolDashboardMetadata } from "@fusionkit/tools";
+import { ensureRunOutputDir, markdownTable } from "@routekit/runtime";
+import type { ToolCapabilityGrade } from "@routekit/tools";
 
 import { toolRegistry } from "./tools.js";
+
+type ToolDashboardMetadata = {
+  id: string;
+  harnessKind: ModelFusionHarnessKind;
+  displayName: string;
+  availability: HarnessAvailability;
+  capabilities: HarnessCapabilities;
+  notes: string[];
+  makeMatrixHarness: (input: {
+    env: Record<string, string | undefined>;
+    repo?: string;
+    timeoutMs?: number;
+  }) => HarnessAdapter;
+  credentialSkipReason: (env: Record<string, string | undefined>) => string | undefined;
+  smoke: {
+    taskId: string;
+    model: EnsembleModel;
+    sideEffects: ModelFusionSideEffects;
+    allowedTools: string[];
+    makeHarness: () => HarnessAdapter;
+  };
+  liveSmoke?: {
+    taskId: string;
+    envName: string;
+    prompt: string;
+    modelEnvName: string;
+    defaultModel: string;
+    makeHarness: (env: Record<string, string | undefined>) => HarnessAdapter;
+  };
+};
+
+function envFlagEnabled(env: Record<string, string | undefined>, name: string): boolean {
+  const value = env[name];
+  return value === "1" || value?.toLowerCase() === "true";
+}
 
 const PRODUCER_GIT_SHA = "0".repeat(40);
 const PRODUCER = "handoffkit-ensemble";
@@ -45,6 +79,8 @@ const DEFAULT_COMMAND_SUCCESS = "printf command-ok";
 const DEFAULT_COMMAND_FAILURE = "exit 7";
 const DEFAULT_OUTPUT_DIR = ".fusionkit/ensemble-dashboard";
 const ALL_LIVE_SMOKE_ENV = "FUSIONKIT_ENSEMBLE_LIVE_SMOKE";
+const LIVE_SMOKE_PROMPT =
+  "Read README.md if present, report a concise readiness result, and do not modify files.";
 
 // The generic (non-tool) harness capability profiles are owned by their
 // implementations in @fusionkit/ensemble (command.ts / mock.ts), where each
@@ -142,8 +178,100 @@ function metadata<S extends "harness-run-result.v1">(schema: S, createdAt: strin
   };
 }
 
+function protocolHarnessKind(
+  kind: ReturnType<(typeof toolRegistry)["list"]>[number]["driver"]["kind"]
+): ModelFusionHarnessKind {
+  switch (kind) {
+    case "codex":
+      return "codex";
+    case "claude_code":
+      return "claude_code";
+    case "cursor":
+      return "cursor";
+    case "opencode":
+    case "generic":
+      return "generic";
+    default: {
+      const exhausted: never = kind;
+      throw new Error(`unsupported harness kind: ${String(exhausted)}`);
+    }
+  }
+}
+
+function capabilityStatus(grade: ToolCapabilityGrade): CapabilityStatus {
+  switch (grade) {
+    case "full":
+      return "supported";
+    case "degraded":
+      return "degraded";
+    case "unsupported":
+      return "unsupported";
+    default: {
+      const exhausted: never = grade;
+      throw new Error(`unsupported capability grade: ${String(exhausted)}`);
+    }
+  }
+}
+
 function dashboardTools(options: HarnessSmokeDashboardOptions): readonly ToolDashboardMetadata[] {
-  return options.tools ?? toolRegistry.dashboardTools();
+  if (options.tools !== undefined) return options.tools;
+  return toolRegistry.list().map((integration) => {
+    const makeHarness = (env: Record<string, string | undefined> = {}): HarnessAdapter =>
+      createDriverHarness({
+        driver: integration.driver.driver,
+        gatewayUrl: "http://127.0.0.1",
+        context: { env },
+        configForModel: (route) =>
+          integration.driver.configForRoute({
+            gatewayUrl: route.endpointUrl,
+            model: route.model
+          })
+      });
+    const envPrefix = integration.id.replace(/[^A-Za-z0-9]/g, "_").toUpperCase();
+    const credentialSkipReason = (
+      env: Record<string, string | undefined>
+    ): string | undefined => {
+      const credentialPresent = Object.entries(env).some(
+        ([name, value]) =>
+          value !== undefined &&
+          value.length > 0 &&
+          /(?:API_KEY|AUTH_TOKEN|OAUTH_TOKEN|ACCESS_TOKEN)$/.test(name)
+      );
+      return credentialPresent
+        ? undefined
+        : `${integration.displayName} credentials are not present in the dashboard environment`;
+    };
+    return {
+      id: integration.id,
+      harnessKind: protocolHarnessKind(integration.driver.kind),
+      displayName: integration.displayName,
+      availability: "credential_gated",
+      capabilities: Object.fromEntries(
+        Object.entries(integration.capabilities).map(([feature, grade]) => [
+          feature,
+          capabilityStatus(grade)
+        ])
+      ),
+      notes: ["Uses the canonical RouteKit driver; live checks are explicit and credential-gated."],
+      makeMatrixHarness: ({ env }) => makeHarness(env),
+      credentialSkipReason,
+      smoke: {
+        taskId: `${integration.id}-driver`,
+        model: { id: integration.id, model: "gateway-model" },
+        sideEffects: "writes_workspace",
+        allowedTools: ["read_file", "write_file", "apply_patch", "run_shell"],
+        makeHarness
+      },
+      liveSmoke: {
+        taskId: `${integration.id}-live`,
+        envName: `FUSIONKIT_${envPrefix}_SMOKE`,
+        prompt: LIVE_SMOKE_PROMPT,
+        modelEnvName: `FUSIONKIT_${envPrefix}_SMOKE_MODEL`,
+        defaultModel: "gateway-model",
+        makeHarness
+      }
+    };
+  });
 }
 
 function safeFileName(value: string): string {
@@ -481,19 +609,41 @@ function genericSmokeRuns(options: Required<Pick<
   ];
 }
 
-function credentialSkipSmokeRuns(tools: readonly ToolDashboardMetadata[]): SmokeRunInput[] {
-  return tools.map((tool) => ({
-    taskId: tool.smoke.taskId,
-    harnessId: tool.id,
-    harnessKind: tool.harnessKind,
-    purpose: "credential-skip",
-    outcome: "skipped",
-    harness: tool.smoke.makeHarness(),
-    model: tool.smoke.model,
-    sideEffects: tool.smoke.sideEffects,
-    allowedTools: tool.smoke.allowedTools,
-    capabilities: tool.capabilities
-  }));
+function credentialSkipSmokeRuns(
+  tools: readonly ToolDashboardMetadata[],
+  env: Record<string, string | undefined>
+): SmokeRunInput[] {
+  return tools.map((tool) => {
+    const reason = tool.credentialSkipReason(env);
+    return {
+      taskId: tool.smoke.taskId,
+      harnessId: tool.id,
+      harnessKind: tool.harnessKind,
+      purpose: "credential-skip",
+      outcome: "skipped",
+      harness:
+        reason === undefined
+          ? tool.smoke.makeHarness()
+          : {
+              ...createMockHarness({
+                id: `${tool.id}-credential-skip`,
+                candidates: {
+                  [tool.smoke.model.id]: {
+                    status: "skipped",
+                    summary: reason,
+                    transcript: reason,
+                    diff: ""
+                  }
+                }
+              }),
+              harnessKind: tool.harnessKind
+            },
+      model: tool.smoke.model,
+      sideEffects: tool.smoke.sideEffects,
+      allowedTools: tool.smoke.allowedTools,
+      capabilities: tool.capabilities
+    };
+  });
 }
 
 function liveSmokeRuns(options: {
@@ -514,7 +664,10 @@ function liveSmokeRuns(options: {
       purpose: "live",
       outcome: "success",
       harness,
-      model: { id: tool.smoke.model.id, model: readEnv(options.env, live.modelEnvName) ?? live.defaultModel },
+      model: {
+        id: tool.smoke.model.id,
+        model: options.env[live.modelEnvName] ?? live.defaultModel
+      },
       sideEffects: "read_only",
       allowedTools: ["read_file"],
       capabilities: tool.capabilities,
@@ -528,7 +681,7 @@ function liveSmokeRuns(options: {
 function capabilityCell(
   capabilities: HarnessCapabilities,
   capability: string
-): ModelFusionCapabilityStatus {
+): CapabilityStatus {
   return capabilities[capability] ?? "unknown";
 }
 
@@ -731,7 +884,7 @@ export async function runHarnessSmokeDashboard(
   const commandFailure = options.commandFailure ?? DEFAULT_COMMAND_FAILURE;
   const env = options.env ?? process.env;
   const tools = dashboardTools(options);
-  ensureRunOutputDir(outputRoot);
+  ensureRunOutputDir(outputRoot, { dataDirectoryNames: [".fusionkit"] });
 
   const matrix = createHarnessCapabilityMatrix({
     ...options,
@@ -758,7 +911,7 @@ export async function runHarnessSmokeDashboard(
   const records: HarnessSmokeRecord[] = [];
   const runs = [
     ...genericSmokeRuns({ commandSuccess, commandFailure }),
-    ...credentialSkipSmokeRuns(tools),
+    ...credentialSkipSmokeRuns(tools, env),
     ...liveSmokeRuns({
       env,
       tools: requestedLiveSmokeTools({ env, tools, liveSmoke: options.liveSmoke }),

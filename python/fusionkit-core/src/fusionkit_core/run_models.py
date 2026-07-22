@@ -157,7 +157,7 @@ class RunInspection(RunBaseModel):
     judge_synthesis_record: dict[str, Any] | None = None
     requires_action: ToolPausePlaceholder | None = None
     terminal_error: NativeRunError | None = None
-    provider_metadata: list[dict[str, Any]] = Field(default_factory=list)
+    model_call_metadata: list[dict[str, Any]] = Field(default_factory=list)
     #: Token usage summed across every ledgered model call (panel + judge +
     #: synthesizer). Fields stay ``None`` when no call reported them.
     usage: RunUsage | None = None
@@ -173,6 +173,13 @@ class RunStore(Protocol):
     def get_idempotency(self, idempotency_key: str) -> IdempotencyRecord | None: ...
 
     def write_idempotency(self, record: IdempotencyRecord) -> None: ...
+
+    def initialize_idempotent_run(
+        self,
+        record: IdempotencyRecord,
+        event: FusionRunEvent,
+        summary: RunStateSummary,
+    ) -> tuple[IdempotencyRecord, bool]: ...
 
     def append_event(self, event: FusionRunEvent) -> FusionRunEvent: ...
 

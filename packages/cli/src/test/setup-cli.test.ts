@@ -1,26 +1,22 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 
+import { runCliForTest } from "@routekit/cli-core/testing";
 import { FUSIONKIT_PYPI_VERSION, fusionkitPyCommand, fusionkitWarmArgv } from "../fusion/env.js";
 import type { HostInfo } from "../fusion/local-catalog.js";
 import {
-  ensureLocalPanelSupported,
   localPanelUnsupportedMessage,
-  panelUsesLocalMlx,
   platformCapabilities
 } from "../fusion/platform.js";
-import type { PanelModelSpec } from "../fusion/env.js";
 
 const CLI = fileURLToPath(new URL("../index.js", import.meta.url));
 
 function runCli(args: string[]): { status: number; stdout: string; stderr: string } {
-  const result = spawnSync(process.execPath, [CLI, ...args], {
-    encoding: "utf8",
+  const result = runCliForTest(CLI, args, {
     env: { ...process.env, NO_COLOR: "1", FUSIONKIT_NO_TUI: "1" }
   });
-  return { status: result.status ?? 1, stdout: result.stdout ?? "", stderr: result.stderr ?? "" };
+  return { ...result, status: result.status ?? 1 };
 }
 
 function host(appleSilicon: boolean): HostInfo {
@@ -32,22 +28,23 @@ function host(appleSilicon: boolean): HostInfo {
   };
 }
 
-const MLX_PANEL: PanelModelSpec[] = [{ id: "qwen", model: "mlx-community/Qwen3-1.7B-4bit", provider: "mlx" }];
-const CLOUD_PANEL: PanelModelSpec[] = [{ id: "gpt", model: "gpt-5.5", provider: "openai" }];
-
 // ---- engine run argv (the uvx/uv invocation used for real router launches) ----
 
 test("fusionkitPyCommand defaults to the pinned uvx engine", () => {
   const runner = fusionkitPyCommand();
   assert.equal(runner.command, "uvx");
-  assert.deepEqual(runner.prefix, [`fusionkit@${FUSIONKIT_PYPI_VERSION}`]);
+  assert.deepEqual(runner.prefix, [
+    "--from",
+    `fusionkit@${FUSIONKIT_PYPI_VERSION}`,
+    "fusionkit-sidecar"
+  ]);
   assert.equal(runner.cwd, undefined);
 });
 
 test("fusionkitPyCommand uses the fusionkit workspace package for local checkouts", () => {
   const runner = fusionkitPyCommand("/tmp/fusionkit-checkout");
   assert.equal(runner.command, "uv");
-  assert.deepEqual(runner.prefix, ["run", "--package", "fusionkit", "fusionkit"]);
+  assert.deepEqual(runner.prefix, ["run", "--package", "fusionkit", "fusionkit-sidecar"]);
   assert.equal(runner.cwd, "/tmp/fusionkit-checkout");
 });
 
@@ -56,55 +53,66 @@ test("fusionkitPyCommand uses the fusionkit workspace package for local checkout
 test("fusionkitWarmArgv defaults to the pinned uvx engine help", () => {
   const argv = fusionkitWarmArgv();
   assert.equal(argv.command, "uvx");
-  assert.deepEqual(argv.args, [`fusionkit@${FUSIONKIT_PYPI_VERSION}`, "--help"]);
+  assert.deepEqual(argv.args, [
+    "--from",
+    `fusionkit@${FUSIONKIT_PYPI_VERSION}`,
+    "fusionkit-sidecar",
+    "--help"
+  ]);
   assert.equal(argv.cwd, undefined);
 });
 
 test("fusionkitWarmArgv offline probe inserts --offline before the package spec", () => {
   const argv = fusionkitWarmArgv(undefined, { offline: true });
   assert.equal(argv.command, "uvx");
-  assert.deepEqual(argv.args, ["--offline", `fusionkit@${FUSIONKIT_PYPI_VERSION}`, "--help"]);
+  assert.deepEqual(argv.args, [
+    "--offline",
+    "--from",
+    `fusionkit@${FUSIONKIT_PYPI_VERSION}`,
+    "fusionkit-sidecar",
+    "--help"
+  ]);
 });
 
 test("fusionkitWarmArgv uses `uv run` against a local checkout (dev override)", () => {
   const argv = fusionkitWarmArgv("/tmp/fusionkit-checkout");
   assert.equal(argv.command, "uv");
-  assert.deepEqual(argv.args, ["run", "--package", "fusionkit", "fusionkit", "--help"]);
+  assert.deepEqual(argv.args, [
+    "run",
+    "--package",
+    "fusionkit",
+    "fusionkit-sidecar",
+    "--help"
+  ]);
   assert.equal(argv.cwd, "/tmp/fusionkit-checkout");
 
   const offline = fusionkitWarmArgv("/tmp/fusionkit-checkout", { offline: true });
-  assert.deepEqual(offline.args, ["run", "--offline", "--package", "fusionkit", "fusionkit", "--help"]);
+  assert.deepEqual(offline.args, [
+    "run",
+    "--offline",
+    "--package",
+    "fusionkit",
+    "fusionkit-sidecar",
+    "--help"
+  ]);
 });
 
 // ---- cross-platform gating ----
 
-test("panelUsesLocalMlx detects mlx members (provider defaults to mlx)", () => {
-  assert.equal(panelUsesLocalMlx(MLX_PANEL), true);
-  assert.equal(panelUsesLocalMlx([{ id: "q", model: "some-model" }]), true);
-  assert.equal(panelUsesLocalMlx(CLOUD_PANEL), false);
+test("local lifecycle guidance points unsupported hosts to RouteKit", () => {
+  assert.match(localPanelUnsupportedMessage(host(false)), /RouteKit/);
+  assert.match(localPanelUnsupportedMessage(host(false)), /Apple Silicon/);
 });
 
-test("ensureLocalPanelSupported throws for a local panel off Apple Silicon", () => {
-  assert.throws(() => ensureLocalPanelSupported(MLX_PANEL, host(false)), /Apple Silicon/);
-  // ... and points the user at the cross-platform cloud path.
-  assert.match(localPanelUnsupportedMessage(host(false)), /cloud panel/);
-});
-
-test("ensureLocalPanelSupported allows a local panel on Apple Silicon and cloud anywhere", () => {
-  assert.doesNotThrow(() => ensureLocalPanelSupported(MLX_PANEL, host(true)));
-  assert.doesNotThrow(() => ensureLocalPanelSupported(CLOUD_PANEL, host(false)));
-  assert.doesNotThrow(() => ensureLocalPanelSupported(CLOUD_PANEL, host(true)));
-});
-
-test("platformCapabilities reports cloud everywhere and local MLX only on Apple Silicon", () => {
+test("platformCapabilities reports RouteKit fusion everywhere and local lifecycle only on Apple Silicon", () => {
   const linux = platformCapabilities(host(false));
-  const cloud = linux.find((cap) => cap.label === "cloud ensembles");
-  const localMlx = linux.find((cap) => cap.label === "local MLX ensembles");
-  assert.equal(cloud?.ok, true);
+  const routed = linux.find((cap) => cap.label === "RouteKit-backed fusion");
+  const localMlx = linux.find((cap) => cap.label === "local MLX lifecycle");
+  assert.equal(routed?.ok, true);
   assert.equal(localMlx?.ok, false);
 
   const mac = platformCapabilities(host(true));
-  assert.equal(mac.find((cap) => cap.label === "local MLX ensembles")?.ok, true);
+  assert.equal(mac.find((cap) => cap.label === "local MLX lifecycle")?.ok, true);
 });
 
 // ---- CLI surface ----
@@ -123,8 +131,8 @@ test("setup --help documents the warm-up and its flags", () => {
   assert.match(result.stdout, /--fusionkit-dir/);
 });
 
-test("doctor --help documents the --provision warm-up flag", () => {
+test("doctor --help no longer offers the removed --provision flag", () => {
   const result = runCli(["doctor", "--help"]);
   assert.equal(result.status, 0, result.stderr);
-  assert.match(result.stdout, /--provision/);
+  assert.doesNotMatch(result.stdout, /--provision/);
 });

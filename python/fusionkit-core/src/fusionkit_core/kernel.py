@@ -15,7 +15,7 @@ from fusionkit_core.run_models import (
     ToolResultSubmission,
 )
 from fusionkit_core.trace import TraceContext
-from fusionkit_core.types import ChatMessage, ModelResponse, PanelMode, StreamChunk, Trajectory
+from fusionkit_core.types import ChatMessage, PanelMode, StreamChunk, Trajectory
 
 
 class FusionKernel:
@@ -95,6 +95,7 @@ class FusionKernel:
         sample_count: int | None = None,
         tools: Sequence[ToolDefinition] | None = None,
         tool_choice: ToolChoice | None = None,
+        trace: TraceContext | None = None,
     ) -> FuseResult:
         return await self._engine.run_step(
             messages,
@@ -104,6 +105,7 @@ class FusionKernel:
             sample_count=sample_count,
             tools=tools,
             tool_choice=tool_choice,
+            trace=trace,
         )
 
     def run_stream(
@@ -116,6 +118,7 @@ class FusionKernel:
         sample_count: int | None = None,
         tools: Sequence[ToolDefinition] | None = None,
         tool_choice: ToolChoice | None = None,
+        trace: TraceContext | None = None,
     ) -> AsyncIterator[StreamChunk | FuseResult]:
         return self._engine.run_stream(
             messages,
@@ -125,32 +128,7 @@ class FusionKernel:
             sample_count=sample_count,
             tools=tools,
             tool_choice=tool_choice,
-        )
-
-    def stream_passthrough(
-        self,
-        model_id: str,
-        messages: Sequence[ChatMessage],
-        sampling: SamplingConfig,
-        *,
-        tools: Sequence[ToolDefinition] | None = None,
-        tool_choice: ToolChoice | None = None,
-    ) -> AsyncIterator[StreamChunk | FuseResult]:
-        return self._engine.stream_passthrough(
-            model_id, messages, sampling, tools=tools, tool_choice=tool_choice
-        )
-
-    async def passthrough_chat(
-        self,
-        model_id: str,
-        messages: Sequence[ChatMessage],
-        sampling: SamplingConfig,
-        *,
-        tools: Sequence[ToolDefinition] | None = None,
-        tool_choice: ToolChoice | None = None,
-    ) -> ModelResponse:
-        return await self.client(model_id).chat(
-            messages, sampling, tools=tools, tool_choice=tool_choice
+            trace=trace,
         )
 
     def _judge_synthesizer_for(

@@ -1,0 +1,485 @@
+{
+  "version": "release_v6",
+  "tasks": [
+    {
+      "task_id": "arc196_b",
+      "question_id": "arc196_b",
+      "contest_date": "2025-04-06T00:00:00",
+      "cluster_key": "2025-04-06T00:00:00",
+      "difficulty": "hard",
+      "version": "release_v6"
+    },
+    {
+      "task_id": "arc196_c",
+      "question_id": "arc196_c",
+      "contest_date": "2025-04-06T00:00:00",
+      "cluster_key": "2025-04-06T00:00:00",
+      "difficulty": "hard",
+      "version": "release_v6"
+    },
+    {
+      "task_id": "arc196_a",
+      "question_id": "arc196_a",
+      "contest_date": "2025-04-06T00:00:00",
+      "cluster_key": "2025-04-06T00:00:00",
+      "difficulty": "hard",
+      "version": "release_v6"
+    },
+    {
+      "task_id": "arc196_d",
+      "question_id": "arc196_d",
+      "contest_date": "2025-04-06T00:00:00",
+      "cluster_key": "2025-04-06T00:00:00",
+      "difficulty": "hard",
+      "version": "release_v6"
+    },
+    {
+      "task_id": "abc400_c",
+      "question_id": "abc400_c",
+      "contest_date": "2025-04-05T00:00:00",
+      "cluster_key": "2025-04-05T00:00:00",
+      "difficulty": "medium",
+      "version": "release_v6"
+    },
+    {
+      "task_id": "abc400_d",
+      "question_id": "abc400_d",
+      "contest_date": "2025-04-05T00:00:00",
+      "cluster_key": "2025-04-05T00:00:00",
+      "difficulty": "medium",
+      "version": "release_v6"
+    },
+    {
+      "task_id": "abc400_e",
+      "question_id": "abc400_e",
+      "contest_date": "2025-04-05T00:00:00",
+      "cluster_key": "2025-04-05T00:00:00",
+      "difficulty": "hard",
+      "version": "release_v6"
+    },
+    {
+      "task_id": "abc400_g",
+      "question_id": "abc400_g",
+      "contest_date": "2025-04-05T00:00:00",
+      "cluster_key": "2025-04-05T00:00:00",
+      "difficulty": "hard",
+      "version": "release_v6"
+    },
+    {
+      "task_id": "abc399_e",
+      "question_id": "abc399_e",
+      "contest_date": "2025-03-29T00:00:00",
+      "cluster_key": "2025-03-29T00:00:00",
+      "difficulty": "hard",
+      "version": "release_v6"
+    },
+    {
+      "task_id": "abc399_d",
+      "question_id": "abc399_d",
+      "contest_date": "2025-03-29T00:00:00",
+      "cluster_key": "2025-03-29T00:00:00",
+      "difficulty": "medium",
+      "version": "release_v6"
+    },
+    {
+      "task_id": "abc399_c",
+      "question_id": "abc399_c",
+      "contest_date": "2025-03-29T00:00:00",
+      "cluster_key": "2025-03-29T00:00:00",
+      "difficulty": "medium",
+      "version": "release_v6"
+    },
+    {
+      "task_id": "abc399_f",
+      "question_id": "abc399_f",
+      "contest_date": "2025-03-29T00:00:00",
+      "cluster_key": "2025-03-29T00:00:00",
+      "difficulty": "hard",
+      "version": "release_v6"
+    },
+    {
+      "task_id": "arc195_e",
+      "question_id": "arc195_e",
+      "contest_date": "2025-03-23T00:00:00",
+      "cluster_key": "2025-03-23T00:00:00",
+      "difficulty": "hard",
+      "version": "release_v6"
+    },
+    {
+      "task_id": "arc195_b",
+      "question_id": "arc195_b",
+      "contest_date": "2025-03-23T00:00:00",
+      "cluster_key": "2025-03-23T00:00:00",
+      "difficulty": "hard",
+      "version": "release_v6"
+    },
+    {
+      "task_id": "arc195_c",
+      "question_id": "arc195_c",
+      "contest_date": "2025-03-23T00:00:00",
+      "cluster_key": "2025-03-23T00:00:00",
+      "difficulty": "hard",
+      "version": "release_v6"
+    },
+    {
+      "task_id": "arc195_d",
+      "question_id": "arc195_d",
+      "contest_date": "2025-03-23T00:00:00",
+      "cluster_key": "2025-03-23T00:00:00",
+      "difficulty": "hard",
+      "version": "release_v6"
+    },
+    {
+      "task_id": "arc195_a",
+      "question_id": "arc195_a",
+      "contest_date": "2025-03-23T00:00:00",
+      "cluster_key": "2025-03-23T00:00:00",
+      "difficulty": "medium",
+      "version": "release_v6"
+    },
+    {
+      "task_id": "abc398_f",
+      "question_id": "abc398_f",
+      "contest_date": "2025-03-22T00:00:00",
+      "cluster_key": "2025-03-22T00:00:00",
+      "difficulty": "hard",
+      "version": "release_v6"
+    },
+    {
+      "task_id": "abc398_b",
+      "question_id": "abc398_b",
+      "contest_date": "2025-03-22T00:00:00",
+      "cluster_key": "2025-03-22T00:00:00",
+      "difficulty": "medium",
+      "version": "release_v6"
+    },
+    {
+      "task_id": "abc398_d",
+      "question_id": "abc398_d",
+      "contest_date": "2025-03-22T00:00:00",
+      "cluster_key": "2025-03-22T00:00:00",
+      "difficulty": "hard",
+      "version": "release_v6"
+    },
+    {
+      "task_id": "abc398_c",
+      "question_id": "abc398_c",
+      "contest_date": "2025-03-22T00:00:00",
+      "cluster_key": "2025-03-22T00:00:00",
+      "difficulty": "medium",
+      "version": "release_v6"
+    },
+    {
+      "task_id": "abc398_g",
+      "question_id": "abc398_g",
+      "contest_date": "2025-03-22T00:00:00",
+      "cluster_key": "2025-03-22T00:00:00",
+      "difficulty": "hard",
+      "version": "release_v6"
+    },
+    {
+      "task_id": "abc397_d",
+      "question_id": "abc397_d",
+      "contest_date": "2025-03-15T00:00:00",
+      "cluster_key": "2025-03-15T00:00:00",
+      "difficulty": "hard",
+      "version": "release_v6"
+    },
+    {
+      "task_id": "abc397_f",
+      "question_id": "abc397_f",
+      "contest_date": "2025-03-15T00:00:00",
+      "cluster_key": "2025-03-15T00:00:00",
+      "difficulty": "hard",
+      "version": "release_v6"
+    },
+    {
+      "task_id": "abc397_c",
+      "question_id": "abc397_c",
+      "contest_date": "2025-03-15T00:00:00",
+      "cluster_key": "2025-03-15T00:00:00",
+      "difficulty": "medium",
+      "version": "release_v6"
+    },
+    {
+      "task_id": "abc397_g",
+      "question_id": "abc397_g",
+      "contest_date": "2025-03-15T00:00:00",
+      "cluster_key": "2025-03-15T00:00:00",
+      "difficulty": "hard",
+      "version": "release_v6"
+    },
+    {
+      "task_id": "abc397_e",
+      "question_id": "abc397_e",
+      "contest_date": "2025-03-15T00:00:00",
+      "cluster_key": "2025-03-15T00:00:00",
+      "difficulty": "hard",
+      "version": "release_v6"
+    },
+    {
+      "task_id": "abc397_b",
+      "question_id": "abc397_b",
+      "contest_date": "2025-03-15T00:00:00",
+      "cluster_key": "2025-03-15T00:00:00",
+      "difficulty": "medium",
+      "version": "release_v6"
+    },
+    {
+      "task_id": "arc194_c",
+      "question_id": "arc194_c",
+      "contest_date": "2025-03-09T00:00:00",
+      "cluster_key": "2025-03-09T00:00:00",
+      "difficulty": "hard",
+      "version": "release_v6"
+    },
+    {
+      "task_id": "arc194_b",
+      "question_id": "arc194_b",
+      "contest_date": "2025-03-09T00:00:00",
+      "cluster_key": "2025-03-09T00:00:00",
+      "difficulty": "hard",
+      "version": "release_v6"
+    },
+    {
+      "task_id": "arc194_e",
+      "question_id": "arc194_e",
+      "contest_date": "2025-03-09T00:00:00",
+      "cluster_key": "2025-03-09T00:00:00",
+      "difficulty": "hard",
+      "version": "release_v6"
+    },
+    {
+      "task_id": "arc194_a",
+      "question_id": "arc194_a",
+      "contest_date": "2025-03-09T00:00:00",
+      "cluster_key": "2025-03-09T00:00:00",
+      "difficulty": "medium",
+      "version": "release_v6"
+    },
+    {
+      "task_id": "arc194_d",
+      "question_id": "arc194_d",
+      "contest_date": "2025-03-09T00:00:00",
+      "cluster_key": "2025-03-09T00:00:00",
+      "difficulty": "hard",
+      "version": "release_v6"
+    },
+    {
+      "task_id": "abc396_g",
+      "question_id": "abc396_g",
+      "contest_date": "2025-03-08T00:00:00",
+      "cluster_key": "2025-03-08T00:00:00",
+      "difficulty": "hard",
+      "version": "release_v6"
+    },
+    {
+      "task_id": "abc396_c",
+      "question_id": "abc396_c",
+      "contest_date": "2025-03-08T00:00:00",
+      "cluster_key": "2025-03-08T00:00:00",
+      "difficulty": "medium",
+      "version": "release_v6"
+    },
+    {
+      "task_id": "abc396_f",
+      "question_id": "abc396_f",
+      "contest_date": "2025-03-08T00:00:00",
+      "cluster_key": "2025-03-08T00:00:00",
+      "difficulty": "hard",
+      "version": "release_v6"
+    },
+    {
+      "task_id": "abc396_e",
+      "question_id": "abc396_e",
+      "contest_date": "2025-03-08T00:00:00",
+      "cluster_key": "2025-03-08T00:00:00",
+      "difficulty": "hard",
+      "version": "release_v6"
+    },
+    {
+      "task_id": "abc396_d",
+      "question_id": "abc396_d",
+      "contest_date": "2025-03-08T00:00:00",
+      "cluster_key": "2025-03-08T00:00:00",
+      "difficulty": "medium",
+      "version": "release_v6"
+    },
+    {
+      "task_id": "abc395_c",
+      "question_id": "abc395_c",
+      "contest_date": "2025-03-01T00:00:00",
+      "cluster_key": "2025-03-01T00:00:00",
+      "difficulty": "medium",
+      "version": "release_v6"
+    },
+    {
+      "task_id": "abc395_f",
+      "question_id": "abc395_f",
+      "contest_date": "2025-03-01T00:00:00",
+      "cluster_key": "2025-03-01T00:00:00",
+      "difficulty": "hard",
+      "version": "release_v6"
+    },
+    {
+      "task_id": "abc395_e",
+      "question_id": "abc395_e",
+      "contest_date": "2025-03-01T00:00:00",
+      "cluster_key": "2025-03-01T00:00:00",
+      "difficulty": "hard",
+      "version": "release_v6"
+    },
+    {
+      "task_id": "arc193_b",
+      "question_id": "arc193_b",
+      "contest_date": "2025-02-23T00:00:00",
+      "cluster_key": "2025-02-23T00:00:00",
+      "difficulty": "hard",
+      "version": "release_v6"
+    },
+    {
+      "task_id": "arc193_a",
+      "question_id": "arc193_a",
+      "contest_date": "2025-02-23T00:00:00",
+      "cluster_key": "2025-02-23T00:00:00",
+      "difficulty": "hard",
+      "version": "release_v6"
+    },
+    {
+      "task_id": "arc193_d",
+      "question_id": "arc193_d",
+      "contest_date": "2025-02-23T00:00:00",
+      "cluster_key": "2025-02-23T00:00:00",
+      "difficulty": "hard",
+      "version": "release_v6"
+    },
+    {
+      "task_id": "abc394_c",
+      "question_id": "abc394_c",
+      "contest_date": "2025-02-22T00:00:00",
+      "cluster_key": "2025-02-22T00:00:00",
+      "difficulty": "medium",
+      "version": "release_v6"
+    },
+    {
+      "task_id": "abc394_f",
+      "question_id": "abc394_f",
+      "contest_date": "2025-02-22T00:00:00",
+      "cluster_key": "2025-02-22T00:00:00",
+      "difficulty": "hard",
+      "version": "release_v6"
+    },
+    {
+      "task_id": "abc394_g",
+      "question_id": "abc394_g",
+      "contest_date": "2025-02-22T00:00:00",
+      "cluster_key": "2025-02-22T00:00:00",
+      "difficulty": "hard",
+      "version": "release_v6"
+    },
+    {
+      "task_id": "abc394_d",
+      "question_id": "abc394_d",
+      "contest_date": "2025-02-22T00:00:00",
+      "cluster_key": "2025-02-22T00:00:00",
+      "difficulty": "medium",
+      "version": "release_v6"
+    },
+    {
+      "task_id": "abc394_e",
+      "question_id": "abc394_e",
+      "contest_date": "2025-02-22T00:00:00",
+      "cluster_key": "2025-02-22T00:00:00",
+      "difficulty": "hard",
+      "version": "release_v6"
+    },
+    {
+      "task_id": "abc393_f",
+      "question_id": "abc393_f",
+      "contest_date": "2025-02-15T00:00:00",
+      "cluster_key": "2025-02-15T00:00:00",
+      "difficulty": "hard",
+      "version": "release_v6"
+    },
+    {
+      "task_id": "abc393_e",
+      "question_id": "abc393_e",
+      "contest_date": "2025-02-15T00:00:00",
+      "cluster_key": "2025-02-15T00:00:00",
+      "difficulty": "hard",
+      "version": "release_v6"
+    },
+    {
+      "task_id": "abc393_d",
+      "question_id": "abc393_d",
+      "contest_date": "2025-02-15T00:00:00",
+      "cluster_key": "2025-02-15T00:00:00",
+      "difficulty": "hard",
+      "version": "release_v6"
+    },
+    {
+      "task_id": "arc192_e",
+      "question_id": "arc192_e",
+      "contest_date": "2025-02-09T00:00:00",
+      "cluster_key": "2025-02-09T00:00:00",
+      "difficulty": "hard",
+      "version": "release_v6"
+    },
+    {
+      "task_id": "arc192_b",
+      "question_id": "arc192_b",
+      "contest_date": "2025-02-09T00:00:00",
+      "cluster_key": "2025-02-09T00:00:00",
+      "difficulty": "hard",
+      "version": "release_v6"
+    },
+    {
+      "task_id": "arc192_d",
+      "question_id": "arc192_d",
+      "contest_date": "2025-02-09T00:00:00",
+      "cluster_key": "2025-02-09T00:00:00",
+      "difficulty": "hard",
+      "version": "release_v6"
+    },
+    {
+      "task_id": "arc192_a",
+      "question_id": "arc192_a",
+      "contest_date": "2025-02-09T00:00:00",
+      "cluster_key": "2025-02-09T00:00:00",
+      "difficulty": "medium",
+      "version": "release_v6"
+    },
+    {
+      "task_id": "abc392_g",
+      "question_id": "abc392_g",
+      "contest_date": "2025-02-08T00:00:00",
+      "cluster_key": "2025-02-08T00:00:00",
+      "difficulty": "hard",
+      "version": "release_v6"
+    },
+    {
+      "task_id": "abc392_d",
+      "question_id": "abc392_d",
+      "contest_date": "2025-02-08T00:00:00",
+      "cluster_key": "2025-02-08T00:00:00",
+      "difficulty": "medium",
+      "version": "release_v6"
+    },
+    {
+      "task_id": "abc392_f",
+      "question_id": "abc392_f",
+      "contest_date": "2025-02-08T00:00:00",
+      "cluster_key": "2025-02-08T00:00:00",
+      "difficulty": "hard",
+      "version": "release_v6"
+    },
+    {
+      "task_id": "abc392_c",
+      "question_id": "abc392_c",
+      "contest_date": "2025-02-08T00:00:00",
+      "cluster_key": "2025-02-08T00:00:00",
+      "difficulty": "medium",
+      "version": "release_v6"
+    }
+  ]
+}

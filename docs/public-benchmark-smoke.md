@@ -1,8 +1,9 @@
 # Public Benchmark Smoke Adapters
 
-ENG-594 adds local smoke adapters for public benchmark suites. These fixtures prove
-that FusionKit can normalize suite-shaped tasks into `benchmark-task-record.v1` and
-feed them through `fusion-bench` reports. They are not public benchmark runs.
+FusionKit ships local smoke adapters for public benchmark suites. These fixtures
+prove that FusionKit can normalize suite-shaped tasks into
+`benchmark-task-record.v1` and feed them through `fusion-bench` reports. They are
+not public benchmark runs.
 
 ## Suites
 
@@ -12,6 +13,11 @@ feed them through `fusion-bench` reports. They are not public benchmark runs.
 | Aider polyglot | `aider-polyglot` | Smoke fixture only; polyglot edit harness unavailable | No |
 | Terminal-Bench | `terminal-bench` | Smoke fixture only; terminal sandbox harness unavailable | No |
 | LiveCodeBench | `livecodebench` | Smoke fixture only; code execution harness unavailable | No |
+
+The "harness unavailable" statuses describe these smoke fixtures only. For real
+public LiveCodeBench runs, a full execution adapter exists at
+`python/fusionkit-evals/src/fusionkit_evals/adapters/livecodebench_adapter.py`
+and is driven by `fusionkit-bench public --runner-command ...`.
 
 ## Rules
 
@@ -29,8 +35,8 @@ feed them through `fusion-bench` reports. They are not public benchmark runs.
 The existing manifest path is enough:
 
 ```bash
-uv run fusionkit fusion-bench \
-  --config path/to/config.toml \
+uv run --package fusionkit-evals fusionkit-bench fusion \
+  --config path/to/config.yaml \
   --manifest python/fusionkit-evals/src/fusionkit_evals/data/fixtures/public-smoke \
   --output .fusionkit/public-smoke/rows.jsonl \
   --report .fusionkit/public-smoke/report.md
@@ -38,6 +44,6 @@ uv run fusionkit fusion-bench \
 
 These tasks are `harness_coding` records. Without a configured HandoffKit executor,
 `FusionBenchRunner` emits explicit `unavailable_harness` skip rows for them, and the
-ENG-593 report layer keeps skipped tasks separate from failed tasks. Running a local
+report layer keeps skipped tasks separate from failed tasks. Running a local
 fake or command executor for smoke coverage still does not make these fixtures
 eligible for public benchmark claims.

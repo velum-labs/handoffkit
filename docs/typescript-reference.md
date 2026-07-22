@@ -2,33 +2,49 @@
 
 This page documents the TypeScript workspace under `packages/`. It is intended for maintainers who need to find the right package, understand the public exports, and make changes without accidentally crossing product boundaries.
 
-The workspace uses ESM, TypeScript project references, pnpm, Node 22 or newer, and package entry points rooted at `packages/<name>/src/index.ts` unless noted otherwise. Tests usually live under `packages/<name>/src/test/` and run after `pnpm build` through the root `pnpm test` command.
+The workspace uses ESM, TypeScript project references, pnpm, Node 22 (effectively `>=22.19.0`, since `.npmrc` sets `engine-strict=true` and the pinned `undici` requires it), and package entry points rooted at `packages/<name>/src/index.ts` unless noted otherwise. Tests usually live under `packages/<name>/src/test/` and run after `pnpm build` through the root `pnpm test` command.
 
 ## Product package flow
 
 ```mermaid
 flowchart LR
-  CLI["@fusionkit/cli"] --> Tools["@fusionkit/tools"]
-  CLI --> Gateway["@fusionkit/model-gateway"]
+  CLI["@fusionkit/cli"] --> ToolRegistry["@routekit/tool-registry"]
+  RouteCLI["@routekit/cli"] --> ToolRegistry
+  ToolRegistry --> Tools["@routekit/tools"]
+  CLI --> FusionGateway["@fusionkit/gateway"]
+  FusionGateway --> Gateway["@routekit/gateway"]
+  CLI --> Accounts["@routekit/accounts"]
   CLI --> Ensemble["@fusionkit/ensemble"]
   CLI --> Workspace["@fusionkit/workspace"]
-  Gateway --> Protocol["@fusionkit/protocol"]
+  FusionGateway --> Protocol["@fusionkit/protocol"]
   Ensemble --> Protocol
   Ensemble --> Workspace
   Ensemble --> Kernel["@fusionkit/kernel"]
-  Tools --> Codex["@fusionkit/tool-codex"]
-  Tools --> Claude["@fusionkit/tool-claude"]
-  Tools --> Cursor["@fusionkit/tool-cursor"]
-  Tools --> Opencode["@fusionkit/tool-opencode"]
+  ToolRegistry --> Codex["@routekit/tool-codex"]
+  ToolRegistry --> Claude["@routekit/tool-claude"]
+  ToolRegistry --> Cursor["@routekit/tool-cursor"]
+  ToolRegistry --> Opencode["@routekit/tool-opencode"]
+  Codex --> Tools
+  Claude --> Tools
+  Cursor --> Tools
+  Opencode --> Tools
+  Tools --> HarnessCore["@routekit/harness-core"]
+  Ensemble --> Tools
 ```
 
-The FusionKit product path starts in `@fusionkit/cli`. The CLI registers tool integrations, resolves configuration, starts the model gateway, starts or connects to the Python fusion engine, and launches the selected harness. The gateway owns wire dialect translation and session state. The ensemble package owns panel execution, worktrees, judge synthesis adapters, and runtime-kernel workflows. Protocol and workspace packages provide shared contracts and git-safe file movement.
+The FusionKit product path starts in `@fusionkit/cli`. The CLI imports the canonical RouteKit tool registry, composes it with the ensemble's generic driver-registry setter, resolves Fusion and RouteKit configuration, starts the Node Fusion gateway and internal Python synthesis sidecar, and launches the selected harness. `@routekit/gateway` owns neutral wire translation, live provider discovery, namespaced model dispatch, and per-call provenance; `@fusionkit/gateway` owns the Fusion front door, durable sessions, and aggregate budgets. The ensemble package owns panel execution, worktrees, judge adapters, and runtime-kernel workflows.
 
 ## `@fusionkit/cli`
 
 `@fusionkit/cli` publishes the `fusionkit` binary and is the single user-facing Node entry point. The binary entry file is `packages/cli/src/index.ts`. It imports `buildProgram()` from `packages/cli/src/cli.ts`, prints help on bare invocation, parses the command line, and maps known failures to stable process exits.
 
-`buildProgram()` constructs the Commander tree. It sets the command name, description, combined npm and PyPI version string, positional option behavior, and command groups. It calls the command registration helpers in a fixed order: ensemble, local, fusion, models, runtime, sessions, config, setup, doctor, and deployment. If a new product command needs to appear in the root CLI, this is the file that proves it is registered.
+`buildProgram()` constructs the Commander tree. It sets the command name,
+description, combined npm and PyPI version string, positional option behavior,
+and command groups. It registers fusion launchers and `init`, then `setup`,
+`doctor`, `config`, `prompts`, `sessions`, `models`, `ensemble`, completion,
+the hidden completion protocol, `telemetry`, `version`, and `stop`. Provider,
+account, proxy, install/uninstall, and direct/single-model commands belong to
+`@routekit/cli`.
 
 The important behavior around errors is also part of the public user experience. `PolicyDeniedError` prints a fail-closed policy denial and exits with status 2. `PreflightError` prints a direct environment or prerequisite error and exits with status 1. Unknown errors print as `error: <message>` and exit with status 1.
 
@@ -38,8 +54,8 @@ Relevant files:
 | --- | --- |
 | `packages/cli/src/index.ts` | Binary entry point, help behavior, top-level error mapping. |
 | `packages/cli/src/cli.ts` | Commander program construction and registration order. |
-| `packages/cli/src/commands/fusion.ts` | Product launcher group for fused harness sessions. |
-| `packages/cli/src/commands/local.ts` | Single local model launcher path. |
+| `packages/cli/src/commands/fusion.ts` | Fusion-only launchers for configured namespaced-model ensembles across Codex, Claude Code, Cursor, OpenCode, and serve. |
+| `packages/cli/src/local.ts` | Fusion-owned local-model lifecycle support. |
 | `packages/cli/src/commands/models.ts` | Local model cache commands. |
 | `packages/cli/src/commands/sessions.ts` | Session list, show, and removal commands. |
 | `packages/cli/src/commands/config.ts` | Configuration inspection and YAML export. |
@@ -97,46 +113,40 @@ const result = await runEnsemble({
 console.log(result.summary.status);
 ```
 
-## `@fusionkit/model-gateway`
+## `@routekit/gateway`
 
-`@fusionkit/model-gateway` receives harness-native HTTP requests and maps them to either a vendor proxy path or the FusionKit panel path. It owns the local gateway server, backend abstraction, frontdoor workflow, session persistence, cost metering, dialect adapters, ACP adapter support, provenance capture, and trajectory reconstruction.
-
-The server entry point is `startGateway()`, which returns a `Gateway` with a URL and close behavior. `OpenAiBackend`, `MlxBackend`, `FusionBackend`, `createBackend()`, `resolveBackendConfig()`, and `DEFAULT_MLX_MODEL` make up the backend layer. `FusionBackend` is the key class when a request should run through model fusion instead of simple passthrough.
-
-The frontdoor workflow exports are `runFusionFrontdoorTurn()`, `streamFusionFrontdoorTurn()`, `runFrontdoorRequest()`, `FrontdoorRequestScheduler`, `frontdoorRequestArtifact()`, and workflow constants. Operator exports such as `frontdoorResolveModelOperator`, `frontdoorBudgetGateOperator`, `frontdoorVendorProxyOperator`, `frontdoorPanelOperator`, `frontdoorFuseOperator`, `frontdoorStreamingFuseOperator`, `frontdoorFinalizeOperator`, and `frontdoorBudgetStopOperator` define the internal graph.
-
-Session exports include `defaultSessionsDir()`, `FileSystemSessionStore`, `InMemorySessionStore`, and types for persisted sessions, summaries, turn records, and metadata. Cost exports include `emptySessionCost()`, `addTurnCost()`, `meterTurn()`, `estimateCost()`, `lookupPricing()`, `parseUsage()`, `parseUsageFromSse()`, `formatUsd()`, and `turnCostLine()`.
-
-Dialect adapters are public because they are tested independently and used by the gateway. Chat helpers include `effectiveModel()`, `withDefaultModel()`, and `isStream()`. Anthropic helpers include `handleAnthropicMessages()`, `anthropicToChat()`, `chatToAnthropicMessage()`, `openAiSseToAnthropic()`, `handleCountTokens()`, `countTokensEstimate()`, and `mapStopReason()`. Responses helpers include `handleResponses()`, `chatToResponses()`, `responsesToChat()`, and `openAiSseToResponses()`.
-
-Fusion gateway helpers include `startFusionGateway()`, `formatChat()`, `formatAnthropic()`, `formatResponses()`, `promptFromChat()`, `promptFromAnthropic()`, `promptFromResponses()`, and headers such as `FUSION_RUN_ID_HEADER`, `FUSION_STATUS_HEADER`, `FUSION_REPORT_HEADER`, and `FUSION_EVIDENCE_HEADER`.
-
-Provenance exports include `buildModelCallRecord()`, `modelCallId()`, `responseBodyHash()`, `readProducerVersion()`, `resolveProducerGitSha()`, `MODEL_CALL_ID_HEADER`, and `UNKNOWN_GIT_SHA`. Trajectory capture exports include `createTrajectoryCapture()` and `reconstructTrajectory()`.
-
-Example:
+`@routekit/gateway` is the neutral HTTP router. It owns `Backend`,
+`startGateway()`, Chat/Responses/Anthropic/Cursor dialect adapters, SSE, ACP,
+single-call cost/provenance records, `RouterConfig`, `CatalogBackend`, provider
+sources, and OpenAI-compatible, Anthropic, Google GenAI, and Codex Responses
+egress. Explicitly enabled providers discover models at startup and publish
+source-qualified `provider/model` IDs.
 
 ```ts
-import {
-  FileSystemSessionStore,
-  formatUsd,
-  startGateway
-} from "@fusionkit/model-gateway";
+import { CatalogBackend, startGateway } from "@routekit/gateway";
 
-const gateway = await startGateway({
-  host: "127.0.0.1",
-  port: 4319,
-  sessions: new FileSystemSessionStore("/tmp/fusionkit-sessions"),
-  backend: {
-    kind: "openai",
-    baseUrl: "http://127.0.0.1:8000/v1",
-    apiKey: "local"
+const backend = await CatalogBackend.create({
+  config: {
+    providers: { openai: {} },
+    defaultModel: "openai/gpt-5.5"
   }
 });
-
-console.log(`gateway ready at ${gateway.url}`);
-console.log(formatUsd(0.013));
-await gateway.close();
+const gateway = await startGateway({ backend });
 ```
+
+## `@routekit/accounts`
+
+`@routekit/accounts` owns subscription credentials, account sources, quota
+tracking, multi-account provider pools, per-model eligibility, provider relays,
+and proxy/client wire contracts. Selection supports sticky, round-robin, and
+capacity-weighted policies.
+
+## `@fusionkit/gateway`
+
+`@fusionkit/gateway` builds on RouteKit with `FusionBackend`, frontdoor
+operators, panel/synthesis orchestration, session stores, aggregate cost and
+budget accounting, trajectory conversion, Fusion headers, and managed MLX
+lifecycle. Pricing and per-call metering are imported from RouteKit.
 
 ## `@fusionkit/protocol`
 
@@ -193,50 +203,53 @@ const outputs = await collectOutputs({ root: "/tmp/fusionkit-session" });
 console.log(outputs.files.length);
 ```
 
-## `@fusionkit/tools`
+## `@routekit/tools`
 
-`@fusionkit/tools` defines the interface between the CLI and per-harness packages. A tool integration tells the CLI how to launch a tool, whether it supports fusion or local modes, and whether it can provide an ensemble harness adapter.
+`@routekit/tools` defines product-neutral launcher, canonical-driver, and capability metadata. Hosts provide opaque model catalogs and generic agent profiles through `ToolLaunchSpec`.
 
-The important exports are the `ToolIntegration` type family, process helper types, `createToolRegistry()`, `ToolRegistry`, constants such as `FUSION_PANEL_MODEL`, `LOCAL_MODEL_LABEL`, and `CURSOR_BRIDGE_MODEL_NAME`, environment compatibility helpers such as `readEnv()`, `envFlagEnabled()`, plus `buildSkippedCandidate()`.
+Important exports are `ToolIntegration`, `ToolLaunchSpec`, `ToolLaunchContext`, `AgentProfile`, `createToolRegistry()`, and `createToolCapabilityMatrix()`.
+
+## `@routekit/tool-registry`
+
+`@routekit/tool-registry` owns the one shipped integration list and exports
+`toolIntegrations` plus the constructed `toolRegistry`. It depends only on
+RouteKit's tool contracts and the individual tool packages. Both CLIs import
+this registry; FusionKit adds only `setToolDriverRegistry(toolRegistry)` to
+connect it to generic ensemble driver lookup.
 
 Example:
 
 ```ts
-import { createToolRegistry } from "@fusionkit/tools";
-import { codexTool } from "@fusionkit/tool-codex";
-import { claudeTool } from "@fusionkit/tool-claude";
+import { toolRegistry } from "@routekit/tool-registry";
 
-const registry = createToolRegistry();
-registry.register(codexTool);
-registry.register(claudeTool);
-console.log(registry.list().map((tool) => tool.name));
+console.log(toolRegistry.list().map((tool) => tool.id));
 ```
 
 ## Tool packages
 
-`@fusionkit/tool-codex` exports `codexTool`, launcher helpers, Codex harness creation, response parsing, and harness types. Use this package when debugging `fusionkit codex`, Codex Responses translation, or Codex panel members.
+`@routekit/tool-codex` owns one Codex serializer/launcher and one SDK driver.
 
-`@fusionkit/tool-claude` exports `claudeTool`, Claude Code harness creation, `claudeEnv()`, `launchClaude()`, and Claude Code harness environment types. Use this package when debugging `fusionkit claude` or Claude Code candidate execution.
+`@routekit/tool-claude` owns one Claude profile serializer/launcher and one Agent SDK driver.
 
-`@fusionkit/tool-cursor` exports `cursorTool`, Cursor harness helpers, `startCursorBridge()`, `cursorInstructions()`, `cursorIdeInstructions()`, and `launchCursor()`. Use this package when debugging Cursor terminal launch, Cursor IDE launch, or the local desktop bridge.
+`@routekit/tool-cursor` owns one Cursor CLI/IDE launch path and one ACP driver.
 
-`@fusionkit/tool-opencode` exports `opencodeTool`, `launchOpencode()`, `opencodeConfig()`, and `opencodeModelArg()`. It provides launcher support and local-model configuration but does not currently own a full ensemble harness path.
+`@routekit/tool-opencode` owns one OpenCode serializer/launcher and one SDK driver.
 
 Example:
 
 ```ts
-import { cursorTool } from "@fusionkit/tool-cursor";
-import { opencodeTool } from "@fusionkit/tool-opencode";
+import { cursorTool } from "@routekit/tool-cursor";
+import { opencodeTool } from "@routekit/tool-opencode";
 
-console.log(cursorTool.name);
-console.log(opencodeTool.modes);
+console.log(cursorTool.driver.kind);
+console.log(opencodeTool.capabilities.streaming);
 ```
 
 ## `@fusionkit/adapter-ai-sdk`
 
-`@fusionkit/adapter-ai-sdk` connects app-owned AI SDK loops with FusionKit and Warrant primitives. It is not the main CLI path, but it is important for applications that want to route model calls, expose governed tools, or manage local MLX servers.
+`@fusionkit/adapter-ai-sdk` is the AI SDK side of FusionKit local-model flows: managed MLX local-model helpers and worktree agent utilities. It is not the main CLI path. The governed helpers (`remoteTools()`, `swarmTools()`, `handoffModel()`, `routedModel()`) moved to the legacy `@fusionkit/handoff` package.
 
-Important exports include `remoteTools()`, `swarmTools()`, `handoffModel()`, `withModel()`, `loadRouterCard()`, `routedModel()`, `withRoutedModel()`, `runWorktreeAgent()`, `worktreeDiff()`, `defaultMlxDir()`, `MlxCapabilityError`, `MlxEnv`, `managedModelServer()`, and `mlxServer()`.
+Important exports include `runWorktreeAgent()`, `worktreeDiff()`, `defaultMlxDir()`, `MlxCapabilityError`, `MlxEnv`, `managedModelServer()`, and `mlxServer()`.
 
 Example:
 
@@ -270,9 +283,48 @@ if (issues.length > 0) {
 }
 ```
 
+## `@routekit/cli-ui` and `@routekit/cli-core`
+
+`@routekit/cli-ui` is a brand-configurable terminal UX layer with rich Ink and ordered plain-text presenters. `@routekit/cli-core` composes it with brand-neutral command context, structured errors, common parsing, completion, version formatting, and test helpers.
+
+Important exports include `createPresenter()`, `InkPresenter`, `PlainPresenter`, prompt helpers (`select()`, `multiselect()`, `confirm()`, `text()`, `fuzzySelect()`), `runWizard()`, `fuzzyFilter()`/`fuzzyMatch()`, and the theme, runtime, and format helpers re-exported from the entry point.
+
+## `@routekit/harness-core`
+
+`@routekit/harness-core` is the product-neutral coding-agent harness contract: driver, instance, and session interfaces, canonical events, tagged errors, approvals, status probes, and shared stream/process primitives.
+
+Important exports include `HARNESS_KINDS`, `isHarnessKind()`, `HarnessError`, `asHarnessError()`, `isRetryable()`, `DEFAULT_AUTOMATION_APPROVAL_POLICY`, `PendingRequests`, stream-JSON helpers, and the `HarnessDriver`/`HarnessInstance`/`SessionHandle` type family.
+
+## `@fusionkit/registry`
+
+`@fusionkit/registry` contains only Fusion identities, aliases, and panel presets
+generated from `spec/registry/fusion.json`. Important exports include
+`FUSION_REGISTRY`, `FUSION_PANEL_MODEL`, `fusionModelId()`, and benchmark panel
+presets.
+
+Product-neutral provider/auth metadata, catalogs, capabilities, pricing, and
+local-model metadata live in `@routekit/registry`, generated from the remaining
+`spec/registry/*.json` sources. Its important exports include `REGISTRY`,
+`PROVIDERS`, and the provider discovery, catalog, capability, and pricing
+helpers.
+
+## RouteKit shared cores
+
+`@routekit/runtime` owns process supervision, child environments, cleanup, atomic files and locks, ports, timeouts, and parameterized portless service registration. `@routekit/config-core` owns layered resolution and validated/migrating JSON IO. `@routekit/telemetry-core` owns parameterized consent, redaction, anonymous event properties, and bounded shutdown.
+
+## `@fusionkit/tracing`
+
+`@routekit/tracing` owns the generic OpenTelemetry engine integration: providers, W3C propagation, in-process listeners, and policy-based export redaction. `@fusionkit/tracing` is the thin conventions facade over the fusion semantic conventions in `spec/fusion-trace/registry.json`.
+
+Important exports include `initFusionTracing()`, `flushFusionTracing()`, `shutdownFusionTracing()`, `startFusionSpan()`, `emitFusionEvent()`, `newSessionCarrier()`, carrier helpers (`carrierFromHeaders()`, `carrierFromEnv()`, `headersOf()`, `envOf()`), and the in-process span/event listener registration (`addSpanListener()`, `addFusionEventListener()`).
+
 ## Governance and VM platform packages
 
-The packages in this section remain in the repository and are still documented, but they are outside the current FusionKit ensemble product path unless a page explicitly describes a bridge.
+The packages in this section live under `legacy/packages/` and are outside the
+root pnpm workspace (`pnpm-workspace.yaml` covers `packages/*`, `examples/*`,
+and `apps/*`). They remain in the repository and are still documented, but
+they are outside the current FusionKit ensemble product path unless a page
+explicitly describes a bridge.
 
 `@fusionkit/plane` is the Warrant control plane. Its central exports are `Plane`, `startPlaneServer()`, `defaultPolicy()`, `evaluatePolicy()`, `ClaimTokenService`, `ContractService`, `ReceiptService`, `SqliteStore`, `SecretStore`, key provider types, `hashToken()`, `principalCan()`, `toPrincipal()`, `IdpVerifier`, `RateLimiter`, `createLogger()`, and `Metrics`. It owns contracts, policy decisions, approvals, secret release, receipt countersignature, rate limiting, audit export, retention, and control-plane HTTP serving.
 
@@ -308,18 +360,21 @@ console.log(Boolean(plane), Boolean(runner));
 
 ## Test and support packages
 
-`@fusionkit/testkit` exports `git()`, `makeRepo()`, `uploadWorkspace()`, `mockRunRequest()`, `withStackAndRepo()`, and `startStack()`. Use it for tests that need a real temporary git repo, an in-process plane, or a runner stack.
+`@fusionkit/testkit` (root `packages/testkit`, never published) is the cross-stack E2E tooling described in [Testing](testing.md). It exports `startProviderSim()`, `startEngine()`, `simSidecarConfigYaml()`, `scriptFusedTurn()`/`judgeAnalysis()`, the `DOOR_PROFILES` door axis with `callDoor()`, real-CLI runners (`runClaudeCode()`, `runCodexExec()`, `runOpenCode()`), SSE observation helpers (`parseSse()`, `sseText()`, `sseReasoning()`, `sseDone()`), skip-gating (`detectStackTooling()`, `stackToolingSkip()`, `cliAvailable()`, `cliSkip()`), and process plumbing (`spawnCaptured()`, `waitForHttpReady()`, `freePort()`). The old in-process plane/runner fixtures (`git()`, `makeRepo()`, `startStack()`, `withStackAndRepo()`) live in `legacy/packages/testkit`.
 
 `@fusionkit/example-utils` exports demo manifest parsing, mock model helpers, live model helpers, and narration utilities. Use it when adding examples rather than duplicating manifest or narration code.
 
 Example:
 
 ```ts
-import { makeRepo, withStackAndRepo } from "@fusionkit/testkit";
+import { simSidecarConfigYaml, startEngine, startProviderSim } from "@fusionkit/testkit";
 
-const repo = makeRepo();
-await withStackAndRepo({ repo }, async ({ stack }) => {
-  console.log(stack.planeUrl);
+const sim = await startProviderSim();
+const engine = await startEngine({
+  configYaml: simSidecarConfigYaml({
+    simUrl: sim.url,
+    members: [{ id: "m1", model: "m1" }]
+  })
 });
 ```
 

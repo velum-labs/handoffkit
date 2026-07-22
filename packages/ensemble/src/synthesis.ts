@@ -10,10 +10,10 @@ import {
 import type {
   HarnessCandidateRecordV1,
   JudgeSynthesisRecordV1,
-  JsonValue,
   ModelFusionStatus
 } from "@fusionkit/protocol";
 import { gitText } from "@fusionkit/workspace";
+import type { JsonValue } from "@routekit/contracts";
 
 import type { ArtifactStore } from "./artifacts.js";
 import type {

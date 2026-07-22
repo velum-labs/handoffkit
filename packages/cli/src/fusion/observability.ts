@@ -19,10 +19,9 @@ import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { spawnLogged, terminate, waitForHttp } from "../shared/proc.js";
-import type { LoggedChild } from "../shared/proc.js";
+import { spawnLogged, superviseSpawn, terminate, waitForHttp } from "@routekit/runtime";
+import type { LoggedChild } from "@routekit/runtime";
 import type { PortlessSession } from "../shared/portless.js";
-import { superviseSpawn } from "@fusionkit/runtime-utils";
 
 import type { StackReporter } from "./env.js";
 
@@ -37,9 +36,10 @@ export function scopeDashboardPort(): number {
 }
 
 /**
- * Locate the isolated scope dashboard app (handoffkit/apps/scope) by walking up
- * from this module. Works from both the compiled dist and src layouts. Only the
- * monorepo dev fallback uses this — published installs ship a prebuilt bundle.
+ * Locate the isolated Scope dashboard app (`apps/scope`) in a FusionKit source
+ * checkout by walking up from this module. Works from both the compiled dist
+ * and src layouts. Only the monorepo dev fallback uses this — published
+ * installs ship a prebuilt bundle.
  */
 export function findScopeAppDir(): string {
   let dir = dirname(fileURLToPath(import.meta.url));
@@ -50,7 +50,10 @@ export function findScopeAppDir(): string {
     if (parent === dir) break;
     dir = parent;
   }
-  throw new Error("could not locate apps/scope relative to the handoffkit CLI");
+  throw new Error(
+    "could not locate the Scope dashboard; published @fusionkit/cli packages " +
+      "must include scope/server.js and source checkouts must include apps/scope"
+  );
 }
 
 /**
@@ -60,9 +63,12 @@ export function findScopeAppDir(): string {
  * module compiles to `<cli-package>/dist/fusion/observability.js`, so the staged
  * bundle is two levels up at `<cli-package>/scope/server.js`.
  */
-export function bundledScopeServer(): string | undefined {
-  if (process.env.FUSIONKIT_DEV === "1") return undefined;
-  const serverJs = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "scope", "server.js");
+export function bundledScopeServer(
+  moduleUrl = import.meta.url,
+  env: NodeJS.ProcessEnv = process.env
+): string | undefined {
+  if (env.FUSIONKIT_DEV === "1") return undefined;
+  const serverJs = join(dirname(fileURLToPath(moduleUrl)), "..", "..", "scope", "server.js");
   return existsSync(serverJs) ? serverJs : undefined;
 }
 
@@ -122,8 +128,16 @@ export function scopeSourceIdentity(scopeDir = findScopeAppDir()): string {
   return `scope-dashboard:${hash.digest("hex").slice(0, 16)}`;
 }
 
-export function expectedScopeIdentity(): string {
-  return bundledScopeServer() !== undefined ? SCOPE_BUNDLED_IDENTITY : scopeSourceIdentity();
+export function expectedScopeIdentity(
+  input: {
+    moduleUrl?: string;
+    env?: NodeJS.ProcessEnv;
+    scopeDir?: string;
+  } = {}
+): string {
+  return bundledScopeServer(input.moduleUrl, input.env) !== undefined
+    ? SCOPE_BUNDLED_IDENTITY
+    : scopeSourceIdentity(input.scopeDir);
 }
 
 /**
@@ -207,8 +221,9 @@ async function collectSpawnOutput(
 
 /**
  * Monorepo dev fallback: build the scope app once (reusing a prior build) and
- * `next start` it on the fixed port. Only reached in a handoffkit checkout where
- * no bundle was staged; published installs always use {@link startBundledDashboard}.
+ * `next start` it on the fixed port. Only reached when a FusionKit source
+ * checkout does not select the release bundle (including `FUSIONKIT_DEV=1`);
+ * published installs always use {@link startBundledDashboard}.
  */
 async function startDevDashboard(input: {
   env: Record<string, string | undefined>;
@@ -351,6 +366,7 @@ export async function startObservability(input: {
     resolved = await input.portless.discoverOrSpawn({
       name: "scope",
       identity: dashboardIdentity,
+      replaceStale: true,
       healthCheck: (loopbackUrl) => probeDashboardIdentity(loopbackUrl, dashboardIdentity),
       spawn: spawnDashboard
     });

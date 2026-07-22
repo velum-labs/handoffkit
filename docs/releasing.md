@@ -18,7 +18,7 @@ flowchart TD
   protocol["fusionkit-protocol (npm + PyPI)"]
   fusionpy["fusionkit-pypi (5 PyPI pkgs)"]
   cursor["cursorkit (npm)"]
-  handoff["handoffkit (19 @fusionkit/* npm)"]
+  handoff["handoffkit (20 @routekit/* + 10 @fusionkit/* npm)"]
   mlx["mlx-lm (private PyPI)"]
   protocol --> fusionpy
   protocol --> cursor
@@ -26,9 +26,20 @@ flowchart TD
   fusionpy --> mlx
 ```
 
-`fusionkit-sandbox` is out of scope (publishes nothing). The Python `uniroute`
-packages, `apps/scope`/`apps/docs`, and the Docker image are `tracked` only:
-visible in plans for version awareness, never published by this tool.
+The Python `uniroute` packages, app source versions, and the Docker image are
+`tracked` only: visible in plans for version awareness, not independent release
+units. The handoffkit npm workflow stages `apps/scope` into `@fusionkit/cli`;
+`apps/docs` deploys separately through Vercel.
+
+Each unit's `publishWorkflow` in `release/workspace.release.json` names a
+workflow in that unit's own repository. For `mlx-lm` that is
+`velum-private-release.yml` in the `velum-labs/mlx-lm` repo; it is not a
+workflow file in this repository.
+
+The protocol ships as two distinct packages: `spec/model-fusion-contract`
+publishes `@velum-labs/model-fusion-protocol` (the cross-repo
+`fusionkit-protocol` release unit above), while `packages/protocol` ships
+`@fusionkit/protocol` as part of the npm monorepo (handoffkit) release.
 
 ## State files
 
@@ -81,10 +92,11 @@ changes. `pnpm check` fails when the docs page drifts from `CHANGELOG.md`.
 
 ## Preflight
 
-Each unit's `preflight` command in `release/workspace.release.json` (e.g.
-`pnpm check` for handoffkit, `uv build --all-packages` for fusionkit-pypi) runs
-after the bump and before the commit, so a broken release candidate aborts
-before anything is pushed or published.
+Each unit's `preflight` command in `release/workspace.release.json` runs after
+the bump and before the commit, so a broken release candidate aborts before
+anything is pushed or published. HandoffKit runs `pnpm check`; the PyPI unit
+builds its five declared packages in dependency order rather than every uv
+workspace member.
 
 ## Agent / scripted usage
 
@@ -119,8 +131,8 @@ ship the new contract.
 Separate from releasing, for day-to-day iteration:
 
 ```bash
-node scripts/monorepo.mjs graph             # @fusionkit/* dep graph + manifest order check
-node scripts/monorepo.mjs affected origin/main   # scoped build + test for changed packages
+node scripts/monorepo.mjs graph             # @routekit/* + @fusionkit/* graph/order check
+node scripts/monorepo.mjs affected origin/main   # Turbo build + test for changed projects/dependents
 node scripts/monorepo.mjs clean             # purge stale release-artifacts tarballs
 ```
 

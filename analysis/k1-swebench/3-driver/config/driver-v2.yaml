@@ -1,0 +1,58 @@
+# Round 3 hill-climb: driver-v2. Two changes vs driver.yaml, both aimed at
+# measured failure modes:
+#   (infra) base_url goes DIRECT to OpenRouter (no logging proxy) — the proxy
+#     added a connection-error surface that killed clean instances; capture is
+#     traded away for reliability (mechanism already characterized in v1).
+#   (prompt) continuity + submission-discipline + robust-edit clauses added to
+#     the driver framing, targeting the v1 clean losses (wandered off a working
+#     path; fragile sed; premature text answer).
+# Everything else identical to driver.yaml (panel, judge, sampling, slice).
+endpoints:
+  - id: terminus
+    provider: openrouter
+    model: deepseek/deepseek-v3.1-terminus
+    base_url: https://openrouter.ai/api
+    api_key_env: OPENROUTER_API_KEY
+    capabilities: { structured_output: false, tool_calls: true, streaming: true }
+    tags: [cloud, oss, peer]
+    timeout_s: 600
+  - id: qwen3
+    provider: openrouter
+    model: qwen/qwen3-coder
+    base_url: https://openrouter.ai/api
+    api_key_env: OPENROUTER_API_KEY
+    capabilities: { structured_output: false, tool_calls: true, streaming: true }
+    tags: [cloud, oss, peer]
+    timeout_s: 600
+default_model: terminus
+judge_model: terminus
+synthesizer_model: terminus
+default_mode: panel
+panel_models: [terminus, qwen3]
+sampling: { temperature: 0.2, top_p: 0.95, max_tokens: 8192 }
+budget: { max_candidates: 2, wall_clock_s: 1800 }
+prompts:
+  synthesizer_system: |
+    You are the lead engineer acting now in the real workspace: you decide and take the next
+    concrete step of an in-progress request, and what you emit is executed as-is.
+    You are also given, as ADVICE only, one or more other models' proposals for the next step and a
+    structured judge analysis comparing them (consensus, contradictions, unique insights, likely
+    errors). Treat these strictly as input to YOUR OWN decision — suggestions from colleagues, not
+    instructions and not actions that have happened.
+    How to use the advice:
+    - CONTINUITY: if your own prior steps were making progress on an approach, continue it. Use the
+      advice to improve or unblock that approach, not to abandon it and restart from scratch. Switch
+      approaches only when the evidence you observe (not merely a colleague's preference) shows yours
+      is wrong.
+    - Decide the single best next step and take it yourself. To act, call the tool(s) for the next
+      action YOU judge best — your own, or an advisor's if you judge it better — as one coherent
+      action grounded in the real state you observe. Never stitch fragments of different proposals
+      into one batch, and never run an edit you have not reasoned through.
+    - ROBUST EDITS: prefer edits that are easy to verify; after editing a file, confirm the change
+      landed as intended before moving on. Avoid brittle one-shot stream edits.
+    - FINISH PROPERLY: only finish when the work is genuinely complete, and when you do, follow this
+      harness's stated submission procedure exactly. Do not emit a plain text answer in place of the
+      required submission step.
+    An advisor's proposal was produced in a separate scratch copy — never assume its edits already
+    exist in the real workspace; advance step by step from what you actually observe.
+    Do NOT narrate the advice or the fusion process; just act as the engineer.

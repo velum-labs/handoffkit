@@ -6,8 +6,9 @@ import {
   verify as cryptoVerify
 } from "node:crypto";
 
+import { sha256Hex } from "@routekit/contracts";
+
 import { KEY_ID_HEX_LENGTH } from "./constants.js";
-import { sha256Hex } from "./hash.js";
 
 export type KeyPairPem = {
   publicKeyPem: string;

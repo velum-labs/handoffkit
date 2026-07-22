@@ -6,7 +6,7 @@ import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { generateText, jsonSchema, stepCountIs, tool } from "ai";
 
 import { ATTR } from "@fusionkit/protocol";
-import { buildChildEnv } from "@fusionkit/runtime-utils";
+import { buildChildEnv } from "@routekit/runtime";
 import { headersOf, jsonAttr, startFusionSpan } from "@fusionkit/tracing";
 import type { FusionSpan, FusionTraceCarrier } from "@fusionkit/tracing";
 
@@ -106,6 +106,19 @@ function extractSteps(content: readonly AgentContentPart[]): Array<Omit<Trajecto
         type: "observation",
         ...(asString(part.toolCallId) !== undefined ? { tool_call_id: asString(part.toolCallId) } : {}),
         text: truncate(stringifyOutput(part.output), MAX_TOOL_OUTPUT)
+      });
+    } else if (part.type === "tool-error") {
+      // AI SDK represents a thrown tool execution separately from a normal
+      // result. It is still critical trajectory evidence (and the model sees
+      // it before its next generation), so never silently drop it.
+      out.push({
+        type: "observation",
+        ...(asString(part.toolName) !== undefined ? { tool_name: asString(part.toolName) } : {}),
+        ...(asString(part.toolCallId) !== undefined
+          ? { tool_call_id: asString(part.toolCallId) }
+          : {}),
+        text: truncate(stringifyOutput(part.error), MAX_TOOL_OUTPUT),
+        is_error: true
       });
     }
   }

@@ -6,6 +6,46 @@ The generated reference intentionally covers package entry points and Python pub
 
 ## TypeScript package entry points
 
+### `packages/accounts/src/index.ts`
+
+`@routekit/accounts` — the subscription pooling SDK.
+
+A cohesive, typed surface for pooling Claude Code and Codex OAuth
+subscriptions behind one provider-native proxy: resolve an account set from
+the official CLI login / an enrolled directory / explicit paths, select and
+refresh members with quota-aware routing, and expose it over the gateway wire
+protocols. `startSubscriptionProxy` is the one-call programmatic entrypoint;
+`SubscriptionProxyClient` reads a running proxy's usage over a typed wire
+contract. Product CLIs can wrap this module without owning account logic.
+
+- `export { defaultSubscriptionAccountDirectory, defaultSubscriptionCredentialPath, enrollCurrentSubscription, loadSubscriptionCredential, persistSubscriptionCredential, removeSubscriptionAccount, sanitizeSubscriptionLabel, subscriptionCredentialLabel } from "./credentials.js";`
+- `export type { RemoveSubscriptionAccountResult } from "./credentials.js";`
+- `export { resolveSubscriptionAccounts } from "./account-source.js";`
+- `export type { ResolvedSubscriptionAccounts, SubscriptionAccountSource } from "./account-source.js";`
+- `export { subscriptionProvider } from "./provider.js";`
+- `export type { AdminUsageCost, AdminUsageRange, SubscriptionProvider } from "./provider.js";`
+- `export { RateLimitTracker, SubscriptionAccountSet, SubscriptionAccountSetExhaustedError } from "./account-set.js";`
+- `export type { SubscriptionAccountSetOptions } from "./account-set.js";`
+- `export { SubscriptionAccountBackend } from "./backend.js";`
+- `export type { SubscriptionAccountBackendOptions } from "./backend.js";`
+- `export { CodexBackendRelay, codexRelayAuth } from "./codex-relay.js";`
+- `export type { CodexCatalogEntry, CodexRelayAuth, CodexRelayAuthSource, CodexRelayOptions, ProviderRelayLogger, CodexStockEntry } from "./codex-relay.js";`
+- `export { AnthropicBackendRelay, forwardRelayHeaders, RelayOnlyBackend } from "./relay.js";`
+- `export type { AnthropicRelayOptions, SubscriptionRelay, SubscriptionRelayDialect } from "./relay.js";`
+- `export { openSubscriptionAccountSets, openSubscriptionRelays, subscriptionRelaysFromAccountSets } from "./gateway.js";`
+- `export type { OpenSubscriptionRelaysOptions, OpenSubscriptionRelaysResult, SubscriptionAccountConfigs, SubscriptionAccountSets } from "./gateway.js";`
+- `export { NoSubscriptionAccountsError, startSubscriptionProxy } from "./proxy.js";`
+- `export type { StartSubscriptionProxyOptions, SubscriptionProxy } from "./proxy.js";`
+- `export { SubscriptionProxyClient, SubscriptionProxyClientError } from "./client.js";`
+- `export type { SubscriptionProxyClientOptions } from "./client.js";`
+- `export { collectSubscriptionUsage, DEFAULT_SUBSCRIPTION_USAGE_REFRESH_MS, openLocalSubscriptionUsage } from "./usage.js";`
+- `export type { SubscriptionUsageSource } from "./usage.js";`
+- `export { CLIPROXY_API_KEY_ENV, CLIPROXY_BASE_URL_ENV, CLIPROXY_HOME_ENV, CLIPROXY_LOGIN_FLAGS, CLIPROXY_PINNED_VERSION, cliproxyAssetName, cliproxyApiKey, cliproxyBaseUrl, cliproxyBinaryPath, cliproxyConfigPath, cliproxyHome, cliproxyStatus, ensureCliproxyConfig, installCliproxy, runCliproxyLogin, spawnCliproxy } from "./cliproxy.js";`
+- `export type { CliproxyInstallResult, CliproxyStatus } from "./cliproxy.js";`
+- `export { snapshotsToUsage, SUBSCRIPTION_USAGE_PATH, subscriptionUsageResponseSchema } from "./wire.js";`
+- `export type { SubscriptionUsageResponse } from "./wire.js";`
+- `export type { AccountLimits, CreditSnapshot, RateLimitObservationSource, RateLimitWindow, SubscriptionAccountSetSnapshot, SubscriptionCredential, SubscriptionFailure, SubscriptionMemberStatus, SubscriptionSelectionStrategy } from "./types.js";`
+
 ### `packages/adapter-ai-sdk/src/index.ts`
 
 @fusionkit/adapter-ai-sdk is the AI SDK side of FusionKit local-model flows.
@@ -21,13 +61,28 @@ routing live in the legacy `@fusionkit/handoff` package.
 - `export { managedModelServer, mlxServer } from "./managed-server.js";`
 - `export type { ManagedModelServerOptions, ManagedServerEvent, MlxServerOptions } from "./managed-server.js";`
 
+### `packages/cli-core/src/index.ts`
+
+No module JSDoc was found.
+
+- `export { attachGlobalFlags, contextFor, emitJson, isJsonMode, resetContextForTest } from "./context.js";`
+- `export type { CommandContext, GlobalFlags } from "./context.js";`
+- `export { CliError, cliErrorPayload, fail, renderCliError } from "./errors.js";`
+- `export type { CliErrorInput } from "./errors.js";`
+- `export { findFlagTypos, knownLongFlags, levenshtein, warnPassthroughTypos } from "./flags.js";`
+- `export { argOrPick, canPickInteractively } from "./pickers.js";`
+- `export { collect, parseIdValue, parsePort, parsePositiveInteger, parsePositiveNumber } from "./options.js";`
+- `export { COMPLETION_SHELLS, completionCandidates, completionScript, filterCompletionCandidates, isCompletionShell, registerCompletion, visibleCommandNames, visibleLongFlags, walkCompletionTree } from "./completion.js";`
+- `export type { CompletionShell, CompletionValueProvider, CompletionWalk } from "./completion.js";`
+- `export { formatPackageVersion, probeBinaryVersion, readPackageVersion } from "./version.js";`
+
 ### `packages/cli-ui/src/index.ts`
 
-@fusionkit/cli-ui — the fusionkit terminal UX layer.
+@routekit/cli-ui — a brand-configurable terminal UX layer.
 
 One presenter contract, two implementations: rich Ink (React) rendering on
 interactive TTYs, ordered plain-text lines everywhere else (CI, pipes,
-`FUSIONKIT_NO_TUI=1`). All UI goes to stderr; stdout stays reserved for
+`ROUTEKIT_NO_TUI=1`). All UI goes to stderr; stdout stays reserved for
 machine payloads and the launched tool's output.
 
 - `export { PlainPresenter, renderErrorPanelLines, renderKeyValueLines, renderTableLines } from "./plain.js";`
@@ -47,6 +102,33 @@ Entry point for the FusionKit command line package. The executable itself lives 
 
 No exports found.
 
+### `packages/config-core/src/index.ts`
+
+No module JSDoc was found.
+
+- `export type ConfigSource ...`
+- `export type LayeredValue<T> ...`
+- `export function resolveLayer<T>(`
+- `export function isRecord(value: unknown): value is Record<string, unknown> ...`
+- `export function readJson(path: string): unknown ...`
+- `export function readValidatedJson<T>(`
+- `export function writeJsonAtomic(`
+- `export function loadMigratingConfig<T>(input: ...`
+- `export function editConfig<T, U ...`
+
+### `packages/contracts/src/index.ts`
+
+No module JSDoc was found.
+
+- `export { canonicalize } from "./jcs.js";`
+- `export type { JsonValue } from "./jcs.js";`
+- `export { SHA256_PREFIX, artifactHash, hashCanonical, hashCanonicalSha256, requestHash, responseHash, schemaBundleHash, sha256Hex, sha256PrefixedHex } from "./hash.js";`
+- `export type { CapabilityStatus, ModelCallContract, ModelCallSideEffects, ModelCallStatus, ModelChatMessage, ModelChatRole, ModelEndpoint, ModelUsage, ProviderError, ProviderErrorKind, ProviderFailure, ProviderFailureCategory } from "./model.js";`
+- `export { ProviderFailureError, classifyProviderFailure, isRetryableProviderFailure, parseRetryAfterSeconds } from "./model.js";`
+- `export type { ModelReasoningCapabilities, ReasoningCapabilityProvenance, ReasoningCapabilityStatus, ReasoningEffortOption, ReasoningSelection } from "./reasoning.js";`
+- `export { resolveReasoningEffort } from "./reasoning.js";`
+- `export type { HarnessApprovalDecision, HarnessContentStream, HarnessEvent, HarnessEventRaw, HarnessEventType, HarnessItemType, HarnessRequestType, HarnessTokenUsage, HarnessTurnEndReason } from "./harness-event.js";`
+
 ### `packages/ensemble/src/index.ts`
 
 FusionKit ensemble runtime entry point. It exposes harness execution, panel workflows, judge synthesis, runtime-kernel workflows, operators, schedulers, worktrees, isolation helpers, and tool execution.
@@ -60,12 +142,12 @@ FusionKit ensemble runtime entry point. It exposes harness execution, panel work
 - `export { createMockJudgeSynthesizer } from "./judge.js";`
 - `export type { JudgeCandidateEvidence, JudgeInput, JudgePatch, JudgeSynthesizer, JudgeSynthesisOutput, MockJudgeSynthesizerOptions, SynthesisFailureSummary } from "./judge.js";`
 - `export { ensemble, runEnsemble } from "./run.js";`
-- `export { buildPanelPrompt, createFusionKitJudgeSynthesizer, harnessSupportsFiniteK, panelCandidateContract, runFusionPanelWorkflow, runFusionPanels, runUnifiedHarnessE2E, setToolHarnessProvider } from "./unified.js";`
+- `export { buildPanelPrompt, createFusionKitJudgeSynthesizer, harnessSupportsFiniteK, panelCandidateContract, runFusionPanelWorkflow, runFusionPanels, runUnifiedHarnessE2E, setToolDriverRegistry } from "./unified.js";`
 - `export { runPanelRound } from "./panel-round.js";`
 - `export type { PanelRoundOptions } from "./panel-round.js";`
 - `export { runProposalPanels } from "./panel-propose.js";`
 - `export type { ProposalPanelOptions } from "./panel-propose.js";`
-- `export type { CursorHarnessRunnerInput, CursorHarnessRunnerResult, FusedSubagentAccess, FusedSubagentEnsemble, FusionPanelOptions, PanelTrust, ToolHarnessProvider, ToolHarnessResolveOptions, UnifiedHarnessE2EOptions, UnifiedHarnessE2EResult, UnifiedHarnessKind, UnifiedHarnessMatrixResult } from "./unified.js";`
+- `export type { CursorHarnessRunnerInput, CursorHarnessRunnerResult, FusedSubagentAccess, FusedSubagentEnsemble, FusionPanelOptions, PanelTrust, ToolDriverRegistry, ToolHarnessResolveOptions, UnifiedHarnessE2EOptions, UnifiedHarnessE2EResult, UnifiedHarnessKind, UnifiedHarnessMatrixResult } from "./unified.js";`
 - `export type { FusionTraceCarrier } from "@fusionkit/tracing";`
 - `export { runJudgeSynthesis } from "./synthesis.js";`
 - `export type { RunSynthesisInput, SynthesisResult } from "./synthesis.js";`
@@ -81,6 +163,8 @@ FusionKit ensemble runtime entry point. It exposes harness execution, panel work
 - `export { createKernelFuseStepRunner, KERNEL_FUSE_STEP_WORKFLOW } from "./kernel-gateway.js";`
 - `export type { FuseStepTransport } from "./kernel-gateway.js";`
 - `export type { GraphNodeInput, KernelWorkflow, WorkflowFactory } from "./kernel.js";`
+- `export { resolveTopology, topology, topologyHash } from "./topology-spec.js";`
+- `export type { ResolvedTopology, TopologySpec } from "./topology-spec.js";`
 - `export { artifactValue, candidatesFromInputs, consumeUsageFromOutput, createTaskArtifact, defineOperator, firstArtifactByType, operatorSpec, taskFromInputs } from "./kernel-helpers.js";`
 - `export type { CreateTaskArtifactInput } from "./kernel-helpers.js";`
 - `export { directModelWorkflow, executionSelectWorkflow, executionSelectRepairWorkflow, panelCaptureWorkflow, panelJudgeSynthWorkflow, rankFuseWorkflow, registerBuiltInWorkflows } from "./workflows.js";`
@@ -119,27 +203,98 @@ Example utilities entry point. It exposes demo manifest parsing, mock model help
 
 No exports found.
 
+### `packages/fusion-config/src/index.ts`
+
+No module JSDoc was found.
+
+- `export const FUSION_CONFIG_DIRNAME ...`
+- `export const FUSION_CONFIG_BASENAME ...`
+- `export const FUSION_PROMPTS_DIRNAME ...`
+- `export const FUSION_CONFIG_VERSION ...`
+- `export const DEFAULT_ENSEMBLE_NAME ...`
+- `export const FUSION_TOOLS ...`
+- `export type FusionTool ...`
+- `export const PROMPT_IDS ...`
+- `export type PromptId ...`
+- `export const PROMPT_CONFIG_KEY: Record<PromptId, string> ...`
+- `export type PromptOverrides ...`
+- `export type OnRateLimitPolicy ...`
+- `export type PanelTrust ...`
+- `export type EmbeddedRouterConfig ...`
+- `export type ExternalRouterConfig ...`
+- `export type FusionRouterConfig ...`
+- `export type EnsembleConfig ...`
+- `export type FusionConfig ...`
+- `export class FusionConfigError extends Error ...`
+- `export function fusionConfigDir(repoRoot: string): string ...`
+- `export function fusionConfigPath(repoRoot: string): string ...`
+- `export function fusionPromptsDir(repoRoot: string, ensemble?: string): string ...`
+- `export function fusionPromptPath(repoRoot: string, id: PromptId, ensemble?: string): string ...`
+- `export function validateEnsembleName(name: string, source: string): void ...`
+- `export function parseFusionConfig(raw: unknown, source: string): FusionConfig ...`
+- `export function readFusionPrompts(repoRoot: string, ensemble?: string): PromptOverrides ...`
+- `export function loadFusionConfig(repoRoot: string): FusionConfig | undefined ...`
+- `export function persistedFusionConfig(config: FusionConfig): Record<string, unknown> ...`
+- `export function writeFusionConfig(`
+- `export function writeFusionPrompts(`
+
+### `packages/fusion-gateway/src/index.ts`
+
+No module JSDoc was found.
+
+- `export { FusionBackend, InMemoryFusionBackendKernelStateStore, PendingSessionWrites } from "./fusion-backend.js";`
+- `export type { ChatMessageLike, FusedModelRoute, FuseStepRunInput, FuseStepRunner, FusionBackendKernelSessionState, FusionBackendKernelStateStore, FusionBackendOptions, OnRateLimitPolicy, PanelRunInput, PanelRunner, PassthroughModel, SessionMetaInput, WireTrajectory } from "./fusion-backend.js";`
+- `export { FrontdoorArtifactTypes, FrontdoorFuseError, FrontdoorOperatorKinds, FrontdoorPanelError, frontdoorBudgetGateOperator, frontdoorBudgetStopOperator, frontdoorFinalizeOperator, frontdoorFuseOperator, frontdoorPanelOperator, frontdoorResolveModelOperator, frontdoorStreamingFuseOperator, frontdoorVendorProxyOperator } from "./frontdoor/operators.js";`
+- `export type { BudgetValue, CandidateSetValue, FailoverValue, RouteValue } from "./frontdoor/operators.js";`
+- `export { FUSION_FRONTDOOR_TURN_WORKFLOW, frontdoorRequestArtifact, runFusionFrontdoorTurn, streamFusionFrontdoorTurn } from "./frontdoor/workflow.js";`
+- `export type { FrontdoorTurnOutcome } from "./frontdoor/workflow.js";`
+- `export { FUSION_FRONTDOOR_REQUEST_WORKFLOW, FrontdoorRequestScheduler, runFrontdoorRequest } from "./frontdoor/request.js";`
+- `export { eventsToSseResponse } from "./frontdoor/sse.js";`
+- `export type { EventsToSseOptions } from "./frontdoor/sse.js";`
+- `export { createTurnNarrator, mergeEventsWithNarration } from "./frontdoor/narration.js";`
+- `export type { NarrationWriter, ReasoningDeltaEvent, TurnNarration, TurnNarratorInput } from "./frontdoor/narration.js";`
+- `export { createChatNarrationWriter } from "./frontdoor/narration-writer.js";`
+- `export type { ChatFn, ChatNarrationWriterOptions } from "./frontdoor/narration-writer.js";`
+- `export { FRONTDOOR_SIGNAL } from "./frontdoor/types.js";`
+- `export type { FrontdoorChatBody, FrontdoorRequestValue, FrontdoorRoute, FrontdoorServices, VendorProxyOutcome } from "./frontdoor/types.js";`
+- `export { defaultSessionsDir, FileSystemSessionStore, InMemorySessionStore } from "./session-store.js";`
+- `export type { PersistedSession, SessionMeta, SessionStore, SessionSummary, SessionTurnRecord } from "./session-store.js";`
+- `export { addLedgerEntry, addTurnCost, emptySessionCost, estimateCost, formatUsd, lookupPricing, meterCall, meterTurn, parseUsage, parseUsageFromSse, turnCostLine } from "./cost.js";`
+- `export type { CostLedgerEntry, CostStage, LocalComputePricing, LocalComputeUsage, ModelPricing, ProviderCostMetadata, SessionCost, TokenUsage, TurnCost } from "./cost.js";`
+- `export { defaultFusionGatewayLogger } from "./logger.js";`
+- `export type { FusionGatewayLogger } from "./logger.js";`
+- `export { MlxBackend } from "./mlx-backend.js";`
+- `export type { MlxBackendOptions } from "./mlx-backend.js";`
+- `export { createBackend, DEFAULT_MLX_MODEL, resolveBackendConfig } from "./config.js";`
+- `export type { BackendConfig } from "./config.js";`
+- `export { createTrajectoryCapture, reconstructTrajectory } from "./trajectory-capture.js";`
+- `export type { CapturedStep, CapturedTrajectory, TrajectoryCapture } from "./trajectory-capture.js";`
+- `export { PANEL_DEPTH_HEADER, panelDepthFromRequest, parsePanelDepth } from "./request-context.js";`
+- `export { toFusionModelCallRecord } from "./provenance.js";`
+
 ### `packages/harness-core/src/index.ts`
 
-@fusionkit/harness-core is the single coding-agent harness contract:
+@routekit/harness-core is the single coding-agent harness contract:
 driver -> instance -> session interfaces, the canonical harness event
 union (with raw provider envelopes), one tagged error taxonomy with
 derived retryability, deferred-based approvals with explicit policies,
 status probes with an identity-checked disk cache, and an explicit driver
 registry. Drivers (tool-codex, tool-claude, tool-cursor, tool-opencode)
-implement this contract; the panel fanout and launchers consume it.
+implement this contract; orchestrators and launchers consume it.
 
-- `export { HARNESS_KINDS, isHarnessKind, toModelFusionHarnessKind } from "./kinds.js";`
+- `export { HARNESS_KINDS, isHarnessKind } from "./kinds.js";`
 - `export type { HarnessKind } from "./kinds.js";`
-- `export { HARNESS_ERROR_CODES, HarnessError, asHarnessError, isRetryable, toModelFusionErrorKind } from "./errors.js";`
+- `export { HARNESS_ERROR_CODES, HarnessError, asHarnessError, isRetryable } from "./errors.js";`
 - `export type { HarnessErrorCategory, HarnessErrorCode } from "./errors.js";`
 - `export type { HarnessContentStream, HarnessEvent, HarnessEventRaw, HarnessEventType, HarnessItemType, HarnessRequestType, HarnessTokenUsage, HarnessTurnEndReason } from "./events.js";`
-- `export { PANEL_APPROVAL_POLICY, PendingRequests, createDeferred, decideApproval } from "./approvals.js";`
+- `export { DEFAULT_AUTOMATION_APPROVAL_POLICY, PendingRequests, createDeferred, decideApproval } from "./approvals.js";`
 - `export type { ApprovalDecision, ApprovalPolicy, Deferred, PendingRequest } from "./approvals.js";`
 - `export { DEFAULT_STATUS_CACHE_DIR, readCachedStatus, statusSkipReason, writeCachedStatus } from "./status.js";`
 - `export type { HarnessAuthStatus, HarnessModelDescriptor, HarnessStatus } from "./status.js";`
 - `export type { AnyHarnessDriver, DriverContext, HarnessDriver, HarnessInstance, ResumeCursor, SessionHandle, SessionTurnInput, StartSessionOptions } from "./contract.js";`
 - `export { DriverRegistry } from "./registry.js";`
+- `export { createCachedHarnessDriver, probeCliVersion, resolveDriverEnv } from "./driver-factory.js";`
+- `export type { CachedHarnessDriverInput, CliVersionProbeInput } from "./driver-factory.js";`
 - `export { AsyncChannel } from "./channel.js";`
 - `export { EventLog } from "./logging.js";`
 - `export type { EventLogOptions } from "./logging.js";`
@@ -157,79 +312,57 @@ No exports found.
 
 ### `packages/model-gateway/src/index.ts`
 
-@fusionkit/model-gateway is the Fusion Harness Gateway entry point.
-
-It fronts OpenAI-compatible Chat Completions backends, local MLX servers, and
-fused panel routes, then exposes the wire dialects each agent harness needs.
-A local or fused model can back opencode, Claude Code, Codex, Cursor, and raw
-HTTP callers without changing their workflow.
-
-Public exports include server startup, backend implementations, frontdoor
-workflows, session stores, cost metering, rate-limit failover, dialect
-adapters, ACP helpers, provenance records, and trajectory capture.
+Product-neutral RouteKit gateway and router.
 
 - `export { startGateway } from "./server.js";`
-- `export type { Gateway, GatewayOptions } from "./server.js";`
-- `export { CodexBackendRelay, codexRelayAuth } from "./codex-relay.js";`
-- `export type { CodexCatalogEntry, CodexRelayAuth, CodexRelayOptions, CodexStockEntry } from "./codex-relay.js";`
-- `export { joinPath, ModelRoutedBackend, OpenAiBackend, PANEL_DEPTH_HEADER, parsePanelDepth } from "./backend.js";`
-- `export type { Backend, BackendRequestOptions, ModelRoutedBackendOptions, OpenAiBackendOptions } from "./backend.js";`
-- `export { FusionBackend } from "./fusion-backend.js";`
-- `export { InMemoryFusionBackendKernelStateStore, PendingSessionWrites } from "./fusion-backend.js";`
-- `export { FrontdoorArtifactTypes, FrontdoorFuseError, FrontdoorOperatorKinds, FrontdoorPanelError, frontdoorBudgetGateOperator, frontdoorBudgetStopOperator, frontdoorFinalizeOperator, frontdoorFuseOperator, frontdoorPanelOperator, frontdoorResolveModelOperator, frontdoorStreamingFuseOperator, frontdoorVendorProxyOperator } from "./frontdoor/operators.js";`
-- `export type { BudgetValue, CandidateSetValue, FailoverValue, RouteValue } from "./frontdoor/operators.js";`
-- `export { FUSION_FRONTDOOR_TURN_WORKFLOW, frontdoorRequestArtifact, runFusionFrontdoorTurn, streamFusionFrontdoorTurn } from "./frontdoor/workflow.js";`
-- `export type { FrontdoorTurnOutcome } from "./frontdoor/workflow.js";`
-- `export { FUSION_FRONTDOOR_REQUEST_WORKFLOW, FrontdoorRequestScheduler, runFrontdoorRequest } from "./frontdoor/request.js";`
-- `export { eventsToSseResponse } from "./frontdoor/sse.js";`
-- `export type { EventsToSseOptions } from "./frontdoor/sse.js";`
-- `export { createTurnNarrator, mergeEventsWithNarration } from "./frontdoor/narration.js";`
-- `export type { NarrationWriter, ReasoningDeltaEvent, TurnNarration, TurnNarratorInput } from "./frontdoor/narration.js";`
-- `export { createChatNarrationWriter } from "./frontdoor/narration-writer.js";`
-- `export type { ChatFn, ChatNarrationWriterOptions } from "./frontdoor/narration-writer.js";`
-- `export { FRONTDOOR_SIGNAL } from "./frontdoor/types.js";`
-- `export type { FrontdoorChatBody, FrontdoorRequestValue, FrontdoorRoute, FrontdoorServices, VendorProxyOutcome } from "./frontdoor/types.js";`
-- `export type { ChatMessageLike, FusedModelRoute, FuseStepRunInput, FuseStepRunner, FusionBackendKernelSessionState, FusionBackendKernelStateStore, FusionBackendOptions, OnRateLimitPolicy, PanelRunInput, PanelRunner, PassthroughModel, SessionMetaInput } from "./fusion-backend.js";`
-- `export type { WireTrajectory } from "@fusionkit/protocol";`
-- `export { defaultSessionsDir, FileSystemSessionStore, InMemorySessionStore } from "./session-store.js";`
-- `export type { PersistedSession, SessionMeta, SessionStore, SessionSummary, SessionTurnRecord } from "./session-store.js";`
-- `export { addTurnCost, DEFAULT_MODEL_PRICING, emptySessionCost, estimateCost, formatUsd, lookupPricing, meterTurn, parseUsage, parseUsageFromSse, turnCostLine } from "./cost.js";`
-- `export type { CostLedgerEntry, CostStage, LocalComputePricing, LocalComputeUsage, ModelPricing, ProviderCostMetadata, SessionCost, TokenUsage, TurnCost } from "./cost.js";`
-- `export { defaultFusionGatewayLogger } from "./logger.js";`
-- `export type { FusionGatewayLogger } from "./logger.js";`
-- `export { MlxBackend } from "./mlx-backend.js";`
-- `export type { MlxBackendOptions } from "./mlx-backend.js";`
-- `export { createBackend, DEFAULT_MLX_MODEL, resolveBackendConfig } from "./config.js";`
-- `export type { BackendConfig } from "./config.js";`
+- `export type { Gateway, GatewayOptions, ProviderRelay, ProviderRelayDialect } from "./server.js";`
+- `export { startSwitchingGatewayProxy } from "./switching-proxy.js";`
+- `export type { SwitchingGatewayProxy } from "./switching-proxy.js";`
+- `export { joinPath, ModelRoutedBackend, OpenAiBackend } from "./backend.js";`
+- `export type { Backend, BackendModelRoute, BackendRequestOptions, ModelRoutedBackendOptions, OpenAiBackendOptions } from "./backend.js";`
+- `export { AnthropicBackend, CodexResponsesBackend, GoogleGenAiBackend } from "./provider-backends.js";`
+- `export type { ProviderBackendOptions, ProviderTransport } from "./provider-backends.js";`
+- `export { CatalogBackend, isSubscriptionProvider, normalizeRouterConfigAliases, parseRouterConfig, routerConfigSchema, splitNamespacedModel, UnknownModelError } from "./router.js";`
+- `export type { CatalogBackendOptions, ProviderPolicy, RouterConfig, } from "./router.js";`
+- `export { API_PROVIDER_IDS, ApiProviderSource, parseDiscoveredModels, parseReasoningCapabilities, PROVIDER_IDS, SUBSCRIPTION_PROVIDER_IDS } from "./provider-source.js";`
+- `export type { ApiProviderId, ApiProviderSourceOptions, DiscoveredModel, ProviderId, ProviderSource, ProviderSourceTransport, SubscriptionProviderId } from "./provider-source.js";`
+- `export { endpointHealthProbe, probeEndpointHealth, providerAuthHeaders } from "./endpoint-health.js";`
+- `export type { AccountEndpointConfig, EndpointHealthProbe, EndpointHealthProbePlan, EndpointHealthResult, ModelEndpointConfig, UrlEndpointConfig } from "./endpoint-health.js";`
+- `export { CapacityPool } from "./capacity-pool.js";`
+- `export type { CapacityLease, CapacityPoolMember, CapacityPoolOptions, CapacityPoolStrategy } from "./capacity-pool.js";`
 - `export { effectiveModel, isStream, withDefaultModel } from "./adapters/chat.js";`
 - `export { isCursorChatBody, translateCursorRequest } from "./adapters/cursor.js";`
-- `export { anthropicModelsResponse, anthropicToChat, chatToAnthropicMessage, claudeModelAlias, countTokensEstimate, handleAnthropicMessages, handleCountTokens, mapStopReason, openAiSseToAnthropic } from "./adapters/anthropic.js";`
+- `export { anthropicModelsResponse, anthropicToChat, CLAUDE_ALIAS_PREFIX, chatToAnthropicMessage, claudeModelAlias, countTokensEstimate, handleAnthropicMessages, handleCountTokens, mapStopReason, openAiSseToAnthropic } from "./adapters/anthropic.js";`
 - `export type { AnthropicRequest } from "./adapters/anthropic.js";`
 - `export { chatToResponses, customToolNames, handleResponses, openAiSseToResponses, responsesToChat, responsesToolRegistry } from "./adapters/responses.js";`
 - `export type { ResponsesRequest, ResponsesToolKind, ResponsesToolRegistry } from "./adapters/responses.js";`
 - `export { MAX_WEB_SEARCHES_PER_TURN, resolveWebSearchExecutor } from "./adapters/web-search.js";`
 - `export type { WebSearchDialect, WebSearchExecutor, WebSearchOutcome } from "./adapters/web-search.js";`
-- `export { FUSION_EVIDENCE_HEADER, FUSION_REPORT_HEADER, FUSION_RUN_ID_HEADER, FUSION_STATUS_HEADER, formatAnthropic, formatChat, formatResponses, promptFromAnthropic, promptFromChat, promptFromResponses, startFusionGateway } from "./fusion-gateway.js";`
-- `export type { ChatRequest, FrontDoorDialect, FrontDoorRunner, FrontDoorRunnerInput, FrontDoorRunnerResult, FusionGateway, FusionGatewayOptions } from "./fusion-gateway.js";`
+- `export { DIALECT_DROPPED_ATTRIBUTE, droppedField, resetDroppedFieldWarnings, withDroppedFieldSpan } from "./adapters/dropped.js";`
+- `export type { DialectName, DroppedFieldSpan } from "./adapters/dropped.js";`
 - `export { ACP_PROTOCOL_VERSION, runAcpAgent } from "./acp-agent.js";`
 - `export type { AcpAgentOptions, AcpRunner, AcpRunnerInput, AcpRunnerResult } from "./acp-agent.js";`
-- `export { runFrontDoorAcceptance } from "./front-door-acceptance.js";`
-- `export type { FrontDoorAcceptanceOptions, FrontDoorAcceptanceReport, FrontDoorOutcome, FrontDoorOutcomeProducer, FrontDoorStatus } from "./front-door-acceptance.js";`
 - `export { ACP_REGISTRY_URL, fetchAcpRegistry, installAcpAdapters } from "./acp-registry.js";`
 - `export type { AcpRegistry, AcpRegistryAgent, AcpRegistryFetcher, InstallAcpAdaptersOptions, InstalledAcpAdapter } from "./acp-registry.js";`
+- `export { DEFAULT_MODEL_PRICING, estimateCost, formatUsd, lookupPricing, meterCall, parseUsage, parseUsageFromSse } from "./cost.js";`
+- `export type { CallCostRecord, ModelPricing, ProviderCostMetadata, TokenUsage } from "./cost.js";`
 - `export { buildModelCallRecord, MODEL_CALL_ID_HEADER, modelCallId, readProducerVersion, resolveProducerGitSha, responseBodyHash, UNKNOWN_GIT_SHA } from "./provenance.js";`
 - `export type { GatewayDialect, ModelCallRecord, ModelGatewayCallContext, ModelGatewayCallResult, ProvenanceSink } from "./provenance.js";`
-- `export { createTrajectoryCapture, reconstructTrajectory } from "./trajectory-capture.js";`
-- `export type { CapturedStep, CapturedTrajectory, TrajectoryCapture } from "./trajectory-capture.js";`
+- `export { authorizedRequest } from "./auth.js";`
+- `export { errorEvent, finishChunk, noticeChunk, reasoningChunk, sseResponse } from "./sse-wire.js";`
+- `export { ChatStreamAssembler } from "./sse/chat-assembler.js";`
+- `export type { AssembledToolCall } from "./sse/chat-assembler.js";`
+- `export { decodeBufferedSse, SseDecoder, SseParseError } from "./sse/parse.js";`
 
 ### `packages/protocol/src/index.ts`
 
 @fusionkit/protocol is the open, versioned data contract layer.
 
-It exports signed run contracts, receipts, hash-chained event logs, workspace
-manifests, policy snapshots, checkpoints, handoff envelopes, model-fusion
-schemas, generated OpenAPI clients, hashing, signing, verification, trace
-events, validators, and normalization helpers.
+It exports FusionKit wire/panel/model-fusion schemas and generated clients.
+The signed-run governance contracts below are unrelated legacy Warrant
+surface retained here for compatibility during this phase; they are
+intentionally guarded as FusionKit protocol, not RouteKit contracts.
+Generic hashing/JCS and model-call primitives come from @routekit/contracts.
 
 Everything here is stable protocol surface. Packages should consume these
 interfaces instead of recreating local string lists or proof logic.
@@ -240,13 +373,13 @@ interfaces instead of recreating local string lists or proof logic.
 - `export type { ExecutionEnv, ExecutionLogPolicy, ExecutionSpec } from "./execution.js";`
 - `export { evaluateToolPolicy, modelFusionSideEffects, toolArgumentsHash, toolCallKey, toolSideEffectClassFromModelFusion } from "./tool-executor.js";`
 - `export type { ToolDefinition, ToolExecutionRequest, ToolExecutionResult, ToolExecutorBudget, ToolExecutorContract, ToolExecutorLimits, ToolExecutorMode, ToolPolicyDecision, ToolSideEffectClass } from "./tool-executor.js";`
-- `export { canonicalize } from "./jcs.js";`
-- `export type { JsonValue } from "./jcs.js";`
+- `export { canonicalize } from "@routekit/contracts";`
+- `export type { JsonValue } from "@routekit/contracts";`
 - `export { assertWireTrajectory, isWireTrajectory, normalizeWireTrajectories } from "./fusion-wire.js";`
 - `export type { WireTrajectory } from "./fusion-wire.js";`
 - `export { isFiniteK, isLookaheadK, isProposalK, panelModeForK } from "./panel-k.js";`
 - `export type { PanelMode } from "./panel-k.js";`
-- `export { artifactHash, hashCanonical, hashCanonicalSha256, requestHash, responseHash, schemaBundleHash, SHA256_PREFIX, sha256Hex, sha256PrefixedHex } from "./hash.js";`
+- `export { artifactHash, hashCanonical, hashCanonicalSha256, requestHash, responseHash, schemaBundleHash, SHA256_PREFIX, sha256Hex, sha256PrefixedHex } from "@routekit/contracts";`
 - `export { MODEL_FUSION_SCHEMA_BUNDLE_HASH, assertArtifactRefV1, assertBenchmarkTaskRecordV1, assertEnsembleReceiptV1, assertHarnessCandidateRecordV1, assertHarnessRunRequestV1, assertHarnessRunResultV1, assertJudgeSynthesisRecordV1, assertModelCallRecordV1, assertModelFusionRecord, assertToolCallPlanV1, assertToolExecutionRecordV1 } from "./model-fusion.js";`
 - `export { executeHarnessTask, MODEL_FUSION_HARNESS_EXECUTOR_PATH, MODEL_FUSION_OPENAPI_SOURCE_HASH } from "./generated/model-fusion-openapi.js";`
 - `export type { ExecuteHarnessTaskClientOptions, ModelFusionOpenApiArtifactRef, ModelFusionOpenApiErrorResponse, ModelFusionOpenApiHarnessExecutionRequest, ModelFusionOpenApiHarnessExecutionResult, ModelFusionOpenApiPersistedJsonRecord } from "./generated/model-fusion-openapi.js";`
@@ -268,105 +401,198 @@ interfaces instead of recreating local string lists or proof logic.
 
 ### `packages/registry/src/index.ts`
 
-Typed accessors over the generated registry data (spec/registry/*.json).
+Fusion-only identities and panel presets generated from
+spec/registry/fusion.json.
 
-This package is the Node-side single source of truth for provider metadata
-(base URLs, API key env vars, key probes, discovery), subscription auth
-metadata (Claude Code / Codex logins), the fusion model identity, the
-cloud/local model catalogs, model-family capability quirks, and default
-pricing. The Python workspace consumes the same data through
-`fusionkit_core._generated.registry_data` — both are generated from the same
-JSON by `scripts/generate-registry.mjs`, so the two stacks cannot drift.
+Product-neutral provider, subscription, catalog, capability, pricing, and
+local model metadata lives in @routekit/registry.
 
-Zero runtime dependencies (node builtins only) so any package can depend on
-it without cycles.
+- `export const FUSION_PANEL_MODEL: string ...`
+- `export const DEFAULT_ENSEMBLE_NAME ...`
+- `export const FUSION_MODEL_ID_PREFIX ...`
+- `export function fusionModelId(ensemble: string): string ...`
+- `export const CURSOR_BRIDGE_MODEL_NAME: string ...`
+- `export const LOCAL_MODEL_LABEL: string ...`
+- `export const FUSION_MODEL_ALIASES: readonly string[] ...`
+- `export const FUSION_DEFAULT_ALIAS: string ...`
+- `export const FUSION_PANEL_ALIAS: string ...`
+- `export const FUSION_GATEWAY_DEFAULT_BASE_URL: string ...`
+- `export const FUSION_GATEWAY_API_KEY_ENV: string ...`
+- `export type CatalogPanelMember ...`
+- `export type BenchmarkPanelPreset ...`
+- `export const DEFAULT_CLOUD_PANEL_MEMBERS: readonly CatalogPanelMember[] ...`
+- `export const BENCHMARK_PANEL_PRESETS: Readonly<Record<string, BenchmarkPanelPreset>> ...`
+
+### `packages/routekit-cli/src/index.ts`
+
+Executable entrypoint for the independent RouteKit router CLI.
+
+No exports found.
+
+### `packages/routekit-config/src/index.ts`
+
+No module JSDoc was found.
+
+- `export type RouterConfigSource ...`
+- `export type LoadedRouterConfig ...`
+- `export type RouterConfigPaths ...`
+- `export type UpdateRouterConfigInput ...`
+- `export function configuredProviderIds(config: RouterConfig): string[] ...`
+  Explicit provider ids in schema declaration order.
+- `export function missingModelIds(`
+  Required namespaced model ids absent from a live catalog.
+- `export function assertModelsAvailable(`
+  Reject when any required namespaced model id is absent from a live catalog.
+- `export function resolveModelId(`
+  Resolve an explicit model, or the configured default/first live model.
+- `export const selectModelId ...`
+  Alias retained for callers that describe model resolution as selection.
+- `export function routekitHome(env: NodeJS.ProcessEnv ...`
+- `export function globalRouterConfigPath(home: string ...`
+- `export function projectRouterConfigPath(cwd: string ...`
+- `export function findProjectRouterConfig(cwd: string ...`
+- `export function routerConfigPaths(`
+- `export function parseRouterConfigDocument(`
+  Parse and validate an in-memory router YAML document without writing it.
+- `export function loadRouterConfig(`
+- `export function writeRouterConfig(path: string, config: RouterConfig | unknown): string ...`
+- `export function updateEffectiveRouterConfig(`
+  Mutate only the selected raw config layer while validating the merged result.  This keeps project overlays sparse instead of materializing defaults or inherited global values into the project file.
+- `export function updateRouterConfig(`
+- `export const DEFAULT_ROUTER_CONFIG: RouterConfig ...`
+
+### `packages/routekit-control/src/index.ts`
+
+No module JSDoc was found.
+
+- `export const ROUTEKIT_CONTROL_CAPABILITY ...`
+- `export type RouteKitControlMethod ...`
+- `export type RouteKitControlParams ...`
+- `export type DaemonStatus ...`
+- `export type ConfigSnapshot ...`
+- `export type ModelInfo ...`
+- `export type LaunchPreparation ...`
+- `export type RouteKitControlResults ...`
+- `export type RouteKitMethodHandler<M extends RouteKitControlMethod> ...`
+- `export type RouteKitControlHandlers ...`
+- `export const MUTATING_ROUTEKIT_METHODS: ReadonlySet<RouteKitControlMethod> ...`
+- `export function validateRouteKitParams<M extends RouteKitControlMethod>(`
+  Validate method-specific structural invariants at the protocol edge. Domain parsers perform deeper validation (provider ids, router schema, credentials).
+- `export function createRouteKitControlHandler(`
+- `export class RouteKitControlClient ...`
+
+### `packages/routekit-daemon/src/index.ts`
+
+Singleton RouteKit daemon.
+
+One process owns a private authenticated control listener and one stable
+model-gateway front door. Router generations run on ephemeral loopback
+ports behind that front door; config/account reload builds a complete new
+generation before atomically switching new traffic and draining the old.
+
+- `export const ROUTEKIT_DAEMON_KIND ...`
+- `export const ROUTEKIT_PRODUCT ...`
+- `export type RouteKitDaemonOptions ...`
+- `export type RunningRouteKitDaemon ...`
+
+### `packages/routekit-registry/src/index.ts`
+
+Typed accessors over RouteKit's generated neutral registry data.
+
+Provider/auth metadata, model catalogs, capabilities, pricing, and local
+model data are generated from spec/registry. Product-specific identities and
+panel presets are deliberately excluded.
 
 - `export type ProviderAuthStyle ...`
 - `export type ProviderKeyProbe ...`
 - `export type ProviderDiscovery ...`
+- `export type ProviderDiscoveryResponseShape ...`
+- `export type ProviderWireProtocol ...`
+- `export type ProviderWire ...`
 - `export type ProviderInfo ...`
 - `export const PROVIDERS: Readonly<Record<string, ProviderInfo>> ...`
-  All registered providers, keyed by canonical provider id.
 - `export function providerDefaultBaseUrl(provider: string): string | undefined ...`
-  Default base URL for a provider, or undefined for local providers (mlx).
 - `export function defaultKeyEnv(provider: string): string | undefined ...`
-  Default env var holding the API key for a provider, or undefined.
 - `export function providerKeyProbe(provider: string): ProviderKeyProbe | undefined ...`
-  Cheap key-validation probe metadata for a provider, or undefined.
 - `export function providerDiscovery(provider: string): ProviderDiscovery | undefined ...`
-  Live model-discovery capability for a provider, or undefined.
 - `export type SubscriptionMode ...`
+- `export type SubscriptionOAuthInfo ...`
+- `export type SubscriptionRateLimitInfo ...`
+- `export type SubscriptionAdminInfo ...`
 - `export type SubscriptionInfo ...`
 - `export const SUBSCRIPTIONS: Readonly<Record<SubscriptionMode, SubscriptionInfo>> ...`
 - `export function subscriptionInfo(mode: SubscriptionMode): SubscriptionInfo ...`
-  Subscription metadata for an auth mode.
 - `export function providerForAuthMode(mode: SubscriptionMode): string ...`
-  The provider a subscription auth mode speaks (claude-code -> anthropic, codex -> codex).
-- `export const FUSION_PANEL_MODEL: string ...`
-  The model label the fused panel is fronted under (gateway + tool pickers).
-- `export const DEFAULT_ENSEMBLE_NAME ...`
-  The name of the implicit/default ensemble (advertised as {@link FUSION_PANEL_MODEL}).
-- `export const FUSION_MODEL_ID_PREFIX ...`
-  The id prefix every non-default ensemble's fused model is advertised under.
-- `export function fusionModelId(ensemble: string): string ...`
-  The advertised model id for a named ensemble: `fusion-<name>`, except the default ensemble which keeps the canonical {@link FUSION_PANEL_MODEL} id (`fusion-panel`) for full back-compat with single-ensemble configs.
-- `export const CURSOR_BRIDGE_MODEL_NAME: string ...`
-  The model name the Cursor bridge exposes to cursor-agent.
-- `export const LOCAL_MODEL_LABEL: string ...`
-  Provider/model label a tool advertises for the gateway-backed local model.
-- `export const FUSION_MODEL_ALIASES: readonly string[] ...`
-  Reserved fusion aliases the Python server's chat front door understands.
-- `export const FUSION_DEFAULT_ALIAS: string ...`
-  The Python server's default (heuristic) fusion alias.
-- `export const FUSION_PANEL_ALIAS: string ...`
-  The panel-mode fusion alias external benchmark runners target.
-- `export const FUSION_GATEWAY_DEFAULT_BASE_URL: string ...`
-  Default local FusionKit gateway base URL used by benchmark runners.
-- `export const FUSION_GATEWAY_API_KEY_ENV: string ...`
-  Env var external runners can read for a FusionKit gateway API key placeholder.
-- `export type CatalogPanelMember ...`
-- `export type BenchmarkPanelPreset ...`
-- `export const DEFAULT_CLOUD_PANEL_MEMBERS: readonly CatalogPanelMember[] ...`
-  The default cloud panel trio (OpenAI + Anthropic + Google).
-- `export const BENCHMARK_PANEL_PRESETS: Readonly<Record<string, BenchmarkPanelPreset>> ...`
-  Named benchmark/live-smoke panel presets shared by CLI scripts and Python evals.
 - `export const DEFAULT_REASONING_MODEL: string ...`
-  The default narration-writer model for a bare `--reasoning-model` flag.
 - `export function catalogDefaultModel(choice: string): string | undefined ...`
-  The default model for an auth choice, or undefined for unknown choices.
 - `export function curatedModels(choice: string): readonly string[] ...`
-  Curated fallback model list for an auth choice (may be empty).
 - `export function smokeModelForTool(tool: string): string | undefined ...`
-  Default smoke-test model for a tool id, or undefined.
 - `export function samplingOverridesForModel(model: string): Readonly<Record<string, number>> ...`
-  Per-model sampling overrides (first matching family wins), e.g. qwen-family models want temperature 0.55 / top_p 1.0. Empty when no family matches.
 - `export function chatTemplateKwargsForModel(`
-  Chat-template kwargs the local MLX gateway should default for a model family (e.g. Qwen `enable_thinking`), or undefined when no family matches.
 - `export type RegistryModelPricing ...`
 - `export const PRICING_ALIASES: Readonly<Record<string, string>> ...`
-  Explicit dated/variant model id → canonical priced id. Lookup is exact → alias → unknown; prefix matching is never used.
 - `export const DEFAULT_MODEL_PRICING: Readonly<Record<string, RegistryModelPricing>> ...`
-  Default per-model list prices (USD / 1M tokens), manual overrides merged over the generated table. Consumers resolve via exact id, then {@link PRICING_ALIASES}.
 - `export type LocalModelRole ...`
 - `export type LocalCatalogModel ...`
 - `export const LOCAL_CATALOG_ENTRIES: readonly LocalCatalogModel[] ...`
-  The curated local MLX catalog, ordered small -> large.
 - `export type PreferredLocalModel ...`
 - `export const PREFERRED_LOCAL_MODELS: readonly PreferredLocalModel[] ...`
-  Repos `defaultTrioFor` prefers first, in order, with their panel member ids.
 - `export const GATEWAY_DEFAULT_MLX_MODEL: string ...`
-  The standalone model-gateway MLX fallback model.
 - `export const LOCAL_PROBE_MODEL: string ...`
-  Throwaway model id used to construct model-agnostic MLX envs.
+
+### `packages/routekit-router/src/index.ts`
+
+No module JSDoc was found.
+
+- `export type StartRouterOptions ...`
+- `export type RunningRouter ...`
+
+### `packages/routekit-tracing/src/index.ts`
+
+No module JSDoc was found.
+
+- `export { baggageOf, carrierFromEnv, carrierFromHeaders, carrierOf, contextOf, envOf, headersOf, newSessionCarrier, newSpanId, newTraceId, sessionCarrier, traceIdOf, withBaggage } from "./carrier.js";`
+- `export type { TraceCarrier } from "./carrier.js";`
+- `export { addEventListener, addSpanListener, hasEventListeners, hasSpanListeners, listenerLogRecordProcessor, listenerSpanProcessor, removeEventListener, removeSpanListener } from "./listener.js";`
+- `export type { EventListener, SpanListener } from "./listener.js";`
+- `export { attrBool, attrJson, attrNum, attrStr, eventNameOf, eventSpanId, eventTimeMs, eventTraceId, spanEndMs, spanId, spanTraceId } from "./readable.js";`
+- `export type { AttributeSource, ReadableEvent, ReadableSpan } from "./readable.js";`
+- `export { isLoopbackOtlpEndpoint, PolicyLogExporter, PolicySpanExporter, toExportableEvent, toExportableSpan } from "./exportable.js";`
+- `export type { AttributePolicy } from "./exportable.js";`
+- `export { flushTracing, initTracing, isEventExportConfigured, isTraceExportConfigured, isTracingActive, resetTracingForTest, shutdownTracing, tracingServiceName } from "./provider.js";`
+- `export type { InitTracingOptions } from "./provider.js";`
+- `export { InMemorySpanExporter, SimpleSpanProcessor } from "@opentelemetry/sdk-trace-base";`
+- `export type { SpanProcessor } from "@opentelemetry/sdk-trace-base";`
+- `export { InMemoryLogRecordExporter, SimpleLogRecordProcessor } from "@opentelemetry/sdk-logs";`
+- `export type { LogRecordProcessor } from "@opentelemetry/sdk-logs";`
 
 ### `packages/runtime-utils/src/index.ts`
 
 No module JSDoc was found.
 
-- `export { registerCleanup, runCleanups } from "./cleanup.js";`
+- `export { extendCleanupGrace, registerCleanup, runCleanups } from "./cleanup.js";`
+- `export { buildChildEnv, commandOnPath, DEFAULT_BRIDGE_SCRUB_PREFIXES, definedEnv, scrubBridgeEnv } from "./environment.js";`
+- `export type { BuildChildEnvInput } from "./environment.js";`
 - `export { superviseSpawn, terminateGroup } from "./process.js";`
 - `export type { ExitInfo, Spawned, SuperviseSpawnOptions } from "./process.js";`
-- `export const RUNTIME_TIMEOUT_MS ...`
+- `export { createActivePortlessSession, createPortlessSession, detectPortlessProxy, reapPortlessProject, reapPortlessService } from "./portless.js";`
+- `export type { DetectedProxy, DiscoverOrSpawnInput, DiscoverOrSpawnResult, PortlessModule, PortlessOptions, PortlessSession, RouteMapping, RouteStoreLike, SpawnedService } from "./portless.js";`
+- `export { createServiceRecordStore, processAlive, processIdentity, SERVICE_SUPERVISOR_ENV, supervisorFromEnv } from "./service/records.js";`
+- `export type { ServiceRecord, ServiceRecordInput, ServiceRecordStore, ServiceSupervisorKind } from "./service/records.js";`
+- `export { CONTROL_BODY_LIMIT_BYTES, CONTROL_PROTOCOL_VERSION, ControlClient, ControlError, controlTokenMatches, generateControlToken, startControlServer } from "./service/control.js";`
+- `export type { ControlClientOptions, ControlErrorCode, ControlEvent, ControlFailure, ControlHandler, ControlHandlerContext, ControlRequest, ControlResponse, ControlSuccess, RunningControlServer } from "./service/control.js";`
+- `export { acquireLifecycleLock, nextServiceGeneration } from "./service/authority.js";`
+- `export type { LifecycleLock } from "./service/authority.js";`
+- `export { readLogTail, rotateLogFile, serviceLogPath, startDaemon, stopDaemonProcess, waitForProcessExit, waitForServiceReady } from "./service/daemon.js";`
+- `export type { ServiceDaemonSpec, StartDaemonOptions, StartDaemonResult, StopDaemonResult } from "./service/daemon.js";`
+- `export { detectSupervisor, launchdAgentPlist, launchdLabel, launchdPlistPath, supervisorController, supervisorOperationTimeoutMs, systemdServiceUnit, systemdUnitName, systemdUnitPath } from "./service/supervisors.js";`
+- `export type { CommandRunner, DetectSupervisorOptions, ServiceUnitSpec, SupervisorController, SupervisorStatus } from "./service/supervisors.js";`
+- `export { planUpgrade, upgradeDetachedDaemon } from "./service/upgrade.js";`
+- `export type { UpgradeDaemonInput, UpgradeDaemonResult, UpgradeStrategy } from "./service/upgrade.js";`
+- `export { assertAuthenticatedBind, isLoopbackHost, normalizeApiBaseUrl, trimSurroundingSlashes, trimTrailingSlashes } from "./url.js";`
+- `export const DEFAULT_RUNTIME_TIMEOUTS ...`
+- `export function defineTimeouts<const T extends Record<string, number>>(timeouts: T): Readonly<T> ...`
+  Build a named timeout map in the product package that owns those names.
 - `export const MANAGED_SERVER_DEFAULTS ...`
 - `export const CANDIDATE_ISOLATION_DEFAULTS ...`
 - `export function sleep(ms: number): Promise<void> ...`
@@ -376,21 +602,15 @@ No module JSDoc was found.
   Rough token estimate from text (and optional tool/JSON payload strings): minimum 1 token, ceil(chars / 4).
 - `export function withDeadline(signal: AbortSignal | undefined, timeoutMs: number): AbortSignal ...`
 - `export function formatDurationMs(ms: number): string ...`
-- `export function commandOnPath(`
-  True when `command` resolves to an executable: an existing path when it contains a separator, else a match on any `PATH` entry (with Windows `PATHEXT` extensions appended). One implementation shared by every harness and launcher instead of three subtly-different copies.
 - `export function captureWorktreeDiff(cwd: string): string | undefined ...`
   The `git diff` of a working tree, or undefined when clean or not a repo.
-- `export function ensureRunOutputDir(dir: string): string ...`
-  Create a run-output directory. When it lives under a `.fusionkit/` segment (the default output roots inside user repos), drop a self-ignoring `.gitignore` so run artifacts never pollute the user's `git status` — while committed config like `.fusionkit/fusion.json` stays trackable.
-- `export function definedEnv(env: EnvInput): Record<string, string> ...`
-- `export function trimTrailingSlashes(value: string): string ...`
-  Strip trailing "/" characters in linear time (a `/\/+$/` regex backtracks polynomially on adversarial input, which code scanning rightly flags).
-- `export function normalizeApiBaseUrl(baseUrl: string): string ...`
-- `export type BuildChildEnvInput ...`
-- `export function buildChildEnv(input: BuildChildEnvInput ...`
-  Build a child environment from an explicit allowlist instead of spreading the entire parent environment: a harness CLI driven headlessly must not inherit every credential the parent process happens to hold. The baseline covers system plumbing (PATH/HOME/locale/TLS/proxy); everything else must be named by the caller.
-- `export const DEFAULT_BRIDGE_SCRUB_PREFIXES ...`
-- `export function scrubBridgeEnv(`
+- `export function ensureRunOutputDir(`
+  Create an output directory. When it lives under one of the caller-owned data-directory segments, drop a self-ignoring `.gitignore` so generated artifacts never pollute the user's working tree.
+- `export function writeFileAtomic(`
+  Atomically replace a UTF-8 file by writing a sibling temporary first.
+- `export type FileLock ...`
+- `export function tryAcquireFileLock(path: string): FileLock | undefined ...`
+  Acquire an exclusive lock file. Creation is atomic; callers own retry policy and must release the returned handle.
 - `export type ReservedPort ...`
   A held ephemeral port: the loopback listener stays open (so nothing else can grab the port) until the caller `release()`s it — ideally immediately before spawning the process that will bind it, which closes the classic probe-then-close race where a returned port is stolen in the gap. The `server` is exposed so a Node-side caller can adopt the already-bound listener instead of releasing and re-binding.
 - `export type CliCaptureOptions ...`
@@ -408,41 +628,92 @@ No module JSDoc was found.
 - `export function escapeMarkdownCell(value: string): string ...`
 - `export function markdownTable(headers: readonly string[], rows: readonly (readonly string[])[]): string[] ...`
 
+### `packages/telemetry-core/src/index.ts`
+
+No module JSDoc was found.
+
+- `export type ConsentFile ...`
+- `export type ConsentDecision ...`
+- `export type ConsentOptions ...`
+- `export const CLI_COMMAND_TELEMETRY_FIELDS ...`
+  Fields shared by every CLI's anonymous command event.
+- `export type TelemetryFieldMap ...`
+- `export function telemetryStatusMetadata(`
+  Shared machine-readable consent status. Products may add operational fields and render this metadata differently, but consent semantics stay identical.
+- `export function createConsentManager(options: ConsentOptions) ...`
+- `export function durationBucket(ms: number): string ...`
+- `export function allowlistedProperties(`
+- `export function anonymousEventProperties(`
+
+### `packages/testkit/src/index.ts`
+
+@fusionkit/testkit — cross-stack test tooling (never published).
+
+Composable layers for realistic end-to-end tests (see docs/testing.md):
+
+- {@link startProviderSim}: the scriptable provider simulator
+  (python/fusionkit-testkit) as a child process, driven over its HTTP
+  control plane and observed through its wire journal.
+- {@link simSidecarConfigYaml}: production-shaped sidecar config over stable
+  namespaced RouteKit model IDs.
+- {@link startEngine}: the internal Python synthesis sidecar as a child
+  process — the same entrypoint the production CLI spawns.
+- {@link parseSse} / {@link sseText}: structured SSE observation.
+- {@link detectStackTooling}: honest skip-gating for environments without
+  the Python toolchain.
+
+- `export { cliAvailable, cliSkip, runClaudeCode, runCodexExec, runOpenCode } from "./clis.js";`
+- `export type { CliRunResult } from "./clis.js";`
+- `export { DOOR_PROFILES, callDoor, doorFrames } from "./doors.js";`
+- `export type { DoorProfile, DoorRequestInput, DoorToolCall, DoorToolExchange } from "./doors.js";`
+- `export type { SimBehavior, SimBehaviorInput, SimDialect, SimError, SimJournalEntry, SimToolCall } from "./behaviors.js";`
+- `export { asBehavior, simErrors } from "./behaviors.js";`
+- `export { startEngine } from "./engine.js";`
+- `export type { EngineHandle } from "./engine.js";`
+- `export { freePort, reservePort, spawnCaptured, waitForHttpReady } from "./proc.js";`
+- `export type { ReservedPort, SpawnedProcess } from "./proc.js";`
+- `export { startProviderSim } from "./provider-sim.js";`
+- `export type { ProviderSimHandle, SimCallFilter } from "./provider-sim.js";`
+- `export { detectStackTooling, repoRoot, stackToolingSkip, uvRunArgv } from "./python.js";`
+- `export type { StackTooling } from "./python.js";`
+- `export { CODEX_TEST_TOKEN_ENV, simSidecarConfigYaml } from "./router-config.js";`
+- `export type { SimModelSpec } from "./router-config.js";`
+- `export { judgeAnalysis, scriptFusedTurn } from "./scenarios.js";`
+- `export type { FusedTurnScript } from "./scenarios.js";`
+- `export { parseSse, sseDone, sseReasoning, sseText } from "./sse.js";`
+- `export type { SseFrame } from "./sse.js";`
+
 ### `packages/tool-claude/src/index.ts`
 
-Claude Code tool integration entry point. It exposes launcher environment helpers and the Claude Code ensemble harness adapter.
+No module JSDoc was found.
 
 - `export const claudeTool: ToolIntegration ...`
-- `export { claudeCodeHarness, claudeCodeHarnessCredentialSkipReason, createClaudeCodeHarness } from "./harness.js";`
-- `export type { ClaudeCodeHarnessEnv, ClaudeCodeHarnessOptions } from "./harness.js";`
-- `export { claudeAgentsJson, claudeEnv, claudeLaunchArgs, launchClaude } from "./launch.js";`
 - `export { claudeDriverConfigSchema, createClaudeDriver } from "./driver.js";`
-- `export type { ClaudeDriverConfig } from "./driver.js";`
+- `export type { ClaudeDriverConfig, ClaudeDriverOptions, ClaudeQueryFn } from "./driver.js";`
+- `export { claudeAgentsJson, claudeEnv, claudeLaunchArgs, launchClaude } from "./launch.js";`
 
 ### `packages/tool-codex/src/index.ts`
 
-Codex tool integration entry point. It exposes the Codex launcher and ensemble harness adapter used by the FusionKit CLI.
+No module JSDoc was found.
 
 - `export const codexTool: ToolIntegration ...`
-- `export { codexConfigToml, codexEndReason, codexHarness, codexHarnessCredentialSkipReason, codexMemberCatalogJson, createCodexHarness, defaultCodexRunner, memberChatBackend } from "./harness.js";`
-- `export type { CodexAmbientProvider, CodexApprovalPolicy, CodexConfigTomlInput, CodexExecInput, CodexExecResult, CodexExecRunner, CodexHarnessEnv, CodexHarnessOptions, CodexOpenAiCompatibleProvider, CodexProvider, CodexResponsesProvider, CodexSandboxMode } from "./harness.js";`
-- `export { codexAgentRoles, codexAgentRoleToml, codexAuthPath, codexCatalogEntries, codexLaunchConfigToml, codexListedStockSlugs, codexModelCatalogJson, codexProfileFiles, codexProfileFileToml, codexRoleDescription, hasCodexLogin, isCodexConfigFailure, launchCodex, readCodexCatalogTemplate, readCodexModelsCache } from "./launch.js";`
-- `export type { CodexAgentRole, CodexModelPreset } from "./launch.js";`
-- `export { CODEX_INSTALL_BEGIN, CODEX_INSTALL_END, CODEX_INSTALL_PROVIDER, codexIntegrationBlock, installCodexIntegration, uninstallCodexIntegration } from "./install.js";`
-- `export type { CodexInstallInput, CodexInstallProfile, CodexInstallResult } from "./install.js";`
 - `export { codexDriverConfigSchema, createCodexDriver } from "./driver.js";`
 - `export type { CodexDriverConfig } from "./driver.js";`
+- `export { codexAgentRoles, codexAgentRoleToml, codexAuthPath, codexCatalogEntries, codexLaunchConfigToml, codexListedStockSlugs, codexModelCatalogJson, codexProfileFiles, codexProfileFileToml, hasCodexLogin, isCodexConfigFailure, launchCodex, readCodexCatalogTemplate, readCodexModelsCache } from "./launch.js";`
+- `export type { CodexAgentRole, CodexModelPreset } from "./launch.js";`
+- `export { codexIntegrationBlock, installCodexIntegration, uninstallCodexIntegration } from "./install.js";`
+- `export type { CodexInstallInput, CodexInstallOwner, CodexInstallProfile, CodexInstallResult } from "./install.js";`
 
 ### `packages/tool-cursor/src/index.ts`
 
-Cursor tool integration entry point. It exposes Cursor launcher helpers, the Cursorkit bridge, and the Cursor ensemble harness adapter.
+No module JSDoc was found.
 
 - `export const cursorTool: ToolIntegration ...`
-- `export { createCursorHarness, cursorHarness, cursorHarnessUnavailableReason, defaultCursorRunner } from "./harness.js";`
-- `export type { CursorExecInput, CursorExecResult, CursorExecRunner, CursorHarnessOptions, CursorRunMode } from "./harness.js";`
 - `export { buildCursorAcpProducer } from "./acp.js";`
 - `export { startCursorBridge } from "./bridge.js";`
 - `export { CURSOR_AGENT_TOOL_MAX_ITERATIONS, CURSOR_AGENT_TOOL_POLICY, cursorBridgeEnv, cursorBridgeModelEnv, cursorIdeEnv, cursorIdeModelsJson } from "./bridge-config.js";`
+- `export { resolveCursorkitCli } from "./cursorkit-path.js";`
+- `export type { CursorkitCli } from "./cursorkit-path.js";`
 - `export { cursorIdeInstructions, cursorInstructions, launchCursor } from "./launch.js";`
 - `export { CURSOR_AGENTS_DIRNAME, cursorSubagentMarkdown, scaffoldCursorSubagents } from "./subagents.js";`
 - `export { createCursorDriver, cursorDriverConfigSchema } from "./driver.js";`
@@ -450,30 +721,34 @@ Cursor tool integration entry point. It exposes Cursor launcher helpers, the Cur
 
 ### `packages/tool-opencode/src/index.ts`
 
-opencode tool integration entry point. It exposes launcher configuration helpers for local-model and gateway-backed opencode sessions.
+No module JSDoc was found.
 
 - `export const opencodeTool: ToolIntegration ...`
-- `export { launchOpencode, opencodeConfig, opencodeModelArg } from "./launch.js";`
+- `export { launchOpencode, opencodeConfig, opencodeModelArg, opencodeProviderConfig } from "./launch.js";`
 - `export { createOpencodeDriver, opencodeDriverConfigSchema } from "./driver.js";`
 - `export type { OpencodeBackend, OpencodeBackendFactory, OpencodeDriverConfig, OpencodeDriverOptions, OpencodeTurnPart, OpencodeTurnResult } from "./driver.js";`
 
+### `packages/tool-registry/src/index.ts`
+
+Canonical registry of the coding-tool integrations shipped by RouteKit.
+
+Add a new integration to `toolIntegrations`; consumers receive it through
+`toolRegistry` without maintaining their own package imports or lists.
+
+- `export { codexIntegrationBlock, installCodexIntegration, uninstallCodexIntegration } from "@routekit/tool-codex";`
+- `export type { CodexInstallInput, CodexInstallOwner, CodexInstallProfile, CodexInstallResult } from "@routekit/tool-codex";`
+- `export const toolIntegrations: readonly ToolIntegration[] ...`
+- `export const toolRegistry: ToolRegistry ...`
+
 ### `packages/tools/src/index.ts`
 
-Tool integration entry point. It exposes the launcher and harness integration contract, registry helpers, process helpers, constants, environment compatibility helpers, and skipped-candidate utilities.
+No module JSDoc was found.
 
-- `export { captureWorktreeDiff, commandOnPath, distillLog, formatDurationMs, freePort, registerCleanup, reservePort, runCleanups, runCliCapture, sleep, spawnLogged, spawnTool, superviseSpawn, terminate, terminateGroup, waitForHttp, waitForOutput, withDeadline, withTimeout } from "./proc.js";`
-- `export type { CliCaptureOptions, CliCaptureResult, ExitInfo, LoggedChild, LoggedSpawnOptions, ReservedPort, Spawned, SuperviseSpawnOptions } from "./proc.js";`
-- `export { CANDIDATE_ISOLATION_DEFAULTS, escapeMarkdownCell, markdownTable, RUNTIME_TIMEOUT_MS, trimTrailingSlashes } from "@fusionkit/runtime-utils";`
-- `export type { FusedEnsembleInfo, ToolDashboardLiveSmoke, ToolDashboardMetadata, ToolDashboardSmoke, ToolHarnessMetadata, ToolIntegration, ToolLaunchContext, ToolLaunchMode } from "./types.js";`
-- `export { createToolRegistry } from "./registry.js";`
-- `export type { ToolRegistry } from "./registry.js";`
-- `export { CURSOR_BRIDGE_MODEL_NAME, DEFAULT_ENSEMBLE_NAME, FUSION_PANEL_MODEL, fusionModelId, LOCAL_MODEL_LABEL } from "./constants.js";`
-- `export { envFlagEnabled, HARNESS_DRIVERS_FLAG, harnessDriversEnabled, readEnv } from "./env-compat.js";`
-- `export { buildChildEnv, DEFAULT_BRIDGE_SCRUB_PREFIXES, definedEnv, normalizeApiBaseUrl, scrubBridgeEnv } from "./env.js";`
-- `export type { BuildChildEnvInput } from "./env.js";`
-- `export { buildSkippedCandidate } from "./candidate.js";`
-- `export { deriveFusedSubagents, fusedSubagentDescription, fusedSubagentDeveloperInstructions, fusedSubagentMembers } from "./fused-subagents.js";`
-- `export type { FusedSubagentDefinition, FusedSubagentDescriptionStyle } from "./fused-subagents.js";`
+- `export type { AgentProfile, ToolCapabilityGrade, ToolCapabilityMetadata, ToolDriverMetadata, ToolDriverRoute, ToolIntegration, ToolLaunchContext, ToolLaunchSpec, ToolModel, ToolModelFeature, ToolModelFeatureStatus } from "./types.js";`
+- `export { createToolCapabilityMatrix, createToolRegistry } from "./registry.js";`
+- `export type { ToolCapabilityCell, ToolRegistry } from "./registry.js";`
+- `export { createDisposerRunner, createToolLaunchContext } from "./launch-context.js";`
+- `export type { CreateToolLaunchContextInput, DisposerRunner, ToolDisposer, ToolLaunchContextHandle } from "./launch-context.js";`
 
 ### `packages/tracing/src/index.ts`
 
@@ -497,10 +772,8 @@ subscribe to.
 - `export type { AllowlistLogExporterOptions, AllowlistSpanExporterOptions } from "./exportable.js";`
 - `export { attrBool, attrJson, attrNum, attrStr, eventNameOf, eventSpanId, eventTimeMs, eventTraceId, spanEndMs, spanId, spanTraceId } from "./readable.js";`
 - `export type { AttributeSource, ReadableFusionEvent, ReadableSpan } from "./readable.js";`
-- `export { InMemorySpanExporter, SimpleSpanProcessor } from "@opentelemetry/sdk-trace-base";`
-- `export type { SpanProcessor } from "@opentelemetry/sdk-trace-base";`
-- `export { InMemoryLogRecordExporter, SimpleLogRecordProcessor } from "@opentelemetry/sdk-logs";`
-- `export type { LogRecordProcessor } from "@opentelemetry/sdk-logs";`
+- `export { InMemoryLogRecordExporter, InMemorySpanExporter, SimpleLogRecordProcessor, SimpleSpanProcessor } from "@routekit/tracing";`
+- `export type { LogRecordProcessor, SpanProcessor } from "@routekit/tracing";`
 - `export { ATTR, EXPORTABLE_ATTRIBUTES, FUSION_CONVENTIONS_VERSION, FUSION_EVENT_NAMES, FUSION_SCOPES, FUSION_SPAN_NAMES } from "@fusionkit/protocol";`
 - `export type { FusionAttributeKey, FusionEventName, FusionSpanName } from "@fusionkit/protocol";`
 
@@ -522,138 +795,34 @@ uses it to checkpoint the workspace before continuation.
 
 ### `python/fusionkit-core/src/fusionkit_core/__init__.py`
 
-Public API for the FusionKit Python engine.
-
-The package re-exports the configuration models, provider clients, fusion engine,
-judge synthesizer, run manager, contract models, artifact helpers, trace helpers,
-and trajectory producers used by the Python server, CLI, benchmarks, and tests.
-Keep this module documented because generated API docs read this docstring and
-the `__all__` list as the supported Python surface.
-
-Re-exports are resolved lazily (PEP 562): importing any single submodule (for
-example ``fusionkit_core.config``) must not pay for the provider SDK stack that
-``fusionkit_core.clients`` drags in. This keeps CLI startup (``fusionkit
---version``, ``fusionkit prompts dump``) fast while ``from fusionkit_core
-import X`` keeps working unchanged for every name in ``__all__``.
+Public API for FusionKit's provider-neutral synthesis engine.
 
 Public exports:
 
-- `ATTR`
-- `AgentTrajectoryProducer`
-- `AnthropicModelClient`
-- `ArtifactRefV1`
-- `BenchmarkTaskRecordV1`
+- `ChatClient`
 - `ChatMessage`
-- `ChatTrajectoryProducer`
-- `CodexResponsesClient`
-- `ContextBudget`
 - `ContextPolicy`
-- `ContractMetadata`
-- `ContractRecord`
-- `CostMetadata`
-- `CreateRunResult`
-- `EndpointAuth`
-- `EndpointCapabilities`
-- `EnsembleReceiptV1`
-- `ExternalTrajectoryProducer`
 - `FakeModelClient`
-- `FileSystemRunStore`
 - `FuseResult`
 - `FusionConfig`
 - `FusionEngine`
 - `FusionKernel`
 - `FusionMode`
-- `FusionRecordV1`
-- `FusionRunEvent`
-- `FusionRunManager`
-- `FusionRunRequestV1`
-- `FusionRunState`
-- `GoogleModelClient`
-- `HarnessCandidateRecordV1`
-- `HarnessRunResultV1`
-- `HeuristicRouter`
-- `IdempotencyRecord`
+- `FusionModeRouter`
 - `JudgeSynthesizer`
-- `LocalArtifactStore`
-- `LocalModelClient`
-- `ModelCallRecordV1`
-- `ModelEndpoint`
-- `ModelEndpointV1`
 - `ModelResponse`
-- `NativeRunError`
-- `OpenAICompatibleClient`
-- `PackReport`
 - `PanelMode`
-- `ProviderCallError`
-- `ProviderErrorCategory`
-- `ProviderKind`
+- `PromptOverrides`
+- `RouteKitClient`
 - `RunBudget`
-- `RunEventPage`
-- `RunInspection`
-- `RunStateSummary`
 - `SamplingConfig`
 - `StreamChunk`
-- `SubscriptionAuthError`
-- `SubscriptionAuthMode`
-- `SubscriptionStatus`
-- `SubscriptionToken`
 - `ToolCall`
-- `ToolCallPlanV1`
-- `ToolExecutionMode`
-- `ToolExecutionPolicy`
-- `ToolExecutionRecordV1`
-- `ToolExecutor`
-- `ToolPausePlaceholder`
-- `ToolResultSubmission`
-- `TraceContext`
 - `Trajectory`
-- `TrajectoryInspection`
-- `TrajectoryPack`
-- `TrajectoryProducer`
-- `TrajectoryV1`
 - `Usage`
-- `build_client`
 - `build_clients`
-- `canonical_json`
-- `classify_provider_error`
-- `context_from_headers`
-- `contract_metadata`
-- `contract_model_for_schema`
-- `emit_event`
-- `endpoint_to_contract`
-- `estimate_cost`
-- `estimate_messages_tokens`
-- `estimate_tokens`
-- `fusion_span`
-- `hash_bytes`
-- `hash_json`
-- `hash_text`
-- `json_attr`
 - `judge_synthesizer_for`
-- `load_claude_code_credentials`
-- `load_codex_credentials`
-- `make_id`
-- `normalize_usage`
-- `pack_trajectories`
-- `producer`
-- `producer_git_sha`
-- `producer_version`
-- `provider_metadata`
-- `resolve_api_key`
-- `resolve_credential`
-- `schema_bundle_hash`
-- `setup_fusion_tracing`
-- `shutdown_fusion_tracing`
-- `status_for_run_state`
-- `subscription_status`
-- `trajectory_from_contract`
-- `trajectory_from_response`
-- `trajectory_to_contract`
-
-Documented local symbols:
-
-- `__getattr__` (function): Resolve a re-exported name (or submodule) on first access.
-- `__dir__` (function)
+- `load_config`
 
 ### `python/fusionkit-server/src/fusionkit_server/__init__.py`
 
@@ -708,21 +877,17 @@ Public exports:
 - `PreparedTask`
 - `PromptEval`
 - `PromptVariant`
-- `ProportionCI`
 - `Sandbox`
 - `SandboxConfig`
 - `SandboxResult`
-- `SeedAggregate`
 - `SolutionRun`
 - `StubProposer`
 - `TaskOutcome`
 - `TaskSplit`
 - `TunerRuntime`
 - `TuningResult`
-- `aggregate_seeds`
 - `append_run`
 - `bank_signature`
-- `bootstrap_ci`
 - `build_candidate_bank`
 - `build_provenance`
 - `build_sandbox`
@@ -739,7 +904,6 @@ Public exports:
 - `mcnemar`
 - `normalize_lines`
 - `optimize`
-- `pass_at_k`
 - `prepare_tasks`
 - `regression_guard_tasks`
 - `retry_async`
@@ -747,7 +911,6 @@ Public exports:
 - `select_decision_tasks`
 - `split_dev_val`
 - `verify_solution`
-- `wilson_interval`
 - `CommandExternalBenchmarkExecutor`
 - `CommandHandoffKitExecutor`
 - `ComparisonBaselineRow`

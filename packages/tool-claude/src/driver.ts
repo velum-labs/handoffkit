@@ -11,15 +11,15 @@ import type {
 
 import {
   HarnessError,
-  PANEL_APPROVAL_POLICY,
+  DEFAULT_AUTOMATION_APPROVAL_POLICY,
   PendingRequests,
   asHarnessError,
   buildChildEnv,
+  createCachedHarnessDriver,
   decideApproval,
-  readCachedStatus,
-  runCliCapture,
-  writeCachedStatus
-} from "@fusionkit/harness-core";
+  probeCliVersion,
+  resolveDriverEnv
+} from "@routekit/harness-core";
 import type {
   ApprovalDecision,
   ApprovalPolicy,
@@ -33,11 +33,10 @@ import type {
   SessionHandle,
   SessionTurnInput,
   StartSessionOptions
-} from "@fusionkit/harness-core";
+} from "@routekit/harness-core";
 
 const RESUME_CURSOR_VERSION = 1;
 const DEFAULT_COMMAND = "claude";
-const VERSION_PROBE_TIMEOUT_MS = 10_000;
 
 const AUTH_ENV_NAMES = [
   "ANTHROPIC_API_KEY",
@@ -73,15 +72,11 @@ function nowIso(): string {
   return new Date().toISOString();
 }
 
-function resolveEnv(context: DriverContext | undefined): Record<string, string | undefined> {
-  return context?.env ?? process.env;
-}
-
 /**
  * The canonical approval request type for a claude tool name. Note `Task`
  * (Claude's sub-agent tool) deliberately lands in the generic `tool_approval`
- * bucket: under the panel default policy (`autoApprove: "all"`) it is
- * auto-accepted, so panel members can parallelize with same-model sub-agents,
+ * bucket: under the automation default policy (`autoApprove: "all"`) it is
+ * auto-accepted, so unattended runs can parallelize with same-model sub-agents,
  * while stricter policies (`edits`/`none`) still surface it like any tool.
  */
 function requestTypeForTool(toolName: string): HarnessRequestType {
@@ -107,6 +102,7 @@ class ClaudeSession implements SessionHandle {
   readonly #context: DriverContext | undefined;
   readonly #cwd: string;
   readonly #model: string | undefined;
+  readonly #reasoning: StartSessionOptions["reasoning"];
   readonly #approvalPolicy: ApprovalPolicy;
   readonly #pending = new PendingRequests();
   #sessionId: string;
@@ -125,7 +121,9 @@ class ClaudeSession implements SessionHandle {
     this.#context = input.context;
     this.#cwd = input.options.cwd;
     this.#model = input.options.model ?? input.config.model;
-    this.#approvalPolicy = input.options.approvalPolicy ?? PANEL_APPROVAL_POLICY;
+    this.#reasoning = input.options.reasoning;
+    this.#approvalPolicy =
+      input.options.approvalPolicy ?? DEFAULT_AUTOMATION_APPROVAL_POLICY;
     this.#sessionId = resumeSessionId(input.options.resume) ?? "claude:pending";
     this.#queryFn = input.queryFn;
   }
@@ -201,14 +199,37 @@ class ClaudeSession implements SessionHandle {
       else input.signal.addEventListener("abort", () => controller.abort(input.signal?.reason), { once: true });
     }
     const resume = this.#sessionId !== "claude:pending" ? this.#sessionId : undefined;
+    const reasoning = input.reasoning ?? this.#reasoning;
     const options: Options = {
       cwd: this.#cwd,
       pathToClaudeCodeExecutable: this.#config.command,
+      // The gateway carries this cursor across front-door turns. Make the
+      // persistence requirement explicit: SDK defaults have changed across
+      // releases and an ephemeral session id cannot be resumed by the next
+      // candidate process.
+      persistSession: true,
       permissionMode: "default",
       canUseTool: this.#canUseTool(),
       abortController: controller,
       env: this.#childEnv(),
       ...(this.#model !== undefined ? { model: this.#model } : {}),
+      ...(reasoning?.mode === "effort"
+        ? {
+            thinking: { type: "adaptive" },
+            effort: reasoning.effort as NonNullable<Options["effort"]>
+          }
+        : reasoning?.mode === "budget"
+          ? {
+              thinking: {
+                type: "enabled",
+                budgetTokens: reasoning.budgetTokens
+              }
+            }
+          : reasoning?.mode === "adaptive"
+            ? { thinking: { type: "adaptive" } }
+            : reasoning?.mode === "disabled"
+              ? { thinking: { type: "disabled" } }
+              : {}),
       ...(resume !== undefined ? { resume } : {})
     };
 
@@ -331,7 +352,7 @@ class ClaudeSession implements SessionHandle {
 
   #childEnv(): Record<string, string> {
     return buildChildEnv({
-      base: resolveEnv(this.#context),
+      base: resolveDriverEnv(this.#context),
       allow: [...AUTH_ENV_NAMES, ...this.#config.credentialEnvNames, /^CLAUDE_/],
       ...(this.#config.baseUrl !== undefined ? { extra: { ANTHROPIC_BASE_URL: this.#config.baseUrl } } : {})
     });
@@ -412,66 +433,31 @@ async function probeClaude(
   config: ClaudeDriverConfig,
   context: DriverContext | undefined
 ): Promise<HarnessStatus> {
-  const env = buildChildEnv({ base: resolveEnv(context), allow: [...AUTH_ENV_NAMES, /^CLAUDE_/] });
-  try {
-    const result = await runCliCapture(config.command, ["--version"], {
-      env,
-      timeoutMs: VERSION_PROBE_TIMEOUT_MS
-    });
-    if (result.exitCode !== 0) {
-      return {
-        kind: "claude_code",
-        installed: false,
-        auth: { status: "unknown" },
-        checkedAt: nowIso(),
-        probeError: result.stderr.trim() || `claude --version exited ${result.exitCode}`
-      };
-    }
-    const sourceEnv = resolveEnv(context);
-    const hasCredential = AUTH_ENV_NAMES.some((name) => (sourceEnv[name]?.length ?? 0) > 0);
-    return {
-      kind: "claude_code",
-      installed: true,
-      command: config.command,
-      version: result.stdout.trim().split(/\s+/).at(-1),
-      auth: {
-        status: hasCredential ? "authenticated" : "unknown",
-        ...(hasCredential ? {} : { detail: "No API key in env; claude may use its own login." })
-      },
-      checkedAt: nowIso()
-    };
-  } catch (error) {
-    const harnessError = asHarnessError(error);
-    return {
-      kind: "claude_code",
-      installed: false,
-      auth: { status: "unknown" },
-      checkedAt: nowIso(),
-      probeError:
-        harnessError.code === "not_installed"
-          ? `Claude CLI "${config.command}" was not found on PATH.`
-          : harnessError.message
-    };
-  }
+  const sourceEnv = resolveDriverEnv(context);
+  const env = buildChildEnv({ base: sourceEnv, allow: [...AUTH_ENV_NAMES, /^CLAUDE_/] });
+  const hasCredential = AUTH_ENV_NAMES.some((name) => (sourceEnv[name]?.length ?? 0) > 0);
+  return probeCliVersion({
+    kind: "claude_code",
+    command: config.command,
+    cliName: "claude",
+    env,
+    auth: {
+      status: hasCredential ? "authenticated" : "unknown",
+      ...(hasCredential ? {} : { detail: "No API key in env; claude may use its own login." })
+    },
+    failureAuth: { status: "unknown" },
+    notInstalledMessage: `Claude CLI "${config.command}" was not found on PATH.`
+  });
 }
 
 export function createClaudeDriver(options: ClaudeDriverOptions = {}): HarnessDriver<ClaudeDriverConfig> {
   const queryFn = options.queryFn ?? (query as ClaudeQueryFn);
-  return {
+  return createCachedHarnessDriver({
     kind: "claude_code",
     configSchema: claudeDriverConfigSchema,
-    probe: async (context?: DriverContext) => {
-      const status = await probeClaude(claudeDriverConfigSchema.parse({}), context);
-      if (context?.statusCacheDir !== undefined) writeCachedStatus(status, context.statusCacheDir);
-      return status;
-    },
-    createInstance: async (config, context?: DriverContext) => {
-      const cached =
-        context?.statusCacheDir !== undefined
-          ? readCachedStatus("claude_code", context.statusCacheDir)
-          : undefined;
-      const status = cached ?? (await probeClaude(config, context));
-      return new ClaudeInstance({ config, context, status, queryFn });
-    }
-  };
+    probeConfig: () => claudeDriverConfigSchema.parse({}),
+    probeStatus: probeClaude,
+    createInstance: (config, context, status) =>
+      new ClaudeInstance({ config, context, status, queryFn })
+  });
 }

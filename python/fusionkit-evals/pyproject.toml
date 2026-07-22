@@ -25,8 +25,17 @@ classifiers = [
 ]
 dependencies = [
   "fusionkit-core==0.8.0",
+  "hyperkit==0.1.0",
   "pydantic>=2.12.5",
+  "pyyaml>=6.0.3",
+  "typer>=0.26.8",
 ]
+
+[project.scripts]
+fusionkit-bench = "fusionkit_evals.cli:bench_app"
+
+[project.entry-points."hyperkit.suts"]
+fusionkit-serve = "fusionkit_evals.hyperkit_plugin:factory"
 
 [project.urls]
 Homepage = "https://fusionkit.velum-labs.com"
@@ -45,5 +54,5 @@ livecodebench = [
 ]
 
 [build-system]
-requires = ["uv_build>=0.11.21,<0.12.0"]
+requires = ["uv_build>=0.11.29,<0.12.0"]
 build-backend = "uv_build"

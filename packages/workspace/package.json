@@ -27,6 +27,7 @@
   },
   "dependencies": {
     "@fusionkit/protocol": "workspace:*",
+    "@routekit/contracts": "workspace:*",
     "minimatch": "10.2.5"
   },
   "keywords": [
@@ -40,6 +41,8 @@
     "workspace"
   ],
   "scripts": {
+    "build": "tsc -b",
+    "clean": "tsc -b --clean",
     "test": "node --test \"dist/test/*.test.js\""
   }
 }

@@ -1,5 +1,5 @@
 import { createArtifact, FusionRuntime, StaticDAGScheduler } from "./runtime.js";
-import type { Backend, BackendRequestOptions } from "@fusionkit/model-gateway";
+import type { Backend, BackendRequestOptions } from "@routekit/gateway";
 import type { Artifact, Operator } from "./runtime.js";
 import { captureWireResponse, WireArtifactTypes } from "./wire-artifacts.js";
 

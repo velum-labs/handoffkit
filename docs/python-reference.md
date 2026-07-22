@@ -2,7 +2,11 @@
 
 This page documents the uv workspace under `python/`. The root `pyproject.toml` is virtual and exists to coordinate shared tooling, dependencies, lockfile state, Ruff, Pyright, pytest, and coverage. The repository itself is not a Python package.
 
-The Python workspace contains the FusionKit engine, the HTTP server, the PyPI CLI package named `fusionkit`, optional MLX helpers, evaluation tooling, and UniRoute routing experiments. The Node CLI invokes the Python server through `uvx` for the product path, while maintainers usually run the Python packages through `uv run`.
+The Python workspace contains FusionKit's internal synthesis sidecar, optional
+MLX helpers, maintainer evaluation tooling, a RouteKit-upstream test simulator,
+the Hyperkit experiment platform, and UniRoute experiments. The Node CLI invokes
+the sidecar through `uvx`; Python does not expose the user-facing `fusionkit`
+binary or own provider accounts.
 
 ## Workspace commands
 
@@ -18,8 +22,8 @@ uv run ruff check .
 Run a single package command by naming the package:
 
 ```bash
-uv run --package fusionkit fusionkit --help
-uv run --package fusionkit-server python -m uvicorn fusionkit_server.app:create_app --factory
+uv run --package fusionkit fusionkit-sidecar --help
+uv run --package fusionkit-evals fusionkit-bench --help
 uv run --package uniroute uniroute-demo
 ```
 
@@ -27,29 +31,35 @@ uv run --package uniroute uniroute-demo
 
 | Package | Import package | Responsibility |
 | --- | --- | --- |
-| `fusionkit-core` | `fusionkit_core` | Core fusion engine, config, clients, judge, run manager, contracts, tracing, artifacts. |
-| `fusionkit-server` | `fusionkit_server` | FastAPI app and OpenAI-compatible HTTP routes. |
-| `fusionkit` | `fusionkit_cli` | PyPI command line interface for serving, setup, auth, prompts, benchmarks, tuning, and hill climbing. |
+| `fusionkit-core` | `fusionkit_core` | Fusion engine, sidecar config, neutral RouteKit client, judge, run manager, contracts, tracing, artifacts. |
+| `fusionkit-server` | `fusionkit_server` | Internal FastAPI trajectory-fusion, native-run, tool-resume, and health APIs. |
+| `fusionkit` | `fusionkit_cli` | PyPI runtime exposing only the internal `fusionkit-sidecar` command. |
 | `fusionkit-evals` | `fusionkit_evals` | Benchmarks, public reports, prompt tuning, Pareto analysis, hill climbing, scoring, and sandbox execution. |
 | `fusionkit-mlx` | `fusionkit_mlx` | Optional MLX launcher utilities. |
+| `fusionkit-testkit` | `fusionkit_testkit` | Scriptable RouteKit-upstream simulator, sidecar config builders, process harness, and pytest fixtures. |
+| `hyperkit` | `hyperkit` | SUT-agnostic experiment platform: `hyperkit` CLI, benchmark adapters, and compute backends. |
 | `uniroute` | `uniroute` | NumPy model routing algorithms and synthetic evaluation helpers. |
 | `uniroute-mlx` | `uniroute_mlx` | Local model and OpenAI-compatible bridge for UniRoute experiments. |
+
+The root `[tool.pyright]` include covers the FusionKit packages (`fusionkit-cli`, `fusionkit-core`, `fusionkit-evals`, `fusionkit-mlx`, `fusionkit-server`, `fusionkit-testkit`, `hyperkit`), the generated protocol Python package, `scripts`, and `tests`. `uniroute` and `uniroute-mlx` predate the merge and stay outside the Pyright scope, though they remain in pytest discovery.
 
 ## Request flow
 
 ```mermaid
 sequenceDiagram
-  participant CLI as Node CLI or Python CLI
-  participant Server as fusionkit_server.app
+  participant CLI as Node FusionKit gateway
+  participant Server as Python synthesis sidecar
+  participant RouteKit as RouteKit gateway
   participant Engine as fusionkit_core.fusion.FusionEngine
   participant Clients as fusionkit_core.clients
   participant Judge as fusionkit_core.judge.JudgeSynthesizer
   participant Store as fusionkit_core.run_store.FileSystemRunStore
 
-  CLI->>Server: HTTP request or serve command
-  Server->>Engine: normalized chat or fusion request
-  Engine->>Clients: model calls for panel members
-  Clients-->>Engine: ModelResponse and usage
+  CLI->>Server: trajectories:fuse request
+  Server->>Engine: normalized trajectories
+  Engine->>Clients: judge/synth calls by namespaced model id
+  Clients->>RouteKit: neutral Chat Completions
+  RouteKit-->>Clients: ModelResponse and usage
   Engine->>Judge: candidate trajectories
   Judge-->>Engine: FuseResult
   Engine->>Store: run events and artifacts
@@ -58,13 +68,19 @@ sequenceDiagram
 
 ## `fusionkit-core`
 
-`fusionkit-core` is the core implementation package. It contains the runtime types, configuration model, provider clients, fusion engine, judge synthesizer, run manager, contract models, tracing, metrics, artifacts, and provider metadata helpers.
+`fusionkit-core` contains runtime types, the provider-neutral sidecar
+configuration, one RouteKit client, the fusion engine, judge synthesizer, run
+manager, contract models, tracing, metrics, and artifacts.
 
 ### `fusionkit_core.config`
 
 This module defines the configuration that the Python engine consumes.
 
-`EndpointAuth` describes how a model endpoint obtains credentials. It is used by provider resolution and subscription auth flows. `EndpointCapabilities` records whether an endpoint supports tools, streaming, or other model features. `CostMetadata` stores token pricing or cost metadata used by budget and report logic. `RunBudget` describes run-level budget limits. `SamplingConfig` carries temperature, top-p, max-token, and related sampling controls. `PromptOverrides` points to judge and synthesizer prompt files. `ModelEndpoint` is the per-model endpoint definition. `FusionConfig` is the top-level engine configuration. `load_config(path)` reads a config file from disk and returns a validated `FusionConfig`.
+`FusionConfig` contains one `routekit_url`, namespaced `endpoint_ids`, default,
+judge and synthesizer model ids, and fusion policy. `RunBudget`,
+`SamplingConfig`, `ContextPolicy`, and `PromptOverrides` carry policy only.
+Provider names, credentials, base URLs, retries, and pricing are intentionally
+absent. `load_config(path)` validates this schema.
 
 Example:
 
@@ -72,15 +88,14 @@ Example:
 from fusionkit_core.config import load_config
 
 config = load_config(".fusionkit/fusion.yaml")
-for endpoint in config.models:
-    print(endpoint.id, endpoint.provider)
+print(config.routekit_url, config.endpoint_ids)
 ```
 
 ### `fusionkit_core.types`
 
 This module contains the runtime data structures shared by clients, producers, the engine, and the judge.
 
-`ToolCall` represents a requested tool invocation. `ChatMessage` represents a normalized chat message. `Usage` stores input, output, and total token counts. `CallMetrics` stores latency and provider metadata. `ModelResponse` is the normalized response from a provider client. `StreamChunk` represents incremental streaming output. `TrajectorySynthesis` captures judge synthesis metadata. `Trajectory` is a candidate path produced by a model or agent. `FusionAnalysis` stores parsed judge analysis. `FusionResult` is the final fused result returned by the engine.
+`ToolCall` represents a requested tool invocation. `ChatMessage` represents a normalized chat message. `Usage` stores input, output, and total token counts. `CallMetrics` stores model ID, latency, usage, and request ID. `ModelResponse` is the normalized response from a `ChatClient`. `StreamChunk` represents incremental streaming output. `TrajectorySynthesis` captures judge synthesis metadata. `Trajectory` is a candidate path produced by a model or agent. `FusionAnalysis` stores parsed judge analysis. `FusionResult` is the final fused result returned by the engine.
 
 Example:
 
@@ -93,11 +108,13 @@ print(message.model_dump())
 
 ### `fusionkit_core.clients`
 
-This module owns provider-specific model clients and error classification.
+This module builds the single neutral RouteKit client used by FusionKit.
 
-`ProviderCallError` wraps provider failures with status, retry, and category information. `classify_provider_error()` converts HTTP status codes and error bodies into provider error categories. `ChatClient` is the protocol implemented by all clients. `OpenAICompatibleClient`, `AnthropicModelClient`, `CodexResponsesClient`, and `GoogleModelClient` call real providers. `FakeModelClient` supports tests and deterministic examples. `build_client(endpoint)` builds one client from a `ModelEndpoint`. `build_clients(config)` builds all configured clients.
-
-Private conversion helpers are relevant because they preserve wire compatibility. `_openai_messages()`, `_openai_tools()`, `_anthropic_messages()`, `_anthropic_tools()`, `_codex_input()`, `_codex_tools()`, `_google_contents()`, and `_google_tools()` map normalized FusionKit messages and tools into vendor payloads. `_loads_arguments()` safely normalizes tool-call argument JSON.
+`ChatClient` is the provider-neutral protocol, `RouteKitClient` speaks RouteKit's
+OpenAI-compatible gateway using namespaced model ids, and `FakeModelClient`
+supports deterministic tests. `build_clients(config)` creates one RouteKit
+client per configured id. There are no credentials, provider branches, retry
+classifiers, balancing rules, or pricing tables in Python.
 
 Example:
 
@@ -187,7 +204,7 @@ print(store.root)
 
 This module mirrors the model-fusion protocol in Python and attaches producer metadata.
 
-Contract classes include `ContractBaseModel`, `ContractMetadata`, `ContractRecord`, `ContractChatMessage`, `ContractUsage`, `ContractError`, `ContractSampling`, `ArtifactRefV1`, `ContractArtifactRef`, `ModelEndpointV1`, `ModelCallRecordV1`, `FusionRunRequestV1`, `FusionRecordV1`, `HarnessRunRequestV1`, `HarnessRunResultV1`, `HarnessCandidateRecordV1`, `TrajectoryItem`, `TrajectorySynthesis`, `TrajectoryV1`, `BenchmarkScorer`, `BenchmarkTaskRecordV1`, `ToolCallPlanV1`, `ToolExecutionRecordV1`, and `EnsembleReceiptV1`.
+Contract classes include `ContractBaseModel`, `ContractMetadata`, `ContractRecord`, `ContractChatMessage`, `ContractUsage`, `ContractError`, `ContractSampling`, `ArtifactRefV1`, `ContractArtifactRef`, `ModelCallRecordV1`, `FusionRunRequestV1`, `FusionRecordV1`, `HarnessRunRequestV1`, `HarnessRunResultV1`, `HarnessCandidateRecordV1`, `TrajectoryItem`, `TrajectorySynthesis`, `TrajectoryV1`, `BenchmarkScorer`, `BenchmarkTaskRecordV1`, `ToolCallPlanV1`, `ToolExecutionRecordV1`, and `EnsembleReceiptV1`.
 
 Functions include `schema_bundle_hash()`, `producer()`, `producer_version()`, `producer_git_sha()`, `contract_metadata()`, `contract_model_for_schema()`, and `status_for_run_state()`. These functions ensure Python records can be compared with schema and TypeScript expectations.
 
@@ -211,39 +228,8 @@ Example:
 ```python
 from fusionkit_core.producers import failed_trajectory
 
-trajectory = failed_trajectory("model-a", "provider timeout")
+trajectory = failed_trajectory("model-a", "RouteKit call failed")
 print(trajectory.status)
-```
-
-### `fusionkit_core.credentials`
-
-This module resolves subscription and provider credentials.
-
-`SubscriptionAuthError` describes credential failures. `SubscriptionToken` stores resolved token values and metadata. `load_claude_code_credentials()` and `load_codex_credentials()` load local subscription auth. `resolve_credential(endpoint)` chooses the credential source for an endpoint. `clear_credential_cache()` resets cached credentials. `SubscriptionStatus` and `subscription_status()` report configured auth state.
-
-Internal helpers read JWT claims, macOS keychain values, token environment variables, and login hints. They should be changed carefully because they affect local developer auth.
-
-Example:
-
-```python
-from fusionkit_core.credentials import clear_credential_cache
-
-clear_credential_cache()
-```
-
-### `fusionkit_core.providers`
-
-This module contains provider metadata and cost helpers.
-
-`resolve_api_key(endpoint)` finds the API key for a model endpoint. `endpoint_to_contract(endpoint)` converts a runtime endpoint into a contract record. `normalize_usage(usage)` normalizes runtime or contract usage values. `estimate_cost()` estimates cost from endpoint metadata and usage. `provider_metadata(endpoint)` returns capability and provider details used in records and diagnostics.
-
-Example:
-
-```python
-from fusionkit_core.providers import provider_metadata
-
-metadata = provider_metadata(endpoint)
-print(metadata["provider"])
 ```
 
 ### `fusionkit_core.prompts`
@@ -265,7 +251,10 @@ print(prompt[:200])
 
 `setup_fusion_tracing()`, `fusion_span()`, `start_fusion_span()`/`end_fusion_span()`, `emit_event()`, `context_from_headers()`, and `candidate_baggage_of()` provide OpenTelemetry-backed spans and events that follow the fusion semantic conventions (`spec/fusion-trace/registry.json`). Export is configured with the standard `OTEL_EXPORTER_OTLP_ENDPOINT` base (spans post to `/v1/traces`, events to `/v1/logs`; the signal-specific variables win).
 
-`RunRecord` and `JsonlRunLogger` write lightweight metrics records. `FusionKernel` is the Python-side kernel abstraction. `RouterDecision` and `HeuristicRouter` support simple routing decisions. `hash_bytes()`, `hash_text()`, and `LocalArtifactStore` support content-addressed artifact storage.
+`RunRecord` and `JsonlRunLogger` write lightweight metrics records.
+`FusionKernel` is the Python-side kernel abstraction. `RouterDecision` and
+`FusionModeRouter` choose internal fusion modes. `hash_bytes()`, `hash_text()`,
+and `LocalArtifactStore` support content-addressed artifact storage.
 
 Example:
 
@@ -279,48 +268,43 @@ with fusion_span("synthesis", "fusion.fuse", ctx) as span:
 
 ## `fusionkit-server`
 
-`fusionkit-server` exposes the fusion engine over HTTP. The central function is `create_app()` in `fusionkit_server.app`. It builds the FastAPI application, loads configuration, wires the engine, and registers OpenAI-compatible and native run routes.
+`fusionkit-server` exposes only the internal fusion sidecar HTTP API. The
+central function is `create_app()` in `fusionkit_server.app`.
 
-The important routes are `/v1/chat/completions`, `/v1/fusion/trajectories:fuse`, and native run endpoints for creating runs, submitting tool results, inspecting runs, and retrieving events. `fusionkit_server.openai_endpoint` contains request and response helpers for OpenAI-shaped payloads.
-
-Example:
-
-```bash
-uv run --package fusionkit-server python -m uvicorn fusionkit_server.app:create_app --factory --port 8000
-```
-
-```bash
-curl http://127.0.0.1:8000/v1/chat/completions \
-  -H 'content-type: application/json' \
-  -d '{"model":"fusion","messages":[{"role":"user","content":"hello"}]}'
-```
-
-## `fusionkit` Python CLI
-
-The PyPI package named `fusionkit` is implemented by `fusionkit_cli.main:app`. It is the Python CLI that the Node side can provision and that maintainers can run directly.
-
-Core commands include `serve()` for the FastAPI fusion router, `init()` for writing config, `serve_endpoint()` for a single-endpoint HTTP server, and `prompts_dump()` for exporting built-in prompt templates.
-
-Authentication commands include `auth_status()`, `_switch_endpoint()`, `auth_switch()`, `auth_set_default()`, and `auth_login()`. They inspect and modify endpoint auth behavior for supported subscription and API-key modes.
-
-Evaluation commands include `run_eval()`, `pareto()`, `tiny_bench()`, `fusion_bench()`, `fusion_bench_report()`, `public_bench()`, `public_bench_baselines()`, `tune_prompts()`, `fusion_hillclimb()`, and `fusion_hillclimb_polyglot()`.
-
-Formatting and resolution helpers include `_format_hillclimb_report()`, `_format_tuning_report()`, `_resolve_public_suite()`, and `_write_fusion_bench_reports()`.
-
-The onboarding module provides `global_config_path()`, `resolve_config_path()`, `default_write_path()`, `write_config()`, `detect_api_keys()`, `detect_codex_model()`, `subscription_endpoint()`, and `api_key_endpoint()`.
+The routes are `/health`, `/v1/fusion/trajectories:fuse`, and native run
+endpoints for creating runs, submitting tool results, inspecting runs, and
+retrieving events. It has no model listing, passthrough, Cursor, Messages, or
+public Chat Completions front door.
 
 Example:
 
 ```bash
-uv run --package fusionkit fusionkit init --global
-uv run --package fusionkit fusionkit prompts dump --dir .fusionkit/prompts
-uv run --package fusionkit fusionkit serve --config .fusionkit/fusion.yaml --port 8000
-uv run --package fusionkit fusionkit auth status
+uv run --package fusionkit fusionkit-sidecar serve --config sidecar.yaml --port 8000
+curl http://127.0.0.1:8000/health
+```
+
+## `fusionkit` Python sidecar
+
+The PyPI package named `fusionkit` is implemented by
+`fusionkit_cli.main:app`. It installs only `fusionkit-sidecar`; the Node
+package owns the user-facing `fusionkit` binary.
+
+Its commands are `serve`, `prompts dump`, and `--version`. It has no auth,
+onboarding, provider, passthrough, benchmark, MLX, or Hyperkit commands.
+
+Example:
+
+```bash
+uv run --package fusionkit fusionkit-sidecar prompts dump --dir .fusionkit/prompts
+uv run --package fusionkit fusionkit-sidecar serve --config sidecar.yaml --port 8000
 ```
 
 ## `fusionkit-evals`
 
-`fusionkit-evals` contains the benchmark and optimization toolkit. It is used for local evaluation, public benchmark comparison, prompt tuning, hill climbing, and report generation.
+`fusionkit-evals` contains the benchmark and optimization toolkit. Its
+`fusionkit_evals.cli:bench_app` is the canonical implementation behind the
+separately installed `fusionkit-bench` entrypoint; the sidecar package contains
+no benchmark command modules or dependency on this package.
 
 `benchmark.py` defines the general benchmark runner abstractions. `fusion_bench.py` defines `FusionBenchRunner` and the benchmark loop for FusionKit panels. `fusion_hillclimb.py` defines the hill-climb loop, including target checks and mutation cycles. `fusion_compound.py` builds compound fusion candidates. `benchmark_panel.py`, `candidate_bank.py`, `dirty_dozen.py`, and `schema.py` define benchmark inputs and candidate storage.
 
@@ -331,10 +315,11 @@ uv run --package fusionkit fusionkit auth status
 Example:
 
 ```bash
-uv run --package fusionkit fusionkit tiny-bench --config .fusionkit/fusion.yaml
-uv run --package fusionkit fusionkit fusion-bench --config .fusionkit/fusion.yaml --limit 12
-uv run --package fusionkit fusionkit fusion-bench-report --input artifacts/fusion-bench/latest.json
-uv run --package fusionkit fusionkit fusion-hillclimb --config .fusionkit/fusion.yaml
+uv run --package fusionkit-evals fusionkit-bench tiny --config sidecar.yaml
+uv run --package fusionkit-evals fusionkit-bench fusion --config sidecar.yaml
+uv run --package fusionkit-evals fusionkit-bench fusion-report \
+  --input artifacts/fusion-bench/latest.json
+uv run --package fusionkit-evals fusionkit-bench hillclimb --config sidecar.yaml
 ```
 
 ## `fusionkit-mlx`
@@ -347,6 +332,34 @@ Example:
 
 ```bash
 uv run --package fusionkit-mlx python -c "import fusionkit_mlx; print(fusionkit_mlx.__name__)"
+```
+
+## `fusionkit-testkit`
+
+`fusionkit-testkit` is never published. Its neutral OpenAI-compatible simulator
+acts as a controllable RouteKit upstream for Python sidecar tests.
+`fusionkit_testkit.endpoints` builds namespaced-model `FusionConfig` objects and
+`EngineProcess` runs the real `fusionkit-sidecar` child process. RouteKit-wire
+coverage belongs to the TypeScript RouteKit gateway tests.
+
+The standalone simulator runs as a console script:
+
+```bash
+uv run --package fusionkit-testkit fusionkit-sim --port 0
+```
+
+## `hyperkit`
+
+`hyperkit` is the system-under-test-agnostic experiment platform;
+[Hyperkit](hyperkit.md) is its living reference. It remains a standalone
+workspace package and is not a dependency or plugin surface of the FusionKit
+sidecar distribution.
+
+Example:
+
+```bash
+uv run --package hyperkit hyperkit --help
+uv run --package hyperkit hyperkit status --workdir .hyperkit
 ```
 
 ## `uniroute`

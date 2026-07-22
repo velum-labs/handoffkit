@@ -8,6 +8,7 @@ one command.
 ```bash
 npm install -g @fusionkit/cli
 cd your-project        # a git repo
+fusionkit init         # scaffold Fusion v4 + RouteKit config
 fusionkit doctor       # check prerequisites
 fusionkit codex        # launch Codex backed by the fusion panel
 ```
@@ -17,40 +18,37 @@ fusionkit codex        # launch Codex backed by the fusion panel
 `fusionkit` orchestrates other tools, so a few things must be available:
 
 - **[uv](https://docs.astral.sh/uv/getting-started/installation/)** — provides
-  `uvx`, used to run the Python synthesizer (`fusionkit` on PyPI). No manual
-  Python install needed.
+  `uvx`, used to run the internal Python synthesis sidecar from the `fusionkit`
+  PyPI distribution. No manual Python install is needed.
 - **A coding agent on your PATH** — one of:
   [`codex`](https://github.com/openai/codex),
   [`claude`](https://docs.anthropic.com/en/docs/claude-code/overview), or
-  [`cursor-agent`](https://cursor.com/cli).
-- **Provider API keys** for the default cloud panel (a three-vendor trio):
-  `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, and `GEMINI_API_KEY` (exported, or in a
-  project `.env` — fusionkit loads it automatically). Any subset works: a
-  default-panel member whose key is missing is skipped with an explicit note,
-  and the survivors are still fused. Not needed for the local MLX panel
-  (`--local`, Apple Silicon).
+  [`cursor-agent`](https://cursor.com/cli), or
+  [`opencode`](https://opencode.ai/).
+- **A RouteKit router configuration** — `.routekit/router.yaml` explicitly
+  enables providers. RouteKit discovers their models and advertises
+  namespaced `provider/model` IDs. Export the registry-defined credential for
+  every selected API provider or enroll the required subscription accounts.
+  FusionKit does not read provider credentials or silently drop members whose
+  credentials are missing.
 - **A git repository** — the panel fuses over the code in your current repo.
 
 Run `fusionkit doctor` any time to see exactly what is and isn't ready.
 
-> Two packages share the name "fusionkit": this npm CLI (`@fusionkit/cli`, the
-> `fusionkit` command) and the Python distribution (`fusionkit` on PyPI) that
-> provides the synthesizer. The CLI fetches the pinned PyPI build via `uvx`
-> automatically.
+> The user-facing `fusionkit` executable belongs only to this npm package. The
+> Python distribution is an internal runtime installed through `uvx` and
+> exposes `fusionkit-sidecar`, not another `fusionkit` executable.
 >
-> - `fusionkit --version` — npm CLI version plus the pinned synthesizer version
-> - `uvx fusionkit --version` — PyPI synthesizer version only
+> - `fusionkit --version` — npm CLI version plus the pinned sidecar version
 > - `fusionkit version` — full matrix (CLI, synthesizer, runners, agents, tool packages)
 
 ## Cost
 
-The default panel runs **multiple frontier cloud models plus a judge** on every
-prompt, so usage adds up. fusionkit asks for confirmation before starting a
-cloud panel — once per repo+panel (the approval is remembered under
-`~/.fusionkit/consent.json`; skip entirely with `--yes`). When the coding agent
-exits, fusionkit prints a session receipt: fused turns, gateway-observed spend,
-and the `--resume` id. Use `--local` for the on-device MLX panel, or `--model`
-to pick cheaper models.
+An ensemble runs **multiple live RouteKit models plus judge/synthesis calls** on
+every prompt, so usage adds up. When the coding agent exits, fusionkit prints a
+session receipt with fused turns, gateway-observed spend, and the `--resume`
+id. Choose provider/model IDs from `routekit models list`; set a session cap
+with `--budget`.
 
 ## Per-repo config
 
@@ -60,12 +58,11 @@ Tired of long flag lines? Scaffold a committed `.fusionkit/` folder:
 fusionkit init
 ```
 
-It writes `.fusionkit/fusion.json` (the panel, judge, default tool, and run
-defaults) plus editable system-prompt overrides in `.fusionkit/prompts/*.md`, so
-the whole team can just run `fusionkit codex`. Only env-var *names* for keys are
-stored, never secrets. Explicit CLI flags always override the folder. A legacy
-`fusionkit.json` is auto-migrated on first run. Inspect the effective config and
-a dry-run preview with `fusionkit status`.
+It writes `.fusionkit/fusion.json` from the live namespaced model IDs discovered
+for `.routekit/router.yaml`. The Fusion file owns ensembles,
+judge/synthesizer choices, tool defaults, run policy, and prompt overrides; the
+RouteKit file owns explicit providers and pooling policy. Inspect the effective
+Fusion config with `fusionkit config show`.
 
 ## Local checkout development
 
@@ -94,22 +91,26 @@ working directory, and does not replace the normal `fusionkit` binary. Set
 ## Commands
 
 - `fusionkit codex | claude | cursor` — launch that agent backed by the panel.
+- `fusionkit opencode` — launch OpenCode through the same neutral tool contract.
 - `fusionkit serve` — just run the gateway and print setup snippets for any tool.
-- `fusionkit fusion [tool]` — the generic launcher (interactive picker on a TTY).
-- `fusionkit fusion stop` — reap portless singleton services (router, dashboard) left running by prior runs.
+- `fusionkit stop` — stop Fusion-owned processes and portless routes.
 - `fusionkit init` — scaffold the committed `.fusionkit/` folder for this repo.
-- `fusionkit setup` — pre-provision the Python fusion engine so the first run is instant.
-- `fusionkit doctor` — check prerequisites with fix hints (`--provision` warms the engine too).
-- `fusionkit status` — show the effective config and what a run will do.
-- `fusionkit config show | path | export-yaml` — inspect the one config source of truth.
-- `fusionkit sessions [show|rm]` — list, inspect, and remove durable gateway sessions (`--resume` / `--continue` rehydrate them).
+- `fusionkit setup` — pre-provision the internal Python sidecar.
+- `fusionkit doctor` — check prerequisites with fix hints.
+- `fusionkit config show | path | get | set | unset | edit` — inspect or edit Fusion v4 policy.
+- `fusionkit ensemble list | add | edit | remove | rename` — manage namespaced-model ensembles.
+- `fusionkit prompts list | edit | reset` — manage judge/synthesizer prompt overrides.
+- `fusionkit sessions list | show | rm` — manage durable Fusion sessions (`--resume` / `--continue` rehydrate them).
 - `fusionkit models list | download | rm` — manage the local MLX model cache.
-- `fusionkit local <tool>` — back an agent with a single local model instead of the panel.
 - `fusionkit version` — show versions for the CLI, synthesizer, runners, agents, and tool packages (`--json` for scripts).
+- `fusionkit telemetry status | on | off | inspect` — control opt-in product telemetry.
 
-Useful flags: `--local`, `--observe`, `--model ID=PROVIDER:MODEL`,
-`--judge-model`, `--repo <dir>`, `--yes`. fusionkit's own flags must precede the
-tool name; everything after the tool is forwarded to it.
+Useful flags include `--ensemble`, `--observe`, `--budget`, `--repo`,
+`--on-rate-limit`, `--resume`, and `--continue`. Provider/model/key flags and
+`--direct` do not exist. For a single model, use a RouteKit launcher such as
+`routekit codex openai/gpt-5.5`. Put global FusionKit options before the
+subcommand, launch options after it, and `--` before arguments that must be
+forwarded unchanged to the coding tool.
 
 ## Notes
 
@@ -119,42 +120,29 @@ tool name; everything after the tool is forwarded to it.
   (Codex reasoning summaries, Claude thinking, `reasoning_content` on the chat
   API). Disable with `--no-reasoning` or `"reasoning": false` in
   `.fusionkit/fusion.json`.
-- **Narration model (opt-in):** `--reasoning-model` (or `"reasoningModel"` in
-  `.fusionkit/fusion.json`) has a model write the narration prose — one-sentence
-  gists of what each candidate did and a comparison line at judge time — instead
-  of the built-in templates. It accepts a panel member (by id or model name,
-  reusing its existing endpoint), a `provider/model` token for any supported
-  provider (`openai/gpt-5.5-mini`, `google/gemini-2.5-flash`,
-  `claude-code/claude-haiku-4-5`, `codex/...`, `openrouter/...`), or a local MLX
-  repo. Bare flag uses `mlx-community/Qwen3-1.7B-4bit` (~1 GB, the smallest
-  model that reliably handled both tasks in our benchmark; smaller models
-  fabricated comparisons; Apple Silicon only, zero API spend). Guardrails always
-  apply (400ms budget, sanitization, template fallback), so a slow or weak model
-  can only ever make a line plainer, never wrong.
-- `--observe` boots a local dashboard that streams live trace events. It is a
-  separate app and is not bundled in the npm package; fusionkit prints how to
-  enable it if it isn't available.
+- `--observe` boots the Scope dashboard that streams live trace events.
+  Published npm packages bundle its standalone server; `fusionkit-dev` builds
+  and reuses the companion `apps/scope` source instead.
 - `cursor` only needs a logged-in `cursor-agent` CLI; Cursorkit ships bundled
   with this package, so no separate checkout is required.
 
 ## Adding a new tool
 
 Each coding tool is its own workspace package implementing a single
-`ToolIntegration` (the adapter), so supporting a new tool is additive:
+neutral `ToolIntegration`, so supporting a new tool is additive:
 
 1. Create `packages/tool-<name>/` (copy `packages/tool-codex` as a template). It
-   depends on `@fusionkit/tools` for the `ToolIntegration` / `ToolLaunchContext`
-   contract, and on `@fusionkit/ensemble` if it also ships a harness adapter.
+   depends on `@routekit/tools` and `@routekit/harness-core`, never on a
+   FusionKit package.
 2. Export a `const <name>Tool: ToolIntegration` with:
-   - `launch(ctx)` — boot the tool's binary against `ctx.gatewayUrl` (the host
-     injects `spawnTool`, portless, teardown, etc. via the context; tool packages
-     never import the CLI).
-   - `modes` — `"fusion"`, `"local"`, or both.
-   - `createHarness` + `harnessKinds` — optional, only if the tool also runs as
-     an ensemble harness in the gateway/e2e matrix.
-3. Register it in [`packages/cli/src/tools.ts`](src/tools.ts) by adding it to the
-   `createToolRegistry([...])` list.
+   - `launch(ctx)` — serialize `ctx.spec` and boot the tool against
+     `ctx.spec.gatewayUrl`.
+   - `driver` — the one canonical `HarnessDriver` implementation for that tool.
+   - `capabilities` — explicit cross-harness grades for streaming, tools,
+     images, and reasoning controls.
+3. Add it to `toolIntegrations` in
+   [`packages/tool-registry/src/index.ts`](../tool-registry/src/index.ts).
 
-That single registry entry wires the tool into the `fusionkit <tool>` launcher,
-`fusionkit local <tool>`, the interactive picker, preflight, and (when it has a
-harness) the ensemble gateway — no other switch statements to update.
+That one canonical registry entry wires the tool into both CLIs, the Fusion
+panel's generic driver adapter, capability reporting, and preflight. FusionKit
+only composes the imported registry with `setToolDriverRegistry`.

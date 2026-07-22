@@ -1,13 +1,23 @@
 /**
- * The gateway's model backend: an OpenAI-compatible Chat Completions server
- * that the gateway translates every harness dialect down to. In practice this
- * is the owned `velum-labs/mlx-lm` fork (`mlx_lm.server`), but it is equally
- * any OpenAI-compatible local server (Ollama, vLLM, LM Studio) or a process
- * fronted by `mlxServer`/`routedModel`. The backend is intentionally a thin
+ * The gateway's model backend. The default HTTP implementation speaks
+ * OpenAI-compatible Chat Completions, but provider-native implementations can
+ * adapt another wire protocol behind the same interface. The backend is a thin
  * `fetch` wrapper that returns the upstream `Response` unchanged, so the chat
  * surface can stream straight through and the dialect adapters can consume the
  * same core without a second abstraction.
  */
+import type { ModelReasoningCapabilities } from "@routekit/contracts";
+import { reasoningSelectionOf } from "./adapters/openai-chat-wire.js";
+
+export type BackendModelRoute = {
+  /** Stable RouteKit catalog id (`provider/model`). */
+  publicId: string;
+  /** Model id understood by the provider's native API. */
+  nativeId: string;
+  /** Configured provider that owns the model. */
+  provider: string;
+  reasoning?: ModelReasoningCapabilities;
+};
 
 export type Backend = {
   /** Model id sent to the backend when a request omits one. */
@@ -23,18 +33,32 @@ export type Backend = {
    * Resolve a client-requested model id to the upstream id the backend should
    * actually run. When absent the gateway falls back to `defaultModel` (the
    * historical single-model behaviour). A multi-model backend returns the
-   * requested id when it recognises a native passthrough model so the gateway
-   * can route it to its real provider instead of fusing it.
+   * requested id when it recognises a native model so the gateway can route it
+   * to its provider.
    */
   resolveModel?(requested: string | undefined): string | undefined;
   /**
-   * Whether the backend serves this exact model id itself (a fused route or a
-   * registered passthrough). Unlike {@link resolveModel} — which folds unknown
+   * Resolve a model together with its provider/native identity. An exact
+   * public id always wins. When `nativeProvider` is supplied, a bare native id
+   * may resolve only inside that provider; this powers provider-native client
+   * aliases without making bare ids valid on RouteKit's global API surface.
+   */
+  resolveModelRoute?(
+    requested: string | undefined,
+    nativeProvider?: string
+  ): BackendModelRoute | undefined;
+  /**
+   * Whether the backend serves this exact model id itself. Unlike
+   * {@link resolveModel} — which folds unknown
    * ids into the default — this distinguishes "mine" from "unknown", so the
    * gateway can hand unknown ids to a relay (e.g. the Codex backend relay)
-   * instead of silently fusing them.
+   * instead of silently routing them to the default.
    */
   servesModel?(model: string): boolean;
+  /** Capabilities advertised for a model id. */
+  capabilities?(model: string): Readonly<Record<string, string>>;
+  /** Structured reasoning controls advertised for a model id. */
+  reasoningCapabilities?(model: string): ModelReasoningCapabilities | undefined;
   /** POST <base>/chat/completions — supports streaming (SSE) upstream. */
   chat(body: unknown, signal?: AbortSignal, options?: BackendRequestOptions): Promise<Response>;
   /** GET <base>/models. */
@@ -47,18 +71,17 @@ export type Backend = {
 
 export type BackendRequestOptions = {
   modelCallId?: string;
+  reasoningCapabilities?: ModelReasoningCapabilities;
   /**
-   * How many fusion panel levels are above this request. 0 / absent = a user
-   * front-door request; 1 = issued by a panel member (e.g. a member's fused
-   * sub-agent turn). The fusion backend uses it to stop provisioning fused
-   * sub-agent access below one level of delegation.
+   * Neutral request context captured at the HTTP boundary. Backends may
+   * interpret their own namespaced headers; the gateway does not.
    */
-  panelDepth?: number;
+  requestContext?: {
+    headers: Readonly<Record<string, string | readonly string[] | undefined>>;
+  };
   /**
    * The caller will wrap the returned stream in a dialect translator
-   * (Anthropic / Responses) that emits its own keepalive. The fusion backend
-   * then suppresses its chat-layer `: keepalive` comments, which the translator
-   * would only drop anyway, so exactly one keepalive reaches the client.
+   * (Anthropic / Responses) that emits its own keepalive.
    */
   translated?: boolean;
 };
@@ -83,28 +106,12 @@ export type OpenAiBackendOptions = {
    * forwarded upstream, regardless of what the client sent. Used by per-candidate
    * capture gateways that are dedicated to one routed endpoint: the driving CLI
    * (e.g. Claude Code) picks its own model label, but the router must always
-   * receive the endpoint id. Absent means the client's model passes through.
+   * receive the routed model id. Absent means the client's model passes through.
    */
   forceModel?: string;
-  /** Extra headers sent on every request (e.g. the panel-depth marker). */
+  /** Extra headers sent on every request. */
   headers?: Record<string, string>;
 };
-
-/**
- * Header carrying the fusion panel depth of the caller: requests issued from
- * inside a panel member (e.g. a member's fused sub-agent turn) arrive at the
- * front-door gateway with depth >= 1, which stops fused sub-agent provisioning
- * from recursing (a depth-1 panel's members get no fused model access).
- */
-export const PANEL_DEPTH_HEADER = "x-fusionkit-panel-depth";
-
-/** Parse a panel-depth header value; absent/invalid means depth 0 (a user request). */
-export function parsePanelDepth(value: string | string[] | undefined): number {
-  const raw = Array.isArray(value) ? value[0] : value;
-  if (raw === undefined) return 0;
-  const parsed = Number.parseInt(raw, 10);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
-}
 
 /** Join a base URL (which may end in `/`) with a route path. */
 export function joinPath(baseUrl: string, path: string): string {
@@ -134,7 +141,7 @@ export class OpenAiBackend implements Backend {
       "content-type": "application/json",
       authorization: `Bearer ${this.#apiKey}`,
       ...this.#extraHeaders,
-      ...(options.modelCallId ? { "x-velum-model-call-id": options.modelCallId } : {})
+      ...(options.modelCallId ? { "x-routekit-model-call-id": options.modelCallId } : {})
     };
   }
 
@@ -143,16 +150,58 @@ export class OpenAiBackend implements Backend {
     signal?: AbortSignal,
     options: BackendRequestOptions = {}
   ): Promise<Response> {
-    const payload =
+    const routed =
       this.#forceModel !== undefined && typeof body === "object" && body !== null && !Array.isArray(body)
         ? { ...(body as Record<string, unknown>), model: this.#forceModel }
         : body;
+    const selection = reasoningSelectionOf(routed);
+    if (
+      (selection.mode === "budget" || selection.mode === "adaptive") &&
+      options.reasoningCapabilities?.wireShape !== "openrouter"
+    ) {
+      return Promise.resolve(
+        Response.json(
+          {
+            error: {
+              type: "invalid_request_error",
+              message: `OpenAI Chat cannot represent reasoning mode "${selection.mode}"`
+            }
+          },
+          { status: 400 }
+        )
+      );
+    }
+    const payload =
+      options.reasoningCapabilities?.wireShape === "openrouter" &&
+      routed !== null &&
+      typeof routed === "object" &&
+      !Array.isArray(routed)
+        ? this.#openRouterReasoning(routed as Record<string, unknown>, selection)
+        : routed;
     return fetch(joinPath(this.#baseUrl, "/chat/completions"), {
       method: "POST",
       headers: this.#headers(options),
       body: JSON.stringify(payload),
       ...(signal ? { signal } : {})
     });
+  }
+
+  #openRouterReasoning(
+    body: Record<string, unknown>,
+    selection: ReturnType<typeof reasoningSelectionOf>
+  ): Record<string, unknown> {
+    const payload = { ...body };
+    delete payload.reasoning_effort;
+    if (selection.mode === "effort") {
+      payload.reasoning = { effort: selection.effort };
+    } else if (selection.mode === "budget") {
+      payload.reasoning = { max_tokens: selection.budgetTokens };
+    } else if (selection.mode === "adaptive") {
+      payload.reasoning = { enabled: true };
+    } else if (selection.mode === "disabled") {
+      payload.reasoning = { enabled: false };
+    }
+    return payload;
   }
 
   models(signal?: AbortSignal): Promise<Response> {
@@ -176,7 +225,7 @@ export class OpenAiBackend implements Backend {
 export type ModelRoutedBackendOptions = {
   /** Requested model ids served by `routed` instead of the primary backend. */
   routedModelIds: readonly string[];
-  /** Backend for the routed ids (e.g. the front-door fusion gateway). */
+  /** Backend for the routed ids. */
   routed: Backend;
   /** Backend for everything else (e.g. the member's router endpoint). */
   primary: Backend;
@@ -184,10 +233,8 @@ export type ModelRoutedBackendOptions = {
 
 /**
  * A backend that dispatches by requested model id: ids in `routedModelIds` go
- * to the `routed` backend, everything else to `primary`. Used by panel-member
- * capture gateways so a member's own-model traffic keeps hitting its router
- * endpoint while its fused sub-agent traffic (`fusion-*`) reaches the
- * front-door fusion gateway.
+ * to the `routed` backend, everything else to `primary`. This lets selected
+ * model ids use a secondary destination.
  */
 export class ModelRoutedBackend implements Backend {
   readonly #routedIds: ReadonlySet<string>;

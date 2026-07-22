@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 from fusionkit_core.clients import FakeModelClient
-from fusionkit_core.config import FusionConfig, ModelEndpoint
+from fusionkit_core.config import FusionConfig
 from fusionkit_core.contracts import FusionRunRequestV1, contract_metadata
 from fusionkit_core.types import ChatMessage
 from fusionkit_server import create_app
@@ -100,21 +100,19 @@ def test_native_fusion_run_missing_run_returns_native_error(tmp_path) -> None:
 
 def _client(tmp_path) -> TestClient:
     config = FusionConfig(
-        endpoints=[
-            ModelEndpoint(id="fast", model="fake-fast", base_url="http://localhost:8101"),
-            ModelEndpoint(id="judge", model="fake-judge", base_url="http://localhost:8102"),
-        ],
-        default_model="fast",
-        judge_model="judge",
+        routekit_url="http://routekit.test",
+        routekit_model_ids=["test/fast", "test/judge"],
+        default_model="test/fast",
+        judge_model="test/judge",
         default_mode="panel",
-        panel_models=["fast"],
+        panel_models=["test/fast"],
     )
     app = create_app(
         config,
         clients={
-            "fast": FakeModelClient("fast", ["fast candidate with evidence"]),
-            "judge": FakeModelClient(
-                "judge",
+            "test/fast": FakeModelClient("test/fast", ["fast candidate with evidence"]),
+            "test/judge": FakeModelClient(
+                "test/judge",
                 [
                     '{"consensus":["candidate has evidence"],"contradictions":[],'
                     '"unique_insights":[],"coverage_gaps":[],"likely_errors":[],'
@@ -140,7 +138,7 @@ def _request_payload(request_id: str, mode: str = "panel") -> dict:
                 )
             ],
             "sampling": {},
-            "requested_models": ["fast"] if mode == "panel" else None,
+            "requested_models": ["test/fast"] if mode == "panel" else None,
         }
     )
     return request.model_dump(mode="json")

@@ -37,10 +37,10 @@ async function driveAgent(
 
 test("acp agent completes initialize, session/new, and session/prompt", async () => {
   const runner: AcpRunner = async (input) => ({
-    finalOutput: `FUSION_OK:${input.prompt}`,
+    finalOutput: `ROUTE_OK:${input.prompt}`,
     runId: "run_acp_1",
     status: "succeeded",
-    evidence: ["patch_artifact", "judge_synthesis"]
+    evidence: ["patch_artifact", "test_report"]
   });
 
   const messages = await driveAgent(runner, [
@@ -66,7 +66,7 @@ test("acp agent completes initialize, session/new, and session/prompt", async ()
   const updateParams = update.params as {
     update: { content: { text: string } };
   };
-  assert.match(updateParams.update.content.text, /FUSION_OK:patch the bug/);
+  assert.match(updateParams.update.content.text, /ROUTE_OK:patch the bug/);
 
   const promptResult = messages.find((message) => message.id === 3);
   const result = promptResult?.result as { stopReason: string; _meta: { runId: string } };

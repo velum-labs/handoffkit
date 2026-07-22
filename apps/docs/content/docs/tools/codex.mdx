@@ -16,16 +16,15 @@ Anything after the tool name is forwarded to Codex, so your usual Codex
 arguments still work:
 
 ```bash
-fusionkit codex --yes -- "fix the failing parser test"
+fusionkit codex -- "fix the failing parser test"
 ```
 
 ## Prerequisites
 
 - The `codex` binary on your PATH. Install it from
   [github.com/openai/codex](https://github.com/openai/codex).
-- Provider keys for the panel you use: `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`,
-  and `GEMINI_API_KEY` for the default cloud trio, or none with `--local` on
-  Apple Silicon.
+- A valid `.fusionkit/fusion.json` v4 file and RouteKit endpoint config. Provider
+  credentials are referenced only by `.routekit/router.yaml`.
 
 `fusionkit doctor` verifies both before you launch.
 
@@ -56,23 +55,8 @@ or a temporary `CODEX_HOME`.
 
 ## The model picker
 
-Codex's `/model` picker lists the fused model first, then every other named
-ensemble (`fusion-<name>`), then each native panel member proxied through the
-gateway, then everything Codex normally offers on its own. Switching models
-mid-session works: pick a member id such as `gpt` for direct passthrough, a
-`fusion-*` id for synthesis, or a stock Codex model.
-
-When you are logged in to Codex (`codex login`), the launcher reuses that
-login in the session and the gateway acts as a live relay to the Codex
-backend: Codex fetches its model list from the gateway, which forwards the
-request to the real backend under your own auth and merges the fusion/panel
-entries in front of the live stock catalog. Picking a stock model relays the
-request verbatim to the Codex backend — same auth, same billing, same model —
-never the fused panel. If the backend is unreachable the merge falls back to
-your local `~/.codex/models_cache.json` snapshot.
-
-Without a Codex login the stock models cannot be served, so the picker lists
-only the fusion/panel entries (via a generated static catalog).
+Codex's `/model` picker lists the default `fusion-panel` model and every other
+named ensemble (`fusion-<name>`). RouteKit owns single-model endpoint launches.
 
 Each model also gets a `[profiles.*]` entry, so you can start Codex on a
 different ensemble directly:
@@ -80,35 +64,6 @@ different ensemble directly:
 ```bash
 fusionkit codex -- --profile fusion-deep
 ```
-
-## Install into your own Codex (additive)
-
-`fusionkit codex` runs Codex in a temporary home so your own configuration is
-never touched. If you would rather add fusion to your *normal* Codex — keeping
-your MCP servers, instructions, history, and default model exactly as they are
-— install FusionKit as an extra provider instead:
-
-```bash
-fusionkit install codex --port 4114
-```
-
-This appends a clearly-marked managed block to `~/.codex/config.toml`: a
-`fusionkit` model provider pointing at the gateway, plus one launch profile
-per fusion ensemble. Nothing else in the file changes, and plain `codex`
-behaves exactly as before. Then:
-
-```bash
-fusionkit serve --port 4114        # start the gateway (any repo)
-codex --profile fusion-panel       # a fused Codex session, in your real home
-```
-
-Codex sessions are single-provider, so the profile is the entry point — but
-inside that session the gateway relay keeps the full `/model` picker: the
-fused ensembles, the panel members, and your own live Codex model list, with
-stock picks relayed to the Codex backend under your own login.
-
-Rerun the command to update the block (e.g. after adding ensembles);
-`fusionkit uninstall codex` removes it.
 
 ## Sub-agents
 
@@ -125,9 +80,7 @@ run. Pass `--no-subagents` (or set `"subagents": false` in
   first two seconds, FusionKit retries automatically: first without the model
   catalog, then without the sub-agent roles. Fusion keeps working in both
   fallbacks; you lose only picker niceties.
-- `fusionkit local codex` backs Codex with a single local MLX model and no
-  fusion. `fusionkit codex --local` runs the fused local panel. Both need
-  Apple Silicon.
+- Direct and single-model mode belongs to RouteKit; FusionKit has no `--direct`.
 
 ## Related pages
 

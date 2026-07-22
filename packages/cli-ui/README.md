@@ -1,17 +1,17 @@
-# @fusionkit/cli-ui
+# @routekit/cli-ui
 
-FusionKit terminal UI primitives for the CLI.
+Brand-configurable terminal UI primitives for CLIs.
 
 ## Architecture
 
-This package provides the Ink presenter, prompt facade, and plain-text fallback used by user-facing FusionKit commands.
+This package provides the Ink presenter, prompt facade, and plain-text fallback used by user-facing commands.
 
 ## Usage
 
-Most users should install `@fusionkit/cli`; use this package only when extending the CLI presentation layer.
+Use this package when extending a RouteKit-based CLI presentation layer.
 
 ```ts
-import * as fusionkitPackage from "@fusionkit/cli-ui";
+import { configureBrand, createPresenter } from "@routekit/cli-ui";
 ```
 
 ## Docs

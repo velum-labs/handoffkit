@@ -17,11 +17,11 @@ concurrency:
 
 jobs:
   check:
-    name: check, build, test, demos
+    name: check, build, test, apps, demos
     runs-on: ubuntu-latest
     # Hard ceiling so a hung test cannot burn CI minutes; the suite normally
     # finishes in well under half of this.
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -29,7 +29,7 @@ jobs:
           persist-credentials: false
 
       - name: Setup Node
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           # Matches the pinned Dockerfile base image; bump them together.
           node-version: 22
@@ -44,13 +44,30 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
 
+      - name: Restore Turborepo cache
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: .turbo
+          key: ${{ runner.os }}-turbo-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-turbo-
+
       - name: Check
         run: pnpm check
 
       - name: Build
         run: pnpm build
 
-      - name: OOTB CLI shape smoke
+      - name: RouteKit clean-install smoke
+        run: node scripts/check-routekit-cli-pack.mjs
+
+      - name: FusionKit clean-install smoke
+        run: node scripts/check-fusionkit-cli-pack.mjs
+
+      - name: RouteKit and FusionKit co-install smoke
+        run: node scripts/check-dual-cli-pack.mjs
+
+      - name: OOTB CLI shape smoke (RouteKit + FusionKit)
         run: node scripts/check-ootb-cli.mjs
 
       - name: Test
@@ -60,15 +77,20 @@ jobs:
         run: pnpm demo all
 
       - name: Audit dependencies
-        run: pnpm audit --audit-level high
+        # npm retired the classic audit endpoints (HTTP 410) that pnpm 10
+        # queries; pnpm 11 uses the bulk advisory endpoint. Audit only reads
+        # the lockfile, so it is safe to run under pnpm 11 while the
+        # workspace stays pinned to pnpm 10 — but the packageManager pin
+        # must be dropped first or pnpm 11 self-delegates back to 10.
+        run: |
+          npm pkg delete packageManager
+          npx --yes pnpm@11 audit --audit-level high
+          git checkout -- package.json
 
-  scope:
-    name: scope observability app (apps/scope)
+  stack-e2e:
+    name: cross-stack e2e (Node RouteKit/Fusion gateways + internal Python sidecar)
     runs-on: ubuntu-latest
-    timeout-minutes: 10
-    defaults:
-      run:
-        working-directory: apps/scope
+    timeout-minutes: 25
     steps:
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -76,7 +98,7 @@ jobs:
           persist-credentials: false
 
       - name: Setup Node
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 22
 
@@ -86,14 +108,96 @@ jobs:
       - name: Pin pnpm
         run: corepack prepare pnpm@10.33.4 --activate
 
-      - name: Install
+      - name: Setup uv
+        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7.6.0
+
+      - name: Install (pnpm)
         run: pnpm install --frozen-lockfile
 
-      - name: Build (type-checks the app)
-        run: pnpm build
+      - name: Restore Turborepo cache
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: .turbo
+          key: ${{ runner.os }}-turbo-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-turbo-
 
-      - name: Test
-        run: pnpm test
+      # The real coding-agent CLIs: the stack-cli suite spawns the actual
+      # `claude`, `codex`, and `opencode` binaries against the sim-backed
+      # gateway (inert tokens; no real provider accounts are touched).
+      - name: Install real coding-agent CLIs
+        run: npm install -g @openai/codex @anthropic-ai/claude-code opencode-ai
+
+      # Cursor Agent cannot run model turns without a real Cursor login, but
+      # install/verify the official binary so its env-gated live suite can run
+      # unchanged on authenticated runners.
+      - name: Install Cursor Agent CLI
+        run: |
+          curl https://cursor.com/install -fsS | bash
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          "$HOME/.local/bin/cursor-agent" --version
+
+      - name: Sync uv workspace
+        run: uv sync --all-packages
+
+      - name: Build
+        run: >-
+          pnpm exec turbo run build
+          --filter=@fusionkit/cli...
+          --filter=@routekit/cli...
+
+      # The cross-process suites: the Node testkit spawns the provider
+      # simulator and internal `fusionkit-sidecar`; the CLI stack composes the
+      # Node RouteKit gateway with the Node Fusion front door, then drives both
+      # through real coding-agent binaries. These self-skip where uv or the
+      # binaries are missing; this job exists to run them for real.
+      - name: Testkit harness suite
+        run: PORTLESS=0 node --test "packages/testkit/dist/test/*.test.js"
+
+      - name: Full-stack front-door matrix suite
+        run: PORTLESS=0 node --test packages/cli/dist/test/stack-e2e.test.js
+
+      - name: Namespaced model IDs and external RouteKit CLI bridge suite
+        run: PORTLESS=0 node --test packages/cli/dist/test/stack-model-ids-e2e.test.js
+
+      - name: Full-stack depth suite
+        run: PORTLESS=0 node --test packages/cli/dist/test/stack-depth-e2e.test.js
+
+      - name: Gateway policy suite (failover / budget / sessions)
+        run: PORTLESS=0 node --test packages/cli/dist/test/stack-policies-e2e.test.js
+
+      - name: Managed harness k suite (finite + unbounded worktrees)
+        run: PORTLESS=0 node --test packages/cli/dist/test/stack-harness-k-e2e.test.js
+
+      - name: Chaos suite (stragglers / timeout / cancellation)
+        run: PORTLESS=0 node --test packages/cli/dist/test/stack-chaos-e2e.test.js
+
+      - name: Hostile-input fuzz suite (door validation invariants)
+        run: PORTLESS=0 node --test packages/cli/dist/test/stack-fuzz-e2e.test.js
+
+      - name: Concurrency suite (cross-talk / abort isolation)
+        run: PORTLESS=0 node --test packages/cli/dist/test/stack-concurrency-e2e.test.js
+
+      - name: Differential suite (JSON/SSE and cross-door parity)
+        run: PORTLESS=0 node --test packages/cli/dist/test/stack-differential-e2e.test.js
+
+      - name: Harness-core real SDK driver cutover suite
+        run: PORTLESS=0 node --test packages/cli/dist/test/stack-drivers-e2e.test.js
+
+      - name: Durable unbounded resume suite
+        run: PORTLESS=0 node --test packages/cli/dist/test/stack-resume-e2e.test.js
+
+      - name: Gateway authentication boundary suite
+        run: PORTLESS=0 node --test packages/cli/dist/test/stack-auth-e2e.test.js
+
+      - name: Real product CLI suite (Node front door boots internal sidecar)
+        run: PORTLESS=0 node --test packages/cli/dist/test/stack-npm-cli-e2e.test.js
+
+      - name: Real coding-agent CLI suite (claude + codex + opencode binaries)
+        run: PORTLESS=0 node --test packages/cli/dist/test/stack-cli-e2e.test.js
+
+      - name: Real CLI command-surface suite
+        run: PORTLESS=0 node --test packages/cli/dist/test/cli-command-surfaces-e2e.test.js
 
   python:
     name: uv workspace (python/*)
@@ -142,3 +246,27 @@ jobs:
           rm -rf dist
           uv build --all-packages
           uv run --with twine python -m twine check dist/*
+
+  observability:
+    name: Hyperkit dashboard query smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Start seeded Prometheus and Grafana
+        run: docker compose -f infra/hyperkit/grafana/compose.yaml up --build -d --wait
+
+      - name: Execute every dashboard query
+        run: python scripts/validate_hyperkit_dashboards.py
+
+      - name: Show observability logs
+        if: failure()
+        run: docker compose -f infra/hyperkit/grafana/compose.yaml logs
+
+      - name: Tear down
+        if: always()
+        run: docker compose -f infra/hyperkit/grafana/compose.yaml down -v

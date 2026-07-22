@@ -22,9 +22,9 @@ body:
     attributes:
       label: Surface area
       options:
-        - CLI
-        - model gateway
-        - Python router / engine
+        - RouteKit CLI / router
+        - FusionKit CLI / gateway
+        - Python synthesis sidecar
         - harness adapter
         - docs
         - other

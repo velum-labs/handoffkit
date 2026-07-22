@@ -1,0 +1,25 @@
+# Instances whose statements permit multiple valid outputs ("print any of
+# them" and variants). Exact-match stdout grading cannot score these fairly:
+# a correct program fails unless it happens to emit the canonical answer, and
+# on arc181_c this inverted the public-test signal that exec-select relies on
+# (samples passed all 25 private tests while failing both public tests).
+# Detected 2026-07-15 by phrase scan over question_content; see the e003
+# errata in lab/. Future manifests and the e005 holdout final must exclude
+# these; existing e002/e003 paired comparisons are unaffected because every
+# cell faced the same instances.
+#
+# dev.txt (6 of 110)
+abc366_g
+abc373_g
+abc384_c
+abc396_e
+arc181_c
+arc191_c
+#
+# holdout.txt (6 of 70)
+abc370_c
+abc397_d
+abc398_f
+arc183_d
+arc185_c
+arc190_a

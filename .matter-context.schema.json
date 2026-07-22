@@ -1,0 +1,121 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/matter-context.schema.json",
+  "title": "Matter Cursor context configuration",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "repository", "matter", "retrieval", "output"],
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "version": {
+      "const": 1
+    },
+    "repository": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+    },
+    "matter": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["requiredTags", "defaultIntentTags", "defaultStatuses", "defaultContentTypes"],
+      "properties": {
+        "requiredTags": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "defaultIntentTags": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "defaultStatuses": {
+          "type": "array",
+          "items": {
+            "enum": ["inbox", "queue", "archive"]
+          }
+        },
+        "defaultContentTypes": {
+          "type": "array",
+          "items": {
+            "enum": ["article", "video", "podcast", "pdf", "tweet", "newsletter"]
+          }
+        }
+      }
+    },
+    "retrieval": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "maxItems",
+        "maxTotalChars",
+        "maxCharsPerItem",
+        "candidateScanLimit",
+        "includeAnnotations",
+        "includeUnannotatedItems"
+      ],
+      "properties": {
+        "maxItems": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 20
+        },
+        "maxTotalChars": {
+          "type": "integer",
+          "minimum": 5000,
+          "maximum": 200000
+        },
+        "maxCharsPerItem": {
+          "type": "integer",
+          "minimum": 1000,
+          "maximum": 50000
+        },
+        "candidateScanLimit": {
+          "type": "integer",
+          "minimum": 10,
+          "maximum": 500
+        },
+        "includeAnnotations": {
+          "type": "boolean"
+        },
+        "includeUnannotatedItems": {
+          "type": "boolean"
+        }
+      }
+    },
+    "output": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["researchDirectory", "decisionDirectory", "requireResearchBeforeCode"],
+      "properties": {
+        "researchDirectory": {
+          "$ref": "#/$defs/relativePathNoParent"
+        },
+        "decisionDirectory": {
+          "$ref": "#/$defs/relativePathNoParent"
+        },
+        "requireResearchBeforeCode": {
+          "type": "boolean"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "relativePathNoParent": {
+      "type": "string",
+      "minLength": 1,
+      "not": {
+        "pattern": "(^|/)\\.\\.(/|$)"
+      },
+      "pattern": "^(?!/)(?![A-Za-z]:)(?!.*//)[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*$"
+    }
+  }
+}

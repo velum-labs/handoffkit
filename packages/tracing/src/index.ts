@@ -82,10 +82,13 @@ export {
 export type { AttributeSource, ReadableFusionEvent, ReadableSpan } from "./readable.js";
 // Test support: capture finished spans/events in memory (used by consumer
 // packages' tests; re-exported so they need no direct OTel dependency).
-export { InMemorySpanExporter, SimpleSpanProcessor } from "@opentelemetry/sdk-trace-base";
-export type { SpanProcessor } from "@opentelemetry/sdk-trace-base";
-export { InMemoryLogRecordExporter, SimpleLogRecordProcessor } from "@opentelemetry/sdk-logs";
-export type { LogRecordProcessor } from "@opentelemetry/sdk-logs";
+export {
+  InMemoryLogRecordExporter,
+  InMemorySpanExporter,
+  SimpleLogRecordProcessor,
+  SimpleSpanProcessor
+} from "@routekit/tracing";
+export type { LogRecordProcessor, SpanProcessor } from "@routekit/tracing";
 export {
   ATTR,
   EXPORTABLE_ATTRIBUTES,

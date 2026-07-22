@@ -1,0 +1,24 @@
+{
+  "$schema": "./.matter-context.schema.json",
+  "version": 1,
+  "repository": "handoffkit",
+  "matter": {
+    "requiredTags": ["cursor", "repo-handoffkit"],
+    "defaultIntentTags": [],
+    "defaultStatuses": ["queue", "archive"],
+    "defaultContentTypes": ["article", "tweet", "pdf", "newsletter"]
+  },
+  "retrieval": {
+    "maxItems": 8,
+    "maxTotalChars": 60000,
+    "maxCharsPerItem": 12000,
+    "candidateScanLimit": 100,
+    "includeAnnotations": true,
+    "includeUnannotatedItems": true
+  },
+  "output": {
+    "researchDirectory": "docs/research/matter",
+    "decisionDirectory": "docs/decisions",
+    "requireResearchBeforeCode": true
+  }
+}

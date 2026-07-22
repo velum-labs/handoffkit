@@ -8,12 +8,15 @@ description: From install to a fused coding session.
 ```bash
 npm install -g @fusionkit/cli
 fusionkit setup
+cd your-git-repo
+fusionkit init
 fusionkit doctor
 ```
 
-Fix anything marked as missing. For the default cloud panel, the provider keys
-are `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, and `GEMINI_API_KEY`. `fusionkit setup`
-warms the Python engine before the first session.
+Edit the generated `.routekit/router.yaml` to enable providers, then use
+`routekit models list` to inspect their live namespaced catalog. FusionKit
+stores no provider credentials.
+`fusionkit setup` warms the Python engine before the first session.
 
 ## 2. Launch a coding agent
 
@@ -21,13 +24,14 @@ From inside your git repo:
 
 ```bash
 cd your-git-repo
-fusionkit codex      # or: fusionkit claude | fusionkit cursor
+fusionkit codex      # or: fusionkit claude | cursor | opencode
 ```
 
 On a TTY you will see a live boot checklist as the panel, synthesizer, and
-gateway come up. The cloud panel asks for a one-line cost confirmation unless you
-pass `--yes`. Then your agent launches pre-wired to the gateway. One `Ctrl+C`
-tears the stack down.
+gateway come up, then your agent launches pre-wired to the gateway. One
+`Ctrl+C` tears the stack down. FusionKit does not implement a separate cloud
+cost-consent prompt; use `--budget` and review the configured RouteKit
+providers and live models before launching.
 
 A healthy launch prints three useful things before handing control to the agent:
 
@@ -36,24 +40,17 @@ A healthy launch prints three useful things before handing control to the agent:
 - a temp log directory for per-process output if anything later fails.
 
 If the first run pauses while provisioning the Python engine, let it finish once
-or run `fusionkit doctor --provision` ahead of time on new machines.
+or run `fusionkit setup` ahead of time on new machines.
 
-## 3. (Optional) Save per-repo defaults
-
-So your team can just run `fusionkit codex`:
-
-```bash
-fusionkit init
-```
-
-This writes a committed `.fusionkit/` folder (settings plus editable prompts).
-See [Configuration](/docs/reference/configuration).
+`fusionkit init` writes committed Fusion v4 settings plus a safe RouteKit
+router placeholder. See [Configuration](/docs/reference/configuration).
 
 ## Per-tool quickstarts
 
 Each supported tool has its own page covering wiring, the model picker,
 sub-agents, and caveats: [Codex](/docs/tools/codex),
 [Claude Code](/docs/tools/claude-code), and [Cursor](/docs/tools/cursor).
+OpenCode uses the same generic launcher/driver path.
 
 <Tabs items={["Codex", "Claude Code", "Cursor", "Just the gateway"]}>
   <Tab value="Codex">
@@ -99,46 +96,30 @@ and tool-calling examples.
 
 ## Common flags
 
-- `--local`: use the on-device MLX panel instead of the cloud panel.
-- `--model ID=PROVIDER:MODEL`: define a custom panel. Repeat it for multiple members.
-- `--judge-model <model>`: pick the synthesis judge.
+- `--ensemble <name>`: select a configured namespaced-model ensemble.
 - `--budget <usd>`: stop after gateway-observed spend crosses the cap.
 - `--on-rate-limit fusion|passthrough|fail`: choose failover behavior for vendor throttling.
 - `--continue` or `--resume <id>`: resume a durable session.
 - `--observe`: boot the local trace dashboard.
-- `--yes`: skip the cloud-panel cost confirmation.
 
 fusionkit's own flags must come before anything you forward to the tool.
-`fusionkit codex --local` sets a fusionkit flag; everything after the first
-forwarded argument (or after `--`) goes to the tool itself, as in
-`fusionkit codex --yes -- "fix the build"`. See the full
+Everything after the first forwarded argument (or after `--`) goes to the tool
+itself, as in `fusionkit codex -- "fix the build"`. See the full
 [command reference](/docs/reference/commands).
 
-For non-interactive environments, combine `--yes` with a fixed port or disabled
-portless registration:
+For non-interactive environments, use a fixed port or disable portless:
 
 ```bash
-fusionkit serve --yes --no-portless --port 8787
+fusionkit serve --no-portless --port 8787
 ```
 
-To reach the gateway from clients that cannot connect to loopback (for
-example Cursor's BYOK base-URL override, which is proxied through Cursor's
-backend), add `--expose`: the gateway is published on a public HTTPS
-Cloudflare Quick Tunnel with a required bearer token, and the exact Cursor
-settings are printed at boot:
+## Pick a fused ensemble
 
-```bash
-fusionkit serve --yes --expose
-```
-
-## Pick fused or direct models
-
-The gateway exposes `fusion-panel` as the fused model. It also exposes panel
-member ids such as `gpt`, `sonnet`, and `gemini` as passthrough models. Choose
-`fusion-panel` when you want synthesis. Choose a member id when you want to
-compare the ensemble against one provider or use
-[rate-limit handoff](/docs/guides/rate-limit-handoff) as a fallback.
+The gateway exposes the default ensemble as `fusion-panel` and every other
+ensemble as `fusion-<name>`. Namespaced RouteKit model IDs remain the routing boundary.
+Use the independent RouteKit CLI for single-model launches.
 
 Run `fusionkit models list` to inspect local MLX models, and use
-`fusionkit config show` to see the effective cloud panel that will be launched
+`routekit models list` to inspect live provider models. Use
+`fusionkit config show` to see the effective namespaced-model ensembles
 for the current repo.

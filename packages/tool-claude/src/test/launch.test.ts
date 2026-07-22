@@ -1,59 +1,108 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
+import type { AgentProfile, ToolLaunchContext } from "@routekit/tools";
+
 import { claudeAgentsJson, claudeLaunchArgs } from "../launch.js";
 
-const ENSEMBLES = [
-  { name: "default", modelId: "fusion-panel", memberIds: ["kimi", "qwen3"] },
-  { name: "deep", modelId: "fusion-deep", memberIds: ["opus", "gpt"] }
-] as const;
-
-test("claudeAgentsJson defines one agent per ensemble on the claude-aliased model", () => {
-  const agents = JSON.parse(claudeAgentsJson(ENSEMBLES, "fusion-panel")) as Record<
-    string,
-    { description: string; prompt: string; model: string }
-  >;
-  assert.deepEqual(Object.keys(agents), ["fusion-panel", "fusion-deep"]);
-  // Claude only accepts claude/anthropic-prefixed model ids; the gateway strips
-  // the alias back when routing (claudeModelAlias parity).
-  assert.equal(agents["fusion-panel"]?.model, "claude-fusion-panel");
-  assert.equal(agents["fusion-deep"]?.model, "claude-fusion-deep");
-  assert.match(agents["fusion-panel"]?.description ?? "", /default "default" fusion ensemble/);
-  assert.match(agents["fusion-deep"]?.description ?? "", /"deep" fusion ensemble \(opus, gpt/);
-  assert.match(agents["fusion-deep"]?.prompt ?? "", /panel-and-judge fusion/);
-});
-
-test("claudeLaunchArgs appends --agents by default", () => {
-  const args = claudeLaunchArgs({
-    toolArgs: ["--verbose"],
-    modelLabel: "fusion-panel",
-    fusedEnsembles: ENSEMBLES
-  });
-  assert.equal(args[0], "--verbose");
-  assert.equal(args[1], "--agents");
-  const agents = JSON.parse(args[2] ?? "{}") as Record<string, unknown>;
-  assert.ok(agents["fusion-deep"] !== undefined);
-});
-
-test("claudeLaunchArgs skips ours when the user passed --agents", () => {
-  for (const userArgs of [["--agents", "{}"], ["--agents={}"]]) {
-    const args = claudeLaunchArgs({
-      toolArgs: userArgs,
-      modelLabel: "fusion-panel",
-      fusedEnsembles: ENSEMBLES
-    });
-    assert.deepEqual(args, userArgs, "the user's --agents definition wins");
+const PROFILES: readonly AgentProfile[] = [
+  {
+    id: "reviewer",
+    model: "opaque-model",
+    description: "Review changes.",
+    instructions: "Return findings."
   }
+];
+
+function context(
+  args: readonly string[],
+  profiles = PROFILES,
+  defaultModel = "opaque-model"
+): ToolLaunchContext {
+  return {
+    spec: {
+      gatewayUrl: "http://127.0.0.1",
+      defaultModel,
+      models: [{ id: defaultModel }],
+      agentProfiles: profiles,
+      args
+    },
+    log: () => undefined,
+    prepareForPassthrough: () => undefined,
+    registerPort: (_name, port) => `http://127.0.0.1:${port}`,
+    unregisterPort: () => undefined,
+    registerDisposer: () => undefined
+  };
+}
+
+test("claudeAgentsJson serializes generic profiles", () => {
+  assert.deepEqual(JSON.parse(claudeAgentsJson(PROFILES)), {
+    reviewer: {
+      description: "Review changes.",
+      prompt: "Return findings.",
+      model: "claude-opaque-model"
+    }
+  });
 });
 
-test("claudeLaunchArgs honors the subagents opt-out and empty ensembles", () => {
-  const optedOut = claudeLaunchArgs({
-    toolArgs: [],
-    modelLabel: "fusion-panel",
-    fusedEnsembles: ENSEMBLES,
-    subagents: false
-  });
-  assert.deepEqual(optedOut, []);
-  const noEnsembles = claudeLaunchArgs({ toolArgs: [], modelLabel: "fusion-panel" });
-  assert.deepEqual(noEnsembles, []);
+test("Claude launcher projects claude-code models to native picker ids", () => {
+  assert.deepEqual(
+    claudeLaunchArgs(
+      context([], [], "claude-code/claude-sonnet-4-6")
+    ),
+    ["--model", "claude-sonnet-4-6"]
+  );
+  assert.deepEqual(
+    JSON.parse(
+      claudeAgentsJson([
+        {
+          id: "native",
+          model: "claude-code/claude-opus-4-8",
+          description: "Use the subscription pool.",
+          instructions: "Review."
+        },
+        {
+          id: "cross",
+          model: "codex/gpt-5.5",
+          description: "Use Codex.",
+          instructions: "Review."
+        }
+      ])
+    ),
+    {
+      native: {
+        description: "Use the subscription pool.",
+        prompt: "Review.",
+        model: "claude-opus-4-8"
+      },
+      cross: {
+        description: "Use Codex.",
+        prompt: "Review.",
+        model: "claude-codex/gpt-5.5"
+      }
+    }
+  );
+});
+
+test("claudeLaunchArgs adds profiles unless the user supplied agents", () => {
+  const args = claudeLaunchArgs(context(["--verbose"]));
+  assert.deepEqual(args.slice(0, 4), [
+    "--model",
+    "claude-opaque-model",
+    "--verbose",
+    "--agents"
+  ]);
+  assert.deepEqual(claudeLaunchArgs(context(["--agents={}"])), [
+    "--model",
+    "claude-opaque-model",
+    "--agents={}"
+  ]);
+  assert.deepEqual(claudeLaunchArgs(context([], [])), [
+    "--model",
+    "claude-opaque-model"
+  ]);
+  assert.deepEqual(
+    claudeLaunchArgs(context(["--model", "claude-user-selected"], [])),
+    ["--model", "claude-user-selected"]
+  );
 });

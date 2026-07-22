@@ -5,6 +5,7 @@ import { test } from "node:test";
 
 import { OpenAiBackend } from "../backend.js";
 import { MODEL_CALL_ID_HEADER } from "../provenance.js";
+import { CatalogBackend } from "../router.js";
 import {
   chatToResponses,
   customToolNames,
@@ -13,6 +14,7 @@ import {
   responsesToolRegistry
 } from "../adapters/responses.js";
 import { startGateway } from "../server.js";
+import type { ProviderRelay } from "../server.js";
 
 /**
  * M3 coverage: the OpenAI Responses adapter (Codex) against a mock OpenAI
@@ -153,7 +155,7 @@ test("responsesToChat folds an assistant text item and its following function ca
         { type: "message", role: "assistant", content: "Let me check the README:\n\n" },
         { type: "reasoning", summary: [{ type: "summary_text", text: "beat" }] },
         { type: "function_call", call_id: "call_1", name: "exec_command", arguments: '{"cmd":"cat README.md"}' },
-        { type: "function_call_output", call_id: "call_1", output: "# FusionKit" }
+        { type: "function_call_output", call_id: "call_1", output: "# RouteKit" }
       ]
     },
     "local-model"
@@ -196,11 +198,11 @@ test("responsesToChat does not fold function calls into a non-adjacent assistant
 
 test("responsesToChat tolerates reasoning: null and text: null (Codex custom-provider slugs)", () => {
   // Regression (ENG-615): Codex serializes `reasoning: null` for any model
-  // slug it cannot resolve to reasoning metadata — which is every panel member
-  // routed through the FusionKit member gateway (e.g. `grok-4`, `deepseek`).
+  // slug it cannot resolve to reasoning metadata — which includes custom
+  // endpoints routed through a compatible gateway (e.g. `grok-4`, `deepseek`).
   // The adapter used to dereference it (`Cannot read properties of null
   // (reading 'effort')`), turning EVERY member request into a 502 and the
-  // whole codex panel candidate into an `exit_error`.
+  // whole custom-endpoint response into an `exit_error`.
   const chat = responsesToChat(
     { model: "grok-4", input: "say OK", reasoning: null, text: null, stream: true },
     "grok-4"
@@ -208,6 +210,14 @@ test("responsesToChat tolerates reasoning: null and text: null (Codex custom-pro
   assert.equal(chat.model, "grok-4");
   assert.equal(chat.reasoning_effort, undefined);
   assert.equal(chat.response_format, undefined);
+});
+
+test("responsesToChat treats Codex reasoning effort null as absent", () => {
+  const chat = responsesToChat(
+    { model: "gpt-5.5", input: "say OK", reasoning: { effort: null } },
+    "gpt-5.5"
+  );
+  assert.equal(chat.reasoning_effort, undefined);
 });
 
 test("responsesToChat still maps a real reasoning effort", () => {
@@ -221,12 +231,12 @@ test("responsesToChat still maps a real reasoning effort", () => {
 test("responsesToChat treats Codex's explicit null fields as absent", () => {
   // Codex sends `"reasoning": null` (and can null other optional fields) when
   // the selected model's metadata advertises no reasoning levels — the default
-  // for a custom-provider model like the fused panel. Reading `.effort` off
-  // that null used to throw, turning EVERY fused Codex turn into a 502 (and
+  // for a custom-provider model. Reading `.effort` off
+  // that null used to throw, turning every custom-provider Codex turn into a 502 (and
   // leaving the --observe dashboard empty because no turn ever ran).
   const chat = responsesToChat(
     {
-      model: "fusion-panel",
+      model: "route-primary",
       input: "say hi",
       reasoning: null,
       text: null,
@@ -244,7 +254,7 @@ test("responsesToChat treats Codex's explicit null fields as absent", () => {
   assert.equal(chat.tool_choice, undefined);
 });
 
-test("serves a Responses request carrying reasoning: null end to end (codex panel member)", async () => {
+test("serves a Responses request carrying reasoning: null end to end", async () => {
   // The member capture gateway path: codex exec -> /v1/responses with
   // `reasoning: null` -> chat completion upstream. Must be a 200, never a 502.
   const mock = await startMock();
@@ -288,7 +298,7 @@ test("serves a Responses request with null optional fields end to end", async ()
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        model: "fusion-panel",
+        model: "route-primary",
         input: [{ type: "message", role: "user", content: [{ type: "input_text", text: "hello" }] }],
         reasoning: null,
         text: null,
@@ -430,7 +440,7 @@ test("chatToResponses emits a custom_tool_call item with raw input for a custom-
       }
     ]
   };
-  const response = chatToResponses(openai, "fusion-panel", custom);
+  const response = chatToResponses(openai, "route-primary", custom);
   const output = response.output as Array<Record<string, unknown>>;
   assert.equal(output.length, 2);
   assert.equal(output[0]?.type, "custom_tool_call");
@@ -453,7 +463,7 @@ test("chatToResponses preserves provider cost metadata", () => {
         generation_id: "gen_test"
       }
     },
-    "fusion-panel"
+    "route-primary"
   );
 
   assert.deepEqual(response.provider_cost, {
@@ -474,7 +484,7 @@ test("chatToResponses passes non-JSON custom tool arguments through as raw input
       }
     ]
   };
-  const response = chatToResponses(openai, "fusion-panel", new Map([["apply_patch", { kind: "custom" as const }]]));
+  const response = chatToResponses(openai, "route-primary", new Map([["apply_patch", { kind: "custom" as const }]]));
   const output = response.output as Array<Record<string, unknown>>;
   assert.equal(output[0]?.type, "custom_tool_call");
   assert.equal(output[0]?.input, PATCH);
@@ -488,7 +498,7 @@ test("openAiSseToResponses streams a custom tool call as custom_tool_call events
     chatChunk({}, "tool_calls"),
     "data: [DONE]\n\n"
   );
-  const text = await new Response(openAiSseToResponses(upstream, "fusion-panel", new Map([["apply_patch", { kind: "custom" as const }]]))).text();
+  const text = await new Response(openAiSseToResponses(upstream, "route-primary", new Map([["apply_patch", { kind: "custom" as const }]]))).text();
   assert.ok(text.includes('"type":"custom_tool_call"'));
   assert.ok(text.includes("event: response.custom_tool_call_input.delta"));
   assert.ok(text.includes("event: response.custom_tool_call_input.done"));
@@ -607,7 +617,7 @@ test("chatToResponses emits a native typed item for a call resolved as typed", (
       }
     ]
   };
-  const response = chatToResponses(openai, "fusion-panel", registry);
+  const response = chatToResponses(openai, "route-primary", registry);
   const output = response.output as Array<Record<string, unknown>>;
   assert.equal(output.length, 1);
   assert.equal(output[0]?.type, "tool_search_call");
@@ -627,7 +637,7 @@ test("openAiSseToResponses streams a typed tool call as its native item", async 
     chatChunk({}, "tool_calls"),
     "data: [DONE]\n\n"
   );
-  const text = await new Response(openAiSseToResponses(upstream, "fusion-panel", registry)).text();
+  const text = await new Response(openAiSseToResponses(upstream, "route-primary", registry)).text();
   assert.ok(text.includes('"type":"tool_search_call"'));
   assert.ok(!text.includes('"type":"function_call"'), "typed calls never surface as function_call items");
   assert.ok(!text.includes("response.function_call_arguments"), "typed calls emit no argument delta events");
@@ -648,14 +658,14 @@ test("openAiSseToResponses keeps function tools on the incremental function_call
     chatChunk({}, "tool_calls"),
     "data: [DONE]\n\n"
   );
-  const text = await new Response(openAiSseToResponses(upstream, "fusion-panel", new Map([["apply_patch", { kind: "custom" as const }]]))).text();
+  const text = await new Response(openAiSseToResponses(upstream, "route-primary", new Map([["apply_patch", { kind: "custom" as const }]]))).text();
   assert.ok(text.includes('"type":"function_call"'));
   assert.ok(text.includes("event: response.function_call_arguments.delta"));
   assert.ok(!text.includes("custom_tool_call"));
 });
 
 test("a mid-stream provider error event becomes response.failed with the upstream message", async () => {
-  // The fusion router surfaces a classified provider failure as an OpenAI-style
+  // The router surfaces a classified provider failure as an OpenAI-style
   // `data: {"error": {...}}` SSE event. The Responses translation must carry
   // that message to the consumer (codex shows it verbatim) instead of ending
   // the stream as a bare disconnect.
@@ -700,5 +710,178 @@ test("translates a streamed Responses event sequence", async () => {
   } finally {
     await gateway.close();
     await mock.close();
+  }
+});
+
+test("Codex picker aliases use the canonical catalog and pooled native relay", async () => {
+  const sourceCalls: string[] = [];
+  const sourceBodies: Array<Record<string, unknown>> = [];
+  const source = (sourceId: "codex" | "claude-code") => ({
+    sourceId,
+    discoverModels: async () => [
+      {
+        id:
+          sourceId === "codex"
+            ? "gpt-5.5"
+            : "claude-sonnet-4-6"
+      }
+    ],
+    chat: async (body: unknown) => {
+      const request = body as Record<string, unknown> & { model: string };
+      sourceCalls.push(request.model);
+      sourceBodies.push(request);
+      return Response.json({
+        id: "chatcmpl_cross_provider",
+        choices: [
+          {
+            index: 0,
+            message: { role: "assistant", content: "CROSS_PROVIDER_OK" },
+            finish_reason: "stop"
+          }
+        ],
+        usage: { prompt_tokens: 1, completion_tokens: 1 }
+      });
+    },
+    embeddings: async () => Response.json({})
+  });
+  const backend = await CatalogBackend.create({
+    config: {
+      providers: { codex: {}, "claude-code": {} },
+      defaultModel: "codex/gpt-5.5"
+    },
+    sources: {
+      codex: source("codex"),
+      "claude-code": source("claude-code")
+    }
+  });
+  const relayedBodies: Array<Record<string, unknown>> = [];
+  const relay: ProviderRelay = {
+    dialect: "codex",
+    shouldRelay: () => false,
+    relay: async (_headers, body) => {
+      relayedBodies.push(body as Record<string, unknown>);
+      return Response.json({
+        id: "resp_native",
+        object: "response",
+        status: "completed",
+        model: (body as { model: string }).model,
+        output: [],
+        usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 }
+      });
+    },
+    mergedCatalog: async () => ({
+      models: [
+        {
+          slug: "gpt-5.5",
+          display_name: "GPT-5.5",
+          description: "Native Codex model",
+          visibility: "list",
+          priority: 7
+        }
+      ],
+      etag: 'W/"upstream-catalog"'
+    })
+  };
+  const gateway = await startGateway({
+    backend,
+    providerRelays: { codex: relay }
+  });
+  try {
+    const catalogResponse = await fetch(
+      `${gateway.url()}/v1/models?client_version=1.0.0`
+    );
+    assert.equal(
+      catalogResponse.headers.get("etag"),
+      null,
+      "a projected managed catalog must not reuse the upstream ETag"
+    );
+    const catalog = (await catalogResponse.json()) as {
+      data: Array<{ id: string }>;
+      models: Array<{ slug: string; display_name: string }>;
+    };
+    assert.deepEqual(
+      catalog.data.map((model) => model.id),
+      ["codex/gpt-5.5", "claude-code/claude-sonnet-4-6"]
+    );
+    assert.deepEqual(
+      catalog.models.map(({ slug, display_name }) => [slug, display_name]),
+      [
+        ["gpt-5.5", "GPT-5.5"],
+        [
+          "claude-code/claude-sonnet-4-6",
+          "claude-code/claude-sonnet-4-6"
+        ]
+      ]
+    );
+
+    for (const model of ["gpt-5.5", "codex/gpt-5.5"]) {
+      const response = await fetch(`${gateway.url()}/v1/responses`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          model,
+          instructions: "You are Codex, a coding agent based on GPT-5.",
+          input: "hi",
+          store: false,
+          reasoning: { effort: "high" }
+        })
+      });
+      assert.equal(response.status, 200);
+      assert.equal(
+        ((await response.json()) as { model: string }).model,
+        "gpt-5.5"
+      );
+    }
+    assert.deepEqual(
+      relayedBodies.map((body) => body.model),
+      ["gpt-5.5", "gpt-5.5"]
+    );
+    assert.ok(relayedBodies.every((body) => body.store === false));
+    assert.ok(
+      relayedBodies.every(
+        (body) =>
+          (body.reasoning as { effort?: string } | undefined)?.effort ===
+          "high"
+      )
+    );
+    assert.ok(
+      relayedBodies.every(
+        (body) =>
+          body.instructions ===
+          "You are Codex, a coding agent based on GPT-5."
+      ),
+      "native Codex routes preserve the stock instructions verbatim"
+    );
+    assert.deepEqual(sourceCalls, []);
+
+    const foreign = await fetch(`${gateway.url()}/v1/responses`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        model: "claude-code/claude-sonnet-4-6",
+        instructions: "You are Codex, a coding agent based on GPT-5.",
+        input: "hi"
+      })
+    });
+    assert.equal(foreign.status, 200);
+    assert.deepEqual(sourceCalls, ["claude-sonnet-4-6"]);
+    assert.ok(
+      !JSON.stringify(sourceBodies[0]?.messages).includes("based on GPT-5"),
+      "a stale startup-model identity must not cross into a foreign provider"
+    );
+
+    const unknown = await fetch(`${gateway.url()}/v1/responses`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ model: "gpt-not-real", input: "hi" })
+    });
+    assert.equal(unknown.status, 400);
+    assert.match(await unknown.text(), /unknown model/);
+    assert.deepEqual(
+      relayedBodies.map((body) => body.model),
+      ["gpt-5.5", "gpt-5.5"]
+    );
+  } finally {
+    await gateway.close();
   }
 });

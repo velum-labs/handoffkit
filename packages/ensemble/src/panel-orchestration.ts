@@ -1,9 +1,9 @@
 import type { WireTrajectory } from "@fusionkit/protocol";
 import { ATTR } from "@fusionkit/protocol";
-import { randomId } from "@fusionkit/runtime-utils";
+import { randomId } from "@routekit/runtime";
 import { headersOf, jsonAttr, startFusionSpan } from "@fusionkit/tracing";
 import type { FusionTraceCarrier } from "@fusionkit/tracing";
-import type { ResumeCursor } from "@fusionkit/harness-core";
+import type { ResumeCursor } from "@routekit/harness-core";
 import { PanelGenerateOperator } from "./fusion-operators.js";
 import { runEnsemble } from "./run.js";
 import { FusionRuntime, StaticDAGScheduler, createArtifact } from "./runtime.js";
@@ -158,12 +158,24 @@ function endReasonToWire(endReason: HarnessEndReason): NonNullable<WireTrajector
 }
 
 function trajectoryToWire(trajectory: HarnessTrajectory): WireTrajectory {
+  // A finite-k agent may end exactly on its k-th tool-call boundary: the
+  // proposal is represented by trailing function_call items and intentionally
+  // has no textual model output. The wire contract still requires a non-empty
+  // `final_output`, so describe that terminal proposal rather than rejecting a
+  // valid bounded rollout (or inventing an answer the model never produced).
+  const terminalProposal = terminalProposalFromTrajectory(trajectory);
+  const finalOutput =
+    trajectory.finalOutput.trim().length > 0
+      ? trajectory.finalOutput
+      : terminalProposal.length > 0
+        ? `Proposed next step: ${terminalProposal.join(", ")}`
+        : "Candidate completed without textual output.";
   return {
     trajectory_id: trajectory.trajectoryId,
     model_id: trajectory.modelId,
     status: trajectory.status,
     items: trajectory.steps.map(stepToWireItem),
-    final_output: trajectory.finalOutput,
+    final_output: finalOutput,
     ...(trajectory.usage !== undefined ? { usage: trajectory.usage } : {}),
     ...(trajectory.candidateId !== undefined ? { candidate_id: trajectory.candidateId } : {}),
     ...(trajectory.model !== undefined ? { model: trajectory.model } : {}),
@@ -179,6 +191,24 @@ function trajectoryToWire(trajectory: HarnessTrajectory): WireTrajectory {
       : {}),
     ...(trajectory.endReason !== undefined ? { end_reason: endReasonToWire(trajectory.endReason) } : {})
   };
+}
+
+function terminalProposalFromTrajectory(trajectory: HarnessTrajectory): string[] {
+  const proposed: string[] = [];
+  for (let index = trajectory.steps.length - 1; index >= 0; index -= 1) {
+    const step = trajectory.steps[index];
+    if (step === undefined) continue;
+    if (step.type === "output" && proposed.length === 0) {
+      if ((step.text ?? "").trim().length === 0) continue;
+      break;
+    }
+    if (step.type === "tool_call") {
+      proposed.unshift(step.tool_name ?? "tool");
+      continue;
+    }
+    break;
+  }
+  return proposed;
 }
 
 /**
@@ -349,6 +379,7 @@ export type FusionPanelOptions = {
   fusedSubagents?: FusedSubagentAccess;
   /** Finite step-boundary budget per member (see UnifiedHarnessE2EOptions.k). */
   k?: number;
+  reasoningEffort?: string;
   /** Native-session resume cursors keyed by model id (see UnifiedHarnessE2EOptions). */
   resumeCursors?: Map<string, ResumeCursor>;
 };
@@ -378,6 +409,14 @@ async function captureFusionPanelWires(options: FusionPanelOptions): Promise<Wir
         ? { fusedModelIds: options.fusedSubagents.ensembles.map((ensemble) => ensemble.modelId) }
         : {})
     }),
+    ...(options.reasoningEffort !== undefined
+      ? {
+          reasoning: {
+            mode: "effort",
+            effort: options.reasoningEffort
+          }
+        }
+      : {}),
     harnesses: [harness],
     models: options.models,
     ...(options.modelEndpoints !== undefined ? { modelEndpoints: options.modelEndpoints } : {}),

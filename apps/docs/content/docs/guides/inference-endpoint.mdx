@@ -5,7 +5,8 @@ description: Run FusionKit as an OpenAI-compatible HTTP endpoint without launchi
 
 You can run FusionKit as a plain HTTP endpoint. This mode is useful when you want model fusion from curl, the OpenAI SDK, a custom application, or a benchmark harness without launching Codex, Claude Code, or Cursor.
 
-`fusionkit serve` starts the same underlying stack as the harness launchers: the panel, the Python fusion router, and the gateway. The difference is that it prints endpoint details and stays running for your client instead of handing the terminal to a coding agent.
+`fusionkit serve` starts the same underlying stack as the harness launchers:
+RouteKit routing, the Python synthesis sidecar, and the Fusion gateway.
 
 ## Prepare the engine
 
@@ -14,18 +15,13 @@ Install the CLI and pre-provision the Python engine so the first request does no
 ```bash
 npm install -g @fusionkit/cli
 fusionkit setup
+fusionkit init
 fusionkit doctor
 ```
 
-For the default cloud panel, export all three provider keys.
-
-```bash
-export OPENAI_API_KEY=...
-export ANTHROPIC_API_KEY=...
-export GEMINI_API_KEY=...
-```
-
-You can put the same values in a project `.env`. Already-exported environment variables take precedence.
+Edit `.routekit/router.yaml` and export the provider variables named by its
+registry-defined credentials. FusionKit reads only namespaced RouteKit model
+IDs.
 
 ## Start the endpoint
 
@@ -37,7 +33,8 @@ fusionkit serve --port 8787
 export FUSION_URL=http://127.0.0.1:8787
 ```
 
-Omit `--port` for an ephemeral port. Use `--local` on Apple Silicon to run the MLX panel. Use repeated `--model ID=PROVIDER:MODEL` flags to define a custom panel.
+Omit `--port` for an ephemeral port. Configure members and judge with
+`fusionkit ensemble`; configure models and credentials in RouteKit.
 
 The fused model id is `fusion-panel`. Each panel member id is also exposed for direct passthrough calls when you want to compare the ensemble against one member.
 
@@ -50,7 +47,10 @@ The gateway exposes familiar routes under `/v1`.
 | `/v1/chat/completions` | OpenAI-compatible chat completions. |
 | `/v1/responses` | OpenAI Responses dialect used by Codex-style clients. |
 | `/v1/messages` | Anthropic Messages dialect used by Claude Code-style clients. |
+| `/v1/messages/count_tokens` | Anthropic token-count helper. |
 | `/v1/models` | Model listing in OpenAI or Anthropic shape. |
+| `/v1/cursor/chat/completions` | Cursor BYOK hybrid: accepts Cursor's Responses-shaped body on a Chat Completions path when Cursor's base URL override points at `.../v1/cursor`. |
+| `/v1/cursor/models` | Mirror of `/v1/models` for Cursor probing relative to its BYOK base URL. |
 | `/v1/embeddings` | Embeddings route when the configured backend supports it. |
 | `/health` | Unauthenticated health check. |
 

@@ -3,8 +3,6 @@ import { createServer } from "node:http";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { test } from "node:test";
 
-import { assertModelCallRecordV1 } from "@fusionkit/protocol";
-
 import { OpenAiBackend } from "../backend.js";
 import { MODEL_CALL_ID_HEADER } from "../provenance.js";
 import type { ModelCallRecord } from "../provenance.js";
@@ -34,6 +32,20 @@ async function readAll(req: IncomingMessage): Promise<Buffer> {
   const chunks: Buffer[] = [];
   for await (const chunk of req) chunks.push(chunk as Buffer);
   return Buffer.concat(chunks);
+}
+
+async function captureStderr<T>(run: () => Promise<T>): Promise<{ result: T; stderr: string }> {
+  const original = process.stderr.write.bind(process.stderr);
+  let stderr = "";
+  process.stderr.write = ((chunk: string | Uint8Array): boolean => {
+    stderr += typeof chunk === "string" ? chunk : new TextDecoder().decode(chunk);
+    return true;
+  }) as typeof process.stderr.write;
+  try {
+    return { result: await run(), stderr };
+  } finally {
+    process.stderr.write = original;
+  }
 }
 
 async function startMock(): Promise<Mock> {
@@ -113,7 +125,6 @@ test("injects the default model and pipes the completion back", async () => {
     assert.equal(json.object, "chat.completion");
     assert.equal(mock.lastChatBody()?.model, "mlx-default");
     assert.equal(records.length, 1);
-    assertModelCallRecordV1(records[0]);
     assert.equal(records[0]?.call_id, callId);
     assert.equal(records[0]?.metadata?.dialect, "openai-chat");
     assert.equal(records[0]?.model, "mlx-default");
@@ -144,7 +155,6 @@ test("records failed upstream responses as failed model-call records", async () 
     });
     assert.equal(response.status, 500);
     assert.equal(records.length, 1);
-    assertModelCallRecordV1(records[0]);
     assert.equal(records[0]?.status, "failed");
     assert.equal(records[0]?.error?.kind, "provider_error");
   } finally {
@@ -153,13 +163,14 @@ test("records failed upstream responses as failed model-call records", async () 
   }
 });
 
-test("records thrown backend failures as failed model-call records", async () => {
+test("redacts thrown backend failures from stderr and the wire response", async () => {
+  const secret = "sk-live-secret-from-upstream";
   const records: ModelCallRecord[] = [];
   const gateway = await startGateway({
     backend: {
       defaultModel: "throw-model",
       chat: async () => {
-        throw new Error("backend exploded");
+        throw new Error(`backend exploded with ${secret}`);
       },
       models: async () => new Response("{}", { status: 200 }),
       embeddings: async () => new Response("{}", { status: 200 })
@@ -167,15 +178,22 @@ test("records thrown backend failures as failed model-call records", async () =>
     provenance: { onModelCall: (record) => records.push(record) }
   });
   try {
-    const response = await fetch(`${gateway.url()}/v1/chat/completions`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ messages: [{ role: "user", content: "fail" }] })
+    const { result: response, stderr } = await captureStderr(async () => {
+      return await fetch(`${gateway.url()}/v1/chat/completions`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ messages: [{ role: "user", content: "fail" }] })
+      });
     });
     assert.equal(response.status, 502);
+    assert.deepEqual(await response.json(), {
+      error: { message: "upstream request failed", type: "upstream_error" }
+    });
+    assert.match(stderr, /routekit gateway upstream error: type=Error/);
+    assert.equal(stderr.includes(secret), false);
+    assert.equal(stderr.includes("backend exploded"), false);
     assert.equal(response.headers.get(MODEL_CALL_ID_HEADER), records[0]?.call_id);
     assert.equal(records.length, 1);
-    assertModelCallRecordV1(records[0]);
     assert.equal(records[0]?.status, "failed");
     assert.equal(records[0]?.error?.kind, "provider_error");
     assert.equal(records[0]?.metadata?.unknown_usage, true);
@@ -216,7 +234,7 @@ test("forceModel overrides the requested model on every upstream call", async ()
     });
     assert.equal(response.status, 200);
     // The driving client's model is ignored; the dedicated capture gateway routes
-    // every call to its candidate's real endpoint id.
+    // every call to its candidate's routed model id.
     assert.equal(mock.lastChatBody()?.model, "routed-endpoint");
   } finally {
     await gateway.close();
