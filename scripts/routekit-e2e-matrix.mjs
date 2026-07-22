@@ -2,6 +2,7 @@
 
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
+import { randomBytes } from "node:crypto";
 import { createServer } from "node:http";
 import {
   existsSync,
@@ -344,6 +345,9 @@ async function startCountingProxy(targetUrl, options = {}) {
       const headers = { ...request.headers };
       delete headers.host;
       delete headers["content-length"];
+      if (options.upstreamAuthorization !== undefined) {
+        headers.authorization = options.upstreamAuthorization;
+      }
       const upstream = await fetch(url, {
         method: request.method,
         headers,
@@ -498,7 +502,7 @@ async function startDeterministicStack(tempRoot) {
 
 function liveRequestBody(door, model, prompt, stream) {
   const body = door.buildRequest({ model, user: prompt, stream });
-  if (door.id === "openai-chat") body.max_tokens = 16;
+  if (door.id === "openai-chat") body.max_completion_tokens = 64;
   else if (door.id === "anthropic-messages") body.max_tokens = 16;
   else if (door.id === "codex-responses") body.max_output_tokens = 16;
   return body;
@@ -1193,25 +1197,36 @@ async function runPtyCase(input) {
   }
 }
 
-async function startLiveRoutekit(configPath) {
+async function startLiveRoutekit(configPath, tempRoot) {
+  const isolatedStateHome = join(tempRoot, "live-routekit-state");
+  const authTokenFile = join(isolatedStateHome, "data-token");
+  mkdirSync(isolatedStateHome, { recursive: true, mode: 0o700 });
+  const dataToken = randomBytes(32).toString("hex");
+  writeFileSync(authTokenFile, `${dataToken}\n`, { mode: 0o600 });
   const child = spawn(
     process.execPath,
     [
       ROUTEKIT_ENTRY,
-      "--config",
+      "daemon",
+      "run",
+      "--config-path",
       configPath,
-      "gateway",
-      "serve",
       "--host",
       "127.0.0.1",
       "--port",
       "0",
       "--no-portless",
+      "--auth-token-file",
+      authTokenFile,
       "--json"
     ],
     {
       cwd: ROOT,
-      env: process.env,
+      env: {
+        ...process.env,
+        ROUTEKIT_HOME: isolatedStateHome,
+        ROUTEKIT_PORTLESS: "0"
+      },
       detached: true,
       stdio: ["ignore", "pipe", "pipe"]
     }
@@ -1228,9 +1243,10 @@ async function startLiveRoutekit(configPath) {
   while (Date.now() < deadline) {
     try {
       const readiness = JSON.parse(stdout.trim());
-      if (typeof readiness.url === "string") {
+      if (readiness.event === "listening" && typeof readiness.dataUrl === "string") {
         return {
-          url: readiness.url,
+          url: readiness.dataUrl,
+          dataToken,
           close: async () => {
             if (child.exitCode !== null) return;
             try {
@@ -1714,12 +1730,13 @@ async function runLive(options, results, artifactDir, tempRoot) {
       ].join("\n")
     );
   }
-  const routekit = await startLiveRoutekit(configPath);
+  const routekit = await startLiveRoutekit(configPath, tempRoot);
   let proxy;
   let billedCalls = 0;
   try {
     proxy = await startCountingProxy(routekit.url, {
-      maxCalls: options.maxLiveCalls
+      maxCalls: options.maxLiveCalls,
+      upstreamAuthorization: `Bearer ${routekit.dataToken}`
     });
     const models = await catalogModels(proxy.url);
     const activeProviders = PROVIDERS.filter((provider) =>
