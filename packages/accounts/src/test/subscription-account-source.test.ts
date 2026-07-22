@@ -1,5 +1,13 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  writeFileSync
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -23,7 +31,7 @@ function codexCredential(accountId: string): string {
   });
 }
 
-test("canonical login is imported as the one-member account-set case", async () => {
+test("auto account resolution never imports the canonical login", async () => {
   const root = mkdtempSync(join(tmpdir(), "routekit-account-source-"));
   const canonical = join(root, "auth.json");
   const directory = join(root, "accounts");
@@ -34,13 +42,14 @@ test("canonical login is imported as the one-member account-set case", async () 
       directory,
       canonicalPath: canonical
     });
-    assert.equal(resolved.paths.length, 1);
-    assert.equal(JSON.parse(readFileSync(resolved.paths[0]!, "utf8")).tokens.account_id, "acct-one");
+    assert.deepEqual(resolved.paths, []);
+    assert.equal(existsSync(canonical), true);
+    assert.deepEqual(readdirSync(directory), []);
 
     const accounts = await SubscriptionAccountSet.open(subscriptionProvider("codex"), {
       mode: "codex",
       source: {
-        kind: "auto",
+        kind: "canonical",
         directory,
         canonicalPath: canonical
       }
@@ -59,16 +68,15 @@ test("canonical login is imported as the one-member account-set case", async () 
   }
 });
 
-test("the same auto source grows naturally from one account to many", async () => {
+test("auto source serves only explicitly enrolled accounts", async () => {
   const root = mkdtempSync(join(tmpdir(), "routekit-account-source-"));
   const canonical = join(root, "auth.json");
   const directory = join(root, "accounts");
   writeFileSync(canonical, codexCredential("acct-one"), { mode: 0o600 });
   try {
-    await resolveSubscriptionAccounts("codex", {
-      kind: "auto",
-      directory,
-      canonicalPath: canonical
+    mkdirSync(directory, { recursive: true });
+    writeFileSync(join(directory, "first.json"), codexCredential("acct-one"), {
+      mode: 0o600
     });
     writeFileSync(join(directory, "second.json"), codexCredential("acct-two"), {
       mode: 0o600
