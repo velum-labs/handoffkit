@@ -107,7 +107,7 @@ then run a subset:
 ```bash
 set -a && source .env && set +a
 routekit --config configs/benchmark-router.example.yaml \
-  serve --no-portless --port 8787
+  gateway serve --no-portless --port 8787
 ```
 
 In another shell:

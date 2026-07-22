@@ -88,7 +88,9 @@ Project `.routekit/router.yaml` discovery remains part of the embeddable
 valid for FusionKit's `{ "config": ... }` embedded mode. `--config` and
 `ROUTEKIT_CONFIG` are recovery/foreground SDK paths, not daemon-backed command
 scope selectors. `config import` validates and atomically replaces the complete
-canonical document; it does not merge project and global files.
+canonical document; it does not merge project and global files. A sparse
+project overlay that relies on inherited SDK-global fields must be expanded
+into a complete router document before import.
 
 Enable each provider explicitly. RouteKit obtains API URLs and credential
 environment-variable names from its registry, performs live discovery at

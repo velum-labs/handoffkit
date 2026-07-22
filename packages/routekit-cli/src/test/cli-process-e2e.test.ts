@@ -122,7 +122,7 @@ test("config init does not install a crash-looping daemon when credentials are m
     OPENAI_API_KEY: undefined
   };
   try {
-    const result = runCli(["config", "init", "--json"], {
+    const result = runCli(["config", "init", "--global", "--json"], {
       cwd: project,
       env
     });
@@ -200,8 +200,11 @@ test("config migrate diagnoses and converts legacy endpoint config explicitly", 
     assert.match(readFileSync(configPath, "utf8"), /^endpoints:/);
 
     mustRun(
-      ["--config", configPath, "config", "migrate", "--json"],
-      input
+      ["config", "migrate", "--json"],
+      {
+        ...input,
+        env: { ...input.env, ROUTEKIT_CONFIG: configPath }
+      }
     );
     const migrated = readFileSync(configPath, "utf8");
     assert.match(migrated, /^providers:/);

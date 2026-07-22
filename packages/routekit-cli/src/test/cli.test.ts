@@ -108,7 +108,10 @@ test("config help describes import-only singleton policy", () => {
   const program = buildProgram();
   const globalConfig = program.options.find((option) => option.long === "--config");
   assert.ok(globalConfig);
-  assert.match(globalConfig.description, /foreground doctor and migration recovery only/);
+  assert.match(
+    globalConfig.description,
+    /foreground gateway, doctor, and migration recovery only/
+  );
 
   const config = command(program, "config");
   const init = config.commands.find((entry) => entry.name() === "init");
@@ -117,8 +120,14 @@ test("config help describes import-only singleton policy", () => {
   assert.ok(init);
   assert.ok(edit);
   assert.ok(importCommand);
-  assert.equal(init.options.some((option) => option.long === "--global"), false);
-  assert.equal(edit.options.some((option) => option.long === "--global"), false);
+  assert.equal(
+    init.options.find((option) => option.long === "--global")?.hidden,
+    true
+  );
+  assert.equal(
+    edit.options.find((option) => option.long === "--global")?.hidden,
+    true
+  );
   assert.match(importCommand.description(), /replace the canonical singleton config/);
 });
 

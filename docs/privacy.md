@@ -64,10 +64,15 @@ before a run:
 
 ```bash
 fusionkit config show
-routekit config show
-routekit providers status
-routekit models list
+cat .routekit/router.yaml
+fusionkit doctor
 ```
+
+Those commands inspect FusionKit's default embedded-router path. If
+`router.url` connects to the standalone singleton instead, inspect that
+external router with `routekit config show`, `routekit providers status`, and
+`routekit models list`. Daemon-backed RouteKit commands never infer a project
+file from the current working directory.
 
 The committed `.fusionkit/fusion.json` contains namespaced model IDs only. This
 repository explicitly enables OpenRouter in `.routekit/router.yaml` and

@@ -76,7 +76,7 @@ export function readDaemonRecord(): ServiceRecord | undefined {
   return daemonStore().read(KIND);
 }
 
-async function retireLegacyGateway(): Promise<void> {
+async function retireLegacyGateway(lifecycleLockHeld = false): Promise<void> {
   const store = daemonStore();
   const legacy = store.read("gateway");
   if (legacy === undefined) {
@@ -98,7 +98,9 @@ async function retireLegacyGateway(): Promise<void> {
     }
     return;
   }
-  const lock = await acquireLifecycleLock(daemonLifecycleLockPath());
+  const lock = lifecycleLockHeld
+    ? undefined
+    : await acquireLifecycleLock(daemonLifecycleLockPath());
   try {
     const current = store.read("gateway");
     if (current === undefined) return;
@@ -122,7 +124,7 @@ async function retireLegacyGateway(): Promise<void> {
     }
     store.remove("gateway");
   } finally {
-    lock.release();
+    lock?.release();
   }
 }
 
@@ -155,11 +157,7 @@ export async function daemonRecordHealthy(record: ServiceRecord): Promise<boolea
 }
 
 export function canonicalConfigOrMigrationError(): string {
-  if (
-    (process.env.ROUTEKIT_CONFIG ?? "").length > 0 ||
-    process.argv.includes("--config") ||
-    process.argv.some((argument) => argument.startsWith("--config="))
-  ) {
+  if ((process.env.ROUTEKIT_CONFIG ?? "").length > 0) {
     throw new Error(
       "--config / ROUTEKIT_CONFIG are not supported by singleton daemon operations; " +
         "use `routekit config import --from <path>`"
@@ -220,7 +218,7 @@ export async function ensureDaemon(input: {
   start?: StartDaemonResult;
 }> {
   const requestedConfigPath = input.configPath ?? canonicalConfigOrMigrationError();
-  await retireLegacyGateway();
+  await retireLegacyGateway(input.lifecycleLockHeld === true);
   const current = readDaemonRecord();
   if (
     current !== undefined &&

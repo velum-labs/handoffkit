@@ -71,9 +71,11 @@ routekit config import --from .routekit/router.yaml
 ```
 
 Import validates and atomically replaces the canonical document; it does not
-merge project and global files. Daemon-backed commands reject `--config` and
-`ROUTEKIT_CONFIG`; those selectors are limited to documented foreground,
-doctor, migration, and SDK recovery paths.
+merge project and global files. Expand any sparse SDK overlay that depends on
+inherited global fields into a complete router document before importing it.
+Daemon-backed commands reject `--config` and `ROUTEKIT_CONFIG`; those selectors
+are limited to documented foreground gateway, doctor, migration, and SDK
+recovery paths.
 
 Ensemble `members`, `judge`, and optional `synthesizer` values are namespaced
 IDs advertised by RouteKit's live catalog. Provider policy, credentials,

@@ -18,8 +18,9 @@ The singleton daemon loads `~/.config/routekit/router.yaml`; replace that
 canonical document from a project file explicitly with
 `routekit config import --from .routekit/router.yaml`. Import validates and
 atomically replaces the complete document; it does not merge configuration.
-`--config` / `ROUTEKIT_CONFIG` are reserved for foreground doctor/migration
-recovery paths. `ROUTEKIT_HOME` relocates runtime state.
+Sparse SDK overlays must be expanded into a complete router document before
+import. `--config` / `ROUTEKIT_CONFIG` are reserved for foreground gateway,
+doctor, and migration recovery paths. `ROUTEKIT_HOME` relocates runtime state.
 
 ## Local checkout development
 

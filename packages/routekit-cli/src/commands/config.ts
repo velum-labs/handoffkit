@@ -10,7 +10,8 @@ import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 
 import { contextFor } from "@routekit/cli-core";
-import type { Command } from "commander";
+import { acquireLifecycleLock } from "@routekit/runtime";
+import { Option, type Command } from "commander";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 
 import {
@@ -20,7 +21,12 @@ import {
   migrateLegacyRouterConfig,
   writeRouterConfig
 } from "../config.js";
-import { ensureDaemon, readDaemonRecord, routekitClient } from "../client.js";
+import {
+  daemonLifecycleLockPath,
+  ensureDaemon,
+  readDaemonRecord,
+  routekitClient
+} from "../client.js";
 import { missingServiceCredentialVariables } from "../daemon.js";
 
 import { configOverride } from "./context.js";
@@ -62,6 +68,7 @@ export function registerConfig(program: Command): void {
   config
     .command("init")
     .description("create the canonical singleton router config")
+    .addOption(new Option("--global").hideHelp())
     .option("--force", "replace an existing config")
     .action(async (options: { force?: boolean }, command: Command) => {
       const ctx = contextFor(command);
@@ -113,6 +120,7 @@ export function registerConfig(program: Command): void {
   config
     .command("edit")
     .description("edit and atomically validate the canonical singleton router config")
+    .addOption(new Option("--global").hideHelp())
     .action(async (_options: unknown, command: Command) => {
       const ctx = contextFor(command);
       if (ctx.json) {
@@ -159,13 +167,7 @@ export function registerConfig(program: Command): void {
       parseYaml(document);
       const canonical = globalRouterConfigPath();
       let revision: number;
-      if (!existsSync(canonical) && readDaemonRecord() === undefined) {
-        // Bootstrap/recovery exception; validation still goes through the
-        // public config writer before the daemon is started.
-        writeRouterConfig(canonical, parseYaml(document));
-        const started = await ensureDaemon({ configPath: canonical });
-        revision = (await started.client.call("config.get", {})).revision;
-      } else {
+      const replaceThroughDaemon = async (): Promise<number> => {
         const client = await routekitClient();
         const current = await client.call("config.get", {});
         const imported = await client.call(
@@ -177,7 +179,30 @@ export function registerConfig(program: Command): void {
           },
           { idempotencyKey: `config-import-${current.revision}` }
         );
-        revision = imported.revision;
+        return imported.revision;
+      };
+      if (!existsSync(canonical) && readDaemonRecord() === undefined) {
+        const lock = await acquireLifecycleLock(daemonLifecycleLockPath(), {
+          timeoutMs: 90_000
+        });
+        try {
+          if (readDaemonRecord() === undefined) {
+            // Bootstrap/recovery exception. The lifecycle lock makes the
+            // direct write and daemon start one authority transition.
+            writeRouterConfig(canonical, parseYaml(document));
+            const started = await ensureDaemon({
+              configPath: canonical,
+              lifecycleLockHeld: true
+            });
+            revision = (await started.client.call("config.get", {})).revision;
+          } else {
+            revision = await replaceThroughDaemon();
+          }
+        } finally {
+          lock.release();
+        }
+      } else {
+        revision = await replaceThroughDaemon();
       }
       if (ctx.json) ctx.emit({ imported: true, source, path: canonical, revision });
       else ctx.presenter.success(`imported ${source} into ${canonical}`);
@@ -189,7 +214,7 @@ export function registerConfig(program: Command): void {
     .option("--dry-run", "diagnose and print the conversion without writing")
     .action(async (options: { dryRun?: boolean }, command: Command) => {
       const ctx = contextFor(command);
-      const override = configOverride(command);
+      const override = configOverride(command) ?? process.env.ROUTEKIT_CONFIG;
       const path = override ?? globalRouterConfigPath();
       if (!existsSync(path)) {
         throw new Error(`router config not found: ${path}`);
