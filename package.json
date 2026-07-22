@@ -31,6 +31,8 @@
     "docs:check-code": "node scripts/generate-code-docs.mjs --check",
     "docs:generate-behaviors": "node scripts/generate-expected-behaviors.mjs",
     "docs:check-behaviors": "node scripts/generate-expected-behaviors.mjs --check",
+    "docs:generate-routekit-evidence": "node scripts/generate-routekit-l06-evidence.mjs",
+    "docs:check-routekit-evidence": "node scripts/generate-routekit-l06-evidence.mjs --check",
     "mlx": "node examples/mlx/dist/run.js",
     "mlx:stress": "node examples/mlx/dist/stress.js",
     "verify": "pnpm check && pnpm build && pnpm test",

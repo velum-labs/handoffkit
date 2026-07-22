@@ -33,9 +33,19 @@ import {
   doorFrames,
   startProviderSim
 } from "../packages/testkit/dist/index.js";
+import {
+  caseIdFor,
+  loadEvidenceMap,
+  mappingDigest,
+  routeIdsForCase
+} from "./lib/routekit-l06-evidence.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const ROUTEKIT_ENTRY = join(ROOT, "packages", "routekit-cli", "dist", "index.js");
+const ROUTEKIT_VERSION = JSON.parse(
+  readFileSync(join(ROOT, "packages", "routekit-cli", "package.json"), "utf8")
+).version;
+const EVIDENCE_MAP = loadEvidenceMap(ROOT);
 const API_DOORS = DOOR_PROFILES.filter((door) =>
   ["openai-chat", "anthropic-messages", "codex-responses"].includes(door.id)
 );
@@ -45,7 +55,7 @@ const CLI_DOORS = [
   { id: "cursor", binary: "cursor-agent" },
   { id: "opencode", binary: "opencode" }
 ];
-const PROVIDERS = ["openrouter", "codex", "claude-code"];
+const PROVIDERS = Object.keys(EVIDENCE_MAP.providerRouteIds);
 const MODEL_CALL_PATHS = new Set([
   "/v1/chat/completions",
   "/chat/completions",
@@ -179,9 +189,7 @@ function writeRouterConfig(path, defaultModel) {
     path,
     [
       "providers:",
-      "  openrouter: {}",
-      "  codex: {}",
-      "  claude-code: {}",
+      ...PROVIDERS.map((provider) => `  ${provider}: {}`),
       `defaultModel: ${defaultModel}`,
       ""
     ].join("\n")
@@ -198,7 +206,7 @@ function sourceFor(simUrl, provider, nativeModels) {
   const backend =
     provider === "codex"
       ? new CodexResponsesBackend(options)
-      : provider === "claude-code"
+      : provider === "claude-code" || provider === "anthropic"
         ? new AnthropicBackend(options)
         : new OpenAiBackend(options);
   return {
@@ -347,6 +355,8 @@ async function startCountingProxy(targetUrl, options = {}) {
 
 async function startDeterministicStack(tempRoot) {
   const nativeModels = {
+    openai: "matrix-openai",
+    anthropic: "matrix-anthropic",
     openrouter: "matrix-openrouter",
     codex: "matrix-codex",
     "claude-code": "claude-matrix"
@@ -363,6 +373,8 @@ async function startDeterministicStack(tempRoot) {
   const backend = await CatalogBackend.create({
     config: {
       providers: {
+        openai: {},
+        anthropic: {},
         openrouter: {},
         codex: {},
         "claude-code": {}
@@ -1058,6 +1070,11 @@ async function catalogModels(gatewayUrl) {
 
 function chooseLiveModels(models, overrides, providers = PROVIDERS) {
   const preferences = {
+    openai: ["openai/gpt-5.5", "openai/gpt-4.1-mini"],
+    anthropic: [
+      "anthropic/claude-sonnet-4-6",
+      "anthropic/claude-3-5-haiku-latest"
+    ],
     openrouter: [
       "openrouter/openai/gpt-4o-mini",
       "openrouter/openai/gpt-4.1-nano"
@@ -1196,10 +1213,15 @@ async function runLivePoolFailover(tempRoot) {
 }
 
 function resultEntry(input) {
-  return {
+  const identity = {
     phase: input.phase,
     provider: input.provider ?? null,
-    door: input.door,
+    door: input.door
+  };
+  return {
+    caseId: caseIdFor(identity),
+    routeIds: routeIdsForCase(EVIDENCE_MAP, identity),
+    ...identity,
     status: input.status,
     reason: input.reason ?? null,
     durationMs: input.durationMs,
@@ -1598,7 +1620,10 @@ async function main() {
     skip: results.filter((entry) => entry.status === "skip").length
   };
   const report = {
-    schemaVersion: 1,
+    schemaVersion: 2,
+    routekitVersion: ROUTEKIT_VERSION,
+    evidenceMappingSchemaVersion: EVIDENCE_MAP.schemaVersion,
+    evidenceMappingDigest: mappingDigest(EVIDENCE_MAP),
     startedAt,
     finishedAt: new Date().toISOString(),
     liveAuthorized: options.live,
