@@ -147,15 +147,16 @@ test("providers and models commands use the live namespaced catalog", async () =
       [CLI_ENTRY, "models", "info", "openai/gpt-live"],
       { env: { ...process.env, NO_COLOR: "1" }, encoding: "utf8" }
     );
-    assert.match(human.stdout, /openai\/gpt-live/);
-    assert.match(human.stdout, /provider\s+openai/);
-    assert.match(human.stdout, /native model\s+gpt-live/);
-    assert.match(human.stdout, /account class\s+api-key/);
-    assert.match(human.stdout, /billing mode\s+metered-api/);
-    assert.match(human.stdout, /default\s+yes/);
-    assert.match(human.stdout, /streaming=supported, tools=degraded/);
-    assert.match(human.stdout, /reasoning\s+not reported/);
-    assert.doesNotMatch(`${human.stdout}\n${human.stderr}`, /test-key/);
+    const humanOutput = `${human.stdout}\n${human.stderr}`;
+    assert.match(humanOutput, /openai\/gpt-live/);
+    assert.match(humanOutput, /provider\s+openai/);
+    assert.match(humanOutput, /native model\s+gpt-live/);
+    assert.match(humanOutput, /account class\s+api-key/);
+    assert.match(humanOutput, /billing mode\s+metered-api/);
+    assert.match(humanOutput, /default\s+yes/);
+    assert.match(humanOutput, /streaming=supported, tools=degraded/);
+    assert.match(humanOutput, /reasoning\s+not reported/);
+    assert.doesNotMatch(humanOutput, /test-key/);
 
     await assert.rejects(
       execFileAsync(
