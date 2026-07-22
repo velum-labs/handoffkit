@@ -103,7 +103,7 @@ export function registerConfig(program: Command): void {
           ctx.presenter.warn(
             `daemon not started: set ${missingCredentials.join(" or ")}`
           );
-          ctx.presenter.note("then run `routekit daemon start`");
+          ctx.presenter.note("then run `routekit start`");
           return;
         }
       }

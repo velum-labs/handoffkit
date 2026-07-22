@@ -14,7 +14,9 @@ import { registerGateway } from "./gateway.js";
 import { registerLaunchers } from "./launchers.js";
 import { registerModels } from "./models.js";
 import { registerProviders } from "./providers.js";
+import { registerStart } from "./start.js";
 import { registerStatus } from "./status.js";
+import { registerStop } from "./stop.js";
 import { registerTelemetry } from "./telemetry.js";
 import { registerUsage } from "./usage.js";
 
@@ -27,6 +29,8 @@ export function registerCommands(program: Command): void {
   registerConfig(program);
 
   program.commandsGroup("Run");
+  registerStart(program);
+  registerStop(program);
   registerDaemon(program);
   registerGateway(program);
   registerLaunchers(program);

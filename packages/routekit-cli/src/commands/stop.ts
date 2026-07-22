@@ -1,6 +1,8 @@
 import { contextFor } from "@routekit/cli-core";
 import {
   acquireLifecycleLock,
+  processAlive,
+  stopDaemonProcess,
   supervisorController,
   supervisorOperationTimeoutMs,
   waitForProcessExit
@@ -16,45 +18,56 @@ import {
 export function registerStop(program: Command): void {
   program
     .command("stop")
-    .description("stop the RouteKit gateway")
-    .action(async (_options: unknown, command: Command) => {
+    .description("gracefully stop RouteKit")
+    .option("--force", "SIGKILL if the control plane cannot drain")
+    .action(async (options: { force?: boolean }, command: Command) => {
       const ctx = contextFor(command);
       const lock = await acquireLifecycleLock(daemonLifecycleLockPath());
-      let result: { stopped: boolean; pid?: number };
       try {
         const record = readDaemonRecord();
-        if (record === undefined) result = { stopped: false };
-        else {
-          if (record.supervisor === "systemd" || record.supervisor === "launchd") {
-            await supervisorController(
-              record.supervisor,
-              "routekit",
-              "daemon"
-            ).stop({
-              timeoutMs: supervisorOperationTimeoutMs(record.drainGraceMs)
-            });
-          } else {
+        if (record === undefined) {
+          if (ctx.json) ctx.emit({ stopped: false });
+          else ctx.presenter.note("RouteKit is not running");
+          return;
+        }
+        let requested = false;
+        if (record.supervisor === "systemd" || record.supervisor === "launchd") {
+          await supervisorController(
+            record.supervisor,
+            "routekit",
+            "daemon"
+          ).stop({
+            timeoutMs: supervisorOperationTimeoutMs(record.drainGraceMs)
+          });
+          requested = true;
+        } else {
+          try {
             await controlClientForRecord(record).call(
               "daemon.prepareShutdown",
               { reason: "stop" },
-              { idempotencyKey: `gateway-stop-${record.generation ?? record.pid}` }
+              { idempotencyKey: `stop-${record.generation ?? record.pid}` }
             );
+            requested = true;
+          } catch (error) {
+            if (options.force !== true) throw error;
           }
-          const stopped = await waitForProcessExit(
-            record.pid,
-            supervisorOperationTimeoutMs(record.drainGraceMs),
-            record.processIdentity
-          );
-          if (!stopped) throw new Error(`RouteKit daemon pid ${record.pid} did not drain`);
-          result = { stopped: true, pid: record.pid };
         }
+        let stopped = await waitForProcessExit(
+          record.pid,
+          supervisorOperationTimeoutMs(record.drainGraceMs),
+          record.processIdentity
+        );
+        if (!stopped && options.force === true) {
+          await stopDaemonProcess(record, { graceMs: 0 });
+          stopped = !processAlive(record.pid);
+        }
+        if (!stopped) {
+          throw new Error(`RouteKit daemon pid ${record.pid} did not stop`);
+        }
+        if (ctx.json) ctx.emit({ stopped: true, requested, pid: record.pid });
+        else ctx.presenter.success("stopped RouteKit");
       } finally {
         lock.release();
-      }
-      if (ctx.json) ctx.emit({ service: result });
-      else {
-        if (result.stopped) ctx.presenter.success("stopped RouteKit daemon");
-        else ctx.presenter.note("RouteKit daemon is not running");
       }
     });
 }
