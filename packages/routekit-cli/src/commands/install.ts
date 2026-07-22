@@ -15,7 +15,7 @@ const CODEX_OWNER: CodexInstallOwner = {
   providerId: "routekit",
   installCommand: "routekit codex install",
   uninstallCommand: "routekit codex uninstall",
-  startCommand: "routekit gateway serve"
+  startCommand: "routekit start"
 };
 
 function codexProfileId(modelId: string, index: number): string {

@@ -14,7 +14,7 @@ npm install -g @routekit/cli
 routekit config init
 routekit providers status
 routekit models list
-routekit gateway serve
+routekit start
 routekit codex openai/gpt-5.5
 ```
 
@@ -34,8 +34,14 @@ The canonical file is `~/.config/routekit/router.yaml`. Project
 scopes. `routekit config import --from .routekit/router.yaml` validates and
 replaces the complete canonical document; it does not merge layers.
 
-`routekit daemon start|status|reload|restart|upgrade|stop|logs` and `daemon
-service install|uninstall|status` are the lifecycle surface. Config/account
+`routekit start|status|stop` is the public lifecycle. The same bootstrap runs
+implicitly before product commands, chooses systemd/launchd or detached
+operation internally, and never requires a separate service-install workflow.
+Advanced `routekit daemon reload|restart|upgrade|logs` and `daemon service
+install|uninstall|status` commands remain available for repair, diagnostics,
+and compatibility; there is no user-facing foreground serve command, and the
+internal `daemon run` entrypoint is exec'd only by supervisors and the
+detached spawner. Config/account
 reloads atomically switch router generations while
 old in-flight streams drain; binary upgrade drains and restarts the combined
 daemon, then the initiating client reconnects and retries.

@@ -25,7 +25,7 @@ export function registerStart(program: Command): void {
   attachServeOptions(
     program
       .command("start")
-      .description("start the singleton RouteKit daemon")
+      .description("start RouteKit")
   ).action(async (options: GatewayServeCliOptions, command: Command) => {
     const ctx = contextFor(command);
     const running = await ensureDaemon({
@@ -53,7 +53,7 @@ export function registerStart(program: Command): void {
     if (ctx.json) ctx.emit(result);
     else {
       ctx.presenter.success(
-        `${result.alreadyRunning ? "RouteKit daemon already running" : "RouteKit daemon started"} at ${result.url}`
+        `${result.alreadyRunning ? "RouteKit already running" : "RouteKit started"} at ${result.url}`
       );
       ctx.presenter.note(`pid ${result.pid} · logs: ${result.logFile}`);
     }
@@ -71,7 +71,7 @@ export function registerRestart(program: Command): void {
       if (record === undefined) {
         throw new CliError({
           message: "RouteKit daemon is not running",
-          tryCommand: "routekit daemon start"
+          tryCommand: "routekit start"
         });
       }
       if (

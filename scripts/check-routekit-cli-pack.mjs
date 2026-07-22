@@ -153,7 +153,7 @@ try {
     const started = JSON.parse(
       execFileSync(
         routekit,
-        ["daemon", "start", "--port", "0", "--no-portless", "--json"],
+        ["start", "--port", "0", "--no-portless", "--json"],
         { cwd: install, env: daemonEnv, encoding: "utf8" }
       )
     );
@@ -166,13 +166,13 @@ try {
       throw new Error(`packed daemon returned unexpected start status: ${JSON.stringify(started)}`);
     }
     const status = JSON.parse(
-      execFileSync(routekit, ["daemon", "status", "--json"], {
+      execFileSync(routekit, ["status", "--json"], {
         cwd: install,
         env: daemonEnv,
         encoding: "utf8"
       })
     );
-    if (status.pid !== started.pid || status.dataUrl !== started.url) {
+    if (status.daemon?.pid !== started.pid || status.daemon?.dataUrl !== started.url) {
       throw new Error(`packed daemon status did not match start: ${JSON.stringify(status)}`);
     }
     const catalog = JSON.parse(
@@ -187,7 +187,7 @@ try {
     }
   } finally {
     if (daemonStarted) {
-      execFileSync(routekit, ["daemon", "stop", "--force", "--json"], {
+      execFileSync(routekit, ["stop", "--force", "--json"], {
         cwd: install,
         env: daemonEnv,
         stdio: "pipe"

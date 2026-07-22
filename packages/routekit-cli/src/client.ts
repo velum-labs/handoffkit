@@ -341,7 +341,7 @@ export async function ensureDaemon(input: {
   if (current !== undefined) {
     throw new Error(
       `RouteKit daemon pid ${current.pid} is alive but unhealthy; ` +
-        "run `routekit daemon stop --force` before recovery"
+        "run `routekit stop --force` before recovery"
     );
   }
   const entry = process.argv[1];

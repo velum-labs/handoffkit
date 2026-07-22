@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import {
   chmodSync,
   existsSync,
@@ -16,6 +16,8 @@ import { dirname, join, resolve } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { parse as parseYaml } from "yaml";
+
+import { processIdentity } from "@routekit/runtime";
 
 const CLI = resolve(dirname(fileURLToPath(import.meta.url)), "..", "index.js");
 
@@ -34,6 +36,15 @@ function run(args: readonly string[], cwd: string, env: NodeJS.ProcessEnv) {
       }
     );
   });
+}
+
+function alive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 test("concurrent product commands auto-start exactly one daemon and all use its gateway", async () => {
@@ -81,6 +92,15 @@ test("concurrent product commands auto-start exactly one daemon and all use its 
   };
   let pid: number | undefined;
   try {
+    const coldStatus = await run(["status", "--json"], project, env);
+    assert.equal(coldStatus.code, 0, coldStatus.stderr);
+    assert.equal(
+      (JSON.parse(coldStatus.stdout) as { daemon?: { running?: boolean } }).daemon
+        ?.running,
+      false
+    );
+    assert.equal(existsSync(join(state, "services", "daemon.json")), false);
+
     const results = await Promise.all(
       Array.from({ length: 8 }, async () =>
         await run(["models", "list", "--json"], project, env)
@@ -105,7 +125,7 @@ test("concurrent product commands auto-start exactly one daemon and all use its 
     assert.equal(typeof record.dataUrl, "string");
     const status = await run(["daemon", "status", "--json"], project, env);
     assert.equal(status.code, 0, status.stderr);
-    assert.equal((JSON.parse(status.stdout) as { pid: number }).pid, pid);
+    assert.equal((JSON.parse(status.stdout) as { pid?: number }).pid, pid);
     const overviewResult = await run(["status", "--json"], project, env);
     assert.equal(overviewResult.code, 0, overviewResult.stderr);
     const overview = JSON.parse(overviewResult.stdout) as {
@@ -200,7 +220,7 @@ test("concurrent product commands auto-start exactly one daemon and all use its 
     assert.equal(serviceStatus.code, 0, serviceStatus.stderr);
     assert.doesNotMatch(serviceStatus.stdout, new RegExp(record.controlToken!));
     assert.equal(serviceStatus.stdout.includes("controlToken"), false);
-    const stopped = await run(["daemon", "stop", "--json"], project, env);
+    const stopped = await run(["stop", "--json"], project, env);
     assert.equal(stopped.code, 0, stopped.stderr);
     pid = undefined;
   } finally {
@@ -248,6 +268,91 @@ test("project overlays require explicit import into the canonical global config"
       "the daemon must never silently adopt a project overlay"
     );
   } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+test("canonical start retires a detached legacy gateway before starting the daemon", async () => {
+  const root = mkdtempSync(join(tmpdir(), "routekit-legacy-gateway-"));
+  const home = join(root, "home");
+  const state = join(root, "state");
+  const project = join(root, "project");
+  mkdirSync(join(home, ".config", "routekit"), { recursive: true });
+  mkdirSync(join(state, "services"), { recursive: true });
+  mkdirSync(project, { recursive: true });
+  writeFileSync(
+    join(home, ".config", "routekit", "router.yaml"),
+    "providers:\n  openai: {}\ndefaultModel: openai/mock-model\n"
+  );
+  const upstream = createServer((_request, response) => {
+    response.setHeader("content-type", "application/json");
+    response.end(JSON.stringify({ data: [{ id: "mock-model" }] }));
+  });
+  await new Promise<void>((resolveListen) =>
+    upstream.listen(0, "127.0.0.1", resolveListen)
+  );
+  const upstreamPort = (upstream.address() as AddressInfo).port;
+  const legacy = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], {
+    detached: true,
+    stdio: "ignore"
+  });
+  assert.ok(legacy.pid);
+  let identity: string | undefined;
+  const identityDeadline = Date.now() + 2_000;
+  while (identity === undefined && Date.now() < identityDeadline) {
+    identity = processIdentity(legacy.pid);
+    if (identity === undefined) {
+      await new Promise((resolveWait) => setTimeout(resolveWait, 20));
+    }
+  }
+  assert.ok(identity);
+  const legacyRecordPath = join(state, "services", "gateway.json");
+  writeFileSync(
+    legacyRecordPath,
+    `${JSON.stringify({
+      product: "routekit",
+      owner: "routekit",
+      kind: "gateway",
+      pid: legacy.pid,
+      url: "http://127.0.0.1:1",
+      port: 1,
+      startedAt: new Date().toISOString(),
+      supervisor: "detached",
+      processIdentity: identity
+    })}\n`
+  );
+  const env = {
+    ...process.env,
+    HOME: home,
+    ROUTEKIT_HOME: state,
+    ROUTEKIT_PORTLESS: "0",
+    ROUTEKIT_NO_SUPERVISOR: "1",
+    OPENAI_API_KEY: "test",
+    OPENAI_BASE_URL: `http://127.0.0.1:${upstreamPort}/v1`,
+    NO_COLOR: "1"
+  };
+  let daemonPid: number | undefined;
+  try {
+    const started = await run(
+      ["start", "--port", "0", "--no-portless", "--json"],
+      project,
+      env
+    );
+    assert.equal(started.code, 0, started.stderr);
+    daemonPid = (JSON.parse(started.stdout) as { pid: number }).pid;
+    assert.equal(alive(legacy.pid), false);
+    assert.equal(existsSync(legacyRecordPath), false);
+  } finally {
+    if (daemonPid !== undefined && alive(daemonPid)) {
+      await run(["stop", "--force", "--json"], project, env);
+    }
+    if (alive(legacy.pid)) {
+      try {
+        process.kill(-legacy.pid, "SIGKILL");
+      } catch {
+        // already gone
+      }
+    }
+    await new Promise<void>((resolveClose) => upstream.close(() => resolveClose()));
     rmSync(root, { recursive: true, force: true });
   }
 });
@@ -342,7 +447,7 @@ test("concurrent cold config mutations keep the canonical file and daemon genera
     ) as Record<string, unknown>;
     assert.deepEqual(active.config, disk);
 
-    const stopped = await run(["daemon", "stop", "--json"], project, env);
+    const stopped = await run(["stop", "--json"], project, env);
     assert.equal(stopped.code, 0, stopped.stderr);
     pid = undefined;
   } finally {

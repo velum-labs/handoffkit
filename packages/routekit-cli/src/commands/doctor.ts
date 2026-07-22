@@ -100,7 +100,7 @@ export function registerDoctor(program: Command): void {
           label: "RouteKit daemon",
           ok: false,
           detail: error instanceof Error ? error.message : String(error),
-          tryCommand: "routekit daemon status"
+          tryCommand: "routekit status"
         });
       }
       for (const tool of routekitToolRegistry

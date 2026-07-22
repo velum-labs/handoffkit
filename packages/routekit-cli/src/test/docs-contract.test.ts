@@ -21,6 +21,9 @@ function help(args: readonly string[]): string {
 
 test("documented safe CLI commands remain executable", () => {
   for (const [cli, args] of [
+    [routekitCli, ["start", "--help"]],
+    [routekitCli, ["status", "--help"]],
+    [routekitCli, ["stop", "--help"]],
     [routekitCli, ["accounts", "add", "--help"]],
     [routekitCli, ["providers", "add", "--help"]],
     [routekitCli, ["accounts", "login", "--help"]],
@@ -36,6 +39,16 @@ test("documented safe CLI commands remain executable", () => {
   const accountsHelp = help(["accounts", "--help"]);
   assert.match(accountsHelp, /\blogin\b/);
   assert.doesNotMatch(accountsHelp, /\bcliproxy\b/);
+
+  const rootHelp = execFileSync(process.execPath, [routekitCli, "--help"], {
+    encoding: "utf8",
+    env: { ...process.env, FUSIONKIT_NO_TUI: "1", ROUTEKIT_NO_TUI: "1" }
+  });
+  assert.match(rootHelp, /^\s+start\b/m);
+  assert.match(rootHelp, /^\s+status\b/m);
+  assert.match(rootHelp, /^\s+stop\b/m);
+  assert.doesNotMatch(rootHelp, /^\s+daemon\b/m);
+  assert.doesNotMatch(rootHelp, /^\s+gateway\b/m);
 });
 
 test("first-launch help exposes only supported RouteKit routes", () => {

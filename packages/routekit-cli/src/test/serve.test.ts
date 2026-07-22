@@ -12,8 +12,7 @@ import {
   ensureCliproxyConfig
 } from "@routekit/accounts";
 import { parseRouterConfig } from "@routekit/gateway";
-
-import { startRouter } from "../serve.js";
+import { startRouter } from "@routekit/router";
 
 async function upstream(): Promise<{ url: string; close(): Promise<void> }> {
   const server = createServer((request, response) => {
@@ -64,7 +63,6 @@ test("serve exposes OpenAI, Anthropic, Responses, and Cursor dialects", async ()
   const router = await startRouter({
     config,
     port: 0,
-    register: false,
     env: {
       OPENAI_API_KEY: "test",
       OPENAI_BASE_URL: provider.url
@@ -155,7 +153,6 @@ test("serve resolves the managed cliproxy credential without printing or exporti
   const router = await startRouter({
     config,
     port: 0,
-    register: false,
     env: {
       ROUTEKIT_HOME: stateHome,
       ROUTEKIT_CLIPROXY_BASE_URL: `http://127.0.0.1:${port}`

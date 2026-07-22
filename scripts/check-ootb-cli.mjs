@@ -85,12 +85,15 @@ if (!routeHelp.stdout.startsWith("Usage: routekit ")) {
   fail("RouteKit help does not identify the routekit executable");
 }
 for (const command of [
-  "gateway",
-  "daemon",
+  "start",
+  "status",
+  "stop",
   "codex",
   "claude",
   "cursor",
   "accounts",
+  "providers",
+  "usage",
   "models",
   "config",
   "doctor",
@@ -102,17 +105,19 @@ for (const command of [
     fail(`RouteKit help is missing command "${command}"`);
   }
 }
+for (const advanced of ["gateway", "daemon"]) {
+  if (helpHasCommand(routeHelp.stdout, advanced)) {
+    fail(`RouteKit help exposes advanced lifecycle surface "${advanced}"`);
+  }
+}
 for (const notOffered of ["opencode", "google", "gemini", "grok", "kimi", "cliproxy"]) {
   if (new RegExp(`\\b${notOffered}\\b`, "i").test(routeHelp.stdout)) {
     fail(`RouteKit help exposes not-offered route "${notOffered}"`);
   }
 }
-const gatewayHelp = runCli(ROUTE_CLI, ["gateway", "--help"]);
-if (gatewayHelp.status !== 0) fail(`\`routekit gateway --help\` exited ${gatewayHelp.status}`);
-for (const command of ["serve"]) {
-  if (!helpHasCommand(gatewayHelp.stdout, command)) {
-    fail(`RouteKit gateway help is missing command "${command}"`);
-  }
+const gatewayProbe = runCli(ROUTE_CLI, ["gateway", "serve"]);
+if (gatewayProbe.status === 0 || !gatewayProbe.stderr.includes("unknown command")) {
+  fail("`routekit gateway serve` unexpectedly still exists");
 }
 const daemonHelp = runCli(ROUTE_CLI, ["daemon", "--help"]);
 if (daemonHelp.status !== 0) fail(`\`routekit daemon --help\` exited ${daemonHelp.status}`);
@@ -126,11 +131,6 @@ for (const command of [
 for (const removed of ["endpoints", "install", "uninstall"]) {
   if (helpHasCommand(routeHelp.stdout, removed)) {
     fail(`RouteKit help unexpectedly includes removed alias "${removed}"`);
-  }
-}
-for (const removed of ["start", "stop", "restart", "upgrade", "logs", "service"]) {
-  if (helpHasCommand(gatewayHelp.stdout, removed)) {
-    fail(`RouteKit gateway help unexpectedly includes daemon command "${removed}"`);
   }
 }
 const serviceHelp = runCli(ROUTE_CLI, ["daemon", "service", "--help"]);

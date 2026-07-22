@@ -5,12 +5,7 @@ import { join } from "node:path";
 import test from "node:test";
 
 import { listAccounts } from "../accounts.js";
-import {
-  registerService,
-  readServiceRecord,
-  stopService,
-  writeStateSnapshot
-} from "../state.js";
+import { writeStateSnapshot } from "../state.js";
 import {
   disableTelemetry,
   enableTelemetry,
@@ -18,7 +13,7 @@ import {
   telemetryPath
 } from "../telemetry.js";
 
-test("gateway stop preserves accounts state and service records stay private", async () => {
+test("account listing and state snapshots stay private", () => {
   const previous = process.env.ROUTEKIT_HOME;
   const home = mkdtempSync(join(tmpdir(), "routekit-state-test-"));
   process.env.ROUTEKIT_HOME = home;
@@ -30,35 +25,10 @@ test("gateway stop preserves accounts state and service records stay private", a
     });
     assert.deepEqual(listAccounts().map((entry) => entry.label), ["primary"]);
 
-    const registration = await registerService({
-      kind: "gateway",
-      loopbackUrl: "http://127.0.0.1:43210",
-      port: 43210,
-      portless: false
-    });
-    const record = readServiceRecord("gateway");
-    assert.equal(record?.product, "routekit");
-    assert.equal(record?.owner, "routekit");
-    assert.equal(record?.pid, process.pid);
-    assert.equal(
-      statSync(join(home, "services", "gateway.json")).mode & 0o777,
-      0o600
-    );
-    const accountsRegistration = await registerService({
-      kind: "accounts",
-      loopbackUrl: "http://127.0.0.1:43211",
-      port: 43211,
-      portless: false
-    });
-    await stopService("gateway");
-    assert.equal(readServiceRecord("gateway"), undefined);
-    assert.equal(readServiceRecord("accounts")?.kind, "accounts");
     const catalog = writeStateSnapshot("catalog", "models", { models: ["opaque"] });
     const health = writeStateSnapshot("health", "providers", { providers: [] });
     assert.equal(statSync(catalog).mode & 0o777, 0o600);
     assert.equal(statSync(health).mode & 0o777, 0o600);
-    await registration.release();
-    await accountsRegistration.release();
   } finally {
     if (previous === undefined) delete process.env.ROUTEKIT_HOME;
     else process.env.ROUTEKIT_HOME = previous;

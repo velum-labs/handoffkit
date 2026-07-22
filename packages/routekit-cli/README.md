@@ -10,7 +10,7 @@ sidecar, or download local models.
 ```sh
 npm install -g @routekit/cli
 routekit config init
-routekit gateway serve
+routekit start
 routekit codex
 ```
 
@@ -50,9 +50,7 @@ Set `ROUTEKIT_DEV_SKIP_BUILD=1` after a build for a faster local check.
 
 | Command | RouteKit responsibility |
 | --- | --- |
-| `daemon start`, `status`, `reload`, `restart`, `upgrade`, `stop`, `logs` | Operate the singleton RouteKit daemon. |
-| `daemon service install`, `uninstall`, `status` | Manage its persistent systemd user unit / launchd agent. |
-| `gateway serve` | Run the combined daemon + gateway in the foreground for development. |
+| `start`, `status`, `stop` | Start, inspect, and gracefully stop RouteKit through its singleton daemon. |
 | `codex`, `claude`, `cursor` | Ask the daemon to prepare a launch, then run the supported coding tool locally against the singleton gateway. |
 | `codex install`, `codex uninstall` | Add or remove RouteKit-owned Codex provider/profile blocks. |
 | `providers add`, `remove`, `status` | Manage explicit providers and run live discovery without printing credentials. |
@@ -156,35 +154,68 @@ routekit config import --from .routekit/router.yaml
 The first product command race-safely ensures the singleton exists. Where a
 systemd user manager or launchd is available it installs/starts the persistent
 unit; unsupported container/WSL environments use the documented detached
-fallback. Explicit lifecycle commands are:
+fallback. Users do not need to select foreground, detached, or supervised
+operation. The public lifecycle is:
 
 ```sh
-routekit daemon service install
-routekit daemon service status
-routekit daemon logs -f
-routekit daemon service uninstall
+routekit start
+routekit status
+routekit stop
 ```
 
-`install` writes `routekit-daemon.service` / the launchd agent, enables it
-(with lingering on Linux so it survives logout and reboot), starts it, and
-verifies authenticated control health before printing the data URL.
+`start` is idempotent and uses the same daemon bootstrap as every product
+command. It writes `routekit-daemon.service` / the launchd agent when an OS
+supervisor is available (with lingering on Linux so it survives logout and
+reboot), starts it, and verifies authenticated control health before printing
+the data URL.
 On systemd, provider credentials for the configured providers are captured
 into a private `~/.routekit/env/daemon.env` (mode 0600) referenced by the
 unit; edit that file to rotate provider keys, then restart the daemon so the
-supervisor supplies the new process environment. `daemon reload` reloads
+supervisor supplies the new process environment. The advanced `daemon reload`
+command reloads
 router/account state, not process environment. The gateway bearer is generated
 into `~/.routekit/secrets/data-token` (0600) and never appears in status, logs,
 or process arguments; `routekit daemon auth show` reveals it only when
 explicitly requested for an external client such as FusionKit. Where no
-init supervisor exists (containers, some WSL setups), `install` falls back to
-a detached daemon and says so.
+init supervisor exists (containers, some WSL setups), `start` falls back to a
+detached daemon.
 
-For a background daemon without OS supervision:
+### Advanced lifecycle operations
 
 ```sh
-routekit daemon start                   # logs to ~/.routekit/logs/daemon.log
-routekit daemon stop
+routekit daemon reload
+routekit daemon restart
+routekit daemon upgrade
+routekit daemon logs -f
+routekit daemon service install
+routekit daemon service status
+routekit daemon service uninstall
 ```
+
+The hidden `daemon` command group remains available for repair, diagnostics,
+and automation compatibility. `daemon service install` rewrites a moved
+systemd/launchd unit. The only foreground entrypoint is the internal
+`daemon run`, which supervisors and the detached spawner execute; it is not a
+user workflow.
+
+### Migrating existing lifecycle commands
+
+- Replace `routekit daemon start` with `routekit start`, `routekit daemon
+  status` with `routekit status`, and `routekit daemon stop` with `routekit
+  stop`. The former commands remain compatible but are omitted from primary
+  help.
+- Existing `routekit daemon service install` users can use `routekit start`;
+  RouteKit chooses and installs the available supervisor automatically. Keep
+  the service command only for unit repair, inspection, or removal.
+- `routekit gateway serve` has been removed. Use `routekit start`; external
+  clients read the gateway URL from `routekit status` and the data token from
+  `routekit daemon auth show`.
+- On first daemon-backed startup, RouteKit retires legacy `gateway` records and
+  systemd/launchd units before publishing the singleton daemon record.
+- Import project configuration with `routekit config import --from
+  .routekit/router.yaml`; the singleton never silently adopts a project
+  overlay. `--config` / `ROUTEKIT_CONFIG` remain doctor/migration recovery
+  flags only.
 
 ### Graceful shutdown and upgrades
 

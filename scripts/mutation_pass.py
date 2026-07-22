@@ -614,15 +614,15 @@ MUTATIONS = [
     Mutation(
         id="M49",
         what=(
-            "routekit daemon serve reports a false readiness URL instead of "
+            "routekit daemon run reports a false readiness URL instead of "
             "its stable gateway"
         ),
-        file="packages/routekit-cli/src/commands/serve.ts",
-        old="            url: running.dataUrl,",
-        new='            url: "http://127.0.0.1:1",',
+        file="packages/routekit-cli/src/commands/daemon.ts",
+        old="            dataUrl: running.dataUrl,",
+        new='            dataUrl: "http://127.0.0.1:1",',
         build=True,
         cmd=(
-            "node --test packages/routekit-cli/dist/test/serve-process-e2e.test.js"
+            "node --test packages/routekit-cli/dist/test/daemon-run-process-e2e.test.js"
         ),
     ),
     Mutation(

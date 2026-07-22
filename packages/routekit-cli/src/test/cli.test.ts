@@ -39,8 +39,9 @@ function productionSources(directory: string): string[] {
 test("independent command surface is complete and has no compatibility aliases", () => {
   const program = buildProgram();
   const expected = [
-    "gateway",
     "daemon",
+    "start",
+    "stop",
     "codex",
     "claude",
     "cursor",
@@ -60,9 +61,9 @@ test("independent command surface is complete and has no compatibility aliases",
     program.commands.map((entry) => entry.name()).sort(),
     expected.sort()
   );
-  assert.deepEqual(
-    command(program, "gateway").commands.map((entry) => entry.name()).sort(),
-    ["serve"]
+  assert.equal(
+    program.commands.some((entry) => entry.name() === "gateway"),
+    false
   );
   assert.deepEqual(
     command(program, "daemon").commands.map((entry) => entry.name()).sort(),
@@ -103,13 +104,22 @@ test("independent command surface is complete and has no compatibility aliases",
   assert.equal(program.commands.some((entry) => entry.aliases().length > 0), false);
 });
 
+test("top-level help presents one public RouteKit lifecycle", () => {
+  const help = buildProgram().helpInformation();
+  assert.match(help, /^\s+start\b/m);
+  assert.match(help, /^\s+status\b/m);
+  assert.match(help, /^\s+stop\b/m);
+  assert.doesNotMatch(help, /^\s+daemon\b/m);
+  assert.doesNotMatch(help, /^\s+gateway\b/m);
+});
+
 test("config help describes import-only singleton policy", () => {
   const program = buildProgram();
   const globalConfig = program.options.find((option) => option.long === "--config");
   assert.ok(globalConfig);
   assert.match(
     globalConfig.description,
-    /foreground gateway, doctor, and migration recovery only/
+    /doctor and migration recovery only/
   );
 
   const config = command(program, "config");
@@ -132,16 +142,19 @@ test("config help describes import-only singleton policy", () => {
 
 test("dynamic completion follows the command tree", () => {
   const program = buildProgram();
+  const topLevel = completionCandidates(program, [""]);
+  assert.ok(topLevel.includes("start"));
+  assert.ok(topLevel.includes("status"));
+  assert.ok(topLevel.includes("stop"));
+  assert.equal(topLevel.includes("daemon"), false);
+  assert.equal(topLevel.includes("gateway"), false);
   assert.ok(completionCandidates(program, ["co"]).includes("config"));
-  assert.deepEqual(completionCandidates(program, ["gateway", "s"]), [
-    "serve"
-  ]);
   assert.deepEqual(completionCandidates(program, ["accounts", "s"]), [
     "status"
   ]);
   assert.ok(completionCandidates(program, ["codex", "in"]).includes("install"));
   assert.ok(
-    completionCandidates(program, ["gateway", "serve", "--p"]).includes("--port")
+    completionCandidates(program, ["start", "--p"]).includes("--port")
   );
   assert.deepEqual(completionCandidates(program, ["accounts", "remove", ""]), [
     "claude",
@@ -156,12 +169,11 @@ test("dynamic completion follows the command tree", () => {
   ]);
 });
 
-test("serve CLI documents explicit data-plane authentication", () => {
+test("start CLI documents explicit data-plane authentication", () => {
   const program = buildProgram();
-  const gateway = command(program, "gateway");
-  const serve = gateway.commands.find((entry) => entry.name() === "serve");
-  assert.ok(serve);
-  assert.match(serve.helpInformation(), /authentication token/);
+  const start = program.commands.find((entry) => entry.name() === "start");
+  assert.ok(start);
+  assert.match(start.helpInformation(), /authentication token/);
 });
 
 test("account removal completion only suggests managed labels for its provider", () => {

@@ -53,10 +53,10 @@ independent `@routekit/cli` manages its singleton daemon separately.
 - `{ "url": "http://127.0.0.1:8787", "authEnv": "ROUTEKIT_TOKEN" }`
   connects to an external router. FusionKit validates `/v1/models` but never
   stops that external process. The recommended target is the stable data URL
-  of the singleton RouteKit daemon (`routekit daemon service install`): it survives
+  of the singleton RouteKit daemon (`routekit start`): it survives
   Fusion sessions, restarts on crash/reboot when supervised, transactionally
-  reloads routing/account generations, and upgrades via `routekit daemon
-  upgrade`.
+  reloads routing/account generations, and upgrades through the advanced
+  `routekit daemon upgrade` operation.
 
 Each ensemble requires non-empty `members` and a `judge`, all expressed as
 namespaced IDs advertised by RouteKit's live `/v1/models` catalog.

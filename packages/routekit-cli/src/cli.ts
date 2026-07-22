@@ -21,8 +21,9 @@ export function buildProgram(): Command {
       "",
       "Examples:",
       "  routekit accounts login codex --name work",
-      "  routekit gateway serve",
+      "  routekit start",
       "  routekit status --watch",
+      "  routekit stop",
       "  routekit usage --watch 10",
       "  routekit models list --provider openai"
     ].join("\n")

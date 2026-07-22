@@ -51,7 +51,7 @@ export function registerUpgrade(program: Command): void {
       if (record === undefined) {
         throw new CliError({
           message: "RouteKit daemon is not running",
-          tryCommand: "routekit daemon start"
+          tryCommand: "routekit start"
         });
       }
       if (

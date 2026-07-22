@@ -15,11 +15,16 @@ single-model launches:
 npm install -g @routekit/cli
 routekit providers status
 routekit models list
-routekit gateway serve
+routekit start
 routekit codex openai/gpt-5.5
 ```
 
 There are no FusionKit forwarding aliases.
+
+RouteKit's public lifecycle is `routekit start`, `routekit status`, and
+`routekit stop`. Product commands also ensure the singleton daemon
+automatically. `routekit daemon` operations are advanced compatibility and
+administration paths, and there is no user-facing foreground serve command.
 
 ## Fusion launch commands
 

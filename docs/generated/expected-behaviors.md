@@ -155,7 +155,9 @@ environment-gated rows name the reason and exact live command.
 | ID | Expected behavior | Status | Evidence |
 |---|---|---|---|
 | `process.product-cli-boot` | The real FusionKit CLI loads config, starts RouteKit and the internal Python sidecar, then serves fusion. | required | `packages/cli/src/test/stack-npm-cli-e2e.test.ts` — `boots its production stack` |
-| `process.routekit-cli-serve` | The real RouteKit CLI process reports machine-readable readiness and serves model discovery plus every supported gateway dialect against a local upstream. | required | `packages/routekit-cli/src/test/serve-process-e2e.test.ts` — `reports JSON readiness and serves every supported door` |
+| `process.routekit-cli-lifecycle` | The public RouteKit start, status, and stop commands operate one daemon-backed lifecycle with idempotent startup and graceful request draining, while hidden legacy daemon commands retain their machine contracts. | required | `packages/routekit-cli/src/test/service-lifecycle-e2e.test.ts` — `public RouteKit lifecycle: start, idempotency, upgrade, drain-on-stop` |
+| `process.routekit-singleton-clients` | Concurrent product commands race-safely join one authoritative daemon record and gateway, while status observes without starting. | required | `packages/routekit-cli/src/test/singleton-client-e2e.test.ts` — `concurrent product commands auto-start exactly one daemon and all use its gateway` |
+| `process.routekit-cli-serve` | The internal RouteKit daemon process entrypoint reports machine-readable readiness and serves model discovery plus every supported gateway dialect against a local upstream. | required | `packages/routekit-cli/src/test/daemon-run-process-e2e.test.ts` — `reports JSON readiness and serves every supported door` |
 
 ## cli
 
@@ -170,7 +172,7 @@ environment-gated rows name the reason and exact live command.
 | ID | Expected behavior | Status | Evidence |
 |---|---|---|---|
 | `composition.routekit-model-ids` | Namespaced RouteKit model IDs cross the real embedded-router, Python-sidecar, and Fusion-gateway stack while provider credentials remain behind RouteKit. | required | `packages/cli/src/test/stack-model-ids-e2e.test.ts` — `embedded RouteKit routes namespaced model ids` |
-| `composition.routekit-authenticated-cli-bridge` | Fusion bridges authenticated external RouteKit CLI traffic over loopback and closes only the bridge, leaving the independently owned RouteKit process alive. | required | `packages/cli/src/test/stack-model-ids-e2e.test.ts` — `authenticated external routekit gateway serve CLI uses a Fusion-owned loopback bridge` |
+| `composition.routekit-authenticated-cli-bridge` | Fusion bridges authenticated external RouteKit CLI traffic over loopback and closes only the bridge, leaving the independently owned RouteKit process alive. | required | `packages/cli/src/test/stack-model-ids-e2e.test.ts` — `authenticated external routekit daemon CLI uses a Fusion-owned loopback bridge` |
 | `composition.subscription-provider-fusion` | Subscription-backed namespaced model ids drive panel, judge, and synthesis while credentials remain absent from Fusion responses. | required | `packages/cli/src/test/stack-model-ids-e2e.test.ts` — `subscription-backed model ids drive panel judge and synthesis without leaking credentials` |
 
 ## observability

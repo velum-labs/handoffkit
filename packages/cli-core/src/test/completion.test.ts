@@ -20,6 +20,7 @@ function commandTree(): Command {
   sessions.command("remove").alias("rm");
   program.command("help");
   program.command("__complete");
+  program.addCommand(new Command("internal"), { hidden: true });
   return program;
 }
 
@@ -29,6 +30,7 @@ test("completion helpers expose visible aliases and inherited long flags", () =>
 
   assert.deepEqual(visibleCommandNames(program), ["sessions", "session"]);
   assert.deepEqual(visibleLongFlags(remove), ["--local", "--json"]);
+  assert.doesNotMatch(completionScript("bash", "example", program), /\binternal\b/);
 });
 
 test("completion tree walking resolves aliases to canonical paths", () => {

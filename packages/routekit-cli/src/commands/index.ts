@@ -10,18 +10,18 @@ import { registerAccounts } from "./accounts.js";
 import { registerConfig } from "./config.js";
 import { registerDaemon } from "./daemon.js";
 import { registerDoctor } from "./doctor.js";
-import { registerGateway } from "./gateway.js";
 import { registerLaunchers } from "./launchers.js";
 import { registerModels } from "./models.js";
 import { registerProviders } from "./providers.js";
+import { registerStart } from "./start.js";
 import { registerStatus } from "./status.js";
+import { registerStop } from "./stop.js";
 import { registerTelemetry } from "./telemetry.js";
 import { registerUsage } from "./usage.js";
 import { configOverride } from "./context.js";
 
 const EXPLICIT_CONFIG_COMMANDS = new Set([
   "doctor",
-  "gateway serve",
   "config migrate"
 ]);
 const CONFIG_INDEPENDENT_COMMANDS = new Set([
@@ -45,7 +45,7 @@ export function registerCommands(program: Command): void {
   attachGlobalFlags(program);
   program.option(
     "--config <path>",
-    "router config path for foreground gateway, doctor, and migration recovery only"
+    "router config path for doctor and migration recovery only"
   );
   program.hook("preAction", (_root, actionCommand) => {
     const override = configOverride(actionCommand) ?? process.env.ROUTEKIT_CONFIG;
@@ -68,8 +68,9 @@ export function registerCommands(program: Command): void {
   registerConfig(program);
 
   program.commandsGroup("Run");
+  registerStart(program);
+  registerStop(program);
   registerDaemon(program);
-  registerGateway(program);
   registerLaunchers(program);
 
   program.commandsGroup("Inspect");

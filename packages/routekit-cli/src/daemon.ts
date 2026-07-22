@@ -1,8 +1,8 @@
 /**
  * RouteKit bindings for the shared service core in `@routekit/runtime`: the
- * gateway daemon spec (what `gateway start`/`restart`/`upgrade` spawn), the
- * supervisor unit spec (what `gateway service install` writes), and the
- * secrets environment file the systemd unit references.
+ * daemon supervisor unit spec (what `routekit start` and `daemon service
+ * install` write) and the secrets environment file the systemd unit
+ * references.
  */
 import { chmodSync, mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
@@ -16,10 +16,9 @@ import { configuredProviderIds } from "@routekit/config";
 import type { RouterConfig } from "@routekit/gateway";
 import { PROVIDERS } from "@routekit/registry";
 import { serviceLogPath, writeFileAtomic } from "@routekit/runtime";
-import type { ServiceDaemonSpec, ServiceUnitSpec } from "@routekit/runtime";
+import type { ServiceUnitSpec } from "@routekit/runtime";
 
 import { routekitHome } from "./config.js";
-import { routekitVersion } from "./state.js";
 
 export const ROUTEKIT_PRODUCT = "routekit";
 
@@ -34,28 +33,6 @@ export function cliEntryPath(): string {
     throw new CliError({ message: "cannot resolve the routekit entry script" });
   }
   return entry;
-}
-
-export function gatewayDaemonSpec(input: {
-  args: readonly string[];
-  binPath?: string;
-  cwd?: string;
-}): ServiceDaemonSpec {
-  return {
-    product: ROUTEKIT_PRODUCT,
-    kind: "gateway",
-    home: routekitHome(),
-    version: routekitVersion(),
-    command: {
-      execPath: process.execPath,
-      args: [input.binPath ?? cliEntryPath(), ...input.args]
-    },
-    cwd: input.cwd ?? process.cwd()
-  };
-}
-
-export function gatewayLogPath(): string {
-  return serviceLogPath(routekitHome(), "gateway");
 }
 
 /**
@@ -165,31 +142,4 @@ export function daemonUnitSpec(input: {
     env: input.env,
     logFile: serviceLogPath(routekitHome(), "daemon")
   };
-}
-
-export function gatewayUnitSpec(input: {
-  args: readonly string[];
-  supervisor: "systemd" | "launchd";
-  env: Record<string, string>;
-  drainGraceMs: number;
-  cwd?: string;
-}): ServiceUnitSpec {
-  const command = {
-    execPath: process.execPath,
-    args: [cliEntryPath(), ...input.args]
-  };
-  const shared = {
-    product: ROUTEKIT_PRODUCT,
-    kind: "gateway",
-    description: "RouteKit model gateway",
-    command,
-    workingDirectory: input.cwd ?? process.cwd(),
-    drainGraceMs: input.drainGraceMs
-  };
-  if (input.supervisor === "systemd") {
-    // Secrets stay out of the unit file: they live in the 0600 env file.
-    return { ...shared, environmentFile: writeServiceEnvFile("gateway", input.env) };
-  }
-  // launchd has no EnvironmentFile; the plist itself is written 0600.
-  return { ...shared, env: input.env, logFile: gatewayLogPath() };
 }
