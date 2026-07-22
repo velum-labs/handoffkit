@@ -209,7 +209,7 @@ function canonicalConfigDocument(path: string): string {
       code: "unavailable",
       message:
         `canonical router config not found: ${path}; run ` +
-        "`routekit config init --global` or `routekit config import --from <path>`"
+        "`routekit config init` or `routekit config import --from <path>`"
     });
   }
   return readFileSync(path, "utf8");

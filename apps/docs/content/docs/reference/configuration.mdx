@@ -54,6 +54,31 @@ catalog, and account commands; FusionKit does not depend on that executable.
 - `url` plus optional `authEnv`: connect to an external RouteKit gateway.
   FusionKit validates its `/v1/models` list and never stops it.
 
+## Standalone RouteKit configuration
+
+The standalone `routekit` CLI is a thin client of one singleton daemon. That
+daemon reads exactly one canonical document:
+`~/.config/routekit/router.yaml`. It never discovers or layers a project file
+from the caller's working directory because concurrent projects share the same
+gateway.
+
+Project `.routekit/router.yaml` files remain valid as explicit inputs to
+FusionKit embedded mode and the embeddable RouteKit SDK. To migrate one into
+the singleton daemon, replace the complete canonical document explicitly:
+
+```bash
+routekit config import --from .routekit/router.yaml
+```
+
+Import validates and atomically replaces the canonical document; it does not
+merge project and global files. Expand any sparse SDK overlay that depends on
+inherited global fields into a complete router document before importing it.
+Stop any foreground gateway running from an explicit config before replacing
+the canonical singleton document.
+Daemon-backed commands reject `--config` and `ROUTEKIT_CONFIG`; those selectors
+are limited to documented foreground gateway, doctor, migration, and SDK
+recovery paths.
+
 Ensemble `members`, `judge`, and optional `synthesizer` values are namespaced
 IDs advertised by RouteKit's live catalog. Provider policy, credentials,
 registry URLs, pricing, and subscription-account enrollment are rejected here.
@@ -91,7 +116,7 @@ routekit claude claude-code/claude-sonnet-4-5
 ```
 
 The first successful managed login or explicit `routekit accounts add` import
-enables that provider in the effective router config. RouteKit discovers each
+enables that provider in the singleton's canonical router config. RouteKit discovers each
 healthy member, publishes the union, and routes a model only to accounts that
 advertise it. Quotas, refresh, cooldowns, and reset windows remain per account.
 
@@ -127,10 +152,13 @@ ensemble. Manage them with `fusionkit prompts list|edit|reset`.
 
 ## Migrating from v3
 
-v1-v3 files are not silently dual-read. Run `routekit config migrate`, replace
-opaque aliases with live `provider/model` IDs, and set `fusionkit.fusion.v4`.
-Runtime loading rejects legacy `endpoints`, `accounts`, and
-`defaultEndpointId` fields.
+v1-v3 files are not silently dual-read. Run
+`routekit --config <legacy-router-path> config migrate` for the specific
+project file, replace opaque aliases with namespaced `provider/model` IDs from
+the provider's catalog, validate the embedded project with `fusionkit doctor`,
+and set `fusionkit.fusion.v4`. For an external singleton, import the complete
+migrated router before inspecting it with `routekit models list`. Runtime
+loading rejects legacy `endpoints`, `accounts`, and `defaultEndpointId` fields.
 
 <Callout type="warn">
   Keep provider credentials out of `.fusionkit/`. The generated Python sidecar

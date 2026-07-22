@@ -47,8 +47,10 @@ Run `fusionkit doctor` any time to see exactly what is and isn't ready.
 An ensemble runs **multiple live RouteKit models plus judge/synthesis calls** on
 every prompt, so usage adds up. When the coding agent exits, fusionkit prints a
 session receipt with fused turns, gateway-observed spend, and the `--resume`
-id. Choose provider/model IDs from `routekit models list`; set a session cap
-with `--budget`.
+id. Choose namespaced provider/model IDs and validate the embedded project
+catalog with `fusionkit doctor`; when `router.url` targets the standalone
+singleton, inspect that external catalog with `routekit models list`. Set a
+session cap with `--budget`.
 
 ## Per-repo config
 

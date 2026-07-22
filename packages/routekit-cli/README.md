@@ -14,10 +14,13 @@ routekit gateway serve
 routekit codex
 ```
 
-The singleton daemon loads `~/.config/routekit/router.yaml`; import a project
-overlay explicitly with `routekit config import --from .routekit/router.yaml`.
-`--config` / `ROUTEKIT_CONFIG` are reserved for foreground doctor/migration
-recovery paths. `ROUTEKIT_HOME` relocates runtime state.
+The singleton daemon loads `~/.config/routekit/router.yaml`; replace that
+canonical document from a project file explicitly with
+`routekit config import --from .routekit/router.yaml`. Import validates and
+atomically replaces the complete document; it does not merge configuration.
+Sparse SDK overlays must be expanded into a complete router document before
+import. `--config` / `ROUTEKIT_CONFIG` are reserved for foreground gateway,
+doctor, and migration recovery paths. `ROUTEKIT_HOME` relocates runtime state.
 
 ## Local checkout development
 
@@ -129,7 +132,8 @@ Help, version, completion, terminal rendering, OAuth/editor interaction, and
 the final coding-tool process remain local. Interactive results are committed
 back through authenticated RPC, so the daemon remains the sole RouteKit state
 writer. Project `.routekit/router.yaml` files are SDK/embedded-router inputs,
-not standalone daemon scopes; import one explicitly:
+not standalone daemon scopes. To migrate one into the singleton, explicitly
+replace its canonical document:
 
 ```sh
 routekit config import --from .routekit/router.yaml

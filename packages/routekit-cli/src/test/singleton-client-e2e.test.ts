@@ -15,6 +15,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
+import { parse as parseYaml } from "yaml";
 
 const CLI = resolve(dirname(fileURLToPath(import.meta.url)), "..", "index.js");
 
@@ -44,7 +45,13 @@ test("concurrent product commands auto-start exactly one daemon and all use its 
   mkdirSync(project, { recursive: true });
   writeFileSync(
     join(home, ".config", "routekit", "router.yaml"),
-    "providers:\n  openai: {}\ndefaultModel: openai/mock-model\n"
+    [
+      "providers:",
+      "  openai:",
+      "    fallbackCooldownSeconds: 17",
+      "defaultModel: openai/mock-model",
+      ""
+    ].join("\n")
   );
   const upstream = createServer((req, res) => {
     res.setHeader("content-type", "application/json");
@@ -124,6 +131,67 @@ test("concurrent product commands auto-start exactly one daemon and all use its 
     );
     assert.equal(warmOverride.code, 1);
     assert.match(warmOverride.stderr, /not supported by singleton daemon operations/);
+    const explicitOverride = await run(
+      ["--config", join(project, "other.yaml"), "models", "list"],
+      project,
+      env
+    );
+    assert.equal(explicitOverride.code, 1);
+    assert.match(explicitOverride.stderr, /not supported by singleton daemon operations/);
+    const lifecycleFlagOverride = await run(
+      ["--config", join(project, "other.yaml"), "daemon", "status"],
+      project,
+      env
+    );
+    assert.equal(lifecycleFlagOverride.code, 1);
+    assert.match(
+      lifecycleFlagOverride.stderr,
+      /not supported by singleton daemon operations/
+    );
+    const lifecycleEnvironmentOverride = await run(
+      ["daemon", "status"],
+      project,
+      { ...env, ROUTEKIT_CONFIG: join(project, "other.yaml") }
+    );
+    assert.equal(lifecycleEnvironmentOverride.code, 1);
+    assert.match(
+      lifecycleEnvironmentOverride.stderr,
+      /not supported by singleton daemon operations/
+    );
+    const versionWithOverride = await run(
+      ["version"],
+      project,
+      { ...env, ROUTEKIT_CONFIG: join(project, "other.yaml") }
+    );
+    assert.equal(versionWithOverride.code, 0, versionWithOverride.stderr);
+
+    const projectConfig = join(project, ".routekit", "router.yaml");
+    mkdirSync(dirname(projectConfig), { recursive: true });
+    writeFileSync(
+      projectConfig,
+      "providers:\n  openai: {}\ndefaultModel: openai/mock-model\n"
+    );
+    const imported = await run(
+      ["config", "import", "--from", projectConfig, "--json"],
+      project,
+      env
+    );
+    assert.equal(imported.code, 0, imported.stderr);
+    assert.equal((JSON.parse(imported.stdout) as { imported?: boolean }).imported, true);
+    const canonicalDocument = readFileSync(
+      join(home, ".config", "routekit", "router.yaml"),
+      "utf8"
+    );
+    assert.doesNotMatch(canonicalDocument, /fallbackCooldownSeconds/);
+    const shown = await run(["config", "show", "--json"], project, env);
+    assert.equal(shown.code, 0, shown.stderr);
+    const snapshot = JSON.parse(shown.stdout) as {
+      sources?: string[];
+      config?: { defaultModel?: string };
+    };
+    assert.deepEqual(snapshot.sources, ["global"]);
+    assert.equal(snapshot.config?.defaultModel, "openai/mock-model");
+
     const serviceStatus = await run(
       ["daemon", "service", "status", "--json"],
       project,
@@ -183,6 +251,112 @@ test("project overlays require explicit import into the canonical global config"
     rmSync(root, { recursive: true, force: true });
   }
 });
+test("concurrent cold config mutations keep the canonical file and daemon generation synchronized", async () => {
+  const root = mkdtempSync(join(tmpdir(), "routekit-concurrent-import-"));
+  const home = join(root, "home");
+  const state = join(root, "state");
+  const project = join(root, "project");
+  mkdirSync(project, { recursive: true });
+  const first = join(project, "first.yaml");
+  const second = join(project, "second.yaml");
+  writeFileSync(
+    first,
+    [
+      "providers:",
+      "  openai:",
+      "    fallbackCooldownSeconds: 11",
+      "defaultModel: openai/mock-model",
+      ""
+    ].join("\n")
+  );
+  writeFileSync(
+    second,
+    [
+      "providers:",
+      "  openai:",
+      "    fallbackCooldownSeconds: 22",
+      "defaultModel: openai/mock-model",
+      ""
+    ].join("\n")
+  );
+  const upstream = createServer((request, response) => {
+    response.setHeader("content-type", "application/json");
+    if (request.url === "/v1/models") {
+      response.end(
+        JSON.stringify({
+          data: [{ id: "mock-model" }, { id: "gpt-5.5" }]
+        })
+      );
+    } else {
+      response.end(JSON.stringify({ choices: [{ message: { content: "ok" } }] }));
+    }
+  });
+  await new Promise<void>((resolveListen) =>
+    upstream.listen(0, "127.0.0.1", resolveListen)
+  );
+  const upstreamPort = (upstream.address() as AddressInfo).port;
+  const env = {
+    ...process.env,
+    HOME: home,
+    ROUTEKIT_HOME: state,
+    ROUTEKIT_PORTLESS: "0",
+    ROUTEKIT_NO_SUPERVISOR: "1",
+    ROUTEKIT_DAEMON_PORT: "0",
+    OPENAI_API_KEY: "test",
+    OPENAI_BASE_URL: `http://127.0.0.1:${upstreamPort}/v1`,
+    NO_COLOR: "1"
+  };
+  let pid: number | undefined;
+  try {
+    const mutations = await Promise.all([
+      run(["config", "import", "--from", first, "--json"], project, env),
+      run(["config", "import", "--from", second, "--json"], project, env),
+      run(["config", "init", "--force", "--json"], project, env)
+    ]);
+    const record = JSON.parse(
+      readFileSync(join(state, "services", "daemon.json"), "utf8")
+    ) as { pid: number };
+    pid = record.pid;
+    assert.ok(mutations.some((result) => result.code === 0));
+    for (const result of mutations) {
+      if (result.code !== 0) {
+        assert.match(`${result.stdout}${result.stderr}`, /revision conflict/i);
+      }
+    }
+    for (const result of mutations.slice(0, 2)) {
+      if (result.code === 0) {
+        assert.equal(
+          (JSON.parse(result.stdout) as { imported?: boolean }).imported,
+          true
+        );
+      }
+    }
+
+    const shown = await run(["config", "show", "--json"], project, env);
+    assert.equal(shown.code, 0, shown.stderr);
+    const active = JSON.parse(shown.stdout) as {
+      config?: Record<string, unknown>;
+    };
+    const disk = parseYaml(
+      readFileSync(join(home, ".config", "routekit", "router.yaml"), "utf8")
+    ) as Record<string, unknown>;
+    assert.deepEqual(active.config, disk);
+
+    const stopped = await run(["daemon", "stop", "--json"], project, env);
+    assert.equal(stopped.code, 0, stopped.stderr);
+    pid = undefined;
+  } finally {
+    if (pid !== undefined) {
+      try {
+        process.kill(pid, "SIGKILL");
+      } catch {
+        // already gone
+      }
+    }
+    await new Promise<void>((resolveClose) => upstream.close(() => resolveClose()));
+    rmSync(root, { recursive: true, force: true });
+  }
+});
 test("explicit external gateway launch neither boots local daemon nor leaks its token", async () => {
   const root = mkdtempSync(join(tmpdir(), "routekit-external-launch-"));
   const bin = join(root, "bin");
@@ -213,7 +387,10 @@ test("explicit external gateway launch neither boots local daemon nor leaks its 
         "--gateway-url",
         `http://127.0.0.1:${port}`,
         "--auth-token",
-        "external-secret"
+        "external-secret",
+        "--",
+        "--config",
+        "tool-owned-value"
       ],
       root,
       {

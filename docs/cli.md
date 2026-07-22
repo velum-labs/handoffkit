@@ -29,6 +29,11 @@ spawning stay local. Concurrent first calls race-safely start exactly one
 daemon, using a persistent systemd user unit / launchd agent when available
 and a clearly reported detached fallback otherwise.
 
+The canonical file is `~/.config/routekit/router.yaml`. Project
+`.routekit/router.yaml` files are explicit Fusion/SDK inputs, not daemon
+scopes. `routekit config import --from .routekit/router.yaml` validates and
+replaces the complete canonical document; it does not merge layers.
+
 `routekit daemon start|status|reload|restart|upgrade|stop|logs` and `daemon
 service install|uninstall|status` are the lifecycle surface. Config/account
 reloads atomically switch router generations while
@@ -72,7 +77,9 @@ Common Fusion flags:
 | `--fusionkit-dir <dir>` | Local Python FusionKit checkout for development. |
 
 There is no `--direct`, provider/model/key flag, or single-model mode. Use
-RouteKit for single-model launches and edit `.routekit/router.yaml` for routing.
+RouteKit for single-model launches. Edit `.routekit/router.yaml` only for
+FusionKit embedded mode; manage standalone routing through daemon-backed
+`routekit config` and provider commands.
 
 ## Fusion commands
 

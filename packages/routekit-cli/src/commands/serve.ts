@@ -1,7 +1,9 @@
 import { contextFor, parsePort } from "@routekit/cli-core";
 import { startRouteKitDaemon } from "@routekit/daemon";
+import { acquireLifecycleLock } from "@routekit/runtime";
 import type { Command } from "commander";
 
+import { daemonLifecycleLockPath } from "../client.js";
 import { globalRouterConfigPath } from "../config.js";
 import { waitForShutdown } from "../serve.js";
 import { routekitVersion } from "../state.js";
@@ -30,16 +32,23 @@ export function registerServe(program: Command): void {
         const requestShutdown = (): void => {
           setImmediate(() => void running?.close().finally(() => process.exit(0)));
         };
-        running = await startRouteKitDaemon({
-          packageVersion: routekitVersion(),
-          configPath,
-          host: options.host,
-          port: parsePort(options.port, 8080),
-          drainGraceMs: drainGraceMs(options.drainGrace),
-          ...(options.authToken !== undefined ? { authToken: options.authToken } : {}),
-          ...(options.portless !== undefined ? { portless: options.portless } : {}),
-          onShutdownRequested: requestShutdown
+        const lock = await acquireLifecycleLock(daemonLifecycleLockPath(), {
+          timeoutMs: 90_000
         });
+        try {
+          running = await startRouteKitDaemon({
+            packageVersion: routekitVersion(),
+            configPath,
+            host: options.host,
+            port: parsePort(options.port, 8080),
+            drainGraceMs: drainGraceMs(options.drainGrace),
+            ...(options.authToken !== undefined ? { authToken: options.authToken } : {}),
+            ...(options.portless !== undefined ? { portless: options.portless } : {}),
+            onShutdownRequested: requestShutdown
+          });
+        } finally {
+          lock.release();
+        }
         if (ctx.json) {
           ctx.emit({
             event: "listening",

@@ -13,9 +13,11 @@ fusionkit init
 fusionkit doctor
 ```
 
-Edit the generated `.routekit/router.yaml` to enable providers, then use
-`routekit models list` to inspect their live namespaced catalog. FusionKit
-stores no provider credentials.
+Edit the generated `.routekit/router.yaml` to enable providers for FusionKit's
+embedded router; `fusionkit doctor` validates its live namespaced catalog.
+FusionKit stores no provider credentials. The standalone RouteKit singleton
+does not discover this project file unless you explicitly run
+`routekit config import --from .routekit/router.yaml`.
 `fusionkit setup` warms the Python engine before the first session.
 
 ## 2. Launch a coding agent
@@ -119,7 +121,9 @@ The gateway exposes the default ensemble as `fusion-panel` and every other
 ensemble as `fusion-<name>`. Namespaced RouteKit model IDs remain the routing boundary.
 Use the independent RouteKit CLI for single-model launches.
 
-Run `fusionkit models list` to inspect local MLX models, and use
-`routekit models list` to inspect live provider models. Use
+Run `fusionkit models list` to inspect local MLX models. Use
+`routekit models list` to inspect the standalone singleton's live provider
+models after configuring its canonical document or explicitly importing the
+project file. Use
 `fusionkit config show` to see the effective namespaced-model ensembles
 for the current repo.

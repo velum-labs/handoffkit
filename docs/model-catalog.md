@@ -1,8 +1,8 @@
 # Model catalog
 
 Provider activation, live model discovery, and dispatch belong to RouteKit.
-Enable providers in `.routekit/router.yaml`; do not copy individual models into
-configuration:
+For FusionKit embedded mode, enable providers in `.routekit/router.yaml`; do
+not copy individual models into configuration:
 
 ```yaml
 providers:
@@ -25,12 +25,20 @@ codex/gpt-5.5
 openrouter/moonshotai/kimi-k2-thinking
 ```
 
-Inspect the live catalog before composing those IDs in Fusion v4:
+The standalone RouteKit singleton instead owns
+`~/.config/routekit/router.yaml`. It never discovers the project file by
+working directory. To inspect a project policy through daemon-backed commands,
+first replace the canonical document explicitly:
 
 ```sh
+routekit config import --from .routekit/router.yaml
 routekit providers status
 routekit models list
 ```
+
+Import validates and atomically replaces the complete document; it does not
+merge project and global configuration. `fusionkit doctor` validates the
+embedded project's catalog without importing it into the singleton.
 
 ```json
 {

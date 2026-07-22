@@ -159,8 +159,9 @@ if (
   fail(`expected a preflight failure, got:\n${preflightOutput}`);
 }
 
-// 4) RouteKit doctor is useful without harness binaries, and launch fails
-// before opening a gateway when the selected real harness is absent.
+// 4) RouteKit doctor accepts an explicit recovery config without harness
+// binaries, while a daemon-backed launcher fails before ensuring the singleton
+// when the selected real harness is absent.
 const routekitRoot = mkdtempSync(join(tmpdir(), "routekit-ootb-"));
 const routekitProject = join(routekitRoot, "project");
 const routekitConfig = join(routekitProject, "router.yaml");
@@ -210,7 +211,7 @@ try {
 
   const missingHarness = runCli(
     ROUTE_CLI,
-    ["--config", routekitConfig, "codex", "ootb"],
+    ["codex", "ootb"],
     routekitEnv
   );
   if (missingHarness.status === 0) {
