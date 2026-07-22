@@ -78,12 +78,116 @@ The equivalent environment filters are `ROUTEKIT_E2E_PROVIDER`,
 `ROUTEKIT_E2E_DOOR`, `ROUTEKIT_E2E_TIMEOUT_MS`, and
 `ROUTEKIT_E2E_MAX_LIVE_CALLS`.
 
+## L06 real-account qualification
+
+ENG-679 qualifies the seven first-launch routes by their stable L05 anchors:
+
+```bash
+ROUTEKIT_LIVE_E2E=1 pnpm test:e2e:matrix -- \
+  --route route-openai-api,route-anthropic-api,route-openrouter-api,\
+route-codex-subscription,route-claude-code-subscription,\
+route-cursor-ide,route-cursor-agent \
+  --max-live-calls 32
+```
+
+`--route` cannot be combined with the lower-level `--provider` or `--door`
+filters. Prefer one route per invocation while diagnosing a failure. This keeps
+credential discovery and billed traffic attributable:
+
+```bash
+ROUTEKIT_LIVE_E2E=1 pnpm test:e2e:matrix -- \
+  --route route-openai-api --max-live-calls 1
+```
+
+The qualification descriptors live in
+[`scripts/routekit-qualification.mjs`](../scripts/routekit-qualification.mjs).
+They intentionally omit Google, Gemini, Grok, Kimi, CLIProxy, OpenCode, MLX,
+and every other Not offered route. The live router config is generated in the
+matrix temporary directory; qualification does not edit the committed
+`.routekit/router.yaml` or import it into the daemon.
+
+### Preflight and account modes
+
+Check availability without printing a credential or account identifier:
+
+```bash
+for name in OPENAI_API_KEY ANTHROPIC_API_KEY OPENROUTER_API_KEY; do
+  test -n "${!name:-}" && echo "$name=set" || echo "$name=unset"
+done
+command -v claude codex cursor-agent
+```
+
+- OpenAI, Anthropic, and OpenRouter use their named environment variables.
+- Codex and Claude Code require enrolled RouteKit subscription accounts and
+  their corresponding official client versions.
+- `cursor-agent` requires an authenticated client plus the selected RouteKit
+  provider route.
+- Cursor IDE requires an authenticated desktop client on a host supported by
+  Cursorkit's `ck` launcher. A headless or unsupported host is a **Fail**, not
+  a Skip.
+
+Never echo token values, inspect credential JSON, or copy account filenames
+into evidence. A missing key, client, login, account, or supported desktop is a
+route-level Fail with a fixed reason code.
+
+### Spend and failure controls
+
+Every route reserves a conservative maximum before live execution. The matrix
+refuses to start if the selected routes cannot fit within
+`--max-live-calls`; the local counting proxy enforces the same cap at request
+time. API and subscription HTTP routes reserve one provider request each.
+`cursor-agent` reserves two because a tool turn may require a continuation.
+The Cursor IDE reservation is consumed only when accepted manual evidence
+records observed custom-endpoint traffic.
+
+Deterministic checks run before billed traffic and prove:
+
+- streaming, tool-call, and reasoning transport for each selected protocol;
+- client cancellation propagates to the upstream response body;
+- a selected provider failure reaches the caller and makes zero calls to every
+  other configured provider.
+
+These checks establish RouteKit behavior without intentionally causing a paid
+provider failure. Live mode then proves the real credential/account and model
+path with a small streamed response. OpenRouter's provider-managed upstream
+routing remains distinct from RouteKit fallback.
+
+### Cursor IDE evidence and restore
+
+Run `routekit cursor --ide` on the supported, logged-in desktop host. Record the
+Cursor build, selected namespaced model, custom endpoint path, observed request
+count, capability outcomes, and whether the isolated profile was removed or
+restored. Do not record the prompt, response, login, token, account ID, home
+path, or raw bridge transcript.
+
+Pass the reviewed, prompt-free record back to the matrix:
+
+```bash
+ROUTEKIT_LIVE_E2E=1 pnpm test:e2e:matrix -- \
+  --route route-cursor-ide \
+  --cursor-ide-evidence /absolute/path/cursor-ide-evidence.json \
+  --max-live-calls 1
+```
+
+The JSON must target `route-cursor-ide`, use only `pass` or `fail`, and contain
+the allowlisted fields accepted by `validateManualEvidence()`. The matrix
+rebuilds the route result from those fields; unknown fields, raw diagnostics,
+messages, and credential values are not serialized.
+
+For Codex, Claude Code, Cursor IDE, and `cursor-agent`, a response alone does
+not prove setup/restore. Qualification stays Fail until setup and exact restore
+are exercised and recorded. API-key routes correctly mark setup/restore as not
+applicable.
+
 ## Artifacts and interpretation
 
 Each run writes a timestamped `report.json` and sanitized PTY transcripts under
 `.artifacts/routekit-e2e/`. This directory is ignored by Git. The report has
-exact pass/fail/skip counts, per-case duration and billed-call counts, and the
-total number of live model requests observed at the local counting proxy.
+exact pass/fail/skip counts, per-case duration and provider-request counts, and
+the total number of live model requests observed at the local counting proxy.
+Schema version 2 also records the exact Git SHA, RouteKit and client versions,
+authorized budget, selected route anchors, fixed reason codes, route
+capabilities, billing basis, setup/restore outcomes, and completeness.
 PTY cases isolate RouteKit and XDG runtime state and disable CLI auto-updaters
 so test runs cannot rewrite user-level executable links.
 
@@ -93,4 +197,7 @@ so test runs cannot rewrite user-level executable links.
 - `skip`: an optional CLI binary was not installed, with the reason recorded.
 
 Provider credentials are never copied into artifacts. Review the report before
-using a wider filter or increasing the call budget.
+using a wider filter or increasing the call budget. `.artifacts` is diagnostic
+and must not be linked as durable L06 evidence. Publish only an allowlisted,
+reviewed report under `docs/evidence/`; never commit PTY transcripts, prompts,
+responses, authorization headers, account identifiers, or local paths.
