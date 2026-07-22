@@ -21,7 +21,7 @@
     "test:routekit-pack": "node scripts/check-routekit-cli-pack.mjs",
     "test:fusionkit-pack": "node scripts/check-fusionkit-cli-pack.mjs",
     "test:dual-cli-pack": "node scripts/check-dual-cli-pack.mjs",
-    "test:e2e:matrix": "pnpm build:routekit && node scripts/routekit-e2e-matrix.mjs",
+    "test:e2e:matrix": "turbo run build --filter=@routekit/cli... --filter=@fusionkit/testkit... && node scripts/routekit-e2e-matrix.mjs",
     "demo": "node scripts/demo.mjs",
     "dev:link-cli": "node scripts/link-fusionkit-dev.mjs",
     "dev:run-cli": "node scripts/fusionkit-dev.mjs",
