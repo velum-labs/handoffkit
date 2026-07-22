@@ -1,8 +1,7 @@
 /**
  * Subscription account connectors.
  *
- * One user-facing account surface (`routekit accounts login <kind>`) is backed
- * by two mechanisms the user never has to distinguish:
+ * The neutral account layer retains two connector mechanisms:
  *
  * - `native`: the official provider CLI login captured into RouteKit's own
  *   account store and served by provider-native relays (claude-code, codex).
@@ -10,7 +9,8 @@
  *   store and ingress key live under RouteKit's home (gemini, grok, kimi).
  *
  * The registry (`@routekit/registry` connectors section) is the single source
- * of truth for which connector backs which kind.
+ * of truth for which connector backs which kind. RouteKit's public CLI applies
+ * a narrower first-launch allowlist; retained connectors are non-contractual.
  */
 import { createHash } from "node:crypto";
 import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";

@@ -1,10 +1,7 @@
 /**
- * One account surface for every subscription kind. `accounts login <kind>`
- * dispatches to the connector the registry declares for that kind — the
- * native official-CLI capture (claude-code, codex) or the RouteKit-managed
- * CLIProxyAPI sidecar (gemini, grok, kimi) — enrolls the credential, enables
- * the matching provider, and verifies live model discovery. Users never
- * manage the connector machinery directly.
+ * Public enrollment is limited to the first-launch subscription contract.
+ * Additional connector implementations remain available internally for
+ * compatibility, but registry presence does not make them supported UX.
  */
 import {
   captureLoginCredential,
@@ -14,13 +11,17 @@ import {
   resolveAccountKind
 } from "@routekit/accounts";
 import { contextFor } from "@routekit/cli-core";
-import { accountKinds, resolveAccountConnector } from "@routekit/registry";
+import { resolveAccountConnector } from "@routekit/registry";
 import { randomId } from "@routekit/runtime";
 import type { Command } from "commander";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 
 import { routekitClient } from "../client.js";
+import {
+  isLaunchAccountKind,
+  LAUNCH_ACCOUNT_KINDS
+} from "../launch-support.js";
 
 /** The router provider a subscription kind routes through. */
 function providerForKind(kind: string, connector: "native" | "cliproxy"): string {
@@ -56,7 +57,7 @@ export function registerAccounts(program: Command): void {
 
   accounts
     .command("login <subscription-kind>")
-    .description(`enroll a subscription account (${accountKinds().join(", ")})`)
+    .description(`enroll a subscription account (${LAUNCH_ACCOUNT_KINDS.join(", ")})`)
     .option("--name <name>", "account label (native subscription kinds)")
     .option(
       "--no-browser",
@@ -74,7 +75,19 @@ export function registerAccounts(program: Command): void {
             "`accounts login` is interactive and does not support --json or --no-input"
           );
         }
+        if (resolveAccountConnector(subscriptionKind) === undefined) {
+          throw new Error(
+            `unknown subscription kind ${JSON.stringify(subscriptionKind)}; ` +
+              `first-launch kinds: ${LAUNCH_ACCOUNT_KINDS.join(", ")}`
+          );
+        }
         const resolved = resolveAccountKind(subscriptionKind);
+        if (!isLaunchAccountKind(resolved.kind)) {
+          throw new Error(
+            `subscription kind ${JSON.stringify(subscriptionKind)} is not offered at first launch; ` +
+              `supported kinds: ${LAUNCH_ACCOUNT_KINDS.join(", ")}`
+          );
+        }
         const noBrowser = options.browser === false;
         if (resolved.localOnly) ctx.presenter.warn(`${resolved.kind}: ${LOCAL_ONLY_WARNING}`);
         const client = await routekitClient();
@@ -230,7 +243,7 @@ export function registerAccounts(program: Command): void {
           connector === "cliproxy"
             ? !accounts.some((entry) => isCliproxyAccount(entry))
             : accounts.every((entry) => entry.subscriptionKind !== kind);
-        if (shouldSuggestProviderRemove) {
+        if (shouldSuggestProviderRemove && isLaunchAccountKind(kind)) {
           ctx.presenter.note(
             `run \`routekit providers remove ${routerProvider}\` to stop subscription routing`
           );

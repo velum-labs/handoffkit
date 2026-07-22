@@ -240,7 +240,7 @@ export function spawnCliproxy(
 ): ReturnType<typeof spawn> {
   const binary = cliproxyBinaryPath(CLIPROXY_PINNED_VERSION, env);
   if (binary === undefined) {
-    throw new Error("CLIProxyAPI is not installed; run `routekit accounts login <kind>`");
+    throw new Error("CLIProxyAPI is not installed for this retained internal connector");
   }
   ensureCliproxyConfig(env);
   return spawn(binary, ["--config", cliproxyConfigPath(env)], {

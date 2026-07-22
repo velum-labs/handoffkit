@@ -1,5 +1,7 @@
 # RouteKit router for the maintainer benchmark sidecar configs in this folder.
 # Provider details stay here; benchmark-panel.*.yaml contains namespaced model IDs.
+# Maintainer fixtures may exercise retained internal backends. Their presence
+# here is non-contractual and does not add them to RouteKit's launch support.
 providers:
   openai: {}
   anthropic: {}

@@ -39,6 +39,9 @@ paths; only OAuth capture was fixture-backed.
 
 ## Connector/failure matrix
 
+The non-native connector cases below are retained internal regression coverage,
+not first-launch qualification or a public support contract.
+
 - Native Codex: actual `SIGKILL` after account/config writes; prior state
   restored.
 - Native Claude/Codex capture: official CLI profiles remain isolated and do not

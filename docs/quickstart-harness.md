@@ -60,7 +60,7 @@ You don't edit any agent config. `fusionkit` sets up each harness for you:
 | Codex | an ephemeral `CODEX_HOME` with a `fusion-gateway` provider (`wire_api = responses`) |
 | Claude Code | `ANTHROPIC_BASE_URL` / `ANTHROPIC_AUTH_TOKEN` pointed at the gateway |
 | Cursor | the bundled cursorkit bridge driving `cursor-agent`; add `--ide` to wire the **Cursor IDE** through a local desktop proxy |
-| OpenCode | the generic RouteKit tool launcher and driver |
+| OpenCode | FusionKit's retained generic tool driver (outside RouteKit's first-launch support contract) |
 
 ```bash
 fusionkit cursor --ide          # turnkey Cursor IDE (no manual tunnel)

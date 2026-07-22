@@ -53,12 +53,12 @@ Set `ROUTEKIT_DEV_SKIP_BUILD=1` after a build for a faster local check.
 | `daemon start`, `status`, `reload`, `restart`, `upgrade`, `stop`, `logs` | Operate the singleton RouteKit daemon. |
 | `daemon service install`, `uninstall`, `status` | Manage its persistent systemd user unit / launchd agent. |
 | `gateway serve` | Run the combined daemon + gateway in the foreground for development. |
-| `codex`, `claude`, `cursor`, `opencode` | Ask the daemon to prepare a launch, then run the coding tool locally against the singleton gateway. |
+| `codex`, `claude`, `cursor` | Ask the daemon to prepare a launch, then run the supported coding tool locally against the singleton gateway. |
 | `codex install`, `codex uninstall` | Add or remove RouteKit-owned Codex provider/profile blocks. |
 | `providers add`, `remove`, `status` | Manage explicit providers and run live discovery without printing credentials. |
 | `models list` | Discover and list the live namespaced model catalog. |
-| `accounts login` | Enroll any subscription kind (`claude-code`, `codex`, `gemini`, `grok`, `kimi`): run the right connector's OAuth flow, enroll the credential, and enable the matching provider. `--no-browser` prefers a device-code / copyable-URL flow for headless hosts. |
-| `accounts add`, `remove`, `list`, `status` | Import the current official CLI login (native kinds) or manage enrolled subscription accounts across every connector. |
+| `accounts login` | Enroll a supported subscription kind (`claude-code` or `codex`), import the credential, and enable the matching provider. `--no-browser` prefers a device-code / copyable-URL flow for headless hosts. |
+| `accounts add`, `remove`, `list`, `status` | Import the current official CLI login or manage enrolled subscription accounts. |
 | `usage` | Show subscription rate limits, credits, and reset windows from the running gateway or enrolled local accounts. |
 | `config path`, `show`, `init`, `edit`, `import`, `migrate` | Manage the daemon's canonical global router config with revision-checked writes. |
 | `doctor` | Check router configuration, referenced credential variables, and installed coding-agent binaries. |
@@ -74,8 +74,8 @@ Provider activation, live model catalogs, account relays, and registry-defined
 credential environment variables are RouteKit-owned. Fusion policy, panels,
 judging, synthesis, and Fusion sessions are intentionally outside this package.
 
-Subscription kinds are `claude-code`, `codex`, `gemini`, `grok`, and `kimi`;
-the Claude Code launcher command remains `routekit claude [provider/model]`.
+The first-launch subscription kinds are `claude-code` and `codex`; the Claude
+Code launcher command remains `routekit claude [provider/model]`.
 Pool policy uses the same provider map as API-key sources:
 
 ```yaml
@@ -89,23 +89,32 @@ providers:
 defaultModel: codex/gpt-5.5
 ```
 
-The one enrollment path for every kind is
-`routekit accounts login <kind>`. Each kind is backed by a connector the user
-never manages directly: `claude-code` and `codex` run the official provider
-CLI in a private temporary profile, atomically import the resulting
-credential, and remove the temporary profile without changing the user's
-normal login (`accounts add` is the explicit current-login import path);
-`gemini`, `grok`, and `kimi` run the OAuth flow of RouteKit's pinned,
-daemon-supervised CLIProxyAPI sidecar (see
-[CLIProxyAPI connector](../../docs/subscription-pooling.md)). `--no-browser`
-prefers a device-code / copyable-URL flow so a headless host only needs a
-browser on some other device.
+The one enrollment path is `routekit accounts login <kind>`. The supported
+`claude-code` and `codex` kinds run the official provider CLI in a private
+temporary profile, atomically import the resulting credential, and remove the
+temporary profile without changing the user's normal login (`accounts add` is
+the explicit current-login import path). `--no-browser` prefers a device-code /
+copyable-URL flow so a headless host only needs a browser on some other device.
 
 API providers infer their key and optional base URL from registry-defined
 environment variables. Subscription providers discover the union of models
 offered by healthy enrolled accounts and keep per-account quota, refresh,
 cooldown, and model eligibility state. An explicitly requested unknown or
 unnamespaced model is rejected rather than routed to the default.
+
+## First-launch support contract
+
+RouteKit's public first-launch set is:
+
+- API providers: OpenAI, Anthropic, and OpenRouter;
+- subscriptions: Codex and Claude Code; and
+- harnesses: Codex CLI, Claude Code, Cursor IDE, and `cursor-agent` through
+  Cursor's custom OpenAI endpoint.
+
+Public support remains conditional on L06 qualification. The neutral registry
+and internal packages may retain additional providers, connectors, and tool
+integrations for compatibility and development. Those retained implementations
+are not first-launch UX, are not qualified, and are not a support contract.
 
 ## Singleton daemon
 
