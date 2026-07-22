@@ -535,11 +535,21 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
         rawBody.model,
         backend.listModelIds?.()
       );
-      const route = resolveNativeModelRoute(
-        backend,
-        "claude-code",
-        alias
-      );
+      const route = backend.resolveModelRoute?.(alias, "claude-code");
+      if (
+        alias !== undefined &&
+        backend.resolveModelRoute !== undefined &&
+        route === undefined
+      ) {
+        writeJson(res, 400, {
+          type: "error",
+          error: {
+            type: "invalid_request_error",
+            message: `unknown model: ${alias}`
+          }
+        });
+        return;
+      }
       if (
         anthropicRelay?.countTokens !== undefined &&
         (route?.provider === "claude-code" ||

@@ -157,6 +157,26 @@ test("SDK serves an empty catalog when no providers are configured", async () =>
       }
     });
 
+    const countTokensUnknown = await fetch(
+      `${running.url}/v1/messages/count_tokens`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          model: "anthropic/not-configured",
+          messages: [{ role: "user", content: "hello" }]
+        })
+      }
+    );
+    assert.equal(countTokensUnknown.status, 400);
+    assert.deepEqual(await countTokensUnknown.json(), {
+      type: "error",
+      error: {
+        type: "invalid_request_error",
+        message: "unknown model: anthropic/not-configured"
+      }
+    });
+
     const unknown = await fetch(`${running.url}/v1/chat/completions`, {
       method: "POST",
       headers: { "content-type": "application/json" },
