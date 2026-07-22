@@ -604,10 +604,18 @@
     {
       "id": "accounts.claude-managed-config-restore",
       "category": "accounts",
-      "expectation": "Managed Claude Code setup owns only RouteKit gateway environment keys, updates atomically, preserves unrelated user settings and post-install edits, and restores the exact original settings when untouched.",
+      "expectation": "Managed Claude Code setup owns only RouteKit gateway environment keys, uses process-safe locking and crash recovery, preserves unrelated user settings and post-install edits, and restores the exact original settings when untouched.",
       "status": "required",
       "testFile": "packages/tool-claude/src/test/install.test.ts",
       "anchor": "Claude managed install updates and restores the exact original settings"
+    },
+    {
+      "id": "accounts.claude-external-gateway-token-isolation",
+      "category": "security",
+      "expectation": "A Claude gateway override never reuses the singleton daemon token; non-loopback overrides require HTTPS and an explicit environment-sourced credential.",
+      "status": "required",
+      "testFile": "packages/routekit-cli/src/test/cli.test.ts",
+      "anchor": "Claude gateway overrides never reuse the local daemon token"
     },
     {
       "id": "accounts.claude-interruption-recovery",
@@ -620,7 +628,7 @@
     {
       "id": "accounts.last-native-removal",
       "category": "accounts",
-      "expectation": "Removing the last native subscription account atomically disables its provider and matching default route, while failed router replacement restores credentials, config, and revisions.",
+      "expectation": "Removing the last native subscription account atomically disables its provider and matching default route, leaves a sole-provider daemon healthy with an empty catalog, and restores credentials, config, and revisions if router replacement fails.",
       "status": "required",
       "testFile": "packages/routekit-daemon/src/test/daemon.test.ts",
       "anchor": "native provider stays enabled until its last account is removed"

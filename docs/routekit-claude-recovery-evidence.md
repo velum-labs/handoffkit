@@ -3,7 +3,7 @@
 - Date: 2026-07-22
 - Issue: [ENG-682](https://linear.app/velum-labs/issue/ENG-682/restore-claude-enrollment-and-recovery-parity)
 - Pull request: [#162](https://github.com/velum-labs/handoffkit/pull/162)
-- Implementation revision tested: [`e303f1a5`](https://github.com/velum-labs/handoffkit/commit/e303f1a590aaafedd397767732cc0f910341d526)
+- Implementation revision tested: [`b05434ab`](https://github.com/velum-labs/handoffkit/commit/b05434aba74ef0a49871a1165c979239bb686549)
 
 ## Result
 
@@ -16,6 +16,11 @@ ENG-682. Claude Code now has the same RouteKit lifecycle surface as Codex:
 - Updating the integration preserves unrelated settings. Uninstall restores
   the byte-exact original file when it is untouched, or removes only unchanged
   RouteKit values when the user edited other settings after installation.
+  Process-owned locking, hash-guarded transaction recovery, and a real child
+  `SIGKILL` test cover concurrent and interrupted settings writes.
+- Managed settings follow `CLAUDE_CONFIG_DIR`, do not force
+  `ANTHROPIC_MODEL`, reject unsafe file types, and never reuse the local daemon
+  token for an overridden gateway.
 - `accounts login claude-code` captures OAuth in an isolated temporary
   `CLAUDE_CONFIG_DIR`, then the daemon atomically enrolls the credential and
   activates `claude-code`.
@@ -24,7 +29,9 @@ ENG-682. Claude Code now has the same RouteKit lifecycle surface as Codex:
   journal recovery proof as Codex.
 - Removing a non-final Claude account keeps its provider active. Removing the
   final account atomically removes the provider and matching default route;
-  router failure restores the credential, config, and revisions.
+  router failure restores the credential, config, and revisions. Removing the
+  only configured subscription leaves a healthy empty catalog without
+  inventing an API provider or requiring another credential.
 
 The billed, exact-version real-account matrix remains [ENG-679](https://linear.app/velum-labs/issue/ENG-679/run-and-record-the-routekit-real-account-matrix), not part of this credential-free recovery proof.
 
@@ -45,10 +52,10 @@ pnpm --filter @routekit/daemon test
 
 Results:
 
-- Claude tool package: 15/15 tests passed.
-- RouteKit CLI: 56/56 tests passed.
-- RouteKit daemon: 13/13 tests passed, including two child-process
-  `SIGKILL` cases (Codex and Claude Code).
+- Claude tool package: 32/32 tests passed.
+- RouteKit CLI: 57/57 tests passed.
+- RouteKit daemon: 16/16 tests passed, including account-transaction and
+  managed-settings child-process `SIGKILL` cases.
 
 The tests use temporary home/config directories and fixture OAuth values.
 They make no billed provider calls and assert that journal, status, doctor,
