@@ -5,7 +5,7 @@ import type { SubscriptionMode } from "@routekit/registry";
 
 import {
   defaultSubscriptionAccountDirectory,
-  enrollCurrentSubscription
+  defaultSubscriptionCredentialPath
 } from "./credentials.js";
 
 export type SubscriptionAccountSource =
@@ -33,8 +33,8 @@ function uniquePaths(paths: readonly string[]): string[] {
 
 /**
  * Resolve every server-owned subscription configuration to the same account
- * sequence. `auto` prefers enrolled accounts and imports the official CLI's
- * current login as a managed one-member set when the directory is empty.
+ * sequence. `auto` reads only daemon-enrolled accounts; enrollment is a
+ * daemon-owned transaction and router startup must never mutate credentials.
  */
 export async function resolveSubscriptionAccounts(
   mode: SubscriptionMode,
@@ -56,25 +56,18 @@ export async function resolveSubscriptionAccounts(
         source.directory ?? defaultSubscriptionAccountDirectory(mode)
       );
       const enrolled = accountFiles(directory);
-      if (enrolled.length > 0 && source.kind === "auto") {
+      if (source.kind === "auto") {
         return { paths: enrolled, stateDirectory: directory };
       }
-      if (enrolled.length === 0 || source.kind === "canonical") {
-        try {
-          const imported = await enrollCurrentSubscription(mode, {
-            label: "default",
-            accountsDirectory: directory,
-            ...(source.canonicalPath !== undefined
-              ? { sourcePath: source.canonicalPath }
-              : {})
-          });
-          return { paths: [resolve(imported)], stateDirectory: directory };
-        } catch (error) {
-          if (source.kind === "canonical") throw error;
-          return { paths: [], stateDirectory: directory };
-        }
-      }
-      return { paths: enrolled, stateDirectory: directory };
+      const canonical = resolve(
+        source.canonicalPath ?? defaultSubscriptionCredentialPath(mode)
+      );
+      return {
+        // The credential loader owns file/keychain fallback and will report a
+        // precise error when neither source exists.
+        paths: [canonical],
+        stateDirectory: directory
+      };
     }
     default: {
       const unreachable: never = source;

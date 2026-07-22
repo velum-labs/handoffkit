@@ -570,6 +570,14 @@
       "anchor": "singleton daemon exposes authenticated control and a stable reloadable data plane"
     },
     {
+      "id": "accounts.transactional-enrollment-and-activation",
+      "category": "accounts",
+      "expectation": "One daemon mutation imports native or CLIProxy credentials and enables the derived provider; failures restore account/config/revision state, interrupted prepared journals roll back before router startup, committed replays are no-ops, and transaction metadata contains no credential values.",
+      "status": "required",
+      "testFile": "packages/routekit-daemon/src/test/daemon.test.ts",
+      "anchor": "daemon recovers interrupted activation before loading config or starting routers"
+    },
+    {
       "id": "accounts.managed-login-isolation",
       "category": "accounts",
       "expectation": "Native account login isolates official CLI authentication, scrubs unrelated credentials, returns the credential only to the authenticated daemon client, and removes temporary state without writing daemon-owned stores locally.",

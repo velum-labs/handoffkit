@@ -117,6 +117,14 @@ The daemon owns:
   a replacement router first, atomically switch new traffic, then drain the old
   generation so active LLM streams finish.
 
+`accounts login` and `accounts add` use one `accounts.enrollActivate` control
+mutation. OAuth capture is isolated from daemon-owned stores; the daemon keeps
+a private rollback vault while it commits account files, provider config,
+account/config revisions, and the router generation. An error restores prior
+state, and startup rolls back any prepared transaction before loading config.
+Committed retries are no-ops. Status and doctor report sanitized recovery and
+account/provider consistency without returning transaction credentials.
+
 Help, version, completion, terminal rendering, OAuth/editor interaction, and
 the final coding-tool process remain local. Interactive results are committed
 back through authenticated RPC, so the daemon remains the sole RouteKit state

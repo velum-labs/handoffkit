@@ -13,16 +13,18 @@ import {
   readFileSync,
   rmSync
 } from "node:fs";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 
 import {
   CLIPROXY_API_KEY_ENV,
   CLIPROXY_BASE_URL_ENV,
   accountStoreEntries,
+  cliproxyAuthDirectory,
   cliproxyAccountEntries,
   cliproxyAccountMatchesKind,
   cliproxyApiKey,
   cliproxyBaseUrl,
+  cliproxyCredentialValid,
   defaultSubscriptionAccountDirectory,
   removeCliproxyAccount,
   removeSubscriptionAccount,
@@ -55,6 +57,7 @@ import type {
 } from "@routekit/gateway";
 import {
   PROVIDERS,
+  accountKindForCliproxyAuthType,
   resolveAccountConnector
 } from "@routekit/registry";
 import type { SubscriptionMode } from "@routekit/registry";
@@ -85,6 +88,13 @@ import { createConsentManager } from "@routekit/telemetry-core";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 
 import { createCliproxySidecar } from "./cliproxy-sidecar.js";
+import {
+  cleanupAccountTransaction,
+  markAccountTransactionCommitted,
+  prepareAccountTransaction,
+  recoverAccountTransactions,
+  rollbackAccountTransaction
+} from "./account-transaction.js";
 
 export const ROUTEKIT_DAEMON_KIND = "daemon";
 export const ROUTEKIT_PRODUCT = "routekit";
@@ -101,6 +111,10 @@ export type RouteKitDaemonOptions = {
   portless?: boolean;
   drainGraceMs?: number;
   onShutdownRequested?: (reason: "stop" | "restart" | "upgrade") => void;
+  /** Test seam used by child-process interruption coverage. */
+  onAccountTransactionPhase?: (
+    phase: "prepared" | "credentials-written" | "router-swapped" | "committed"
+  ) => void;
 };
 
 export type RunningRouteKitDaemon = {
@@ -267,6 +281,43 @@ function safeCredentialBlob(
   return record;
 }
 
+function safeCliproxyCredentialBlob(
+  kind: string,
+  value: unknown
+): Record<string, unknown> {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new ControlError({ code: "bad_request", message: "credential must be an object" });
+  }
+  const record = structuredClone(value as Record<string, unknown>);
+  const type = typeof record.type === "string" ? record.type : undefined;
+  const classified =
+    type === undefined
+      ? undefined
+      : accountKindForCliproxyAuthType(type) ?? resolveAccountConnector(type)?.kind;
+  if (classified !== kind || !cliproxyCredentialValid(record, type)) {
+    throw new ControlError({
+      code: "bad_request",
+      message: `credential does not have the expected ${kind} connector shape`
+    });
+  }
+  return record;
+}
+
+function safeCliproxyLabel(label: string): string {
+  if (
+    label.length === 0 ||
+    label.startsWith(".") ||
+    basename(label) !== label ||
+    label.includes("\\")
+  ) {
+    throw new ControlError({
+      code: "bad_request",
+      message: "connector account label is not path-safe"
+    });
+  }
+  return label;
+}
+
 async function healthyControl(record: ServiceRecord): Promise<boolean> {
   if (record.controlToken === undefined) return false;
   try {
@@ -305,6 +356,13 @@ export async function startRouteKitDaemon(
         : undefined;
     }
   });
+  let accountRecovery;
+  try {
+    accountRecovery = recoverAccountTransactions(home);
+  } catch (error) {
+    authority.release();
+    throw error;
+  }
 
   let control: RunningControlServer | undefined;
   let proxy: SwitchingGatewayProxy | undefined;
@@ -404,7 +462,12 @@ export async function startRouteKitDaemon(
     const replaceRouter = async (
       nextConfig: RouterConfig,
       nextDocument: string,
-      input: { write: boolean; configRevision?: boolean; accountRevision?: boolean }
+      input: {
+        write: boolean;
+        configRevision?: boolean;
+        accountRevision?: boolean;
+        beforeSwap?: () => void | Promise<void>;
+      }
     ): Promise<void> => {
       // Sidecar reconcile runs before the generation commits; any failure
       // below must put the sidecar back to the still-live currentConfig.
@@ -428,6 +491,7 @@ export async function startRouteKitDaemon(
       try {
         if (input.write) writeRouterConfig(configPath, nextConfig);
         writeRevisions(home, nextRevisions);
+        await input.beforeSwap?.();
       } catch (error) {
         if (input.write) {
           writeFileAtomic(configPath, previousDocument, { mode: 0o600 });
@@ -682,7 +746,12 @@ export async function startRouteKitDaemon(
               ...(member?.limits !== undefined ? { limits: member.limits } : {})
             };
           }),
-          revision: revisions.accounts
+          revision: revisions.accounts,
+          recovery: {
+            state: accountRecovery.recovered > 0 ? "recovered" : "clean",
+            recovered: accountRecovery.recovered,
+            cleaned: accountRecovery.cleaned
+          }
         };
       },
       "accounts.enroll": async (params) => {
@@ -725,6 +794,223 @@ export async function startRouteKitDaemon(
           }
         });
         return { enrolled: true, revision: revisions.accounts };
+      },
+      "accounts.enrollActivate": async (params) => {
+        const resolved = resolveAccountConnector(params.kind);
+        if (resolved === undefined) {
+          throw new ControlError({
+            code: "bad_request",
+            message: `unknown subscription kind: ${params.kind}`
+          });
+        }
+        const kind = resolved.kind;
+        const connector = resolved.info.connector;
+        const provider = connector === "cliproxy" ? "cliproxy" : kind;
+        const seenLabels = new Set<string>();
+        const prepared = params.accounts.map((account) => {
+          const label =
+            connector === "native"
+              ? sanitizeSubscriptionLabel(account.label)
+              : safeCliproxyLabel(account.label);
+          if (
+            label !== account.label ||
+            (connector === "native" && label.startsWith("."))
+          ) {
+            throw new ControlError({
+              code: "bad_request",
+              message: "account label must already be normalized"
+            });
+          }
+          if (seenLabels.has(label)) {
+            throw new ControlError({
+              code: "bad_request",
+              message: `duplicate account label: ${label}`
+            });
+          }
+          seenLabels.add(label);
+          const directory =
+            connector === "native"
+              ? defaultSubscriptionAccountDirectory(kind as SubscriptionMode, env)
+              : cliproxyAuthDirectory(env);
+          const path = join(directory, `${label}.json`);
+          let credential = account.credential;
+          if (credential === undefined) {
+            if (!existsSync(path)) {
+              throw new ControlError({
+                code: "not_found",
+                message: `${kind}/${label} is not enrolled`
+              });
+            }
+            try {
+              credential = JSON.parse(readFileSync(path, "utf8")) as unknown;
+            } catch {
+              throw new ControlError({
+                code: "bad_request",
+                message: `${kind}/${label} has an invalid stored credential`
+              });
+            }
+          }
+          const blob =
+            connector === "native"
+              ? safeCredentialBlob(kind as SubscriptionMode, credential)
+              : safeCliproxyCredentialBlob(kind, credential);
+          const content = `${JSON.stringify(blob, null, 2)}\n`;
+          if (
+            connector === "native" &&
+            account.credential !== undefined &&
+            existsSync(path) &&
+            readFileSync(path, "utf8") !== content
+          ) {
+            throw new ControlError({
+              code: "conflict",
+              message: `${kind}/${label} is already enrolled with different credentials`
+            });
+          }
+          return {
+            label,
+            directory,
+            path,
+            content,
+            credentialProvided: account.credential !== undefined
+          };
+        });
+        await serializeMutation(async () => {
+          for (const entry of prepared) {
+            if (!entry.credentialProvided) {
+              if (!existsSync(entry.path)) {
+                throw new ControlError({
+                  code: "not_found",
+                  message: `${kind}/${entry.label} is not enrolled`
+                });
+              }
+              let stored: unknown;
+              try {
+                stored = JSON.parse(readFileSync(entry.path, "utf8")) as unknown;
+              } catch {
+                throw new ControlError({
+                  code: "bad_request",
+                  message: `${kind}/${entry.label} has an invalid stored credential`
+                });
+              }
+              const blob =
+                connector === "native"
+                  ? safeCredentialBlob(kind as SubscriptionMode, stored)
+                  : safeCliproxyCredentialBlob(kind, stored);
+              entry.content = `${JSON.stringify(blob, null, 2)}\n`;
+            } else if (
+              connector === "native" &&
+              existsSync(entry.path) &&
+              readFileSync(entry.path, "utf8") !== entry.content
+            ) {
+              throw new ControlError({
+                code: "conflict",
+                message: `${kind}/${entry.label} is already enrolled with different credentials`
+              });
+            }
+          }
+          const unchanged = prepared.every(
+            (entry) =>
+              existsSync(entry.path) &&
+              readFileSync(entry.path, "utf8") === entry.content
+          );
+          if (
+            unchanged &&
+            (currentConfig.providers as Record<string, unknown>)[provider] !== undefined
+          ) {
+            return;
+          }
+
+          const raw = parseYaml(currentDocument) as Record<string, unknown>;
+          const providers =
+            typeof raw.providers === "object" &&
+            raw.providers !== null &&
+            !Array.isArray(raw.providers)
+              ? { ...(raw.providers as Record<string, unknown>) }
+              : {};
+          providers[provider] ??= {};
+          raw.providers = providers;
+          const nextDocument = stringifyYaml(raw);
+          const nextConfig = parseConfigDocument(nextDocument);
+          const previousDocument = currentDocument;
+          const previousConfig = currentConfig;
+          const transaction = prepareAccountTransaction({
+            home,
+            configPath,
+            accountPaths: prepared.map((entry) => entry.path),
+            accountRoots: prepared.map((entry) => entry.directory),
+            kind,
+            provider,
+            labels: prepared.map((entry) => entry.label)
+          });
+          options.onAccountTransactionPhase?.("prepared");
+          let routerReplaced = false;
+          try {
+            for (const entry of prepared) {
+              mkdirSync(entry.directory, { recursive: true, mode: 0o700 });
+              chmodSync(entry.directory, 0o700);
+              writeFileAtomic(entry.path, entry.content, { mode: 0o600 });
+              chmodSync(entry.path, 0o600);
+            }
+            options.onAccountTransactionPhase?.("credentials-written");
+            await replaceRouter(nextConfig, nextDocument, {
+              write: true,
+              configRevision: true,
+              accountRevision: true,
+              beforeSwap: async () => {
+                markAccountTransactionCommitted(transaction);
+                if (connector === "cliproxy") await sidecar.refresh();
+                options.onAccountTransactionPhase?.("committed");
+              }
+            });
+            routerReplaced = true;
+            options.onAccountTransactionPhase?.("router-swapped");
+            try {
+              cleanupAccountTransaction(transaction);
+            } catch {
+              // A committed manifest is cleanup-only on the next daemon start.
+            }
+          } catch (error) {
+            const rollbackFailures: unknown[] = [];
+            try {
+              rollbackAccountTransaction(transaction, home);
+            } catch (rollbackError) {
+              rollbackFailures.push(rollbackError);
+            }
+            if (connector === "cliproxy") {
+              try {
+                await sidecar.refresh();
+              } catch (rollbackError) {
+                rollbackFailures.push(rollbackError);
+              }
+            }
+            if (routerReplaced) {
+              try {
+                await replaceRouter(previousConfig, previousDocument, {
+                  write: false
+                });
+              } catch (rollbackError) {
+                rollbackFailures.push(rollbackError);
+              }
+            }
+            if (rollbackFailures.length > 0) {
+              throw new AggregateError(
+                [error, ...rollbackFailures],
+                `could not activate ${kind}; rollback failed`
+              );
+            }
+            throw error;
+          }
+        });
+        return {
+          enrolled: prepared.map((entry) => ({
+            subscriptionKind: kind,
+            label: entry.label
+          })),
+          activated: true,
+          configPath,
+          configRevision: revisions.config,
+          accountRevision: revisions.accounts
+        };
       },
       "accounts.remove": async (params) => {
         const resolved = resolveAccountConnector(params.kind);
@@ -834,11 +1120,57 @@ export async function startRouteKitDaemon(
       },
       "doctor.run": async (_params, context) => {
         const providers = await activeRouter!.providerStatuses(context.signal);
+        const accounts = accountEntries(env);
+        const missingProviders = [
+          ...new Set(
+            accounts
+              .filter((entry) => {
+                const provider =
+                  entry.connector === "cliproxy"
+                    ? "cliproxy"
+                    : entry.subscriptionKind;
+                return currentConfig.providers[provider] === undefined;
+              })
+              .map((entry) => entry.subscriptionKind)
+          )
+        ];
+        const providerOnly = ["claude-code", "codex", "cliproxy"].filter(
+          (provider) =>
+            (currentConfig.providers as Record<string, unknown>)[provider] !== undefined &&
+            !accounts.some((entry) =>
+              provider === "cliproxy"
+                ? entry.connector === "cliproxy"
+                : entry.subscriptionKind === provider
+            )
+        );
+        const consistent = missingProviders.length === 0 && providerOnly.length === 0;
         return {
           checks: [
             { name: "canonical config", ok: existsSync(configPath), detail: configPath },
             { name: "control plane", ok: control !== undefined },
             { name: "model gateway", ok: proxy !== undefined, detail: dataUrl },
+            {
+              name: "account activation recovery",
+              ok: true,
+              detail:
+                accountRecovery.recovered > 0
+                  ? `recovered ${accountRecovery.recovered} interrupted operation(s)`
+                  : "clean"
+            },
+            {
+              name: "account/provider consistency",
+              ok: consistent,
+              detail: consistent
+                ? "consistent"
+                : [
+                    ...(missingProviders.length > 0
+                      ? [`routing disabled: ${missingProviders.join(", ")}`]
+                      : []),
+                    ...(providerOnly.length > 0
+                      ? [`credential missing: ${providerOnly.join(", ")}`]
+                      : [])
+                  ].join("; ")
+            },
             ...(wantsCliproxySidecar(currentConfig)
               ? [
                   {

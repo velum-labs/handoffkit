@@ -33,6 +33,7 @@ export type RouteKitControlMethod =
   | "accounts.list"
   | "accounts.status"
   | "accounts.enroll"
+  | "accounts.enrollActivate"
   | "accounts.remove"
   | "accounts.sync"
   | "accounts.usage"
@@ -58,6 +59,11 @@ export type RouteKitControlParams = {
     kind: "claude-code" | "codex";
     label: string;
     credential: unknown;
+  };
+  /** Atomically import connector credentials and enable their router provider. */
+  "accounts.enrollActivate": {
+    kind: string;
+    accounts: Array<{ label: string; credential?: unknown }>;
   };
   /** Registry kind or the raw kind returned by accounts.list for an unclassified file. */
   "accounts.remove": { kind: string; label: string };
@@ -145,8 +151,20 @@ export type RouteKitControlResults = {
       limits?: unknown;
     }>;
     revision: number;
+    recovery: {
+      state: "clean" | "recovered";
+      recovered: number;
+      cleaned: number;
+    };
   };
   "accounts.enroll": { enrolled: true; revision: number };
+  "accounts.enrollActivate": {
+    enrolled: Array<{ subscriptionKind: string; label: string }>;
+    activated: true;
+    configPath: string;
+    configRevision: number;
+    accountRevision: number;
+  };
   "accounts.remove": { removed: boolean; revision: number };
   "accounts.sync": { synced: true; revision: number };
   "accounts.usage": unknown;
@@ -179,6 +197,7 @@ const METHODS: ReadonlySet<string> = new Set<RouteKitControlMethod>([
   "accounts.list",
   "accounts.status",
   "accounts.enroll",
+  "accounts.enrollActivate",
   "accounts.remove",
   "accounts.sync",
   "accounts.usage",
@@ -195,6 +214,7 @@ export const MUTATING_ROUTEKIT_METHODS: ReadonlySet<RouteKitControlMethod> = new
   "config.import",
   "providers.set",
   "accounts.enroll",
+  "accounts.enrollActivate",
   "accounts.remove",
   "accounts.sync",
   "telemetry.set"
@@ -281,6 +301,19 @@ export function validateRouteKitParams<M extends RouteKitControlMethod>(
       requiredString(params, "label", method);
       if (params.credential === undefined) {
         throw new ControlError({ code: "bad_request", message: `${method} requires credential` });
+      }
+      break;
+    case "accounts.enrollActivate":
+      requiredString(params, "kind", method);
+      if (!Array.isArray(params.accounts) || params.accounts.length === 0) {
+        throw new ControlError({
+          code: "bad_request",
+          message: `${method} requires one or more accounts`
+        });
+      }
+      for (const account of params.accounts) {
+        const entry = record(account, method);
+        requiredString(entry, "label", method);
       }
       break;
     case "accounts.remove":

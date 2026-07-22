@@ -27,6 +27,17 @@ automatically enables the subscription provider in the effective router
 config; `accounts remove`, `list`, and `status` operate uniformly across all
 kinds.
 
+Enrollment and activation are one daemon-owned transaction. Native and
+CLIProxy OAuth run against disposable profiles first; the authenticated daemon
+then commits every account file, the provider config, both revisions, and the
+replacement router generation together. A failure restores the exact prior
+local state. If the daemon is interrupted after preparation, startup restores
+the private rollback vault before loading config or starting a sidecar/router.
+Retries of an already committed account/provider pair are no-ops. Transaction
+manifests contain paths, hashes, phases, and revision metadata only—credential
+values remain in mode-`0600` opaque rollback files and are deleted after commit
+or recovery.
+
 ## Connectors (implementation detail)
 
 The registry (`spec/registry/connectors.json`) declares which mechanism backs
@@ -45,6 +56,9 @@ profile, imports only that credential, and removes the temporary profile. It
 never replaces the user's normal Claude Code or Codex login. Use
 `accounts add <kind> --name <label>` only to import the current official CLI
 login instead.
+
+Router startup never imports an official CLI login implicitly. This keeps the
+daemon transaction as the sole RouteKit-owned enrollment write path.
 
 Pool selection policy lives on the provider:
 

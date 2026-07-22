@@ -40,10 +40,10 @@ contract. Product CLIs can wrap this module without owning account logic.
 - `export type { SubscriptionProxyClientOptions } from "./client.js";`
 - `export { collectSubscriptionUsage, DEFAULT_SUBSCRIPTION_USAGE_REFRESH_MS, openLocalSubscriptionUsage } from "./usage.js";`
 - `export type { SubscriptionUsageSource } from "./usage.js";`
-- `export { CLIPROXY_API_KEY_ENV, CLIPROXY_BASE_URL_ENV, CLIPROXY_HOME_ENV, CLIPROXY_PINNED_VERSION, cliproxyAssetName, cliproxyApiKey, cliproxyBaseUrl, cliproxyBinaryPath, cliproxyConfigPath, cliproxyHome, cliproxyManagedPort, cliproxyStatus, ensureCliproxyConfig, installCliproxy, spawnCliproxy } from "./cliproxy.js";`
+- `export { CLIPROXY_API_KEY_ENV, CLIPROXY_BASE_URL_ENV, CLIPROXY_HOME_ENV, CLIPROXY_PINNED_VERSION, cliproxyAssetName, cliproxyApiKey, cliproxyBaseUrl, cliproxyBinaryPath, cliproxyConfigPath, cliproxyHome, cliproxyManagedPort, cliproxyStatus, ensureCliproxyConfig, installCliproxy, spawnCliproxy, writeCliproxyLoginConfig } from "./cliproxy.js";`
 - `export type { CliproxyInstallResult, CliproxyStatus } from "./cliproxy.js";`
-- `export { accountStoreEntries, cliproxyAccountEntries, cliproxyAccountMatchesKind, loginCliproxyAccount, removeCliproxyAccount, resolveAccountKind } from "./connector.js";`
-- `export type { AccountStoreEntry, CliproxyAccountEntry, CliproxyLoginInvocation, CliproxyLoginOptions, ResolvedAccountKind } from "./connector.js";`
+- `export { accountStoreEntries, captureCliproxyLoginCredentials, cliproxyAccountEntries, cliproxyAccountMatchesKind, cliproxyAuthDirectory, cliproxyCredentialValid, loginCliproxyAccount, removeCliproxyAccount, resolveAccountKind } from "./connector.js";`
+- `export type { AccountStoreEntry, CapturedCliproxyCredential, CliproxyAccountEntry, CliproxyLoginInvocation, CliproxyLoginOptions, ResolvedAccountKind } from "./connector.js";`
 - `export { captureLoginCredential, claudeProfileKeychainService, parseAccountMode } from "./managed-login.js";`
 - `export type { ManagedAccountLoginInvocation, ManagedAccountLoginOptions, ManagedLoginKeychain } from "./managed-login.js";`
 - `export { snapshotsToUsage, SUBSCRIPTION_USAGE_PATH, subscriptionUsageResponseSchema } from "./wire.js";`

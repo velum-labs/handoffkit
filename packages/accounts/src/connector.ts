@@ -13,7 +13,8 @@
  * of truth for which connector backs which kind.
  */
 import { createHash } from "node:crypto";
-import { readdirSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 
 import {
@@ -31,7 +32,8 @@ import {
   cliproxyConfigPath,
   cliproxyHome,
   ensureCliproxyConfig,
-  installCliproxy
+  installCliproxy,
+  writeCliproxyLoginConfig
 } from "./cliproxy.js";
 import { defaultSubscriptionAccountDirectory } from "./credentials.js";
 
@@ -72,7 +74,7 @@ export type CliproxyAccountEntry = {
   credentialValid: boolean;
 };
 
-function cliproxyAuthDirectory(
+export function cliproxyAuthDirectory(
   env: Readonly<Record<string, string | undefined>>
 ): string {
   return join(cliproxyHome(env), "auth");
@@ -114,7 +116,7 @@ function expirationMillis(record: Record<string, unknown>): number | undefined {
   return nested === undefined ? undefined : expirationMillis(nested);
 }
 
-function cliproxyCredentialValid(
+export function cliproxyCredentialValid(
   parsed: Record<string, unknown>,
   type: string | undefined
 ): boolean {
@@ -272,6 +274,12 @@ export type CliproxyLoginOptions = {
   runLogin?: (invocation: CliproxyLoginInvocation) => Promise<number>;
 };
 
+export type CapturedCliproxyCredential = {
+  subscriptionKind: string;
+  label: string;
+  credential: Record<string, unknown>;
+};
+
 async function spawnCliproxyLogin(
   invocation: CliproxyLoginInvocation,
   env: Readonly<Record<string, string | undefined>>
@@ -285,6 +293,72 @@ async function spawnCliproxyLogin(
     throw new Error(`CLIProxyAPI login terminated by ${result.signal}`);
   }
   return result.exitCode ?? 1;
+}
+
+/**
+ * Run CLIProxyAPI OAuth against a disposable auth directory. The returned
+ * credential blobs exist only in memory until the authenticated daemon commits
+ * them together with provider activation.
+ */
+export async function captureCliproxyLoginCredentials(
+  kindInput: string,
+  options: CliproxyLoginOptions & { temporaryParent?: string } = {}
+): Promise<{ accounts: CapturedCliproxyCredential[] }> {
+  const resolved = resolveAccountKind(kindInput);
+  const flag = resolved.cliproxyLoginFlag ?? ACCOUNT_CONNECTORS[resolved.kind]?.cliproxyLoginFlag;
+  if (resolved.connector !== "cliproxy" || flag === undefined) {
+    throw new Error(`${resolved.kind} is not a cliproxy-backed subscription kind`);
+  }
+  const env = options.env ?? process.env;
+  const installed = await installCliproxy({
+    env,
+    ...(options.onProgress !== undefined ? { onProgress: options.onProgress } : {})
+  });
+  const temporaryHome = mkdtempSync(
+    join(options.temporaryParent ?? tmpdir(), "routekit-cliproxy-login-")
+  );
+  const isolatedEnv = {
+    ...env,
+    ROUTEKIT_CLIPROXY_HOME: temporaryHome
+  };
+  const configPath = join(temporaryHome, "config.yaml");
+  writeCliproxyLoginConfig(configPath, cliproxyAuthDirectory(isolatedEnv));
+  const invocation: CliproxyLoginInvocation = {
+    command: installed.binary,
+    args: [
+      "--config",
+      configPath,
+      flag,
+      ...(options.noBrowser === true ? ["-no-browser"] : [])
+    ]
+  };
+  try {
+    const code = await (options.runLogin !== undefined
+      ? options.runLogin(invocation)
+      : spawnCliproxyLogin(invocation, isolatedEnv));
+    if (code !== 0) throw new Error(`CLIProxyAPI login exited with code ${code}`);
+    const entries = cliproxyAccountEntries(isolatedEnv).filter((entry) =>
+      cliproxyAccountMatchesKind(entry, resolved.kind)
+    );
+    if (entries.length === 0) {
+      throw new Error("CLIProxyAPI login completed without adding an account");
+    }
+    return {
+      accounts: entries.map((entry) => {
+        const parsed = recordValue(JSON.parse(readFileSync(entry.path, "utf8")));
+        if (parsed === undefined) {
+          throw new Error("CLIProxyAPI login produced an invalid account file");
+        }
+        return {
+          subscriptionKind: resolved.kind,
+          label: entry.label,
+          credential: parsed
+        };
+      })
+    };
+  } finally {
+    rmSync(temporaryHome, { recursive: true, force: true });
+  }
 }
 
 /**

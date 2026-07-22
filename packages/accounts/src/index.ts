@@ -117,21 +117,26 @@ export {
   cliproxyStatus,
   ensureCliproxyConfig,
   installCliproxy,
-  spawnCliproxy
+  spawnCliproxy,
+  writeCliproxyLoginConfig
 } from "./cliproxy.js";
 export type { CliproxyInstallResult, CliproxyStatus } from "./cliproxy.js";
 
 // Account connectors: one login surface over native + cliproxy mechanisms
 export {
   accountStoreEntries,
+  captureCliproxyLoginCredentials,
   cliproxyAccountEntries,
   cliproxyAccountMatchesKind,
+  cliproxyAuthDirectory,
+  cliproxyCredentialValid,
   loginCliproxyAccount,
   removeCliproxyAccount,
   resolveAccountKind
 } from "./connector.js";
 export type {
   AccountStoreEntry,
+  CapturedCliproxyCredential,
   CliproxyAccountEntry,
   CliproxyLoginInvocation,
   CliproxyLoginOptions,

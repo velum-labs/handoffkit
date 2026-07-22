@@ -48,6 +48,20 @@ test("method-specific validators reject malformed mutations at the protocol edge
       }),
     /must be one of/
   );
+  assert.throws(
+    () => validateRouteKitParams("accounts.enrollActivate", {
+      kind: "gemini",
+      accounts: []
+    }),
+    /one or more accounts/
+  );
+  assert.deepEqual(
+    validateRouteKitParams("accounts.enrollActivate", {
+      kind: "codex",
+      accounts: [{ label: "work" }]
+    }),
+    { kind: "codex", accounts: [{ label: "work" }] }
+  );
 });
 
 test("dispatcher rejects unknown methods and deduplicates idempotent mutations", async () => {
