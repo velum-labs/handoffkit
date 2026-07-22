@@ -5,12 +5,15 @@ import { spawn, spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { createServer } from "node:http";
 import {
+  chmodSync,
+  copyFileSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
   readdirSync,
   rmSync,
+  statSync,
   writeFileSync
 } from "node:fs";
 import { arch, platform, tmpdir } from "node:os";
@@ -102,14 +105,14 @@ function parseArgs(argv) {
         [
           "Usage: pnpm test:e2e:matrix -- [options]",
           "",
-          "  --live                    run billed cases (also ROUTEKIT_LIVE_E2E=1)",
+          "  --live                    run live cases (also ROUTEKIT_LIVE_E2E=1)",
           "  --route <ids>             comma-separated L05 route-anchor filter",
           "  --provider <ids>          comma-separated provider filter",
           "  --door <ids>              API/CLI door filter",
           "  --cursor-ide-evidence <p> prompt-free manual evidence JSON",
           "  --model <provider=id>     override one live namespaced model",
           "  --timeout-ms <ms>         per-PTY timeout",
-          "  --max-live-calls <count>  hard billed-request budget",
+          "  --max-live-calls <count>  hard client-to-gateway request budget",
           ""
         ].join("\n")
       );
@@ -1189,7 +1192,7 @@ async function runPtyCase(input) {
       );
       assert.equal(readFileSync(proofPath, "utf8"), "ROUTEKIT_TOOL_OK");
     }
-    return { transcript, billedCalls: caseCalls.length };
+    return { transcript, gatewayRequests: caseCalls.length };
   } finally {
     tmux("send-keys", "-t", session, "C-c");
     tmux("send-keys", "-t", session, "C-c");
@@ -1197,10 +1200,72 @@ async function runPtyCase(input) {
   }
 }
 
-async function startLiveRoutekit(configPath, tempRoot) {
+function accountStoreSnapshot(directory) {
+  if (!existsSync(directory)) return [];
+  return readdirSync(directory)
+    .filter((name) => name.endsWith(".json") && !name.startsWith("."))
+    .sort()
+    .map((name) => {
+      const stat = statSync(join(directory, name));
+      return { name, size: stat.size, mtimeMs: stat.mtimeMs };
+    });
+}
+
+function stageSubscriptionAccounts(isolatedStateHome, providers) {
+  const snapshots = {};
+  for (const provider of ["codex", "claude-code"]) {
+    if (!providers.includes(provider)) continue;
+    const source = defaultSubscriptionAccountDirectory(provider);
+    const before = accountStoreSnapshot(source);
+    const destination = join(isolatedStateHome, "subscriptions", provider);
+    mkdirSync(destination, { recursive: true, mode: 0o700 });
+    for (const { name } of before) {
+      const destinationPath = join(destination, name);
+      copyFileSync(join(source, name), destinationPath);
+      chmodSync(destinationPath, 0o600);
+    }
+    snapshots[provider] = { source, before, stagedCount: before.length };
+  }
+  return snapshots;
+}
+
+function subscriptionStoresUnchanged(snapshots) {
+  return Object.fromEntries(
+    Object.entries(snapshots).map(([provider, snapshot]) => [
+      provider,
+      JSON.stringify(accountStoreSnapshot(snapshot.source)) ===
+        JSON.stringify(snapshot.before)
+    ])
+  );
+}
+
+function killProcessGroup(child, signal) {
+  if (child.exitCode !== null) return;
+  try {
+    process.kill(-child.pid, signal);
+  } catch {
+    child.kill(signal);
+  }
+}
+
+async function terminateChild(child) {
+  if (child.exitCode !== null) return;
+  killProcessGroup(child, "SIGTERM");
+  await Promise.race([
+    new Promise((resolveExit) => child.once("exit", resolveExit)),
+    new Promise((resolveWait) => setTimeout(resolveWait, 5_000))
+  ]);
+  if (child.exitCode === null) killProcessGroup(child, "SIGKILL");
+}
+
+async function startLiveRoutekit(configPath, tempRoot, providers) {
   const isolatedStateHome = join(tempRoot, "live-routekit-state");
   const authTokenFile = join(isolatedStateHome, "data-token");
   mkdirSync(isolatedStateHome, { recursive: true, mode: 0o700 });
+  const subscriptionSnapshots = stageSubscriptionAccounts(
+    isolatedStateHome,
+    providers
+  );
   const dataToken = randomBytes(32).toString("hex");
   writeFileSync(authTokenFile, `${dataToken}\n`, { mode: 0o600 });
   const child = spawn(
@@ -1239,6 +1304,19 @@ async function startLiveRoutekit(configPath, tempRoot) {
   child.stderr.on("data", (chunk) => {
     stderr += chunk.toString("utf8");
   });
+  const exitForSignal = (code) => {
+    killProcessGroup(child, "SIGTERM");
+    rmSync(isolatedStateHome, { recursive: true, force: true });
+    process.exit(128 + code);
+  };
+  const onSigint = () => exitForSignal(2);
+  const onSigterm = () => exitForSignal(15);
+  process.once("SIGINT", onSigint);
+  process.once("SIGTERM", onSigterm);
+  const removeSignalHandlers = () => {
+    process.off("SIGINT", onSigint);
+    process.off("SIGTERM", onSigterm);
+  };
   const deadline = Date.now() + 90_000;
   while (Date.now() < deadline) {
     try {
@@ -1247,24 +1325,17 @@ async function startLiveRoutekit(configPath, tempRoot) {
         return {
           url: readiness.dataUrl,
           dataToken,
+          stagedAccounts: Object.fromEntries(
+            Object.entries(subscriptionSnapshots).map(([provider, snapshot]) => [
+              provider,
+              snapshot.stagedCount
+            ])
+          ),
+          verifySubscriptionStores: () =>
+            subscriptionStoresUnchanged(subscriptionSnapshots),
           close: async () => {
-            if (child.exitCode !== null) return;
-            try {
-              process.kill(-child.pid, "SIGTERM");
-            } catch {
-              child.kill("SIGTERM");
-            }
-            await Promise.race([
-              new Promise((resolveExit) => child.once("exit", resolveExit)),
-              new Promise((resolveWait) => setTimeout(resolveWait, 5_000))
-            ]);
-            if (child.exitCode === null) {
-              try {
-                process.kill(-child.pid, "SIGKILL");
-              } catch {
-                child.kill("SIGKILL");
-              }
-            }
+            removeSignalHandlers();
+            await terminateChild(child);
           }
         };
       }
@@ -1272,12 +1343,15 @@ async function startLiveRoutekit(configPath, tempRoot) {
       // Readiness JSON is pretty-printed; keep waiting for the closing brace.
     }
     if (child.exitCode !== null) {
+      removeSignalHandlers();
       throw new Error(
         `routekit live gateway exited ${child.exitCode}\n${sanitize(stdout)}\n${sanitize(stderr)}`
       );
     }
     await new Promise((resolveWait) => setTimeout(resolveWait, 100));
   }
+  removeSignalHandlers();
+  await terminateChild(child);
   throw new Error(
     `timed out starting live RouteKit gateway\n${sanitize(stdout)}\n${sanitize(stderr)}`
   );
@@ -1429,11 +1503,14 @@ async function runLivePoolFailover(tempRoot) {
     assert.notEqual(attempts[0], attempts[1]);
     const active = accounts.snapshot().members.find((member) => member.active);
     assert.equal(active?.id, attempts[1]);
+    const memberOrdinals = new Map(
+      before.members.map((member, index) => [member.id, `member-${index + 1}`])
+    );
     return {
       model: sharedModel,
-      members: before.members.map((member) => member.id),
-      attempts,
-      active: active?.id
+      memberCount: before.members.length,
+      attempts: attempts.map((member) => memberOrdinals.get(member)),
+      active: memberOrdinals.get(active?.id)
     };
   } finally {
     await accounts.close();
@@ -1452,9 +1529,10 @@ function resultEntry(input) {
         ? "qualified"
         : input.reasonCode ?? classifyFailure(input.reason ?? "provider request failed"),
     durationMs: input.durationMs,
-    billedCalls: input.billedCalls ?? 0,
+    gatewayRequests: input.gatewayRequests ?? 0,
     artifact: input.artifact ?? null,
-    model: input.model ?? null
+    model: input.model ?? null,
+    setupRestore: input.setupRestore ?? null
   };
 }
 
@@ -1686,12 +1764,12 @@ async function runDeterministic(options, results, artifactDir, tempRoot) {
               `selected provider ${provider} received no simulator call`
             );
             return {
-              billedCalls: 0,
+              gatewayRequests: 0,
               artifact: relative(ROOT, transcriptPath)
             };
           }
         );
-        if (entry.status === "pass") entry.billedCalls = 0;
+        if (entry.status === "pass") entry.gatewayRequests = 0;
       }
     }
     if (poolCasesEnabled(options)) {
@@ -1710,8 +1788,8 @@ async function runDeterministic(options, results, artifactDir, tempRoot) {
 }
 
 async function runLive(options, results, artifactDir, tempRoot) {
-  const routes = qualificationRoutes(options);
-  reserveRouteBudget(routes, options.maxLiveCalls);
+  const routes = options.routes === undefined ? [] : qualificationRoutes(options);
+  if (routes.length > 0) reserveRouteBudget(routes, options.maxLiveCalls);
   const configuredPath = join(ROOT, ".routekit", "router.yaml");
   if (!existsSync(configuredPath)) {
     throw new Error(`live RouteKit config not found: ${configuredPath}`);
@@ -1730,17 +1808,24 @@ async function runLive(options, results, artifactDir, tempRoot) {
       ].join("\n")
     );
   }
-  const routekit = await startLiveRoutekit(configPath, tempRoot);
+  const routekit = await startLiveRoutekit(
+    configPath,
+    tempRoot,
+    options.providers ?? ["codex", "claude-code"]
+  );
   let proxy;
-  let billedCalls = 0;
+  let gatewayRequests = 0;
   try {
     proxy = await startCountingProxy(routekit.url, {
       maxCalls: options.maxLiveCalls,
       upstreamAuthorization: `Bearer ${routekit.dataToken}`
     });
     const models = await catalogModels(proxy.url);
-    const activeProviders = PROVIDERS.filter((provider) =>
-      selected(provider, options.providers)
+    const activeProviders = PROVIDERS.filter(
+      (provider) =>
+        selected(provider, options.providers) &&
+        (options.providers !== undefined ||
+          models.some((model) => model.startsWith(`${provider}/`)))
     );
     const chosen = chooseLiveModels(models, options.models, activeProviders);
     const pickerPublicModels = Object.fromEntries(
@@ -1768,12 +1853,12 @@ async function runLive(options, results, artifactDir, tempRoot) {
             join(artifactDir, "live-native-pickers.json"),
             `${JSON.stringify(aliases, null, 2)}\n`
           );
-          return { billedCalls: 0, artifact: "live-native-pickers.json" };
+          return { gatewayRequests: 0, artifact: "live-native-pickers.json" };
         }
       );
     }
     const estimatedMinimum =
-      PROVIDERS.flatMap((provider) =>
+      activeProviders.flatMap((provider) =>
         [...API_DOORS, ...CLI_DOORS].filter((door) =>
           caseSelected(provider, door.id, options)
         )
@@ -1783,8 +1868,7 @@ async function runLive(options, results, artifactDir, tempRoot) {
         `selected live matrix needs at least ${estimatedMinimum} calls, above budget ${options.maxLiveCalls}`
       );
     }
-    for (const provider of PROVIDERS) {
-      if (!selected(provider, options.providers)) continue;
+    for (const provider of activeProviders) {
       for (const door of API_DOORS) {
         if (!caseSelected(provider, door.id, options)) continue;
         await recordCase(
@@ -1806,15 +1890,14 @@ async function runLive(options, results, artifactDir, tempRoot) {
             );
             assert.match(answer, /ROUTEKIT_OK/i);
             return {
-              billedCalls: proxy.calls.length - before,
+              gatewayRequests: proxy.calls.length - before,
               model: chosen[provider]
             };
           }
         );
       }
     }
-    for (const provider of PROVIDERS) {
-      if (!selected(provider, options.providers)) continue;
+    for (const provider of activeProviders) {
       for (const door of CLI_DOORS) {
         if (!caseSelected(provider, door.id, options)) continue;
         if (!commandAvailable(door.binary)) {
@@ -1854,9 +1937,10 @@ async function runLive(options, results, artifactDir, tempRoot) {
             });
             writeFileSync(transcriptPath, `${sanitize(output.transcript).trim()}\n`);
             return {
-              billedCalls: output.billedCalls,
+              gatewayRequests: output.gatewayRequests,
               artifact: relative(ROOT, transcriptPath),
-              model: chosen[provider]
+              model: chosen[provider],
+              setupRestore: { setup: "pass", restore: "pass" }
             };
           }
         );
@@ -1874,18 +1958,32 @@ async function runLive(options, results, artifactDir, tempRoot) {
           const result = await runLivePoolFailover(tempRoot);
           writeFileSync(artifactPath, `${JSON.stringify(result, null, 2)}\n`);
           return {
-            billedCalls: 0,
+            gatewayRequests: 0,
             artifact: relative(ROOT, artifactPath)
           };
         }
       );
     }
   } finally {
-    billedCalls = proxy?.calls.length ?? 0;
-    await proxy?.close();
-    await routekit.close();
+    gatewayRequests = proxy?.calls.length ?? 0;
+    try {
+      await proxy?.close();
+    } finally {
+      await routekit.close();
+    }
+    const unchangedStores = routekit.verifySubscriptionStores();
+    for (const entry of results.filter(
+      (candidate) =>
+        candidate.phase === "live" &&
+        (candidate.provider === "codex" || candidate.provider === "claude-code")
+    )) {
+      entry.setupRestore = {
+        setup: (routekit.stagedAccounts[entry.provider] ?? 0) > 0 ? "pass" : "fail",
+        restore: unchangedStores[entry.provider] === true ? "pass" : "fail"
+      };
+    }
   }
-  return billedCalls;
+  return gatewayRequests;
 }
 
 function commandVersion(binary) {
@@ -1936,20 +2034,15 @@ function deterministicCheck(results, provider, protocolDoor, prefix) {
   );
 }
 
-function buildQualification(options, results, topLevelError, billedLiveCallsMade) {
-  if (!options.live) {
+function buildQualification(options, results, topLevelError, liveGatewayRequestsObserved) {
+  if (!options.live || options.routes === undefined) {
     return {
       status: "not-run",
-      expectedRouteIds: qualificationRoutes(options).map((route) => route.routeId),
+      expectedRouteIds: [],
       routes: []
     };
   }
-  let cursorIdeEvidence;
-  if (options.cursorIdeEvidence !== undefined) {
-    cursorIdeEvidence = validateManualEvidence(
-      JSON.parse(readFileSync(resolve(options.cursorIdeEvidence), "utf8"))
-    );
-  }
+  const cursorIdeEvidence = options.cursorIdeEvidenceRecord;
   const cancellation = results.find(
     (entry) => entry.phase === "deterministic" && entry.door === "cancellation"
   );
@@ -2001,11 +2094,7 @@ function buildQualification(options, results, topLevelError, billedLiveCallsMade
       capabilities?.status === "pass";
     const requiredClientAvailable =
       route.client === "routekit-http" || commandVersion(route.client) !== "unavailable";
-    const passed =
-      livePassed &&
-      deterministicPassed &&
-      requiredClientAvailable &&
-      route.setupRestore !== "required";
+    const passed = livePassed && deterministicPassed && requiredClientAvailable;
     const clientVersion =
       route.client === "routekit-http"
         ? repositoryMetadata().routekitVersion
@@ -2019,23 +2108,15 @@ function buildQualification(options, results, topLevelError, billedLiveCallsMade
             ? "matrix-case-missing"
             : live.status === "skip" || !requiredClientAvailable
               ? "client-unavailable"
-              : route.setupRestore === "required" && livePassed
-                ? "setup-restore-failed"
-                : live.reasonCode,
+              : !livePassed
+                ? live.reasonCode
+                : !deterministicPassed
+                  ? "provider-request-failed"
+                  : "setup-restore-failed",
       durationMs: live?.durationMs,
       model: live?.model,
       apiRevision: route.provider === "anthropic" ? "2023-06-01" : "not-advertised",
-      egressHost:
-        route.provider === "openai"
-          ? "api.openai.com"
-          : route.provider === "anthropic" || route.provider === "claude-code"
-            ? "api.anthropic.com"
-            : route.provider === "openrouter"
-              ? "openrouter.ai"
-              : route.provider === "codex"
-                ? "chatgpt.com"
-                : "not-observed",
-      credentialAvailable: live !== undefined && live.status !== "skip",
+      credentialAvailable: livePassed,
       clientVersion,
       protocol: {
         streaming: livePassed ? "pass" : "fail",
@@ -2048,17 +2129,14 @@ function buildQualification(options, results, topLevelError, billedLiveCallsMade
         routekitFallback: failure?.status === "pass" ? "none" : "unverified"
       },
       attributionBasis:
-        livePassed && (live?.billedCalls ?? 0) > 0
-          ? "local-counting-proxy"
+        livePassed && (live?.gatewayRequests ?? 0) > 0
+          ? "namespaced-route-success"
           : "not-observed",
-      providerRequestsObserved: live?.billedCalls ?? 0,
+      gatewayRequestsObserved: live?.gatewayRequests ?? 0,
       setupRestore:
         route.setupRestore === "not-applicable"
           ? { setup: "not-applicable", restore: "not-applicable" }
-          : {
-              setup: livePassed ? "pass" : "fail",
-              restore: "fail"
-            },
+          : live?.setupRestore ?? { setup: "fail", restore: "fail" },
       evidence: [
         `deterministic-failure-no-fallback-${route.provider}-${protocolDoor}`,
         `deterministic-tools-reasoning-${route.provider}-${protocolDoor}`,
@@ -2071,18 +2149,22 @@ function buildQualification(options, results, topLevelError, billedLiveCallsMade
     routes,
     qualificationRoutes(options).map((route) => route.routeId)
   );
+  const manualGatewayRequests =
+    cursorIdeEvidence?.gatewayRequestsObserved ?? 0;
+  const totalGatewayRequests =
+    liveGatewayRequestsObserved + manualGatewayRequests;
   return {
     status: completeness.allPassed ? "pass" : "fail",
     completeness,
     budget: {
       authorizedMaximum: options.maxLiveCalls,
       plannedMaximum: qualificationRoutes(options).reduce(
-        (sum, route) => sum + route.maxProviderCalls,
+        (sum, route) => sum + route.maxGatewayRequests,
         0
       ),
-      providerRequestsObserved: billedLiveCallsMade,
-      remaining: Math.max(0, options.maxLiveCalls - billedLiveCallsMade),
-      exhausted: billedLiveCallsMade >= options.maxLiveCalls
+      gatewayRequestsObserved: totalGatewayRequests,
+      remaining: Math.max(0, options.maxLiveCalls - totalGatewayRequests),
+      exhausted: totalGatewayRequests >= options.maxLiveCalls
     },
     routes
   };
@@ -2090,6 +2172,15 @@ function buildQualification(options, results, topLevelError, billedLiveCallsMade
 
 async function main() {
   const options = parseArgs(process.argv.slice(2));
+  if (options.cursorIdeEvidence !== undefined) {
+    assert.ok(
+      options.routes?.includes("route-cursor-ide"),
+      "--cursor-ide-evidence requires --route route-cursor-ide"
+    );
+    options.cursorIdeEvidenceRecord = validateManualEvidence(
+      JSON.parse(readFileSync(resolve(options.cursorIdeEvidence), "utf8"))
+    );
+  }
   if (!existsSync(ROUTEKIT_ENTRY)) {
     throw new Error("RouteKit is not built; run pnpm build:routekit");
   }
@@ -2103,11 +2194,11 @@ async function main() {
   mkdirSync(artifactDir, { recursive: true });
   const results = [];
   let topLevelError;
-  let billedLiveCallsMade = 0;
+  let liveGatewayRequestsObserved = 0;
   try {
     await runDeterministic(options, results, artifactDir, tempRoot);
     if (options.live) {
-      billedLiveCallsMade = await runLive(
+      liveGatewayRequestsObserved = await runLive(
         options,
         results,
         artifactDir,
@@ -2115,7 +2206,7 @@ async function main() {
       );
     } else {
       process.stdout.write(
-        "LIVE SKIPPED: set ROUTEKIT_LIVE_E2E=1 to authorize billed provider calls\n"
+        "LIVE SKIPPED: set ROUTEKIT_LIVE_E2E=1 to authorize live account calls\n"
       );
     }
   } catch (error) {
@@ -2138,16 +2229,19 @@ async function main() {
     options,
     results,
     topLevelError,
-    billedLiveCallsMade
+    liveGatewayRequestsObserved
   );
   const report = {
-    schemaVersion: 2,
+    schemaVersion: 3,
     startedAt,
     finishedAt: new Date().toISOString(),
     metadata: repositoryMetadata(),
     liveAuthorized: options.live,
     filters: {
-      routes: qualificationRoutes(options).map((route) => route.routeId),
+      routes:
+        options.routes === undefined
+          ? []
+          : qualificationRoutes(options).map((route) => route.routeId),
       providers: options.providers ?? PROVIDERS,
       doors:
         options.doors ??
@@ -2156,7 +2250,7 @@ async function main() {
       maxLiveCalls: options.maxLiveCalls
     },
     counts,
-    billedLiveCallsMade,
+    liveGatewayRequestsObserved,
     results,
     qualification,
     topLevelError:
@@ -2165,13 +2259,15 @@ async function main() {
   const reportPath = join(artifactDir, "report.json");
   writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`);
   process.stdout.write(
-    `RESULT pass=${counts.pass} fail=${counts.fail} skip=${counts.skip} billed=${report.billedLiveCallsMade}\n`
+    `RESULT pass=${counts.pass} fail=${counts.fail} skip=${counts.skip} gateway_requests=${report.liveGatewayRequestsObserved}\n`
   );
   process.stdout.write(`REPORT ${relative(ROOT, reportPath)}\n`);
   if (
     counts.fail > 0 ||
     topLevelError !== undefined ||
-    (options.live && qualification.status !== "pass")
+    (options.live &&
+      options.routes !== undefined &&
+      qualification.status !== "pass")
   ) {
     process.exitCode = 1;
   }

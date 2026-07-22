@@ -6,8 +6,9 @@ Run the credential-free matrix:
 pnpm test:e2e:matrix
 ```
 
-It exercises the configured provider classes (`openrouter`, `codex`, and
-`claude-code`) through the OpenAI Chat, Anthropic Messages, and Responses HTTP
+It exercises the configured provider classes (`openai`, `anthropic`,
+`openrouter`, `codex`, and `claude-code`) through the OpenAI Chat, Anthropic
+Messages, and Responses HTTP
 boundaries. It also launches every installed coding-agent CLI through the real
 `routekit` command in a tmux PTY. Each CLI case selects a non-default
 namespaced model, types a deterministic prompt, waits for a response, and
@@ -37,7 +38,7 @@ It covers an actual child `SIGKILL`, daemon startup recovery, injected
 connector failure, idempotent replay, and transaction-journal redaction without
 copying provider credentials into artifacts.
 
-## Live, billed mode
+## Live real-account mode
 
 Live calls are disabled unless explicitly authorized:
 
@@ -49,12 +50,16 @@ Live mode first reruns the deterministic matrix, then starts RouteKit with
 `.routekit/router.yaml`. Failure to discover any configured provider is a
 failure. An installed CLI that cannot complete is also a failure; a missing
 optional CLI is an explicit skip. Prompts and HTTP output limits are kept
-small. The default hard budget is 32 provider requests, including extra agent
-turns such as a tool result or OpenCode title generation.
+small. The default hard limit is 32 client-to-RouteKit model requests,
+including extra agent turns such as a tool result or OpenCode title generation.
+This is not an invoice or provider-egress counter: a provider backend can make
+bounded internal retries or same-kind subscription rotations after one gateway
+request. Authorize provider-account spend separately under the route's
+documented retry policy.
 
 Live mode repeats the native-picker assertions for configured Claude Code and
 Codex providers. Catalog checks do not issue model-generation requests and
-therefore add zero billed calls.
+therefore add zero live model requests.
 
 When `claude-code` and the `pool` door are selected, live mode also loads the
 real enrolled account set, injects a quota response for the first selected
@@ -92,7 +97,7 @@ route-cursor-ide,route-cursor-agent \
 
 `--route` cannot be combined with the lower-level `--provider` or `--door`
 filters. Prefer one route per invocation while diagnosing a failure. This keeps
-credential discovery and billed traffic attributable:
+credential discovery and live traffic attributable:
 
 ```bash
 ROUTEKIT_LIVE_E2E=1 pnpm test:e2e:matrix -- \
@@ -130,17 +135,23 @@ Never echo token values, inspect credential JSON, or copy account filenames
 into evidence. A missing key, client, login, account, or supported desktop is a
 route-level Fail with a fixed reason code.
 
-### Spend and failure controls
+### Request and spend controls
 
-Every route reserves a conservative maximum before live execution. The matrix
+Every route reserves a conservative gateway-request maximum before live execution. The matrix
 refuses to start if the selected routes cannot fit within
 `--max-live-calls`; the local counting proxy enforces the same cap at request
-time. API and subscription HTTP routes reserve one provider request each.
+time. API and subscription HTTP routes reserve one gateway request each.
 `cursor-agent` reserves two because a tool turn may require a continuation.
 The Cursor IDE reservation is consumed only when accepted manual evidence
 records observed custom-endpoint traffic.
 
-Deterministic checks run before billed traffic and prove:
+The cap does not observe provider-internal retries and must not be represented
+as a provider-request or billing limit. API routes have no RouteKit retry or
+fallback. Subscription retries and same-kind rotation remain bounded by the
+route contract; run those routes individually with an account-level spend
+authorization.
+
+Deterministic checks run before live traffic and prove:
 
 - streaming, tool-call, and reasoning transport for each selected protocol;
 - client cancellation propagates to the upstream response body;
@@ -170,22 +181,28 @@ ROUTEKIT_LIVE_E2E=1 pnpm test:e2e:matrix -- \
 ```
 
 The JSON must target `route-cursor-ide`, use only `pass` or `fail`, and contain
-the allowlisted fields accepted by `validateManualEvidence()`. The matrix
-rebuilds the route result from those fields; unknown fields, raw diagnostics,
+the allowlisted fields accepted by `validateManualEvidence()`. A Pass requires
+an available credential and versioned client, a namespaced model, all required
+capability/failure/setup/restore outcomes, no RouteKit fallback, one bounded
+gateway request, a fixed attribution basis, and safe evidence IDs. The matrix
+derives the final status from those fields; unknown fields, raw diagnostics,
 messages, and credential values are not serialized.
 
-For Codex, Claude Code, Cursor IDE, and `cursor-agent`, a response alone does
-not prove setup/restore. Qualification stays Fail until setup and exact restore
-are exercised and recorded. API-key routes correctly mark setup/restore as not
-applicable.
+For Codex and Claude Code, the live runner copies only the selected enrolled
+credential files into its mode-`0600` temporary RouteKit home, verifies the
+source account store is unchanged after shutdown, and removes the temporary
+home. Cursor clients use their isolated launcher state. A response alone does
+not prove setup/restore; every required setup and restore outcome must pass.
+API-key routes correctly mark setup/restore as not applicable.
 
 ## Artifacts and interpretation
 
 Each run writes a timestamped `report.json` and sanitized PTY transcripts under
 `.artifacts/routekit-e2e/`. This directory is ignored by Git. The report has
-exact pass/fail/skip counts, per-case duration and provider-request counts, and
-the total number of live model requests observed at the local counting proxy.
-Schema version 2 also records the exact Git SHA, RouteKit and client versions,
+exact pass/fail/skip counts, per-case duration and gateway-request counts, and
+the total number of client-to-RouteKit model requests observed at the local
+counting proxy.
+Schema version 3 also records the exact Git SHA, RouteKit and client versions,
 authorized budget, selected route anchors, fixed reason codes, route
 capabilities, billing basis, setup/restore outcomes, and completeness.
 PTY cases isolate RouteKit and XDG runtime state and disable CLI auto-updaters

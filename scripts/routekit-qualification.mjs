@@ -9,10 +9,11 @@ export const ROUTE_CASES = Object.freeze([
     credentialMode: "api-key",
     credentialReference: "OPENAI_API_KEY",
     protocolPath: "/v1/chat/completions",
+    egressHost: "api.openai.com",
     billingMode: "openai-api",
     aggregator: false,
     setupRestore: "not-applicable",
-    maxProviderCalls: 1
+    maxGatewayRequests: 1
   },
   {
     routeId: "route-anthropic-api",
@@ -22,10 +23,11 @@ export const ROUTE_CASES = Object.freeze([
     credentialMode: "api-key",
     credentialReference: "ANTHROPIC_API_KEY",
     protocolPath: "/v1/messages",
+    egressHost: "api.anthropic.com",
     billingMode: "anthropic-api",
     aggregator: false,
     setupRestore: "not-applicable",
-    maxProviderCalls: 1
+    maxGatewayRequests: 1
   },
   {
     routeId: "route-openrouter-api",
@@ -35,10 +37,11 @@ export const ROUTE_CASES = Object.freeze([
     credentialMode: "api-key",
     credentialReference: "OPENROUTER_API_KEY",
     protocolPath: "/v1/chat/completions",
+    egressHost: "openrouter.ai",
     billingMode: "openrouter-credits",
     aggregator: true,
     setupRestore: "not-applicable",
-    maxProviderCalls: 1
+    maxGatewayRequests: 1
   },
   {
     routeId: "route-codex-subscription",
@@ -48,10 +51,11 @@ export const ROUTE_CASES = Object.freeze([
     credentialMode: "enrolled-subscription",
     credentialReference: "codex",
     protocolPath: "/v1/responses",
+    egressHost: "chatgpt.com",
     billingMode: "codex-subscription",
     aggregator: false,
     setupRestore: "required",
-    maxProviderCalls: 1
+    maxGatewayRequests: 1
   },
   {
     routeId: "route-claude-code-subscription",
@@ -61,10 +65,11 @@ export const ROUTE_CASES = Object.freeze([
     credentialMode: "enrolled-subscription",
     credentialReference: "claude-code",
     protocolPath: "/v1/messages",
+    egressHost: "api.anthropic.com",
     billingMode: "claude-code-subscription",
     aggregator: false,
     setupRestore: "required",
-    maxProviderCalls: 1
+    maxGatewayRequests: 1
   },
   {
     routeId: "route-cursor-ide",
@@ -74,10 +79,11 @@ export const ROUTE_CASES = Object.freeze([
     credentialMode: "cursor-login-plus-selected-route",
     credentialReference: "cursor-desktop",
     protocolPath: "/v1/cursor/chat/completions",
+    egressHost: "api.openai.com",
     billingMode: "selected-route",
     aggregator: false,
     setupRestore: "required",
-    maxProviderCalls: 1,
+    maxGatewayRequests: 1,
     manual: true
   },
   {
@@ -88,10 +94,11 @@ export const ROUTE_CASES = Object.freeze([
     credentialMode: "cursor-login-plus-selected-route",
     credentialReference: "cursor-agent",
     protocolPath: "/v1/cursor/chat/completions",
+    egressHost: "api.openai.com",
     billingMode: "selected-route",
     aggregator: false,
     setupRestore: "required",
-    maxProviderCalls: 2
+    maxGatewayRequests: 2
   }
 ]);
 
@@ -99,6 +106,14 @@ export const ROUTE_IDS = Object.freeze(ROUTE_CASES.map((route) => route.routeId)
 
 const SAFE_OUTCOMES = new Set(["pass", "fail"]);
 const SAFE_CAPABILITY_OUTCOMES = new Set(["pass", "fail", "degraded", "not-applicable"]);
+const SAFE_ATTRIBUTION_BASES = new Set([
+  "namespaced-route-success",
+  "manual-custom-endpoint-observation",
+  "not-observed"
+]);
+const SAFE_EVIDENCE_ID = /^[a-z0-9][a-z0-9._-]{0,79}$/;
+const SAFE_MODEL_ID = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,159}$/;
+const SAFE_VERSION = /^[A-Za-z0-9][A-Za-z0-9.+() _/-]{0,159}$/;
 const SAFE_REASON_CODES = new Set([
   "qualified",
   "api-credential-unavailable",
@@ -150,10 +165,10 @@ export function classifyFailure(error) {
 }
 
 export function reserveRouteBudget(routes, authorizedMaximum) {
-  const plannedMaximum = routes.reduce((sum, route) => sum + route.maxProviderCalls, 0);
+  const plannedMaximum = routes.reduce((sum, route) => sum + route.maxGatewayRequests, 0);
   assert.ok(
     plannedMaximum <= authorizedMaximum,
-    `selected routes reserve ${plannedMaximum} provider requests, above budget ${authorizedMaximum}`
+    `selected routes reserve ${plannedMaximum} gateway requests, above budget ${authorizedMaximum}`
   );
   return {
     authorizedMaximum,
@@ -166,32 +181,105 @@ function capability(value, fallback = "fail") {
   return SAFE_CAPABILITY_OUTCOMES.has(value) ? value : fallback;
 }
 
-function safeVersion(value) {
-  if (typeof value !== "string" || value.trim() === "") return "unavailable";
-  return value.trim().replaceAll(/[\r\n\t]/g, " ").slice(0, 160);
-}
-
 function safeReasonCode(value, status) {
   if (status === "pass") return "qualified";
-  return SAFE_REASON_CODES.has(value) ? value : "provider-request-failed";
+  return SAFE_REASON_CODES.has(value) && value !== "qualified"
+    ? value
+    : "provider-request-failed";
+}
+
+function safeIdentifier(value, pattern) {
+  if (
+    typeof value !== "string" ||
+    !pattern.test(value) ||
+    /(?:sk-|bearer|secret|token|credential)/i.test(value) ||
+    value.includes("..")
+  ) {
+    return "unavailable";
+  }
+  return value;
+}
+
+function safeEvidenceIds(value) {
+  if (!Array.isArray(value)) return [];
+  return [
+    ...new Set(
+      value.filter(
+        (entry) =>
+          typeof entry === "string" &&
+          SAFE_EVIDENCE_ID.test(entry) &&
+          !/(?:secret|token|prompt|response|credential|authorization)/i.test(entry)
+      )
+    )
+  ];
+}
+
+function passRequirements(route, input, protocol, behavior, setupRestore) {
+  const reasoningPass =
+    protocol.reasoning === "pass" ||
+    (route.routeId.startsWith("route-cursor-") && protocol.reasoning === "degraded");
+  const setupRestorePass =
+    route.setupRestore === "not-applicable"
+      ? setupRestore.setup === "not-applicable" && setupRestore.restore === "not-applicable"
+      : setupRestore.setup === "pass" && setupRestore.restore === "pass";
+  const model = safeIdentifier(input.model, SAFE_MODEL_ID);
+  const modelPass =
+    model !== "unavailable" &&
+    model.includes("/") &&
+    (route.routeId.startsWith("route-cursor-") ||
+      model.startsWith(`${route.provider}/`));
+  const attributionPass =
+    route.manual === true
+      ? input.attributionBasis === "manual-custom-endpoint-observation"
+      : input.attributionBasis === "namespaced-route-success";
+  return (
+    input.credentialAvailable === true &&
+    modelPass &&
+    safeIdentifier(input.clientVersion, SAFE_VERSION) !== "unavailable" &&
+    protocol.streaming === "pass" &&
+    protocol.tools === "pass" &&
+    reasoningPass &&
+    behavior.cancellation === "pass" &&
+    behavior.failurePropagation === "pass" &&
+    behavior.routekitFallback === "none" &&
+    setupRestorePass &&
+    Number.isInteger(input.gatewayRequestsObserved) &&
+    input.gatewayRequestsObserved > 0 &&
+    input.gatewayRequestsObserved <= route.maxGatewayRequests &&
+    attributionPass &&
+    safeEvidenceIds(input.evidence).length > 0
+  );
 }
 
 export function makeRouteResult(route, input) {
   assert.ok(route !== undefined, "route descriptor is required");
-  const status = SAFE_OUTCOMES.has(input.status) ? input.status : "fail";
   const protocol = input.protocol ?? {};
   const behavior = input.behavior ?? {};
   const setupRestore = input.setupRestore ?? {};
+  const requestedPass = input.status === "pass";
+  const status = requestedPass && passRequirements(route, input, protocol, behavior, setupRestore)
+    ? "pass"
+    : "fail";
+  const reasonCode =
+    status === "pass"
+      ? "qualified"
+      : requestedPass && route.setupRestore === "required" &&
+          (setupRestore.setup !== "pass" || setupRestore.restore !== "pass")
+        ? "setup-restore-failed"
+        : safeReasonCode(input.reasonCode, "fail");
   return {
     routeId: route.routeId,
     status,
-    reasonCode: safeReasonCode(input.reasonCode, status),
+    reasonCode,
     durationMs: Number.isFinite(input.durationMs) ? Math.max(0, input.durationMs) : 0,
     provider: {
       id: route.provider,
-      model: safeVersion(input.model),
-      apiRevision: safeVersion(input.apiRevision ?? "not-advertised"),
-      egressHost: safeVersion(input.egressHost ?? "not-observed"),
+      model: safeIdentifier(input.model, SAFE_MODEL_ID),
+      apiRevision: safeIdentifier(
+        input.apiRevision ?? "not-advertised",
+        SAFE_VERSION
+      ),
+      egressHost: route.egressHost,
       aggregator: route.aggregator
     },
     credential: {
@@ -201,7 +289,7 @@ export function makeRouteResult(route, input) {
     },
     client: {
       id: route.client,
-      version: safeVersion(input.clientVersion),
+      version: safeIdentifier(input.clientVersion, SAFE_VERSION),
       integrationMode: route.manual === true ? "custom-endpoint-desktop" : route.door
     },
     protocol: {
@@ -220,9 +308,11 @@ export function makeRouteResult(route, input) {
     },
     billing: {
       mode: route.billingMode,
-      attributionBasis: safeVersion(input.attributionBasis ?? "request-observation"),
-      providerRequestsObserved: Number.isInteger(input.providerRequestsObserved)
-        ? Math.max(0, input.providerRequestsObserved)
+      attributionBasis: SAFE_ATTRIBUTION_BASES.has(input.attributionBasis)
+        ? input.attributionBasis
+        : "not-observed",
+      gatewayRequestsObserved: Number.isInteger(input.gatewayRequestsObserved)
+        ? Math.max(0, input.gatewayRequestsObserved)
         : 0
     },
     setupRestore: {
@@ -236,9 +326,7 @@ export function makeRouteResult(route, input) {
         route.setupRestore === "not-applicable" ? "not-applicable" : "fail"
       )
     },
-    evidence: Array.isArray(input.evidence)
-      ? input.evidence.filter((value) => typeof value === "string").map(safeVersion)
-      : []
+    evidence: safeEvidenceIds(input.evidence)
   };
 }
 
@@ -246,25 +334,35 @@ export function validateManualEvidence(raw, expectedRouteId = "route-cursor-ide"
   assert.equal(raw?.routeId, expectedRouteId, `manual evidence must target ${expectedRouteId}`);
   assert.ok(SAFE_OUTCOMES.has(raw.status), "manual evidence status must be pass or fail");
   assert.ok(
-    raw.status === "pass" || SAFE_REASON_CODES.has(raw.reasonCode),
+    raw.status === "pass" ||
+      (SAFE_REASON_CODES.has(raw.reasonCode) && raw.reasonCode !== "qualified"),
     "manual evidence failure needs a known reasonCode"
   );
-  return {
+  const route = routeById(expectedRouteId);
+  assert.ok(route !== undefined, `unknown manual evidence route ${expectedRouteId}`);
+  const normalized = {
     status: raw.status,
     reasonCode: safeReasonCode(raw.reasonCode, raw.status),
     durationMs: raw.durationMs,
     model: raw.model,
     apiRevision: raw.apiRevision,
-    egressHost: raw.egressHost,
     credentialAvailable: raw.credentialAvailable,
     clientVersion: raw.clientVersion,
     protocol: raw.protocol,
     behavior: raw.behavior,
     attributionBasis: raw.attributionBasis,
-    providerRequestsObserved: raw.providerRequestsObserved,
+    gatewayRequestsObserved: raw.gatewayRequestsObserved,
     setupRestore: raw.setupRestore,
-    evidence: raw.evidence
+    evidence: safeEvidenceIds(raw.evidence)
   };
+  if (raw.status === "pass") {
+    assert.equal(
+      makeRouteResult(route, normalized).status,
+      "pass",
+      "manual Pass evidence is missing required credential, client, capability, request, fallback, setup/restore, attribution, or evidence fields"
+    );
+  }
+  return normalized;
 }
 
 export function qualificationCompleteness(routes, expectedRouteIds = ROUTE_IDS) {

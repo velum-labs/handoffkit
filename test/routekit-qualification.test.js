@@ -72,6 +72,81 @@ test("manual evidence accepts only a known route and fixed outcomes", () => {
       }),
     /pass or fail/
   );
+  assert.throws(
+    () =>
+      validateManualEvidence({
+        routeId: "route-cursor-ide",
+        status: "fail",
+        reasonCode: "qualified"
+      }),
+    /known reasonCode/
+  );
+  assert.throws(
+    () =>
+      validateManualEvidence({
+        routeId: "route-cursor-ide",
+        status: "pass"
+      }),
+    /missing required/
+  );
+
+  const passing = validateManualEvidence({
+    routeId: "route-cursor-ide",
+    status: "pass",
+    credentialAvailable: true,
+    model: "openai/gpt-test",
+    clientVersion: "Cursor 1.0.0",
+    protocol: { streaming: "pass", tools: "pass", reasoning: "degraded" },
+    behavior: {
+      cancellation: "pass",
+      failurePropagation: "pass",
+      routekitFallback: "none"
+    },
+    attributionBasis: "manual-custom-endpoint-observation",
+    gatewayRequestsObserved: 1,
+    setupRestore: { setup: "pass", restore: "pass" },
+    evidence: ["desktop-route-observation"]
+  });
+  assert.equal(passing.status, "pass");
+});
+
+test("manual evidence cannot persist free-form secrets or exceed its route budget", () => {
+  const secret = "sk-secret-material";
+  assert.throws(
+    () =>
+      validateManualEvidence({
+        routeId: "route-cursor-ide",
+        status: "pass",
+        credentialAvailable: true,
+        model: secret,
+        clientVersion: secret,
+        protocol: { streaming: "pass", tools: "pass", reasoning: "degraded" },
+        behavior: {
+          cancellation: "pass",
+          failurePropagation: "pass",
+          routekitFallback: "none"
+        },
+        attributionBasis: "manual-custom-endpoint-observation",
+        gatewayRequestsObserved: 2,
+        setupRestore: { setup: "pass", restore: "pass" },
+        evidence: [secret, "private-prompt"]
+      }),
+    /missing required/
+  );
+  const failed = validateManualEvidence({
+    routeId: "route-cursor-ide",
+    status: "fail",
+    reasonCode: "client-unavailable",
+    model: secret,
+    clientVersion: secret,
+    evidence: [secret, "private-prompt", "manual-preflight"]
+  });
+  const serialized = JSON.stringify(
+    makeRouteResult(ROUTE_CASES.find((route) => route.routeId === "route-cursor-ide"), failed)
+  );
+  assert.doesNotMatch(serialized, new RegExp(secret));
+  assert.doesNotMatch(serialized, /private-prompt/);
+  assert.match(serialized, /manual-preflight/);
 });
 
 test("budget reservation and completeness are strict", () => {
@@ -83,6 +158,7 @@ test("budget reservation and completeness are strict", () => {
     makeRouteResult(route, {
       status: "pass",
       credentialAvailable: true,
+      model: `${route.provider}/test-model`,
       clientVersion: "test",
       protocol: { streaming: "pass", tools: "pass", reasoning: "pass" },
       behavior: {
@@ -93,7 +169,13 @@ test("budget reservation and completeness are strict", () => {
       setupRestore: {
         setup: route.setupRestore === "required" ? "pass" : "not-applicable",
         restore: route.setupRestore === "required" ? "pass" : "not-applicable"
-      }
+      },
+      attributionBasis:
+        route.manual === true
+          ? "manual-custom-endpoint-observation"
+          : "namespaced-route-success",
+      gatewayRequestsObserved: 1,
+      evidence: ["qualification-test"]
     })
   );
   assert.deepEqual(qualificationCompleteness(routes), {
