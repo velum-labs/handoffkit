@@ -150,13 +150,26 @@ test("concurrent product commands auto-start exactly one daemon and all use its 
     const attributed = JSON.parse(attributedJson.stdout) as {
       callId?: string;
       effectiveModel?: string;
+      nativeModel?: string;
       provider?: string;
       billingMode?: string;
+      retries?: { attempts?: number; total?: number; accountFailovers?: number };
+      cost?: { unknownUsage?: boolean; unknownCost?: boolean };
     };
     assert.equal(attributed.callId, callId);
     assert.equal(attributed.effectiveModel, "openai/mock-model");
+    assert.equal(attributed.nativeModel, "mock-model");
     assert.equal(attributed.provider, "openai");
     assert.equal(attributed.billingMode, "api_key");
+    assert.deepEqual(attributed.retries, {
+      attempts: 1,
+      total: 0,
+      accountFailovers: 0
+    });
+    assert.deepEqual(attributed.cost, {
+      unknownUsage: true,
+      unknownCost: true
+    });
     assert.doesNotMatch(attributedJson.stdout, /test/);
     const attributedHuman = await run(
       ["calls", "inspect", callId],

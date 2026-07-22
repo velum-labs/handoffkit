@@ -198,6 +198,28 @@ test("singleton daemon exposes authenticated control and a stable reloadable dat
     assert.equal(rejectedInspection.effectiveModel, "openai/missing-model");
     assert.equal(rejectedInspection.provider, "openai");
     assert.equal(rejectedInspection.error?.kind, "validation_error");
+    const embedding = await fetch(`${beforeUrl}/v1/embeddings`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${dataToken}`
+      },
+      body: JSON.stringify({
+        model: "openai/mock-model",
+        input: "embed this"
+      })
+    });
+    assert.equal(embedding.status, 200);
+    const embeddingCallId = embedding.headers.get("x-routekit-model-call-id");
+    assert.ok(embeddingCallId);
+    await embedding.text();
+    const embeddingInspection = await client.call("calls.inspect", {
+      callId: embeddingCallId
+    });
+    assert.equal(embeddingInspection.effectiveModel, "openai/mock-model");
+    assert.equal(embeddingInspection.nativeModel, "mock-model");
+    assert.equal(embeddingInspection.provider, "openai");
+    assert.equal(embeddingInspection.billingMode, "api_key");
     await assert.rejects(
       client.call("calls.inspect", { callId: "model_call_missing" }),
       (error: unknown) =>

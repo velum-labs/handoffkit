@@ -43,6 +43,50 @@ test("ignores embedding calls when reconstructing chat trajectories", () => {
   assert.equal(finalOutput, "");
 });
 
+test("a trailing embedding call does not erase the preceding chat trajectory", () => {
+  const capture = createTrajectoryCapture();
+  const startedAt = new Date().toISOString();
+  capture.sink.onModelCallRaw?.(
+    {
+      callId: "chat",
+      dialect: "openai-chat",
+      requestedModel: "m",
+      model: "m",
+      stream: false,
+      requestBody: { messages: [{ role: "user", content: "hello" }] },
+      startedAt
+    },
+    {
+      statusCode: 200,
+      responseBody: Buffer.from(
+        JSON.stringify({
+          choices: [{ message: { role: "assistant", content: "answer" } }]
+        })
+      ),
+      durationMs: 1
+    }
+  );
+  capture.sink.onModelCallRaw?.(
+    {
+      callId: "embedding",
+      dialect: "openai-embeddings",
+      requestedModel: "e",
+      model: "e",
+      stream: false,
+      requestBody: { input: "hello" },
+      startedAt
+    },
+    {
+      statusCode: 200,
+      responseBody: Buffer.from('{"data":[{"embedding":[0.1]}]}'),
+      durationMs: 1
+    }
+  );
+  const trajectory = capture.reconstruct();
+  assert.equal(trajectory.finalOutput, "answer");
+  assert.equal(trajectory.steps.at(-1)?.text, "answer");
+});
+
 test("reconstructs an openai-chat tool loop into steps", () => {
   const { steps, finalOutput } = feed(
     "openai-chat",

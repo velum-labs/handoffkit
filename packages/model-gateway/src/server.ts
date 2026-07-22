@@ -194,7 +194,7 @@ function resolveNativeModelRoute(
   return route;
 }
 
-function initialAttribution(
+export function initialAttribution(
   backend: Backend,
   requested: string | undefined,
   nativeProvider?: "claude-code" | "codex"
@@ -204,7 +204,9 @@ function initialAttribution(
   const slash = effectiveModel.indexOf("/");
   const provider =
     route?.provider ??
-    (slash > 0 ? effectiveModel.slice(0, slash) : "unknown");
+    (slash > 0
+      ? effectiveModel.slice(0, slash)
+      : nativeProvider ?? "unknown");
   const nativeModel =
     route?.nativeId ??
     (slash > 0 ? effectiveModel.slice(slash + 1) : effectiveModel);

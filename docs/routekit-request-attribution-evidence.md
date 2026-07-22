@@ -45,18 +45,19 @@ the separate sanitized real-account qualification matrix.
 
 - Subscription pool tests force a same-seat retry followed by an alternate
   seat and assert opaque, stable-within-process seat references.
-- Compound-operation tests prove successful tool-loop steps are not mislabeled
-  as retries or seat failovers.
-- Failed model selection and embeddings tests prove their correlation IDs remain
-  inspectable.
+- The request-accounting unit test feeds two successful provider-operation IDs
+  through the collector and proves they are not mislabeled as retries or seat
+  failovers.
+- Daemon integration tests prove failed model selection and embeddings
+  correlation IDs remain inspectable.
 - Provenance tests inject a credential-shaped secret into a thrown upstream
   error and assert the record contains only the safe normalized failure.
 - Call-store tests inject credential and source-path fields into internal
   metadata and assert the public projection drops them.
 - Control protocol tests reject a missing `callId`.
-- Model-fusion protocol tests validate and reject malformed nested attribution
-  metadata without
-  changing the top-level `model-call-record.v1` schema.
+- Model-fusion protocol tests accept canonical nested attribution metadata
+  through the schema's existing open `metadata` extension point without
+  changing compatibility or the top-level `model-call-record.v1` schema.
 - Capacity and TTL tests prove deterministic eviction of stale call records.
 
 ## Repository verification

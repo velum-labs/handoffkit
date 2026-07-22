@@ -182,19 +182,6 @@ test("model-call metadata accepts sanitized RouteKit request attribution", () =>
   };
   assertModelCallRecordV1(attributed);
   assertModelFusionRecord(attributed);
-  assert.throws(
-    () =>
-      assertModelCallRecordV1({
-        ...attributed,
-        metadata: {
-          attribution: {
-            ...(attributed.metadata.attribution as Record<string, unknown>),
-            billing_mode: "credential"
-          }
-        }
-      }),
-    /billing_mode/
-  );
 });
 
 test("harness candidate metadata accepts nested microVM hardening evidence", () => {

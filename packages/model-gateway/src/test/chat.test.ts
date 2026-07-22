@@ -6,7 +6,11 @@ import { test } from "node:test";
 import { OpenAiBackend } from "../backend.js";
 import { MODEL_CALL_ID_HEADER } from "../provenance.js";
 import type { ModelCallRecord } from "../provenance.js";
-import { collectAttribution, startGateway } from "../server.js";
+import {
+  collectAttribution,
+  initialAttribution,
+  startGateway
+} from "../server.js";
 
 /**
  * M1 coverage: the OpenAI chat surface against a mock upstream. No mlx process
@@ -172,6 +176,34 @@ test("compound provider operations are not counted as retries", () => {
   });
   assert.deepEqual(attribution.snapshot()?.retries, 2);
   assert.deepEqual(attribution.snapshot()?.account_failovers, 1);
+});
+
+test("rejected bare native aliases retain subscription attribution", () => {
+  const backend = {
+    defaultModel: undefined,
+    resolveModelRoute: () => undefined,
+    chat: async () => new Response("{}"),
+    models: async () => new Response("{}"),
+    embeddings: async () => new Response("{}")
+  };
+  assert.deepEqual(
+    initialAttribution(backend, "missing-codex-model", "codex"),
+    {
+      effective_model: "missing-codex-model",
+      native_model: "missing-codex-model",
+      provider: "codex",
+      billing_mode: "subscription"
+    }
+  );
+  assert.deepEqual(
+    initialAttribution(backend, "missing-claude-model", "claude-code"),
+    {
+      effective_model: "missing-claude-model",
+      native_model: "missing-claude-model",
+      provider: "claude-code",
+      billing_mode: "subscription"
+    }
+  );
 });
 
 test("embeddings receive a call id and sanitized attribution record", async () => {

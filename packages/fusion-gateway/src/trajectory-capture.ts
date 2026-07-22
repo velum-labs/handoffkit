@@ -460,8 +460,13 @@ function finalOutputForCall(call: RawCall): string {
  * the whole trajectory in one pass.
  */
 export function reconstructTrajectory(calls: readonly RawCall[]): CapturedTrajectory {
-  const successful = calls.filter((call) => call.statusCode >= 200 && call.statusCode < 300);
-  const source = successful.at(-1) ?? calls.at(-1);
+  const trajectoryCalls = calls.filter(
+    (call) => call.dialect !== "openai-embeddings"
+  );
+  const successful = trajectoryCalls.filter(
+    (call) => call.statusCode >= 200 && call.statusCode < 300
+  );
+  const source = successful.at(-1) ?? trajectoryCalls.at(-1);
   if (source === undefined) return { steps: [], finalOutput: "" };
   const steps = stepsForCall(source);
   const finalOutput = finalOutputForCall(source);
