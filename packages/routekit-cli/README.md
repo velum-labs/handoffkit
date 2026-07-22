@@ -112,7 +112,7 @@ RouteKit's public first-launch set is:
   Cursor's custom OpenAI endpoint.
 
 Read the
-[per-route credential, billing, egress, failover, and limitation disclosures](../../apps/docs/content/docs/reference/routes-and-billing.mdx)
+[per-route credential, billing, egress, failover, and limitation disclosures](https://fusionkit.velum-labs.com/docs/reference/routes-and-billing)
 before enabling a route. OpenRouter is an aggregator; API-key and subscription
 routes have different billing and quota boundaries.
 
