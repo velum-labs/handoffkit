@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readdirSync } from "node:fs";
+import { mkdirSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
 
 import type { SubscriptionMode } from "@routekit/registry";
@@ -63,7 +63,9 @@ export async function resolveSubscriptionAccounts(
         source.canonicalPath ?? defaultSubscriptionCredentialPath(mode)
       );
       return {
-        paths: existsSync(canonical) ? [canonical] : [],
+        // The credential loader owns file/keychain fallback and will report a
+        // precise error when neither source exists.
+        paths: [canonical],
         stateDirectory: directory
       };
     }

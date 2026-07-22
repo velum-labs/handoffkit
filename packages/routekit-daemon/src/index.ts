@@ -358,7 +358,7 @@ export async function startRouteKitDaemon(
   });
   let accountRecovery;
   try {
-    accountRecovery = recoverAccountTransactions(home, configPath);
+    accountRecovery = recoverAccountTransactions(home);
   } catch (error) {
     authority.release();
     throw error;
@@ -462,7 +462,12 @@ export async function startRouteKitDaemon(
     const replaceRouter = async (
       nextConfig: RouterConfig,
       nextDocument: string,
-      input: { write: boolean; configRevision?: boolean; accountRevision?: boolean }
+      input: {
+        write: boolean;
+        configRevision?: boolean;
+        accountRevision?: boolean;
+        beforeSwap?: () => void | Promise<void>;
+      }
     ): Promise<void> => {
       // Sidecar reconcile runs before the generation commits; any failure
       // below must put the sidecar back to the still-live currentConfig.
@@ -486,6 +491,7 @@ export async function startRouteKitDaemon(
       try {
         if (input.write) writeRouterConfig(configPath, nextConfig);
         writeRevisions(home, nextRevisions);
+        await input.beforeSwap?.();
       } catch (error) {
         if (input.write) {
           writeFileAtomic(configPath, previousDocument, { mode: 0o600 });
@@ -858,9 +864,48 @@ export async function startRouteKitDaemon(
               message: `${kind}/${label} is already enrolled with different credentials`
             });
           }
-          return { label, directory, path, content };
+          return {
+            label,
+            directory,
+            path,
+            content,
+            credentialProvided: account.credential !== undefined
+          };
         });
         await serializeMutation(async () => {
+          for (const entry of prepared) {
+            if (!entry.credentialProvided) {
+              if (!existsSync(entry.path)) {
+                throw new ControlError({
+                  code: "not_found",
+                  message: `${kind}/${entry.label} is not enrolled`
+                });
+              }
+              let stored: unknown;
+              try {
+                stored = JSON.parse(readFileSync(entry.path, "utf8")) as unknown;
+              } catch {
+                throw new ControlError({
+                  code: "bad_request",
+                  message: `${kind}/${entry.label} has an invalid stored credential`
+                });
+              }
+              const blob =
+                connector === "native"
+                  ? safeCredentialBlob(kind as SubscriptionMode, stored)
+                  : safeCliproxyCredentialBlob(kind, stored);
+              entry.content = `${JSON.stringify(blob, null, 2)}\n`;
+            } else if (
+              connector === "native" &&
+              existsSync(entry.path) &&
+              readFileSync(entry.path, "utf8") !== entry.content
+            ) {
+              throw new ControlError({
+                code: "conflict",
+                message: `${kind}/${entry.label} is already enrolled with different credentials`
+              });
+            }
+          }
           const unchanged = prepared.every(
             (entry) =>
               existsSync(entry.path) &&
@@ -890,6 +935,7 @@ export async function startRouteKitDaemon(
             home,
             configPath,
             accountPaths: prepared.map((entry) => entry.path),
+            accountRoots: prepared.map((entry) => entry.directory),
             kind,
             provider,
             labels: prepared.map((entry) => entry.label)
@@ -904,16 +950,18 @@ export async function startRouteKitDaemon(
               chmodSync(entry.path, 0o600);
             }
             options.onAccountTransactionPhase?.("credentials-written");
-            if (connector === "cliproxy") await sidecar.refresh();
             await replaceRouter(nextConfig, nextDocument, {
               write: true,
               configRevision: true,
-              accountRevision: true
+              accountRevision: true,
+              beforeSwap: async () => {
+                markAccountTransactionCommitted(transaction);
+                if (connector === "cliproxy") await sidecar.refresh();
+                options.onAccountTransactionPhase?.("committed");
+              }
             });
             routerReplaced = true;
             options.onAccountTransactionPhase?.("router-swapped");
-            markAccountTransactionCommitted(transaction);
-            options.onAccountTransactionPhase?.("committed");
             try {
               cleanupAccountTransaction(transaction);
             } catch {
@@ -922,7 +970,7 @@ export async function startRouteKitDaemon(
           } catch (error) {
             const rollbackFailures: unknown[] = [];
             try {
-              rollbackAccountTransaction(transaction, home, configPath);
+              rollbackAccountTransaction(transaction, home);
             } catch (rollbackError) {
               rollbackFailures.push(rollbackError);
             }

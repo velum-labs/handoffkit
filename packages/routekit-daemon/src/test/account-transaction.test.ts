@@ -56,7 +56,7 @@ test("prepared account transactions restore exact prior files without secrets in
     writeFileSync(config, "providers:\n  openai: {}\n  codex: {}\n");
     writeFileSync(revisions, '{"config":3,"accounts":4,"daemon":1}\n');
 
-    assert.deepEqual(recoverAccountTransactions(home, config), {
+    assert.deepEqual(recoverAccountTransactions(home), {
       recovered: 1,
       cleaned: 0
     });
@@ -91,7 +91,7 @@ test("committed transactions preserve new state and only clean rollback data", (
     writeFileSync(config, "providers:\n  cliproxy: {}\n");
     markAccountTransactionCommitted(transaction);
 
-    assert.deepEqual(recoverAccountTransactions(home, config), {
+    assert.deepEqual(recoverAccountTransactions(home), {
       recovered: 0,
       cleaned: 1
     });
@@ -112,7 +112,7 @@ test("orphaned pre-prepare transaction directories are safe cleanup only", () =>
   writeFileSync(join(orphan, "backup-0.bin"), "opaque");
   writeFileSync(config, "providers: {}\n");
   try {
-    assert.deepEqual(recoverAccountTransactions(home, config), {
+    assert.deepEqual(recoverAccountTransactions(home), {
       recovered: 0,
       cleaned: 1
     });
@@ -169,7 +169,7 @@ test("SIGKILL after account/config writes is rolled back from the prepared journ
     assert.equal(result.signal, "SIGKILL");
     assert.equal(existsSync(account), true);
 
-    assert.deepEqual(recoverAccountTransactions(home, config), {
+    assert.deepEqual(recoverAccountTransactions(home), {
       recovered: 1,
       cleaned: 0
     });

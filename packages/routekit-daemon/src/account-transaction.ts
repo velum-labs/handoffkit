@@ -15,6 +15,7 @@ import { writeFileAtomic } from "@routekit/runtime";
 
 type TransactionFile = {
   role: "account" | "config" | "revisions";
+  root?: string;
   relativePath?: string;
   existed: boolean;
   backup?: string;
@@ -29,6 +30,7 @@ type AccountTransactionManifest = {
   kind: string;
   provider: string;
   labels: string[];
+  configPath: string;
   files: TransactionFile[];
 };
 
@@ -58,17 +60,17 @@ function hash(value: Buffer): string {
   return createHash("sha256").update(value).digest("hex");
 }
 
-function accountRelativePath(home: string, path: string): string {
-  const normalizedHome = resolve(home);
+function accountRelativePath(root: string, path: string): string {
+  const normalizedRoot = resolve(root);
   const normalizedPath = resolve(path);
-  const value = relative(normalizedHome, normalizedPath);
+  const value = relative(normalizedRoot, normalizedPath);
   if (
     value.length === 0 ||
     isAbsolute(value) ||
     value === ".." ||
     value.startsWith(`..${sep}`)
   ) {
-    throw new Error("account transaction target must be inside RouteKit home");
+    throw new Error("account transaction target must be inside its account root");
   }
   return value;
 }
@@ -76,15 +78,15 @@ function accountRelativePath(home: string, path: string): string {
 function targetPath(
   file: TransactionFile,
   home: string,
-  configPath: string
+  manifest: AccountTransactionManifest
 ): string {
-  if (file.role === "config") return configPath;
+  if (file.role === "config") return manifest.configPath;
   if (file.role === "revisions") return revisionsPath(home);
-  if (typeof file.relativePath !== "string") {
+  if (typeof file.root !== "string" || typeof file.relativePath !== "string") {
     throw new Error("account transaction manifest has no account path");
   }
-  const path = resolve(home, file.relativePath);
-  accountRelativePath(home, path);
+  const path = resolve(file.root, file.relativePath);
+  accountRelativePath(file.root, path);
   return path;
 }
 
@@ -104,6 +106,8 @@ function parseManifest(directory: string): AccountTransactionManifest {
     (parsed.state !== "prepared" && parsed.state !== "committed") ||
     typeof parsed.kind !== "string" ||
     typeof parsed.provider !== "string" ||
+    typeof parsed.configPath !== "string" ||
+    !isAbsolute(parsed.configPath) ||
     !Array.isArray(parsed.labels) ||
     !parsed.labels.every((label) => typeof label === "string") ||
     !Array.isArray(parsed.files)
@@ -117,6 +121,7 @@ export function prepareAccountTransaction(input: {
   home: string;
   configPath: string;
   accountPaths: string[];
+  accountRoots?: string[];
   kind: string;
   provider: string;
   labels: string[];
@@ -128,16 +133,34 @@ export function prepareAccountTransaction(input: {
   const directory = join(root, id);
   mkdirSync(directory, { mode: 0o700 });
   chmodSync(directory, 0o700);
+  const roots = [...new Set([input.home, ...(input.accountRoots ?? [])])].map(
+    (root) => resolve(root)
+  );
   const descriptors: Array<{
     role: TransactionFile["role"];
     path: string;
+    root?: string;
     relativePath?: string;
   }> = [
-    ...[...new Set(input.accountPaths)].map((path) => ({
-      role: "account" as const,
-      path,
-      relativePath: accountRelativePath(input.home, path)
-    })),
+    ...[...new Set(input.accountPaths)].map((path) => {
+      const root = roots.find((candidate) => {
+        try {
+          accountRelativePath(candidate, path);
+          return true;
+        } catch {
+          return false;
+        }
+      });
+      if (root === undefined) {
+        throw new Error("account transaction target has no allowed account root");
+      }
+      return {
+        role: "account" as const,
+        path,
+        root,
+        relativePath: accountRelativePath(root, path)
+      };
+    }),
     { role: "config" as const, path: input.configPath },
     { role: "revisions" as const, path: revisionsPath(input.home) }
   ];
@@ -146,6 +169,7 @@ export function prepareAccountTransaction(input: {
       if (!existsSync(descriptor.path)) {
         return {
           role: descriptor.role,
+          ...(descriptor.root !== undefined ? { root: descriptor.root } : {}),
           ...(descriptor.relativePath !== undefined
             ? { relativePath: descriptor.relativePath }
             : {}),
@@ -159,6 +183,7 @@ export function prepareAccountTransaction(input: {
       const bytes = readFileSync(backupPath);
       return {
         role: descriptor.role,
+        ...(descriptor.root !== undefined ? { root: descriptor.root } : {}),
         ...(descriptor.relativePath !== undefined
           ? { relativePath: descriptor.relativePath }
           : {}),
@@ -175,6 +200,7 @@ export function prepareAccountTransaction(input: {
       kind: input.kind,
       provider: input.provider,
       labels: [...input.labels],
+      configPath: resolve(input.configPath),
       files
     };
     // The manifest is the prepare record and is deliberately written only
@@ -189,11 +215,10 @@ export function prepareAccountTransaction(input: {
 
 function restorePreparedTransaction(
   transaction: PreparedAccountTransaction,
-  home: string,
-  configPath: string
+  home: string
 ): void {
   for (const file of transaction.manifest.files) {
-    const path = targetPath(file, home, configPath);
+    const path = targetPath(file, home, transaction.manifest);
     if (!file.existed) {
       rmSync(path, { force: true });
       continue;
@@ -214,10 +239,9 @@ function restorePreparedTransaction(
 
 export function rollbackAccountTransaction(
   transaction: PreparedAccountTransaction,
-  home: string,
-  configPath: string
+  home: string
 ): void {
-  restorePreparedTransaction(transaction, home, configPath);
+  restorePreparedTransaction(transaction, home);
   cleanupAccountTransaction(transaction);
 }
 
@@ -248,8 +272,7 @@ export function cleanupAccountTransaction(
  * is started.
  */
 export function recoverAccountTransactions(
-  home: string,
-  configPath: string
+  home: string
 ): AccountTransactionRecovery {
   const root = transactionsRoot(home);
   if (!existsSync(root)) return { recovered: 0, cleaned: 0 };
@@ -265,7 +288,7 @@ export function recoverAccountTransactions(
     const manifest = parseManifest(directory);
     const transaction = { directory, manifest };
     if (manifest.state === "prepared") {
-      restorePreparedTransaction(transaction, home, configPath);
+      restorePreparedTransaction(transaction, home);
       recovered += 1;
     } else {
       cleaned += 1;
