@@ -8,6 +8,7 @@ import type { Command } from "commander";
 import { routekitClient } from "../client.js";
 import { migrateLegacyRouterConfig } from "../config.js";
 import { routekitToolRegistry } from "../launch.js";
+import { isLaunchToolId } from "../launch-support.js";
 import { configOverride, loaded } from "./context.js";
 
 function installCommand(binary: string): string {
@@ -18,8 +19,6 @@ function installCommand(binary: string): string {
       return "npm install -g @anthropic-ai/claude-code";
     case "cursor-agent":
       return "curl https://cursor.com/install -fsS | bash";
-    case "opencode":
-      return "npm install -g opencode-ai";
     default:
       return `command -v ${binary}`;
   }
@@ -104,7 +103,9 @@ export function registerDoctor(program: Command): void {
           tryCommand: "routekit daemon status"
         });
       }
-      for (const tool of routekitToolRegistry.list()) {
+      for (const tool of routekitToolRegistry
+        .list()
+        .filter((entry) => isLaunchToolId(entry.id))) {
         if (tool.binary === undefined) continue;
         const ok = commandOnPath(tool.binary);
         checks.push({

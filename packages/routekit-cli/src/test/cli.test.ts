@@ -44,7 +44,6 @@ test("independent command surface is complete and has no compatibility aliases",
     "codex",
     "claude",
     "cursor",
-    "opencode",
     "status",
     "usage",
     "accounts",
@@ -80,7 +79,7 @@ test("independent command surface is complete and has no compatibility aliases",
     command(program, "codex").commands.map((entry) => entry.name()).sort(),
     ["install", "uninstall"]
   );
-  for (const launcher of ["claude", "cursor", "opencode"]) {
+  for (const launcher of ["claude", "cursor"]) {
     assert.deepEqual(command(program, launcher).commands, []);
   }
   // One connector-neutral account surface: no cliproxy (or other
@@ -145,18 +144,11 @@ test("dynamic completion follows the command tree", () => {
     completionCandidates(program, ["gateway", "serve", "--p"]).includes("--port")
   );
   assert.deepEqual(completionCandidates(program, ["accounts", "remove", ""]), [
-    "antigravity",
     "claude",
     "claude-code",
-    "codex",
-    "gemini",
-    "grok",
-    "kimi",
-    "xai"
+    "codex"
   ]);
-  assert.deepEqual(completionCandidates(program, ["accounts", "login", "a"]), [
-    "antigravity"
-  ]);
+  assert.deepEqual(completionCandidates(program, ["accounts", "login", "a"]), []);
   assert.deepEqual(completionCandidates(program, ["accounts", "add", ""]), [
     "claude",
     "claude-code",
@@ -196,7 +188,7 @@ test("account removal completion only suggests managed labels for its provider",
       completionCandidates(buildProgram(), ["accounts", "remove", "claude", "w"]),
       []
     );
-    // Aliases resolve to the canonical kind's labels.
+    // Retained internal connector state never leaks into public completion.
     assert.deepEqual(
       completionCandidates(buildProgram(), [
         "accounts",
@@ -204,20 +196,15 @@ test("account removal completion only suggests managed labels for its provider",
         "antigravity",
         "a"
       ]),
-      ["antigravity-user@example.com"]
+      []
     );
     assert.deepEqual(
       completionCandidates(buildProgram(), ["accounts", "remove", "gemini", "a"]),
-      ["antigravity-user@example.com"]
-    );
-    assert.ok(
-      completionCandidates(buildProgram(), ["accounts", "remove", "m"]).includes(
-        "mystery"
-      )
+      []
     );
     assert.deepEqual(
       completionCandidates(buildProgram(), ["accounts", "remove", "mystery", "m"]),
-      ["mystery-blob"]
+      []
     );
   } finally {
     if (previousHome === undefined) delete process.env.ROUTEKIT_HOME;

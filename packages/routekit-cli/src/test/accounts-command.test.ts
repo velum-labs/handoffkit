@@ -246,7 +246,25 @@ test("accounts login rejects unknown kinds before contacting the daemon", async 
       "--name",
       "x"
     ]),
-    /unknown subscription kind/
+    (error: unknown) => {
+      const message = error instanceof Error ? error.message : String(error);
+      assert.match(message, /unknown subscription kind.*first-launch kinds/);
+      assert.doesNotMatch(message, /gemini|grok|kimi|cliproxy/i);
+      return true;
+    }
+  );
+});
+
+test("accounts login rejects retained internal connectors before OAuth or daemon work", async () => {
+  await assert.rejects(
+    buildProgram().parseAsync([
+      "node",
+      "routekit",
+      "accounts",
+      "login",
+      "gemini"
+    ]),
+    /not offered at first launch.*claude-code, codex/
   );
 });
 
@@ -270,5 +288,6 @@ test("one unified accounts surface: no connector subcommands leak to the CLI", (
   const login = accounts.commands.find((command) => command.name() === "login");
   assert.ok(login);
   assert.match(login.helpInformation(), /--no-browser/);
-  assert.match(login.description(), /gemini/);
+  assert.match(login.description(), /claude-code, codex/);
+  assert.doesNotMatch(login.description(), /gemini|grok|kimi|cliproxy/i);
 });

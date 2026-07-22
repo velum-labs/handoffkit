@@ -15,7 +15,7 @@ FusionKit is a pnpm + TypeScript workspace plus a uv + Python workspace. The pac
 | `packages/fusion-config` | `@fusionkit/config` | Fusion-only v4 schema, namespaced-model ensembles, prompt loading, and atomic writes. |
 | `packages/cli` | `@fusionkit/cli` | Fusion-only command line. It composes RouteKit SDKs but never depends on `@routekit/cli`; release tarballs also contain the staged Scope server. |
 | `packages/model-gateway` | `@routekit/gateway` | Product-neutral HTTP gateway, wire dialects, live provider catalogs, namespaced dispatch, and single-call provenance. |
-| `packages/accounts` | `@routekit/accounts` | Subscription credentials, multi-account provider pools, per-model eligibility, quota-aware relays, proxy clients, and managed CLIProxyAPI lifecycle. |
+| `packages/accounts` | `@routekit/accounts` | Supported subscription credentials, multi-account pools, eligibility, and quota-aware relays, plus retained connector internals that are non-contractual RouteKit implementation details. |
 | `packages/fusion-gateway` | `@fusionkit/gateway` | Fusion front-door orchestration, sessions, aggregate cost accounting, trajectories, and managed local-model lifecycle. |
 | `packages/ensemble` | `@fusionkit/ensemble` | Panel orchestration, worktrees, runtime-kernel workflows, judge adapters, and advanced harness tooling. |
 | `packages/runtime-utils` | `@routekit/runtime` | Process/environment/URL safety, cleanup, atomic files, ports, and optional portless service lifecycle. |

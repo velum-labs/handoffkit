@@ -56,7 +56,7 @@ names. Use the manifest name when importing or installing:
 | `@fusionkit/adapter-ai-sdk` | Product-local AI SDK utilities, worktree agents, local model adapters, and managed MLX helpers. | `packages/adapter-ai-sdk/src/index.ts` |
 | `@fusionkit/adapter-compute` | ComputeSDK-shaped sandbox surface backed by governed runner sessions. | `legacy/packages/adapter-compute/src/sandbox.ts` |
 | `@routekit/gateway` | Neutral HTTP gateway, dialect adapters, runtime router/catalog, pooled endpoints, provider egress, and single-call provenance. | `packages/model-gateway/src/index.ts` |
-| `@routekit/accounts` | Subscription credentials, reusable account pooling, provider relays, proxy clients, and managed CLIProxyAPI lifecycle. | `packages/accounts/src/index.ts` |
+| `@routekit/accounts` | Supported subscription credentials, reusable account pooling, and provider relays, plus retained connector internals that are non-contractual RouteKit implementation details. | `packages/accounts/src/index.ts` |
 | `@fusionkit/gateway` | Fusion frontdoor, panel/synthesis orchestration, sessions, aggregate budgets, trajectory conversion, and local lifecycle. | `packages/fusion-gateway/src/index.ts` |
 
 ## Session and harness packages

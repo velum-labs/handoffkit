@@ -6,11 +6,17 @@ import type { Command } from "commander";
 
 import { launchTool, routekitToolRegistry } from "../launch.js";
 import { routekitClient } from "../client.js";
+import {
+  isLaunchToolId,
+  type LaunchToolId
+} from "../launch-support.js";
 
 import { registerCodexIntegration } from "./install.js";
 
 export function registerLaunchers(program: Command): void {
-  for (const integration of routekitToolRegistry.list()) {
+  for (const integration of routekitToolRegistry
+    .list()
+    .filter((entry) => isLaunchToolId(entry.id))) {
     const command = program
       .command(integration.id)
       .description(`launch ${integration.displayName} through RouteKit`)
@@ -69,7 +75,7 @@ export function registerLaunchers(program: Command): void {
             throw new Error("authenticated external gateways require HTTPS");
           }
         }
-        const tool = integration.id as "codex" | "claude" | "cursor" | "opencode";
+        const tool = integration.id as LaunchToolId;
         const prepared =
           options.gatewayUrl === undefined
             ? await (await routekitClient()).call("launcher.prepare", {

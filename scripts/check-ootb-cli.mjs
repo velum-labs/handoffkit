@@ -90,7 +90,6 @@ for (const command of [
   "codex",
   "claude",
   "cursor",
-  "opencode",
   "accounts",
   "models",
   "config",
@@ -101,6 +100,11 @@ for (const command of [
 ]) {
   if (!helpHasCommand(routeHelp.stdout, command)) {
     fail(`RouteKit help is missing command "${command}"`);
+  }
+}
+for (const notOffered of ["opencode", "google", "gemini", "grok", "kimi", "cliproxy"]) {
+  if (new RegExp(`\\b${notOffered}\\b`, "i").test(routeHelp.stdout)) {
+    fail(`RouteKit help exposes not-offered route "${notOffered}"`);
   }
 }
 const gatewayHelp = runCli(ROUTE_CLI, ["gateway", "--help"]);
