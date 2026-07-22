@@ -573,7 +573,7 @@ test("daemon owns the cliproxy sidecar: spawn, restart, account routing, shutdow
       client.call("accounts.enrollActivate", claudeActivation, {
         idempotencyKey: "activate-claude-failure"
       }),
-      /injected activation failure/
+      (error: unknown) => error instanceof ControlError
     );
     failActivation = false;
     const claudePath = join(
