@@ -1,9 +1,9 @@
 # RouteKit Claude Code setup and recovery evidence
 
-Date: 2026-07-22  
-Issue: [ENG-682](https://linear.app/velum-labs/issue/ENG-682/restore-claude-enrollment-and-recovery-parity)  
-Pull request: [#162](https://github.com/velum-labs/handoffkit/pull/162)  
-Implementation revision tested: [`e303f1a5`](https://github.com/velum-labs/handoffkit/commit/e303f1a590aaafedd397767732cc0f910341d526)
+- Date: 2026-07-22
+- Issue: [ENG-682](https://linear.app/velum-labs/issue/ENG-682/restore-claude-enrollment-and-recovery-parity)
+- Pull request: [#162](https://github.com/velum-labs/handoffkit/pull/162)
+- Implementation revision tested: [`e303f1a5`](https://github.com/velum-labs/handoffkit/commit/e303f1a590aaafedd397767732cc0f910341d526)
 
 ## Result
 
