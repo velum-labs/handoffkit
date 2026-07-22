@@ -1,4 +1,5 @@
 import { existsSync, readFileSync } from "node:fs";
+import { createHmac, randomBytes } from "node:crypto";
 import { join } from "node:path";
 
 import {
@@ -37,7 +38,7 @@ export type SubscriptionAccountSetOptions = {
 };
 
 export type SubscriptionExecutionObserver = {
-  onAttempt?(account: { label: string }): void;
+  onAttempt?(account: { seat: string }): void;
 };
 
 type PersistedMemberState = {
@@ -71,6 +72,14 @@ const DEFAULT_REFRESH_SKEW_SECONDS = 300;
 const DEFAULT_FALLBACK_COOLDOWN_SECONDS = 300;
 const RAMP_WINDOW_MS = 30_000;
 const RAMP_STEP_MS = 250;
+const ATTRIBUTION_SEAT_KEY = randomBytes(32);
+
+function attributionSeat(label: string): string {
+  return `seat_${createHmac("sha256", ATTRIBUTION_SEAT_KEY)
+    .update(label)
+    .digest("hex")
+    .slice(0, 16)}`;
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -568,7 +577,7 @@ export class SubscriptionAccountSet {
       const lease = await this.#acquire(model, excluded, signal);
       const member = lease.value;
       try {
-        observer?.onAttempt?.({ label: member.label });
+        observer?.onAttempt?.({ seat: attributionSeat(member.label) });
         const response = await operation(member.credential);
         const headerLimits = this.#provider.parseLimits(response.headers);
         if (headerLimits !== undefined) this.#tracker.update(member.id, headerLimits);

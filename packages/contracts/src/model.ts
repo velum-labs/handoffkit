@@ -45,8 +45,8 @@ export type RequestAttribution = {
   provider: string;
   billing_mode: RequestBillingMode;
   account?: {
-    /** Operator-assigned local label for the selected subscription seat. */
-    label: string;
+    /** Process-local opaque reference; never a provider account id or label. */
+    seat: string;
   };
   attempts: number;
   retries: number;

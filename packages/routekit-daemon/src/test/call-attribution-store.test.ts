@@ -8,7 +8,7 @@ import {
   callInspection
 } from "../call-attribution-store.js";
 
-function modelCall(callId: string, label = "work"): ModelCallRecord {
+function modelCall(callId: string, seat = "seat_0123456789abcdef"): ModelCallRecord {
   return {
     call_id: callId,
     endpoint_id: "codex/gpt-5.3-codex",
@@ -32,7 +32,7 @@ function modelCall(callId: string, label = "work"): ModelCallRecord {
         native_model: "gpt-5.3-codex",
         provider: "codex",
         billing_mode: "subscription",
-        account: { label },
+        account: { seat },
         attempts: 3,
         retries: 2,
         account_failovers: 1
@@ -50,7 +50,7 @@ test("call inspection exposes attribution while dropping sensitive metadata", ()
   const inspection = callInspection(modelCall("model_call_safe"));
   assert.ok(inspection);
   assert.equal(inspection.effectiveModel, "codex/gpt-5.3-codex");
-  assert.equal(inspection.account?.label, "work");
+  assert.equal(inspection.account?.seat, "seat_0123456789abcdef");
   assert.deepEqual(inspection.retries, {
     attempts: 3,
     total: 2,

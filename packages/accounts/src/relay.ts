@@ -1,4 +1,5 @@
 import type { IncomingHttpHeaders } from "node:http";
+import { randomUUID } from "node:crypto";
 
 import { providerDefaultBaseUrl, subscriptionInfo } from "@routekit/registry";
 import { trimTrailingSlashes } from "@routekit/runtime";
@@ -155,6 +156,7 @@ export class AnthropicBackendRelay implements SubscriptionRelay {
     signal?: AbortSignal,
     options?: Parameters<ProviderRelay["relay"]>[3]
   ): Promise<Response> {
+    const operationId = randomUUID();
     return this.#accounts.execute(body.model, (credential) => {
       const upstreamHeaders = this.#upstreamHeaders(headers, credential.accessToken);
       return fetch(`${this.#backendUrl}/v1/messages`, {
@@ -165,7 +167,9 @@ export class AnthropicBackendRelay implements SubscriptionRelay {
       });
     }, signal, {
       onAttempt: (account) =>
-        options?.onAttribution?.({ account })
+        options?.onAttribution?.({
+          accountAttempt: { operationId, seat: account.seat }
+        })
     });
   }
 

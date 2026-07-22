@@ -18,6 +18,7 @@ import { meterCall, parseUsage, parseUsageFromSse } from "./cost.js";
 
 export type GatewayDialect =
   | "openai-chat"
+  | "openai-embeddings"
   | "anthropic-messages"
   | "openai-responses";
 
@@ -195,7 +196,7 @@ export function buildModelCallRecord(
             provider: context.attribution.provider,
             billing_mode: context.attribution.billing_mode,
             ...(context.attribution.account !== undefined
-              ? { account: { label: context.attribution.account.label } }
+              ? { account: { seat: context.attribution.account.seat } }
               : {}),
             attempts: context.attribution.attempts,
             retries: context.attribution.retries,

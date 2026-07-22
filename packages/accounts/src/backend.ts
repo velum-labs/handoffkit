@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import {
   AnthropicBackend,
   CodexResponsesBackend
@@ -117,7 +119,15 @@ export class SubscriptionAccountBackend implements Backend, ProviderSource {
         return await fetch(url, { ...init, headers });
       }, init.signal ?? undefined, {
         onAttempt: (account) =>
-          requestOptions?.onAttribution?.({ account })
+          requestOptions?.onAttribution?.({
+            accountAttempt: {
+              operationId:
+                requestOptions.attributionOperationId ??
+                requestOptions.modelCallId ??
+                randomUUID(),
+              seat: account.seat
+            }
+          })
       });
     const backendOptions = {
       baseUrl: backendBaseUrl(mode),
@@ -186,10 +196,14 @@ export class SubscriptionAccountBackend implements Backend, ProviderSource {
     signal?: AbortSignal,
     options?: BackendRequestOptions
   ): Promise<Response> {
+    const attributedOptions = {
+      ...options,
+      attributionOperationId: randomUUID()
+    };
     return this.#backend.chat(
       withSubscriptionInstructions(this.#accountSet.mode, body),
       signal,
-      options
+      attributedOptions
     );
   }
 
@@ -197,7 +211,11 @@ export class SubscriptionAccountBackend implements Backend, ProviderSource {
     return this.#backend.models(signal);
   }
 
-  embeddings(body: unknown, signal?: AbortSignal): Promise<Response> {
-    return this.#backend.embeddings(body, signal);
+  embeddings(
+    body: unknown,
+    signal?: AbortSignal,
+    options?: BackendRequestOptions
+  ): Promise<Response> {
+    return this.#backend.embeddings(body, signal, options);
   }
 }

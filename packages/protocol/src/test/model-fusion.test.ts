@@ -170,7 +170,7 @@ test("model-call metadata accepts sanitized RouteKit request attribution", () =>
         native_model: "gpt-5.3-codex",
         provider: "codex",
         billing_mode: "subscription",
-        account: { label: "work" },
+        account: { seat: "seat_0123456789abcdef" },
         attempts: 3,
         retries: 2,
         account_failovers: 1
@@ -182,6 +182,19 @@ test("model-call metadata accepts sanitized RouteKit request attribution", () =>
   };
   assertModelCallRecordV1(attributed);
   assertModelFusionRecord(attributed);
+  assert.throws(
+    () =>
+      assertModelCallRecordV1({
+        ...attributed,
+        metadata: {
+          attribution: {
+            ...(attributed.metadata.attribution as Record<string, unknown>),
+            billing_mode: "credential"
+          }
+        }
+      }),
+    /billing_mode/
+  );
 });
 
 test("harness candidate metadata accepts nested microVM hardening evidence", () => {

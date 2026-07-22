@@ -42,7 +42,7 @@ import type {
   ModelGatewayCallContext,
   ProvenanceSink
 } from "./provenance.js";
-import { UnknownModelError } from "./router.js";
+import { isSubscriptionProvider, UnknownModelError } from "./router.js";
 
 /**
  * The local-model gateway HTTP server. It fronts a single OpenAI Chat
@@ -187,11 +187,32 @@ function resolveNativeModelRoute(
   requested: string | undefined
 ): BackendModelRoute | undefined {
   if (backend.resolveModelRoute === undefined) return undefined;
-  const route = backend.resolveModelRoute(requested, provider);
-  if (route === undefined && requested !== undefined) {
-    throw new UnknownModelError(requested);
-  }
-  return route;
+  return backend.resolveModelRoute(requested, provider);
+}
+
+function initialAttribution(
+  backend: Backend,
+  requested: string | undefined,
+  nativeProvider?: "claude-code" | "codex"
+): Partial<RequestAttribution> {
+  const route = backend.resolveModelRoute?.(requested, nativeProvider);
+  const effectiveModel = route?.publicId ?? requested ?? backend.defaultModel ?? "unknown";
+  const slash = effectiveModel.indexOf("/");
+  const provider =
+    route?.provider ??
+    (slash > 0 ? effectiveModel.slice(0, slash) : "unknown");
+  const nativeModel =
+    route?.nativeId ??
+    (slash > 0 ? effectiveModel.slice(slash + 1) : effectiveModel);
+  return {
+    effective_model: effectiveModel,
+    native_model: nativeModel,
+    provider,
+    billing_mode:
+      isSubscriptionProvider(provider) || provider === "cliproxy"
+        ? "subscription"
+        : "api_key"
+  };
 }
 
 function withModel<T extends Record<string, unknown>>(body: T, model: string): T {
@@ -489,6 +510,10 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
         dialect: "openai-chat",
         body,
         defaultModel: backend.defaultModel,
+        attribution: initialAttribution(
+          backend,
+          effectiveModel(body, backend.defaultModel)
+        ),
         invoke: (callId, signal, onAttribution) =>
           backend.chat(body, signal, {
             modelCallId: callId,
@@ -525,6 +550,10 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
         dialect: "openai-chat",
         body,
         defaultModel: backend.defaultModel,
+        attribution: initialAttribution(
+          backend,
+          effectiveModel(body, backend.defaultModel)
+        ),
         invoke: (callId, signal, onAttribution) =>
           backend.chat(body, signal, {
             modelCallId: callId,
@@ -538,7 +567,22 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
     if (method === "POST" && path === "/v1/embeddings") {
       const raw = await readJson(req, res);
       if (raw === NO_BODY) return;
-      await pipeUpstream(res, await backend.embeddings(withDefaultModel(raw, backend.defaultModel)));
+      const body = withDefaultModel(raw, backend.defaultModel);
+      await handleModelCall(res, provenance, {
+        dialect: "openai-embeddings",
+        body,
+        defaultModel: backend.defaultModel,
+        attribution: initialAttribution(
+          backend,
+          effectiveModel(body, backend.defaultModel)
+        ),
+        invoke: (callId, signal, onAttribution) =>
+          backend.embeddings(body, signal, {
+            modelCallId: callId,
+            requestContext,
+            onAttribution
+          })
+      });
       return;
     }
 
@@ -649,6 +693,11 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
         dialect: "anthropic-messages",
         body,
         defaultModel: backend.defaultModel,
+        attribution: initialAttribution(
+          backend,
+          resolvedModel,
+          "claude-code"
+        ),
         invoke: (callId, signal, onAttribution) =>
           handleAnthropicMessages(backend, body, callId, signal, {
             requestContext,
@@ -733,6 +782,11 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
         dialect: "openai-responses",
         body: canonicalBody,
         defaultModel: backend.defaultModel,
+        attribution: initialAttribution(
+          backend,
+          requestedModel,
+          codexProviderRelay !== undefined ? "codex" : undefined
+        ),
         invoke: (callId, signal, onAttribution) =>
           handleResponses(backend, canonicalBody, callId, signal, {
             requestContext,
@@ -934,7 +988,7 @@ type ModelCallRoute = {
   ) => Promise<Response>;
 };
 
-function collectAttribution(seed: Partial<RequestAttribution> | undefined): {
+export function collectAttribution(seed: Partial<RequestAttribution> | undefined): {
   report: NonNullable<BackendRequestOptions["onAttribution"]>;
   snapshot(): RequestAttribution | undefined;
 } {
@@ -942,18 +996,28 @@ function collectAttribution(seed: Partial<RequestAttribution> | undefined): {
   let attempts = 0;
   let retries = 0;
   let accountFailovers = 0;
-  let previousAccount: string | undefined;
+  const operations = new Map<string, { attempts: number; lastSeat?: string }>();
   return {
     report: (update) => {
-      if (update.account !== undefined) {
+      if (update.accountAttempt !== undefined) {
+        const attempt = update.accountAttempt;
+        const operation = operations.get(attempt.operationId) ?? { attempts: 0 };
         attempts += 1;
-        if (attempts > 1) retries += 1;
-        if (previousAccount !== undefined && previousAccount !== update.account.label) {
+        if (operation.attempts > 0) retries += 1;
+        if (
+          operation.lastSeat !== undefined &&
+          operation.lastSeat !== attempt.seat
+        ) {
           accountFailovers += 1;
         }
-        previousAccount = update.account.label;
+        operations.set(attempt.operationId, {
+          attempts: operation.attempts + 1,
+          lastSeat: attempt.seat
+        });
+        current = { ...current, account: { seat: attempt.seat } };
       }
-      current = { ...current, ...update };
+      const { accountAttempt: _accountAttempt, ...attribution } = update;
+      current = { ...current, ...attribution };
     },
     snapshot: () => {
       if (

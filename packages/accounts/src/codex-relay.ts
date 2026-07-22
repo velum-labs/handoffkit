@@ -1,4 +1,5 @@
 import type { IncomingHttpHeaders } from "node:http";
+import { randomUUID } from "node:crypto";
 
 import { z } from "zod";
 
@@ -269,6 +270,7 @@ export class CodexBackendRelay implements SubscriptionRelay {
       typeof body.model === "string"
         ? body.model
         : undefined;
+    const operationId = randomUUID();
     return this.#auth.accounts.execute(
       model,
       (credential) =>
@@ -276,7 +278,9 @@ export class CodexBackendRelay implements SubscriptionRelay {
       signal,
       {
         onAttempt: (account) =>
-          options?.onAttribution?.({ account })
+          options?.onAttribution?.({
+            accountAttempt: { operationId, seat: account.seat }
+          })
       }
     );
   }

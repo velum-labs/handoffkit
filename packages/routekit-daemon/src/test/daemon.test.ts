@@ -176,6 +176,28 @@ test("singleton daemon exposes authenticated control and a stable reloadable dat
     assert.equal(inspection.cost.unknownUsage, true);
     assert.equal(inspection.cost.unknownCost, true);
     assert.equal("account" in inspection, false);
+    const rejected = await fetch(`${beforeUrl}/v1/chat/completions`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${dataToken}`
+      },
+      body: JSON.stringify({
+        model: "openai/missing-model",
+        messages: [{ role: "user", content: "reject this" }]
+      })
+    });
+    assert.equal(rejected.status, 400);
+    const rejectedCallId = rejected.headers.get("x-routekit-model-call-id");
+    assert.ok(rejectedCallId);
+    await rejected.text();
+    const rejectedInspection = await client.call("calls.inspect", {
+      callId: rejectedCallId
+    });
+    assert.equal(rejectedInspection.status, "failed");
+    assert.equal(rejectedInspection.effectiveModel, "openai/missing-model");
+    assert.equal(rejectedInspection.provider, "openai");
+    assert.equal(rejectedInspection.error?.kind, "validation_error");
     await assert.rejects(
       client.call("calls.inspect", { callId: "model_call_missing" }),
       (error: unknown) =>

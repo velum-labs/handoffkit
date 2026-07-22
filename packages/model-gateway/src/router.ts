@@ -431,7 +431,8 @@ export class CatalogBackend implements Backend {
       effective_model: entry.publicId,
       native_model: entry.nativeId,
       provider: entry.provider,
-      billing_mode: isSubscriptionProvider(entry.provider)
+      billing_mode:
+        isSubscriptionProvider(entry.provider) || entry.provider === "cliproxy"
         ? "subscription"
         : "api_key"
     });
@@ -472,11 +473,25 @@ export class CatalogBackend implements Backend {
     );
   }
 
-  embeddings(body: unknown, signal?: AbortSignal): Promise<Response> {
+  embeddings(
+    body: unknown,
+    signal?: AbortSignal,
+    options?: BackendRequestOptions
+  ): Promise<Response> {
     const entry = this.#entry(this.#requestedModel(body));
+    options?.onAttribution?.({
+      effective_model: entry.publicId,
+      native_model: entry.nativeId,
+      provider: entry.provider,
+      billing_mode:
+        isSubscriptionProvider(entry.provider) || entry.provider === "cliproxy"
+          ? "subscription"
+          : "api_key"
+    });
     return entry.source.embeddings(
       this.#withNativeModel(body, entry.nativeId),
-      signal
+      signal,
+      options
     );
   }
 

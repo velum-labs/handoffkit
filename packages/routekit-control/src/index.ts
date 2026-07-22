@@ -132,7 +132,7 @@ export type RouteKitCallInspection = {
   nativeModel?: string;
   provider: string;
   billingMode: RequestBillingMode;
-  account?: { label: string };
+  account?: { seat: string };
   retries: {
     attempts: number;
     total: number;

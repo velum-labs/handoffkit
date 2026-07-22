@@ -1,6 +1,7 @@
 import { CliError, contextFor } from "@routekit/cli-core";
 import type { RouteKitCallInspection } from "@routekit/control";
 import { formatUsd } from "@routekit/gateway";
+import { ControlError } from "@routekit/runtime";
 import type { Command } from "commander";
 
 import { routekitClient } from "../client.js";
@@ -37,7 +38,10 @@ export function registerCalls(program: Command): void {
       let call: RouteKitCallInspection;
       try {
         call = await (await routekitClient()).call("calls.inspect", { callId });
-      } catch {
+      } catch (error) {
+        if (!(error instanceof ControlError) || error.code !== "not_found") {
+          throw error;
+        }
         throw new CliError({
           code: "call_not_found",
           message: `model call is unknown or expired: ${callId}`,
@@ -57,7 +61,7 @@ export function registerCalls(program: Command): void {
           ? [["native model", call.nativeModel]]
           : []),
         ["provider", call.provider],
-        ["account / seat", call.account?.label ?? "not applicable"],
+        ["account / seat", call.account?.seat ?? "not applicable"],
         ["billing mode", call.billingMode],
         [
           "retries",

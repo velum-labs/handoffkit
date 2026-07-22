@@ -47,7 +47,7 @@ export function callInspection(
     return undefined;
   }
   const account = record(attribution?.account);
-  const accountLabel = string(account?.label);
+  const accountSeat = string(account?.seat);
   const nativeModel = string(attribution?.native_model);
   const estimateUsd = number(metadata?.cost_estimate_usd);
   const attempts = number(attribution?.attempts) ?? 1;
@@ -60,7 +60,7 @@ export function callInspection(
     ...(nativeModel !== undefined ? { nativeModel } : {}),
     provider,
     billingMode,
-    ...(accountLabel !== undefined ? { account: { label: accountLabel } } : {}),
+    ...(accountSeat !== undefined ? { account: { seat: accountSeat } } : {}),
     retries: {
       attempts,
       total: retries,

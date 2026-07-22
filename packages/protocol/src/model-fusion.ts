@@ -483,6 +483,46 @@ function assertUsage(value: unknown, context: string): asserts value is ModelFus
   }
 }
 
+function assertRequestAttribution(value: unknown, context: string): void {
+  assertObject(value, context);
+  assertAllowedKeys(
+    value,
+    [
+      "effective_model",
+      "native_model",
+      "provider",
+      "billing_mode",
+      "account",
+      "attempts",
+      "retries",
+      "account_failovers"
+    ],
+    context
+  );
+  assertString(value.effective_model, `${context}.effective_model`);
+  assertOptionalString(value.native_model, `${context}.native_model`);
+  assertString(value.provider, `${context}.provider`);
+  assertEnum(
+    value.billing_mode,
+    ["api_key", "subscription", "client_auth"] as const,
+    `${context}.billing_mode`
+  );
+  if (value.account !== undefined) {
+    assertObject(value.account, `${context}.account`);
+    assertAllowedKeys(value.account, ["seat"], `${context}.account`);
+    assertString(value.account.seat, `${context}.account.seat`);
+  }
+  for (const key of ["attempts", "retries", "account_failovers"] as const) {
+    const candidate = value[key];
+    if (!Number.isInteger(candidate) || (candidate as number) < 0) {
+      throw new Error(`${context}.${key} must be a non-negative integer`);
+    }
+  }
+  if ((value.attempts as number) < 1) {
+    throw new Error(`${context}.attempts must be at least one`);
+  }
+}
+
 export function assertArtifactRefV1(value: unknown): asserts value is ArtifactRefV1 {
   assertObject(value, "artifact-ref.v1");
   assertMetadata(value, "artifact-ref.v1");
@@ -536,7 +576,15 @@ export function assertModelCallRecordV1(value: unknown): asserts value is ModelC
   if (value.usage !== undefined) assertUsage(value.usage, "usage");
   assertOptionalString(value.output_text, "output_text");
   if (value.error !== undefined) assertError(value.error, "error");
-  if (value.metadata !== undefined) assertObject(value.metadata, "metadata");
+  if (value.metadata !== undefined) {
+    assertObject(value.metadata, "metadata");
+    if (value.metadata.attribution !== undefined) {
+      assertRequestAttribution(
+        value.metadata.attribution,
+        "metadata.attribution"
+      );
+    }
+  }
 }
 
 export function assertHarnessRunRequestV1(
