@@ -117,6 +117,8 @@ test("an unconfigured router is not attributed to a provider or marked retryable
     {
       callId: "call_no_route",
       dialect: "anthropic-messages",
+      requestedModel: undefined,
+      model: undefined,
       stream: false,
       requestBody: { messages: [{ role: "user", content: "hi" }] },
       startedAt: "2026-07-22T00:00:00.000Z"
