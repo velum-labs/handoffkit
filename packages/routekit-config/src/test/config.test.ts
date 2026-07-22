@@ -47,6 +47,28 @@ test("router config persists only explicit providers", () => {
   }
 });
 
+test("router config persists and loads an explicit unconfigured state", () => {
+  const directory = mkdtempSync(join(tmpdir(), "routekit-config-empty-"));
+  try {
+    const path = projectRouterConfigPath(directory);
+    writeRouterConfig(path, { providers: {} });
+    const loaded = loadRouterConfig({
+      cwd: directory,
+      home: directory,
+      env: {}
+    });
+    assert.deepEqual(configuredProviderIds(loaded.config), []);
+    assert.equal(loaded.config.defaultModel, undefined);
+    assert.match(readFileSync(path, "utf8"), /^providers: \{\}\n$/);
+    assert.throws(
+      () => resolveModelId(loaded.config, []),
+      /router catalog has no models/
+    );
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 test("router config rejects inline credentials and legacy endpoint fields", () => {
   const directory = mkdtempSync(join(tmpdir(), "routekit-config-sdk-"));
   try {

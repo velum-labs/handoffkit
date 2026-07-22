@@ -7,6 +7,7 @@ import {
   readFileSync,
   rmSync,
   statSync,
+  symlinkSync,
   writeFileSync
 } from "node:fs";
 import { createServer } from "node:http";
@@ -79,6 +80,48 @@ async function withMockAnthropicDiscovery<T>(run: () => Promise<T>): Promise<T> 
   } finally {
     globalThis.fetch = originalFetch;
   }
+}
+
+async function withMockNativeDiscovery<T>(
+  kind: "claude-code" | "codex",
+  run: () => Promise<T>
+): Promise<T> {
+  if (kind === "claude-code") return await withMockAnthropicDiscovery(run);
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input: string | URL | Request, init?: RequestInit) => {
+    const url = new URL(input instanceof Request ? input.url : input.toString());
+    if (
+      url.hostname === "chatgpt.com" &&
+      url.pathname.startsWith("/backend-api/codex/") &&
+      url.pathname.endsWith("/models")
+    ) {
+      return Response.json({ models: [{ slug: "gpt-test-model" }] });
+    }
+    return await originalFetch(input, init);
+  };
+  try {
+    return await run();
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+}
+
+function nativeCredential(kind: "claude-code" | "codex"): Record<string, unknown> {
+  return kind === "claude-code"
+    ? {
+        claudeAiOauth: {
+          accessToken: "test-access",
+          refreshToken: "test-refresh",
+          expiresAt: Date.now() + 3_600_000
+        }
+      }
+    : {
+        tokens: {
+          access_token: "eyJhbGciOiJub25lIn0.eyJleHAiOjk5OTk5OTk5OTl9.",
+          refresh_token: "test-refresh",
+          account_id: "acct-test"
+        }
+      };
 }
 
 test("singleton daemon exposes authenticated control and a stable reloadable data plane", async () => {
@@ -395,6 +438,214 @@ test("native provider stays enabled until its last account is removed", async ()
       }
     });
   } finally {
+    await upstream.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+for (const kind of ["claude-code", "codex"] as const) {
+  test(`last sole ${kind} account leaves a healthy unconfigured daemon without provider credentials`, async () => {
+    const root = mkdtempSync(join(tmpdir(), `routekit-daemon-sole-${kind}-`));
+    const stateHome = join(root, "state");
+    const configPath = join(root, "router.yaml");
+    const accountsDirectory = join(stateHome, "subscriptions", kind);
+    const accountPath = join(accountsDirectory, "only.json");
+    mkdirSync(accountsDirectory, { recursive: true });
+    writeFileSync(accountPath, JSON.stringify(nativeCredential(kind)), { mode: 0o600 });
+    writeFileSync(
+      configPath,
+      [
+        "providers:",
+        `  ${kind === "claude-code" ? "claude" : kind}: {}`,
+        `defaultModel: ${kind}/${kind === "claude-code" ? "claude-test-model" : "gpt-test-model"}`,
+        ""
+      ].join("\n")
+    );
+    try {
+      await withMockNativeDiscovery(kind, async () => {
+        const daemon = await startRouteKitDaemon({
+          packageVersion: "1.2.3",
+          stateHome,
+          configPath,
+          port: 0,
+          portless: false,
+          env: {
+            HOME: root,
+            ROUTEKIT_HOME: stateHome,
+            ROUTEKIT_PORTLESS: "0"
+          }
+        });
+        try {
+          const client = new RouteKitControlClient({
+            url: daemon.record.url,
+            token: daemon.record.controlToken!
+          });
+          const before = await client.call("daemon.status", {});
+          const result = await client.call(
+            "accounts.remove",
+            { kind, label: "only" },
+            { idempotencyKey: `remove-only-${kind}` }
+          );
+          assert.equal(result.removed, true);
+          assert.equal(result.revision, before.accountRevision + 1);
+          assert.equal(existsSync(accountPath), false);
+          const after = await client.call("daemon.status", {});
+          assert.equal(after.configRevision, before.configRevision + 1);
+          assert.equal(after.accountRevision, before.accountRevision + 1);
+          const config = parseYaml(
+            (await client.call("config.get", {})).document
+          ) as {
+            providers: Record<string, unknown>;
+            defaultModel?: string;
+          };
+          assert.deepEqual(Object.keys(config.providers), []);
+          assert.equal(config.defaultModel, undefined);
+          assert.deepEqual((await client.call("providers.status", {})).providers, []);
+          const listed = await client.call("models.list", {});
+          assert.deepEqual(listed.models, []);
+          assert.equal(listed.defaultModel, undefined);
+          const currentStatus = await client.call("daemon.status", {});
+          assert.equal(currentStatus.dataUrl, daemon.dataUrl);
+          assert.equal(currentStatus.draining, false);
+
+          const doctor = await client.call("doctor.run", {});
+          assert.deepEqual(
+            doctor.checks.find(
+              (check) => check.name === "provider configuration"
+            ),
+            {
+              name: "provider configuration",
+              ok: false,
+              detail:
+                "no providers configured; run `routekit providers add <provider>`"
+            }
+          );
+          assert.equal(
+            doctor.checks.find(
+              (check) => check.name === "account/provider consistency"
+            )?.ok,
+            true
+          );
+          await assert.rejects(
+            client.call("launcher.prepare", { tool: "codex" }),
+            (error: unknown) =>
+              error instanceof ControlError &&
+              error.code === "not_found" &&
+              /no model is available/.test(error.message)
+          );
+
+          assert.equal((await fetch(`${daemon.dataUrl}/health`)).status, 200);
+          const dataToken = readFileSync(daemon.record.authTokenFile!, "utf8").trim();
+          const gatewayModels = await fetch(`${daemon.dataUrl}/v1/models`, {
+            headers: { authorization: `Bearer ${dataToken}` }
+          });
+          assert.equal(gatewayModels.status, 200);
+          assert.deepEqual(await gatewayModels.json(), {
+            object: "list",
+            data: [],
+            models: []
+          });
+
+          const unavailableResponse = await fetch(
+            `${daemon.dataUrl}/v1/chat/completions`,
+            {
+              method: "POST",
+              headers: {
+                authorization: `Bearer ${dataToken}`,
+                "content-type": "application/json"
+              },
+              body: JSON.stringify({
+                messages: [{ role: "user", content: "hello" }]
+              })
+            }
+          );
+          assert.equal(unavailableResponse.status, 503);
+          assert.match(await unavailableResponse.text(), /no model is available/);
+
+          const modelResponse = await fetch(
+            `${daemon.dataUrl}/v1/chat/completions`,
+            {
+              method: "POST",
+              headers: {
+                authorization: `Bearer ${dataToken}`,
+                "content-type": "application/json"
+              },
+              body: JSON.stringify({
+                model: `${kind}/removed-model`,
+                messages: [{ role: "user", content: "hello" }]
+              })
+            }
+          );
+          assert.equal(modelResponse.status, 400);
+          assert.match(await modelResponse.text(), /unknown model/);
+          assert.equal(existsSync(join(stateHome, "account-transactions")), false);
+        } finally {
+          await daemon.close();
+        }
+      });
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+}
+
+test("native removal failure before deletion cleans its prepared transaction", async () => {
+  const root = mkdtempSync(join(tmpdir(), "routekit-daemon-remove-symlink-"));
+  const stateHome = join(root, "state");
+  const configPath = join(root, "router.yaml");
+  const accountsDirectory = join(stateHome, "subscriptions", "claude-code");
+  const externalPath = join(root, "external.json");
+  const accountPath = join(accountsDirectory, "linked.json");
+  mkdirSync(accountsDirectory, { recursive: true });
+  writeFileSync(externalPath, JSON.stringify(nativeCredential("claude-code")), {
+    mode: 0o600
+  });
+  symlinkSync(externalPath, accountPath);
+  writeFileSync(
+    configPath,
+    [
+      "providers:",
+      "  openai: {}",
+      "defaultModel: openai/mock-model",
+      ""
+    ].join("\n")
+  );
+  const upstream = await mockProvider();
+  const daemon = await startRouteKitDaemon({
+    packageVersion: "1.2.3",
+    stateHome,
+    configPath,
+    port: 0,
+    portless: false,
+    env: {
+      ...process.env,
+      HOME: root,
+      ROUTEKIT_HOME: stateHome,
+      OPENAI_API_KEY: "test-key",
+      OPENAI_BASE_URL: upstream.url,
+      ROUTEKIT_PORTLESS: "0"
+    }
+  });
+  try {
+    const client = new RouteKitControlClient({
+      url: daemon.record.url,
+      token: daemon.record.controlToken!
+    });
+    const before = await client.call("daemon.status", {});
+    await assert.rejects(
+      client.call(
+        "accounts.remove",
+        { kind: "claude-code", label: "linked" },
+        { idempotencyKey: "remove-linked-claude" }
+      ),
+      (error: unknown) => error instanceof ControlError
+    );
+    assert.equal(existsSync(accountPath), true);
+    assert.equal(existsSync(externalPath), true);
+    assert.deepEqual(await client.call("daemon.status", {}), before);
+    assert.equal(existsSync(join(stateHome, "account-transactions")), false);
+  } finally {
+    await daemon.close();
     await upstream.close();
     rmSync(root, { recursive: true, force: true });
   }

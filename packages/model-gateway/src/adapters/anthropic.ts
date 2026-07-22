@@ -1259,6 +1259,15 @@ export async function handleAnthropicMessages(
   }
   const requestedModel = body.model ?? backend.defaultModel ?? "";
   const upstreamModel = backend.resolveModel?.(body.model) ?? backend.defaultModel;
+  if (upstreamModel === undefined) {
+    return jsonResponse(503, {
+      type: "error",
+      error: {
+        type: "unavailable",
+        message: "no model is available; configure a provider"
+      }
+    });
+  }
   // Server-executed web search is honored when the caller declared the server
   // tool, an executor is available, and no *client* tool already owns the
   // projected name (a client `web_search` must keep round-tripping untouched).

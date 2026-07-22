@@ -66,6 +66,79 @@ test("SDK starts only after live provider discovery", async () => {
     }
   });
 });
+
+test("SDK serves an empty catalog when no providers are configured", async () => {
+  const running = await startRouter({
+    config: parseRouterConfig({ providers: {} }),
+    host: "127.0.0.1",
+    port: 0,
+    env: {}
+  });
+  try {
+    assert.equal((await fetch(`${running.url}/health`)).status, 200);
+    const modelsResponse = await fetch(`${running.url}/v1/models`);
+    assert.equal(modelsResponse.status, 200);
+    const models = (await modelsResponse.json()) as {
+      data: unknown[];
+      models: unknown[];
+    };
+    assert.deepEqual(models.data, []);
+    assert.deepEqual(models.models, []);
+    assert.deepEqual(await running.providerStatuses(), []);
+
+    const unavailable = await fetch(`${running.url}/v1/chat/completions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ messages: [{ role: "user", content: "hello" }] })
+    });
+    assert.equal(unavailable.status, 503);
+    assert.match(await unavailable.text(), /no model is available/);
+
+    const anthropicUnavailable = await fetch(`${running.url}/v1/messages`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        max_tokens: 64,
+        messages: [{ role: "user", content: "hello" }]
+      })
+    });
+    assert.equal(anthropicUnavailable.status, 503);
+    assert.deepEqual(await anthropicUnavailable.json(), {
+      type: "error",
+      error: {
+        type: "unavailable",
+        message: "no model is available; configure a provider"
+      }
+    });
+
+    const responsesUnavailable = await fetch(`${running.url}/v1/responses`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ input: "hello" })
+    });
+    assert.equal(responsesUnavailable.status, 503);
+    assert.deepEqual(await responsesUnavailable.json(), {
+      error: {
+        type: "unavailable",
+        message: "no model is available; configure a provider"
+      }
+    });
+
+    const unknown = await fetch(`${running.url}/v1/chat/completions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        model: "openai/not-configured",
+        messages: [{ role: "user", content: "hello" }]
+      })
+    });
+    assert.equal(unknown.status, 400);
+    assert.match(await unknown.text(), /unknown model/);
+  } finally {
+    await running.close();
+  }
+});
+
 test("SDK requires authentication for non-loopback router binds", async () => {
   await assert.rejects(
     startRouter({ config, host: "0.0.0.0", port: 0 }),

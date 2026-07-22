@@ -35,7 +35,7 @@ import type {
   ModelGatewayCallContext,
   ProvenanceSink
 } from "./provenance.js";
-import { UnknownModelError } from "./router.js";
+import { NoModelAvailableError, UnknownModelError } from "./router.js";
 
 /**
  * The local-model gateway HTTP server. It fronts a single OpenAI Chat
@@ -833,6 +833,15 @@ function writeGatewayError(
   res: ServerResponse,
   error: unknown
 ): { statusCode: number; payload: Buffer } {
+  if (error instanceof NoModelAvailableError) {
+    const payload = writeErrorSafely(res, 503, {
+      error: {
+        message: error.message,
+        type: "unavailable"
+      }
+    });
+    return { statusCode: 503, payload };
+  }
   if (error instanceof UnknownModelError) {
     const payload = writeErrorSafely(res, 400, {
       error: {

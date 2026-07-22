@@ -862,6 +862,14 @@ export async function handleResponses(
 ): Promise<Response> {
   const requestedModel = body.model ?? backend.defaultModel ?? "";
   const upstreamModel = backend.resolveModel?.(body.model) ?? backend.defaultModel;
+  if (upstreamModel === undefined) {
+    return jsonResponse(503, {
+      error: {
+        type: "unavailable",
+        message: "no model is available; configure a provider"
+      }
+    });
+  }
   // Server-executed web search is honored when the caller declared the tool,
   // an executor is available (a provider key exists), and no *client* tool
   // already owns the projected name; otherwise the ingress keeps its

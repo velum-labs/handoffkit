@@ -35,6 +35,13 @@ export class UnknownModelError extends Error {
   }
 }
 
+export class NoModelAvailableError extends Error {
+  constructor() {
+    super("no model is available; configure a provider");
+    this.name = "NoModelAvailableError";
+  }
+}
+
 const providerPolicySchema = z
   .object({
     strategy: z
@@ -121,10 +128,7 @@ export const routerConfigSchema = z
         codex: providerPolicySchema.optional(),
         "claude-code": providerPolicySchema.optional()
       })
-      .strict()
-      .refine((providers) => Object.keys(providers).length > 0, {
-        message: "at least one provider must be configured"
-      }),
+      .strict(),
     defaultModel: z.string().min(3).optional(),
     reasoningCapabilities: z
       .record(z.string().min(3), reasoningCapabilityOverrideSchema)
@@ -229,12 +233,12 @@ function namespaced(provider: ProviderId, model: string): string {
 }
 
 export class CatalogBackend implements Backend {
-  readonly defaultModel: string;
+  readonly defaultModel: string | undefined;
   readonly #entries: ReadonlyMap<string, CatalogEntry>;
   readonly #sources: readonly ProviderSource[];
 
   private constructor(
-    defaultModel: string,
+    defaultModel: string | undefined,
     entries: ReadonlyMap<string, CatalogEntry>,
     sources: readonly ProviderSource[]
   ) {
@@ -307,9 +311,10 @@ export class CatalogBackend implements Backend {
       const first = entries.keys().next().value as string | undefined;
       const defaultModel = config.defaultModel ?? first;
       if (defaultModel === undefined) {
-        throw new Error("configured providers discovered no models");
-      }
-      if (!entries.has(defaultModel)) {
+        if (configuredProviderIds(config).length > 0) {
+          throw new Error("configured providers discovered no models");
+        }
+      } else if (!entries.has(defaultModel)) {
         throw new UnknownModelError(defaultModel);
       }
       return new CatalogBackend(defaultModel, entries, sources);
@@ -371,6 +376,7 @@ export class CatalogBackend implements Backend {
     nativeProvider?: string
   ): BackendModelRoute | undefined {
     const publicId = requested ?? this.defaultModel;
+    if (publicId === undefined) return undefined;
     const exact = this.#entries.get(publicId);
     if (exact !== undefined) return this.#modelRoute(exact);
     if (nativeProvider === undefined || requested === undefined) return undefined;
@@ -487,6 +493,7 @@ export class CatalogBackend implements Backend {
 
   #entry(requested: string | undefined): CatalogEntry {
     const model = requested ?? this.defaultModel;
+    if (model === undefined) throw new NoModelAvailableError();
     const entry = this.#entries.get(model);
     if (entry === undefined) throw new UnknownModelError(model);
     return entry;

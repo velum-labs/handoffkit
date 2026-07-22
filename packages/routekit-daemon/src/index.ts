@@ -1090,17 +1090,17 @@ export async function startRouteKitDaemon(
               provider: nativeKind,
               labels: [params.label]
             });
-            const result = removeSubscriptionAccount(
-              nativeKind,
-              params.label,
-              { accountsDirectory: activeNativeDirectory }
-            );
-            removed = result.removed;
-            if (!result.removed) {
-              cleanupAccountTransaction(transaction);
-              return;
-            }
             try {
+              const result = removeSubscriptionAccount(
+                nativeKind,
+                params.label,
+                { accountsDirectory: activeNativeDirectory }
+              );
+              removed = result.removed;
+              if (!result.removed) {
+                cleanupAccountTransaction(transaction);
+                return;
+              }
               await replaceRouter(nextConfig, nextDocument, {
                 write: disableProvider,
                 configRevision: disableProvider,
@@ -1186,6 +1186,7 @@ export async function startRouteKitDaemon(
       },
       "doctor.run": async (_params, context) => {
         const providers = await activeRouter!.providerStatuses(context.signal);
+        const configuredProviders = configuredProviderIds(currentConfig);
         const accounts = accountEntries(env);
         const missingProviders = [
           ...new Set(
@@ -1215,6 +1216,14 @@ export async function startRouteKitDaemon(
             { name: "canonical config", ok: existsSync(configPath), detail: configPath },
             { name: "control plane", ok: control !== undefined },
             { name: "model gateway", ok: proxy !== undefined, detail: dataUrl },
+            {
+              name: "provider configuration",
+              ok: configuredProviders.length > 0,
+              detail:
+                configuredProviders.length > 0
+                  ? `${configuredProviders.length} provider(s) configured`
+                  : "no providers configured; run `routekit providers add <provider>`"
+            },
             {
               name: "account activation recovery",
               ok: true,
