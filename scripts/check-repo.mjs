@@ -252,8 +252,10 @@ const requiredFiles = [
   "scripts/lib/routekit-cursor-state.mjs",
   "scripts/lib/routekit-l06-evidence.mjs",
   "scripts/lib/routekit-manual-evidence.mjs",
+  "scripts/lib/routekit-subscription-state.mjs",
   "scripts/test/routekit-l06-evidence.test.mjs",
   "scripts/test/routekit-manual-evidence.test.mjs",
+  "scripts/test/routekit-subscription-state.test.mjs",
   "scripts/publish-npm-workspaces.mjs",
   "scripts/release.mjs",
   "scripts/lib/changelog.mjs",
@@ -496,7 +498,8 @@ const routekitEvidenceTests = spawnSync(
   [
     "--test",
     "scripts/test/routekit-l06-evidence.test.mjs",
-    "scripts/test/routekit-manual-evidence.test.mjs"
+    "scripts/test/routekit-manual-evidence.test.mjs",
+    "scripts/test/routekit-subscription-state.test.mjs"
   ],
   { encoding: "utf8" }
 );

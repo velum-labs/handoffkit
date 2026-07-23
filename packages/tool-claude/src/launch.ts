@@ -5,7 +5,10 @@ export function claudeEnv(gatewayUrl: string, authToken?: string): Record<string
   return {
     ANTHROPIC_BASE_URL: gatewayUrl,
     ANTHROPIC_AUTH_TOKEN: authToken ?? "routekit",
-    CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY: "1"
+    CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY: "1",
+    ...(process.env.CLAUDE_CONFIG_DIR !== undefined
+      ? { CLAUDE_CONFIG_DIR: process.env.CLAUDE_CONFIG_DIR }
+      : {})
   };
 }
 

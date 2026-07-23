@@ -2,19 +2,14 @@
 
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
-import { createHash, randomBytes } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import { createServer } from "node:http";
 import {
-  chmodSync,
-  copyFileSync,
-  cpSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
-  readdirSync,
   rmSync,
-  statSync,
   writeFileSync
 } from "node:fs";
 import { arch, platform, tmpdir } from "node:os";
@@ -56,6 +51,10 @@ import {
   cursorConfigDirectory,
   stageCursorState
 } from "./lib/routekit-cursor-state.mjs";
+import {
+  stageSubscriptionAccounts,
+  subscriptionStoresUnchanged
+} from "./lib/routekit-subscription-state.mjs";
 import { processAlive } from "../packages/runtime-utils/dist/index.js";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -1013,16 +1012,44 @@ function toolBehavior(door, proofPath) {
 async function runPtyCase(input) {
   const session = `routekit-e2e-${process.pid}-${Math.random().toString(16).slice(2)}`;
   const caseDir = mkdtempSync(join(input.tempRoot, `${input.door}-${input.provider}-`));
+  const clientHome = join(caseDir, "home");
+  const xdgConfig = join(caseDir, "xdg-config");
   const routekitHome = join(caseDir, "routekit-home");
+  const claudeConfig = join(caseDir, "claude-config");
   const xdgData = join(caseDir, "xdg-data");
   const xdgCache = join(caseDir, "xdg-cache");
   const xdgState = join(caseDir, "xdg-state");
   const proofPath = join(caseDir, "routekit-tool-proof.txt");
   const workingDir = input.door === "claude" ? ROOT : caseDir;
+  mkdirSync(clientHome, { mode: 0o700 });
+  mkdirSync(xdgConfig, { mode: 0o700 });
   mkdirSync(routekitHome);
+  mkdirSync(claudeConfig, { mode: 0o700 });
   mkdirSync(xdgData);
   mkdirSync(xdgCache);
   mkdirSync(xdgState);
+  if (input.door === "claude") {
+    writeFileSync(
+      join(claudeConfig, ".claude.json"),
+      `${JSON.stringify({
+        hasCompletedOnboarding: true,
+        projects: {
+          [workingDir]: {
+            hasTrustDialogAccepted: true
+          }
+        }
+      }, null, 2)}\n`,
+      { mode: 0o600 }
+    );
+    writeFileSync(
+      join(claudeConfig, "settings.json"),
+      `${JSON.stringify({
+        theme: "dark",
+        skipDangerousModePermissionPrompt: true
+      }, null, 2)}\n`,
+      { mode: 0o600 }
+    );
+  }
   const marker = `MATRIX_RESPONSE_${input.provider.replaceAll("-", "_").toUpperCase()}_${input.door.toUpperCase()}`;
   const prompt = input.live
     ? input.toolCase
@@ -1064,7 +1091,13 @@ async function runPtyCase(input) {
     "-c",
     workingDir,
     "-e",
+    `HOME=${clientHome}`,
+    "-e",
+    `XDG_CONFIG_HOME=${xdgConfig}`,
+    "-e",
     `ROUTEKIT_HOME=${routekitHome}`,
+    "-e",
+    `CLAUDE_CONFIG_DIR=${claudeConfig}`,
     "-e",
     `XDG_DATA_HOME=${xdgData}`,
     "-e",
@@ -1226,50 +1259,6 @@ async function runPtyCase(input) {
   }
 }
 
-function accountStoreSnapshot(directory) {
-  if (!existsSync(directory)) return [];
-  return readdirSync(directory)
-    .filter((name) => name.endsWith(".json") && !name.startsWith("."))
-    .sort()
-    .map((name) => {
-      const path = join(directory, name);
-      const stat = statSync(path);
-      return {
-        name,
-        size: stat.size,
-        sha256: createHash("sha256").update(readFileSync(path)).digest("hex")
-      };
-    });
-}
-
-function stageSubscriptionAccounts(isolatedStateHome, providers) {
-  const snapshots = {};
-  for (const provider of ["codex", "claude-code"]) {
-    if (!providers.includes(provider)) continue;
-    const source = defaultSubscriptionAccountDirectory(provider);
-    const before = accountStoreSnapshot(source);
-    const destination = join(isolatedStateHome, "subscriptions", provider);
-    mkdirSync(destination, { recursive: true, mode: 0o700 });
-    for (const { name } of before) {
-      const destinationPath = join(destination, name);
-      copyFileSync(join(source, name), destinationPath);
-      chmodSync(destinationPath, 0o600);
-    }
-    snapshots[provider] = { source, before, stagedCount: before.length };
-  }
-  return snapshots;
-}
-
-function subscriptionStoresUnchanged(snapshots) {
-  return Object.fromEntries(
-    Object.entries(snapshots).map(([provider, snapshot]) => [
-      provider,
-      JSON.stringify(accountStoreSnapshot(snapshot.source)) ===
-        JSON.stringify(snapshot.before)
-    ])
-  );
-}
-
 function killProcessGroup(child, signal) {
   if (child.exitCode !== null) return;
   try {
@@ -1297,9 +1286,14 @@ async function startLiveRoutekit(configPath, tempRoot, providers) {
   const isolatedStateHome = join(tempRoot, "live-routekit-state");
   const authTokenFile = join(isolatedStateHome, "data-token");
   mkdirSync(isolatedStateHome, { recursive: true, mode: 0o700 });
-  const subscriptionSnapshots = stageSubscriptionAccounts(
+  const subscriptionSnapshots = await stageSubscriptionAccounts(
     isolatedStateHome,
-    providers
+    providers,
+    {
+      accountDirectory: defaultSubscriptionAccountDirectory,
+      loadCredential: async (provider, path) =>
+        await subscriptionProvider(provider).loadCredential(path)
+    }
   );
   const dataToken = randomBytes(32).toString("hex");
   writeFileSync(authTokenFile, `${dataToken}\n`, { mode: 0o600 });
@@ -1446,31 +1440,24 @@ function assertNoConfiguredSecrets(value) {
   }
 }
 
-function liveRouteInfo(configPath, chosen, tempRoot) {
+async function liveRouteInfo(configPath, chosen, tempRoot) {
   const home = join(tempRoot, "route-info-home");
   const stateHome = join(tempRoot, "route-info-state");
   const canonicalConfig = join(home, ".config", "routekit", "router.yaml");
   mkdirSync(dirname(canonicalConfig), { recursive: true });
   writeFileSync(canonicalConfig, readFileSync(configPath, "utf8"));
-  for (const provider of ["codex", "claude-code"]) {
-    if (chosen[provider] === undefined) continue;
-    const source = defaultSubscriptionAccountDirectory(provider, process.env);
-    if (!existsSync(source)) {
-      throw new Error(`live route info account directory is missing: ${source}`);
+  const subscriptionProviders = ["codex", "claude-code"].filter(
+    (provider) => chosen[provider] !== undefined
+  );
+  const sourceSnapshots = await stageSubscriptionAccounts(
+    stateHome,
+    subscriptionProviders,
+    {
+      accountDirectory: defaultSubscriptionAccountDirectory,
+      loadCredential: async (provider, path) =>
+        await subscriptionProvider(provider).loadCredential(path)
     }
-    const target = join(stateHome, "subscriptions", provider);
-    mkdirSync(dirname(target), { recursive: true });
-    // Discovery and token refresh may persist account state. Copy credentials
-    // into the private temporary root so a verification run cannot mutate the
-    // operator's enrolled accounts.
-    cpSync(source, target, {
-      recursive: true,
-      dereference: true,
-      errorOnExist: true,
-      force: false,
-      preserveTimestamps: true
-    });
-  }
+  );
   const env = {
     ...process.env,
     HOME: home,
@@ -1536,6 +1523,14 @@ function liveRouteInfo(configPath, chosen, tempRoot) {
         `route info daemon cleanup failed\n${sanitize(stopped.stdout)}\n${sanitize(stopped.stderr)}`
       );
     }
+    const unchangedStores = subscriptionStoresUnchanged(sourceSnapshots);
+    for (const provider of subscriptionProviders) {
+      assert.equal(
+        unchangedStores[provider],
+        true,
+        `route info qualification mutated the enrolled ${provider} account store`
+      );
+    }
     const recordPath = join(stateHome, "services", "daemon.json");
     if (existsSync(recordPath)) {
       const record = JSON.parse(readFileSync(recordPath, "utf8"));
@@ -1575,19 +1570,20 @@ function runPoolCoverage() {
 }
 
 async function runLivePoolFailover(tempRoot) {
-  const directory = defaultSubscriptionAccountDirectory("claude-code");
-  const sourceSnapshot = accountStoreSnapshot(directory);
-  const stagedDirectory = join(tempRoot, "live-pool-credentials");
-  mkdirSync(stagedDirectory, { recursive: true, mode: 0o700 });
-  const paths = readdirSync(directory)
-    .filter((name) => name.endsWith(".json") && !name.startsWith("."))
-    .sort()
-    .map((name) => {
-      const target = join(stagedDirectory, name);
-      copyFileSync(join(directory, name), target);
-      chmodSync(target, 0o600);
-      return target;
-    });
+  const stagingHome = join(tempRoot, "live-pool-credentials");
+  const sourceSnapshots = await stageSubscriptionAccounts(
+    stagingHome,
+    ["claude-code"],
+    {
+      accountDirectory: defaultSubscriptionAccountDirectory,
+      loadCredential: async (provider, path) =>
+        await subscriptionProvider(provider).loadCredential(path)
+    }
+  );
+  const stagedDirectory = join(stagingHome, "subscriptions", "claude-code");
+  const paths = sourceSnapshots["claude-code"].before.map(({ name }) =>
+    join(stagedDirectory, name)
+  );
   assert.ok(paths.length >= 2, "live pool failover needs at least two enrolled Claude accounts");
   const accounts = await SubscriptionAccountSet.open(
     subscriptionProvider("claude-code"),
@@ -1659,9 +1655,9 @@ async function runLivePoolFailover(tempRoot) {
     };
   } finally {
     await accounts.close();
-    assert.deepEqual(
-      accountStoreSnapshot(directory),
-      sourceSnapshot,
+    assert.equal(
+      subscriptionStoresUnchanged(sourceSnapshots)["claude-code"],
+      true,
       "live pool qualification mutated the enrolled Claude account store"
     );
   }
@@ -2029,7 +2025,7 @@ async function runLive(options, results, artifactDir, tempRoot) {
       results,
       { phase: "live", door: "route-info" },
       async () => {
-        const routeInfo = liveRouteInfo(configPath, chosen, tempRoot);
+        const routeInfo = await liveRouteInfo(configPath, chosen, tempRoot);
         const artifact = "live-route-info.json";
         writeFileSync(
           join(artifactDir, artifact),
