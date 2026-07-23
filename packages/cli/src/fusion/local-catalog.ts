@@ -11,8 +11,8 @@
  */
 import { totalmem } from "node:os";
 
-import { LOCAL_CATALOG_ENTRIES, PREFERRED_LOCAL_MODELS } from "@routekit/registry";
-import type { LocalCatalogModel, LocalModelRole } from "@routekit/registry";
+import { LOCAL_CATALOG_ENTRIES, PREFERRED_LOCAL_MODELS } from "@velum-labs/routekit-registry";
+import type { LocalCatalogModel, LocalModelRole } from "@velum-labs/routekit-registry";
 
 export type ModelRole = LocalModelRole;
 

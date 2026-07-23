@@ -1,8 +1,8 @@
 import { chmodSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { readPackageVersion } from "@routekit/cli-core";
-import { writeFileAtomic } from "@routekit/runtime";
+import { readPackageVersion } from "@velum-labs/routekit-cli-core";
+import { writeFileAtomic } from "@velum-labs/routekit-runtime";
 
 import { routekitHome } from "./config.js";
 

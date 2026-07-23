@@ -7,9 +7,9 @@
  */
 import { resolve } from "node:path";
 
-import { fail } from "@routekit/cli-core";
-import { editConfig } from "@routekit/config-core";
-import type { Presenter } from "@routekit/cli-ui";
+import { fail } from "@velum-labs/routekit-cli-core";
+import { editConfig } from "@velum-labs/routekit-config-core";
+import type { Presenter } from "@velum-labs/routekit-cli-ui";
 
 import {
   FUSION_CONFIG_VERSION,

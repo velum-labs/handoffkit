@@ -3,17 +3,17 @@ import { randomUUID } from "node:crypto";
 import {
   AnthropicBackend,
   CodexResponsesBackend
-} from "@routekit/gateway";
-import type { ModelReasoningCapabilities } from "@routekit/contracts";
+} from "@velum-labs/routekit-gateway";
+import type { ModelReasoningCapabilities } from "@velum-labs/routekit-contracts";
 import type {
   Backend,
   BackendRequestOptions,
   DiscoveredModel,
   ProviderSource,
   ProviderTransport
-} from "@routekit/gateway";
-import { subscriptionInfo } from "@routekit/registry";
-import type { SubscriptionMode } from "@routekit/registry";
+} from "@velum-labs/routekit-gateway";
+import { subscriptionInfo } from "@velum-labs/routekit-registry";
+import type { SubscriptionMode } from "@velum-labs/routekit-registry";
 
 import { SubscriptionAccountSet } from "./account-set.js";
 import { subscriptionProvider } from "./provider.js";

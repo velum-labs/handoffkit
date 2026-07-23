@@ -4,7 +4,7 @@ import {
   assertHarnessRunResultV1,
   MODEL_FUSION_SCHEMA_BUNDLE_HASH
 } from "@fusionkit/protocol";
-import { CANDIDATE_ISOLATION_DEFAULTS, registerCleanup } from "@routekit/runtime";
+import { CANDIDATE_ISOLATION_DEFAULTS, registerCleanup } from "@velum-labs/routekit-runtime";
 import type {
   HarnessCandidateRecordV1,
   HarnessRunRequestV1,
@@ -12,8 +12,8 @@ import type {
   ModelCallRecordV1,
   ModelFusionStatus
 } from "@fusionkit/protocol";
-import { requestHash } from "@routekit/contracts";
-import type { JsonValue } from "@routekit/contracts";
+import { requestHash } from "@velum-labs/routekit-contracts";
+import type { JsonValue } from "@velum-labs/routekit-contracts";
 
 import { createArtifactStore } from "./artifacts.js";
 import { hardeningToJson } from "./harness.js";

@@ -7,7 +7,7 @@
   "type": "module",
   "dependencies": {
     "@fusionkit/adapter-ai-sdk": "workspace:*",
-    "@routekit/registry": "workspace:*",
+    "@velum-labs/routekit-registry": "workspace:*",
     "ai": "6.0.200"
   },
   "scripts": {

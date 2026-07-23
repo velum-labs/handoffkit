@@ -7,8 +7,8 @@ export {
   listenerSpanProcessor,
   removeEventListener as removeFusionEventListener,
   removeSpanListener
-} from "@routekit/tracing";
+} from "@velum-labs/routekit-tracing";
 export type {
   EventListener as FusionEventListener,
   SpanListener
-} from "@routekit/tracing";
+} from "@velum-labs/routekit-tracing";

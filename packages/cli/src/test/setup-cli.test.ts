@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 
-import { runCliForTest } from "@routekit/cli-core/testing";
+import { runCliForTest } from "@velum-labs/routekit-cli-core/testing";
 import { FUSIONKIT_PYPI_VERSION, fusionkitPyCommand, fusionkitWarmArgv } from "../fusion/env.js";
 import type { HostInfo } from "../fusion/local-catalog.js";
 import {

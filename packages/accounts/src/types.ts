@@ -1,7 +1,7 @@
-import type { SubscriptionMode } from "@routekit/registry";
+import type { SubscriptionMode } from "@velum-labs/routekit-registry";
 
-import type { ProviderFailure } from "@routekit/contracts";
-import type { CapacityPoolStrategy } from "@routekit/gateway";
+import type { ProviderFailure } from "@velum-labs/routekit-contracts";
+import type { CapacityPoolStrategy } from "@velum-labs/routekit-gateway";
 
 export type SubscriptionSelectionStrategy = CapacityPoolStrategy;
 export type RateLimitObservationSource =

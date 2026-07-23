@@ -6,11 +6,11 @@ import {
   type ModelReasoningCapabilities,
   ProviderFailureError,
   isRetryableProviderFailure
-} from "@routekit/contracts";
-import { CapacityPool, SseDecoder, SseParseError } from "@routekit/gateway";
-import type { CapacityLease } from "@routekit/gateway";
-import type { SubscriptionMode } from "@routekit/registry";
-import { writeFileAtomic } from "@routekit/runtime";
+} from "@velum-labs/routekit-contracts";
+import { CapacityPool, SseDecoder, SseParseError } from "@velum-labs/routekit-gateway";
+import type { CapacityLease } from "@velum-labs/routekit-gateway";
+import type { SubscriptionMode } from "@velum-labs/routekit-registry";
+import { writeFileAtomic } from "@velum-labs/routekit-runtime";
 
 import { resolveSubscriptionAccounts } from "./account-source.js";
 import type { SubscriptionAccountSource } from "./account-source.js";

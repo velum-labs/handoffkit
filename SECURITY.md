@@ -2,7 +2,7 @@
 
 ## Supported versions
 
-RouteKit and FusionKit ship as the npm `@routekit/*` foundation and
+RouteKit and FusionKit ship as the npm `@velum-labs/routekit` and `@velum-labs/routekit-*` foundation and
 `@fusionkit/*` product packages. FusionKit also provisions the internal PyPI
 sidecar packages. Security fixes land on `main` first and are released for the
 latest minor line, currently `0.8.x`.

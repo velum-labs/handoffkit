@@ -2,10 +2,10 @@ import { chmodSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 
-import { isRecord } from "@routekit/config-core";
-import { normalizeRouterConfigAliases, parseRouterConfig } from "@routekit/gateway";
-import type { RouterConfig } from "@routekit/gateway";
-import { writeFileAtomic } from "@routekit/runtime";
+import { isRecord } from "@velum-labs/routekit-config-core";
+import { normalizeRouterConfigAliases, parseRouterConfig } from "@velum-labs/routekit-gateway";
+import type { RouterConfig } from "@velum-labs/routekit-gateway";
+import { writeFileAtomic } from "@velum-labs/routekit-runtime";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 
 export type RouterConfigSource = "flag" | "environment" | "project" | "global";

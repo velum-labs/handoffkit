@@ -1,6 +1,6 @@
-import type { SubscriptionUsageResponse, SubscriptionUsageSource } from "@routekit/accounts";
-import { CliError, contextFor } from "@routekit/cli-core";
-import { renderErrorPanelLines, watch } from "@routekit/cli-ui";
+import type { SubscriptionUsageResponse, SubscriptionUsageSource } from "@velum-labs/routekit-accounts";
+import { CliError, contextFor } from "@velum-labs/routekit-cli-core";
+import { renderErrorPanelLines, watch } from "@velum-labs/routekit-cli-ui";
 import type { Command } from "commander";
 
 import { routekitClient } from "../client.js";

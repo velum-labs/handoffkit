@@ -20,10 +20,10 @@ import {
   startProviderSim
 } from "@fusionkit/testkit";
 import type { ProviderSimHandle } from "@fusionkit/testkit";
-import { OpenAiBackend, parseRouterConfig } from "@routekit/gateway";
-import type { ProviderSource } from "@routekit/gateway";
-import { startRouter } from "@routekit/router";
-import type { RunningRouter } from "@routekit/router";
+import { OpenAiBackend, parseRouterConfig } from "@velum-labs/routekit-gateway";
+import type { ProviderSource } from "@velum-labs/routekit-gateway";
+import { startRouter } from "@velum-labs/routekit-router";
+import type { RunningRouter } from "@velum-labs/routekit-router";
 
 const SKIP = stackToolingSkip();
 

@@ -3,7 +3,7 @@
  * spec/registry/fusion.json.
  *
  * Product-neutral provider, subscription, catalog, capability, pricing, and
- * local model metadata lives in @routekit/registry.
+ * local model metadata lives in @velum-labs/routekit-registry.
  */
 import { FUSION_REGISTRY } from "./generated/data.js";
 

@@ -10,7 +10,7 @@ import type {
   ModelFusionStatus,
   ToolExecutionRecordV1
 } from "@fusionkit/protocol";
-import type { CapabilityStatus, JsonValue, ModelUsage } from "@routekit/contracts";
+import type { CapabilityStatus, JsonValue, ModelUsage } from "@velum-labs/routekit-contracts";
 
 import type { CandidateWorktree } from "./worktree.js";
 import type { JudgeSynthesizer, SynthesisFailureSummary } from "./judge.js";

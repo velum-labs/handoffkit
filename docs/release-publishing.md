@@ -1,6 +1,6 @@
 # Release publishing
 
-HandoffKit publishes the RouteKit foundation (`@routekit/*`, including the
+HandoffKit publishes the RouteKit foundation (`@velum-labs/routekit` and `@velum-labs/routekit-*`, including the
 `routekit` CLI) and FusionKit product packages (`@fusionkit/*`, including the
 `fusionkit` CLI) to the public npm registry only from the canonical repository.
 
@@ -36,9 +36,9 @@ Forks and non-canonical mirrors cannot publish packages through this workflow.
 ## Published packages
 
 The complete publish list and explicit dependency order live in
-`release/npm-packages.json`. `@routekit/cli` installs `routekit`;
+`release/npm-packages.json`. `@velum-labs/routekit` installs `routekit`;
 `@fusionkit/cli` installs `fusionkit`. Packages publish under both
-`@routekit/*` and `@fusionkit/*` to:
+`@velum-labs/routekit` and `@velum-labs/routekit-*` and `@fusionkit/*` to:
 
 ```text
 https://registry.npmjs.org

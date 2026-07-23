@@ -17,7 +17,7 @@ import {
   reservePort,
   sleep,
   terminateGroup
-} from "@routekit/runtime";
+} from "@velum-labs/routekit-runtime";
 
 import { MLX_LM_STRUCTURED_PIN, MlxEnv } from "./mlx-env.js";
 import type { MlxEnvOptions, SpawnSpec } from "./mlx-env.js";

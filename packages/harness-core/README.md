@@ -1,8 +1,8 @@
-# @routekit/harness-core
+# @velum-labs/routekit-harness-core
 
-`packages/harness-core` publishes `@routekit/harness-core`: the product-neutral
+`packages/harness-core` publishes `@velum-labs/routekit-harness-core`: the product-neutral
 coding-agent harness contract. Its test helpers are published from
-`@routekit/harness-core/testing`.
+`@velum-labs/routekit-harness-core/testing`.
 
 ## Architecture
 
@@ -19,9 +19,9 @@ Use it when implementing or testing a new coding-agent harness adapter.
 import {
   createCachedHarnessDriver,
   probeCliVersion
-} from "@routekit/harness-core";
-import { driverContractSuite } from "@routekit/harness-core/testing";
-import type { HarnessDriver } from "@routekit/harness-core";
+} from "@velum-labs/routekit-harness-core";
+import { driverContractSuite } from "@velum-labs/routekit-harness-core/testing";
+import type { HarnessDriver } from "@velum-labs/routekit-harness-core";
 ```
 
 `createCachedHarnessDriver()` supplies the common probe/cache/create lifecycle

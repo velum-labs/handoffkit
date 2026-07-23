@@ -1,7 +1,7 @@
 # FusionKit
 
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
-[![npm: @routekit/cli](https://img.shields.io/npm/v/@routekit/cli.svg)](https://www.npmjs.com/package/@routekit/cli)
+[![npm: @velum-labs/routekit](https://img.shields.io/npm/v/@velum-labs/routekit.svg)](https://www.npmjs.com/package/@velum-labs/routekit)
 [![npm: @fusionkit/cli](https://img.shields.io/npm/v/@fusionkit/cli.svg)](https://www.npmjs.com/package/@fusionkit/cli)
 [![PyPI: fusionkit](https://img.shields.io/pypi/v/fusionkit.svg)](https://pypi.org/project/fusionkit/)
 
@@ -19,7 +19,7 @@ does not install a user-facing Python `fusionkit` command.
 For independent routing through explicit providers:
 
 ```bash
-npm install -g @routekit/cli
+npm install -g @velum-labs/routekit
 routekit config init
 routekit start                      # product commands also start RouteKit automatically
 routekit codex                      # or: routekit claude | cursor
@@ -108,7 +108,7 @@ Panel members run in lightweight git worktrees so parallel candidates can inspec
 
 | Area | What it is |
 | --- | --- |
-| [`packages/routekit-cli`](packages/routekit-cli) | The independent npm `@routekit/cli` router front door. |
+| [`packages/routekit-cli`](packages/routekit-cli) | The independent npm `@velum-labs/routekit` router front door. |
 | [`packages/cli`](packages/cli) | The npm `@fusionkit/cli` front door. |
 | [`packages/model-gateway`](packages/model-gateway) | RouteKit's neutral dialect translation, live provider catalog, namespaced dispatch, streaming, and per-call provenance/metering. |
 | [`packages/fusion-gateway`](packages/fusion-gateway) | Fusion front door, panel/synthesis orchestration, durable sessions, and aggregate budgets. |

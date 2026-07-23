@@ -1,5 +1,5 @@
 {
-  "name": "@routekit/tracing",
+  "name": "@velum-labs/routekit-tracing",
   "private": false,
   "version": "0.8.0",
   "repository": {

@@ -18,7 +18,7 @@ import { defaultSessionsDir, FileSystemSessionStore } from "@fusionkit/gateway";
 import {
   COMPLETION_SHELLS,
   completionCandidates as coreCompletionCandidates
-} from "@routekit/cli-core";
+} from "@velum-labs/routekit-cli-core";
 
 import { loadFusionConfig, PROMPT_IDS } from "../fusion-config.js";
 import { cachedCatalog } from "../fusion/catalog.js";

@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 
-import { startGateway } from "@routekit/gateway";
+import { startGateway } from "@velum-labs/routekit-gateway";
 import { openSubscriptionRelays } from "./gateway.js";
 import type { SubscriptionAccountConfigs } from "./gateway.js";
 import { RelayOnlyBackend } from "./relay.js";

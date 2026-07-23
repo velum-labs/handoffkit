@@ -1,7 +1,7 @@
 import { basename } from "node:path";
 
 import { gitText } from "@fusionkit/workspace";
-import { trimTrailingSlashes } from "@routekit/runtime";
+import { trimTrailingSlashes } from "@velum-labs/routekit-runtime";
 
 /** Repo label for provenance: origin remote basename, else workspace directory name. */
 export function deriveSourceRepo(cwd: string): string {

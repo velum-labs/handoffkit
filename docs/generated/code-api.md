@@ -8,7 +8,7 @@ The generated reference intentionally covers package entry points and Python pub
 
 ### `packages/accounts/src/index.ts`
 
-`@routekit/accounts` — the subscription pooling SDK.
+`@velum-labs/routekit-accounts` — the subscription pooling SDK.
 
 A cohesive, typed surface for pooling Claude Code and Codex OAuth
 subscriptions behind one provider-native proxy: resolve an account set from
@@ -82,7 +82,7 @@ No module JSDoc was found.
 
 ### `packages/cli-ui/src/index.ts`
 
-@routekit/cli-ui — a brand-configurable terminal UX layer.
+@velum-labs/routekit-cli-ui — a brand-configurable terminal UX layer.
 
 One presenter contract, two implementations: rich Ink (React) rendering on
 interactive TTYs, ordered plain-text lines everywhere else (CI, pipes,
@@ -278,7 +278,7 @@ No module JSDoc was found.
 
 ### `packages/harness-core/src/index.ts`
 
-@routekit/harness-core is the single coding-agent harness contract:
+@velum-labs/routekit-harness-core is the single coding-agent harness contract:
 driver -> instance -> session interfaces, the canonical harness event
 union (with raw provider envelopes), one tagged error taxonomy with
 derived retryability, deferred-based approvals with explicit policies,
@@ -366,7 +366,7 @@ It exports FusionKit wire/panel/model-fusion schemas and generated clients.
 The signed-run governance contracts below are unrelated legacy Warrant
 surface retained here for compatibility during this phase; they are
 intentionally guarded as FusionKit protocol, not RouteKit contracts.
-Generic hashing/JCS and model-call primitives come from @routekit/contracts.
+Generic hashing/JCS and model-call primitives come from @velum-labs/routekit-contracts.
 
 Everything here is stable protocol surface. Packages should consume these
 interfaces instead of recreating local string lists or proof logic.
@@ -377,13 +377,13 @@ interfaces instead of recreating local string lists or proof logic.
 - `export type { ExecutionEnv, ExecutionLogPolicy, ExecutionSpec } from "./execution.js";`
 - `export { evaluateToolPolicy, modelFusionSideEffects, toolArgumentsHash, toolCallKey, toolSideEffectClassFromModelFusion } from "./tool-executor.js";`
 - `export type { ToolDefinition, ToolExecutionRequest, ToolExecutionResult, ToolExecutorBudget, ToolExecutorContract, ToolExecutorLimits, ToolExecutorMode, ToolPolicyDecision, ToolSideEffectClass } from "./tool-executor.js";`
-- `export { canonicalize } from "@routekit/contracts";`
-- `export type { JsonValue } from "@routekit/contracts";`
+- `export { canonicalize } from "@velum-labs/routekit-contracts";`
+- `export type { JsonValue } from "@velum-labs/routekit-contracts";`
 - `export { assertWireTrajectory, isWireTrajectory, normalizeWireTrajectories } from "./fusion-wire.js";`
 - `export type { WireTrajectory } from "./fusion-wire.js";`
 - `export { isFiniteK, isLookaheadK, isProposalK, panelModeForK } from "./panel-k.js";`
 - `export type { PanelMode } from "./panel-k.js";`
-- `export { artifactHash, hashCanonical, hashCanonicalSha256, requestHash, responseHash, schemaBundleHash, SHA256_PREFIX, sha256Hex, sha256PrefixedHex } from "@routekit/contracts";`
+- `export { artifactHash, hashCanonical, hashCanonicalSha256, requestHash, responseHash, schemaBundleHash, SHA256_PREFIX, sha256Hex, sha256PrefixedHex } from "@velum-labs/routekit-contracts";`
 - `export { MODEL_FUSION_SCHEMA_BUNDLE_HASH, assertArtifactRefV1, assertBenchmarkTaskRecordV1, assertEnsembleReceiptV1, assertHarnessCandidateRecordV1, assertHarnessRunRequestV1, assertHarnessRunResultV1, assertJudgeSynthesisRecordV1, assertModelCallRecordV1, assertModelFusionRecord, assertToolCallPlanV1, assertToolExecutionRecordV1 } from "./model-fusion.js";`
 - `export { executeHarnessTask, MODEL_FUSION_HARNESS_EXECUTOR_PATH, MODEL_FUSION_OPENAPI_SOURCE_HASH } from "./generated/model-fusion-openapi.js";`
 - `export type { ExecuteHarnessTaskClientOptions, ModelFusionOpenApiArtifactRef, ModelFusionOpenApiErrorResponse, ModelFusionOpenApiHarnessExecutionRequest, ModelFusionOpenApiHarnessExecutionResult, ModelFusionOpenApiPersistedJsonRecord } from "./generated/model-fusion-openapi.js";`
@@ -409,7 +409,7 @@ Fusion-only identities and panel presets generated from
 spec/registry/fusion.json.
 
 Product-neutral provider, subscription, catalog, capability, pricing, and
-local model metadata lives in @routekit/registry.
+local model metadata lives in @velum-labs/routekit-registry.
 
 - `export const FUSION_PANEL_MODEL: string ...`
 - `export const DEFAULT_ENSEMBLE_NAME ...`
@@ -757,10 +757,10 @@ Canonical registry of the coding-tool integrations shipped by RouteKit.
 Add a new integration to `toolIntegrations`; consumers receive it through
 `toolRegistry` without maintaining their own package imports or lists.
 
-- `export { installClaudeIntegration, uninstallClaudeIntegration } from "@routekit/tool-claude";`
-- `export type { ClaudeInstallInput, ClaudeInstallOwner, ClaudeInstallResult } from "@routekit/tool-claude";`
-- `export { codexIntegrationBlock, installCodexIntegration, uninstallCodexIntegration } from "@routekit/tool-codex";`
-- `export type { CodexInstallInput, CodexInstallOwner, CodexInstallProfile, CodexInstallResult } from "@routekit/tool-codex";`
+- `export { installClaudeIntegration, uninstallClaudeIntegration } from "@velum-labs/routekit-tool-claude";`
+- `export type { ClaudeInstallInput, ClaudeInstallOwner, ClaudeInstallResult } from "@velum-labs/routekit-tool-claude";`
+- `export { codexIntegrationBlock, installCodexIntegration, uninstallCodexIntegration } from "@velum-labs/routekit-tool-codex";`
+- `export type { CodexInstallInput, CodexInstallOwner, CodexInstallProfile, CodexInstallResult } from "@velum-labs/routekit-tool-codex";`
 - `export const toolIntegrations: readonly ToolIntegration[] ...`
 - `export const toolRegistry: ToolRegistry ...`
 
@@ -796,8 +796,8 @@ subscribe to.
 - `export type { AllowlistLogExporterOptions, AllowlistSpanExporterOptions } from "./exportable.js";`
 - `export { attrBool, attrJson, attrNum, attrStr, eventNameOf, eventSpanId, eventTimeMs, eventTraceId, spanEndMs, spanId, spanTraceId } from "./readable.js";`
 - `export type { AttributeSource, ReadableFusionEvent, ReadableSpan } from "./readable.js";`
-- `export { InMemoryLogRecordExporter, InMemorySpanExporter, SimpleLogRecordProcessor, SimpleSpanProcessor } from "@routekit/tracing";`
-- `export type { LogRecordProcessor, SpanProcessor } from "@routekit/tracing";`
+- `export { InMemoryLogRecordExporter, InMemorySpanExporter, SimpleLogRecordProcessor, SimpleSpanProcessor } from "@velum-labs/routekit-tracing";`
+- `export type { LogRecordProcessor, SpanProcessor } from "@velum-labs/routekit-tracing";`
 - `export { ATTR, EXPORTABLE_ATTRIBUTES, FUSION_CONVENTIONS_VERSION, FUSION_EVENT_NAMES, FUSION_SCOPES, FUSION_SPAN_NAMES } from "@fusionkit/protocol";`
 - `export type { FusionAttributeKey, FusionEventName, FusionSpanName } from "@fusionkit/protocol";`
 

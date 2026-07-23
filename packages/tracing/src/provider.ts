@@ -7,8 +7,8 @@ import {
   resetTracingForTest,
   shutdownTracing,
   tracingServiceName
-} from "@routekit/tracing";
-import type { LogRecordProcessor, SpanProcessor } from "@routekit/tracing";
+} from "@velum-labs/routekit-tracing";
+import type { LogRecordProcessor, SpanProcessor } from "@velum-labs/routekit-tracing";
 import { EXPORTABLE_ATTRIBUTES } from "@fusionkit/protocol";
 
 import { TRACE_REDACTED_ATTRIBUTE } from "./exportable.js";

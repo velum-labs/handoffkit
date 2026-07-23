@@ -1,4 +1,4 @@
-# @routekit/tool-opencode
+# @velum-labs/routekit-tool-opencode
 
 Product-neutral OpenCode launcher and canonical harness driver.
 
@@ -8,10 +8,10 @@ This package owns the one OpenCode configuration serializer, launcher, and route
 
 ## Usage
 
-Register `opencodeTool` in an `@routekit/tools` registry.
+Register `opencodeTool` in an `@velum-labs/routekit-tools` registry.
 
 ```ts
-import { opencodeTool } from "@routekit/tool-opencode";
+import { opencodeTool } from "@velum-labs/routekit-tool-opencode";
 ```
 
 ## Docs

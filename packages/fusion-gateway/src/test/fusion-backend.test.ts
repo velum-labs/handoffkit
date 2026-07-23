@@ -5,7 +5,7 @@ import { test } from "node:test";
 
 import { FusionBackend } from "../fusion-backend.js";
 import type { WireTrajectory } from "../fusion-backend.js";
-import { startGateway } from "@routekit/gateway";
+import { startGateway } from "@velum-labs/routekit-gateway";
 
 function candidate(modelId: string, status = "succeeded"): WireTrajectory {
   return { trajectory_id: `t_${modelId}`, model_id: modelId, status, final_output: "ok" };

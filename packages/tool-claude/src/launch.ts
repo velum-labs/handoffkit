@@ -1,5 +1,5 @@
-import { spawnTool } from "@routekit/runtime";
-import type { AgentProfile, ToolLaunchContext } from "@routekit/tools";
+import { spawnTool } from "@velum-labs/routekit-runtime";
+import type { AgentProfile, ToolLaunchContext } from "@velum-labs/routekit-tools";
 
 export function claudeEnv(gatewayUrl: string, authToken?: string): Record<string, string> {
   return {

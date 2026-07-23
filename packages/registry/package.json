@@ -7,7 +7,7 @@
     "url": "git+https://github.com/velum-labs/handoffkit.git",
     "directory": "packages/registry"
   },
-  "description": "Generated FusionKit model identities and panel presets, separated from the product-neutral @routekit/registry catalog.",
+  "description": "Generated FusionKit model identities and panel presets, separated from the product-neutral @velum-labs/routekit-registry catalog.",
   "license": "Apache-2.0",
   "type": "module",
   "exports": {

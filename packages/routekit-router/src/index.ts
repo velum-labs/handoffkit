@@ -7,28 +7,28 @@ import {
   openSubscriptionAccountSets,
   SubscriptionAccountBackend,
   subscriptionRelaysFromAccountSets
-} from "@routekit/accounts";
-import type { SubscriptionAccountConfigs } from "@routekit/accounts";
+} from "@velum-labs/routekit-accounts";
+import type { SubscriptionAccountConfigs } from "@velum-labs/routekit-accounts";
 import type {
   SubscriptionAccountSetSnapshot,
   SubscriptionUsageResponse
-} from "@routekit/accounts";
+} from "@velum-labs/routekit-accounts";
 import {
   CatalogBackend,
   startGateway
-} from "@routekit/gateway";
+} from "@velum-labs/routekit-gateway";
 import type {
   Gateway,
   ProviderId,
   ProviderSource,
   ProvenanceSink,
   RouterConfig
-} from "@routekit/gateway";
+} from "@velum-labs/routekit-gateway";
 import {
   assertAuthenticatedBind,
   extendCleanupGrace,
   registerCleanup
-} from "@routekit/runtime";
+} from "@velum-labs/routekit-runtime";
 
 export type StartRouterOptions = {
   config: RouterConfig;

@@ -1,9 +1,9 @@
 import { z } from "zod";
-import { resolveReasoningEffort } from "@routekit/contracts";
+import { resolveReasoningEffort } from "@velum-labs/routekit-contracts";
 import type {
   ModelReasoningCapabilities,
   ReasoningSelection
-} from "@routekit/contracts";
+} from "@velum-labs/routekit-contracts";
 
 import type {
   Backend,

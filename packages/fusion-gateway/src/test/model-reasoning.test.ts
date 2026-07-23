@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { chatToAnthropicMessage, openAiSseToAnthropic } from "@routekit/gateway";
-import { chatToResponses, openAiSseToResponses } from "@routekit/gateway";
+import { chatToAnthropicMessage, openAiSseToAnthropic } from "@velum-labs/routekit-gateway";
+import { chatToResponses, openAiSseToResponses } from "@velum-labs/routekit-gateway";
 import { createTrajectoryCapture } from "../trajectory-capture.js";
-import type { GatewayDialect } from "@routekit/gateway";
+import type { GatewayDialect } from "@velum-labs/routekit-gateway";
 
 /**
  * The upstream model's own reasoning (local MLX `reasoning`, vLLM-style

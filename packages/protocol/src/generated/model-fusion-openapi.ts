@@ -3,7 +3,7 @@
 // Source: packages/protocol/openapi/model-fusion-harness-executor.openapi.json
 // Source hash: sha256:00da728751403fa1384b977c673f970eb68ec4e159bee0adc61109f4109d25b5
 
-import type { JsonValue } from "@routekit/contracts";
+import type { JsonValue } from "@velum-labs/routekit-contracts";
 
 export const MODEL_FUSION_OPENAPI_SOURCE_HASH = "sha256:00da728751403fa1384b977c673f970eb68ec4e159bee0adc61109f4109d25b5" as const;
 export const MODEL_FUSION_HARNESS_EXECUTOR_PATH = "/v1/harness-executions" as const;

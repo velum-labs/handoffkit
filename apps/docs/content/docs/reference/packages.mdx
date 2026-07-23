@@ -9,20 +9,20 @@ FusionKit is a pnpm + TypeScript workspace plus a uv + Python workspace. The pac
 
 | Source directory | Published package | Responsibility |
 | --- | --- | --- |
-| `packages/routekit-cli` | `@routekit/cli` | Independent `routekit` executable for provider/catalog/account management, gateway serving, and coding-tool launch. |
-| `packages/routekit-config` | `@routekit/config` | RouterConfig discovery, layered loading, validation, atomic writes, and live-model selection/check helpers. |
-| `packages/routekit-router` | `@routekit/router` | Reusable embedded router composition and lifecycle. |
+| `packages/routekit-cli` | `@velum-labs/routekit` | Independent `routekit` executable for provider/catalog/account management, gateway serving, and coding-tool launch. |
+| `packages/routekit-config` | `@velum-labs/routekit-config` | RouterConfig discovery, layered loading, validation, atomic writes, and live-model selection/check helpers. |
+| `packages/routekit-router` | `@velum-labs/routekit-router` | Reusable embedded router composition and lifecycle. |
 | `packages/fusion-config` | `@fusionkit/config` | Fusion-only v4 schema, namespaced-model ensembles, prompt loading, and atomic writes. |
-| `packages/cli` | `@fusionkit/cli` | Fusion-only command line. It composes RouteKit SDKs but never depends on `@routekit/cli`; release tarballs also contain the staged Scope server. |
-| `packages/model-gateway` | `@routekit/gateway` | Product-neutral HTTP gateway, wire dialects, live provider catalogs, namespaced dispatch, and single-call provenance. |
-| `packages/accounts` | `@routekit/accounts` | Supported subscription credentials, multi-account pools, eligibility, and quota-aware relays, plus retained connector internals that are non-contractual RouteKit implementation details. |
+| `packages/cli` | `@fusionkit/cli` | Fusion-only command line. It composes RouteKit SDKs but never depends on `@velum-labs/routekit`; release tarballs also contain the staged Scope server. |
+| `packages/model-gateway` | `@velum-labs/routekit-gateway` | Product-neutral HTTP gateway, wire dialects, live provider catalogs, namespaced dispatch, and single-call provenance. |
+| `packages/accounts` | `@velum-labs/routekit-accounts` | Supported subscription credentials, multi-account pools, eligibility, and quota-aware relays, plus retained connector internals that are non-contractual RouteKit implementation details. |
 | `packages/fusion-gateway` | `@fusionkit/gateway` | Fusion front-door orchestration, sessions, aggregate cost accounting, trajectories, and managed local-model lifecycle. |
 | `packages/ensemble` | `@fusionkit/ensemble` | Panel orchestration, worktrees, runtime-kernel workflows, judge adapters, and advanced harness tooling. |
-| `packages/runtime-utils` | `@routekit/runtime` | Process/environment/URL safety, cleanup, atomic files, ports, and optional portless service lifecycle. |
-| `packages/harness-core` | `@routekit/harness-core` | Driver/session contracts, events, errors, approvals, status caching, common driver factories, and a `./testing` subpath. |
-| `packages/tools` | `@routekit/tools` | Product-neutral launcher contracts, capability registry, launch contexts, and disposer lifecycle. |
-| `packages/tool-registry` | `@routekit/tool-registry` | Canonical product-neutral registry consumed by both the RouteKit and FusionKit CLIs. |
-| `packages/tool-*` | `@routekit/tool-codex`, `@routekit/tool-claude`, `@routekit/tool-cursor`, `@routekit/tool-opencode` | Canonical launcher and driver for each coding tool. |
+| `packages/runtime-utils` | `@velum-labs/routekit-runtime` | Process/environment/URL safety, cleanup, atomic files, ports, and optional portless service lifecycle. |
+| `packages/harness-core` | `@velum-labs/routekit-harness-core` | Driver/session contracts, events, errors, approvals, status caching, common driver factories, and a `./testing` subpath. |
+| `packages/tools` | `@velum-labs/routekit-tools` | Product-neutral launcher contracts, capability registry, launch contexts, and disposer lifecycle. |
+| `packages/tool-registry` | `@velum-labs/routekit-tool-registry` | Canonical product-neutral registry consumed by both the RouteKit and FusionKit CLIs. |
+| `packages/tool-*` | `@velum-labs/routekit-tool-codex`, `@velum-labs/routekit-tool-claude`, `@velum-labs/routekit-tool-cursor`, `@velum-labs/routekit-tool-opencode` | Canonical launcher and driver for each coding tool. |
 | `packages/protocol` | `@fusionkit/protocol` | Model-fusion contracts, schemas, OpenAPI bindings, trace records, and generated SDK bindings. |
 | `packages/workspace` | `@fusionkit/workspace` | Git capture, worktree materialization, output collection, and divergence-safe pull helpers. |
 | `packages/adapter-ai-sdk` | `@fusionkit/adapter-ai-sdk` | Managed MLX server and AI SDK model adapters used by local-model paths. |
@@ -49,7 +49,7 @@ Each coding tool is its own workspace package implementing a `ToolIntegration`:
 
 1. Create `packages/tool-<name>/` from an adjacent tool package.
 2. Export a `ToolIntegration` with a `launch(ctx)` implementation.
-3. Add it to `toolIntegrations` in `@routekit/tool-registry`.
+3. Add it to `toolIntegrations` in `@velum-labs/routekit-tool-registry`.
 
 That one canonical entry wires the tool into both CLIs and internal harness
 composition through a neutral `ToolLaunchSpec`; consumers do not keep parallel

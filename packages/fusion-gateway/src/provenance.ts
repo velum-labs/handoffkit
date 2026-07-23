@@ -3,11 +3,11 @@ import {
   assertModelCallRecordV1
 } from "@fusionkit/protocol";
 import type { ModelCallRecordV1 } from "@fusionkit/protocol";
-import type { ModelCallContract } from "@routekit/contracts";
+import type { ModelCallContract } from "@velum-labs/routekit-contracts";
 import {
   readProducerVersion,
   resolveProducerGitSha
-} from "@routekit/gateway";
+} from "@velum-labs/routekit-gateway";
 
 const PRODUCER = "fusionkit-gateway";
 const PRODUCER_VERSION = readProducerVersion();

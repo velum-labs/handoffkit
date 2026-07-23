@@ -1,8 +1,8 @@
 import type { Command } from "commander";
 
-import { dim } from "@routekit/cli-ui";
-import { contextFor, formatPackageVersion } from "@routekit/cli-core";
-import type { CommandContext } from "@routekit/cli-core";
+import { dim } from "@velum-labs/routekit-cli-ui";
+import { contextFor, formatPackageVersion } from "@velum-labs/routekit-cli-core";
+import type { CommandContext } from "@velum-labs/routekit-cli-core";
 
 import { collectVersionMatrix } from "../package-version.js";
 
@@ -51,7 +51,7 @@ async function runVersion(ctx: CommandContext): Promise<number> {
   presenter.line(dim("tool integrations"));
   presenter.keyValue(
     Object.entries(matrix.tools).map(([name, version]) => ({
-      label: `@routekit/tool-${name}`,
+      label: `@velum-labs/routekit-tool-${name}`,
       value: version ?? dim("unknown")
     }))
   );

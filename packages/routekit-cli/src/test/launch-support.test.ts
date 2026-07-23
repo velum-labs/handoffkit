@@ -4,7 +4,7 @@ import test from "node:test";
 import {
   configuredProviderIds,
   DEFAULT_ROUTER_CONFIG
-} from "@routekit/config";
+} from "@velum-labs/routekit-config";
 
 import { buildProgram } from "../cli.js";
 import { completionCandidates } from "../completion.js";

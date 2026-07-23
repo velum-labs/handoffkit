@@ -12,7 +12,7 @@ import { arch as osArch, homedir, platform as osPlatform } from "node:os";
 import { dirname, join } from "node:path";
 import { promisify } from "node:util";
 
-import { trimTrailingSlashes, writeFileAtomic } from "@routekit/runtime";
+import { trimTrailingSlashes, writeFileAtomic } from "@velum-labs/routekit-runtime";
 import { parse as parseYaml } from "yaml";
 
 const execFileAsync = promisify(execFile);

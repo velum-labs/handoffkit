@@ -1,9 +1,9 @@
-import { contextFor } from "@routekit/cli-core";
+import { contextFor } from "@velum-labs/routekit-cli-core";
 import {
   PROVIDER_IDS,
   splitNamespacedModel,
   type ProviderId
-} from "@routekit/gateway";
+} from "@velum-labs/routekit-gateway";
 import type { Command } from "commander";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 

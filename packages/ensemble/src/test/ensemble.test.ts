@@ -20,7 +20,7 @@ import {
 } from "@fusionkit/protocol";
 import type { ModelCallRecordV1 } from "@fusionkit/protocol";
 import { gitText } from "@fusionkit/workspace";
-import { requestHash, responseHash } from "@routekit/contracts";
+import { requestHash, responseHash } from "@velum-labs/routekit-contracts";
 
 import { createCommandHarness } from "../command.js";
 import { createMockJudgeSynthesizer } from "../judge.js";

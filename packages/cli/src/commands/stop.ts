@@ -1,6 +1,6 @@
 import type { Command } from "commander";
 
-import { dim, done, note, uiStream } from "@routekit/cli-ui";
+import { dim, done, note, uiStream } from "@velum-labs/routekit-cli-ui";
 
 import { reapFusionServices } from "../shared/portless.js";
 

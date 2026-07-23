@@ -1,4 +1,4 @@
-import { randomId } from "@routekit/runtime";
+import { randomId } from "@velum-labs/routekit-runtime";
 
 import { joinPath } from "./backend.js";
 import type { Backend, BackendRequestOptions } from "./backend.js";

@@ -24,7 +24,7 @@
  * simply re-issue the search next turn.
  */
 
-import { randomId } from "@routekit/runtime";
+import { randomId } from "@velum-labs/routekit-runtime";
 
 import { SseDecoder } from "../sse/parse.js";
 import { ChatStreamAssembler } from "../sse/chat-assembler.js";

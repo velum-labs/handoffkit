@@ -8,8 +8,8 @@
  * harness-agnostic. fusionkit owns no verification, so reconstructed steps carry
  * raw observations only — never a computed verdict.
  */
-import type { ProvenanceSink, ModelGatewayCallContext, ModelGatewayCallResult } from "@routekit/gateway";
-import { decodeBufferedSse } from "@routekit/gateway";
+import type { ProvenanceSink, ModelGatewayCallContext, ModelGatewayCallResult } from "@velum-labs/routekit-gateway";
+import { decodeBufferedSse } from "@velum-labs/routekit-gateway";
 
 /** A normalized trajectory step (mirrors harness-trajectory.v1 / TrajectoryStep). */
 export type CapturedStep = {

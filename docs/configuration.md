@@ -18,7 +18,7 @@ fusionkit init
 
 If `.routekit/router.yaml` does not exist, `init` creates a provider-based
 placeholder for FusionKit's embedded router. Edit that file directly. The
-independent `@routekit/cli` manages its singleton daemon separately.
+independent `@velum-labs/routekit` manages its singleton daemon separately.
 
 ## FusionKit v4
 
@@ -84,7 +84,7 @@ routekit config import --from .routekit/router.yaml
 ```
 
 Project `.routekit/router.yaml` discovery remains part of the embeddable
-`@routekit/config` / `@routekit/router` SDK contract and therefore remains
+`@velum-labs/routekit-config` / `@velum-labs/routekit-router` SDK contract and therefore remains
 valid for FusionKit's `{ "config": ... }` embedded mode. `--config` and
 `ROUTEKIT_CONFIG` are recovery/foreground SDK paths, not daemon-backed command
 scope selectors. `config import` validates and atomically replaces the complete

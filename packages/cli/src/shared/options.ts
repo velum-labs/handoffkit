@@ -7,9 +7,9 @@ import {
   parsePort,
   parsePositiveInteger,
   parsePositiveNumber
-} from "@routekit/cli-core";
+} from "@velum-labs/routekit-cli-core";
 
-import { fail } from "@routekit/cli-core";
+import { fail } from "@velum-labs/routekit-cli-core";
 
 export { collect, parseIdValue, parsePort };
 

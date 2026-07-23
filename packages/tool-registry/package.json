@@ -1,5 +1,5 @@
 {
-  "name": "@routekit/tool-registry",
+  "name": "@velum-labs/routekit-tool-registry",
   "private": false,
   "version": "0.8.0",
   "repository": {
@@ -27,11 +27,11 @@
     "provenance": true
   },
   "dependencies": {
-    "@routekit/tool-claude": "workspace:*",
-    "@routekit/tool-codex": "workspace:*",
-    "@routekit/tool-cursor": "workspace:*",
-    "@routekit/tool-opencode": "workspace:*",
-    "@routekit/tools": "workspace:*"
+    "@velum-labs/routekit-tool-claude": "workspace:*",
+    "@velum-labs/routekit-tool-codex": "workspace:*",
+    "@velum-labs/routekit-tool-cursor": "workspace:*",
+    "@velum-labs/routekit-tool-opencode": "workspace:*",
+    "@velum-labs/routekit-tools": "workspace:*"
   },
   "keywords": [
     "routekit",

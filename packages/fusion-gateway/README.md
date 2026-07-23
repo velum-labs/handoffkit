@@ -5,5 +5,5 @@ session persistence, aggregate budget accounting, trajectory conversion, and
 managed local-model integration.
 
 Generic HTTP routing, dialect adapters, provider egress, and per-call
-provenance come from `@routekit/gateway`. Subscription accounts come from
-`@routekit/accounts`.
+provenance come from `@velum-labs/routekit-gateway`. Subscription accounts come from
+`@velum-labs/routekit-accounts`.

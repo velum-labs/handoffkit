@@ -23,32 +23,32 @@ function workspacePackage(name, dependencies = {}) {
 
 test("RouteKit dependency guard rejects direct and transitive FusionKit dependencies", () => {
   const manifests = [
-    workspacePackage("@routekit/contracts"),
-    workspacePackage("@routekit/registry", {
-      "@routekit/contracts": "workspace:*"
+    workspacePackage("@velum-labs/routekit-contracts"),
+    workspacePackage("@velum-labs/routekit-registry", {
+      "@velum-labs/routekit-contracts": "workspace:*"
     }),
-    workspacePackage("@routekit/gateway", {
-      "@routekit/registry": "workspace:*"
+    workspacePackage("@velum-labs/routekit-gateway", {
+      "@velum-labs/routekit-registry": "workspace:*"
     }),
     workspacePackage("@fusionkit/protocol", {
-      "@routekit/contracts": "workspace:*"
+      "@velum-labs/routekit-contracts": "workspace:*"
     }),
     workspacePackage("@fusionkit/registry", {
-      "@routekit/registry": "workspace:*"
+      "@velum-labs/routekit-registry": "workspace:*"
     }),
-    workspacePackage("@routekit/bad-direct", {
+    workspacePackage("@velum-labs/routekit-bad-direct", {
       "@fusionkit/protocol": "workspace:*"
     }),
-    workspacePackage("@routekit/bad-transitive", {
-      "@routekit/bad-direct": "workspace:*"
+    workspacePackage("@velum-labs/routekit-bad-transitive", {
+      "@velum-labs/routekit-bad-direct": "workspace:*"
     })
   ];
 
   assert.deepEqual(
     routekitDependencyViolations(manifests).map((violation) => violation.dependencyPath),
     [
-      ["@routekit/bad-direct", "@fusionkit/protocol"],
-      ["@routekit/bad-transitive", "@routekit/bad-direct", "@fusionkit/protocol"]
+      ["@velum-labs/routekit-bad-direct", "@fusionkit/protocol"],
+      ["@velum-labs/routekit-bad-transitive", "@velum-labs/routekit-bad-direct", "@fusionkit/protocol"]
     ]
   );
 });
@@ -63,68 +63,71 @@ test("canonical shared package guard pins every owner name to its path", () => {
   const runtime = manifests.find((entry) => entry.dir === "packages/runtime-utils");
   assert.ok(runtime);
   runtime.manifest.name = "@fusionkit/runtime-utils";
-  assert.match(canonicalSharedPackageViolations(manifests)[0], /must declare @routekit\/runtime/);
+  assert.match(
+    canonicalSharedPackageViolations(manifests)[0],
+    /must declare @velum-labs\/routekit-runtime/
+  );
 });
 
 test("FusionKit composition guard rejects a transitive RouteKit CLI dependency", () => {
   const clean = [
     workspacePackage("@fusionkit/cli", {
-      "@routekit/router": "workspace:*",
-      "@routekit/config": "workspace:*"
+      "@velum-labs/routekit-router": "workspace:*",
+      "@velum-labs/routekit-config": "workspace:*"
     }),
-    workspacePackage("@routekit/router", {
-      "@routekit/gateway": "workspace:*"
+    workspacePackage("@velum-labs/routekit-router", {
+      "@velum-labs/routekit-gateway": "workspace:*"
     }),
-    workspacePackage("@routekit/config"),
-    workspacePackage("@routekit/gateway")
+    workspacePackage("@velum-labs/routekit-config"),
+    workspacePackage("@velum-labs/routekit-gateway")
   ];
   assert.deepEqual(fusionkitCompositionViolations(clean), []);
 
   const bad = [
     ...clean,
-    workspacePackage("@routekit/bad-wrapper", {
-      "@routekit/cli": "workspace:*"
+    workspacePackage("@velum-labs/routekit-bad-wrapper", {
+      "@velum-labs/routekit": "workspace:*"
     }),
-    workspacePackage("@routekit/cli")
+    workspacePackage("@velum-labs/routekit")
   ];
-  bad[0].manifest.dependencies["@routekit/bad-wrapper"] = "workspace:*";
+  bad[0].manifest.dependencies["@velum-labs/routekit-bad-wrapper"] = "workspace:*";
   assert.deepEqual(fusionkitCompositionViolations(bad), [
-    "FusionKit dependency closure includes the RouteKit CLI: @fusionkit/cli -> @routekit/bad-wrapper -> @routekit/cli"
+    "FusionKit dependency closure includes the RouteKit CLI: @fusionkit/cli -> @velum-labs/routekit-bad-wrapper -> @velum-labs/routekit"
   ]);
 });
 
 test("tool registry guard enforces one neutral composition point for both CLIs", () => {
   const clean = [
-    workspacePackage("@routekit/tools"),
-    workspacePackage("@routekit/tool-codex"),
-    workspacePackage("@routekit/tool-claude"),
-    workspacePackage("@routekit/tool-cursor"),
-    workspacePackage("@routekit/tool-opencode"),
-    workspacePackage("@routekit/tool-registry", {
-      "@routekit/tools": "workspace:*",
-      "@routekit/tool-codex": "workspace:*",
-      "@routekit/tool-claude": "workspace:*",
-      "@routekit/tool-cursor": "workspace:*",
-      "@routekit/tool-opencode": "workspace:*"
+    workspacePackage("@velum-labs/routekit-tools"),
+    workspacePackage("@velum-labs/routekit-tool-codex"),
+    workspacePackage("@velum-labs/routekit-tool-claude"),
+    workspacePackage("@velum-labs/routekit-tool-cursor"),
+    workspacePackage("@velum-labs/routekit-tool-opencode"),
+    workspacePackage("@velum-labs/routekit-tool-registry", {
+      "@velum-labs/routekit-tools": "workspace:*",
+      "@velum-labs/routekit-tool-codex": "workspace:*",
+      "@velum-labs/routekit-tool-claude": "workspace:*",
+      "@velum-labs/routekit-tool-cursor": "workspace:*",
+      "@velum-labs/routekit-tool-opencode": "workspace:*"
     }),
-    workspacePackage("@routekit/cli", {
-      "@routekit/tool-registry": "workspace:*"
+    workspacePackage("@velum-labs/routekit", {
+      "@velum-labs/routekit-tool-registry": "workspace:*"
     }),
     workspacePackage("@fusionkit/cli", {
-      "@routekit/tool-registry": "workspace:*"
+      "@velum-labs/routekit-tool-registry": "workspace:*"
     })
   ];
   assert.deepEqual(toolRegistryCompositionViolations(clean), []);
 
-  clean.at(-2).manifest.dependencies["@routekit/tool-codex"] = "workspace:*";
+  clean.at(-2).manifest.dependencies["@velum-labs/routekit-tool-codex"] = "workspace:*";
   assert.deepEqual(toolRegistryCompositionViolations(clean), [
-    "@routekit/cli must compose tools through @routekit/tool-registry, not @routekit/tool-codex"
+    "@velum-labs/routekit must compose tools through @velum-labs/routekit-tool-registry, not @velum-labs/routekit-tool-codex"
   ]);
-  delete clean.at(-2).manifest.dependencies["@routekit/tool-codex"];
+  delete clean.at(-2).manifest.dependencies["@velum-labs/routekit-tool-codex"];
 
-  clean.at(-1).manifest.dependencies["@routekit/tool-cursor"] = "workspace:*";
+  clean.at(-1).manifest.dependencies["@velum-labs/routekit-tool-cursor"] = "workspace:*";
   assert.deepEqual(toolRegistryCompositionViolations(clean), [
-    "@fusionkit/cli must compose tools through @routekit/tool-registry, not @routekit/tool-cursor"
+    "@fusionkit/cli must compose tools through @velum-labs/routekit-tool-registry, not @velum-labs/routekit-tool-cursor"
   ]);
 });
 
@@ -134,7 +137,7 @@ test("tool registry source guard rejects parallel imports and construction", () 
       "packages/cli/src/tools.ts",
       [
         'import { setToolDriverRegistry } from "@fusionkit/ensemble";',
-        'import { toolRegistry } from "@routekit/tool-registry";',
+        'import { toolRegistry } from "@velum-labs/routekit-tool-registry";',
         "setToolDriverRegistry(toolRegistry);"
       ].join("\n")
     ),
@@ -144,8 +147,8 @@ test("tool registry source guard rejects parallel imports and construction", () 
     toolRegistryConsumerSourceViolations(
       "packages/routekit-cli/src/launch.ts",
       [
-        'import { codexTool } from "@routekit/tool-codex";',
-        'import { createToolRegistry } from "@routekit/tools";',
+        'import { codexTool } from "@velum-labs/routekit-tool-codex";',
+        'import { createToolRegistry } from "@velum-labs/routekit-tools";',
         "export const toolRegistry = createToolRegistry([codexTool]);"
       ].join("\n")
     ),
@@ -160,14 +163,14 @@ test("tool registry CLI source guard scans every production source", () => {
   const routekitSources = [
     {
       file: "packages/routekit-cli/src/launch.ts",
-      source: 'import { toolRegistry } from "@routekit/tool-registry";'
+      source: 'import { toolRegistry } from "@velum-labs/routekit-tool-registry";'
     },
     {
       file: "packages/routekit-cli/src/commands/install.ts",
-      source: 'export { installCodexIntegration } from "@routekit/tool-codex";'
+      source: 'export { installCodexIntegration } from "@velum-labs/routekit-tool-codex";'
     }
   ];
-  assert.deepEqual(toolRegistryCliSourceViolations("@routekit/cli", routekitSources), [
+  assert.deepEqual(toolRegistryCliSourceViolations("@velum-labs/routekit", routekitSources), [
     "packages/routekit-cli/src/commands/install.ts must not import individual tool integrations"
   ]);
 
@@ -175,23 +178,23 @@ test("tool registry CLI source guard scans every production source", () => {
     {
       file: "packages/cli/src/tools.ts",
       source: [
-        'import { toolRegistry } from "@routekit/tool-registry";',
+        'import { toolRegistry } from "@velum-labs/routekit-tool-registry";',
         "setToolDriverRegistry(toolRegistry);"
       ].join("\n")
     },
     {
       file: "packages/cli/src/commands/setup.ts",
-      source: 'const loadTool = () => import("@routekit/tool-cursor");'
+      source: 'const loadTool = () => import("@velum-labs/routekit-tool-cursor");'
     }
   ];
   assert.deepEqual(toolRegistryCliSourceViolations("@fusionkit/cli", fusionkitSources), [
     "packages/cli/src/commands/setup.ts must not import individual tool integrations"
   ]);
   assert.deepEqual(
-    toolRegistryCliSourceViolations("@routekit/cli", [
+    toolRegistryCliSourceViolations("@velum-labs/routekit", [
       { file: "packages/routekit-cli/src/commands.ts", source: "export const commands = [];" }
     ]),
-    ["@routekit/cli production sources must import @routekit/tool-registry"]
+    ["@velum-labs/routekit production sources must import @velum-labs/routekit-tool-registry"]
   );
 });
 
@@ -224,7 +227,7 @@ test("trailing slash guard rejects polynomial regexes but allows fixed /v1 match
       'export const normalize = (url) => url.replace(/\\/+$/, "");'
     ),
     [
-      "packages/example/src/url.ts uses a polynomial trailing-slash regex; use @routekit/runtime slash helpers"
+      "packages/example/src/url.ts uses a polynomial trailing-slash regex; use @velum-labs/routekit-runtime slash helpers"
     ]
   );
   assert.deepEqual(

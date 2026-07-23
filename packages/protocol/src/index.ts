@@ -5,7 +5,7 @@
  * The signed-run governance contracts below are unrelated legacy Warrant
  * surface retained here for compatibility during this phase; they are
  * intentionally guarded as FusionKit protocol, not RouteKit contracts.
- * Generic hashing/JCS and model-call primitives come from @routekit/contracts.
+ * Generic hashing/JCS and model-call primitives come from @velum-labs/routekit-contracts.
  *
  * Everything here is stable protocol surface. Packages should consume these
  * interfaces instead of recreating local string lists or proof logic.
@@ -55,8 +55,8 @@ export type {
   ToolPolicyDecision,
   ToolSideEffectClass
 } from "./tool-executor.js";
-export { canonicalize } from "@routekit/contracts";
-export type { JsonValue } from "@routekit/contracts";
+export { canonicalize } from "@velum-labs/routekit-contracts";
+export type { JsonValue } from "@velum-labs/routekit-contracts";
 export {
   assertWireTrajectory,
   isWireTrajectory,
@@ -75,7 +75,7 @@ export {
   SHA256_PREFIX,
   sha256Hex,
   sha256PrefixedHex
-} from "@routekit/contracts";
+} from "@velum-labs/routekit-contracts";
 export {
   MODEL_FUSION_SCHEMA_BUNDLE_HASH,
   assertArtifactRefV1,

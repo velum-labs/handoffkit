@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { canonicalize, hashCanonical } from "@routekit/contracts";
+import { canonicalize, hashCanonical } from "@velum-labs/routekit-contracts";
 
 import { appendEvent, verifyChain } from "../chain.js";
 import { contractHash, signContract } from "../contract.js";

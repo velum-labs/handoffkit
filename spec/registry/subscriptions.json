@@ -1,5 +1,5 @@
 {
-  "$comment": "Subscription auth metadata (Claude Code / Codex CLI logins): credential store locations, auth-mode -> provider mapping, default models, and provider-required request framing. Consumed via the generated @routekit/registry binding; regenerate with `node scripts/generate-registry.mjs`.",
+  "$comment": "Subscription auth metadata (Claude Code / Codex CLI logins): credential store locations, auth-mode -> provider mapping, default models, and provider-required request framing. Consumed via the generated @velum-labs/routekit-registry binding; regenerate with `node scripts/generate-registry.mjs`.",
   "subscriptions": {
     "claude-code": {
       "provider": "anthropic",

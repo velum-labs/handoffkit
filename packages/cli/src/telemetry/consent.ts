@@ -1,8 +1,8 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-import { createConsentManager } from "@routekit/telemetry-core";
-import type { ConsentDecision, ConsentFile } from "@routekit/telemetry-core";
+import { createConsentManager } from "@velum-labs/routekit-telemetry-core";
+import type { ConsentDecision, ConsentFile } from "@velum-labs/routekit-telemetry-core";
 
 export type TelemetryFile = ConsentFile;
 export type TelemetryDecision = ConsentDecision;

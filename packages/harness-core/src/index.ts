@@ -1,5 +1,5 @@
 /**
- * @routekit/harness-core is the single coding-agent harness contract:
+ * @velum-labs/routekit-harness-core is the single coding-agent harness contract:
  * driver -> instance -> session interfaces, the canonical harness event
  * union (with raw provider envelopes), one tagged error taxonomy with
  * derived retryability, deferred-based approvals with explicit policies,

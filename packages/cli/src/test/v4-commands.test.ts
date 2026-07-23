@@ -9,7 +9,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 import { loadFusionConfig } from "@fusionkit/config";
-import { loadRouterConfig } from "@routekit/config";
+import { loadRouterConfig } from "@velum-labs/routekit-config";
 
 import { configuredDefaultToolArgv } from "../commands/palette.js";
 

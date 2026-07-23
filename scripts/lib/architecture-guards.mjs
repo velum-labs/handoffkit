@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 
-const INTERNAL_SCOPES = ["@fusionkit/", "@routekit/"];
+const INTERNAL_SCOPES = ["@fusionkit/", "@velum-labs/routekit"];
 const DEPENDENCY_SECTIONS = [
   "dependencies",
   "devDependencies",
@@ -10,24 +10,24 @@ const DEPENDENCY_SECTIONS = [
 ];
 
 export const CANONICAL_SHARED_PACKAGES = new Map([
-  ["packages/model-gateway", "@routekit/gateway"],
-  ["packages/accounts", "@routekit/accounts"],
-  ["packages/runtime-utils", "@routekit/runtime"],
-  ["packages/routekit-tracing", "@routekit/tracing"],
-  ["packages/cli-ui", "@routekit/cli-ui"],
-  ["packages/cli-core", "@routekit/cli-core"],
-  ["packages/config-core", "@routekit/config-core"],
-  ["packages/routekit-config", "@routekit/config"],
-  ["packages/routekit-router", "@routekit/router"],
-  ["packages/telemetry-core", "@routekit/telemetry-core"],
-  ["packages/harness-core", "@routekit/harness-core"],
-  ["packages/tools", "@routekit/tools"],
-  ["packages/tool-codex", "@routekit/tool-codex"],
-  ["packages/tool-claude", "@routekit/tool-claude"],
-  ["packages/tool-cursor", "@routekit/tool-cursor"],
-  ["packages/tool-opencode", "@routekit/tool-opencode"],
-  ["packages/tool-registry", "@routekit/tool-registry"],
-  ["packages/routekit-cli", "@routekit/cli"]
+  ["packages/model-gateway", "@velum-labs/routekit-gateway"],
+  ["packages/accounts", "@velum-labs/routekit-accounts"],
+  ["packages/runtime-utils", "@velum-labs/routekit-runtime"],
+  ["packages/routekit-tracing", "@velum-labs/routekit-tracing"],
+  ["packages/cli-ui", "@velum-labs/routekit-cli-ui"],
+  ["packages/cli-core", "@velum-labs/routekit-cli-core"],
+  ["packages/config-core", "@velum-labs/routekit-config-core"],
+  ["packages/routekit-config", "@velum-labs/routekit-config"],
+  ["packages/routekit-router", "@velum-labs/routekit-router"],
+  ["packages/telemetry-core", "@velum-labs/routekit-telemetry-core"],
+  ["packages/harness-core", "@velum-labs/routekit-harness-core"],
+  ["packages/tools", "@velum-labs/routekit-tools"],
+  ["packages/tool-codex", "@velum-labs/routekit-tool-codex"],
+  ["packages/tool-claude", "@velum-labs/routekit-tool-claude"],
+  ["packages/tool-cursor", "@velum-labs/routekit-tool-cursor"],
+  ["packages/tool-opencode", "@velum-labs/routekit-tool-opencode"],
+  ["packages/tool-registry", "@velum-labs/routekit-tool-registry"],
+  ["packages/routekit-cli", "@velum-labs/routekit"]
 ]);
 
 export function canonicalSharedPackageViolations(manifests) {
@@ -60,7 +60,7 @@ export function routekitDependencyViolations(manifests) {
   const violations = [];
 
   for (const entry of manifests) {
-    if (!entry.manifest.name?.startsWith("@routekit/")) continue;
+    if (!entry.manifest.name?.startsWith("@velum-labs/routekit")) continue;
     const queue = [...manifestDependencies(entry.manifest)].map((name) => ({
       name,
       path: [entry.manifest.name, name]
@@ -103,7 +103,7 @@ export function fusionkitCompositionViolations(manifests) {
     const current = queue.shift();
     if (current === undefined || visited.has(current.name)) continue;
     visited.add(current.name);
-    if (current.name === "@routekit/cli") {
+    if (current.name === "@velum-labs/routekit") {
       violations.push(
         `FusionKit dependency closure includes the RouteKit CLI: ${current.path.join(" -> ")}`
       );
@@ -120,34 +120,34 @@ export function fusionkitCompositionViolations(manifests) {
 
 export function toolRegistryCompositionViolations(manifests) {
   const byName = new Map(manifests.map((entry) => [entry.manifest.name, entry]));
-  const registry = byName.get("@routekit/tool-registry");
-  if (registry === undefined) return ["@routekit/tool-registry is missing from the workspace"];
+  const registry = byName.get("@velum-labs/routekit-tool-registry");
+  if (registry === undefined) return ["@velum-labs/routekit-tool-registry is missing from the workspace"];
 
   const violations = [];
   const registryDependencies = manifestDependencies(registry.manifest);
   const integrationPackages = [...byName.keys()]
-    .filter((name) => /^@routekit\/tool-(?!registry$)/.test(name))
+    .filter((name) => /^@velum-labs\/routekit-tool-(?!registry$)/.test(name))
     .sort();
-  for (const dependency of ["@routekit/tools", ...integrationPackages]) {
+  for (const dependency of ["@velum-labs/routekit-tools", ...integrationPackages]) {
     if (!registryDependencies.has(dependency)) {
-      violations.push(`@routekit/tool-registry must depend on ${dependency}`);
+      violations.push(`@velum-labs/routekit-tool-registry must depend on ${dependency}`);
     }
   }
 
-  for (const consumerName of ["@routekit/cli", "@fusionkit/cli"]) {
+  for (const consumerName of ["@velum-labs/routekit", "@fusionkit/cli"]) {
     const consumer = byName.get(consumerName);
     if (consumer === undefined) {
       violations.push(`${consumerName} is missing from the workspace`);
       continue;
     }
     const dependencies = manifestDependencies(consumer.manifest);
-    if (!dependencies.has("@routekit/tool-registry")) {
-      violations.push(`${consumerName} must depend on @routekit/tool-registry`);
+    if (!dependencies.has("@velum-labs/routekit-tool-registry")) {
+      violations.push(`${consumerName} must depend on @velum-labs/routekit-tool-registry`);
     }
     for (const dependency of dependencies) {
       if (integrationPackages.includes(dependency)) {
         violations.push(
-          `${consumerName} must compose tools through @routekit/tool-registry, not ${dependency}`
+          `${consumerName} must compose tools through @velum-labs/routekit-tool-registry, not ${dependency}`
         );
       }
     }
@@ -158,7 +158,7 @@ export function toolRegistryCompositionViolations(manifests) {
 export function toolRegistryConsumerSourceViolations(file, source) {
   const violations = [];
   if (
-    /(?:\bfrom\s*|\bimport\s*(?:\(\s*)?|\brequire\s*\(\s*)["']@routekit\/tool-(?!registry(?:["'/]))[^"']+["']/.test(
+    /(?:\bfrom\s*|\bimport\s*(?:\(\s*)?|\brequire\s*\(\s*)["']@velum-labs\/routekit-tool-(?!registry(?:["'/]))[^"']+["']/.test(
       source
     )
   ) {
@@ -180,12 +180,12 @@ export function toolRegistryCliSourceViolations(consumerName, sources) {
   const violations = [];
   if (
     !sources.some(({ source }) =>
-      /(?:\bfrom\s*|\bimport\s*(?:\(\s*)?|\brequire\s*\(\s*)["']@routekit\/tool-registry["']/.test(
+      /(?:\bfrom\s*|\bimport\s*(?:\(\s*)?|\brequire\s*\(\s*)["']@velum-labs\/routekit-tool-registry["']/.test(
         source
       )
     )
   ) {
-    violations.push(`${consumerName} production sources must import @routekit/tool-registry`);
+    violations.push(`${consumerName} production sources must import @velum-labs/routekit-tool-registry`);
   }
   for (const { file, source } of sources) {
     violations.push(...toolRegistryConsumerSourceViolations(file, source));
@@ -212,7 +212,7 @@ export function toolRegistryConstructionViolations(sources) {
 export function polynomialTrailingSlashRegexViolations(file, source) {
   if (!/\\\/[+*]\$\//.test(source)) return [];
   return [
-    `${file} uses a polynomial trailing-slash regex; use @routekit/runtime slash helpers`
+    `${file} uses a polynomial trailing-slash regex; use @velum-labs/routekit-runtime slash helpers`
   ];
 }
 

@@ -1,7 +1,7 @@
 import { runWorktreeAgent } from "@fusionkit/adapter-ai-sdk";
 import { ATTR } from "@fusionkit/protocol";
-import { artifactHash } from "@routekit/contracts";
-import { defineTimeouts } from "@routekit/runtime";
+import { artifactHash } from "@velum-labs/routekit-contracts";
+import { defineTimeouts } from "@velum-labs/routekit-runtime";
 import { emitFusionEvent } from "@fusionkit/tracing";
 import type { FusionTraceCarrier } from "@fusionkit/tracing";
 

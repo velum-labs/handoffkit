@@ -14,7 +14,7 @@
  */
 
 import type { Backend, BackendRequestOptions } from "../backend.js";
-import { randomId } from "@routekit/runtime";
+import { randomId } from "@velum-labs/routekit-runtime";
 import {
   attachReasoningSelection,
   attachReasoningSelectionError,

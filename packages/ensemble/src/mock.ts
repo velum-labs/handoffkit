@@ -1,4 +1,4 @@
-import { artifactHash } from "@routekit/contracts";
+import { artifactHash } from "@velum-labs/routekit-contracts";
 
 import type {
   HarnessAdapter,

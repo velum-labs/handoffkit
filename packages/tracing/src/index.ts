@@ -87,8 +87,8 @@ export {
   InMemorySpanExporter,
   SimpleLogRecordProcessor,
   SimpleSpanProcessor
-} from "@routekit/tracing";
-export type { LogRecordProcessor, SpanProcessor } from "@routekit/tracing";
+} from "@velum-labs/routekit-tracing";
+export type { LogRecordProcessor, SpanProcessor } from "@velum-labs/routekit-tracing";
 export {
   ATTR,
   EXPORTABLE_ATTRIBUTES,

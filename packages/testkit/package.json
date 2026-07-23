@@ -12,7 +12,7 @@
     }
   },
   "dependencies": {
-    "@routekit/runtime": "workspace:*",
+    "@velum-labs/routekit-runtime": "workspace:*",
     "yaml": "2.9.0"
   },
   "scripts": {

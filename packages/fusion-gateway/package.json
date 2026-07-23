@@ -31,11 +31,11 @@
     "@fusionkit/protocol": "workspace:*",
     "@fusionkit/registry": "workspace:*",
     "@fusionkit/tracing": "workspace:*",
-    "@routekit/contracts": "workspace:*",
-    "@routekit/gateway": "workspace:*",
-    "@routekit/registry": "workspace:*",
-    "@routekit/runtime": "workspace:*",
-    "@routekit/tracing": "workspace:*"
+    "@velum-labs/routekit-contracts": "workspace:*",
+    "@velum-labs/routekit-gateway": "workspace:*",
+    "@velum-labs/routekit-registry": "workspace:*",
+    "@velum-labs/routekit-runtime": "workspace:*",
+    "@velum-labs/routekit-tracing": "workspace:*"
   },
   "keywords": [
     "fusionkit",

@@ -3,8 +3,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import type { ServerOptions } from "@opencode-ai/sdk/server";
-import { spawnTool, trimTrailingSlashes } from "@routekit/runtime";
-import type { ToolLaunchContext, ToolLaunchSpec } from "@routekit/tools";
+import { spawnTool, trimTrailingSlashes } from "@velum-labs/routekit-runtime";
+import type { ToolLaunchContext, ToolLaunchSpec } from "@velum-labs/routekit-tools";
 
 const PROVIDER_ID = "routekit";
 type OpencodeServerConfig = NonNullable<ServerOptions["config"]>;

@@ -2,7 +2,7 @@ import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
-import { hashCanonicalSha256 } from "@routekit/contracts";
+import { hashCanonicalSha256 } from "@velum-labs/routekit-contracts";
 import { gitText } from "@fusionkit/workspace";
 
 import type { EnsembleDescriptor, EnsembleModel } from "./harness.js";

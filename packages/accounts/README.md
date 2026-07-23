@@ -1,4 +1,4 @@
-# @routekit/accounts
+# @velum-labs/routekit-accounts
 
 Provider-neutral subscription account pooling, credential sources, quota
 tracking, relays, and account connectors. Some connector internals are retained
@@ -22,7 +22,7 @@ and development. Those registry entries and exported APIs are internal,
 unqualified, and non-contractual; they are not RouteKit onboarding or support.
 
 ```ts
-import { startSubscriptionProxy } from "@routekit/accounts";
+import { startSubscriptionProxy } from "@velum-labs/routekit-accounts";
 ```
 
 Retained connector state remains private under `ROUTEKIT_HOME`; credential

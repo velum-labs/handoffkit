@@ -46,7 +46,7 @@ jobs:
 
       # The publish step performs the npm OIDC exchange via the npm CLI, which
       # must be >= 11.5.1 for trusted publishing. Trusted Publishers for the
-      # @routekit/* and @fusionkit/* packages are configured on npmjs.com, so
+      # @velum-labs/routekit and @velum-labs/routekit-* and @fusionkit/* packages are configured on npmjs.com, so
       # publishing is token-free via OIDC (provenance is emitted automatically).
       - name: Update npm for OIDC trusted publishing
         run: npm install -g npm@latest

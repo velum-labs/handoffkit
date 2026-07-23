@@ -5,7 +5,7 @@ description: Release notes for the FusionKit packages.
 
 {/* Generated from CHANGELOG.md by scripts/sync-docs-changelog.mjs. Do not edit by hand. */}
 
-Release notes for the RouteKit/FusionKit monorepo: `@routekit/*` and
+Release notes for the RouteKit/FusionKit monorepo: `@velum-labs/routekit` and `@velum-labs/routekit-*` and
 `@fusionkit/*` npm packages, the `@velum-labs/model-fusion-protocol` contract
 package, and the PyPI FusionKit sidecar package set. Release tags are named
 `handoffkit-v*` for historical reasons.
@@ -41,7 +41,7 @@ package, and the PyPI FusionKit sidecar package set. Release tags are named
 - Isolated the Codex SDK driver's `CODEX_HOME` for gateway-routed sessions so
   the user's personal Codex config (model, reasoning effort) cannot leak into
   panel requests and codex cannot overwrite the user's real models cache.
-- Split the neutral routing foundation into `@routekit/*` packages and the
+- Split the neutral routing foundation into `@velum-labs/routekit` and `@velum-labs/routekit-*` packages and the
   independent `routekit` CLI. RouteKit now owns explicit provider configuration,
   live namespaced model catalogs, credentials, multi-subscription account
   pooling, proxies, provider egress, and direct coding-tool launches.
@@ -60,7 +60,7 @@ package, and the PyPI FusionKit sidecar package set. Release tags are named
   distribution owns `fusionkit-bench`.
 - Moved durable Fusion sessions, aggregate budgets, trajectories, and the public
   Fusion front door to `@fusionkit/gateway`; neutral per-call routing,
-  provenance, and metering remain in `@routekit/gateway`.
+  provenance, and metering remain in `@velum-labs/routekit-gateway`.
 - Added clean-install and OOTB command-shape gates for both CLIs, explicit npm
   and PyPI release dependency order, complete package/binary/version metadata,
   and Trusted Publisher validation for both npm scopes and all FusionKit PyPI

@@ -17,7 +17,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { parse as parseYaml } from "yaml";
 
-import { processIdentity } from "@routekit/runtime";
+import { processIdentity } from "@velum-labs/routekit-runtime";
 
 const CLI = resolve(dirname(fileURLToPath(import.meta.url)), "..", "index.js");
 

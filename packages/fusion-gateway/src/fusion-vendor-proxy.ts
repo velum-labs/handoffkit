@@ -2,10 +2,10 @@ import { ATTR } from "@fusionkit/protocol";
 import { startFusionSpan } from "@fusionkit/tracing";
 import { FUSION_PANEL_MODEL } from "@fusionkit/registry";
 
-import { joinPath } from "@routekit/gateway";
+import { joinPath } from "@velum-labs/routekit-gateway";
 import type { FrontdoorRequestValue, VendorProxyOutcome } from "./frontdoor/types.js";
 import type { FusionGatewayLogger } from "./logger.js";
-import { errorEvent, finishChunk, noticeChunk, sseResponse } from "@routekit/gateway";
+import { errorEvent, finishChunk, noticeChunk, sseResponse } from "@velum-labs/routekit-gateway";
 import { parseUsageFromSse } from "./cost.js";
 import { FusionCostMeter, providerCostFromSse, usageWithProviderCost } from "./fusion-cost-meter.js";
 import {
@@ -19,7 +19,7 @@ import {
   sseObjectError,
   sseObjectHasContent
 } from "./fusion-failover.js";
-import { SseDecoder } from "@routekit/gateway";
+import { SseDecoder } from "@velum-labs/routekit-gateway";
 import { errorText } from "./fusion-session.js";
 import type {
   FailoverCategory,

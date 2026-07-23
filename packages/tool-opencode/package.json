@@ -1,5 +1,5 @@
 {
-  "name": "@routekit/tool-opencode",
+  "name": "@velum-labs/routekit-tool-opencode",
   "private": false,
   "version": "0.8.0",
   "repository": {
@@ -26,9 +26,9 @@
     "provenance": true
   },
   "dependencies": {
-    "@routekit/harness-core": "workspace:*",
-    "@routekit/tools": "workspace:*",
-    "@routekit/runtime": "workspace:*",
+    "@velum-labs/routekit-harness-core": "workspace:*",
+    "@velum-labs/routekit-tools": "workspace:*",
+    "@velum-labs/routekit-runtime": "workspace:*",
     "@opencode-ai/sdk": "1.17.13",
     "zod": "4.4.3"
   },

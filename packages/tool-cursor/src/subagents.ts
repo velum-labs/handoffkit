@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-import type { AgentProfile } from "@routekit/tools";
+import type { AgentProfile } from "@velum-labs/routekit-tools";
 
 export const CURSOR_AGENTS_DIRNAME = join(".cursor", "agents");
 

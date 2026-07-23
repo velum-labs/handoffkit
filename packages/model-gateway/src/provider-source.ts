@@ -4,11 +4,11 @@ import {
   type ProviderDiscoveryResponseShape,
   type ProviderInfo,
   type ProviderWireProtocol
-} from "@routekit/registry";
+} from "@velum-labs/routekit-registry";
 import type {
   ModelReasoningCapabilities,
   ReasoningEffortOption
-} from "@routekit/contracts";
+} from "@velum-labs/routekit-contracts";
 
 import { OpenAiBackend } from "./backend.js";
 import type { Backend, BackendRequestOptions } from "./backend.js";

@@ -13,9 +13,9 @@ import {
   DEFAULT_ROUTER_CONFIG,
   loadRouterConfig,
   writeRouterConfig
-} from "@routekit/config";
-import { canPromptInteractively, confirm, done, note, select } from "@routekit/cli-ui";
-import { startRouter } from "@routekit/router";
+} from "@velum-labs/routekit-config";
+import { canPromptInteractively, confirm, done, note, select } from "@velum-labs/routekit-cli-ui";
+import { startRouter } from "@velum-labs/routekit-router";
 
 import { toolSelectOptions } from "./fusion-quickstart.js";
 

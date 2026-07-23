@@ -18,9 +18,9 @@ import { dirname } from "node:path";
 
 import type { Command } from "commander";
 
-import { bold, canPromptInteractively, cyan, dim, gray } from "@routekit/cli-ui";
-import { argOrPick, contextFor, fail } from "@routekit/cli-core";
-import type { CommandContext } from "@routekit/cli-core";
+import { bold, canPromptInteractively, cyan, dim, gray } from "@velum-labs/routekit-cli-ui";
+import { argOrPick, contextFor, fail } from "@velum-labs/routekit-cli-core";
+import type { CommandContext } from "@velum-labs/routekit-cli-core";
 
 import {
   DEFAULT_ENSEMBLE_NAME,

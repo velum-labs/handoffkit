@@ -1,5 +1,5 @@
 {
-  "name": "@routekit/tool-cursor",
+  "name": "@velum-labs/routekit-tool-cursor",
   "private": false,
   "version": "0.8.0",
   "repository": {
@@ -26,10 +26,10 @@
     "provenance": true
   },
   "dependencies": {
-    "@routekit/contracts": "workspace:*",
-    "@routekit/harness-core": "workspace:*",
-    "@routekit/runtime": "workspace:*",
-    "@routekit/tools": "workspace:*",
+    "@velum-labs/routekit-contracts": "workspace:*",
+    "@velum-labs/routekit-harness-core": "workspace:*",
+    "@velum-labs/routekit-runtime": "workspace:*",
+    "@velum-labs/routekit-tools": "workspace:*",
     "@velum-labs/cursorkit": "0.2.0",
     "@zed-industries/agent-client-protocol": "0.4.5",
     "zod": "4.4.3"

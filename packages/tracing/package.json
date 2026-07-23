@@ -27,7 +27,7 @@
   },
   "dependencies": {
     "@fusionkit/protocol": "workspace:*",
-    "@routekit/tracing": "workspace:*",
+    "@velum-labs/routekit-tracing": "workspace:*",
     "@opentelemetry/api": "1.9.1",
     "@opentelemetry/api-logs": "0.220.0",
     "@opentelemetry/sdk-logs": "0.220.0",

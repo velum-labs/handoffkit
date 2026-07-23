@@ -1,9 +1,9 @@
 import type { WireTrajectory } from "@fusionkit/protocol";
 import { ATTR } from "@fusionkit/protocol";
-import { randomId } from "@routekit/runtime";
+import { randomId } from "@velum-labs/routekit-runtime";
 import { headersOf, jsonAttr, startFusionSpan } from "@fusionkit/tracing";
 import type { FusionTraceCarrier } from "@fusionkit/tracing";
-import type { ResumeCursor } from "@routekit/harness-core";
+import type { ResumeCursor } from "@velum-labs/routekit-harness-core";
 import { PanelGenerateOperator } from "./fusion-operators.js";
 import { runEnsemble } from "./run.js";
 import { FusionRuntime, StaticDAGScheduler, createArtifact } from "./runtime.js";

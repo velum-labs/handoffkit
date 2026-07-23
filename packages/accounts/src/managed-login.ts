@@ -24,8 +24,8 @@ import { platform, tmpdir, userInfo } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 
-import type { SubscriptionMode } from "@routekit/registry";
-import { buildChildEnv, commandOnPath, superviseSpawn } from "@routekit/runtime";
+import type { SubscriptionMode } from "@velum-labs/routekit-registry";
+import { buildChildEnv, commandOnPath, superviseSpawn } from "@velum-labs/routekit-runtime";
 
 import {
   defaultSubscriptionAccountDirectory,

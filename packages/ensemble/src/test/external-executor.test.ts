@@ -15,7 +15,7 @@ import type {
   ToolCallPlanV1,
   ToolExecutorContract
 } from "@fusionkit/protocol";
-import type { JsonValue } from "@routekit/contracts";
+import type { JsonValue } from "@velum-labs/routekit-contracts";
 
 import {
   executeFusionKitToolBatch,

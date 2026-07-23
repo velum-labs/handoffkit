@@ -1,5 +1,5 @@
 {
-  "name": "@routekit/daemon",
+  "name": "@velum-labs/routekit-daemon",
   "private": false,
   "version": "0.8.0",
   "description": "Singleton RouteKit control daemon and stable model gateway.",
@@ -24,14 +24,14 @@
   },
   "keywords": ["routekit", "daemon", "model-gateway", "service"],
   "dependencies": {
-    "@routekit/accounts": "workspace:*",
-    "@routekit/config": "workspace:*",
-    "@routekit/control": "workspace:*",
-    "@routekit/gateway": "workspace:*",
-    "@routekit/registry": "workspace:*",
-    "@routekit/router": "workspace:*",
-    "@routekit/runtime": "workspace:*",
-    "@routekit/telemetry-core": "workspace:*",
+    "@velum-labs/routekit-accounts": "workspace:*",
+    "@velum-labs/routekit-config": "workspace:*",
+    "@velum-labs/routekit-control": "workspace:*",
+    "@velum-labs/routekit-gateway": "workspace:*",
+    "@velum-labs/routekit-registry": "workspace:*",
+    "@velum-labs/routekit-router": "workspace:*",
+    "@velum-labs/routekit-runtime": "workspace:*",
+    "@velum-labs/routekit-telemetry-core": "workspace:*",
     "yaml": "2.9.0"
   },
   "scripts": {

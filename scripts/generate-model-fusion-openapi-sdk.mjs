@@ -81,7 +81,7 @@ function renderTs() {
     `// Source: ${OPENAPI_PATH}`,
     `// Source hash: ${specHash}`,
     "",
-    'import type { JsonValue } from "@routekit/contracts";',
+    'import type { JsonValue } from "@velum-labs/routekit-contracts";',
     "",
     `export const MODEL_FUSION_OPENAPI_SOURCE_HASH = ${JSON.stringify(specHash)} as const;`,
     `export const MODEL_FUSION_HARNESS_EXECUTOR_PATH = "/v1/harness-executions" as const;`,

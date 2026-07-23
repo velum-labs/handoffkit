@@ -1,4 +1,4 @@
-import { createPresenter, uiStream } from "@routekit/cli-ui";
+import { createPresenter, uiStream } from "@velum-labs/routekit-cli-ui";
 
 import { emitJson, isJsonMode } from "./context.js";
 

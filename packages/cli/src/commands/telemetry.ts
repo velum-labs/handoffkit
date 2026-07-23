@@ -14,13 +14,13 @@
  */
 import type { Command } from "commander";
 
-import { bold, dim, green, yellow } from "@routekit/cli-ui";
-import { contextFor } from "@routekit/cli-core";
-import type { CommandContext } from "@routekit/cli-core";
+import { bold, dim, green, yellow } from "@velum-labs/routekit-cli-ui";
+import { contextFor } from "@velum-labs/routekit-cli-core";
+import type { CommandContext } from "@velum-labs/routekit-cli-core";
 import {
   CLI_COMMAND_TELEMETRY_FIELDS,
   telemetryStatusMetadata
-} from "@routekit/telemetry-core";
+} from "@velum-labs/routekit-telemetry-core";
 
 import {
   disableTelemetry,

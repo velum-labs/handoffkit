@@ -10,16 +10,16 @@ import {
 } from "@fusionkit/gateway";
 import { fusionModelId } from "@fusionkit/registry";
 import { shutdownFusionTracing } from "@fusionkit/tracing";
-import type { HarnessKind } from "@routekit/harness-core";
+import type { HarnessKind } from "@velum-labs/routekit-harness-core";
 import {
   assertModelsAvailable,
   loadRouterConfig
-} from "@routekit/config";
-import { resolveReasoningEffort } from "@routekit/contracts";
-import type { ModelReasoningCapabilities } from "@routekit/contracts";
-import { commandOnPath, registerCleanup, trimTrailingSlashes } from "@routekit/runtime";
-import { createToolLaunchContext } from "@routekit/tools";
-import type { AgentProfile, ToolLaunchSpec } from "@routekit/tools";
+} from "@velum-labs/routekit-config";
+import { resolveReasoningEffort } from "@velum-labs/routekit-contracts";
+import type { ModelReasoningCapabilities } from "@velum-labs/routekit-contracts";
+import { commandOnPath, registerCleanup, trimTrailingSlashes } from "@velum-labs/routekit-runtime";
+import { createToolLaunchContext } from "@velum-labs/routekit-tools";
+import type { AgentProfile, ToolLaunchSpec } from "@velum-labs/routekit-tools";
 
 import { resolveSessionId } from "./commands/sessions.js";
 import { gatewaySetupSnippets } from "./gateway.js";

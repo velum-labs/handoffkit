@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import type { AgentProfile, ToolLaunchContext } from "@routekit/tools";
+import type { AgentProfile, ToolLaunchContext } from "@velum-labs/routekit-tools";
 
 import { claudeAgentsJson, claudeEnv, claudeLaunchArgs } from "../launch.js";
 

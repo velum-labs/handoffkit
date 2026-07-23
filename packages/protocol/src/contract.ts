@@ -1,4 +1,4 @@
-import { hashCanonical } from "@routekit/contracts";
+import { hashCanonical } from "@velum-labs/routekit-contracts";
 import { keyIdFromPublicPem, signData, verifyData } from "./keys.js";
 import type { RunContract, Signature } from "./types.js";
 

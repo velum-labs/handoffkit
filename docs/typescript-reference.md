@@ -8,31 +8,31 @@ The workspace uses ESM, TypeScript project references, pnpm, Node 22 (effectivel
 
 ```mermaid
 flowchart LR
-  CLI["@fusionkit/cli"] --> ToolRegistry["@routekit/tool-registry"]
-  RouteCLI["@routekit/cli"] --> ToolRegistry
-  ToolRegistry --> Tools["@routekit/tools"]
+  CLI["@fusionkit/cli"] --> ToolRegistry["@velum-labs/routekit-tool-registry"]
+  RouteCLI["@velum-labs/routekit"] --> ToolRegistry
+  ToolRegistry --> Tools["@velum-labs/routekit-tools"]
   CLI --> FusionGateway["@fusionkit/gateway"]
-  FusionGateway --> Gateway["@routekit/gateway"]
-  CLI --> Accounts["@routekit/accounts"]
+  FusionGateway --> Gateway["@velum-labs/routekit-gateway"]
+  CLI --> Accounts["@velum-labs/routekit-accounts"]
   CLI --> Ensemble["@fusionkit/ensemble"]
   CLI --> Workspace["@fusionkit/workspace"]
   FusionGateway --> Protocol["@fusionkit/protocol"]
   Ensemble --> Protocol
   Ensemble --> Workspace
   Ensemble --> Kernel["@fusionkit/kernel"]
-  ToolRegistry --> Codex["@routekit/tool-codex"]
-  ToolRegistry --> Claude["@routekit/tool-claude"]
-  ToolRegistry --> Cursor["@routekit/tool-cursor"]
-  ToolRegistry --> Opencode["@routekit/tool-opencode"]
+  ToolRegistry --> Codex["@velum-labs/routekit-tool-codex"]
+  ToolRegistry --> Claude["@velum-labs/routekit-tool-claude"]
+  ToolRegistry --> Cursor["@velum-labs/routekit-tool-cursor"]
+  ToolRegistry --> Opencode["@velum-labs/routekit-tool-opencode"]
   Codex --> Tools
   Claude --> Tools
   Cursor --> Tools
   Opencode --> Tools
-  Tools --> HarnessCore["@routekit/harness-core"]
+  Tools --> HarnessCore["@velum-labs/routekit-harness-core"]
   Ensemble --> Tools
 ```
 
-The FusionKit product path starts in `@fusionkit/cli`. The CLI imports the canonical RouteKit tool registry, composes it with the ensemble's generic driver-registry setter, resolves Fusion and RouteKit configuration, starts the Node Fusion gateway and internal Python synthesis sidecar, and launches the selected harness. `@routekit/gateway` owns neutral wire translation, live provider discovery, namespaced model dispatch, and per-call provenance; `@fusionkit/gateway` owns the Fusion front door, durable sessions, and aggregate budgets. The ensemble package owns panel execution, worktrees, judge adapters, and runtime-kernel workflows.
+The FusionKit product path starts in `@fusionkit/cli`. The CLI imports the canonical RouteKit tool registry, composes it with the ensemble's generic driver-registry setter, resolves Fusion and RouteKit configuration, starts the Node Fusion gateway and internal Python synthesis sidecar, and launches the selected harness. `@velum-labs/routekit-gateway` owns neutral wire translation, live provider discovery, namespaced model dispatch, and per-call provenance; `@fusionkit/gateway` owns the Fusion front door, durable sessions, and aggregate budgets. The ensemble package owns panel execution, worktrees, judge adapters, and runtime-kernel workflows.
 
 ## `@fusionkit/cli`
 
@@ -44,7 +44,7 @@ and command groups. It registers fusion launchers and `init`, then `setup`,
 `doctor`, `config`, `prompts`, `sessions`, `models`, `ensemble`, completion,
 the hidden completion protocol, `telemetry`, `version`, and `stop`. Provider,
 account, proxy, install/uninstall, and direct/single-model commands belong to
-`@routekit/cli`.
+`@velum-labs/routekit`.
 
 The important behavior around errors is also part of the public user experience. `PolicyDeniedError` prints a fail-closed policy denial and exits with status 2. `PreflightError` prints a direct environment or prerequisite error and exits with status 1. Unknown errors print as `error: <message>` and exit with status 1.
 
@@ -113,9 +113,9 @@ const result = await runEnsemble({
 console.log(result.summary.status);
 ```
 
-## `@routekit/gateway`
+## `@velum-labs/routekit-gateway`
 
-`@routekit/gateway` is the neutral HTTP router. It owns `Backend`,
+`@velum-labs/routekit-gateway` is the neutral HTTP router. It owns `Backend`,
 `startGateway()`, Chat/Responses/Anthropic/Cursor dialect adapters, SSE, ACP,
 single-call cost/provenance records, `RouterConfig`, `CatalogBackend`, provider
 sources, and OpenAI-compatible, Anthropic, Google GenAI, and Codex Responses
@@ -123,7 +123,7 @@ egress. Explicitly enabled providers discover models at startup and publish
 source-qualified `provider/model` IDs.
 
 ```ts
-import { CatalogBackend, startGateway } from "@routekit/gateway";
+import { CatalogBackend, startGateway } from "@velum-labs/routekit-gateway";
 
 const backend = await CatalogBackend.create({
   config: {
@@ -134,9 +134,9 @@ const backend = await CatalogBackend.create({
 const gateway = await startGateway({ backend });
 ```
 
-## `@routekit/accounts`
+## `@velum-labs/routekit-accounts`
 
-`@routekit/accounts` owns subscription credentials, account sources, quota
+`@velum-labs/routekit-accounts` owns subscription credentials, account sources, quota
 tracking, multi-account provider pools, per-model eligibility, provider relays,
 and proxy/client wire contracts. Selection supports sticky, round-robin, and
 capacity-weighted policies.
@@ -203,15 +203,15 @@ const outputs = await collectOutputs({ root: "/tmp/fusionkit-session" });
 console.log(outputs.files.length);
 ```
 
-## `@routekit/tools`
+## `@velum-labs/routekit-tools`
 
-`@routekit/tools` defines product-neutral launcher, canonical-driver, and capability metadata. Hosts provide opaque model catalogs and generic agent profiles through `ToolLaunchSpec`.
+`@velum-labs/routekit-tools` defines product-neutral launcher, canonical-driver, and capability metadata. Hosts provide opaque model catalogs and generic agent profiles through `ToolLaunchSpec`.
 
 Important exports are `ToolIntegration`, `ToolLaunchSpec`, `ToolLaunchContext`, `AgentProfile`, `createToolRegistry()`, and `createToolCapabilityMatrix()`.
 
-## `@routekit/tool-registry`
+## `@velum-labs/routekit-tool-registry`
 
-`@routekit/tool-registry` owns the one shipped integration list and exports
+`@velum-labs/routekit-tool-registry` owns the one shipped integration list and exports
 `toolIntegrations` plus the constructed `toolRegistry`. It depends only on
 RouteKit's tool contracts and the individual tool packages. Both CLIs import
 this registry; FusionKit adds only `setToolDriverRegistry(toolRegistry)` to
@@ -220,26 +220,26 @@ connect it to generic ensemble driver lookup.
 Example:
 
 ```ts
-import { toolRegistry } from "@routekit/tool-registry";
+import { toolRegistry } from "@velum-labs/routekit-tool-registry";
 
 console.log(toolRegistry.list().map((tool) => tool.id));
 ```
 
 ## Tool packages
 
-`@routekit/tool-codex` owns one Codex serializer/launcher and one SDK driver.
+`@velum-labs/routekit-tool-codex` owns one Codex serializer/launcher and one SDK driver.
 
-`@routekit/tool-claude` owns one Claude profile serializer/launcher and one Agent SDK driver.
+`@velum-labs/routekit-tool-claude` owns one Claude profile serializer/launcher and one Agent SDK driver.
 
-`@routekit/tool-cursor` owns one Cursor CLI/IDE launch path and one ACP driver.
+`@velum-labs/routekit-tool-cursor` owns one Cursor CLI/IDE launch path and one ACP driver.
 
-`@routekit/tool-opencode` owns one OpenCode serializer/launcher and one SDK driver.
+`@velum-labs/routekit-tool-opencode` owns one OpenCode serializer/launcher and one SDK driver.
 
 Example:
 
 ```ts
-import { cursorTool } from "@routekit/tool-cursor";
-import { opencodeTool } from "@routekit/tool-opencode";
+import { cursorTool } from "@velum-labs/routekit-tool-cursor";
+import { opencodeTool } from "@velum-labs/routekit-tool-opencode";
 
 console.log(cursorTool.driver.kind);
 console.log(opencodeTool.capabilities.streaming);
@@ -283,15 +283,15 @@ if (issues.length > 0) {
 }
 ```
 
-## `@routekit/cli-ui` and `@routekit/cli-core`
+## `@velum-labs/routekit-cli-ui` and `@velum-labs/routekit-cli-core`
 
-`@routekit/cli-ui` is a brand-configurable terminal UX layer with rich Ink and ordered plain-text presenters. `@routekit/cli-core` composes it with brand-neutral command context, structured errors, common parsing, completion, version formatting, and test helpers.
+`@velum-labs/routekit-cli-ui` is a brand-configurable terminal UX layer with rich Ink and ordered plain-text presenters. `@velum-labs/routekit-cli-core` composes it with brand-neutral command context, structured errors, common parsing, completion, version formatting, and test helpers.
 
 Important exports include `createPresenter()`, `InkPresenter`, `PlainPresenter`, prompt helpers (`select()`, `multiselect()`, `confirm()`, `text()`, `fuzzySelect()`), `runWizard()`, `fuzzyFilter()`/`fuzzyMatch()`, and the theme, runtime, and format helpers re-exported from the entry point.
 
-## `@routekit/harness-core`
+## `@velum-labs/routekit-harness-core`
 
-`@routekit/harness-core` is the product-neutral coding-agent harness contract: driver, instance, and session interfaces, canonical events, tagged errors, approvals, status probes, and shared stream/process primitives.
+`@velum-labs/routekit-harness-core` is the product-neutral coding-agent harness contract: driver, instance, and session interfaces, canonical events, tagged errors, approvals, status probes, and shared stream/process primitives.
 
 Important exports include `HARNESS_KINDS`, `isHarnessKind()`, `HarnessError`, `asHarnessError()`, `isRetryable()`, `DEFAULT_AUTOMATION_APPROVAL_POLICY`, `PendingRequests`, stream-JSON helpers, and the `HarnessDriver`/`HarnessInstance`/`SessionHandle` type family.
 
@@ -303,18 +303,18 @@ generated from `spec/registry/fusion.json`. Important exports include
 presets.
 
 Product-neutral provider/auth metadata, catalogs, capabilities, pricing, and
-local-model metadata live in `@routekit/registry`, generated from the remaining
+local-model metadata live in `@velum-labs/routekit-registry`, generated from the remaining
 `spec/registry/*.json` sources. Its important exports include `REGISTRY`,
 `PROVIDERS`, and the provider discovery, catalog, capability, and pricing
 helpers.
 
 ## RouteKit shared cores
 
-`@routekit/runtime` owns process supervision, child environments, cleanup, atomic files and locks, ports, timeouts, and parameterized portless service registration. `@routekit/config-core` owns layered resolution and validated/migrating JSON IO. `@routekit/telemetry-core` owns parameterized consent, redaction, anonymous event properties, and bounded shutdown.
+`@velum-labs/routekit-runtime` owns process supervision, child environments, cleanup, atomic files and locks, ports, timeouts, and parameterized portless service registration. `@velum-labs/routekit-config-core` owns layered resolution and validated/migrating JSON IO. `@velum-labs/routekit-telemetry-core` owns parameterized consent, redaction, anonymous event properties, and bounded shutdown.
 
 ## `@fusionkit/tracing`
 
-`@routekit/tracing` owns the generic OpenTelemetry engine integration: providers, W3C propagation, in-process listeners, and policy-based export redaction. `@fusionkit/tracing` is the thin conventions facade over the fusion semantic conventions in `spec/fusion-trace/registry.json`.
+`@velum-labs/routekit-tracing` owns the generic OpenTelemetry engine integration: providers, W3C propagation, in-process listeners, and policy-based export redaction. `@fusionkit/tracing` is the thin conventions facade over the fusion semantic conventions in `spec/fusion-trace/registry.json`.
 
 Important exports include `initFusionTracing()`, `flushFusionTracing()`, `shutdownFusionTracing()`, `startFusionSpan()`, `emitFusionEvent()`, `newSessionCarrier()`, carrier helpers (`carrierFromHeaders()`, `carrierFromEnv()`, `headersOf()`, `envOf()`), and the in-process span/event listener registration (`addSpanListener()`, `addFusionEventListener()`).
 

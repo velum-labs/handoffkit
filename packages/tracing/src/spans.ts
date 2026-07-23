@@ -41,8 +41,8 @@ import {
   sessionCarrier,
   traceIdOf,
   withBaggage
-} from "@routekit/tracing";
-import type { TraceCarrier } from "@routekit/tracing";
+} from "@velum-labs/routekit-tracing";
+import type { TraceCarrier } from "@velum-labs/routekit-tracing";
 
 export type FusionScope = keyof typeof FUSION_SCOPES;
 

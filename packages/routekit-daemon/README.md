@@ -1,4 +1,4 @@
-# `@routekit/daemon`
+# `@velum-labs/routekit-daemon`
 
 Composition root for RouteKit's singleton daemon.
 
@@ -9,5 +9,5 @@ switch new requests, then drain the old generation. The daemon is the sole
 writer for canonical config, account enrollment, revisions, catalog/health
 snapshots, and telemetry state.
 
-Applications normally use it through `@routekit/cli`; embedders should keep
-using `@routekit/router` instead of claiming the singleton service record.
+Applications normally use it through `@velum-labs/routekit`; embedders should keep
+using `@velum-labs/routekit-router` instead of claiming the singleton service record.

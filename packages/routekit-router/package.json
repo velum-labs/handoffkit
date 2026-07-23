@@ -1,5 +1,5 @@
 {
-  "name": "@routekit/router",
+  "name": "@velum-labs/routekit-router",
   "private": false,
   "version": "0.8.0",
   "repository": {
@@ -26,9 +26,9 @@
     "provenance": true
   },
   "dependencies": {
-    "@routekit/accounts": "workspace:*",
-    "@routekit/gateway": "workspace:*",
-    "@routekit/runtime": "workspace:*"
+    "@velum-labs/routekit-accounts": "workspace:*",
+    "@velum-labs/routekit-gateway": "workspace:*",
+    "@velum-labs/routekit-runtime": "workspace:*"
   },
   "keywords": [
     "routekit",

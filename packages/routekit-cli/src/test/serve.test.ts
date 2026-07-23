@@ -10,9 +10,9 @@ import {
   CLIPROXY_API_KEY_ENV,
   cliproxyApiKey,
   ensureCliproxyConfig
-} from "@routekit/accounts";
-import { parseRouterConfig } from "@routekit/gateway";
-import { startRouter } from "@routekit/router";
+} from "@velum-labs/routekit-accounts";
+import { parseRouterConfig } from "@velum-labs/routekit-gateway";
+import { startRouter } from "@velum-labs/routekit-router";
 
 async function upstream(): Promise<{ url: string; close(): Promise<void> }> {
   const server = createServer((request, response) => {

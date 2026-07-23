@@ -5,8 +5,8 @@ import {
   reservePort,
   spawnLogged,
   terminateGroup
-} from "@routekit/runtime";
-import type { ReservedPort } from "@routekit/runtime";
+} from "@velum-labs/routekit-runtime";
+import type { ReservedPort } from "@velum-labs/routekit-runtime";
 
 export type SpawnedProcess = {
   child: ChildProcess;

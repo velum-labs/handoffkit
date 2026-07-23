@@ -36,7 +36,7 @@ function internalClosure(rootName) {
     if (entry === undefined) continue;
     closure.push(entry);
     for (const dependency of Object.keys(entry.manifest.dependencies ?? {})) {
-      if (dependency.startsWith("@routekit/") || dependency.startsWith("@fusionkit/")) {
+      if (dependency.startsWith("@velum-labs/routekit") || dependency.startsWith("@fusionkit/")) {
         pending.push(dependency);
       }
     }
@@ -44,13 +44,13 @@ function internalClosure(rootName) {
   return { closure, seen };
 }
 
-const routekit = internalClosure("@routekit/cli");
+const routekit = internalClosure("@velum-labs/routekit");
 const fusionkit = internalClosure("@fusionkit/cli");
 if (routekit.seen.has("@fusionkit/cli")) {
   throw new Error("RouteKit package closure must not include @fusionkit/cli");
 }
-if (fusionkit.seen.has("@routekit/cli")) {
-  throw new Error("FusionKit package closure must not include @routekit/cli");
+if (fusionkit.seen.has("@velum-labs/routekit")) {
+  throw new Error("FusionKit package closure must not include @velum-labs/routekit");
 }
 const combined = new Map(
   [...routekit.closure, ...fusionkit.closure].map((entry) => [entry.manifest.name, entry])
@@ -81,7 +81,7 @@ try {
     { cwd: install, stdio: "pipe" }
   );
 
-  for (const packageName of ["@routekit/cli", "@fusionkit/cli"]) {
+  for (const packageName of ["@velum-labs/routekit", "@fusionkit/cli"]) {
     if (!existsSync(join(install, "node_modules", packageName, "package.json"))) {
       throw new Error(`co-install is missing ${packageName}`);
     }
@@ -102,7 +102,7 @@ try {
     cwd: install,
     encoding: "utf8"
   });
-  if (!routekitVersion.includes("@routekit/cli")) {
+  if (!routekitVersion.includes("@velum-labs/routekit")) {
     throw new Error(`routekit executable returned unexpected output: ${routekitVersion}`);
   }
   if (!fusionkitVersion.includes("@fusionkit/cli")) {

@@ -6,7 +6,7 @@ import {
   verify as cryptoVerify
 } from "node:crypto";
 
-import { sha256Hex } from "@routekit/contracts";
+import { sha256Hex } from "@velum-labs/routekit-contracts";
 
 import { KEY_ID_HEX_LENGTH } from "./constants.js";
 

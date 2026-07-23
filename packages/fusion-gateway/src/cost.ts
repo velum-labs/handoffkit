@@ -1,4 +1,4 @@
-import { randomId } from "@routekit/runtime";
+import { randomId } from "@velum-labs/routekit-runtime";
 import {
   estimateCost,
   formatUsd,
@@ -6,13 +6,13 @@ import {
   meterCall as meterProviderCall,
   parseUsage,
   parseUsageFromSse
-} from "@routekit/gateway";
+} from "@velum-labs/routekit-gateway";
 import type {
   CallCostRecord,
   ModelPricing,
   ProviderCostMetadata,
   TokenUsage
-} from "@routekit/gateway";
+} from "@velum-labs/routekit-gateway";
 
 export {
   estimateCost,

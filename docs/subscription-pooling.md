@@ -9,7 +9,7 @@ namespaced `provider/model` IDs that RouteKit advertises for API-key providers.
 Every subscription kind enrolls through the same command:
 
 ```sh
-npm install -g @routekit/cli
+npm install -g @velum-labs/routekit
 routekit config init
 routekit accounts login claude-code --name personal
 routekit accounts login codex --name work
@@ -106,7 +106,7 @@ first-launch onboarding, are not qualified by L06, and do not create a public
 support commitment. Do not infer RouteKit support from registry entries,
 generated catalogs, package presence, or internal tests.
 
-FusionKit links the reusable `@routekit/router` SDK for embedded composition;
-it does not depend on `@routekit/cli` or execute `routekit`. `fusionkit stop`
+FusionKit links the reusable `@velum-labs/routekit-router` SDK for embedded composition;
+it does not depend on `@velum-labs/routekit` or execute `routekit`. `fusionkit stop`
 only reaps Fusion-owned processes and portless routes. External RouteKit
 daemons remain running.

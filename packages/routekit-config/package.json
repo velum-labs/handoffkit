@@ -1,5 +1,5 @@
 {
-  "name": "@routekit/config",
+  "name": "@velum-labs/routekit-config",
   "private": false,
   "version": "0.8.0",
   "repository": {
@@ -26,9 +26,9 @@
     "provenance": true
   },
   "dependencies": {
-    "@routekit/config-core": "workspace:*",
-    "@routekit/gateway": "workspace:*",
-    "@routekit/runtime": "workspace:*",
+    "@velum-labs/routekit-config-core": "workspace:*",
+    "@velum-labs/routekit-gateway": "workspace:*",
+    "@velum-labs/routekit-runtime": "workspace:*",
     "yaml": "2.9.0"
   },
   "keywords": [

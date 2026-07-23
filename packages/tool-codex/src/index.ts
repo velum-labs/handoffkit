@@ -1,5 +1,5 @@
-import type { ToolIntegration } from "@routekit/tools";
-import { trimTrailingSlashes } from "@routekit/runtime";
+import type { ToolIntegration } from "@velum-labs/routekit-tools";
+import { trimTrailingSlashes } from "@velum-labs/routekit-runtime";
 
 import { codexDriverConfigSchema, createCodexDriver } from "./driver.js";
 import { codexLaunchConfigToml, launchCodex } from "./launch.js";
@@ -11,7 +11,7 @@ export const codexTool: ToolIntegration = {
   displayName: "Codex",
   pickerHint: "OpenAI Codex CLI",
   binary: "codex",
-  packageName: "@routekit/tool-codex",
+  packageName: "@velum-labs/routekit-tool-codex",
   installHint: "install the Codex CLI: https://github.com/openai/codex",
   authSummary: "Codex uses an ephemeral gateway-backed provider.",
   setupSnippet: ({ gatewayUrl, model = "gateway-model" }) =>

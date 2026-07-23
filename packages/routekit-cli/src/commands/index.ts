@@ -1,7 +1,7 @@
 import {
   attachGlobalFlags,
   registerCompletion
-} from "@routekit/cli-core";
+} from "@velum-labs/routekit-cli-core";
 import type { Command } from "commander";
 
 import { registerDynamicCompletion } from "../completion.js";

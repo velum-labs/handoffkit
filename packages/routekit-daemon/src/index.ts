@@ -29,40 +29,40 @@ import {
   removeCliproxyAccount,
   removeSubscriptionAccount,
   sanitizeSubscriptionLabel
-} from "@routekit/accounts";
-import type { AccountStoreEntry, SubscriptionCredential } from "@routekit/accounts";
+} from "@velum-labs/routekit-accounts";
+import type { AccountStoreEntry, SubscriptionCredential } from "@velum-labs/routekit-accounts";
 import {
   configuredProviderIds,
   globalRouterConfigPath,
   parseRouterConfigDocument,
   routekitHome,
   writeRouterConfig
-} from "@routekit/config";
+} from "@velum-labs/routekit-config";
 import {
   createRouteKitControlHandler,
   ROUTEKIT_CONTROL_CAPABILITY
-} from "@routekit/control";
+} from "@velum-labs/routekit-control";
 import type {
   ConfigSnapshot,
   DaemonStatus,
   ModelInfo,
   RouteKitControlHandlers
-} from "@routekit/control";
+} from "@velum-labs/routekit-control";
 import {
   startSwitchingGatewayProxy
-} from "@routekit/gateway";
+} from "@velum-labs/routekit-gateway";
 import type {
   RouterConfig,
   SwitchingGatewayProxy
-} from "@routekit/gateway";
+} from "@velum-labs/routekit-gateway";
 import {
   PROVIDERS,
   accountKindForCliproxyAuthType,
   resolveAccountConnector
-} from "@routekit/registry";
-import type { SubscriptionMode } from "@routekit/registry";
-import { startRouter } from "@routekit/router";
-import type { RunningRouter } from "@routekit/router";
+} from "@velum-labs/routekit-registry";
+import type { SubscriptionMode } from "@velum-labs/routekit-registry";
+import { startRouter } from "@velum-labs/routekit-router";
+import type { RunningRouter } from "@velum-labs/routekit-router";
 import {
   acquireLifecycleLock,
   CONTROL_PROTOCOL_VERSION,
@@ -78,13 +78,13 @@ import {
   startControlServer,
   supervisorFromEnv,
   writeFileAtomic
-} from "@routekit/runtime";
+} from "@velum-labs/routekit-runtime";
 import type {
   PortlessSession,
   RunningControlServer,
   ServiceRecord
-} from "@routekit/runtime";
-import { createConsentManager } from "@routekit/telemetry-core";
+} from "@velum-labs/routekit-runtime";
+import { createConsentManager } from "@velum-labs/routekit-telemetry-core";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 
 import { createCliproxySidecar } from "./cliproxy-sidecar.js";

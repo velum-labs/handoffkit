@@ -1,5 +1,5 @@
-import { PROVIDERS, providerKeyProbe } from "@routekit/registry";
-import type { ProviderAuthStyle, ProviderKeyProbe } from "@routekit/registry";
+import { PROVIDERS, providerKeyProbe } from "@velum-labs/routekit-registry";
+import type { ProviderAuthStyle, ProviderKeyProbe } from "@velum-labs/routekit-registry";
 
 export type UrlEndpointConfig = {
   endpointId: string;

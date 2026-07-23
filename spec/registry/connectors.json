@@ -1,5 +1,5 @@
 {
-  "$comment": "Account connector map: which mechanism backs each `routekit accounts login <kind>` (a native RouteKit relay or the RouteKit-managed CLIProxyAPI sidecar), the sidecar login flag, auth-store classification types, and the local-only policy marker. Consumed via the generated @routekit/registry binding; regenerate with `node scripts/generate-registry.mjs`.",
+  "$comment": "Account connector map: which mechanism backs each `routekit accounts login <kind>` (a native RouteKit relay or the RouteKit-managed CLIProxyAPI sidecar), the sidecar login flag, auth-store classification types, and the local-only policy marker. Consumed via the generated @velum-labs/routekit-registry binding; regenerate with `node scripts/generate-registry.mjs`.",
   "connectors": {
     "claude-code": {
       "connector": "native",

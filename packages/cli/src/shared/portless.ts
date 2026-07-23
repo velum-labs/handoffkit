@@ -4,7 +4,7 @@ import {
   detectPortlessProxy,
   reapPortlessProject,
   reapPortlessService
-} from "@routekit/runtime";
+} from "@velum-labs/routekit-runtime";
 import type {
   DetectedProxy,
   DiscoverOrSpawnInput,
@@ -15,7 +15,7 @@ import type {
   RouteMapping,
   RouteStoreLike,
   SpawnedService
-} from "@routekit/runtime";
+} from "@velum-labs/routekit-runtime";
 
 export type {
   DetectedProxy,

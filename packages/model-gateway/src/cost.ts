@@ -1,7 +1,7 @@
 import {
   DEFAULT_MODEL_PRICING as REGISTRY_MODEL_PRICING,
   PRICING_ALIASES
-} from "@routekit/registry";
+} from "@velum-labs/routekit-registry";
 
 import { decodeBufferedSse } from "./sse/parse.js";
 

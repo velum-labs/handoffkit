@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { dirname } from "node:path";
 
-import { writeFileAtomic } from "@routekit/runtime";
+import { writeFileAtomic } from "@velum-labs/routekit-runtime";
 
 export type ConsentFile = {
   enabled: boolean;

@@ -1,13 +1,13 @@
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 
-import { hashCanonicalSha256 } from "@routekit/contracts";
+import { hashCanonicalSha256 } from "@velum-labs/routekit-contracts";
 import {
   CANDIDATE_ISOLATION_DEFAULTS,
   definedEnv,
   randomId,
   superviseSpawn
-} from "@routekit/runtime";
+} from "@velum-labs/routekit-runtime";
 
 import type {
   CandidateActualIsolationKind,

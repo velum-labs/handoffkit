@@ -1,5 +1,5 @@
 import { setToolDriverRegistry } from "@fusionkit/ensemble";
-import { toolRegistry } from "@routekit/tool-registry";
+import { toolRegistry } from "@velum-labs/routekit-tool-registry";
 
 export { toolRegistry };
 

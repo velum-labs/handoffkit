@@ -15,39 +15,39 @@
   "packages": [
     {
       "path": "packages/contracts",
-      "name": "@routekit/contracts"
+      "name": "@velum-labs/routekit-contracts"
     },
     {
       "path": "packages/routekit-registry",
-      "name": "@routekit/registry"
+      "name": "@velum-labs/routekit-registry"
     },
     {
       "path": "packages/runtime-utils",
-      "name": "@routekit/runtime"
+      "name": "@velum-labs/routekit-runtime"
     },
     {
       "path": "packages/routekit-control",
-      "name": "@routekit/control"
+      "name": "@velum-labs/routekit-control"
     },
     {
       "path": "packages/routekit-tracing",
-      "name": "@routekit/tracing"
+      "name": "@velum-labs/routekit-tracing"
     },
     {
       "path": "packages/cli-ui",
-      "name": "@routekit/cli-ui"
+      "name": "@velum-labs/routekit-cli-ui"
     },
     {
       "path": "packages/cli-core",
-      "name": "@routekit/cli-core"
+      "name": "@velum-labs/routekit-cli-core"
     },
     {
       "path": "packages/config-core",
-      "name": "@routekit/config-core"
+      "name": "@velum-labs/routekit-config-core"
     },
     {
       "path": "packages/telemetry-core",
-      "name": "@routekit/telemetry-core"
+      "name": "@velum-labs/routekit-telemetry-core"
     },
     {
       "path": "packages/registry",
@@ -79,11 +79,11 @@
     },
     {
       "path": "packages/model-gateway",
-      "name": "@routekit/gateway"
+      "name": "@velum-labs/routekit-gateway"
     },
     {
       "path": "packages/accounts",
-      "name": "@routekit/accounts"
+      "name": "@velum-labs/routekit-accounts"
     },
     {
       "path": "packages/fusion-gateway",
@@ -91,43 +91,43 @@
     },
     {
       "path": "packages/harness-core",
-      "name": "@routekit/harness-core"
+      "name": "@velum-labs/routekit-harness-core"
     },
     {
       "path": "packages/tools",
-      "name": "@routekit/tools"
+      "name": "@velum-labs/routekit-tools"
     },
     {
       "path": "packages/tool-codex",
-      "name": "@routekit/tool-codex"
+      "name": "@velum-labs/routekit-tool-codex"
     },
     {
       "path": "packages/tool-claude",
-      "name": "@routekit/tool-claude"
+      "name": "@velum-labs/routekit-tool-claude"
     },
     {
       "path": "packages/tool-cursor",
-      "name": "@routekit/tool-cursor"
+      "name": "@velum-labs/routekit-tool-cursor"
     },
     {
       "path": "packages/tool-opencode",
-      "name": "@routekit/tool-opencode"
+      "name": "@velum-labs/routekit-tool-opencode"
     },
     {
       "path": "packages/tool-registry",
-      "name": "@routekit/tool-registry"
+      "name": "@velum-labs/routekit-tool-registry"
     },
     {
       "path": "packages/routekit-config",
-      "name": "@routekit/config"
+      "name": "@velum-labs/routekit-config"
     },
     {
       "path": "packages/routekit-router",
-      "name": "@routekit/router"
+      "name": "@velum-labs/routekit-router"
     },
     {
       "path": "packages/routekit-daemon",
-      "name": "@routekit/daemon"
+      "name": "@velum-labs/routekit-daemon"
     },
     {
       "path": "packages/ensemble",
@@ -135,7 +135,7 @@
     },
     {
       "path": "packages/routekit-cli",
-      "name": "@routekit/cli"
+      "name": "@velum-labs/routekit"
     },
     {
       "path": "packages/cli",

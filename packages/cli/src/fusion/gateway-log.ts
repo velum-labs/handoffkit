@@ -16,7 +16,7 @@
  * warnings and errors still print, since losing them is worse than a redraw.
  * All styling degrades to plain text when color is off (pipes, CI).
  */
-import { bold, cyan, dim, glyph, gray, green, red, uiStream, yellow } from "@routekit/cli-ui";
+import { bold, cyan, dim, glyph, gray, green, red, uiStream, yellow } from "@velum-labs/routekit-cli-ui";
 import type { FusionGatewayLogger } from "@fusionkit/gateway";
 
 let chatter = true;

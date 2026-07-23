@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { driverContractSuite } from "@routekit/harness-core/testing";
-import type { HarnessEvent } from "@routekit/harness-core";
+import { driverContractSuite } from "@velum-labs/routekit-harness-core/testing";
+import type { HarnessEvent } from "@velum-labs/routekit-harness-core";
 
 import { createOpencodeDriver } from "../driver.js";
 import type { OpencodeBackend, OpencodeBackendFactory } from "../driver.js";

@@ -6,7 +6,7 @@ Generated FusionKit model identities and panel presets.
 
 The registry is generated from `spec/registry/fusion.json`. Product-neutral
 provider, subscription, catalog, capability, pricing, and local model metadata
-lives in `@routekit/registry`.
+lives in `@velum-labs/routekit-registry`.
 
 ## Usage
 

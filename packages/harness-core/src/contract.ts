@@ -1,6 +1,6 @@
 import type { ZodType } from "zod";
 
-import type { JsonValue, ReasoningSelection } from "@routekit/contracts";
+import type { JsonValue, ReasoningSelection } from "@velum-labs/routekit-contracts";
 
 import type { ApprovalDecision, ApprovalPolicy } from "./approvals.js";
 import type { HarnessEvent } from "./events.js";

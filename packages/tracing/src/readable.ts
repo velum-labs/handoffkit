@@ -10,9 +10,9 @@ export {
   spanEndMs,
   spanId,
   spanTraceId
-} from "@routekit/tracing";
+} from "@velum-labs/routekit-tracing";
 export type {
   AttributeSource,
   ReadableEvent as ReadableFusionEvent,
   ReadableSpan
-} from "@routekit/tracing";
+} from "@velum-labs/routekit-tracing";

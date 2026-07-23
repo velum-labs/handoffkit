@@ -10,8 +10,8 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 
-import { contextFor } from "@routekit/cli-core";
-import { acquireLifecycleLock } from "@routekit/runtime";
+import { contextFor } from "@velum-labs/routekit-cli-core";
+import { acquireLifecycleLock } from "@velum-labs/routekit-runtime";
 import { Option, type Command } from "commander";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 

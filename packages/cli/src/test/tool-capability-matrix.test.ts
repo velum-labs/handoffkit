@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { createToolCapabilityMatrix } from "@routekit/tools";
+import { createToolCapabilityMatrix } from "@velum-labs/routekit-tools";
 
 import { toolRegistry } from "../tools.js";
 

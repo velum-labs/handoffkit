@@ -3,14 +3,14 @@
 ## Product boundary
 
 `@fusionkit/cli` installs only `fusionkit`. It composes the neutral
-`@routekit/config`, `@routekit/router`, gateway, and tool-launcher SDK packages;
-it does not depend on `@routekit/cli` or invoke the `routekit` executable.
+`@velum-labs/routekit-config`, `@velum-labs/routekit-router`, gateway, and tool-launcher SDK packages;
+it does not depend on `@velum-labs/routekit` or invoke the `routekit` executable.
 
-Install `@routekit/cli` separately when you want RouteKit's provider, account,
+Install `@velum-labs/routekit` separately when you want RouteKit's provider, account,
 live-catalog, proxy, or single-model command surfaces:
 
 ```sh
-npm install -g @routekit/cli
+npm install -g @velum-labs/routekit
 routekit config init
 routekit providers status
 routekit models list
@@ -45,7 +45,7 @@ detached spawner. Config/account
 reloads atomically switch router generations while
 old in-flight streams drain; binary upgrade drains and restarts the combined
 daemon, then the initiating client reconnects and retries.
-See the [`@routekit/cli` README](../packages/routekit-cli/README.md) for the
+See the [`@velum-labs/routekit` README](../packages/routekit-cli/README.md) for the
 full service runbook.
 
 ## Fusion launchers

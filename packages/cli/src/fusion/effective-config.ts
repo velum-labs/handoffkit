@@ -7,8 +7,8 @@ import type {
 } from "@fusionkit/config";
 import { DEFAULT_ENSEMBLE_NAME, FusionConfigError } from "@fusionkit/config";
 import { fusionModelId } from "@fusionkit/registry";
-import { resolveLayer } from "@routekit/config-core";
-import type { ConfigSource, LayeredValue } from "@routekit/config-core";
+import { resolveLayer } from "@velum-labs/routekit-config-core";
+import type { ConfigSource, LayeredValue } from "@velum-labs/routekit-config-core";
 
 export type { ConfigSource };
 export type Provenance<T> = LayeredValue<T>;

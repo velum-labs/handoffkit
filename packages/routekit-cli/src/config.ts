@@ -10,15 +10,15 @@ import {
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
-import { routekitHome, writeRouterConfig } from "@routekit/config";
+import { routekitHome, writeRouterConfig } from "@velum-labs/routekit-config";
 import {
   parseRouterConfig,
   PROVIDER_IDS,
   type ProviderId,
   type RouterConfig
-} from "@routekit/gateway";
-import { PROVIDERS } from "@routekit/registry";
-import { trimTrailingSlashes } from "@routekit/runtime";
+} from "@velum-labs/routekit-gateway";
+import { PROVIDERS } from "@velum-labs/routekit-registry";
+import { trimTrailingSlashes } from "@velum-labs/routekit-runtime";
 import { parse as parseYaml } from "yaml";
 
 export {
@@ -32,13 +32,13 @@ export {
   updateEffectiveRouterConfig,
   updateRouterConfig,
   writeRouterConfig
-} from "@routekit/config";
+} from "@velum-labs/routekit-config";
 export type {
   LoadedRouterConfig,
   RouterConfigPaths,
   RouterConfigSource,
   UpdateRouterConfigInput
-} from "@routekit/config";
+} from "@velum-labs/routekit-config";
 
 export type MigrationAction = {
   source: string;

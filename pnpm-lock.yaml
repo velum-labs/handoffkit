@@ -144,7 +144,7 @@ importers:
       '@fusionkit/adapter-ai-sdk':
         specifier: workspace:*
         version: link:../../packages/adapter-ai-sdk
-      '@routekit/registry':
+      '@velum-labs/routekit-registry':
         specifier: workspace:*
         version: link:../../packages/routekit-registry
       ai:
@@ -162,16 +162,16 @@ importers:
 
   packages/accounts:
     dependencies:
-      '@routekit/contracts':
+      '@velum-labs/routekit-contracts':
         specifier: workspace:*
         version: link:../contracts
-      '@routekit/gateway':
+      '@velum-labs/routekit-gateway':
         specifier: workspace:*
         version: link:../model-gateway
-      '@routekit/registry':
+      '@velum-labs/routekit-registry':
         specifier: workspace:*
         version: link:../routekit-registry
-      '@routekit/runtime':
+      '@velum-labs/routekit-runtime':
         specifier: workspace:*
         version: link:../runtime-utils
       yaml:
@@ -195,7 +195,7 @@ importers:
       '@fusionkit/tracing':
         specifier: workspace:*
         version: link:../tracing
-      '@routekit/runtime':
+      '@velum-labs/routekit-runtime':
         specifier: workspace:*
         version: link:../runtime-utils
       ai:
@@ -228,43 +228,43 @@ importers:
       '@fusionkit/workspace':
         specifier: workspace:*
         version: link:../workspace
-      '@routekit/cli-core':
+      '@velum-labs/routekit-cli-core':
         specifier: workspace:*
         version: link:../cli-core
-      '@routekit/cli-ui':
+      '@velum-labs/routekit-cli-ui':
         specifier: workspace:*
         version: link:../cli-ui
-      '@routekit/config':
+      '@velum-labs/routekit-config':
         specifier: workspace:*
         version: link:../routekit-config
-      '@routekit/config-core':
+      '@velum-labs/routekit-config-core':
         specifier: workspace:*
         version: link:../config-core
-      '@routekit/contracts':
+      '@velum-labs/routekit-contracts':
         specifier: workspace:*
         version: link:../contracts
-      '@routekit/gateway':
+      '@velum-labs/routekit-gateway':
         specifier: workspace:*
         version: link:../model-gateway
-      '@routekit/harness-core':
+      '@velum-labs/routekit-harness-core':
         specifier: workspace:*
         version: link:../harness-core
-      '@routekit/registry':
+      '@velum-labs/routekit-registry':
         specifier: workspace:*
         version: link:../routekit-registry
-      '@routekit/router':
+      '@velum-labs/routekit-router':
         specifier: workspace:*
         version: link:../routekit-router
-      '@routekit/runtime':
+      '@velum-labs/routekit-runtime':
         specifier: workspace:*
         version: link:../runtime-utils
-      '@routekit/telemetry-core':
+      '@velum-labs/routekit-telemetry-core':
         specifier: workspace:*
         version: link:../telemetry-core
-      '@routekit/tool-registry':
+      '@velum-labs/routekit-tool-registry':
         specifier: workspace:*
         version: link:../tool-registry
-      '@routekit/tools':
+      '@velum-labs/routekit-tools':
         specifier: workspace:*
         version: link:../tools
       commander:
@@ -289,7 +289,7 @@ importers:
 
   packages/cli-core:
     dependencies:
-      '@routekit/cli-ui':
+      '@velum-labs/routekit-cli-ui':
         specifier: workspace:*
         version: link:../cli-ui
       commander:
@@ -323,7 +323,7 @@ importers:
 
   packages/config-core:
     dependencies:
-      '@routekit/runtime':
+      '@velum-labs/routekit-runtime':
         specifier: workspace:*
         version: link:../runtime-utils
 
@@ -349,24 +349,24 @@ importers:
       '@fusionkit/workspace':
         specifier: workspace:*
         version: link:../workspace
-      '@routekit/contracts':
-        specifier: workspace:*
-        version: link:../contracts
-      '@routekit/gateway':
-        specifier: workspace:*
-        version: link:../model-gateway
-      '@routekit/harness-core':
-        specifier: workspace:*
-        version: link:../harness-core
-      '@routekit/runtime':
-        specifier: workspace:*
-        version: link:../runtime-utils
-      '@routekit/tools':
-        specifier: workspace:*
-        version: link:../tools
       '@velum-labs/cursorkit':
         specifier: 0.2.0
         version: 0.2.0
+      '@velum-labs/routekit-contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@velum-labs/routekit-gateway':
+        specifier: workspace:*
+        version: link:../model-gateway
+      '@velum-labs/routekit-harness-core':
+        specifier: workspace:*
+        version: link:../harness-core
+      '@velum-labs/routekit-runtime':
+        specifier: workspace:*
+        version: link:../runtime-utils
+      '@velum-labs/routekit-tools':
+        specifier: workspace:*
+        version: link:../tools
 
   packages/example-utils:
     dependencies:
@@ -376,7 +376,7 @@ importers:
       '@ai-sdk/provider':
         specifier: 4.0.2
         version: 4.0.2
-      '@routekit/registry':
+      '@velum-labs/routekit-registry':
         specifier: workspace:*
         version: link:../routekit-registry
       ai:
@@ -385,10 +385,10 @@ importers:
 
   packages/fusion-config:
     dependencies:
-      '@routekit/config-core':
+      '@velum-labs/routekit-config-core':
         specifier: workspace:*
         version: link:../config-core
-      '@routekit/runtime':
+      '@velum-labs/routekit-runtime':
         specifier: workspace:*
         version: link:../runtime-utils
 
@@ -409,28 +409,28 @@ importers:
       '@fusionkit/tracing':
         specifier: workspace:*
         version: link:../tracing
-      '@routekit/contracts':
+      '@velum-labs/routekit-contracts':
         specifier: workspace:*
         version: link:../contracts
-      '@routekit/gateway':
+      '@velum-labs/routekit-gateway':
         specifier: workspace:*
         version: link:../model-gateway
-      '@routekit/registry':
+      '@velum-labs/routekit-registry':
         specifier: workspace:*
         version: link:../routekit-registry
-      '@routekit/runtime':
+      '@velum-labs/routekit-runtime':
         specifier: workspace:*
         version: link:../runtime-utils
-      '@routekit/tracing':
+      '@velum-labs/routekit-tracing':
         specifier: workspace:*
         version: link:../routekit-tracing
 
   packages/harness-core:
     dependencies:
-      '@routekit/contracts':
+      '@velum-labs/routekit-contracts':
         specifier: workspace:*
         version: link:../contracts
-      '@routekit/runtime':
+      '@velum-labs/routekit-runtime':
         specifier: workspace:*
         version: link:../runtime-utils
       zod:
@@ -441,16 +441,16 @@ importers:
 
   packages/model-gateway:
     dependencies:
-      '@routekit/contracts':
+      '@velum-labs/routekit-contracts':
         specifier: workspace:*
         version: link:../contracts
-      '@routekit/registry':
+      '@velum-labs/routekit-registry':
         specifier: workspace:*
         version: link:../routekit-registry
-      '@routekit/runtime':
+      '@velum-labs/routekit-runtime':
         specifier: workspace:*
         version: link:../runtime-utils
-      '@routekit/tracing':
+      '@velum-labs/routekit-tracing':
         specifier: workspace:*
         version: link:../routekit-tracing
       zod:
@@ -459,7 +459,7 @@ importers:
 
   packages/protocol:
     dependencies:
-      '@routekit/contracts':
+      '@velum-labs/routekit-contracts':
         specifier: workspace:*
         version: link:../contracts
 
@@ -467,46 +467,46 @@ importers:
 
   packages/routekit-cli:
     dependencies:
-      '@routekit/accounts':
+      '@velum-labs/routekit-accounts':
         specifier: workspace:*
         version: link:../accounts
-      '@routekit/cli-core':
+      '@velum-labs/routekit-cli-core':
         specifier: workspace:*
         version: link:../cli-core
-      '@routekit/cli-ui':
+      '@velum-labs/routekit-cli-ui':
         specifier: workspace:*
         version: link:../cli-ui
-      '@routekit/config':
+      '@velum-labs/routekit-config':
         specifier: workspace:*
         version: link:../routekit-config
-      '@routekit/contracts':
+      '@velum-labs/routekit-contracts':
         specifier: workspace:*
         version: link:../contracts
-      '@routekit/control':
+      '@velum-labs/routekit-control':
         specifier: workspace:*
         version: link:../routekit-control
-      '@routekit/daemon':
+      '@velum-labs/routekit-daemon':
         specifier: workspace:*
         version: link:../routekit-daemon
-      '@routekit/gateway':
+      '@velum-labs/routekit-gateway':
         specifier: workspace:*
         version: link:../model-gateway
-      '@routekit/registry':
+      '@velum-labs/routekit-registry':
         specifier: workspace:*
         version: link:../routekit-registry
-      '@routekit/router':
+      '@velum-labs/routekit-router':
         specifier: workspace:*
         version: link:../routekit-router
-      '@routekit/runtime':
+      '@velum-labs/routekit-runtime':
         specifier: workspace:*
         version: link:../runtime-utils
-      '@routekit/telemetry-core':
+      '@velum-labs/routekit-telemetry-core':
         specifier: workspace:*
         version: link:../telemetry-core
-      '@routekit/tool-registry':
+      '@velum-labs/routekit-tool-registry':
         specifier: workspace:*
         version: link:../tool-registry
-      '@routekit/tools':
+      '@velum-labs/routekit-tools':
         specifier: workspace:*
         version: link:../tools
       commander:
@@ -518,13 +518,13 @@ importers:
 
   packages/routekit-config:
     dependencies:
-      '@routekit/config-core':
+      '@velum-labs/routekit-config-core':
         specifier: workspace:*
         version: link:../config-core
-      '@routekit/gateway':
+      '@velum-labs/routekit-gateway':
         specifier: workspace:*
         version: link:../model-gateway
-      '@routekit/runtime':
+      '@velum-labs/routekit-runtime':
         specifier: workspace:*
         version: link:../runtime-utils
       yaml:
@@ -533,37 +533,37 @@ importers:
 
   packages/routekit-control:
     dependencies:
-      '@routekit/contracts':
+      '@velum-labs/routekit-contracts':
         specifier: workspace:*
         version: link:../contracts
-      '@routekit/runtime':
+      '@velum-labs/routekit-runtime':
         specifier: workspace:*
         version: link:../runtime-utils
 
   packages/routekit-daemon:
     dependencies:
-      '@routekit/accounts':
+      '@velum-labs/routekit-accounts':
         specifier: workspace:*
         version: link:../accounts
-      '@routekit/config':
+      '@velum-labs/routekit-config':
         specifier: workspace:*
         version: link:../routekit-config
-      '@routekit/control':
+      '@velum-labs/routekit-control':
         specifier: workspace:*
         version: link:../routekit-control
-      '@routekit/gateway':
+      '@velum-labs/routekit-gateway':
         specifier: workspace:*
         version: link:../model-gateway
-      '@routekit/registry':
+      '@velum-labs/routekit-registry':
         specifier: workspace:*
         version: link:../routekit-registry
-      '@routekit/router':
+      '@velum-labs/routekit-router':
         specifier: workspace:*
         version: link:../routekit-router
-      '@routekit/runtime':
+      '@velum-labs/routekit-runtime':
         specifier: workspace:*
         version: link:../runtime-utils
-      '@routekit/telemetry-core':
+      '@velum-labs/routekit-telemetry-core':
         specifier: workspace:*
         version: link:../telemetry-core
       yaml:
@@ -574,13 +574,13 @@ importers:
 
   packages/routekit-router:
     dependencies:
-      '@routekit/accounts':
+      '@velum-labs/routekit-accounts':
         specifier: workspace:*
         version: link:../accounts
-      '@routekit/gateway':
+      '@velum-labs/routekit-gateway':
         specifier: workspace:*
         version: link:../model-gateway
-      '@routekit/runtime':
+      '@velum-labs/routekit-runtime':
         specifier: workspace:*
         version: link:../runtime-utils
 
@@ -619,13 +619,13 @@ importers:
 
   packages/telemetry-core:
     dependencies:
-      '@routekit/runtime':
+      '@velum-labs/routekit-runtime':
         specifier: workspace:*
         version: link:../runtime-utils
 
   packages/testkit:
     dependencies:
-      '@routekit/runtime':
+      '@velum-labs/routekit-runtime':
         specifier: workspace:*
         version: link:../runtime-utils
       yaml:
@@ -637,16 +637,16 @@ importers:
       '@anthropic-ai/claude-agent-sdk':
         specifier: 0.3.198
         version: 0.3.198(@modelcontextprotocol/sdk@1.29.0)(zod@4.4.3)
-      '@routekit/harness-core':
+      '@velum-labs/routekit-harness-core':
         specifier: workspace:*
         version: link:../harness-core
-      '@routekit/registry':
+      '@velum-labs/routekit-registry':
         specifier: workspace:*
         version: link:../routekit-registry
-      '@routekit/runtime':
+      '@velum-labs/routekit-runtime':
         specifier: workspace:*
         version: link:../runtime-utils
-      '@routekit/tools':
+      '@velum-labs/routekit-tools':
         specifier: workspace:*
         version: link:../tools
       zod:
@@ -658,16 +658,16 @@ importers:
       '@openai/codex-sdk':
         specifier: 0.145.0
         version: 0.145.0
-      '@routekit/harness-core':
+      '@velum-labs/routekit-harness-core':
         specifier: workspace:*
         version: link:../harness-core
-      '@routekit/registry':
+      '@velum-labs/routekit-registry':
         specifier: workspace:*
         version: link:../routekit-registry
-      '@routekit/runtime':
+      '@velum-labs/routekit-runtime':
         specifier: workspace:*
         version: link:../runtime-utils
-      '@routekit/tools':
+      '@velum-labs/routekit-tools':
         specifier: workspace:*
         version: link:../tools
       smol-toml:
@@ -679,21 +679,21 @@ importers:
 
   packages/tool-cursor:
     dependencies:
-      '@routekit/contracts':
-        specifier: workspace:*
-        version: link:../contracts
-      '@routekit/harness-core':
-        specifier: workspace:*
-        version: link:../harness-core
-      '@routekit/runtime':
-        specifier: workspace:*
-        version: link:../runtime-utils
-      '@routekit/tools':
-        specifier: workspace:*
-        version: link:../tools
       '@velum-labs/cursorkit':
         specifier: 0.2.0
         version: 0.2.0
+      '@velum-labs/routekit-contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@velum-labs/routekit-harness-core':
+        specifier: workspace:*
+        version: link:../harness-core
+      '@velum-labs/routekit-runtime':
+        specifier: workspace:*
+        version: link:../runtime-utils
+      '@velum-labs/routekit-tools':
+        specifier: workspace:*
+        version: link:../tools
       '@zed-industries/agent-client-protocol':
         specifier: 0.4.5
         version: 0.4.5
@@ -706,13 +706,13 @@ importers:
       '@opencode-ai/sdk':
         specifier: 1.17.13
         version: 1.17.13
-      '@routekit/harness-core':
+      '@velum-labs/routekit-harness-core':
         specifier: workspace:*
         version: link:../harness-core
-      '@routekit/runtime':
+      '@velum-labs/routekit-runtime':
         specifier: workspace:*
         version: link:../runtime-utils
-      '@routekit/tools':
+      '@velum-labs/routekit-tools':
         specifier: workspace:*
         version: link:../tools
       zod:
@@ -721,28 +721,28 @@ importers:
 
   packages/tool-registry:
     dependencies:
-      '@routekit/tool-claude':
+      '@velum-labs/routekit-tool-claude':
         specifier: workspace:*
         version: link:../tool-claude
-      '@routekit/tool-codex':
+      '@velum-labs/routekit-tool-codex':
         specifier: workspace:*
         version: link:../tool-codex
-      '@routekit/tool-cursor':
+      '@velum-labs/routekit-tool-cursor':
         specifier: workspace:*
         version: link:../tool-cursor
-      '@routekit/tool-opencode':
+      '@velum-labs/routekit-tool-opencode':
         specifier: workspace:*
         version: link:../tool-opencode
-      '@routekit/tools':
+      '@velum-labs/routekit-tools':
         specifier: workspace:*
         version: link:../tools
 
   packages/tools:
     dependencies:
-      '@routekit/contracts':
+      '@velum-labs/routekit-contracts':
         specifier: workspace:*
         version: link:../contracts
-      '@routekit/harness-core':
+      '@velum-labs/routekit-harness-core':
         specifier: workspace:*
         version: link:../harness-core
 
@@ -763,7 +763,7 @@ importers:
       '@opentelemetry/sdk-trace-base':
         specifier: 2.9.0
         version: 2.9.0(@opentelemetry/api@1.9.1)
-      '@routekit/tracing':
+      '@velum-labs/routekit-tracing':
         specifier: workspace:*
         version: link:../routekit-tracing
 
@@ -772,7 +772,7 @@ importers:
       '@fusionkit/protocol':
         specifier: workspace:*
         version: link:../protocol
-      '@routekit/contracts':
+      '@velum-labs/routekit-contracts':
         specifier: workspace:*
         version: link:../contracts
       minimatch:

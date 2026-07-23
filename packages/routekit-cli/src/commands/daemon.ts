@@ -1,8 +1,8 @@
 import { Command } from "commander";
 
-import { contextFor, parsePort } from "@routekit/cli-core";
+import { contextFor, parsePort } from "@velum-labs/routekit-cli-core";
 import { readFileSync } from "node:fs";
-import { startRouteKitDaemon } from "@routekit/daemon";
+import { startRouteKitDaemon } from "@velum-labs/routekit-daemon";
 
 import {
   connectDaemon,

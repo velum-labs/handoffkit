@@ -8,7 +8,7 @@ Keep this mirror aligned when route behavior or qualification evidence changes.
 All seven routes remain **Planned Supported until L06 closes**. The 2026-07-22
 [real-account report](evidence/routekit-real-account/2026-07-22-dad16c53.md)
 records three API-route Pass results and four subscription/client Fail results
-at `@routekit/cli` 0.8.0 revision
+at `@velum-labs/routekit` 0.8.0 revision
 [`dad16c53`](https://github.com/velum-labs/handoffkit/commit/dad16c53c0e083a51d41df59149a21964d27cc12).
 The Fail rows must be rerun with the required accounts and clients before the
 public labels can change.

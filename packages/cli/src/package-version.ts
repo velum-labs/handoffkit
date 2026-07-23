@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 
-import { probeBinaryVersion, readPackageVersion } from "@routekit/cli-core";
+import { probeBinaryVersion, readPackageVersion } from "@velum-labs/routekit-cli-core";
 
 import { FUSIONKIT_PYPI_VERSION, fusionkitWarmArgv } from "./fusion/env.js";
 import { hasBinary } from "./shared/preflight.js";

@@ -9,7 +9,7 @@
 import type {
   ModelReasoningCapabilities,
   RequestAttribution
-} from "@routekit/contracts";
+} from "@velum-labs/routekit-contracts";
 import { reasoningSelectionOf } from "./adapters/openai-chat-wire.js";
 
 export type BackendModelRoute = {

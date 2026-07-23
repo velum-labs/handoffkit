@@ -1,4 +1,4 @@
-# @routekit/registry
+# @velum-labs/routekit-registry
 
 Product-neutral generated provider, subscription, catalog, capability, pricing,
 and local model metadata from `spec/registry`.

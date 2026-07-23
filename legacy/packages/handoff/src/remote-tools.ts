@@ -6,7 +6,7 @@ import { createCommandContext, executeGovernedCommand, toGovernedRunRecord } fro
 import type { CommandHarnessConfig, GovernedRunRecord } from "./run-executor.js";
 import { targets } from "./targets.js";
 import type { RunStatus } from "@fusionkit/protocol";
-import { DEFAULT_RUNTIME_TIMEOUTS } from "@routekit/runtime";
+import { DEFAULT_RUNTIME_TIMEOUTS } from "@velum-labs/routekit-runtime";
 
 export type RemoteToolsConfig = CommandHarnessConfig & {
   /** Pull workspace changes back after each call. Defaults to true. */

@@ -1,4 +1,4 @@
-import type { HarnessKind } from "@routekit/harness-core";
+import type { HarnessKind } from "@velum-labs/routekit-harness-core";
 
 import { createDriverHarness } from "./driver-adapter.js";
 import type { HarnessAdapter } from "./harness.js";

@@ -16,9 +16,9 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import test from "node:test";
 
-import { CLIPROXY_PINNED_VERSION } from "@routekit/accounts";
-import { RouteKitControlClient } from "@routekit/control";
-import { ControlClient, ControlError, createServiceRecordStore } from "@routekit/runtime";
+import { CLIPROXY_PINNED_VERSION } from "@velum-labs/routekit-accounts";
+import { RouteKitControlClient } from "@velum-labs/routekit-control";
+import { ControlClient, ControlError, createServiceRecordStore } from "@velum-labs/routekit-runtime";
 import { parse as parseYaml } from "yaml";
 
 import { startRouteKitDaemon } from "../index.js";

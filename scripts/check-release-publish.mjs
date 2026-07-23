@@ -156,7 +156,7 @@ for (const entry of manifest.packages ?? []) {
 }
 
 for (const [packageName, binary] of [
-  ["@routekit/cli", "routekit"],
+  ["@velum-labs/routekit", "routekit"],
   ["@fusionkit/cli", "fusionkit"]
 ]) {
   const entry = (manifest.packages ?? []).find((candidate) => candidate.name === packageName);
@@ -187,7 +187,7 @@ if (npmUnit?.packageManifest !== RELEASE_MANIFEST) {
 if (
   JSON.stringify(npmUnit?.binaries) !==
   JSON.stringify([
-    { name: "routekit", package: "@routekit/cli" },
+    { name: "routekit", package: "@velum-labs/routekit" },
     { name: "fusionkit", package: "@fusionkit/cli" }
   ])
 ) {

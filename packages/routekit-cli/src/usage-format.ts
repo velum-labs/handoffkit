@@ -2,8 +2,8 @@ import type {
   AccountLimits,
   SubscriptionMemberStatus,
   SubscriptionUsageResponse
-} from "@routekit/accounts";
-import { dim, renderTableLines, supportsUnicode } from "@routekit/cli-ui";
+} from "@velum-labs/routekit-accounts";
+import { dim, renderTableLines, supportsUnicode } from "@velum-labs/routekit-cli-ui";
 
 function boundedUtilization(value: number): number {
   if (!Number.isFinite(value)) return 0;

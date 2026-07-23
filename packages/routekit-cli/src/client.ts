@@ -14,8 +14,8 @@ import {
   globalRouterConfigPath,
   loadRouterConfig,
   routekitHome
-} from "@routekit/config";
-import { RouteKitControlClient } from "@routekit/control";
+} from "@velum-labs/routekit-config";
+import { RouteKitControlClient } from "@velum-labs/routekit-control";
 import {
   acquireLifecycleLock,
   ControlClient,
@@ -29,8 +29,8 @@ import {
   supervisorOperationTimeoutMs,
   waitForServiceReady,
   writeFileAtomic
-} from "@routekit/runtime";
-import type { ServiceRecord, StartDaemonResult } from "@routekit/runtime";
+} from "@velum-labs/routekit-runtime";
+import type { ServiceRecord, StartDaemonResult } from "@velum-labs/routekit-runtime";
 
 import { routekitVersion } from "./state.js";
 import {

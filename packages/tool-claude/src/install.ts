@@ -10,12 +10,12 @@ import { createHash } from "node:crypto";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
-import { SUBSCRIPTIONS } from "@routekit/registry";
+import { SUBSCRIPTIONS } from "@velum-labs/routekit-registry";
 import {
   acquireLifecycleLock,
   trimTrailingSlashes,
   writeFileAtomic
-} from "@routekit/runtime";
+} from "@velum-labs/routekit-runtime";
 
 export type ClaudeInstallOwner = {
   id: string;

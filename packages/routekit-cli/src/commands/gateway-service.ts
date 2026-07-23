@@ -1,6 +1,6 @@
 import { createReadStream, statSync } from "node:fs";
 
-import { contextFor, CliError } from "@routekit/cli-core";
+import { contextFor, CliError } from "@velum-labs/routekit-cli-core";
 import {
   acquireLifecycleLock,
   detectSupervisor,
@@ -11,8 +11,8 @@ import {
   systemdUnitName,
   waitForProcessExit,
   waitForServiceReady
-} from "@routekit/runtime";
-import type { SupervisorController } from "@routekit/runtime";
+} from "@velum-labs/routekit-runtime";
+import type { SupervisorController } from "@velum-labs/routekit-runtime";
 import type { Command } from "commander";
 
 import {

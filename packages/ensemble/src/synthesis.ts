@@ -13,7 +13,7 @@ import type {
   ModelFusionStatus
 } from "@fusionkit/protocol";
 import { gitText } from "@fusionkit/workspace";
-import type { JsonValue } from "@routekit/contracts";
+import type { JsonValue } from "@velum-labs/routekit-contracts";
 
 import type { ArtifactStore } from "./artifacts.js";
 import type {

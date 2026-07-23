@@ -11,9 +11,9 @@
  */
 import { spawn } from "node:child_process";
 
-import { createPresenter, dim, gray, yellow } from "@routekit/cli-ui";
-import type { Presenter } from "@routekit/cli-ui";
-import { distillLog } from "@routekit/runtime";
+import { createPresenter, dim, gray, yellow } from "@velum-labs/routekit-cli-ui";
+import type { Presenter } from "@velum-labs/routekit-cli-ui";
+import { distillLog } from "@velum-labs/routekit-runtime";
 
 import { hasBinary } from "../shared/preflight.js";
 

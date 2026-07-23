@@ -5,9 +5,9 @@ import {
   emitJson,
   isJsonMode,
   renderCliError
-} from "@routekit/cli-core";
-import { configureBrand, uiStream } from "@routekit/cli-ui";
-import { runCleanups } from "@routekit/runtime";
+} from "@velum-labs/routekit-cli-core";
+import { configureBrand, uiStream } from "@velum-labs/routekit-cli-ui";
+import { runCleanups } from "@velum-labs/routekit-runtime";
 import { CommanderError } from "commander";
 
 import { buildProgram, routekitVersion } from "./cli.js";

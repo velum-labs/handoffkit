@@ -15,7 +15,7 @@
  * off and the adapters keep their honest-drop behavior.
  */
 
-import { withDeadline } from "@routekit/runtime";
+import { withDeadline } from "@velum-labs/routekit-runtime";
 
 export type WebSearchCitation = { url: string; title?: string };
 

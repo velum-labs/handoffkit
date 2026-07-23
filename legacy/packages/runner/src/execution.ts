@@ -6,7 +6,7 @@ import {
   type ExecutionSpec,
   type RunContract
 } from "@fusionkit/protocol";
-import { DEFAULT_RUNTIME_TIMEOUTS } from "@routekit/runtime";
+import { DEFAULT_RUNTIME_TIMEOUTS } from "@velum-labs/routekit-runtime";
 
 import { buildAgentCommand, type AgentContext } from "./agents.js";
 

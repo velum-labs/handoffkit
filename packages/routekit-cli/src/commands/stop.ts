@@ -1,4 +1,4 @@
-import { contextFor } from "@routekit/cli-core";
+import { contextFor } from "@velum-labs/routekit-cli-core";
 import {
   acquireLifecycleLock,
   processAlive,
@@ -6,7 +6,7 @@ import {
   supervisorController,
   supervisorOperationTimeoutMs,
   waitForProcessExit
-} from "@routekit/runtime";
+} from "@velum-labs/routekit-runtime";
 import type { Command } from "commander";
 
 import {

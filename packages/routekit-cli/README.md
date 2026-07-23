@@ -1,6 +1,6 @@
-# `@routekit/cli`
+# `@velum-labs/routekit`
 
-`packages/routekit-cli` publishes the independent `@routekit/cli` npm package
+`packages/routekit-cli` publishes the independent `@velum-labs/routekit` npm package
 and its `routekit` executable. It configures and serves model routes directly;
 it does not depend on `@fusionkit/cli`, run fusion ensembles, start the Python
 sidecar, or download local models.
@@ -8,7 +8,7 @@ sidecar, or download local models.
 ## Install
 
 ```sh
-npm install -g @routekit/cli
+npm install -g @velum-labs/routekit
 routekit config init
 routekit start
 routekit codex
@@ -64,7 +64,7 @@ Set `ROUTEKIT_DEV_SKIP_BUILD=1` after a build for a faster local check.
 | `doctor` | Check router configuration, referenced credential variables, and installed coding-agent binaries. |
 | `telemetry status`, `on`, `off` | Control RouteKit's anonymous, opt-in product telemetry. |
 | `completion <bash\|zsh\|fish>` | Print shell completion setup. |
-| `version`, `--version` | Print the `@routekit/cli` version. |
+| `version`, `--version` | Print the `@velum-labs/routekit` version. |
 
 Global options are `--json`, `--no-input`, `--yes`, and `--quiet`. `--config`
 is retained only for foreground/recovery migration; daemon-backed commands use
@@ -234,7 +234,7 @@ are rejected, and in-flight requests (long-lived LLM streams) get up to the
 drain grace (default 30s; `--drain-grace <seconds>` or `ROUTEKIT_DRAIN_GRACE`)
 to finish before the listener is severed.
 
-After installing a new `@routekit/cli`, the next product command negotiates
+After installing a new `@velum-labs/routekit`, the next product command negotiates
 the package/protocol version and gracefully restarts an older daemon before
 retrying. The explicit form is:
 

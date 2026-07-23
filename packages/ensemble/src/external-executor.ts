@@ -12,8 +12,8 @@ import type {
   ToolExecutionResult,
   ToolPolicyDecision
 } from "@fusionkit/protocol";
-import type { JsonValue } from "@routekit/contracts";
-import { trimTrailingSlashes } from "@routekit/runtime";
+import type { JsonValue } from "@velum-labs/routekit-contracts";
+import { trimTrailingSlashes } from "@velum-labs/routekit-runtime";
 
 import type { ToolExecutor } from "./tool-executor.js";
 

@@ -1,4 +1,4 @@
-import { hashCanonical } from "@routekit/contracts";
+import { hashCanonical } from "@velum-labs/routekit-contracts";
 import type { ChainedEvent, RunEvent } from "./types.js";
 
 function eventHash(input: {

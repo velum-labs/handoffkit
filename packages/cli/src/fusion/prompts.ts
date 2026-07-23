@@ -5,7 +5,7 @@
  * unreachable (e.g. offline) — callers fall back to leaving prompts unset, in
  * which case the built-in defaults are used at run time.
  */
-import { superviseSpawn } from "@routekit/runtime";
+import { superviseSpawn } from "@velum-labs/routekit-runtime";
 
 import { PROMPT_IDS } from "../fusion-config.js";
 import type { PromptOverrides } from "../fusion-config.js";

@@ -1,4 +1,4 @@
-import type { SubscriptionMode } from "@routekit/registry";
+import type { SubscriptionMode } from "@velum-labs/routekit-registry";
 
 import { CodexBackendRelay } from "./codex-relay.js";
 import type { CodexCatalogEntry, CodexRelayOptions } from "./codex-relay.js";

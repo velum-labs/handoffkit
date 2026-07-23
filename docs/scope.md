@@ -29,17 +29,17 @@ These packages must not depend directly or transitively on the legacy packages:
 | --- | --- |
 | `@fusionkit/cli` | Product front door. |
 | `@fusionkit/ensemble` | Panel run engine: worktrees, harness execution, judge synthesis, fusion. |
-| `@routekit/gateway` | Neutral router, gateway dialects, endpoint pools, provider egress, and call provenance. |
-| `@routekit/accounts` | Neutral subscription credentials, capacity pools, relays, and proxy clients. |
+| `@velum-labs/routekit-gateway` | Neutral router, gateway dialects, endpoint pools, provider egress, and call provenance. |
+| `@velum-labs/routekit-accounts` | Neutral subscription credentials, capacity pools, relays, and proxy clients. |
 | `@fusionkit/gateway` | Fusion frontdoor, panel/synthesis orchestration, sessions, budgets, and local lifecycle. |
 | `@fusionkit/protocol` | Model-fusion data contracts and generated SDK bindings. |
 | `@fusionkit/workspace` | Git workspace capture, worktree materialization, divergence-safe pull. |
-| `@routekit/tools`, `@routekit/tool-registry`, `@routekit/tool-codex`, `@routekit/tool-claude`, `@routekit/tool-cursor`, `@routekit/tool-opencode` | Product-neutral launcher, canonical registry composition, driver, and capability integrations. |
+| `@velum-labs/routekit-tools`, `@velum-labs/routekit-tool-registry`, `@velum-labs/routekit-tool-codex`, `@velum-labs/routekit-tool-claude`, `@velum-labs/routekit-tool-cursor`, `@velum-labs/routekit-tool-opencode` | Product-neutral launcher, canonical registry composition, driver, and capability integrations. |
 | `@fusionkit/adapter-ai-sdk` | Managed MLX local-model helpers and product-local AI SDK utilities. |
-| `@routekit/harness-core` | Product-neutral harness driver contracts and shared event/process primitives. |
+| `@velum-labs/routekit-harness-core` | Product-neutral harness driver contracts and shared event/process primitives. |
 | `@fusionkit/registry`, `@fusionkit/kernel` | Fusion-specific registry and execution primitives. |
 | `@fusionkit/tracing` | OpenTelemetry-backed fusion span/event helpers and trace carriers. |
-| `@routekit/runtime`, `cli-ui`, `cli-core`, `config-core`, `telemetry-core`, `tracing` | Brand-neutral shared runtime, CLI, configuration, telemetry, and tracing foundations. |
+| `@velum-labs/routekit-runtime`, `cli-ui`, `cli-core`, `config-core`, `telemetry-core`, `tracing` | Brand-neutral shared runtime, CLI, configuration, telemetry, and tracing foundations. |
 
 ## Legacy quarantine
 
@@ -74,7 +74,7 @@ packages. Legacy-only surfaces moved out of product packages:
   from `@fusionkit/cli`.
 - The CLI receipt/trace renderer moved to private `@fusionkit/example-utils` for
   legacy examples only.
-- `@routekit/tool-claude` owns one product-neutral Claude Code launcher and
+- `@velum-labs/routekit-tool-claude` owns one product-neutral Claude Code launcher and
   canonical driver; FusionKit adapts it in the ensemble package.
 - Governed AI SDK helpers (`remoteTools`, `swarmTools`, `handoffModel`,
   `routedModel`) moved from `@fusionkit/adapter-ai-sdk` to legacy

@@ -3,9 +3,9 @@ import type { FusionTraceCarrier } from "@fusionkit/tracing";
 import {
   HarnessError,
   DEFAULT_AUTOMATION_APPROVAL_POLICY
-} from "@routekit/harness-core";
-import { artifactHash } from "@routekit/contracts";
-import type { JsonValue, ReasoningSelection } from "@routekit/contracts";
+} from "@velum-labs/routekit-harness-core";
+import { artifactHash } from "@velum-labs/routekit-contracts";
+import type { JsonValue, ReasoningSelection } from "@velum-labs/routekit-contracts";
 import type {
   AnyHarnessDriver,
   ApprovalPolicy,
@@ -14,8 +14,8 @@ import type {
   HarnessErrorCode,
   HarnessEvent,
   ResumeCursor
-} from "@routekit/harness-core";
-import type { HarnessKind } from "@routekit/harness-core";
+} from "@velum-labs/routekit-harness-core";
+import type { HarnessKind } from "@velum-labs/routekit-harness-core";
 
 import { traceCandidate } from "./candidate-trace.js";
 import type {

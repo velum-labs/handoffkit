@@ -1,6 +1,6 @@
 import { resolve } from "node:path";
 
-import { contextFor, fail } from "@routekit/cli-core";
+import { contextFor, fail } from "@velum-labs/routekit-cli-core";
 import type { Command } from "commander";
 
 import type { FusionTool } from "@fusionkit/config";

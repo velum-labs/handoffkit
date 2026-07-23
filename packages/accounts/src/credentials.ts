@@ -17,8 +17,8 @@ import {
   subscriptionInfo,
   type SubscriptionInfo,
   type SubscriptionMode
-} from "@routekit/registry";
-import { writeFileAtomic } from "@routekit/runtime";
+} from "@velum-labs/routekit-registry";
+import { writeFileAtomic } from "@velum-labs/routekit-runtime";
 
 import type { SubscriptionCredential } from "./types.js";
 

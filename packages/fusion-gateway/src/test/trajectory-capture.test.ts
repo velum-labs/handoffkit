@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { createTrajectoryCapture } from "../trajectory-capture.js";
-import type { GatewayDialect } from "@routekit/gateway";
+import type { GatewayDialect } from "@velum-labs/routekit-gateway";
 
 function feed(dialect: GatewayDialect, requestBody: unknown, responseBody: unknown) {
   return feedRaw(dialect, requestBody, JSON.stringify(responseBody));

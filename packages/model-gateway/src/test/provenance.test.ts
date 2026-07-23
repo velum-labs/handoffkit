@@ -38,7 +38,7 @@ test("WS7: an installed copy (node_modules, no stamp) falls back to the 'unknown
   try {
     // A node_modules path is treated as an installed artifact: no git lookup
     // (so we never mis-report the consumer's repo) → the clearly-marked sentinel.
-    const sha = resolveProducerGitSha("/tmp/project/node_modules/@routekit/gateway/dist");
+    const sha = resolveProducerGitSha("/tmp/project/node_modules/@velum-labs/routekit-gateway/dist");
     assert.equal(sha, UNKNOWN_GIT_SHA);
     assert.equal(sha, "unknown");
     assert.notEqual(sha, "0".repeat(40), "the sentinel is never 40 zeros");
