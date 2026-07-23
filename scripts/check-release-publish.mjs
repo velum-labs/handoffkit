@@ -74,6 +74,7 @@ for (const required of [
   "corepack pnpm test",
   "scripts/publish-npm-workspaces.mjs",
   "secrets.NPM_TOKEN",
+  "inputs.publish == true",
   "npm-bootstrap.npmrc",
   "Publishing via npm OIDC trusted publishing"
 ]) {

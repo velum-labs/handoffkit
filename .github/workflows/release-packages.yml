@@ -6,7 +6,17 @@ on:
   # tag must match handoffkit-v* or v* (enforced in "Validate release tag").
   release:
     types: [published]
+  # Recovery-only trigger for an already-published release whose original
+  # workflow failed before upload. Remove after the recovery run succeeds.
+  push:
+    tags:
+      - "npm-recovery-v*"
   workflow_dispatch:
+    inputs:
+      publish:
+        description: "Publish after validation (recovery only)"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -59,6 +69,14 @@ jobs:
             *) echo "release tag must match handoffkit-v* or v*"; exit 1 ;;
           esac
 
+      - name: Validate recovery tag
+        if: github.event_name == 'push'
+        run: |
+          case "${{ github.ref_name }}" in
+            npm-recovery-v*) echo "recovery tag ${{ github.ref_name }} ok" ;;
+            *) echo "recovery tag must match npm-recovery-v*"; exit 1 ;;
+          esac
+
       - name: Install
         run: corepack pnpm install --frozen-lockfile
 
@@ -98,11 +116,11 @@ jobs:
         run: corepack pnpm test
 
       - name: Dry-run package tarballs
-        if: github.event_name == 'workflow_dispatch'
+        if: github.event_name == 'workflow_dispatch' && inputs.publish != true
         run: node scripts/publish-npm-workspaces.mjs --dry-run
 
       - name: Publish packages to npm
-        if: github.event_name == 'release'
+        if: github.event_name == 'release' || github.event_name == 'push' || inputs.publish == true
         env:
           GITHUB_REPOSITORY: ${{ github.repository }}
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

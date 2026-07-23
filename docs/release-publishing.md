@@ -15,7 +15,9 @@ The release workflow is `.github/workflows/release-packages.yml`.
 
 - Publishing runs on a **published GitHub Release** (`release: published`), and
   only when the release's tag matches `handoffkit-v*` or `v*`.
-- `workflow_dispatch` runs a dry-run pack only; it never publishes.
+- `workflow_dispatch` runs a dry-run pack by default. Setting its reviewed
+  `publish` recovery input publishes idempotently from `main` after an existing
+  release workflow failed before completing its package loop.
 
 Draft a GitHub Release against a `handoffkit-v<version>` tag, review the notes,
 and publishing happens when you click **Publish release**. A bare tag push does
@@ -91,10 +93,10 @@ release containing new names:
 4. Configure the Trusted Publisher above on every newly created package.
 5. Delete `NPM_TOKEN` immediately. Subsequent releases use OIDC exclusively.
 
-If publication fails partway through the manifest, rerun the failed GitHub
-Actions job after correcting the cause. Do not create another release or bump
-the version merely to recover the remaining packages. `workflow_dispatch`
-remains a pack-only dry run and never publishes.
+If publication fails partway through the manifest, correct the cause and
+dispatch the workflow from `main` with `publish=true`. Do not create another
+release or bump the version merely to recover the remaining packages. Exact
+versions already on npm are skipped.
 
 ## Release validation
 
