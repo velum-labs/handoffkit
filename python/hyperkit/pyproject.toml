@@ -29,7 +29,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-aws = ["boto3>=1.43.37"]
+aws = ["boto3>=1.43.54"]
 
 [project.scripts]
 hyperkit = "hyperkit.cli:app"
