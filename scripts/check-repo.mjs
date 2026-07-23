@@ -436,6 +436,21 @@ if (pricingCheck.status !== 0) {
   fail("pricing check failed");
 }
 
+const fusionRouterAlignmentCheck = spawnSync(
+  process.execPath,
+  ["scripts/check-fusion-router-alignment.mjs"],
+  { encoding: "utf8" }
+);
+if (fusionRouterAlignmentCheck.stdout.trim()) {
+  console.log(fusionRouterAlignmentCheck.stdout.trim());
+}
+if (fusionRouterAlignmentCheck.stderr.trim()) {
+  console.error(fusionRouterAlignmentCheck.stderr.trim());
+}
+if (fusionRouterAlignmentCheck.status !== 0) {
+  fail("Fusion/RouteKit committed config alignment failed");
+}
+
 const modelFusionProtocolCheck = spawnSync(
   process.execPath,
   ["scripts/check-model-fusion-protocol.mjs"],
