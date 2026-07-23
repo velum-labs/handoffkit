@@ -119,9 +119,6 @@ test("retained implementation references are explicitly non-contractual", () => 
 test("every first-launch route has a complete public disclosure", () => {
   const source = readFileSync(join(root, routeDisclosuresPath), "utf8");
   const mirror = readFileSync(join(root, "docs/routekit-routes-and-billing.md"), "utf8");
-  const packageJson = JSON.parse(
-    readFileSync(join(root, "packages/routekit-cli/package.json"), "utf8")
-  ) as { version: string };
   const routeIds = [...LAUNCH_ROUTE_IDS];
   const evidenceMapping = JSON.parse(
     readFileSync(join(root, "spec/routekit/l06-evidence-map.json"), "utf8")
@@ -130,6 +127,7 @@ test("every first-launch route has a complete public disclosure", () => {
     readFileSync(join(root, "docs/routekit-l06-evidence.json"), "utf8")
   ) as {
     mappingDigest: string;
+    routekitVersion: string;
     routes: Record<
       string,
       {
@@ -188,7 +186,10 @@ test("every first-launch route has a complete public disclosure", () => {
       ),
       `${routeId} does not link its stable durable evidence row`
     );
-    assert.match(section, new RegExp(`RouteKit ${packageJson.version.replaceAll(".", "\\.")}`));
+    assert.match(
+      section,
+      new RegExp(`RouteKit ${evidenceReport.routekitVersion.replaceAll(".", "\\.")}`)
+    );
     assert.match(section, /\b20\d{2}-\d{2}-\d{2}\b/);
     assert.match(section, /makes no unlimited-use claim/i);
 
@@ -212,7 +213,7 @@ test("every first-launch route has a complete public disclosure", () => {
     );
     assert.match(
       mirrorSection,
-      new RegExp(`RouteKit ${packageJson.version.replaceAll(".", "\\.")}`)
+      new RegExp(`RouteKit ${evidenceReport.routekitVersion.replaceAll(".", "\\.")}`)
     );
     assert.match(mirrorSection, /\b20\d{2}-\d{2}-\d{2}\b/);
 
