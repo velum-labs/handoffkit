@@ -6,26 +6,44 @@ namespaced `provider/model` IDs that RouteKit advertises for API-key providers.
 
 ## One enrollment surface
 
-Every subscription kind enrolls through the same command:
+For a brand-new subscription-only setup, every supported kind enrolls through
+the same command surface:
 
 ```sh
 npm install -g @velum-labs/routekit
-routekit config init
+npm install -g @anthropic-ai/claude-code  # for a Claude subscription
+# npm install -g @openai/codex             # for a ChatGPT subscription
+
+cat > routekit.yaml <<'YAML'
+providers: {}
+YAML
+
+routekit config import --from ./routekit.yaml
 routekit accounts login claude-code --name personal
-routekit accounts login codex --name work
 routekit accounts status
 routekit models list
 ```
 
+If RouteKit is already configured, skip the `providers: {}` import because
+import replaces the complete canonical config. Install the matching official
+CLI and run only the relevant `accounts login` command.
+
 `accounts login <kind>` accepts the first-launch `claude-code` and `codex`
 kinds, runs the official CLI OAuth flow, enrolls the credential, enables the
 matching router provider, and verifies live model discovery. `--no-browser`
-prefers a browserless flow
-(Codex device code; copyable URL + pasted code elsewhere) so a headless host
-only needs a browser on some other device. The first successful login
+uses `codex login --device-auth` for Codex. Claude Code still runs its official
+`claude auth login --claudeai` flow, which may present a URL that can be opened
+elsewhere. The first successful login
 automatically enables the subscription provider in the effective router
 config; `accounts remove`, `list`, and `status` operate uniformly across all
-kinds.
+kinds. The empty starter config is required for a subscription-only first run
+because `routekit config init` creates an OpenAI route and expects
+`OPENAI_API_KEY`.
+
+These routes are exposed in the first-launch interface, but public support
+remains conditional until L06 qualification closes. See
+[RouteKit route and billing disclosures](routekit-routes-and-billing.md) for
+the current evidence.
 
 Enrollment and activation are one daemon-owned transaction. OAuth runs against
 disposable profiles first; the authenticated daemon then commits every account
@@ -47,6 +65,11 @@ each kind. Users never install, serve, or configure a connector directly.
 | --- | --- | --- |
 | `claude-code` (alias `claude`) | native | Official CLI login in a private temporary profile; credential imported into RouteKit's native pool; provider-native relay. |
 | `codex` | native | Same managed login; `--no-browser` runs `codex login --device-auth`. |
+
+These connectors reuse subscription OAuth credentials over provider-native
+endpoints and are intended for personal, local use. Do not expose pooled
+personal subscriptions through a shared gateway unless the provider
+explicitly permits it.
 
 The native login runs the matching official CLI in a private temporary
 profile, imports only that credential, and removes the temporary profile. It

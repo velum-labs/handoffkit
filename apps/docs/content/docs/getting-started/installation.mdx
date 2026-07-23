@@ -9,6 +9,7 @@ For standalone routing without the ensemble runtime, install RouteKit:
 
 ```bash
 npm install -g @velum-labs/routekit
+export OPENAI_API_KEY=...
 routekit config init
 routekit doctor
 ```
@@ -17,7 +18,17 @@ This provides `routekit` and requires neither the FusionKit package nor its
 Python executable. RouteKit uses explicitly configured providers and does not
 download or start local models. Its singleton daemon owns
 `~/.config/routekit/router.yaml`; `routekit config init` creates that canonical
-document.
+document with an OpenAI starter route and `openai/gpt-5.5` default. If that
+model is unavailable, or if you use Anthropic, OpenRouter, or a subscription
+instead, follow [RouteKit from zero](/docs/getting-started/routekit) for the
+correct first config and copy-paste examples. `routekit doctor` checks all
+supported coding tools, so missing results for unused tools are expected and
+may make it exit non-zero when you only need the gateway or one launcher.
+
+RouteKit exposes a deliberately limited first-launch route set, but public
+support remains conditional until L06 qualification closes. Review the
+[current credential, billing, limitations, and qualification evidence](/docs/reference/routes-and-billing)
+before relying on a route.
 
 For model ensembles, install FusionKit:
 

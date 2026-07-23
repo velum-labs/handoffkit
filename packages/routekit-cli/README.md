@@ -5,10 +5,14 @@ and its `routekit` executable. It configures and serves model routes directly;
 it does not depend on `@fusionkit/cli`, run fusion ensembles, start the Python
 sidecar, or download local models.
 
+New to RouteKit? Start with the
+[zero-context user guide](https://fusionkit.velum-labs.com/docs/getting-started/routekit).
+
 ## Install
 
 ```sh
 npm install -g @velum-labs/routekit
+export OPENAI_API_KEY=...
 routekit config init
 routekit start
 routekit codex
@@ -52,17 +56,17 @@ Set `ROUTEKIT_DEV_SKIP_BUILD=1` after a build for a faster local check.
 | --- | --- |
 | `start`, `status`, `stop` | Start, inspect, and gracefully stop RouteKit through its singleton daemon. |
 | `codex`, `claude`, `cursor` | Ask the daemon to prepare a launch, then run the supported coding tool locally against the singleton gateway. |
-| `codex install`, `codex uninstall` | Add or remove RouteKit-owned Codex provider/profile blocks. |
+| `codex install`, `codex uninstall` | Advanced Codex profile generation/removal. In 0.9.0 the generated profile does not wire the singleton gateway token; use `routekit codex` for the authenticated first-launch path. |
 | `claude install`, `claude uninstall` | Add or remove RouteKit-owned Claude Code gateway settings while preserving user configuration. |
 | `providers add`, `remove`, `status` | Manage explicit providers and run live discovery without printing credentials. |
 | `models list` | Discover and list the live namespaced model catalog. |
 | `models info <provider/model>` | Explain the effective provider and native model, account class, billing mode, default status, capabilities, and reasoning metadata without printing credentials. |
-| `accounts login` | Enroll a supported subscription kind (`claude-code` or `codex`), import the credential, and enable the matching provider. `--no-browser` prefers a device-code / copyable-URL flow for headless hosts. |
+| `accounts login` | Enroll a supported subscription kind (`claude-code` or `codex`), import the credential, and enable the matching provider. For Codex, `--no-browser` uses device authentication on headless hosts. |
 | `accounts add`, `remove`, `list`, `status` | Import the current official CLI login or manage enrolled subscription accounts. |
-| `usage` | Show subscription rate limits, credits, and reset windows from the running gateway or enrolled local accounts. |
+| `usage` | Connect to or start the singleton daemon and show its subscription rate limits, credits, and reset windows. |
 | `config path`, `show`, `init`, `edit`, `import`, `migrate` | Manage the daemon's canonical global router config with revision-checked writes. |
 | `doctor` | Check router configuration, referenced credential variables, and installed coding-agent binaries. |
-| `telemetry status`, `on`, `off` | Control RouteKit's anonymous, opt-in product telemetry. |
+| `telemetry status`, `on`, `off` | Manage the stored opt-in telemetry consent preference. The current CLI initializes no event transport. |
 | `completion <bash\|zsh\|fish>` | Print shell completion setup. |
 | `version`, `--version` | Print the `@velum-labs/routekit` version. |
 
@@ -93,8 +97,9 @@ The one enrollment path is `routekit accounts login <kind>`. The supported
 `claude-code` and `codex` kinds run the official provider CLI in a private
 temporary profile, atomically import the resulting credential, and remove the
 temporary profile without changing the user's normal login (`accounts add` is
-the explicit current-login import path). `--no-browser` prefers a device-code /
-copyable-URL flow so a headless host only needs a browser on some other device.
+the explicit current-login import path). For Codex, `--no-browser` runs
+`codex login --device-auth`; Claude Code continues to use its official
+`claude auth login --claudeai` flow.
 
 API providers infer their key and optional base URL from registry-defined
 environment variables. Subscription providers discover the union of models
@@ -161,11 +166,13 @@ replace its canonical document:
 routekit config import --from .routekit/router.yaml
 ```
 
-The first product command race-safely ensures the singleton exists. Where a
-systemd user manager or launchd is available it installs/starts the persistent
-unit; unsupported container/WSL environments use the documented detached
-fallback. Users do not need to select foreground, detached, or supervised
-operation. The public lifecycle is:
+The first product command race-safely ensures the singleton exists.
+Bootstrap config mutations (`config init` and the first `config import`) start
+a detached daemon while holding the config/lifecycle authority lock. Promote
+that daemon to a persistent systemd user unit or launchd agent with
+`routekit daemon service install`; the installer drains the detached process
+before handing over. Unsupported container/WSL environments keep the
+documented detached fallback. The public lifecycle is:
 
 ```sh
 routekit start
@@ -174,10 +181,11 @@ routekit stop
 ```
 
 `start` is idempotent and uses the same daemon bootstrap as every product
-command. It writes `routekit-daemon.service` / the launchd agent when an OS
-supervisor is available (with lingering on Linux so it survives logout and
-reboot), starts it, and verifies authenticated control health before printing
-the data URL.
+command. With no existing daemon, it writes `routekit-daemon.service` / the
+launchd agent when an OS supervisor is available, starts it, and verifies
+authenticated control health before printing the data URL. A healthy detached
+daemon remains detached until `routekit daemon service install` explicitly
+promotes it.
 On systemd, provider credentials for the configured providers are captured
 into a private `~/.routekit/env/daemon.env` (mode 0600) referenced by the
 unit; edit that file to rotate provider keys, then restart the daemon so the
@@ -185,7 +193,7 @@ supervisor supplies the new process environment. The advanced `daemon reload`
 command reloads
 router/account state, not process environment. The gateway bearer is generated
 into `~/.routekit/secrets/data-token` (0600) and never appears in status, logs,
-or process arguments; `routekit daemon auth show` reveals it only when
+or RouteKit-owned process arguments; `routekit daemon auth show` reveals it only when
 explicitly requested for an external client such as FusionKit. Where no
 init supervisor exists (containers, some WSL setups), `start` falls back to a
 detached daemon.
@@ -214,9 +222,9 @@ user workflow.
   status` with `routekit status`, and `routekit daemon stop` with `routekit
   stop`. The former commands remain compatible but are omitted from primary
   help.
-- Existing `routekit daemon service install` users can use `routekit start`;
-  RouteKit chooses and installs the available supervisor automatically. Keep
-  the service command only for unit repair, inspection, or removal.
+- Keep `routekit daemon service install` when you want OS supervision.
+  `routekit start` can select a supervisor when no daemon exists, but it does
+  not promote a healthy detached daemon created during config bootstrap.
 - `routekit gateway serve` has been removed. Use `routekit start`; external
   clients read the gateway URL from `routekit status` and the data token from
   `routekit daemon auth show`.

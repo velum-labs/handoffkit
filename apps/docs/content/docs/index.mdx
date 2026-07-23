@@ -1,6 +1,6 @@
 ---
 title: Introduction
-description: What FusionKit is, how the CLI and Python fusion engine fit together, and where to start.
+description: Choose RouteKit for standalone model routing or FusionKit for multi-model synthesis, then follow the right setup path.
 ---
 
 ## What is FusionKit?
@@ -25,17 +25,32 @@ fusionkit doctor       # verify prerequisites
 fusionkit codex        # launch Codex backed by the panel
 ```
 
-## Two supported product paths
+## What is RouteKit?
 
-The Node `@fusionkit/cli` is the front door. It launches coding harnesses, owns
-Fusion configuration, sessions, cost controls, and local-model management, and
-starts the internal Python `fusionkit-sidecar` when synthesis is needed. The
-Node Fusion gateway owns the public OpenAI-compatible endpoint; the sidecar has
-only internal fusion/run routes.
+RouteKit is the standalone routing product underneath FusionKit. It gives
+OpenAI, Anthropic, OpenRouter, Claude Code subscriptions, and Codex
+subscriptions one local model catalog and one authenticated endpoint. It can
+also launch Codex, Claude Code, or Cursor against a model from that catalog.
+RouteKit does not run model panels or require FusionKit. Its exposed
+first-launch routes remain conditionally supported until L06 qualification
+closes.
+
+## Choose a product path
+
+For model fusion, the Node `@fusionkit/cli` is the front door. It launches
+coding harnesses, owns Fusion configuration, sessions, cost controls, and
+local-model management, and starts the internal Python `fusionkit-sidecar`
+when synthesis is needed. The Node Fusion gateway owns the public
+OpenAI-compatible endpoint; the sidecar has only internal fusion/run routes.
 
 <Cards>
+  <Card title="Start with RouteKit" href="/docs/getting-started/routekit">
+    Set up standalone model routing, pooled local subscriptions, coding tools,
+    and an OpenAI-compatible gateway from zero context.
+  </Card>
   <Card title="Install the CLI" href="/docs/getting-started/installation">
-    Back Codex, Claude Code, or Cursor with a fused model panel from one command.
+    Install FusionKit and back Codex, Claude Code, or Cursor with a fused model
+    panel.
   </Card>
   <Card title="Set up your tool" href="/docs/tools">
     Per-tool guides for Codex, Claude Code, and Cursor: wiring, model pickers,
@@ -71,7 +86,7 @@ The sidebar follows reader intent, from first install to contract-level detail.
 
 | Section | Read it when you want to | Contents |
 | --- | --- | --- |
-| [Get started](/docs/getting-started/installation) | Install the CLI and run your first fused session. | Installation, quickstart. |
+| [Get started](/docs/getting-started/installation) | Install RouteKit or FusionKit and run your first routed or fused session. | Installation, RouteKit from zero, FusionKit quickstart. |
 | [Tools](/docs/tools) | Set up a specific coding agent. | One page each for Codex, Claude Code, and Cursor. |
 | [Guides](/docs/guides/inference-endpoint) | Complete a specific workflow. | Raw inference endpoint, rate-limit handoff, cost control, observability, troubleshooting, examples. |
 | [Concepts](/docs/concepts/overview) | Understand how the product fits together. | Panels, judges, model fusion, runtime kernel, product scope, privacy. |

@@ -1,8 +1,12 @@
-# FusionKit maintainer documentation
+# RouteKit and FusionKit maintainer documentation
 
 > **Documentation split:** `docs/` is the maintainer and contributor documentation layer. `apps/docs` is the canonical user documentation source, published at <https://fusionkit.velum-labs.com/docs>.
 
-FusionKit runs panels of local and cloud models as a raw inference endpoint and behind unmodified coding harnesses (Codex, Claude Code, Cursor). The Node `@fusionkit/cli` owns the product gateway and starts an internal Python synthesis sidecar when fusion needs it.
+RouteKit provides standalone model routing, subscription pools, coding-tool
+launchers, and an authenticated local gateway. FusionKit builds on RouteKit to
+run panels of local and cloud models behind unmodified coding harnesses. The
+Node `@fusionkit/cli` owns the Fusion gateway and starts an internal Python
+synthesis sidecar when fusion needs it.
 
 Use this directory for implementation, release, protocol, benchmark, and historical context. When a page overlaps with the public site, the site is the source of truth and any `docs/quickstart-*.md` page is an in-repo mirror kept for existing links.
 
@@ -17,6 +21,7 @@ Read [Documentation taxonomy](documentation-taxonomy.md) before adding, moving, 
 | [Repository coverage map](repository-coverage-map.md) | Orientation | Major repo areas mapped to their owning docs. |
 | [Repository reference](repository-reference.md) | Reference | Comprehensive package, API, app, example, protocol, and operations map. |
 | [Getting started](getting-started.md) | Task guide | Contributor setup, local verification, portless behavior, and demos. |
+| [RouteKit user guide](routekit-user-guide.md) | Task guide mirror | Zero-context RouteKit onboarding: install, providers, subscription pooling, coding tools, and the local gateway API. |
 | [Package guide](packages.md) | Reference | Short package guide for readers who do not need full package references. |
 | [Testing](testing.md) | Task guide | RouteKit/sidecar test tooling, the coverage matrix, and the mutation pass. |
 | [Hyperkit](hyperkit.md) | Reference | The SUT-agnostic experiment platform: boundary, CLI, adapters, backends, and observability. |
@@ -24,7 +29,7 @@ Read [Documentation taxonomy](documentation-taxonomy.md) before adding, moving, 
 | [Generated code API reference](generated/code-api.md) | Reference | API reference emitted from TypeScript JSDoc and Python docstrings. |
 | [CLI reference](cli.md) | Reference | Shipped `fusionkit` command surface, flags, sessions, cost, budget, and env vars. |
 | [Configuration](configuration.md) | Reference | `.fusionkit/` config, precedence, prompts, and YAML export. |
-| [Privacy](privacy.md) | Policy | Local storage, provider egress, rate-limit failover, and no-telemetry disclosure. |
+| [Privacy](privacy.md) | Policy | Local storage, provider egress, rate-limit failover, and opt-in telemetry disclosure. |
 | [Fusion Harness Gateway](fusion-harness-gateway.md) | Architecture | Dialect translation, streaming, and per-harness wiring. |
 | [Subscription pooling](subscription-pooling.md) | Architecture | Supported Codex and Claude Code credential pools, usage windows, and quota-aware rotation. |
 | [Fusion Judge Trajectory](fusion-judge-trajectory.md) | Architecture | Trajectory production, judge synthesis, OTel trace spans, and e2e drivers. |
@@ -42,6 +47,7 @@ Read [Documentation taxonomy](documentation-taxonomy.md) before adding, moving, 
 
 Canonical user docs live on the site; these mirrors remain because they are linked widely:
 
+- [RouteKit user guide](routekit-user-guide.md) -> <https://fusionkit.velum-labs.com/docs/getting-started/routekit>
 - [Quickstart: inference endpoint](quickstart-inference.md) -> <https://fusionkit.velum-labs.com/docs/getting-started/inference-endpoint>
 - [Quickstart: coding harness](quickstart-harness.md) -> <https://fusionkit.velum-labs.com/docs/getting-started/quickstart>
 - [Quickstart: rate-limit handoff](quickstart-handoff.md) -> <https://fusionkit.velum-labs.com/docs/getting-started/rate-limit-handoff>

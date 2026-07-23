@@ -16,7 +16,8 @@ const features = [
 ];
 
 const sections = [
-  { title: "Get started", href: "/docs/getting-started/installation", body: "Install the CLI and run your first fused session." },
+  { title: "RouteKit", href: "/docs/getting-started/routekit", body: "Start from zero with standalone model routing, subscriptions, tools, and gateway code examples." },
+  { title: "Get started", href: "/docs/getting-started/installation", body: "Choose RouteKit or FusionKit and install the CLI you need." },
   { title: "Tools", href: "/docs/tools", body: "Per-tool guides for Codex, Claude Code, and Cursor." },
   { title: "Guides", href: "/docs/guides/inference-endpoint", body: "Endpoint usage, rate-limit handoff, cost control, observability, and troubleshooting." },
   { title: "Concepts", href: "/docs/concepts/overview", body: "Panels, judges, model fusion, product scope, and privacy." },

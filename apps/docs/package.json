@@ -4,7 +4,7 @@
   "license": "Apache-2.0",
   "private": true,
   "type": "module",
-  "description": "Documentation site for fusionkit (the @fusionkit/cli coding-agent fusion CLI), built with Fumadocs.",
+  "description": "Documentation site for @velum-labs/routekit and @fusionkit/cli, built with Fumadocs.",
   "engines": {
     "node": ">=22"
   },

@@ -29,8 +29,20 @@ export async function generateMetadata(props: { params: Promise<{ slug?: string[
   const params = await props.params;
   const page = source.getPage(params.slug);
   if (page === undefined) notFound();
+  const title = page.data.title;
+  const description = page.data.description;
   return {
-    title: page.data.title,
-    description: page.data.description
+    title,
+    description,
+    openGraph: {
+      title,
+      description,
+      type: "article"
+    },
+    twitter: {
+      card: "summary",
+      title,
+      description
+    }
   };
 }
