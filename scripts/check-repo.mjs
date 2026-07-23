@@ -686,7 +686,7 @@ const TRUSTED_APP_THIRD_PARTY = new Map([
   ["fumadocs-ui", "15.8.5"],
   ["lucide-react", "1.20.0"],
   ["mermaid", "11.15.0"],
-  ["next", "15.5.19"],
+  ["next", "15.5.21"],
   ["next-themes", "0.4.6"],
   ["radix-ui", "1.6.0"],
   ["react-dom", "19.2.7"],
