@@ -245,9 +245,15 @@ const requiredFiles = [
   "scripts/generate-model-fusion-openapi-sdk.mjs",
   "scripts/generate-code-docs.mjs",
   "scripts/generate-expected-behaviors.mjs",
+  "scripts/generate-routekit-cursor-attestation.mjs",
   "scripts/generate-routekit-l06-evidence.mjs",
+  "scripts/generate-routekit-manual-records.mjs",
+  "scripts/lib/routekit-cursor-attestation-runner.mjs",
+  "scripts/lib/routekit-cursor-state.mjs",
   "scripts/lib/routekit-l06-evidence.mjs",
+  "scripts/lib/routekit-manual-evidence.mjs",
   "scripts/test/routekit-l06-evidence.test.mjs",
+  "scripts/test/routekit-manual-evidence.test.mjs",
   "scripts/publish-npm-workspaces.mjs",
   "scripts/release.mjs",
   "scripts/lib/changelog.mjs",
@@ -487,7 +493,11 @@ if (routekitEvidenceCheck.status !== 0) {
 
 const routekitEvidenceTests = spawnSync(
   process.execPath,
-  ["--test", "scripts/test/routekit-l06-evidence.test.mjs"],
+  [
+    "--test",
+    "scripts/test/routekit-l06-evidence.test.mjs",
+    "scripts/test/routekit-manual-evidence.test.mjs"
+  ],
   { encoding: "utf8" }
 );
 if (routekitEvidenceTests.stdout.trim()) {

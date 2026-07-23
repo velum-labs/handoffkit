@@ -269,10 +269,11 @@ export function renderEvidenceMarkdown(mapping, source) {
   return `${lines.join("\n")}\n`;
 }
 
-export function promoteMatrixResults(mapping, source, matrixReport, revision) {
+export function validateMatrixReport(mapping, matrixReport, revision, options = {}) {
+  const supportedSchemas = options.supportedSchemas ?? [2, 4];
   assert.ok(
-    matrixReport.schemaVersion === 2 || matrixReport.schemaVersion === 4,
-    "matrix report must use schemaVersion 2 or 4"
+    supportedSchemas.includes(matrixReport.schemaVersion),
+    `matrix report must use schemaVersion ${supportedSchemas.join(" or ")}`
   );
   assert.equal(
     matrixReport.evidenceMappingDigest,
@@ -320,6 +321,11 @@ export function promoteMatrixResults(mapping, source, matrixReport, revision) {
     }
     byCaseId.set(result.caseId, result);
   }
+  return byCaseId;
+}
+
+export function promoteMatrixResults(mapping, source, matrixReport, revision) {
+  const byCaseId = validateMatrixReport(mapping, matrixReport, revision);
   const next = structuredClone(source);
   next.testedRevision = revision;
   next.routekitVersion = matrixReport.routekitVersion;
@@ -388,45 +394,8 @@ export function promoteMatrixResults(mapping, source, matrixReport, revision) {
   return next;
 }
 
-export function applyManualRecords(mapping, source, manualRecords) {
-  assert.equal(manualRecords.schemaVersion, 1, "manual records must use schemaVersion 1");
-  assert.match(
-    manualRecords.testedRevision,
-    /^[0-9a-f]{40}$/,
-    "manual records must name a full testedRevision"
+export function applyManualRecords() {
+  assert.fail(
+    "untrusted manual records are not accepted; use applyReviewedManualRecords with the bound matrix report"
   );
-  assert.equal(
-    manualRecords.testedRevision,
-    source.testedRevision,
-    "manual records were reviewed against a different revision"
-  );
-  assert.match(
-    manualRecords.evidenceDate,
-    /^20\d{2}-\d{2}-\d{2}$/,
-    "manual records must name an ISO-8601 evidenceDate"
-  );
-  assertSanitized(manualRecords);
-  const next = structuredClone(source);
-  next.evidenceDate = manualRecords.evidenceDate;
-  for (const [routeId, record] of Object.entries(manualRecords.routes ?? {})) {
-    assert.ok(
-      mapping.routes.some((route) => route.id === routeId),
-      `manual evidence names unknown route ${routeId}`
-    );
-    const row = next.routes[routeId];
-    for (const field of ["credentialMode", "clientProviderVersion", "qualificationStatus"]) {
-      if (record[field] !== undefined) row[field] = record[field];
-    }
-    if (record.outcomes !== undefined) {
-      row.outcomes = { ...row.outcomes, ...record.outcomes };
-    }
-    if (record.evidence !== undefined) {
-      row.evidence = [
-        ...row.evidence.filter((item) => item.type !== "manual"),
-        ...record.evidence.map((item) => ({ ...item, type: "manual" }))
-      ];
-    }
-  }
-  validateEvidence(mapping, next);
-  return next;
 }

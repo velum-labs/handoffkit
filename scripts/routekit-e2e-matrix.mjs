@@ -52,6 +52,10 @@ import {
   mappingDigest,
   routeIdsForCase
 } from "./lib/routekit-l06-evidence.mjs";
+import {
+  cursorConfigDirectory,
+  stageCursorState
+} from "./lib/routekit-cursor-state.mjs";
 import { processAlive } from "../packages/runtime-utils/dist/index.js";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -1039,8 +1043,6 @@ async function runPtyCase(input) {
   const command = [
     process.execPath,
     ROUTEKIT_ENTRY,
-    "--config",
-    input.configPath,
     input.door,
     input.model,
     "--gateway-url",
@@ -1073,6 +1075,9 @@ async function runPtyCase(input) {
     "DISABLE_AUTOUPDATER=1",
     "-e",
     "DISABLE_UPDATES=1",
+    ...(input.cursorConfigDir === undefined
+      ? []
+      : ["-e", `CURSOR_CONFIG_DIR=${input.cursorConfigDir}`]),
     "--",
     "sleep",
     "3600"
@@ -2118,38 +2123,57 @@ async function runLive(options, results, artifactDir, tempRoot) {
           continue;
         }
         const transcriptPath = join(artifactDir, `live-${provider}-${door.id}.txt`);
-        await recordCase(
-          results,
-          {
-            phase: "live",
-            routeId: routeIdForCase(provider, door.id, options),
-            provider,
-            door: door.id
-          },
-          async () =>
-            await observeGatewayRequests(proxy, async () => {
-              const output = await runPtyCase({
-                tempRoot,
-                provider,
-                door: door.id,
-                model: chosen[provider],
-                nativeModel: chosen[provider].slice(provider.length + 1),
-                configPath,
-                proxy,
-                timeoutMs: options.timeoutMs,
-                toolCase: provider === "openrouter" && door.id === "claude",
-                live: true
-              });
-              writeFileSync(
-                transcriptPath,
-                `${sanitize(output.transcript).trim()}\n`
-              );
-              return {
-                artifact: relative(ROOT, transcriptPath),
-                model: chosen[provider]
-              };
-            })
-        );
+        const cursorState =
+          door.id === "cursor"
+            ? stageCursorState(
+                cursorConfigDirectory(),
+                join(tempRoot, "cursor-agent-config")
+              )
+            : undefined;
+        let entry;
+        try {
+          entry = await recordCase(
+            results,
+            {
+              phase: "live",
+              routeId: routeIdForCase(provider, door.id, options),
+              provider,
+              door: door.id
+            },
+            async () =>
+              await observeGatewayRequests(proxy, async () => {
+                const output = await runPtyCase({
+                  tempRoot,
+                  provider,
+                  door: door.id,
+                  model: chosen[provider],
+                  nativeModel: chosen[provider].slice(provider.length + 1),
+                  configPath,
+                  proxy,
+                  timeoutMs: options.timeoutMs,
+                  toolCase: provider === "openrouter" && door.id === "claude",
+                  live: true,
+                  cursorConfigDir: cursorState?.directory
+                });
+                writeFileSync(
+                  transcriptPath,
+                  `${sanitize(output.transcript).trim()}\n`
+                );
+                return {
+                  artifact: relative(ROOT, transcriptPath),
+                  model: chosen[provider]
+                };
+              })
+          );
+        } finally {
+          if (cursorState !== undefined && entry !== undefined) {
+            const state = cursorState.verify();
+            entry.setupRestore = {
+              setup: cursorState.stagedCount > 0 ? "pass" : "fail",
+              restore: state.unchanged ? "pass" : "fail"
+            };
+          }
+        }
       }
     }
     if (
