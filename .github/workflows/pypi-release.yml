@@ -76,14 +76,14 @@ jobs:
           fi
 
       - name: Publish to PyPI
-        # Real publish only on a published GitHub Release; workflow_dispatch is
-        # build/validate only. Uses an API token when PYPI_TOKEN is set (the
-        # one-time bootstrap, before Trusted Publishers can be attached to
-        # not-yet-existing projects); otherwise authenticates via OIDC trusted
-        # publishing for fusionkit-core, fusionkit-server, fusionkit,
-        # fusionkit-mlx, and fusionkit-evals. Remove the PYPI_TOKEN secret after
-        # every project has its Trusted Publisher configured to go token-free.
-        if: github.event_name == 'release'
+        # Published releases publish by default. A manual dispatch publishes
+        # only when dry_run=false, which provides an idempotent recovery path
+        # after the release event has already fired. Uses an API token when
+        # PYPI_TOKEN is set (the one-time bootstrap, before Trusted Publishers
+        # can be attached to not-yet-existing projects); otherwise authenticates
+        # via OIDC trusted publishing. Remove PYPI_TOKEN after every project has
+        # its Trusted Publisher configured.
+        if: github.event_name == 'release' || inputs.dry_run == false
         env:
           UV_PUBLISH_TOKEN: ${{ secrets.PYPI_TOKEN }}
         run: |
