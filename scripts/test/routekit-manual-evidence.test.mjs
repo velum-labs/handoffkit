@@ -35,7 +35,11 @@ import {
   ensureTmuxCursorAuthUpdate,
   tmuxClientEnvironment
 } from "../lib/routekit-tmux-auth.mjs";
-import { runActiveCursorIdeAttestation } from "../lib/routekit-cursor-attestation-runner.mjs";
+import {
+  loopbackGatewayTarget,
+  proxyRequestPath,
+  runActiveCursorIdeAttestation
+} from "../lib/routekit-cursor-attestation-runner.mjs";
 import { routeById } from "../routekit-qualification.mjs";
 
 const ROOT = new URL("../..", import.meta.url).pathname;
@@ -44,6 +48,30 @@ const source = JSON.parse(
   readFileSync(join(ROOT, "spec", "routekit", "l06-evidence.json"), "utf8")
 );
 const REVISION = "1".repeat(40);
+
+test("Cursor attestation proxy accepts only relative requests to literal loopback", () => {
+  assert.equal(
+    loopbackGatewayTarget("http://127.0.0.1:43123").origin,
+    "http://127.0.0.1:43123"
+  );
+  for (const target of [
+    "https://127.0.0.1:43123",
+    "http://localhost:43123",
+    "http://example.com:43123",
+    "http://127.0.0.1",
+    "http://127.0.0.1:43123/v1",
+    "http://user:password@127.0.0.1:43123"
+  ]) {
+    assert.throws(() => loopbackGatewayTarget(target));
+  }
+  assert.equal(proxyRequestPath("/v1/models?limit=1"), "/v1/models?limit=1");
+  for (const target of [
+    "http://example.com/v1/models",
+    "//example.com/v1/models"
+  ]) {
+    assert.throws(() => proxyRequestPath(target), /must be relative/);
+  }
+});
 
 function result(caseId, overrides = {}) {
   const [phase, providerPart, door] = caseId.split(".");

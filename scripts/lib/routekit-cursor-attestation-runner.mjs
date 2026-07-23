@@ -29,6 +29,30 @@ const MODEL_CALL_PATHS = new Set([
 ]);
 const LOCAL_HARNESS_KEY = "routekit-attestation-local";
 const GATEWAY_TOKEN_ENV = "ROUTEKIT_CURSOR_GATEWAY_TOKEN";
+const PROXY_REQUEST_BASE = "http://routekit-attestation.invalid";
+
+export function loopbackGatewayTarget(value) {
+  const target = new URL(value);
+  assert.equal(target.protocol, "http:", "gateway URL must use HTTP");
+  assert.equal(target.hostname, "127.0.0.1", "gateway URL must use literal loopback");
+  assert.equal(target.username, "", "gateway URL cannot contain credentials");
+  assert.equal(target.password, "", "gateway URL cannot contain credentials");
+  assert.match(target.port, /^\d+$/, "gateway URL must name an explicit port");
+  assert.equal(target.pathname, "/", "gateway URL cannot contain a path");
+  assert.equal(target.search, "", "gateway URL cannot contain a query");
+  assert.equal(target.hash, "", "gateway URL cannot contain a fragment");
+  return target;
+}
+
+export function proxyRequestPath(value) {
+  const requestTarget = new URL(value, PROXY_REQUEST_BASE);
+  assert.equal(
+    requestTarget.origin,
+    PROXY_REQUEST_BASE,
+    "proxy request target must be relative"
+  );
+  return `${requestTarget.pathname}${requestTarget.search}`;
+}
 
 function parseModel(body) {
   try {
@@ -44,13 +68,7 @@ function parseModel(body) {
 }
 
 export async function startCursorGatewayProxy(input) {
-  const target = new URL(input.gatewayUrl);
-  assert.ok(
-    ["http:", "https:"].includes(target.protocol) &&
-      target.username === "" &&
-      target.password === "",
-    "gateway URL must be an HTTP(S) URL without embedded credentials"
-  );
+  const target = loopbackGatewayTarget(input.gatewayUrl);
   assert.ok(
     typeof input.authToken === "string" && input.authToken.length > 0,
     `${GATEWAY_TOKEN_ENV} is required`
@@ -64,7 +82,8 @@ export async function startCursorGatewayProxy(input) {
       const chunks = [];
       for await (const chunk of request) chunks.push(Buffer.from(chunk));
       const body = Buffer.concat(chunks);
-      const url = new URL(request.url ?? "/", target);
+      const path = proxyRequestPath(request.url ?? "/");
+      const url = new URL(path, target);
       const isModelCall =
         request.method === "POST" && MODEL_CALL_PATHS.has(url.pathname);
       if (isModelCall) {
@@ -89,9 +108,12 @@ export async function startCursorGatewayProxy(input) {
       delete headers.host;
       delete headers["content-length"];
       headers.authorization = `Bearer ${input.authToken}`;
+      // lgtm[js/request-forgery] The origin is restricted to literal loopback,
+      // the request target is forced relative, and redirects are disabled.
       const upstream = await fetch(url, {
         method: request.method,
         headers,
+        redirect: "error",
         ...(body.length > 0 ? { body } : {})
       });
       response.writeHead(
