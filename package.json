@@ -44,7 +44,7 @@
   },
   "devDependencies": {
     "@types/node": "22.19.20",
-    "@velum-labs/model-fusion-protocol": "file:spec/model-fusion-contract",
+    "@velum-labs/model-fusion-protocol": "0.6.0",
     "turbo": "2.10.5",
     "typescript": "6.0.3"
   }

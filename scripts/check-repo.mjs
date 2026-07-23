@@ -636,7 +636,7 @@ const TRUSTED_THIRD_PARTY = new Map([
   // heuristic rename changed the schema bundle and v0.6.0 is prepared in
   // spec/model-fusion-contract but not yet published. Restore an exact
   // registry pin ("0.6.0") once the model-fusion-protocol-v0.6.0 tag ships.
-  ["@velum-labs/model-fusion-protocol", "file:spec/model-fusion-contract"],
+  ["@velum-labs/model-fusion-protocol", "0.6.0"],
   ["@vercel/sandbox", "2.4.0"],
   ["ai", "6.0.200"],
   ["commander", "14.0.3"],
