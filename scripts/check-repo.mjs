@@ -250,6 +250,7 @@ const requiredFiles = [
   "scripts/generate-routekit-manual-records.mjs",
   "scripts/lib/routekit-cursor-attestation-runner.mjs",
   "scripts/lib/routekit-cursor-state.mjs",
+  "scripts/lib/routekit-tmux-auth.mjs",
   "scripts/lib/routekit-l06-evidence.mjs",
   "scripts/lib/routekit-manual-evidence.mjs",
   "scripts/lib/routekit-subscription-state.mjs",

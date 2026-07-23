@@ -113,3 +113,40 @@ export function stageCursorState(sourceDirectory, destinationDirectory) {
     }
   };
 }
+
+export function prepareCursorAuthentication(
+  sourceDirectory,
+  destinationDirectory,
+  env = process.env
+) {
+  const before = snapshotCursorState(sourceDirectory);
+  const envKeyAvailable =
+    typeof env.CURSOR_API_KEY === "string" && env.CURSOR_API_KEY.length > 0;
+  if (envKeyAvailable) {
+    return {
+      authSource: "env-key",
+      directory: undefined,
+      verify() {
+        const after = snapshotCursorState(sourceDirectory);
+        return {
+          authSource: "env-key",
+          unchanged:
+            before.count === after.count && before.digest === after.digest
+        };
+      }
+    };
+  }
+
+  const staged = stageCursorState(sourceDirectory, destinationDirectory);
+  const authSource = staged.stagedCount > 0 ? "staged-config" : "none";
+  return {
+    authSource,
+    directory: authSource === "staged-config" ? staged.directory : undefined,
+    verify() {
+      return {
+        authSource,
+        unchanged: staged.verify().unchanged
+      };
+    }
+  };
+}

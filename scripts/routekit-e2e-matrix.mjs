@@ -49,8 +49,13 @@ import {
 } from "./lib/routekit-l06-evidence.mjs";
 import {
   cursorConfigDirectory,
-  stageCursorState
+  prepareCursorAuthentication
 } from "./lib/routekit-cursor-state.mjs";
+import {
+  cursorAuthTmuxSessionArgs,
+  ensureTmuxCursorAuthUpdate,
+  tmuxClientEnvironment
+} from "./lib/routekit-tmux-auth.mjs";
 import {
   stageSubscriptionAccounts,
   subscriptionStoresUnchanged
@@ -891,13 +896,7 @@ function tmux(...args) {
     cwd: ROOT,
     encoding: "utf8",
     timeout: 30_000,
-    env: {
-      PATH: process.env.PATH,
-      HOME: process.env.HOME,
-      TMPDIR: process.env.TMPDIR,
-      LANG: process.env.LANG ?? "en_US.UTF-8",
-      TERM: "xterm-256color"
-    }
+    env: tmuxClientEnvironment()
   });
 }
 
@@ -1079,6 +1078,7 @@ async function runPtyCase(input) {
     "--",
     ...cliArgs(input.door)
   ];
+  ensureTmuxCursorAuthUpdate(tmux);
   const started = tmux(
     "new-session",
     "-d",
@@ -1108,6 +1108,7 @@ async function runPtyCase(input) {
     "DISABLE_AUTOUPDATER=1",
     "-e",
     "DISABLE_UPDATES=1",
+    ...cursorAuthTmuxSessionArgs(),
     ...(input.cursorConfigDir === undefined
       ? []
       : ["-e", `CURSOR_CONFIG_DIR=${input.cursorConfigDir}`]),
@@ -2119,9 +2120,9 @@ async function runLive(options, results, artifactDir, tempRoot) {
           continue;
         }
         const transcriptPath = join(artifactDir, `live-${provider}-${door.id}.txt`);
-        const cursorState =
+        const cursorAuthentication =
           door.id === "cursor"
-            ? stageCursorState(
+            ? prepareCursorAuthentication(
                 cursorConfigDirectory(),
                 join(tempRoot, "cursor-agent-config")
               )
@@ -2149,7 +2150,7 @@ async function runLive(options, results, artifactDir, tempRoot) {
                   timeoutMs: options.timeoutMs,
                   toolCase: provider === "openrouter" && door.id === "claude",
                   live: true,
-                  cursorConfigDir: cursorState?.directory
+                  cursorConfigDir: cursorAuthentication?.directory
                 });
                 writeFileSync(
                   transcriptPath,
@@ -2162,11 +2163,12 @@ async function runLive(options, results, artifactDir, tempRoot) {
               })
           );
         } finally {
-          if (cursorState !== undefined && entry !== undefined) {
-            const state = cursorState.verify();
+          if (cursorAuthentication !== undefined && entry !== undefined) {
+            const evidence = cursorAuthentication.verify();
             entry.setupRestore = {
-              setup: cursorState.stagedCount > 0 ? "pass" : "fail",
-              restore: state.unchanged ? "pass" : "fail"
+              setup: evidence.authSource === "none" ? "fail" : "pass",
+              restore: evidence.unchanged ? "pass" : "fail",
+              evidence
             };
           }
         }

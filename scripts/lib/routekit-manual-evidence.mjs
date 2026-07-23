@@ -16,6 +16,7 @@ const REVIEWED_ROUTE_IDS = Object.freeze([
 const CURSOR_IDE_ROUTE_ID = "route-cursor-ide";
 const SAFE_VERSION = /^[A-Za-z0-9][A-Za-z0-9.+() _/-]{0,159}$/;
 const SAFE_MODEL = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,159}$/;
+const SAFE_CURSOR_AUTH_SOURCES = new Set(["env-key", "staged-config"]);
 
 function exactKeys(value, keys, label) {
   assert.ok(value !== null && typeof value === "object" && !Array.isArray(value), `${label} must be an object`);
@@ -140,6 +141,42 @@ function assertMappedCases(mappingRoute, route, byCaseId) {
   }
 }
 
+function trustedCursorAuthSource(mappingRoute, byCaseId) {
+  const liveCursorCaseIds = mappingRoute.requiredCaseIds.filter((caseId) => {
+    const result = byCaseId.get(caseId);
+    return result?.phase === "live" && result.door === "cursor";
+  });
+  assert.equal(
+    liveCursorCaseIds.length,
+    1,
+    "route-cursor-agent must map exactly one live cursor case"
+  );
+  const result = passCase(byCaseId, liveCursorCaseIds[0]);
+  exactKeys(
+    result.setupRestore,
+    ["setup", "restore", "evidence"],
+    `${result.caseId} setup/restore`
+  );
+  assert.equal(result.setupRestore.setup, "pass", `${result.caseId} setup failed`);
+  assert.equal(result.setupRestore.restore, "pass", `${result.caseId} restore failed`);
+  exactKeys(
+    result.setupRestore.evidence,
+    ["authSource", "unchanged"],
+    `${result.caseId} auth evidence`
+  );
+  const authSource = result.setupRestore.evidence.authSource;
+  assert.ok(
+    SAFE_CURSOR_AUTH_SOURCES.has(authSource),
+    `${result.caseId} has an absent or unknown auth source`
+  );
+  assert.equal(
+    result.setupRestore.evidence.unchanged,
+    true,
+    `${result.caseId} auth source state changed`
+  );
+  return authSource;
+}
+
 function assertReviewedQualification(mapping, report, byCaseId, routeId) {
   const route = routeById(routeId);
   const mappingRoute = mapping.routes.find((candidate) => candidate.id === routeId);
@@ -192,10 +229,22 @@ function assertReviewedQualification(mapping, report, byCaseId, routeId) {
   assert.ok(Array.isArray(result.evidence) && result.evidence.length > 0);
   assertSupportingCases(byCaseId, route);
   assertMappedCases(mappingRoute, route, byCaseId);
-  return { route, result, model, clientVersion };
+  const cursorAuthSource =
+    routeId === "route-cursor-agent"
+      ? trustedCursorAuthSource(mappingRoute, byCaseId)
+      : undefined;
+  return { route, result, model, clientVersion, cursorAuthSource };
 }
 
-function reviewedRecord({ route, result, model, clientVersion, report, reportDigest }) {
+function reviewedRecord({
+  route,
+  result,
+  model,
+  clientVersion,
+  cursorAuthSource,
+  report,
+  reportDigest
+}) {
   const reasoning = result.protocol.reasoning;
   const requests = result.billing.gatewayRequestsObserved;
   return {
@@ -205,7 +254,7 @@ function reviewedRecord({ route, result, model, clientVersion, report, reportDig
       "route-claude-code-subscription":
         "Enrolled Claude Code subscription account staged into isolated RouteKit state.",
       "route-cursor-agent":
-        "Authenticated cursor-agent state staged into an isolated Cursor configuration directory.",
+        `Authenticated cursor-agent using ${cursorAuthSource}.`,
       "route-cursor-ide":
         "Authenticated Cursor desktop state used through an isolated Cursorkit profile."
     }[route.routeId],

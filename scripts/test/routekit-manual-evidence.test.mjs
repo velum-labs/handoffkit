@@ -26,9 +26,15 @@ import {
   validateReviewedManualRecords
 } from "../lib/routekit-manual-evidence.mjs";
 import {
+  prepareCursorAuthentication,
   snapshotCursorState,
   stageCursorState
 } from "../lib/routekit-cursor-state.mjs";
+import {
+  cursorAuthTmuxSessionArgs,
+  ensureTmuxCursorAuthUpdate,
+  tmuxClientEnvironment
+} from "../lib/routekit-tmux-auth.mjs";
 import { runActiveCursorIdeAttestation } from "../lib/routekit-cursor-attestation-runner.mjs";
 import { routeById } from "../routekit-qualification.mjs";
 
@@ -156,7 +162,18 @@ function matrixReport() {
       candidate.phase === "live" &&
       ["codex", "claude-code", "openrouter"].includes(candidate.provider)
   )) {
-    entry.setupRestore = { setup: "pass", restore: "pass" };
+    entry.setupRestore = {
+      setup: "pass",
+      restore: "pass",
+      ...(entry.caseId === "live.openrouter.cursor"
+        ? {
+            evidence: {
+              authSource: "env-key",
+              unchanged: true
+            }
+          }
+        : {})
+    };
   }
   const caseCounts = {
     pass: results.length,
@@ -230,6 +247,12 @@ function matrixReport() {
     },
     topLevelError: null
   };
+}
+
+function cursorLiveCase(report) {
+  return report.results.find(
+    (entry) => entry.caseId === "live.openrouter.cursor"
+  );
 }
 
 function cursorkitSummary(overrides = {}) {
@@ -339,6 +362,75 @@ test("reviewed records are a fixed projection of passing machine artifacts", () 
     attestation.observations.behavior.sourceCases.cancellation,
     "deterministic.shared.cancellation"
   );
+});
+
+test("cursor reviewed credential mode derives only the safe auth-source enum", () => {
+  for (const authSource of ["env-key", "staged-config"]) {
+    const report = matrixReport();
+    cursorLiveCase(report).setupRestore.evidence.authSource = authSource;
+    const records = deriveReviewedManualRecords(mapping, report, {
+      revision: REVISION
+    });
+    const cursorRecord = records.routes["route-cursor-agent"];
+    assert.equal(
+      cursorRecord.credentialMode,
+      `Authenticated cursor-agent using ${authSource}.`
+    );
+    assert.equal(
+      JSON.stringify(cursorRecord).includes('"authSource"'),
+      false
+    );
+    assert.equal(JSON.stringify(cursorRecord).includes('"unchanged"'), false);
+  }
+});
+
+test("cursor reviewed evidence rejects absent, unknown, changed, and forged auth sources", () => {
+  for (const [label, mutate, expected] of [
+    [
+      "missing evidence",
+      (entry) => delete entry.setupRestore.evidence,
+      /setup\/restore has untrusted fields/
+    ],
+    [
+      "missing source",
+      (entry) => delete entry.setupRestore.evidence.authSource,
+      /auth evidence has untrusted fields/
+    ],
+    [
+      "unknown source",
+      (entry) => {
+        entry.setupRestore.evidence.authSource = "none";
+      },
+      /absent or unknown auth source/
+    ],
+    [
+      "changed source state",
+      (entry) => {
+        entry.setupRestore.evidence.unchanged = false;
+      },
+      /auth source state changed/
+    ],
+    [
+      "forged private fields",
+      (entry) => {
+        entry.setupRestore.evidence.path = "/private/cursor-config";
+        entry.setupRestore.evidence.digest = "a".repeat(64);
+        entry.setupRestore.evidence.tokenValue = "forged-value";
+      },
+      /auth evidence has untrusted fields|secret field/
+    ]
+  ]) {
+    const report = matrixReport();
+    mutate(cursorLiveCase(report));
+    assert.throws(
+      () =>
+        deriveReviewedManualRecords(mapping, report, {
+          revision: REVISION
+        }),
+      expected,
+      label
+    );
+  }
 });
 
 test("stale, dirty, and forged mappings fail closed", () => {
@@ -702,6 +794,158 @@ test("Cursor state snapshots expose only aggregate hashes and detect mutation", 
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test("Cursor authentication supports env keys, staged config, and absent auth safely", () => {
+  const root = mkdtempSync(join(tmpdir(), "routekit-cursor-auth-test-"));
+  try {
+    const source = join(root, "source");
+    mkdirSync(source);
+    writeFileSync(join(source, "cli-config.json"), '{"auth":"private"}\n');
+
+    const envKey = prepareCursorAuthentication(
+      source,
+      join(root, "env-staged"),
+      { CURSOR_API_KEY: "cursor-test-key" }
+    );
+    assert.equal(envKey.authSource, "env-key");
+    assert.equal(envKey.directory, undefined);
+    assert.deepEqual(envKey.verify(), {
+      authSource: "env-key",
+      unchanged: true
+    });
+
+    const staged = prepareCursorAuthentication(
+      source,
+      join(root, "config-staged"),
+      {}
+    );
+    assert.equal(staged.authSource, "staged-config");
+    assert.equal(
+      readFileSync(join(staged.directory, "cli-config.json"), "utf8"),
+      '{"auth":"private"}\n'
+    );
+    const stagedEvidence = staged.verify();
+    assert.deepEqual(stagedEvidence, {
+      authSource: "staged-config",
+      unchanged: true
+    });
+    assert.deepEqual(Object.keys(stagedEvidence), ["authSource", "unchanged"]);
+    assert.doesNotMatch(
+      JSON.stringify(stagedEvidence),
+      /private|digest|directory|[/\\]/
+    );
+
+    const emptySource = join(root, "empty-source");
+    mkdirSync(emptySource);
+    const absent = prepareCursorAuthentication(
+      emptySource,
+      join(root, "empty-staged"),
+      {}
+    );
+    assert.equal(absent.authSource, "none");
+    assert.equal(absent.directory, undefined);
+    assert.deepEqual(absent.verify(), {
+      authSource: "none",
+      unchanged: true
+    });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+const tmuxAvailable =
+  spawnSync("tmux", ["-V"], {
+    stdio: "ignore",
+    timeout: 15_000
+  }).status === 0;
+
+test(
+  "Cursor auth forwarding refreshes stale tmux state and clears absent auth",
+  { skip: !tmuxAvailable },
+  () => {
+    const root = mkdtempSync(join(tmpdir(), "routekit-tmux-auth-test-"));
+    const socket = `routekit-auth-test-${process.pid}-${Date.now()}`;
+    const child = join(root, "observe-auth.cjs");
+    writeFileSync(
+      child,
+      [
+        'const { spawnSync } = require("node:child_process");',
+        'const { writeFileSync } = require("node:fs");',
+        "const state = process.env.CURSOR_API_KEY === 'cursor-test-fresh'",
+        "  ? 'env-key'",
+        "  : process.env.CURSOR_API_KEY ? 'unexpected' : 'none';",
+        "writeFileSync(process.env.RESULT_PATH, state);",
+        `spawnSync("tmux", ["-L", ${JSON.stringify(socket)}, "wait-for", "-S", process.env.WAIT_CHANNEL]);`
+      ].join("\n")
+    );
+    const runWith = (env) => (...args) =>
+      spawnSync("tmux", ["-L", socket, ...args], {
+        encoding: "utf8",
+        timeout: 15_000,
+        env: tmuxClientEnvironment(env)
+      });
+    const stale = runWith({
+      ...process.env,
+      CURSOR_API_KEY: "cursor-test-stale"
+    });
+    const fresh = runWith({
+      ...process.env,
+      CURSOR_API_KEY: "cursor-test-fresh"
+    });
+    const absentEnv = {
+      ...process.env,
+      CURSOR_API_KEY: undefined,
+      UNRELATED_SECRET: "must-not-leak"
+    };
+    const absent = runWith(absentEnv);
+    try {
+      const noServerSocket = `${socket}-unused`;
+      const noServer = (...args) =>
+        spawnSync("tmux", ["-L", noServerSocket, ...args], {
+          encoding: "utf8",
+          timeout: 15_000,
+          env: tmuxClientEnvironment(absentEnv)
+        });
+      assert.doesNotThrow(() => ensureTmuxCursorAuthUpdate(noServer));
+      assert.equal(
+        stale("new-session", "-d", "-s", "seed", "sleep", "30").status,
+        0
+      );
+      ensureTmuxCursorAuthUpdate(fresh);
+
+      for (const [label, run, expected] of [
+        ["fresh", fresh, "env-key"],
+        ["absent", absent, "none"]
+      ]) {
+        const resultPath = join(root, `${label}.txt`);
+        const channel = `${socket}-${label}`;
+        const args = [
+          "new-session",
+          "-d",
+          "-s",
+          label,
+          ...cursorAuthTmuxSessionArgs(),
+          "-e",
+          `RESULT_PATH=${resultPath}`,
+          "-e",
+          `WAIT_CHANNEL=${channel}`,
+          "--",
+          process.execPath,
+          child
+        ];
+        assert.doesNotMatch(args.join(" "), /cursor-test-(?:fresh|stale)/);
+        assert.equal(run(...args).status, 0);
+        assert.equal(run("wait-for", channel).status, 0);
+        assert.equal(readFileSync(resultPath, "utf8"), expected);
+      }
+      assert.equal(tmuxClientEnvironment(absentEnv).UNRELATED_SECRET, undefined);
+      assert.equal(tmuxClientEnvironment({ CURSOR_API_KEY: "" }).CURSOR_API_KEY, undefined);
+    } finally {
+      stale("kill-server");
+      rmSync(root, { recursive: true, force: true });
+    }
+  }
+);
 
 const cursorAgentAvailable =
   spawnSync("cursor-agent", ["--version"], {
