@@ -95,5 +95,6 @@ jobs:
             uv publish --check-url https://pypi.org/simple/
           else
             echo "Publishing to PyPI via OIDC trusted publishing"
+            unset UV_PUBLISH_TOKEN
             uv publish --trusted-publishing always --check-url https://pypi.org/simple/
           fi
