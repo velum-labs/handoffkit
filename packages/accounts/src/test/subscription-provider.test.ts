@@ -160,6 +160,7 @@ test("subscription adapters discover native models with member credentials", asy
     assert.equal(requests[1]?.headers.get("authorization"), "Bearer codex-token");
     assert.equal(requests[1]?.headers.get("chatgpt-account-id"), "acct");
     assert.equal(requests[1]?.headers.get("originator"), "routekit");
+    assert.match(requests[1]?.url ?? "", /[?&]client_version=[^&]+/);
   } finally {
     globalThis.fetch = originalFetch;
   }

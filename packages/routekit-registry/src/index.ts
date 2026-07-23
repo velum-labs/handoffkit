@@ -103,6 +103,7 @@ export type SubscriptionInfo = {
   discovery: {
     path: string;
     responseShape: ProviderDiscoveryResponseShape;
+    clientVersion?: string;
     cacheFallback?: boolean;
     extraHeaders?: Record<string, string>;
   };
