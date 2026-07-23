@@ -114,3 +114,78 @@ test("executionHash records the prepared execution shape", () => {
   assert.notEqual(executionHash(shell), executionHash(argv));
   assert.match(executionHash(shell), /^[0-9a-f]{64}$/);
 });
+
+test("codex prepares an explicit governed argv (codex-cli 0.144.2 shape)", () => {
+  const prompt = "Fix the failing test without network access.";
+  const contract = contractFixture({
+    agent: { kind: "codex" },
+    task: { prompt },
+    execution: { kind: "agent", agent: { kind: "codex" }, prompt }
+  });
+  const execution = prepareExecution({
+    contract,
+    mockScriptPath: "/tmp/mock-agent.js"
+  });
+  assert.equal(execution.kind, "argv");
+  if (execution.kind !== "argv") return;
+  assert.equal(execution.cmd, "codex");
+  assert.deepEqual(execution.args, [
+    "exec",
+    "--sandbox",
+    "workspace-write",
+    "--json",
+    "--ephemeral",
+    "--ignore-rules",
+    "--skip-git-repo-check",
+    prompt
+  ]);
+  // Local codex exec --help does not expose -a/--ask-for-approval; do not invent it.
+  assert.equal(execution.args.includes("-a"), false);
+  assert.equal(execution.args.includes("--ask-for-approval"), false);
+  // --ignore-user-config requires a verified isolated CODEX_HOME; leave unset for now.
+  assert.equal(execution.args.includes("--ignore-user-config"), false);
+});
+
+test("codex executionHash changes when boundary flags change", () => {
+  const prompt = "Fix the failing test without network access.";
+  const governed = prepareExecution({
+    contract: contractFixture({
+      agent: { kind: "codex" },
+      task: { prompt },
+      execution: { kind: "agent", agent: { kind: "codex" }, prompt }
+    }),
+    mockScriptPath: "/tmp/mock-agent.js"
+  });
+  // Old loose argv shape (pre-hardening): missing sandbox/json/ephemeral/ignore-rules.
+  const loose = prepareExecution({
+    contract: contractFixture({
+      execution: {
+        kind: "argv",
+        command: "codex",
+        args: ["exec", "--skip-git-repo-check", prompt]
+      }
+    }),
+    mockScriptPath: "/tmp/mock-agent.js"
+  });
+  assert.notEqual(executionHash(governed), executionHash(loose));
+});
+
+test("codex prepared env does not yet isolate CODEX_HOME from host HOME", () => {
+  // Coverage note / TODO: ProcessSessionBackend still seeds HOME from
+  // process.env.HOME, and prepareAgentExecution does not set CODEX_HOME.
+  // Adding --ignore-user-config without a generated isolated
+  // CODEX_HOME/config.toml + auth boundary would break ambient auth.
+  // Follow-up should generate a session-scoped CODEX_HOME before claiming
+  // host-config isolation. Process-tier egress remains proxy-only.
+  const execution = prepareExecution({
+    contract: contractFixture({
+      agent: { kind: "codex" },
+      task: { prompt: "fix it" },
+      execution: { kind: "agent", agent: { kind: "codex" }, prompt: "fix it" }
+    }),
+    mockScriptPath: "/tmp/mock-agent.js"
+  });
+  assert.equal(execution.env.HOME, undefined);
+  assert.equal(execution.env.CODEX_HOME, undefined);
+  assert.equal(execution.egressProxy, true);
+});
