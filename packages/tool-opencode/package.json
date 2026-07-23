@@ -29,7 +29,7 @@
     "@velum-labs/routekit-harness-core": "workspace:*",
     "@velum-labs/routekit-tools": "workspace:*",
     "@velum-labs/routekit-runtime": "workspace:*",
-    "@opencode-ai/sdk": "1.17.13",
+    "@opencode-ai/sdk": "1.18.4",
     "zod": "4.4.3"
   },
   "keywords": [
