@@ -38,5 +38,5 @@ Documentation = "https://fusionkit.velum-labs.com"
 server = ["uvicorn[standard]>=0.38.0"]
 
 [build-system]
-requires = ["uv_build>=0.11.29,<0.12.0"]
+requires = ["uv_build>=0.11.31,<0.12.0"]
 build-backend = "uv_build"
