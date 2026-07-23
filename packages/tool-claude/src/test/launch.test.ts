@@ -3,7 +3,7 @@ import { test } from "node:test";
 
 import type { AgentProfile, ToolLaunchContext } from "@routekit/tools";
 
-import { claudeAgentsJson, claudeLaunchArgs } from "../launch.js";
+import { claudeAgentsJson, claudeEnv, claudeLaunchArgs } from "../launch.js";
 
 const PROFILES: readonly AgentProfile[] = [
   {
@@ -82,6 +82,20 @@ test("Claude launcher projects claude-code models to native picker ids", () => {
       }
     }
   );
+});
+
+test("Claude launcher forwards an explicit isolated config directory", () => {
+  const previous = process.env.CLAUDE_CONFIG_DIR;
+  process.env.CLAUDE_CONFIG_DIR = "/tmp/routekit-claude-config";
+  try {
+    assert.equal(
+      claudeEnv("http://127.0.0.1:8080").CLAUDE_CONFIG_DIR,
+      "/tmp/routekit-claude-config"
+    );
+  } finally {
+    if (previous === undefined) delete process.env.CLAUDE_CONFIG_DIR;
+    else process.env.CLAUDE_CONFIG_DIR = previous;
+  }
 });
 
 test("claudeLaunchArgs adds profiles unless the user supplied agents", () => {

@@ -742,7 +742,7 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
       try {
         route =
           codexProviderRelay === undefined
-            ? backend.resolveModelRoute?.(requestedModel)
+            ? backend.resolveModelRoute?.(requestedModel, "codex")
             : resolveNativeModelRoute(backend, "codex", requestedModel);
       } catch (error) {
         await handleModelCall(res, provenance, {
@@ -788,6 +788,7 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
         return;
       }
       if (
+        route === undefined &&
         codexRequestRelay !== undefined &&
         (codexProviderRelay === undefined ||
           backend.resolveModelRoute === undefined) &&

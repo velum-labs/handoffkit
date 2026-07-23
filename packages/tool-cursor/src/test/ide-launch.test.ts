@@ -1,5 +1,12 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
@@ -35,6 +42,110 @@ function writeCkStub(path: string, outFile: string): void {
     ].join("\n")
   );
 }
+
+test("launchCursor CLI forwards only supported Cursor auth inputs", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "cursor-cli-auth-"));
+  const bridgeStub = join(workdir, "bridge.cjs");
+  const agentStub = join(workdir, "cursor-agent");
+  const recorder = join(workdir, "record-agent.cjs");
+  const observations = join(workdir, "agent-observations.ndjson");
+  writeFileSync(
+    bridgeStub,
+    [
+      "process.stdout.write('bridge listening\\n');",
+      "const timer = setInterval(() => {}, 1000);",
+      "process.on('SIGTERM', () => { clearInterval(timer); process.exit(0); });"
+    ].join("\n")
+  );
+  writeFileSync(
+    recorder,
+    [
+      'const { appendFileSync } = require("node:fs");',
+      `appendFileSync(${JSON.stringify(observations)}, JSON.stringify({`,
+      "  auth: process.env.CURSOR_API_KEY ?? null,",
+      "  config: process.env.CURSOR_CONFIG_DIR ?? null,",
+      "  unrelated: process.env.UNRELATED_SECRET ?? null",
+      "}) + '\\n');"
+    ].join("\n")
+  );
+  writeFileSync(agentStub, `#!/bin/sh\nexec "${process.execPath}" "${recorder}" "$@"\n`);
+  chmodSync(agentStub, 0o755);
+
+  const previous = {
+    path: process.env.PATH,
+    serveCli: process.env.ROUTEKIT_CURSORKIT_SERVE_CLI,
+    apiKey: process.env.CURSOR_API_KEY,
+    configDirectory: process.env.CURSOR_CONFIG_DIR,
+    unrelated: process.env.UNRELATED_SECRET
+  };
+  process.env.PATH = `${workdir}:${process.env.PATH ?? ""}`;
+  process.env.ROUTEKIT_CURSORKIT_SERVE_CLI = bridgeStub;
+  process.env.UNRELATED_SECRET = "must-not-leak";
+  try {
+    const stagedConfig = join(workdir, "staged-config");
+    for (const [, apiKey, configDirectory, expected] of [
+      [
+        "env-key",
+        "cursor-test-key",
+        undefined,
+        { auth: "cursor-test-key", config: null }
+      ],
+      [
+        "staged-config",
+        undefined,
+        stagedConfig,
+        { auth: null, config: stagedConfig }
+      ],
+      ["absent", undefined, undefined, { auth: null, config: null }]
+    ] as const) {
+      if (apiKey === undefined) delete process.env.CURSOR_API_KEY;
+      else process.env.CURSOR_API_KEY = apiKey;
+      if (configDirectory === undefined) delete process.env.CURSOR_CONFIG_DIR;
+      else process.env.CURSOR_CONFIG_DIR = configDirectory;
+      const disposers: Array<() => void | Promise<void>> = [];
+      const ctx: ToolLaunchContext = {
+        spec: {
+          gatewayUrl: "http://127.0.0.1:9999",
+          defaultModel: "primary",
+          models: [{ id: "primary" }],
+          args: [],
+          cwd: workdir
+        },
+        log: () => undefined,
+        prepareForPassthrough: () => undefined,
+        registerPort: (_name, port) => `http://127.0.0.1:${port}`,
+        unregisterPort: () => undefined,
+        registerDisposer: (dispose) => disposers.push(dispose)
+      };
+      try {
+        assert.equal(await launchCursor(ctx), 0);
+        const observed = readFileSync(observations, "utf8")
+          .trim()
+          .split("\n")
+          .map((line) => JSON.parse(line))
+          .at(-1);
+        assert.deepEqual(observed, {
+          ...expected,
+          unrelated: null
+        });
+      } finally {
+        for (const dispose of disposers) await dispose();
+      }
+    }
+  } finally {
+    for (const [name, value] of [
+      ["PATH", previous.path],
+      ["ROUTEKIT_CURSORKIT_SERVE_CLI", previous.serveCli],
+      ["CURSOR_API_KEY", previous.apiKey],
+      ["CURSOR_CONFIG_DIR", previous.configDirectory],
+      ["UNRELATED_SECRET", previous.unrelated]
+    ] as const) {
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
+    rmSync(workdir, { recursive: true, force: true });
+  }
+});
 
 test("launchCursor --ide drives the desktop launcher with the gateway-wired model", async () => {
   const workdir = mkdtempSync(join(tmpdir(), "cursor-ide-"));

@@ -281,7 +281,12 @@ test("POST /v1/responses relays a stock-model pick verbatim under the client's o
     const response = await fetch(`${gateway.url()}/v1/responses`, {
       method: "POST",
       headers: { ...CHATGPT_HEADERS, "content-type": "application/json" },
-      body: JSON.stringify({ model: "gpt-5.3-codex", input: "hello", stream: true, store: false })
+      body: JSON.stringify({
+        model: "gpt-5.3-codex",
+        input: "hello",
+        stream: true,
+        max_output_tokens: 64
+      })
     });
     assert.equal(response.status, 200);
     assert.match(response.headers.get("content-type") ?? "", /text\/event-stream/);
@@ -293,7 +298,12 @@ test("POST /v1/responses relays a stock-model pick verbatim under the client's o
     assert.ok(seen);
     assert.equal(seen.headers.authorization, CHATGPT_HEADERS.authorization);
     assert.equal(seen.headers["chatgpt-account-id"], CHATGPT_HEADERS["chatgpt-account-id"]);
-    assert.deepEqual(seen.body, { model: "gpt-5.3-codex", input: "hello", stream: true, store: false });
+    assert.deepEqual(seen.body, {
+      model: "gpt-5.3-codex",
+      input: "hello",
+      stream: true,
+      max_output_tokens: 64
+    });
     // Nothing leaked into the local backend for a stock pick.
     assert.deepEqual(backend.chatModels, []);
   } finally {
@@ -376,8 +386,20 @@ test("server-owned Codex relay rotates pooled accounts on a usage limit", async 
     void (async () => {
       const accountId = String(req.headers["chatgpt-account-id"]);
       seenAccounts.push(accountId);
-      const body = JSON.parse(await readBody(req)) as { model?: string };
+      const body = JSON.parse(await readBody(req)) as {
+        model?: string;
+        store?: boolean;
+        stream?: boolean;
+        max_output_tokens?: number;
+        temperature?: number;
+        top_p?: number;
+      };
       assert.equal(body.model, "gpt-5.5");
+      assert.equal(body.store, false);
+      assert.equal(body.stream, true);
+      assert.equal(body.max_output_tokens, undefined);
+      assert.equal(body.temperature, undefined);
+      assert.equal(body.top_p, undefined);
       if (accountId === "acct-a") {
         res.writeHead(429, {
           "content-type": "application/json",
@@ -423,7 +445,14 @@ test("server-owned Codex relay rotates pooled accounts on a usage limit", async 
     const response = await fetch(`${gateway.url()}/v1/responses`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ model: "gpt-5.5", input: "hello" })
+      body: JSON.stringify({
+        model: "gpt-5.5",
+        input: "hello",
+        stream: false,
+        max_output_tokens: 128,
+        temperature: 0.2,
+        top_p: 0.9
+      })
     });
     assert.equal(response.status, 200);
     assert.deepEqual(await response.json(), {

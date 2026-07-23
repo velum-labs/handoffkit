@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 
 import { z } from "zod";
 
-import { providerDefaultBaseUrl } from "@routekit/registry";
+import { providerDefaultBaseUrl, subscriptionInfo } from "@routekit/registry";
 import { trimTrailingSlashes } from "@routekit/runtime";
 
 import type { SubscriptionAccountSet } from "./account-set.js";
@@ -11,6 +11,22 @@ import { codexModelsSearch, subscriptionProvider } from "./provider.js";
 import { forwardRelayHeaders } from "./relay.js";
 import type { SubscriptionRelay } from "./relay.js";
 import type { SubscriptionAccountSetSnapshot } from "./types.js";
+
+function withCodexAccountDefaults(body: unknown): unknown {
+  if (typeof body !== "object" || body === null || Array.isArray(body)) return body;
+  const defaults = subscriptionInfo("codex").requestDefaults;
+  const normalized: Record<string, unknown> = {
+    ...(body as Record<string, unknown>),
+    ...(defaults?.stream !== undefined ? { stream: defaults.stream } : {}),
+    ...(defaults?.store !== undefined ? { store: defaults.store } : {})
+  };
+  if (defaults?.omitSampling === true) {
+    delete normalized.max_output_tokens;
+    delete normalized.temperature;
+    delete normalized.top_p;
+  }
+  return normalized;
+}
 
 /**
  * The Codex backend relay: lets a Codex client keep its own stock models while
@@ -246,6 +262,8 @@ export class CodexBackendRelay implements SubscriptionRelay {
     signal?: AbortSignal,
     options?: Parameters<SubscriptionRelay["relay"]>[3]
   ): Promise<Response> {
+    const upstreamBody =
+      this.#auth.kind === "accounts" ? withCodexAccountDefaults(body) : body;
     const request = (injected?: Record<string, string>): Promise<Response> => {
       const forwarded = forwardRelayHeaders(headers);
       if (injected !== undefined) {
@@ -258,7 +276,7 @@ export class CodexBackendRelay implements SubscriptionRelay {
       return fetch(`${this.#backendUrl}/responses`, {
         method: "POST",
         headers: forwarded,
-        body: JSON.stringify(body),
+        body: JSON.stringify(upstreamBody),
         ...(signal !== undefined ? { signal } : {})
       });
     };

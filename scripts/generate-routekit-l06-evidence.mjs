@@ -5,12 +5,12 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import {
-  applyManualRecords,
   durableEvidence,
   loadEvidenceMap,
   promoteMatrixResults,
   renderEvidenceMarkdown
 } from "./lib/routekit-l06-evidence.mjs";
+import { applyReviewedManualRecords } from "./lib/routekit-manual-evidence.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const SOURCE_PATH = join(ROOT, "spec", "routekit", "l06-evidence.json");
@@ -44,6 +44,9 @@ function parseArgs(argv) {
   if (options.matrixReport !== undefined && options.revision === undefined) {
     throw new Error("--matrix-report requires --revision <full-sha>");
   }
+  if (options.manualRecords !== undefined && options.matrixReport === undefined) {
+    throw new Error("--manual-records requires the bound --matrix-report");
+  }
   return options;
 }
 
@@ -54,16 +57,23 @@ function readJson(path) {
 const options = parseArgs(process.argv.slice(2));
 const mapping = loadEvidenceMap(ROOT);
 let source = readJson(SOURCE_PATH);
+let matrixReport;
 if (options.matrixReport !== undefined) {
+  matrixReport = readJson(options.matrixReport);
   source = promoteMatrixResults(
     mapping,
     source,
-    readJson(options.matrixReport),
+    matrixReport,
     options.revision
   );
 }
 if (options.manualRecords !== undefined) {
-  source = applyManualRecords(mapping, source, readJson(options.manualRecords));
+  source = applyReviewedManualRecords(
+    mapping,
+    source,
+    matrixReport,
+    readJson(options.manualRecords)
+  );
 }
 if (options.matrixReport !== undefined || options.manualRecords !== undefined) {
   writeFileSync(SOURCE_PATH, `${JSON.stringify(source, null, 2)}\n`);

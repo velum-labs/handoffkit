@@ -885,3 +885,111 @@ test("Codex picker aliases use the canonical catalog and pooled native relay", a
     await gateway.close();
   }
 });
+
+async function codexAliasBackend(sourceCalls: string[]): Promise<CatalogBackend> {
+  return await CatalogBackend.create({
+    config: {
+      providers: { codex: {} },
+      defaultModel: "codex/matrix-codex"
+    },
+    sources: {
+      codex: {
+        sourceId: "codex",
+        discoverModels: async () => [{ id: "matrix-codex" }],
+        chat: async (body: unknown) => {
+          sourceCalls.push((body as { model: string }).model);
+          return Response.json({
+            id: "chatcmpl_codex_alias",
+            choices: [
+              {
+                index: 0,
+                message: { role: "assistant", content: "CODEX_ALIAS_OK" },
+                finish_reason: "stop"
+              }
+            ],
+            usage: { prompt_tokens: 1, completion_tokens: 1 }
+          });
+        },
+        embeddings: async () => Response.json({})
+      }
+    }
+  });
+}
+
+test("Codex native picker alias routes through the catalog without a managed relay", async () => {
+  const sourceCalls: string[] = [];
+  const backend = await codexAliasBackend(sourceCalls);
+  const gateway = await startGateway({ backend });
+  try {
+    const catalogResponse = await fetch(`${gateway.url()}/v1/models`);
+    assert.equal(catalogResponse.status, 200);
+    const catalog = (await catalogResponse.json()) as {
+      models: Array<{ slug: string }>;
+    };
+    assert.deepEqual(
+      catalog.models.map((model) => model.slug),
+      ["matrix-codex"]
+    );
+
+    const response = await fetch(`${gateway.url()}/v1/responses`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ model: "matrix-codex", input: "hi" })
+    });
+    assert.equal(response.status, 200);
+    assert.deepEqual(sourceCalls, ["matrix-codex"]);
+
+    const unknown = await fetch(`${gateway.url()}/v1/responses`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ model: "not-in-catalog", input: "hi" })
+    });
+    assert.equal(unknown.status, 400);
+    assert.deepEqual(sourceCalls, ["matrix-codex"]);
+  } finally {
+    await gateway.close();
+  }
+});
+
+test("Codex client relay still receives unknown native models after alias resolution", async () => {
+  const sourceCalls: string[] = [];
+  const backend = await codexAliasBackend(sourceCalls);
+  const relayCalls: string[] = [];
+  const relay: ProviderRelay = {
+    dialect: "codex",
+    shouldRelay: () => true,
+    relay: async (_headers, body) => {
+      relayCalls.push((body as { model: string }).model);
+      return Response.json({
+        id: "resp_client_relay",
+        object: "response",
+        status: "completed",
+        model: (body as { model: string }).model,
+        output: [],
+        usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 }
+      });
+    }
+  };
+  const gateway = await startGateway({ backend, codexRelay: relay });
+  try {
+    const managed = await fetch(`${gateway.url()}/v1/responses`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ model: "matrix-codex", input: "hi" })
+    });
+    assert.equal(managed.status, 200);
+    assert.deepEqual(sourceCalls, ["matrix-codex"]);
+    assert.deepEqual(relayCalls, []);
+
+    const relayed = await fetch(`${gateway.url()}/v1/responses`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ model: "upstream-only", input: "hi" })
+    });
+    assert.equal(relayed.status, 200);
+    assert.deepEqual(sourceCalls, ["matrix-codex"]);
+    assert.deepEqual(relayCalls, ["upstream-only"]);
+  } finally {
+    await gateway.close();
+  }
+});

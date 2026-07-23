@@ -245,9 +245,20 @@ const requiredFiles = [
   "scripts/generate-model-fusion-openapi-sdk.mjs",
   "scripts/generate-code-docs.mjs",
   "scripts/generate-expected-behaviors.mjs",
+  "scripts/generate-routekit-cursor-attestation.mjs",
   "scripts/generate-routekit-l06-evidence.mjs",
+  "scripts/generate-routekit-manual-records.mjs",
+  "scripts/lib/routekit-cursor-attestation-runner.mjs",
+  "scripts/lib/routekit-cursor-state.mjs",
+  "scripts/lib/routekit-pty-trust.mjs",
+  "scripts/lib/routekit-tmux-auth.mjs",
   "scripts/lib/routekit-l06-evidence.mjs",
+  "scripts/lib/routekit-manual-evidence.mjs",
+  "scripts/lib/routekit-subscription-state.mjs",
   "scripts/test/routekit-l06-evidence.test.mjs",
+  "scripts/test/routekit-manual-evidence.test.mjs",
+  "scripts/test/routekit-pty-trust.test.mjs",
+  "scripts/test/routekit-subscription-state.test.mjs",
   "scripts/publish-npm-workspaces.mjs",
   "scripts/release.mjs",
   "scripts/lib/changelog.mjs",
@@ -487,7 +498,13 @@ if (routekitEvidenceCheck.status !== 0) {
 
 const routekitEvidenceTests = spawnSync(
   process.execPath,
-  ["--test", "scripts/test/routekit-l06-evidence.test.mjs"],
+  [
+    "--test",
+    "scripts/test/routekit-l06-evidence.test.mjs",
+    "scripts/test/routekit-manual-evidence.test.mjs",
+    "scripts/test/routekit-pty-trust.test.mjs",
+    "scripts/test/routekit-subscription-state.test.mjs"
+  ],
   { encoding: "utf8" }
 );
 if (routekitEvidenceTests.stdout.trim()) {
@@ -669,7 +686,7 @@ const TRUSTED_APP_THIRD_PARTY = new Map([
   ["fumadocs-ui", "15.8.5"],
   ["lucide-react", "1.20.0"],
   ["mermaid", "11.15.0"],
-  ["next", "15.5.19"],
+  ["next", "15.5.21"],
   ["next-themes", "0.4.6"],
   ["radix-ui", "1.6.0"],
   ["react-dom", "19.2.7"],

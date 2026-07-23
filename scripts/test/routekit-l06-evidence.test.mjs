@@ -275,7 +275,7 @@ test("rendered reports preserve skip reasons and one final newline", () => {
   assert.ok(!markdown.endsWith("\n\n"));
 });
 
-test("manual evidence is bound to the exact tested revision", () => {
+test("self-authored manual evidence is never accepted", () => {
   const manualRecords = {
     schemaVersion: 1,
     testedRevision: REVISION,
@@ -295,20 +295,8 @@ test("manual evidence is bound to the exact tested revision", () => {
     }
   };
   assert.throws(
-    () =>
-      applyManualRecords(mapping, source, {
-        ...manualRecords,
-        testedRevision: "f".repeat(40)
-      }),
-    /different revision/
-  );
-  const revisionSource = structuredClone(source);
-  revisionSource.testedRevision = REVISION;
-  const applied = applyManualRecords(mapping, revisionSource, manualRecords);
-  assert.equal(applied.evidenceDate, "2026-07-23");
-  assert.equal(
-    applied.routes["route-cursor-ide"].clientProviderVersion,
-    "Cursor IDE 1.99; OpenRouter provider snapshot 2026-07-23."
+    () => applyManualRecords(mapping, source, manualRecords),
+    /untrusted manual records/
   );
 });
 

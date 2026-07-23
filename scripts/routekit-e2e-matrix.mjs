@@ -2,19 +2,14 @@
 
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
-import { createHash, randomBytes } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import { createServer } from "node:http";
 import {
-  chmodSync,
-  copyFileSync,
-  cpSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
-  readdirSync,
   rmSync,
-  statSync,
   writeFileSync
 } from "node:fs";
 import { arch, platform, tmpdir } from "node:os";
@@ -52,6 +47,20 @@ import {
   mappingDigest,
   routeIdsForCase
 } from "./lib/routekit-l06-evidence.mjs";
+import {
+  cursorConfigDirectory,
+  prepareCursorAuthentication
+} from "./lib/routekit-cursor-state.mjs";
+import { cursorWorkspaceTrustDecision } from "./lib/routekit-pty-trust.mjs";
+import {
+  cursorAuthTmuxSessionArgs,
+  ensureTmuxCursorAuthUpdate,
+  tmuxClientEnvironment
+} from "./lib/routekit-tmux-auth.mjs";
+import {
+  stageSubscriptionAccounts,
+  subscriptionStoresUnchanged
+} from "./lib/routekit-subscription-state.mjs";
 import { processAlive } from "../packages/runtime-utils/dist/index.js";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -463,7 +472,7 @@ async function startDeterministicStack(tempRoot) {
           wireShape: "openai"
         },
         [publicModels.anthropic]: {
-          efforts: [{ id: "quick" }, { id: "deep" }],
+          efforts: [{ id: "quick" }, { id: "deep" }, { id: "high" }],
           defaultEffort: "quick",
           wireShape: "anthropic"
         },
@@ -631,6 +640,35 @@ async function verifyToolsAndReasoning(stack, provider, door) {
     door.streamReasoningOf(parsed.frames).length > 0,
     `${door.id} omitted deterministic reasoning`
   );
+}
+
+async function verifyAnthropicHighEffort(stack) {
+  await stack.simulator.reset();
+  await stack.simulator.queue(stack.nativeModels.anthropic, [
+    "ANTHROPIC_HIGH_EFFORT_OK"
+  ]);
+  const door = API_DOORS.find((candidate) => candidate.id === "anthropic-messages");
+  assert.ok(door !== undefined);
+  const requestBody = door.buildRequest({
+    model: stack.publicModels.anthropic,
+    user: "Deterministic Anthropic high-effort probe."
+  });
+  requestBody.thinking = { type: "adaptive" };
+  requestBody.output_config = { effort: "high" };
+  const response = await fetch(`${stack.proxy.url}${door.path}`, {
+    method: "POST",
+    headers: { "content-type": "application/json", ...(door.headers ?? {}) },
+    body: JSON.stringify(requestBody)
+  });
+  const responseBody = await response.json();
+  assert.equal(response.status, 200, JSON.stringify(responseBody));
+  assert.match(door.textOf(responseBody), /ANTHROPIC_HIGH_EFFORT_OK/);
+  const calls = await stack.simulator.calls({
+    model: stack.nativeModels.anthropic
+  });
+  assert.equal(calls.length, 1, await stack.simulator.describeJournal());
+  assert.deepEqual(calls[0].request.thinking, { type: "adaptive" });
+  assert.deepEqual(calls[0].request.output_config, { effort: "high" });
 }
 
 async function verifyCancellationPropagation() {
@@ -888,13 +926,7 @@ function tmux(...args) {
     cwd: ROOT,
     encoding: "utf8",
     timeout: 30_000,
-    env: {
-      PATH: process.env.PATH,
-      HOME: process.env.HOME,
-      TMPDIR: process.env.TMPDIR,
-      LANG: process.env.LANG ?? "en_US.UTF-8",
-      TERM: "xterm-256color"
-    }
+    env: tmuxClientEnvironment()
   });
 }
 
@@ -1009,16 +1041,44 @@ function toolBehavior(door, proofPath) {
 async function runPtyCase(input) {
   const session = `routekit-e2e-${process.pid}-${Math.random().toString(16).slice(2)}`;
   const caseDir = mkdtempSync(join(input.tempRoot, `${input.door}-${input.provider}-`));
+  const clientHome = join(caseDir, "home");
+  const xdgConfig = join(caseDir, "xdg-config");
   const routekitHome = join(caseDir, "routekit-home");
+  const claudeConfig = join(caseDir, "claude-config");
   const xdgData = join(caseDir, "xdg-data");
   const xdgCache = join(caseDir, "xdg-cache");
   const xdgState = join(caseDir, "xdg-state");
   const proofPath = join(caseDir, "routekit-tool-proof.txt");
   const workingDir = input.door === "claude" ? ROOT : caseDir;
+  mkdirSync(clientHome, { mode: 0o700 });
+  mkdirSync(xdgConfig, { mode: 0o700 });
   mkdirSync(routekitHome);
+  mkdirSync(claudeConfig, { mode: 0o700 });
   mkdirSync(xdgData);
   mkdirSync(xdgCache);
   mkdirSync(xdgState);
+  if (input.door === "claude") {
+    writeFileSync(
+      join(claudeConfig, ".claude.json"),
+      `${JSON.stringify({
+        hasCompletedOnboarding: true,
+        projects: {
+          [workingDir]: {
+            hasTrustDialogAccepted: true
+          }
+        }
+      }, null, 2)}\n`,
+      { mode: 0o600 }
+    );
+    writeFileSync(
+      join(claudeConfig, "settings.json"),
+      `${JSON.stringify({
+        theme: "dark",
+        skipDangerousModePermissionPrompt: true
+      }, null, 2)}\n`,
+      { mode: 0o600 }
+    );
+  }
   const marker = `MATRIX_RESPONSE_${input.provider.replaceAll("-", "_").toUpperCase()}_${input.door.toUpperCase()}`;
   const prompt = input.live
     ? input.toolCase
@@ -1039,8 +1099,6 @@ async function runPtyCase(input) {
   const command = [
     process.execPath,
     ROUTEKIT_ENTRY,
-    "--config",
-    input.configPath,
     input.door,
     input.model,
     "--gateway-url",
@@ -1050,6 +1108,7 @@ async function runPtyCase(input) {
     "--",
     ...cliArgs(input.door)
   ];
+  ensureTmuxCursorAuthUpdate(tmux);
   const started = tmux(
     "new-session",
     "-d",
@@ -1062,7 +1121,13 @@ async function runPtyCase(input) {
     "-c",
     workingDir,
     "-e",
+    `HOME=${clientHome}`,
+    "-e",
+    `XDG_CONFIG_HOME=${xdgConfig}`,
+    "-e",
     `ROUTEKIT_HOME=${routekitHome}`,
+    "-e",
+    `CLAUDE_CONFIG_DIR=${claudeConfig}`,
     "-e",
     `XDG_DATA_HOME=${xdgData}`,
     "-e",
@@ -1073,6 +1138,10 @@ async function runPtyCase(input) {
     "DISABLE_AUTOUPDATER=1",
     "-e",
     "DISABLE_UPDATES=1",
+    ...cursorAuthTmuxSessionArgs(),
+    ...(input.cursorConfigDir === undefined
+      ? []
+      : ["-e", `CURSOR_CONFIG_DIR=${input.cursorConfigDir}`]),
     "--",
     "sleep",
     "3600"
@@ -1110,24 +1179,25 @@ async function runPtyCase(input) {
       );
     }
     if (
-      /Workspace Trust Required|Do you trust|trust this folder|project you created/i.test(
+      /Workspace Trust Required|Do you trust|trust this (?:folder|workspace)|project you created/i.test(
         transcript
       )
     ) {
-      await new Promise((resolveWait) =>
-        setTimeout(resolveWait, input.door === "claude" ? 1_500 : 500)
-      );
       if (input.door === "cursor") {
-        tmux("send-keys", "-l", "-t", session, "a");
-        await new Promise((resolveWait) => setTimeout(resolveWait, 250));
-      }
-      tmux("send-keys", "-t", session, "Enter");
-      if (input.door === "cursor") {
-        await new Promise((resolveWait) => setTimeout(resolveWait, 1_500));
-        if (/Trusting workspace/i.test(capturePane(session))) {
-          tmux("send-keys", "-l", "-t", session, "a");
-          tmux("send-keys", "-t", session, "Enter");
+        const trustSendPane = capturePane(session);
+        const decision = cursorWorkspaceTrustDecision(trustSendPane, {
+          ready: modelVisible(trustSendPane, input.door, input.model)
+        });
+        if (decision.action?.type === "literal") {
+          tmux("send-keys", "-l", "-t", session, decision.action.value);
+        } else if (decision.action?.type === "key") {
+          tmux("send-keys", "-t", session, decision.action.value);
+        } else if (decision.state === "unsupported") {
+          throw new Error("Cursor displayed an unsupported workspace trust prompt");
         }
+      } else {
+        await new Promise((resolveWait) => setTimeout(resolveWait, 1_500));
+        tmux("send-keys", "-t", session, "Enter");
       }
       transcript = await waitForPane(
         session,
@@ -1221,50 +1291,6 @@ async function runPtyCase(input) {
   }
 }
 
-function accountStoreSnapshot(directory) {
-  if (!existsSync(directory)) return [];
-  return readdirSync(directory)
-    .filter((name) => name.endsWith(".json") && !name.startsWith("."))
-    .sort()
-    .map((name) => {
-      const path = join(directory, name);
-      const stat = statSync(path);
-      return {
-        name,
-        size: stat.size,
-        sha256: createHash("sha256").update(readFileSync(path)).digest("hex")
-      };
-    });
-}
-
-function stageSubscriptionAccounts(isolatedStateHome, providers) {
-  const snapshots = {};
-  for (const provider of ["codex", "claude-code"]) {
-    if (!providers.includes(provider)) continue;
-    const source = defaultSubscriptionAccountDirectory(provider);
-    const before = accountStoreSnapshot(source);
-    const destination = join(isolatedStateHome, "subscriptions", provider);
-    mkdirSync(destination, { recursive: true, mode: 0o700 });
-    for (const { name } of before) {
-      const destinationPath = join(destination, name);
-      copyFileSync(join(source, name), destinationPath);
-      chmodSync(destinationPath, 0o600);
-    }
-    snapshots[provider] = { source, before, stagedCount: before.length };
-  }
-  return snapshots;
-}
-
-function subscriptionStoresUnchanged(snapshots) {
-  return Object.fromEntries(
-    Object.entries(snapshots).map(([provider, snapshot]) => [
-      provider,
-      JSON.stringify(accountStoreSnapshot(snapshot.source)) ===
-        JSON.stringify(snapshot.before)
-    ])
-  );
-}
-
 function killProcessGroup(child, signal) {
   if (child.exitCode !== null) return;
   try {
@@ -1292,9 +1318,14 @@ async function startLiveRoutekit(configPath, tempRoot, providers) {
   const isolatedStateHome = join(tempRoot, "live-routekit-state");
   const authTokenFile = join(isolatedStateHome, "data-token");
   mkdirSync(isolatedStateHome, { recursive: true, mode: 0o700 });
-  const subscriptionSnapshots = stageSubscriptionAccounts(
+  const subscriptionSnapshots = await stageSubscriptionAccounts(
     isolatedStateHome,
-    providers
+    providers,
+    {
+      accountDirectory: defaultSubscriptionAccountDirectory,
+      loadCredential: async (provider, path) =>
+        await subscriptionProvider(provider).loadCredential(path)
+    }
   );
   const dataToken = randomBytes(32).toString("hex");
   writeFileSync(authTokenFile, `${dataToken}\n`, { mode: 0o600 });
@@ -1441,31 +1472,24 @@ function assertNoConfiguredSecrets(value) {
   }
 }
 
-function liveRouteInfo(configPath, chosen, tempRoot) {
+async function liveRouteInfo(configPath, chosen, tempRoot) {
   const home = join(tempRoot, "route-info-home");
   const stateHome = join(tempRoot, "route-info-state");
   const canonicalConfig = join(home, ".config", "routekit", "router.yaml");
   mkdirSync(dirname(canonicalConfig), { recursive: true });
   writeFileSync(canonicalConfig, readFileSync(configPath, "utf8"));
-  for (const provider of ["codex", "claude-code"]) {
-    if (chosen[provider] === undefined) continue;
-    const source = defaultSubscriptionAccountDirectory(provider, process.env);
-    if (!existsSync(source)) {
-      throw new Error(`live route info account directory is missing: ${source}`);
+  const subscriptionProviders = ["codex", "claude-code"].filter(
+    (provider) => chosen[provider] !== undefined
+  );
+  const sourceSnapshots = await stageSubscriptionAccounts(
+    stateHome,
+    subscriptionProviders,
+    {
+      accountDirectory: defaultSubscriptionAccountDirectory,
+      loadCredential: async (provider, path) =>
+        await subscriptionProvider(provider).loadCredential(path)
     }
-    const target = join(stateHome, "subscriptions", provider);
-    mkdirSync(dirname(target), { recursive: true });
-    // Discovery and token refresh may persist account state. Copy credentials
-    // into the private temporary root so a verification run cannot mutate the
-    // operator's enrolled accounts.
-    cpSync(source, target, {
-      recursive: true,
-      dereference: true,
-      errorOnExist: true,
-      force: false,
-      preserveTimestamps: true
-    });
-  }
+  );
   const env = {
     ...process.env,
     HOME: home,
@@ -1531,6 +1555,14 @@ function liveRouteInfo(configPath, chosen, tempRoot) {
         `route info daemon cleanup failed\n${sanitize(stopped.stdout)}\n${sanitize(stopped.stderr)}`
       );
     }
+    const unchangedStores = subscriptionStoresUnchanged(sourceSnapshots);
+    for (const provider of subscriptionProviders) {
+      assert.equal(
+        unchangedStores[provider],
+        true,
+        `route info qualification mutated the enrolled ${provider} account store`
+      );
+    }
     const recordPath = join(stateHome, "services", "daemon.json");
     if (existsSync(recordPath)) {
       const record = JSON.parse(readFileSync(recordPath, "utf8"));
@@ -1570,19 +1602,20 @@ function runPoolCoverage() {
 }
 
 async function runLivePoolFailover(tempRoot) {
-  const directory = defaultSubscriptionAccountDirectory("claude-code");
-  const sourceSnapshot = accountStoreSnapshot(directory);
-  const stagedDirectory = join(tempRoot, "live-pool-credentials");
-  mkdirSync(stagedDirectory, { recursive: true, mode: 0o700 });
-  const paths = readdirSync(directory)
-    .filter((name) => name.endsWith(".json") && !name.startsWith("."))
-    .sort()
-    .map((name) => {
-      const target = join(stagedDirectory, name);
-      copyFileSync(join(directory, name), target);
-      chmodSync(target, 0o600);
-      return target;
-    });
+  const stagingHome = join(tempRoot, "live-pool-credentials");
+  const sourceSnapshots = await stageSubscriptionAccounts(
+    stagingHome,
+    ["claude-code"],
+    {
+      accountDirectory: defaultSubscriptionAccountDirectory,
+      loadCredential: async (provider, path) =>
+        await subscriptionProvider(provider).loadCredential(path)
+    }
+  );
+  const stagedDirectory = join(stagingHome, "subscriptions", "claude-code");
+  const paths = sourceSnapshots["claude-code"].before.map(({ name }) =>
+    join(stagedDirectory, name)
+  );
   assert.ok(paths.length >= 2, "live pool failover needs at least two enrolled Claude accounts");
   const accounts = await SubscriptionAccountSet.open(
     subscriptionProvider("claude-code"),
@@ -1654,9 +1687,9 @@ async function runLivePoolFailover(tempRoot) {
     };
   } finally {
     await accounts.close();
-    assert.deepEqual(
-      accountStoreSnapshot(directory),
-      sourceSnapshot,
+    assert.equal(
+      subscriptionStoresUnchanged(sourceSnapshots)["claude-code"],
+      true,
       "live pool qualification mutated the enrolled Claude account store"
     );
   }
@@ -1852,6 +1885,20 @@ async function runDeterministic(options, results, artifactDir, tempRoot) {
         }
       );
     }
+    if (selected("anthropic", options.providers)) {
+      await recordCase(
+        results,
+        {
+          phase: "deterministic",
+          provider: "anthropic",
+          door: "anthropic-high-effort"
+        },
+        async () => {
+          await verifyAnthropicHighEffort(stack);
+          return {};
+        }
+      );
+    }
     if (selected("openrouter", options.providers)) {
       await recordCase(
         results,
@@ -2024,7 +2071,7 @@ async function runLive(options, results, artifactDir, tempRoot) {
       results,
       { phase: "live", door: "route-info" },
       async () => {
-        const routeInfo = liveRouteInfo(configPath, chosen, tempRoot);
+        const routeInfo = await liveRouteInfo(configPath, chosen, tempRoot);
         const artifact = "live-route-info.json";
         writeFileSync(
           join(artifactDir, artifact),
@@ -2118,38 +2165,58 @@ async function runLive(options, results, artifactDir, tempRoot) {
           continue;
         }
         const transcriptPath = join(artifactDir, `live-${provider}-${door.id}.txt`);
-        await recordCase(
-          results,
-          {
-            phase: "live",
-            routeId: routeIdForCase(provider, door.id, options),
-            provider,
-            door: door.id
-          },
-          async () =>
-            await observeGatewayRequests(proxy, async () => {
-              const output = await runPtyCase({
-                tempRoot,
-                provider,
-                door: door.id,
-                model: chosen[provider],
-                nativeModel: chosen[provider].slice(provider.length + 1),
-                configPath,
-                proxy,
-                timeoutMs: options.timeoutMs,
-                toolCase: provider === "openrouter" && door.id === "claude",
-                live: true
-              });
-              writeFileSync(
-                transcriptPath,
-                `${sanitize(output.transcript).trim()}\n`
-              );
-              return {
-                artifact: relative(ROOT, transcriptPath),
-                model: chosen[provider]
-              };
-            })
-        );
+        const cursorAuthentication =
+          door.id === "cursor"
+            ? prepareCursorAuthentication(
+                cursorConfigDirectory(),
+                join(tempRoot, "cursor-agent-config")
+              )
+            : undefined;
+        let entry;
+        try {
+          entry = await recordCase(
+            results,
+            {
+              phase: "live",
+              routeId: routeIdForCase(provider, door.id, options),
+              provider,
+              door: door.id
+            },
+            async () =>
+              await observeGatewayRequests(proxy, async () => {
+                const output = await runPtyCase({
+                  tempRoot,
+                  provider,
+                  door: door.id,
+                  model: chosen[provider],
+                  nativeModel: chosen[provider].slice(provider.length + 1),
+                  configPath,
+                  proxy,
+                  timeoutMs: options.timeoutMs,
+                  toolCase: provider === "openrouter" && door.id === "claude",
+                  live: true,
+                  cursorConfigDir: cursorAuthentication?.directory
+                });
+                writeFileSync(
+                  transcriptPath,
+                  `${sanitize(output.transcript).trim()}\n`
+                );
+                return {
+                  artifact: relative(ROOT, transcriptPath),
+                  model: chosen[provider]
+                };
+              })
+          );
+        } finally {
+          if (cursorAuthentication !== undefined && entry !== undefined) {
+            const evidence = cursorAuthentication.verify();
+            entry.setupRestore = {
+              setup: evidence.authSource === "none" ? "fail" : "pass",
+              restore: evidence.unchanged ? "pass" : "fail",
+              evidence
+            };
+          }
+        }
       }
     }
     if (

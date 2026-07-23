@@ -220,6 +220,7 @@ export const REGISTRY = {
       "discovery": {
         "path": "/models",
         "responseShape": "codex",
+        "clientVersion": "0.145.0",
         "cacheFallback": true,
         "extraHeaders": {
           "OpenAI-Beta": "responses=v1",

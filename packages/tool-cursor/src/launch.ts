@@ -1,7 +1,13 @@
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 
-import { spawnLogged, spawnTool, terminate, waitForOutput } from "@routekit/runtime";
+import {
+  definedEnv,
+  spawnLogged,
+  spawnTool,
+  terminate,
+  waitForOutput
+} from "@routekit/runtime";
 import type { ToolLaunchContext } from "@routekit/tools";
 
 import { cursorIdeEnv } from "./bridge-config.js";
@@ -41,6 +47,21 @@ export function cursorInstructions(
   ].join("\n");
 }
 
+function cursorCliAuthEnv(
+  env: Record<string, string | undefined> = process.env
+): Record<string, string> {
+  const apiKey = env.CURSOR_API_KEY;
+  const configDirectory = env.CURSOR_CONFIG_DIR;
+  return definedEnv({
+    CURSOR_API_KEY:
+      typeof apiKey === "string" && apiKey.length > 0 ? apiKey : undefined,
+    CURSOR_CONFIG_DIR:
+      typeof configDirectory === "string" && configDirectory.length > 0
+        ? configDirectory
+        : undefined
+  });
+}
+
 async function launchCursorCli(ctx: ToolLaunchContext): Promise<number> {
   const started = await startCursorBridge({
     gatewayUrl: ctx.spec.gatewayUrl,
@@ -66,7 +87,7 @@ async function launchCursorCli(ctx: ToolLaunchContext): Promise<number> {
   return await spawnTool(
     "cursor-agent",
     ["--endpoint", bridgeUrl, "--model", ctx.spec.defaultModel, ...ctx.spec.args],
-    {},
+    cursorCliAuthEnv(),
     ctx.spec.cwd
   );
 }

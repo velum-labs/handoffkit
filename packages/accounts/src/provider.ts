@@ -159,7 +159,8 @@ function cachedCodexClientVersion(): string | undefined {
 
 export function codexModelsSearch(
   search: string,
-  clientVersion: string | undefined = cachedCodexClientVersion()
+  clientVersion: string | undefined =
+    cachedCodexClientVersion() ?? subscriptionInfo("codex").discovery.clientVersion
 ): string {
   const query = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
   if (query.has("client_version") || clientVersion === undefined) return search;
@@ -174,11 +175,15 @@ async function discoverSubscriptionModels(
   signal?: AbortSignal
 ): Promise<readonly DiscoveredModel[]> {
   const info = subscriptionInfo(mode);
+  const codexClientVersion =
+    mode === "codex"
+      ? cachedCodexClientVersion() ?? info.discovery.clientVersion
+      : undefined;
+  const discoveryPath =
+    mode === "codex"
+      ? `${info.discovery.path}${codexModelsSearch("", codexClientVersion)}`
+      : info.discovery.path;
   try {
-    const discoveryPath =
-      mode === "codex"
-        ? `${info.discovery.path}${codexModelsSearch("")}`
-        : info.discovery.path;
     const response = await fetch(joinUrl(baseUrl, discoveryPath), {
       headers: {
         accept: "application/json",
