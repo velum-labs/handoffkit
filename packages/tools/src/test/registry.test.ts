@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { createMockDriver } from "@routekit/harness-core/testing";
+import { createMockDriver } from "@velum-labs/routekit-harness-core/testing";
 
 import { createToolCapabilityMatrix, createToolRegistry } from "../registry.js";
 import type { ToolIntegration } from "../types.js";
@@ -13,7 +13,7 @@ function integration(id: string, kind: "codex" | "claude_code"): ToolIntegration
     aliases: [`${id}-alias`],
     displayName: id,
     pickerHint: `${id} hint`,
-    packageName: `@routekit/tool-${id}`,
+    packageName: `@velum-labs/routekit-tool-${id}`,
     launch: async () => 0,
     driver: {
       kind,

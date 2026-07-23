@@ -14,7 +14,7 @@ import type { RuntimeEvent } from "@fusionkit/kernel";
 
 import { defaultFusionGatewayLogger } from "../logger.js";
 import type { FusionGatewayLogger } from "../logger.js";
-import { errorEvent, noticeChunk, reasoningChunk } from "@routekit/gateway";
+import { errorEvent, noticeChunk, reasoningChunk } from "@velum-labs/routekit-gateway";
 import type { ReasoningDeltaEvent } from "./narration.js";
 
 const KEEPALIVE_MS = 3000;

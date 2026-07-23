@@ -1,4 +1,4 @@
-# @routekit/cli-ui
+# @velum-labs/routekit-cli-ui
 
 Brand-configurable terminal UI primitives for CLIs.
 
@@ -11,7 +11,7 @@ This package provides the Ink presenter, prompt facade, and plain-text fallback 
 Use this package when extending a RouteKit-based CLI presentation layer.
 
 ```ts
-import { configureBrand, createPresenter } from "@routekit/cli-ui";
+import { configureBrand, createPresenter } from "@velum-labs/routekit-cli-ui";
 ```
 
 ## Docs

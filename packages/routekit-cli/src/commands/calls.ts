@@ -1,7 +1,7 @@
-import { CliError, contextFor } from "@routekit/cli-core";
-import type { RouteKitCallInspection } from "@routekit/control";
-import { formatUsd } from "@routekit/gateway";
-import { ControlError } from "@routekit/runtime";
+import { CliError, contextFor } from "@velum-labs/routekit-cli-core";
+import type { RouteKitCallInspection } from "@velum-labs/routekit-control";
+import { formatUsd } from "@velum-labs/routekit-gateway";
+import { ControlError } from "@velum-labs/routekit-runtime";
 import type { Command } from "commander";
 
 import { routekitClient } from "../client.js";

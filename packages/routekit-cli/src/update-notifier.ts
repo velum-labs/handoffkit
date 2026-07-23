@@ -1,13 +1,13 @@
 import { chmodSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { createPresenter, isInteractive } from "@routekit/cli-ui";
-import { writeFileAtomic } from "@routekit/runtime";
+import { createPresenter, isInteractive } from "@velum-labs/routekit-cli-ui";
+import { writeFileAtomic } from "@velum-labs/routekit-runtime";
 
 import { routekitHome } from "./config.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
-const PACKAGE_URL = "https://registry.npmjs.org/@routekit%2fcli/latest";
+const PACKAGE_URL = "https://registry.npmjs.org/@velum-labs%2Froutekit/latest";
 
 type UpdateCache = {
   checkedAt: number;
@@ -83,7 +83,7 @@ export async function notifyIfUpdateAvailable(currentVersion: string): Promise<v
   }
   if (cache.latest !== undefined && newer(cache.latest, currentVersion)) {
     createPresenter().note(
-      `RouteKit ${cache.latest} is available (current ${currentVersion}); update with npm install -g @routekit/cli@latest`
+      `RouteKit ${cache.latest} is available (current ${currentVersion}); update with npm install -g @velum-labs/routekit@latest`
     );
   }
 }

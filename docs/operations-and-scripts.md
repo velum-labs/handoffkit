@@ -12,7 +12,7 @@ Turborepo orchestrates `packages/*`, `examples/*`, and `apps/*` from the root.
 | `pnpm check` | Runs `scripts/check-repo.mjs`, protocol package checks, generated OpenAPI SDK checks, generated code docs checks, expected-behavior checks, and release publish checks. | Before committing package, protocol, release, or documentation changes. |
 | `pnpm build` | Runs dependency-aware Turbo builds for every package, example, and Next.js app. | After changing Node code, examples, or apps. |
 | `pnpm build:cli` | Builds `@fusionkit/cli` and its dependencies through Turbo. | For fast CLI-only rebuilds. |
-| `pnpm build:routekit` | Builds `@routekit/cli` and its dependencies through Turbo. | For fast RouteKit CLI-only rebuilds. |
+| `pnpm build:routekit` | Builds `@velum-labs/routekit` and its dependencies through Turbo. | For fast RouteKit CLI-only rebuilds. |
 | `pnpm clean` | Runs each workspace project's clean task through Turbo. | When build output is stale or a package graph changed. |
 | `pnpm test` | Runs Turbo package/app tests with their builds, then root `test/`. | After changing Node behavior. |
 | `pnpm test:root` | Runs only the root `test/*.test.js` suites. | For root-level test iteration. |

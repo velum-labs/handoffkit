@@ -10,7 +10,7 @@ import {
   createCachedHarnessDriver,
   probeCliVersion,
   resolveDriverEnv
-} from "@routekit/harness-core";
+} from "@velum-labs/routekit-harness-core";
 import type {
   ApprovalDecision,
   ApprovalPolicy,
@@ -24,7 +24,7 @@ import type {
   SessionHandle,
   SessionTurnInput,
   StartSessionOptions
-} from "@routekit/harness-core";
+} from "@velum-labs/routekit-harness-core";
 
 import { opencodeProviderConfig } from "./launch.js";
 

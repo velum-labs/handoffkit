@@ -19,7 +19,7 @@ import {
   createCachedHarnessDriver,
   probeCliVersion,
   resolveDriverEnv
-} from "@routekit/harness-core";
+} from "@velum-labs/routekit-harness-core";
 import type {
   DriverContext,
   HarnessDriver,
@@ -31,8 +31,8 @@ import type {
   SessionHandle,
   SessionTurnInput,
   StartSessionOptions
-} from "@routekit/harness-core";
-import { registerCleanup } from "@routekit/runtime";
+} from "@velum-labs/routekit-harness-core";
+import { registerCleanup } from "@velum-labs/routekit-runtime";
 
 import { createIsolatedCodexHome } from "./launch.js";
 

@@ -1,5 +1,5 @@
-import type { RouteKitCallInspection } from "@routekit/control";
-import type { ModelCallRecord, ProvenanceSink } from "@routekit/gateway";
+import type { RouteKitCallInspection } from "@velum-labs/routekit-control";
+import type { ModelCallRecord, ProvenanceSink } from "@velum-labs/routekit-gateway";
 
 export const DEFAULT_CALL_ATTRIBUTION_LIMIT = 1_000;
 export const DEFAULT_CALL_ATTRIBUTION_TTL_MS = 24 * 60 * 60 * 1_000;

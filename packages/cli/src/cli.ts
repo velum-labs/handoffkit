@@ -1,5 +1,5 @@
 import { Command } from "commander";
-import { attachGlobalFlags, readPackageVersion } from "@routekit/cli-core";
+import { attachGlobalFlags, readPackageVersion } from "@velum-labs/routekit-cli-core";
 
 import "./tools.js";
 import { FUSIONKIT_PYPI_VERSION } from "./fusion-quickstart.js";

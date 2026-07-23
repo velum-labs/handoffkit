@@ -11,7 +11,7 @@ import {
 } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
-import { writeFileAtomic } from "@routekit/runtime";
+import { writeFileAtomic } from "@velum-labs/routekit-runtime";
 
 type TransactionFile = {
   role: "account" | "config" | "revisions";

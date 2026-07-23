@@ -1,6 +1,6 @@
 import type { ChildProcess } from "node:child_process";
 
-import { reservePort, spawnLogged, terminate, waitForOutput } from "@routekit/runtime";
+import { reservePort, spawnLogged, terminate, waitForOutput } from "@velum-labs/routekit-runtime";
 
 import { cursorBridgeEnv } from "./bridge-config.js";
 import type { CursorBridgeModelDescriptor } from "./bridge-config.js";

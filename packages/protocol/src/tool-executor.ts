@@ -1,5 +1,5 @@
-import { hashCanonical, hashCanonicalSha256 } from "@routekit/contracts";
-import type { JsonValue } from "@routekit/contracts";
+import { hashCanonical, hashCanonicalSha256 } from "@velum-labs/routekit-contracts";
+import type { JsonValue } from "@velum-labs/routekit-contracts";
 import type { ModelFusionSideEffects, ToolExecutionRecordV1 } from "./model-fusion.js";
 
 export type ToolSideEffectClass = "none" | "read" | "write" | "external";

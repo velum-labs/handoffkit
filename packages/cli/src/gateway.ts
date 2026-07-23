@@ -12,7 +12,7 @@ import type {
   PanelTrust,
   UnifiedHarnessKind
 } from "@fusionkit/ensemble";
-import type { ResumeCursor } from "@routekit/harness-core";
+import type { ResumeCursor } from "@velum-labs/routekit-harness-core";
 import { ATTR, normalizeWireTrajectories } from "@fusionkit/protocol";
 import { emitFusionEvent, initFusionTracing, jsonAttr } from "@fusionkit/tracing";
 import { FusionBackend } from "@fusionkit/gateway";
@@ -29,10 +29,10 @@ import type {
 import {
   installAcpAdapters,
   startGateway
-} from "@routekit/gateway";
-import type { Gateway } from "@routekit/gateway";
-import { bold, cyan, gray, uiStream } from "@routekit/cli-ui";
-import { registerCleanup, trimTrailingSlashes } from "@routekit/runtime";
+} from "@velum-labs/routekit-gateway";
+import type { Gateway } from "@velum-labs/routekit-gateway";
+import { bold, cyan, gray, uiStream } from "@velum-labs/routekit-cli-ui";
+import { registerCleanup, trimTrailingSlashes } from "@velum-labs/routekit-runtime";
 import { FUSION_PANEL_MODEL } from "@fusionkit/registry";
 import { PROMPT_CONFIG_KEY } from "./fusion-config.js";
 import type { PromptOverrides } from "./fusion-config.js";

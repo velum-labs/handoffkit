@@ -12,7 +12,7 @@ import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { test } from "node:test";
 
-import type { ToolLaunchContext } from "@routekit/tools";
+import type { ToolLaunchContext } from "@velum-labs/routekit-tools";
 
 import { launchCursor } from "../launch.js";
 

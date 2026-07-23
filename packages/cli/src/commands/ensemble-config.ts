@@ -2,8 +2,8 @@ import type { Command } from "commander";
 
 import type { EnsembleConfig } from "@fusionkit/config";
 import { fusionModelId } from "@fusionkit/registry";
-import { contextFor, fail } from "@routekit/cli-core";
-import type { CommandContext } from "@routekit/cli-core";
+import { contextFor, fail } from "@velum-labs/routekit-cli-core";
+import type { CommandContext } from "@velum-labs/routekit-cli-core";
 
 import {
   FusionConfigError,

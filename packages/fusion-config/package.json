@@ -26,8 +26,8 @@
     "provenance": true
   },
   "dependencies": {
-    "@routekit/config-core": "workspace:*",
-    "@routekit/runtime": "workspace:*"
+    "@velum-labs/routekit-config-core": "workspace:*",
+    "@velum-labs/routekit-runtime": "workspace:*"
   },
   "keywords": [
     "fusionkit",

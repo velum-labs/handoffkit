@@ -80,18 +80,18 @@
       "key": "handoffkit",
       "repo": "handoffkit",
       "ecosystem": "pnpm-monorepo",
-      "description": "The publishable @routekit/* foundation and @fusionkit/* product npm packages, versioned in lockstep with the root and release/npm-packages.json protocol.version.",
+      "description": "The publishable @velum-labs/routekit and @velum-labs/routekit-* foundation and @fusionkit/* product npm packages, versioned in lockstep with the root and release/npm-packages.json protocol.version.",
       "branch": "main",
       "tagPattern": "handoffkit-v{version}",
       "releaseTrigger": "github-release",
       "publishWorkflow": "release-packages.yml",
       "registries": [
-        { "kind": "npm", "package": "@routekit/cli" },
+        { "kind": "npm", "package": "@velum-labs/routekit" },
         { "kind": "npm", "package": "@fusionkit/cli" }
       ],
       "packageManifest": "release/npm-packages.json",
       "binaries": [
-        { "name": "routekit", "package": "@routekit/cli" },
+        { "name": "routekit", "package": "@velum-labs/routekit" },
         { "name": "fusionkit", "package": "@fusionkit/cli" }
       ],
       "versionSources": ["package.json#version"],

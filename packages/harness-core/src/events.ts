@@ -7,7 +7,7 @@ import type {
   HarnessRequestType,
   HarnessTokenUsage,
   HarnessTurnEndReason
-} from "@routekit/contracts";
+} from "@velum-labs/routekit-contracts";
 
 import type { HarnessKind } from "./kinds.js";
 

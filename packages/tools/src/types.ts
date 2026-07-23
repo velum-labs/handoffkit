@@ -1,8 +1,8 @@
-import type { AnyHarnessDriver, HarnessKind } from "@routekit/harness-core";
+import type { AnyHarnessDriver, HarnessKind } from "@velum-labs/routekit-harness-core";
 import type {
   ModelReasoningCapabilities,
   ReasoningSelection
-} from "@routekit/contracts";
+} from "@velum-labs/routekit-contracts";
 
 export type ToolModelFeature = "streaming" | "tools" | "images" | "reasoning_controls";
 export type ToolCapabilityGrade = "full" | "degraded" | "unsupported";

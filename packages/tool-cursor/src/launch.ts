@@ -7,8 +7,8 @@ import {
   spawnTool,
   terminate,
   waitForOutput
-} from "@routekit/runtime";
-import type { ToolLaunchContext } from "@routekit/tools";
+} from "@velum-labs/routekit-runtime";
+import type { ToolLaunchContext } from "@velum-labs/routekit-tools";
 
 import { cursorIdeEnv } from "./bridge-config.js";
 import type { CursorBridgeModelDescriptor } from "./bridge-config.js";

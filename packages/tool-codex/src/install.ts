@@ -4,8 +4,8 @@ import { dirname, join } from "node:path";
 
 import { parse as tomlParse, stringify as tomlStringify } from "smol-toml";
 
-import { SUBSCRIPTIONS } from "@routekit/registry";
-import { trimTrailingSlashes } from "@routekit/runtime";
+import { SUBSCRIPTIONS } from "@velum-labs/routekit-registry";
+import { trimTrailingSlashes } from "@velum-labs/routekit-runtime";
 
 import { codexProfileFileToml } from "./launch.js";
 

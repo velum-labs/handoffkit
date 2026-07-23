@@ -1,5 +1,5 @@
-import { contextFor, CliError } from "@routekit/cli-core";
-import { glyph, watch } from "@routekit/cli-ui";
+import { contextFor, CliError } from "@velum-labs/routekit-cli-core";
+import { glyph, watch } from "@velum-labs/routekit-cli-ui";
 import type { Command } from "commander";
 
 import { connectDaemon, readDaemonRecord } from "../client.js";

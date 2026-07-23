@@ -1,9 +1,9 @@
-# @routekit/tool-registry
+# @velum-labs/routekit-tool-registry
 
 The product-neutral, canonical registry of RouteKit coding-tool integrations.
 
 ```ts
-import { toolRegistry } from "@routekit/tool-registry";
+import { toolRegistry } from "@velum-labs/routekit-tool-registry";
 
 const integration = toolRegistry.get("codex");
 ```

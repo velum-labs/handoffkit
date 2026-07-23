@@ -3,7 +3,7 @@ import type { WireTrajectory } from "@fusionkit/protocol";
 import { headersOf, isFusionTracingActive, jsonAttr, startFusionSpan } from "@fusionkit/tracing";
 import type { FusionSpan } from "@fusionkit/tracing";
 import { FUSION_PANEL_MODEL } from "@fusionkit/registry";
-import { withDeadline } from "@routekit/runtime";
+import { withDeadline } from "@velum-labs/routekit-runtime";
 
 import { parseUsage } from "./cost.js";
 import { createTurnNarrator, proposalsAgree, renderProposal, terminalProposal } from "./frontdoor/narration.js";
@@ -13,10 +13,10 @@ import type { FusionGatewayLogger } from "./logger.js";
 import { FusionCostMeter, providerCostFromPayload, usageWithProviderCost } from "./fusion-cost-meter.js";
 import type { ProviderCostMetadata } from "./cost.js";
 import { hasUsableCandidates, type FusionSessionManager } from "./fusion-session.js";
-import { sseResponse } from "@routekit/gateway";
-import { ChatStreamAssembler } from "@routekit/gateway";
-import type { AssembledToolCall } from "@routekit/gateway";
-import { decodeBufferedSse } from "@routekit/gateway";
+import { sseResponse } from "@velum-labs/routekit-gateway";
+import { ChatStreamAssembler } from "@velum-labs/routekit-gateway";
+import type { AssembledToolCall } from "@velum-labs/routekit-gateway";
+import { decodeBufferedSse } from "@velum-labs/routekit-gateway";
 import type {
   FusedModelRoute,
   FuseStepRunner,

@@ -1,4 +1,4 @@
-import type { ToolIntegration } from "@routekit/tools";
+import type { ToolIntegration } from "@velum-labs/routekit-tools";
 
 import { createCursorDriver, cursorDriverConfigSchema } from "./driver.js";
 import { launchCursor } from "./launch.js";
@@ -10,7 +10,7 @@ export const cursorTool: ToolIntegration = {
   displayName: "Cursor",
   pickerHint: "Cursor CLI or desktop",
   binary: "cursor-agent",
-  packageName: "@routekit/tool-cursor",
+  packageName: "@velum-labs/routekit-tool-cursor",
   installHint: "install the Cursor CLI: https://cursor.com/cli",
   authSummary: "Cursor uses a logged-in cursor-agent CLI and a local bridge.",
   setupSnippet: ({ gatewayUrl, model = "gateway-model", note }) =>

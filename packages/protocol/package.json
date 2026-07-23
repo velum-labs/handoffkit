@@ -7,7 +7,7 @@
     "url": "git+https://github.com/velum-labs/handoffkit.git",
     "directory": "packages/protocol"
   },
-  "description": "FusionKit wire, panel, and model-fusion schemas plus temporarily retained legacy governance contracts; generic primitives live in @routekit/contracts.",
+  "description": "FusionKit wire, panel, and model-fusion schemas plus temporarily retained legacy governance contracts; generic primitives live in @velum-labs/routekit-contracts.",
   "license": "Apache-2.0",
   "type": "module",
   "exports": {
@@ -21,7 +21,7 @@
     "LICENSE"
   ],
   "dependencies": {
-    "@routekit/contracts": "workspace:*"
+    "@velum-labs/routekit-contracts": "workspace:*"
   },
   "publishConfig": {
     "registry": "https://registry.npmjs.org",

@@ -32,9 +32,9 @@
     "@ai-sdk/sandbox-just-bash": "1.0.0-canary.6",
     "@ai-sdk/sandbox-vercel": "1.0.0-canary.6",
     "@fusionkit/protocol": "workspace:*",
-    "@routekit/registry": "workspace:*",
+    "@velum-labs/routekit-registry": "workspace:*",
     "@fusionkit/runner": "workspace:*",
-    "@routekit/runtime": "workspace:*",
+    "@velum-labs/routekit-runtime": "workspace:*",
     "@fusionkit/session-hermetic": "workspace:*",
     "@fusionkit/session-vercel-sandbox": "workspace:*",
     "ws": "8.21.0"

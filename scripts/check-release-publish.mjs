@@ -5,6 +5,7 @@ import { existsSync, readFileSync } from "node:fs";
 const RELEASE_MANIFEST = "release/npm-packages.json";
 const RELEASE_TOPOLOGY = "release/workspace.release.json";
 const WORKFLOW = ".github/workflows/release-packages.yml";
+const NPM_PUBLISHER = "scripts/publish-npm-workspaces.mjs";
 const PYPI_WORKFLOW = ".github/workflows/pypi-release.yml";
 const OPENAPI_SNAPSHOT = "packages/protocol/openapi/model-fusion-harness-executor.openapi.json";
 const BINDINGS = "packages/protocol/model-fusion-bindings.json";
@@ -22,6 +23,7 @@ for (const path of [
   RELEASE_MANIFEST,
   RELEASE_TOPOLOGY,
   WORKFLOW,
+  NPM_PUBLISHER,
   PYPI_WORKFLOW,
   OPENAPI_SNAPSHOT,
   BINDINGS
@@ -70,7 +72,10 @@ for (const required of [
   "scripts/stage-scope.mjs",
   "scripts/check-fusionkit-cli-pack.mjs --require-scope",
   "corepack pnpm test",
-  "scripts/publish-npm-workspaces.mjs"
+  "scripts/publish-npm-workspaces.mjs",
+  "secrets.NPM_TOKEN",
+  "npm-bootstrap.npmrc",
+  "Publishing via npm OIDC trusted publishing"
 ]) {
   if (!workflow.includes(required)) fail(`release workflow missing: ${required}`);
 }
@@ -81,6 +86,14 @@ if (
   workflow.indexOf("scripts/check-fusionkit-cli-pack.mjs --require-scope")
 ) {
   fail("release workflow must build and stage Scope before validating the FusionKit tarball");
+}
+const npmPublisher = readFileSync(NPM_PUBLISHER, "utf8");
+for (const required of [
+  "exactPackageVersionExists",
+  "skipping ${name}@${version}: already published",
+  "continuing after ${name}@${version} became available"
+]) {
+  if (!npmPublisher.includes(required)) fail(`npm publisher missing recovery behavior: ${required}`);
 }
 
 const openApiHash = `sha256:${createHash("sha256")
@@ -156,7 +169,7 @@ for (const entry of manifest.packages ?? []) {
 }
 
 for (const [packageName, binary] of [
-  ["@routekit/cli", "routekit"],
+  ["@velum-labs/routekit", "routekit"],
   ["@fusionkit/cli", "fusionkit"]
 ]) {
   const entry = (manifest.packages ?? []).find((candidate) => candidate.name === packageName);
@@ -187,7 +200,7 @@ if (npmUnit?.packageManifest !== RELEASE_MANIFEST) {
 if (
   JSON.stringify(npmUnit?.binaries) !==
   JSON.stringify([
-    { name: "routekit", package: "@routekit/cli" },
+    { name: "routekit", package: "@velum-labs/routekit" },
     { name: "fusionkit", package: "@fusionkit/cli" }
   ])
 ) {

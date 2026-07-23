@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname } from "node:path";
 
-import { writeFileAtomic } from "@routekit/runtime";
+import { writeFileAtomic } from "@velum-labs/routekit-runtime";
 
 export type ConfigSource = "flag" | "config" | "default";
 export type LayeredValue<T> = { value: T; source: ConfigSource };

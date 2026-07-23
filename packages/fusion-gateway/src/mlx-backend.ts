@@ -1,9 +1,9 @@
 import { mlxServer } from "@fusionkit/adapter-ai-sdk";
 import type { ManagedServerEvent } from "@fusionkit/adapter-ai-sdk";
-import { chatTemplateKwargsForModel } from "@routekit/registry";
+import { chatTemplateKwargsForModel } from "@velum-labs/routekit-registry";
 
-import { OpenAiBackend } from "@routekit/gateway";
-import type { Backend } from "@routekit/gateway";
+import { OpenAiBackend } from "@velum-labs/routekit-gateway";
+import type { Backend } from "@velum-labs/routekit-gateway";
 
 /**
  * The first-class gateway backend: the owned `velum-labs/mlx-lm` fork run as

@@ -11,8 +11,8 @@ import {
 } from "@fusionkit/tracing";
 import type { FusionTraceCarrier } from "@fusionkit/tracing";
 
-import { anthropicToChat, openAiSseToAnthropic } from "@routekit/gateway";
-import { openAiSseToResponses, responsesToChat } from "@routekit/gateway";
+import { anthropicToChat, openAiSseToAnthropic } from "@velum-labs/routekit-gateway";
+import { openAiSseToResponses, responsesToChat } from "@velum-labs/routekit-gateway";
 import {
   changedFiles,
   createNarratorState,
@@ -27,7 +27,7 @@ import type { NarrationWriter, ReasoningDeltaEvent } from "../frontdoor/narratio
 import { createChatNarrationWriter } from "../frontdoor/narration-writer.js";
 import { FusionBackend } from "../fusion-backend.js";
 import type { WireTrajectory } from "../fusion-backend.js";
-import { startGateway } from "@routekit/gateway";
+import { startGateway } from "@velum-labs/routekit-gateway";
 
 /**
  * Reasoning traces to the front doors: the panel/judge phase is narrated as

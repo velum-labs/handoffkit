@@ -39,20 +39,20 @@ while (pending.length > 0) {
   const name = pending.shift();
   if (name === undefined || seen.has(name)) continue;
   seen.add(name);
-  if (name === "@routekit/cli") {
-    throw new Error("FusionKit dependency closure must not include @routekit/cli");
+  if (name === "@velum-labs/routekit") {
+    throw new Error("FusionKit dependency closure must not include @velum-labs/routekit");
   }
   const entry = byName.get(name);
   if (entry === undefined) continue;
   closure.push(entry);
   for (const dependency of Object.keys(entry.manifest.dependencies ?? {})) {
-    if (dependency.startsWith("@routekit/") || dependency.startsWith("@fusionkit/")) {
+    if (dependency.startsWith("@velum-labs/routekit") || dependency.startsWith("@fusionkit/")) {
       pending.push(dependency);
     }
   }
 }
 
-for (const required of ["@routekit/config", "@routekit/router", "@routekit/gateway"]) {
+for (const required of ["@velum-labs/routekit-config", "@velum-labs/routekit-router", "@velum-labs/routekit-gateway"]) {
   if (!seen.has(required)) throw new Error(`FusionKit package closure is missing ${required}`);
 }
 const cliEntry = byName.get("@fusionkit/cli");

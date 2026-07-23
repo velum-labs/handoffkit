@@ -1,8 +1,8 @@
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { isRecord, writeJsonAtomic } from "@routekit/config-core";
-import { writeFileAtomic } from "@routekit/runtime";
+import { isRecord, writeJsonAtomic } from "@velum-labs/routekit-config-core";
+import { writeFileAtomic } from "@velum-labs/routekit-runtime";
 
 export const FUSION_CONFIG_DIRNAME = ".fusionkit";
 export const FUSION_CONFIG_BASENAME = "fusion.json";

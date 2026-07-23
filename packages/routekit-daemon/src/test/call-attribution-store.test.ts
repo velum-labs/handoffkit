@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import type { ModelCallRecord } from "@routekit/gateway";
+import type { ModelCallRecord } from "@velum-labs/routekit-gateway";
 
 import {
   CallAttributionStore,

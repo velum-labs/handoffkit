@@ -28,7 +28,7 @@
   "dependencies": {
     "@fusionkit/handoff": "workspace:*",
     "@fusionkit/protocol": "workspace:*",
-    "@routekit/runtime": "workspace:*",
+    "@velum-labs/routekit-runtime": "workspace:*",
     "@fusionkit/sdk": "workspace:*",
     "@fusionkit/workspace": "workspace:*"
   },

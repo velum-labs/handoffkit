@@ -10,10 +10,10 @@
  */
 import type { Command } from "commander";
 
-import { bold, dim, green, red } from "@routekit/cli-ui";
-import { contextFor } from "@routekit/cli-core";
-import type { CommandContext } from "@routekit/cli-core";
-import type { Presenter } from "@routekit/cli-ui";
+import { bold, dim, green, red } from "@velum-labs/routekit-cli-ui";
+import { contextFor } from "@velum-labs/routekit-cli-core";
+import type { CommandContext } from "@velum-labs/routekit-cli-core";
+import type { Presenter } from "@velum-labs/routekit-cli-ui";
 
 import { detectHost } from "../fusion/local-catalog.js";
 import { platformCapabilities } from "../fusion/platform.js";

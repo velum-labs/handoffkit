@@ -2,10 +2,10 @@ import { writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { isFiniteK } from "@fusionkit/protocol";
 import type { ModelFusionStatus } from "@fusionkit/protocol";
-import { ensureRunOutputDir, runCliCapture } from "@routekit/runtime";
+import { ensureRunOutputDir, runCliCapture } from "@velum-labs/routekit-runtime";
 import { envOf } from "@fusionkit/tracing";
 import { gitText } from "@fusionkit/workspace";
-import type { JsonValue } from "@routekit/contracts";
+import type { JsonValue } from "@velum-labs/routekit-contracts";
 
 import { createAgentHarness } from "./agent.js";
 import { createCommandHarness } from "./command.js";

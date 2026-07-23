@@ -1,5 +1,5 @@
 /**
- * RouteKit bindings for the shared service core in `@routekit/runtime`: the
+ * RouteKit bindings for the shared service core in `@velum-labs/routekit-runtime`: the
  * daemon supervisor unit spec (what `routekit start` and `daemon service
  * install` write) and the secrets environment file the systemd unit
  * references.
@@ -10,13 +10,13 @@ import { join } from "node:path";
 import {
   CLIPROXY_API_KEY_ENV,
   cliproxyApiKey
-} from "@routekit/accounts";
-import { CliError } from "@routekit/cli-core";
-import { configuredProviderIds } from "@routekit/config";
-import type { RouterConfig } from "@routekit/gateway";
-import { PROVIDERS } from "@routekit/registry";
-import { serviceLogPath, writeFileAtomic } from "@routekit/runtime";
-import type { ServiceUnitSpec } from "@routekit/runtime";
+} from "@velum-labs/routekit-accounts";
+import { CliError } from "@velum-labs/routekit-cli-core";
+import { configuredProviderIds } from "@velum-labs/routekit-config";
+import type { RouterConfig } from "@velum-labs/routekit-gateway";
+import { PROVIDERS } from "@velum-labs/routekit-registry";
+import { serviceLogPath, writeFileAtomic } from "@velum-labs/routekit-runtime";
+import type { ServiceUnitSpec } from "@velum-labs/routekit-runtime";
 
 import { routekitHome } from "./config.js";
 

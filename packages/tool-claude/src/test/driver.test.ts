@@ -3,8 +3,8 @@ import { test } from "node:test";
 
 import type { Options, Query, SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 
-import { driverContractSuite } from "@routekit/harness-core/testing";
-import type { HarnessEvent } from "@routekit/harness-core";
+import { driverContractSuite } from "@velum-labs/routekit-harness-core/testing";
+import type { HarnessEvent } from "@velum-labs/routekit-harness-core";
 
 import { createClaudeDriver } from "../driver.js";
 import type { ClaudeQueryFn } from "../driver.js";

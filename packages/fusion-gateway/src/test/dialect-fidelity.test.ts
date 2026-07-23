@@ -7,13 +7,13 @@ import { beforeEach, test } from "node:test";
 import {
   chatToAnthropicMessage,
   mapStopReason
-} from "@routekit/gateway";
+} from "@velum-labs/routekit-gateway";
 import {
   DIALECT_DROPPED_ATTRIBUTE,
   resetDroppedFieldWarnings,
   withDroppedFieldSpan
-} from "@routekit/gateway";
-import { responsesToChat } from "@routekit/gateway";
+} from "@velum-labs/routekit-gateway";
+import { responsesToChat } from "@velum-labs/routekit-gateway";
 import { initFusionTracing, InMemorySpanExporter, SimpleSpanProcessor, startFusionSpan } from "@fusionkit/tracing";
 import type { ReadableSpan } from "@fusionkit/tracing";
 

@@ -241,7 +241,7 @@ for (const expected of [
   },
   {
     path: "packages/routekit-cli/package.json",
-    name: "@routekit/cli",
+    name: "@velum-labs/routekit",
     binary: "routekit"
   }
 ]) {

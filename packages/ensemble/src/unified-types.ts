@@ -1,8 +1,8 @@
 import type { ModelFusionStatus } from "@fusionkit/protocol";
-import type { JsonValue } from "@routekit/contracts";
-import type { ResumeCursor } from "@routekit/harness-core";
-import type { ReasoningSelection } from "@routekit/contracts";
-import type { ToolRegistry } from "@routekit/tools";
+import type { JsonValue } from "@velum-labs/routekit-contracts";
+import type { ResumeCursor } from "@velum-labs/routekit-harness-core";
+import type { ReasoningSelection } from "@velum-labs/routekit-contracts";
+import type { ToolRegistry } from "@velum-labs/routekit-tools";
 import type { FusionTraceCarrier } from "@fusionkit/tracing";
 import type { EnsembleModel, EnsembleRunResult } from "./harness.js";
 

@@ -11,7 +11,7 @@
  * commands that actually exist. Palette order follows the registration order
  * in `cli.ts`.
  */
-import { brandBanner, canPromptInteractively, fuzzySelect, isInteractive, uiStream } from "@routekit/cli-ui";
+import { brandBanner, canPromptInteractively, fuzzySelect, isInteractive, uiStream } from "@velum-labs/routekit-cli-ui";
 
 import { loadFusionConfig } from "../fusion-config.js";
 import { gitToplevel } from "../fusion-quickstart.js";

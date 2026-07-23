@@ -57,7 +57,7 @@ Fixtures live under `spec/model-fusion-contract/fixture/`. Each schema should ha
 `model-capabilities.json` (model-family capability quirks), `pricing.json`
 (curated default pricing), and `fusion.json` (Fusion identities, aliases, and
 panel presets). `scripts/generate-registry.mjs` emits neutral TypeScript data to
-`@routekit/registry`, Fusion-only TypeScript data to `@fusionkit/registry`, and
+`@velum-labs/routekit-registry`, Fusion-only TypeScript data to `@fusionkit/registry`, and
 the corresponding split Python generated modules. `scripts/generate-pricing.mjs`
 and `scripts/generate-local-catalog.mjs` refresh and validate their respective
 sources.
@@ -138,7 +138,7 @@ curl http://127.0.0.1:8000/health
 ### Node public gateway
 
 The only production public server is RouteKit's `startGateway()` from
-`@routekit/gateway`, configured with FusionKit's `FusionBackend` from
+`@velum-labs/routekit-gateway`, configured with FusionKit's `FusionBackend` from
 `@fusionkit/gateway`. RouteKit owns HTTP dialects and provider egress;
 FusionKit owns ensemble orchestration, durable sessions, and aggregate cost
 accounting.
@@ -162,7 +162,7 @@ The plane API owns contracts, claims, approvals, principal auth, secrets, receip
 
 Fusion traces with OpenTelemetry: real spans and log-based events over OTLP/HTTP, W3C `traceparent`/`baggage` propagation, and standard `OTEL_*` configuration. The semantic conventions — span/event names, attribute keys, and per-attribute sensitivity classes — live in `spec/fusion-trace/registry.json`; `node scripts/generate-trace-conventions.mjs` regenerates the TypeScript, Python, and scope bindings, and `pnpm check` fails when they drift.
 
-TypeScript span helpers live in `@fusionkit/tracing`, the Fusion conventions facade over the generic `@routekit/tracing` OTel runtime; `@fusionkit/protocol` re-exports only generated constants. Python helpers live in `fusionkit_core.trace`. Units of work (turn, candidate, judge, model call) are real spans on the traces signal; live point-in-time signals (steps, judge thinking, cost beats) are OTel events — log records with an `event.name` and trace/span correlation on the logs signal — so the scope dashboard updates while a unit is still running.
+TypeScript span helpers live in `@fusionkit/tracing`, the Fusion conventions facade over the generic `@velum-labs/routekit-tracing` OTel runtime; `@fusionkit/protocol` re-exports only generated constants. Python helpers live in `fusionkit_core.trace`. Units of work (turn, candidate, judge, model call) are real spans on the traces signal; live point-in-time signals (steps, judge thinking, cost beats) are OTel events — log records with an `event.name` and trace/span correlation on the logs signal — so the scope dashboard updates while a unit is still running.
 
 Example:
 

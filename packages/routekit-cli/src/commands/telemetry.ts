@@ -1,5 +1,5 @@
-import { contextFor } from "@routekit/cli-core";
-import { randomId } from "@routekit/runtime";
+import { contextFor } from "@velum-labs/routekit-cli-core";
+import { randomId } from "@velum-labs/routekit-runtime";
 import type { Command } from "commander";
 
 import { routekitClient } from "../client.js";

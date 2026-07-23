@@ -1,8 +1,8 @@
 import { Command } from "commander";
 
-import { completionCandidates as coreCompletionCandidates } from "@routekit/cli-core";
-import { configuredProviderIds } from "@routekit/config";
-import { resolveAccountConnector } from "@routekit/registry";
+import { completionCandidates as coreCompletionCandidates } from "@velum-labs/routekit-cli-core";
+import { configuredProviderIds } from "@velum-labs/routekit-config";
+import { resolveAccountConnector } from "@velum-labs/routekit-registry";
 
 import { listAccounts } from "./accounts.js";
 import { globalRouterConfigPath, loadRouterConfig } from "./config.js";

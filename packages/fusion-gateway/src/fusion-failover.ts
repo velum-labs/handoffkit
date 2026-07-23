@@ -1,4 +1,4 @@
-import { decodeBufferedSse } from "@routekit/gateway";
+import { decodeBufferedSse } from "@velum-labs/routekit-gateway";
 import type {
   FailoverCategory,
   ProxyFailure

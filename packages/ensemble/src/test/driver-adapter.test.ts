@@ -5,9 +5,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 
-import { createMockDriver } from "@routekit/harness-core/testing";
-import type { HarnessDriver, ResumeCursor, SessionHandle } from "@routekit/harness-core";
-import type { MockDriverConfig } from "@routekit/harness-core/testing";
+import { createMockDriver } from "@velum-labs/routekit-harness-core/testing";
+import type { HarnessDriver, ResumeCursor, SessionHandle } from "@velum-labs/routekit-harness-core";
+import type { MockDriverConfig } from "@velum-labs/routekit-harness-core/testing";
 
 import { createDriverHarness } from "../driver-adapter.js";
 import type { DriverModelRoute } from "../driver-adapter.js";

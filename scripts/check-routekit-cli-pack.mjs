@@ -71,7 +71,7 @@ const packageEntries = readdirSync(join(root, "packages"), { withFileTypes: true
   .filter((entry) => entry !== undefined);
 const byName = new Map(packageEntries.map((entry) => [entry.manifest.name, entry]));
 const closure = [];
-const pending = ["@routekit/cli"];
+const pending = ["@velum-labs/routekit"];
 const seen = new Set();
 while (pending.length > 0) {
   const name = pending.shift();
@@ -84,7 +84,7 @@ while (pending.length > 0) {
   if (entry === undefined) continue;
   closure.push(entry);
   for (const dependency of Object.keys(entry.manifest.dependencies ?? {})) {
-    if (dependency.startsWith("@routekit/") || dependency.startsWith("@fusionkit/")) {
+    if (dependency.startsWith("@velum-labs/routekit") || dependency.startsWith("@fusionkit/")) {
       pending.push(dependency);
     }
   }
@@ -123,7 +123,7 @@ try {
     ["version"],
     { cwd: install, encoding: "utf8" }
   );
-  if (!output.includes("@routekit/cli")) {
+  if (!output.includes("@velum-labs/routekit")) {
     throw new Error(`installed routekit executable returned unexpected output: ${output}`);
   }
 

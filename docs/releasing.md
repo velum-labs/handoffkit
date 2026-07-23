@@ -18,7 +18,7 @@ flowchart TD
   protocol["fusionkit-protocol (npm + PyPI)"]
   fusionpy["fusionkit-pypi (5 PyPI pkgs)"]
   cursor["cursorkit (npm)"]
-  handoff["handoffkit (20 @routekit/* + 10 @fusionkit/* npm)"]
+  handoff["handoffkit (22 @velum-labs/routekit and @velum-labs/routekit-* + 10 @fusionkit/* npm)"]
   mlx["mlx-lm (private PyPI)"]
   protocol --> fusionpy
   protocol --> cursor
@@ -131,7 +131,7 @@ ship the new contract.
 Separate from releasing, for day-to-day iteration:
 
 ```bash
-node scripts/monorepo.mjs graph             # @routekit/* + @fusionkit/* graph/order check
+node scripts/monorepo.mjs graph             # @velum-labs/routekit and @velum-labs/routekit-* + @fusionkit/* graph/order check
 node scripts/monorepo.mjs affected origin/main   # Turbo build + test for changed projects/dependents
 node scripts/monorepo.mjs clean             # purge stale release-artifacts tarballs
 ```

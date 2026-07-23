@@ -12,7 +12,7 @@ import type {
   ModelFusionSideEffects
 } from "@fusionkit/protocol";
 import { gitText } from "@fusionkit/workspace";
-import type { CapabilityStatus, JsonValue } from "@routekit/contracts";
+import type { CapabilityStatus, JsonValue } from "@velum-labs/routekit-contracts";
 
 import {
   COMMAND_DASHBOARD_CAPABILITIES,
@@ -29,8 +29,8 @@ import type {
   HarnessAdapter,
   HarnessCapabilities
 } from "@fusionkit/ensemble";
-import { ensureRunOutputDir, markdownTable } from "@routekit/runtime";
-import type { ToolCapabilityGrade } from "@routekit/tools";
+import { ensureRunOutputDir, markdownTable } from "@velum-labs/routekit-runtime";
+import type { ToolCapabilityGrade } from "@velum-labs/routekit-tools";
 
 import { toolRegistry } from "./tools.js";
 

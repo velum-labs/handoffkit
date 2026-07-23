@@ -2,10 +2,10 @@ import { isFiniteK } from "@fusionkit/protocol";
 import type { WireTrajectory } from "@fusionkit/protocol";
 import { newSpanId, newTraceId } from "@fusionkit/tracing";
 import { FUSION_PANEL_MODEL } from "@fusionkit/registry";
-import { withTimeout } from "@routekit/runtime";
+import { withTimeout } from "@velum-labs/routekit-runtime";
 
-import { CLAUDE_ALIAS_PREFIX } from "@routekit/gateway";
-import type { Backend, BackendRequestOptions } from "@routekit/gateway";
+import { CLAUDE_ALIAS_PREFIX } from "@velum-labs/routekit-gateway";
+import type { Backend, BackendRequestOptions } from "@velum-labs/routekit-gateway";
 import type { FrontdoorRequestValue, FrontdoorServices } from "./frontdoor/types.js";
 import { FRONTDOOR_SIGNAL } from "./frontdoor/types.js";
 import { runFrontdoorRequest } from "./frontdoor/request.js";

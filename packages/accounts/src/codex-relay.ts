@@ -3,8 +3,8 @@ import { randomUUID } from "node:crypto";
 
 import { z } from "zod";
 
-import { providerDefaultBaseUrl, subscriptionInfo } from "@routekit/registry";
-import { trimTrailingSlashes } from "@routekit/runtime";
+import { providerDefaultBaseUrl, subscriptionInfo } from "@velum-labs/routekit-registry";
+import { trimTrailingSlashes } from "@velum-labs/routekit-runtime";
 
 import type { SubscriptionAccountSet } from "./account-set.js";
 import { codexModelsSearch, subscriptionProvider } from "./provider.js";

@@ -4,8 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 
-import { driverContractSuite } from "@routekit/harness-core/testing";
-import type { HarnessEvent } from "@routekit/harness-core";
+import { driverContractSuite } from "@velum-labs/routekit-harness-core/testing";
+import type { HarnessEvent } from "@velum-labs/routekit-harness-core";
 
 import { createCodexDriver } from "../driver.js";
 

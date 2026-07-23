@@ -3,8 +3,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 
-import { contextFor, fail } from "@routekit/cli-core";
-import type { CommandContext } from "@routekit/cli-core";
+import { contextFor, fail } from "@velum-labs/routekit-cli-core";
+import type { CommandContext } from "@velum-labs/routekit-cli-core";
 import type { Command } from "commander";
 
 import { fusionConfigPath, parseFusionConfig } from "../fusion-config.js";

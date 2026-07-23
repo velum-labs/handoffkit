@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { parseRouterConfig } from "@routekit/gateway";
+import { parseRouterConfig } from "@velum-labs/routekit-gateway";
 
 import { buildToolLaunchSpec, routekitToolRegistry } from "../launch.js";
 

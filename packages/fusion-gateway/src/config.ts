@@ -1,7 +1,7 @@
-import { GATEWAY_DEFAULT_MLX_MODEL } from "@routekit/registry";
+import { GATEWAY_DEFAULT_MLX_MODEL } from "@velum-labs/routekit-registry";
 
-import { OpenAiBackend } from "@routekit/gateway";
-import type { Backend } from "@routekit/gateway";
+import { OpenAiBackend } from "@velum-labs/routekit-gateway";
+import type { Backend } from "@velum-labs/routekit-gateway";
 import { MlxBackend } from "./mlx-backend.js";
 
 /**

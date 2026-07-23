@@ -1,5 +1,5 @@
 {
-  "$comment": "Provider metadata: single source of truth for provider base URLs, API key env vars, wire compatibility, key-validation probes, and live model-discovery capabilities. Consumed via the generated @routekit/registry binding; regenerate with `node scripts/generate-registry.mjs`.",
+  "$comment": "Provider metadata: single source of truth for provider base URLs, API key env vars, wire compatibility, key-validation probes, and live model-discovery capabilities. Consumed via the generated @velum-labs/routekit-registry binding; regenerate with `node scripts/generate-registry.mjs`.",
   "providers": {
     "openai": {
       "baseUrl": "https://api.openai.com",

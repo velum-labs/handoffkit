@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 
-import { sha256Hex } from "@routekit/contracts";
+import { sha256Hex } from "@velum-labs/routekit-contracts";
 import {
   captureWorkspace,
   collectOutput,

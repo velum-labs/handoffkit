@@ -13,7 +13,7 @@ test("the canonical registry contains every declared tool integration exactly on
     readFileSync(new URL("../../package.json", import.meta.url), "utf8")
   ) as PackageManifest;
   const declaredToolPackages = Object.keys(manifest.dependencies ?? {})
-    .filter((name) => name.startsWith("@routekit/tool-") && name !== "@routekit/tool-registry")
+    .filter((name) => name.startsWith("@velum-labs/routekit-tool-") && name !== "@velum-labs/routekit-tool-registry")
     .sort();
   const registeredToolPackages = toolIntegrations.map((integration) => integration.packageName).sort();
 

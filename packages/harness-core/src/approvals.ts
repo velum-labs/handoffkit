@@ -10,7 +10,7 @@ import { randomUUID } from "node:crypto";
 import type {
   HarnessApprovalDecision,
   HarnessRequestType as RouteHarnessRequestType
-} from "@routekit/contracts";
+} from "@velum-labs/routekit-contracts";
 
 export type ApprovalDecision = HarnessApprovalDecision;
 export type HarnessRequestType = RouteHarnessRequestType;

@@ -1,5 +1,5 @@
 {
-  "name": "@routekit/tools",
+  "name": "@velum-labs/routekit-tools",
   "private": false,
   "version": "0.8.0",
   "repository": {
@@ -26,8 +26,8 @@
     "provenance": true
   },
   "dependencies": {
-    "@routekit/contracts": "workspace:*",
-    "@routekit/harness-core": "workspace:*"
+    "@velum-labs/routekit-contracts": "workspace:*",
+    "@velum-labs/routekit-harness-core": "workspace:*"
   },
   "keywords": [
     "llm",

@@ -85,7 +85,7 @@ fixtures; no `.env` files; no `ghp_`/`AKIA`/private-key matches). Remaining issu
 | ID | Finding | Evidence | Sev |
 | --- | --- | --- | --- |
 | 4.1 | **`SECURITY.md` states the repo is "design-stage and private… no released versions"** — false (npm/PyPI 0.8.0 shipped) and dangerous as public policy | `SECURITY.md:5-24` | P0 |
-| 4.2 | Resolved: published package license payloads, including `@routekit/harness-core` and `@routekit/runtime`, now match their manifests. | `packages/harness-core/`, `packages/runtime-utils/` | Resolved |
+| 4.2 | Resolved: published package license payloads, including `@velum-labs/routekit-harness-core` and `@velum-labs/routekit-runtime`, now match their manifests. | `packages/harness-core/`, `packages/runtime-utils/` | Resolved |
 | 4.3 | No root `NOTICE`; `spec/model-fusion-contract/package.json` missing a `license` field; `python/uniroute*` are `UNLICENSED` inside an Apache-2.0 repo | multiple | P1 |
 | 4.4 | **Committed `.fusionkit/fusion.json` routes this repo's default panel through OpenRouter** (third-party aggregator) — anyone cloning and running `fusionkit codex` in-repo sends code to OpenRouter, undisclosed; also diverges from the documented default frontier trio | `.fusionkit/fusion.json` | P0 |
 | 4.5 | Sessions persist **full prompt/message arrays** (user code included) to `~/.fusionkit/sessions/<id>/turns.jsonl` — mentioned in passing, no privacy/data-handling doc | `packages/fusion-gateway/src/session-store.ts:12-18` | P1 |

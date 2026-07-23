@@ -4,7 +4,7 @@
 
 This repo is a dual-stack monorepo: a **pnpm/Turborepo Node** workspace
 (`packages/*`, `examples/*`, `apps/*`) and a **uv/Python** workspace (`python/*`). The
-shipped products are **RouteKit** (the independent `@routekit/cli` Node router)
+shipped products are **RouteKit** (the independent `@velum-labs/routekit` Node router)
 and **FusionKit** (the `@fusionkit/cli` Node front door + internal Python
 `fusionkit-sidecar` synthesis process). The `warrant` governance
 stack in `docker-compose.yml` / `Dockerfile` is **legacy / out of product

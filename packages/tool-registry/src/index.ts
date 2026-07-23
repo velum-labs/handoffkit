@@ -4,33 +4,33 @@
  * Add a new integration to `toolIntegrations`; consumers receive it through
  * `toolRegistry` without maintaining their own package imports or lists.
  */
-import { claudeTool } from "@routekit/tool-claude";
-import { codexTool } from "@routekit/tool-codex";
-import { cursorTool } from "@routekit/tool-cursor";
-import { opencodeTool } from "@routekit/tool-opencode";
-import { createToolRegistry } from "@routekit/tools";
-import type { ToolIntegration, ToolRegistry } from "@routekit/tools";
+import { claudeTool } from "@velum-labs/routekit-tool-claude";
+import { codexTool } from "@velum-labs/routekit-tool-codex";
+import { cursorTool } from "@velum-labs/routekit-tool-cursor";
+import { opencodeTool } from "@velum-labs/routekit-tool-opencode";
+import { createToolRegistry } from "@velum-labs/routekit-tools";
+import type { ToolIntegration, ToolRegistry } from "@velum-labs/routekit-tools";
 
 export {
   installClaudeIntegration,
   uninstallClaudeIntegration
-} from "@routekit/tool-claude";
+} from "@velum-labs/routekit-tool-claude";
 export type {
   ClaudeInstallInput,
   ClaudeInstallOwner,
   ClaudeInstallResult
-} from "@routekit/tool-claude";
+} from "@velum-labs/routekit-tool-claude";
 export {
   codexIntegrationBlock,
   installCodexIntegration,
   uninstallCodexIntegration
-} from "@routekit/tool-codex";
+} from "@velum-labs/routekit-tool-codex";
 export type {
   CodexInstallInput,
   CodexInstallOwner,
   CodexInstallProfile,
   CodexInstallResult
-} from "@routekit/tool-codex";
+} from "@velum-labs/routekit-tool-codex";
 
 export const toolIntegrations: readonly ToolIntegration[] = [
   codexTool,

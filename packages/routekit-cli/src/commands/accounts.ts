@@ -9,10 +9,10 @@ import {
   defaultSubscriptionCredentialPath,
   parseAccountMode,
   resolveAccountKind
-} from "@routekit/accounts";
-import { contextFor } from "@routekit/cli-core";
-import { resolveAccountConnector } from "@routekit/registry";
-import { randomId } from "@routekit/runtime";
+} from "@velum-labs/routekit-accounts";
+import { contextFor } from "@velum-labs/routekit-cli-core";
+import { resolveAccountConnector } from "@velum-labs/routekit-registry";
+import { randomId } from "@velum-labs/routekit-runtime";
 import type { Command } from "commander";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";

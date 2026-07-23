@@ -1,15 +1,15 @@
 import type { IncomingHttpHeaders } from "node:http";
 import { randomUUID } from "node:crypto";
 
-import { providerDefaultBaseUrl, subscriptionInfo } from "@routekit/registry";
-import { trimTrailingSlashes } from "@routekit/runtime";
+import { providerDefaultBaseUrl, subscriptionInfo } from "@velum-labs/routekit-registry";
+import { trimTrailingSlashes } from "@velum-labs/routekit-runtime";
 import type {
   AnthropicRequest,
   Backend,
   ProviderRelay,
   ProviderRelayDialect,
   ResponsesRequest
-} from "@routekit/gateway";
+} from "@velum-labs/routekit-gateway";
 
 import type { SubscriptionAccountSet } from "./account-set.js";
 import type { SubscriptionAccountSetSnapshot } from "./types.js";

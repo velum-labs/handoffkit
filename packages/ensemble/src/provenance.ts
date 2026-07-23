@@ -20,7 +20,7 @@
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { readProducerVersion, resolveProducerGitSha } from "@routekit/gateway";
+import { readProducerVersion, resolveProducerGitSha } from "@velum-labs/routekit-gateway";
 
 const PACKAGE_DIR = dirname(fileURLToPath(import.meta.url));
 

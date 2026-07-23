@@ -13,8 +13,8 @@ import { join } from "node:path";
 
 import { stringify as tomlStringify } from "smol-toml";
 
-import { trimTrailingSlashes } from "@routekit/runtime";
-import type { AgentProfile, ToolLaunchContext, ToolLaunchSpec } from "@routekit/tools";
+import { trimTrailingSlashes } from "@velum-labs/routekit-runtime";
+import type { AgentProfile, ToolLaunchContext, ToolLaunchSpec } from "@velum-labs/routekit-tools";
 
 const PROVIDER_ID = "routekit";
 const CATALOG_FILE = "model-catalog.json";

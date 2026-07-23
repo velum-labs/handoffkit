@@ -6,7 +6,7 @@ import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { generateText, jsonSchema, stepCountIs, tool } from "ai";
 
 import { ATTR } from "@fusionkit/protocol";
-import { buildChildEnv } from "@routekit/runtime";
+import { buildChildEnv } from "@velum-labs/routekit-runtime";
 import { headersOf, jsonAttr, startFusionSpan } from "@fusionkit/tracing";
 import type { FusionSpan, FusionTraceCarrier } from "@fusionkit/tracing";
 

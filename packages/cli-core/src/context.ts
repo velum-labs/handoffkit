@@ -5,7 +5,7 @@ import {
   forceNonInteractive,
   PlainPresenter,
   stripAnsi
-} from "@routekit/cli-ui";
+} from "@velum-labs/routekit-cli-ui";
 import type {
   ChecklistController,
   KeyValueRow,
@@ -16,7 +16,7 @@ import type {
   StepInput,
   TableOptions,
   TaskController
-} from "@routekit/cli-ui";
+} from "@velum-labs/routekit-cli-ui";
 
 export type GlobalFlags = {
   json: boolean;

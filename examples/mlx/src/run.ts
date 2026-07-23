@@ -16,7 +16,7 @@ import {
   mlxServer,
   type ManagedServerEvent
 } from "@fusionkit/adapter-ai-sdk";
-import { GATEWAY_DEFAULT_MLX_MODEL } from "@routekit/registry";
+import { GATEWAY_DEFAULT_MLX_MODEL } from "@velum-labs/routekit-registry";
 
 const DEFAULT_MODEL = GATEWAY_DEFAULT_MLX_MODEL;
 const DEFAULT_PROMPT =

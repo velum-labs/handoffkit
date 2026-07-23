@@ -15,9 +15,9 @@ import type { Command } from "commander";
 import { defaultSessionsDir, FileSystemSessionStore, formatUsd } from "@fusionkit/gateway";
 import type { SessionCost, SessionStore, SessionSummary } from "@fusionkit/gateway";
 
-import { bold, cyan, dim, gray, green, relativeTime } from "@routekit/cli-ui";
-import { argOrPick, contextFor } from "@routekit/cli-core";
-import type { CommandContext } from "@routekit/cli-core";
+import { bold, cyan, dim, gray, green, relativeTime } from "@velum-labs/routekit-cli-ui";
+import { argOrPick, contextFor } from "@velum-labs/routekit-cli-core";
+import type { CommandContext } from "@velum-labs/routekit-cli-core";
 
 
 import { registerPaletteAction } from "./palette.js";

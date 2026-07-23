@@ -1,4 +1,4 @@
-import type { BackendRequestOptions } from "@routekit/gateway";
+import type { BackendRequestOptions } from "@velum-labs/routekit-gateway";
 
 export const PANEL_DEPTH_HEADER = "x-fusionkit-panel-depth";
 

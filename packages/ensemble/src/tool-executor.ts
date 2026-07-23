@@ -18,8 +18,8 @@ import type {
   ToolSideEffectClass
 } from "@fusionkit/protocol";
 import { resolveInsideWorkspace } from "@fusionkit/workspace";
-import { artifactHash } from "@routekit/contracts";
-import type { JsonValue } from "@routekit/contracts";
+import { artifactHash } from "@velum-labs/routekit-contracts";
+import type { JsonValue } from "@velum-labs/routekit-contracts";
 
 import { PRODUCER, PRODUCER_GIT_SHA, PRODUCER_VERSION } from "./provenance.js";
 

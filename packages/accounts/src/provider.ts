@@ -6,11 +6,11 @@ import {
   providerDefaultBaseUrl,
   subscriptionInfo,
   type SubscriptionMode
-} from "@routekit/registry";
-import { parseRetryAfterSeconds } from "@routekit/contracts";
-import { parseDiscoveredModels } from "@routekit/gateway";
-import type { DiscoveredModel } from "@routekit/gateway";
-import { trimSurroundingSlashes, trimTrailingSlashes } from "@routekit/runtime";
+} from "@velum-labs/routekit-registry";
+import { parseRetryAfterSeconds } from "@velum-labs/routekit-contracts";
+import { parseDiscoveredModels } from "@velum-labs/routekit-gateway";
+import type { DiscoveredModel } from "@velum-labs/routekit-gateway";
+import { trimSurroundingSlashes, trimTrailingSlashes } from "@velum-labs/routekit-runtime";
 
 import {
   loadSubscriptionCredential,

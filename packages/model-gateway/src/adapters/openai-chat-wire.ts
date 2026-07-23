@@ -1,4 +1,4 @@
-import type { ReasoningSelection } from "@routekit/contracts";
+import type { ReasoningSelection } from "@velum-labs/routekit-contracts";
 
 export type OpenAiToolCall = {
   id?: string;
@@ -149,16 +149,16 @@ export type AnthropicRequestMetadata = {
  * controls/history without leaking Anthropic-only fields to OpenAI providers.
  */
 export const ANTHROPIC_REQUEST_METADATA = Symbol.for(
-  "@routekit/gateway/anthropic-request-metadata"
+  "@velum-labs/routekit-gateway/anthropic-request-metadata"
 );
 export const ANTHROPIC_MESSAGE_CONTENT = Symbol.for(
-  "@routekit/gateway/anthropic-message-content"
+  "@velum-labs/routekit-gateway/anthropic-message-content"
 );
 export const REASONING_SELECTION = Symbol.for(
-  "@routekit/gateway/reasoning-selection"
+  "@velum-labs/routekit-gateway/reasoning-selection"
 );
 export const REASONING_SELECTION_ERROR = Symbol.for(
-  "@routekit/gateway/reasoning-selection-error"
+  "@velum-labs/routekit-gateway/reasoning-selection-error"
 );
 
 export function attachReasoningSelection(

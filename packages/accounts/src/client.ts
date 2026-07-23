@@ -1,4 +1,4 @@
-import { trimTrailingSlashes } from "@routekit/runtime";
+import { trimTrailingSlashes } from "@velum-labs/routekit-runtime";
 
 import { subscriptionUsageResponseSchema, SUBSCRIPTION_USAGE_PATH } from "./wire.js";
 import type { SubscriptionUsageResponse } from "./wire.js";

@@ -1,5 +1,5 @@
 /**
- * `@routekit/accounts` — the subscription pooling SDK.
+ * `@velum-labs/routekit-accounts` — the subscription pooling SDK.
  *
  * A cohesive, typed surface for pooling Claude Code and Codex OAuth
  * subscriptions behind one provider-native proxy: resolve an account set from

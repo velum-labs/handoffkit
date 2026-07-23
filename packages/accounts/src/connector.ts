@@ -8,7 +8,7 @@
  * - `cliproxy`: the RouteKit-managed CLIProxyAPI sidecar, whose OAuth account
  *   store and ingress key live under RouteKit's home (gemini, grok, kimi).
  *
- * The registry (`@routekit/registry` connectors section) is the single source
+ * The registry (`@velum-labs/routekit-registry` connectors section) is the single source
  * of truth for which connector backs which kind. RouteKit's public CLI applies
  * a narrower first-launch allowlist; retained connectors are non-contractual.
  */
@@ -22,9 +22,9 @@ import {
   accountKindForCliproxyAuthType,
   accountKinds,
   resolveAccountConnector
-} from "@routekit/registry";
-import type { AccountConnector, SubscriptionMode } from "@routekit/registry";
-import { superviseSpawn } from "@routekit/runtime";
+} from "@velum-labs/routekit-registry";
+import type { AccountConnector, SubscriptionMode } from "@velum-labs/routekit-registry";
+import { superviseSpawn } from "@velum-labs/routekit-runtime";
 
 import {
   CLIPROXY_PINNED_VERSION,

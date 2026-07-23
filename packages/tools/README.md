@@ -1,12 +1,12 @@
-# @routekit/tools
+# @velum-labs/routekit-tools
 
-`packages/tools` publishes `@routekit/tools`: product-neutral coding-tool
+`packages/tools` publishes `@velum-labs/routekit-tools`: product-neutral coding-tool
 launcher, canonical-driver, lifecycle, and capability-registry contracts.
 
 ## Architecture
 
 This package defines the host/integration boundary used by Codex, Claude Code,
-Cursor, and OpenCode adapters. Individual `@routekit/tool-*` packages implement
+Cursor, and OpenCode adapters. Individual `@velum-labs/routekit-tool-*` packages implement
 `ToolIntegration`; hosts assemble immutable registries and supply an opaque
 `ToolLaunchSpec`.
 
@@ -19,7 +19,7 @@ import {
   createToolCapabilityMatrix,
   createToolLaunchContext,
   createToolRegistry
-} from "@routekit/tools";
+} from "@velum-labs/routekit-tools";
 ```
 
 `createToolRegistry()` validates and indexes integrations.

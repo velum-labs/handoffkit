@@ -40,14 +40,14 @@ The billed, exact-version real-account matrix remains [ENG-679](https://linear.a
 The focused commands were run from the repository root:
 
 ```sh
-pnpm exec turbo run build --filter=@routekit/tool-claude...
-pnpm --filter @routekit/tool-claude test
+pnpm exec turbo run build --filter=@velum-labs/routekit-tool-claude...
+pnpm --filter @velum-labs/routekit-tool-claude test
 
-pnpm exec turbo run build --filter=@routekit/cli...
-pnpm --filter @routekit/cli test
+pnpm exec turbo run build --filter=@velum-labs/routekit...
+pnpm --filter @velum-labs/routekit test
 
-pnpm exec turbo run build --filter=@routekit/daemon...
-pnpm --filter @routekit/daemon test
+pnpm exec turbo run build --filter=@velum-labs/routekit-daemon...
+pnpm --filter @velum-labs/routekit-daemon test
 ```
 
 Results:

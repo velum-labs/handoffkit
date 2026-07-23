@@ -1,5 +1,5 @@
-import { normalizeApiBaseUrl, scrubBridgeEnv } from "@routekit/runtime";
-import type { ModelReasoningCapabilities } from "@routekit/contracts";
+import { normalizeApiBaseUrl, scrubBridgeEnv } from "@velum-labs/routekit-runtime";
+import type { ModelReasoningCapabilities } from "@velum-labs/routekit-contracts";
 
 const DEFAULT_CONTEXT_TOKEN_LIMIT = 128000;
 const DEFAULT_LOCAL_API_KEY = "local";

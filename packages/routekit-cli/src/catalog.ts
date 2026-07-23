@@ -1,5 +1,5 @@
-import type { ModelReasoningCapabilities } from "@routekit/contracts";
-import { trimTrailingSlashes } from "@routekit/runtime";
+import type { ModelReasoningCapabilities } from "@velum-labs/routekit-contracts";
+import { trimTrailingSlashes } from "@velum-labs/routekit-runtime";
 
 export type LiveModel = {
   id: string;

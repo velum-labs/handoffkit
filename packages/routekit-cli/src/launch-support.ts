@@ -1,4 +1,4 @@
-import type { ProviderId } from "@routekit/gateway";
+import type { ProviderId } from "@velum-labs/routekit-gateway";
 
 /**
  * RouteKit's first-launch public contract.

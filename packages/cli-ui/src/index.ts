@@ -1,5 +1,5 @@
 /**
- * @routekit/cli-ui — a brand-configurable terminal UX layer.
+ * @velum-labs/routekit-cli-ui — a brand-configurable terminal UX layer.
  *
  * One presenter contract, two implementations: rich Ink (React) rendering on
  * interactive TTYs, ordered plain-text lines everywhere else (CI, pipes,

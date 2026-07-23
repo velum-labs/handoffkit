@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, test } from "node:test";
 
-import type { AgentProfile } from "@routekit/tools";
+import type { AgentProfile } from "@velum-labs/routekit-tools";
 
 import {
   CURSOR_AGENTS_DIRNAME,

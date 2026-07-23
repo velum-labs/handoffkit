@@ -1,4 +1,4 @@
-# @routekit/tool-cursor
+# @velum-labs/routekit-tool-cursor
 
 Product-neutral Cursor launcher, bridge serializer, and canonical ACP driver.
 
@@ -8,10 +8,10 @@ This package owns the one Cursor launch path and canonical driver.
 
 ## Usage
 
-Register `cursorTool` in an `@routekit/tools` registry.
+Register `cursorTool` in an `@velum-labs/routekit-tools` registry.
 
 ```ts
-import { cursorTool } from "@routekit/tool-cursor";
+import { cursorTool } from "@velum-labs/routekit-tool-cursor";
 ```
 
 ## Docs

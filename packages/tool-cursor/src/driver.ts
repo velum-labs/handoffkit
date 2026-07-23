@@ -28,7 +28,7 @@ import {
   probeCliVersion,
   resolveDriverEnv,
   terminate
-} from "@routekit/harness-core";
+} from "@velum-labs/routekit-harness-core";
 import type {
   ApprovalDecision,
   ApprovalPolicy,
@@ -43,7 +43,7 @@ import type {
   SessionHandle,
   SessionTurnInput,
   StartSessionOptions
-} from "@routekit/harness-core";
+} from "@velum-labs/routekit-harness-core";
 
 const RESUME_CURSOR_VERSION = 1;
 const DEFAULT_COMMAND = "cursor-agent";

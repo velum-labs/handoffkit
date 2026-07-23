@@ -1,6 +1,6 @@
 # Release publishing
 
-HandoffKit publishes the RouteKit foundation (`@routekit/*`, including the
+HandoffKit publishes the RouteKit foundation (`@velum-labs/routekit` and `@velum-labs/routekit-*`, including the
 `routekit` CLI) and FusionKit product packages (`@fusionkit/*`, including the
 `fusionkit` CLI) to the public npm registry only from the canonical repository.
 
@@ -36,9 +36,9 @@ Forks and non-canonical mirrors cannot publish packages through this workflow.
 ## Published packages
 
 The complete publish list and explicit dependency order live in
-`release/npm-packages.json`. `@routekit/cli` installs `routekit`;
-`@fusionkit/cli` installs `fusionkit`. Packages publish under both
-`@routekit/*` and `@fusionkit/*` to:
+`release/npm-packages.json`. `@velum-labs/routekit` installs `routekit`;
+`@fusionkit/cli` installs `fusionkit`. Packages publish as
+`@velum-labs/routekit`, `@velum-labs/routekit-*`, and `@fusionkit/*` to:
 
 ```text
 https://registry.npmjs.org
@@ -61,20 +61,40 @@ Packages not listed in `release/npm-packages.json` must remain `private: true`.
 
 ## Authentication: trusted publishing
 
-Publishing uses **npm trusted publishing (OIDC)** with no stored token.
+Normal publishing uses **npm trusted publishing (OIDC)** with no stored token.
 The workflow already grants `id-token: write` and updates the npm CLI to a
 version that performs the OIDC exchange, so once a Trusted Publisher is
 configured on npmjs.com, `npm publish` authenticates via OIDC automatically
 (and provenance is generated automatically).
 
-Every package in both scopes must configure *Settings → Trusted Publisher* with
-organization `velum-labs`, repository `handoffkit`, workflow filename
-`release-packages.yml`, and no environment. The workflow intentionally does not
-set `registry-url`, `NODE_AUTH_TOKEN`, or an npm auth line: any token entry can
-shadow OIDC.
+Every package must configure *Settings → Trusted Publisher → GitHub Actions*
+with organization `velum-labs`, repository `handoffkit`, workflow filename
+`release-packages.yml`, no environment, and `npm publish` as an allowed action.
+The normal workflow path intentionally does not set `registry-url` or write an
+npm auth line: either can shadow OIDC.
 
 Workflow permissions: `id-token: write` (OIDC + provenance) and
 `contents: read` (checkout).
+
+### One-time bootstrap for new package names
+
+npm cannot attach a Trusted Publisher until a package exists. For the first
+release containing new names:
+
+1. Create a short-lived granular npm token with publish access to the
+   `@velum-labs` and `@fusionkit` organizations and CI/2FA bypass enabled.
+2. Store it as the `NPM_TOKEN` repository secret. The release workflow writes a
+   private, temporary npm user config only when that secret is non-empty.
+3. Publish the reviewed GitHub Release. The publisher checks every exact
+   package version before upload, so rerunning a partially completed workflow
+   skips immutable versions that already reached npm.
+4. Configure the Trusted Publisher above on every newly created package.
+5. Delete `NPM_TOKEN` immediately. Subsequent releases use OIDC exclusively.
+
+If publication fails partway through the manifest, rerun the failed GitHub
+Actions job after correcting the cause. Do not create another release or bump
+the version merely to recover the remaining packages. `workflow_dispatch`
+remains a pack-only dry run and never publishes.
 
 ## Release validation
 

@@ -1,6 +1,6 @@
-import { CliError, contextFor } from "@routekit/cli-core";
-import type { ModelRouteInfo } from "@routekit/control";
-import { ControlError } from "@routekit/runtime";
+import { CliError, contextFor } from "@velum-labs/routekit-cli-core";
+import type { ModelRouteInfo } from "@velum-labs/routekit-control";
+import { ControlError } from "@velum-labs/routekit-runtime";
 import type { Command } from "commander";
 
 import { routekitClient } from "../client.js";

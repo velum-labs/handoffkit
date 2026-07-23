@@ -1,18 +1,18 @@
-import { contextFor } from "@routekit/cli-core";
+import { contextFor } from "@velum-labs/routekit-cli-core";
 import {
   isLoopbackHost,
   trimTrailingSlashes
-} from "@routekit/runtime";
+} from "@velum-labs/routekit-runtime";
 import {
   installClaudeIntegration,
   installCodexIntegration,
   uninstallClaudeIntegration,
   uninstallCodexIntegration
-} from "@routekit/tool-registry";
+} from "@velum-labs/routekit-tool-registry";
 import type {
   ClaudeInstallOwner,
   CodexInstallOwner
-} from "@routekit/tool-registry";
+} from "@velum-labs/routekit-tool-registry";
 import type { Command } from "commander";
 
 import { routekitClient } from "../client.js";

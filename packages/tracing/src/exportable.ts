@@ -8,7 +8,7 @@ import {
   PolicySpanExporter,
   toExportableEvent as applyEventPolicy,
   toExportableSpan
-} from "@routekit/tracing";
+} from "@velum-labs/routekit-tracing";
 
 export const TRACE_REDACTED_ATTRIBUTE = "fusion.trace.redacted";
 const policy = {

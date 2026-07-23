@@ -12,10 +12,10 @@ import type { Command } from "commander";
 import { MlxCapabilityError } from "@fusionkit/adapter-ai-sdk";
 import type { MlxEnv } from "@fusionkit/adapter-ai-sdk";
 
-import { bold, cyan, dim, formatBytes, gray, red } from "@routekit/cli-ui";
-import { argOrPick, contextFor } from "@routekit/cli-core";
-import type { CommandContext } from "@routekit/cli-core";
-import type { Presenter } from "@routekit/cli-ui";
+import { bold, cyan, dim, formatBytes, gray, red } from "@velum-labs/routekit-cli-ui";
+import { argOrPick, contextFor } from "@velum-labs/routekit-cli-core";
+import type { CommandContext } from "@velum-labs/routekit-cli-core";
+import type { Presenter } from "@velum-labs/routekit-cli-ui";
 
 import { catalogFor } from "../fusion/catalog.js";
 import { catalogEntry, detectHost, recommendFor, usableRamGB } from "../fusion/local-catalog.js";

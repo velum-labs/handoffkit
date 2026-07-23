@@ -34,15 +34,15 @@ import {
   GoogleGenAiBackend,
   OpenAiBackend,
   parseRouterConfig
-} from "@routekit/gateway";
-import type { ModelReasoningCapabilities } from "@routekit/contracts";
+} from "@velum-labs/routekit-gateway";
+import type { ModelReasoningCapabilities } from "@velum-labs/routekit-contracts";
 import type {
   Backend,
   BackendRequestOptions,
   ProviderId,
   ProviderSource,
   RouterConfig
-} from "@routekit/gateway";
+} from "@velum-labs/routekit-gateway";
 
 import type { PromptOverrides } from "../fusion-config.js";
 import { startFusionStack } from "../fusion/stack.js";

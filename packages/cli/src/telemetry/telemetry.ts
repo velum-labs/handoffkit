@@ -25,7 +25,7 @@ import {
   boundedShutdown,
   CLI_COMMAND_TELEMETRY_FIELDS,
   durationBucket
-} from "@routekit/telemetry-core";
+} from "@velum-labs/routekit-telemetry-core";
 import {
   addFusionEventListener,
   addSpanListener,

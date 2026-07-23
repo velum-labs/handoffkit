@@ -7,9 +7,9 @@ import { PolicyDeniedError } from "@fusionkit/protocol";
 // Importing the cleanup registry installs the process-wide SIGINT/SIGTERM/exit
 // handlers once, so anything registered during a run (worktrees, supervised
 // process groups) is torn down on interrupt or normal exit.
-import { registerCleanup, runCleanups } from "@routekit/runtime";
+import { registerCleanup, runCleanups } from "@velum-labs/routekit-runtime";
 
-import { configureBrand, uiStream } from "@routekit/cli-ui";
+import { configureBrand, uiStream } from "@velum-labs/routekit-cli-ui";
 import { CommanderError, type Command } from "commander";
 
 import { buildProgram } from "./cli.js";
@@ -23,7 +23,7 @@ import {
   isJsonMode,
   readPackageVersion,
   renderCliError
-} from "@routekit/cli-core";
+} from "@velum-labs/routekit-cli-core";
 import { PreflightError } from "./shared/preflight.js";
 import { captureCommand, initTelemetry, shutdownTelemetry } from "./telemetry/telemetry.js";
 

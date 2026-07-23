@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { createInterface } from "node:readline";
 
-import { commandOnPath, reservePort, terminate } from "@routekit/runtime";
+import { commandOnPath, reservePort, terminate } from "@velum-labs/routekit-runtime";
 
 import { cursorBridgeEnv } from "./bridge-config.js";
 import { resolveCursorkitCli } from "./cursorkit-path.js";

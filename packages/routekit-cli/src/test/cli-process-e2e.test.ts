@@ -79,7 +79,7 @@ test("real routekit command surfaces execute independently of FusionKit", () => 
       package?: string;
       version?: string;
     };
-    assert.equal(version.package, "@routekit/cli");
+    assert.equal(version.package, "@velum-labs/routekit");
     assert.match(version.version ?? "", /^\d+\.\d+\.\d+/);
 
     for (const shell of ["bash", "zsh", "fish"]) {

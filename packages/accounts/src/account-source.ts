@@ -1,7 +1,7 @@
 import { mkdirSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
 
-import type { SubscriptionMode } from "@routekit/registry";
+import type { SubscriptionMode } from "@velum-labs/routekit-registry";
 
 import {
   defaultSubscriptionAccountDirectory,

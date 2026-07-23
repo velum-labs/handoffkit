@@ -3,7 +3,7 @@ import type { WireTrajectory } from "@fusionkit/protocol";
 import { emitFusionEvent, jsonAttr } from "@fusionkit/tracing";
 import type { FusionTraceCarrier } from "@fusionkit/tracing";
 
-import { decodeBufferedSse } from "@routekit/gateway";
+import { decodeBufferedSse } from "@velum-labs/routekit-gateway";
 
 import {
   addLedgerEntry,
@@ -25,7 +25,7 @@ import type {
   TokenUsage,
   TurnCost
 } from "./cost.js";
-import { errorEvent, sseResponse } from "@routekit/gateway";
+import { errorEvent, sseResponse } from "@velum-labs/routekit-gateway";
 import type { FusionGatewayLogger } from "./logger.js";
 import type { SessionStore } from "./session-store.js";
 import type { FusionBackendKernelStateStore } from "./fusion-types.js";

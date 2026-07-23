@@ -134,7 +134,7 @@ Each coding tool is its own workspace package implementing a single
 neutral `ToolIntegration`, so supporting a new tool is additive:
 
 1. Create `packages/tool-<name>/` (copy `packages/tool-codex` as a template). It
-   depends on `@routekit/tools` and `@routekit/harness-core`, never on a
+   depends on `@velum-labs/routekit-tools` and `@velum-labs/routekit-harness-core`, never on a
    FusionKit package.
 2. Export a `const <name>Tool: ToolIntegration` with:
    - `launch(ctx)` — serialize `ctx.spec` and boot the tool against

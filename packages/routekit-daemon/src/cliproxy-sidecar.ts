@@ -17,7 +17,7 @@ import {
   cliproxyBaseUrl,
   cliproxyBinaryPath,
   spawnCliproxy
-} from "@routekit/accounts";
+} from "@velum-labs/routekit-accounts";
 
 const RESPAWN_DELAY_MS = 2_000;
 const READY_TIMEOUT_MS = 8_000;

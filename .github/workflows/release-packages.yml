@@ -44,10 +44,10 @@ jobs:
       - name: Pin pnpm
         run: corepack prepare pnpm@10.33.4 --activate
 
-      # The publish step performs the npm OIDC exchange via the npm CLI, which
-      # must be >= 11.5.1 for trusted publishing. Trusted Publishers for the
-      # @routekit/* and @fusionkit/* packages are configured on npmjs.com, so
-      # publishing is token-free via OIDC (provenance is emitted automatically).
+      # The publish step normally performs the npm OIDC exchange via the npm
+      # CLI, which must be >= 11.5.1 for trusted publishing. A short-lived
+      # NPM_TOKEN is accepted only to bootstrap package names that do not yet
+      # exist and therefore cannot have a Trusted Publisher configured.
       - name: Update npm for OIDC trusted publishing
         run: npm install -g npm@latest
 
@@ -103,7 +103,18 @@ jobs:
 
       - name: Publish packages to npm
         if: github.event_name == 'release'
-        # No NODE_AUTH_TOKEN: publishing is via OIDC trusted publishing.
         env:
           GITHUB_REPOSITORY: ${{ github.repository }}
-        run: node scripts/publish-npm-workspaces.mjs
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [ -n "${NODE_AUTH_TOKEN}" ]; then
+            echo "Publishing with the short-lived npm bootstrap token"
+            bootstrap_config="${RUNNER_TEMP}/npm-bootstrap.npmrc"
+            trap 'rm -f "${bootstrap_config}"' EXIT
+            umask 077
+            printf '%s\n' '//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}' > "${bootstrap_config}"
+            NPM_CONFIG_USERCONFIG="${bootstrap_config}" node scripts/publish-npm-workspaces.mjs
+          else
+            echo "Publishing via npm OIDC trusted publishing"
+            node scripts/publish-npm-workspaces.mjs
+          fi

@@ -1,5 +1,5 @@
-import { canPromptInteractively, fuzzySelect, isInteractive } from "@routekit/cli-ui";
-import type { SelectOption } from "@routekit/cli-ui";
+import { canPromptInteractively, fuzzySelect, isInteractive } from "@velum-labs/routekit-cli-ui";
+import type { SelectOption } from "@velum-labs/routekit-cli-ui";
 
 import { fail } from "./errors.js";
 

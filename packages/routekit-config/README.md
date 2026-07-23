@@ -1,6 +1,6 @@
-# @routekit/config
+# @velum-labs/routekit-config
 
-`packages/routekit-config` publishes `@routekit/config`: reusable RouteKit
+`packages/routekit-config` publishes `@velum-labs/routekit-config`: reusable RouteKit
 router-config discovery, layered loading, provider validation, live-model
 selection, and atomic writes.
 
@@ -10,7 +10,7 @@ selection, and atomic writes.
 `ROUTEKIT_CONFIG`, then overlays the nearest project
 `.routekit/router.yaml` on `~/.config/routekit/router.yaml`. Configuration
 rejects inline credentials; providers obtain credential and optional base-URL
-environment-variable names from `@routekit/registry`.
+environment-variable names from `@velum-labs/routekit-registry`.
 
 ```ts
 import {
@@ -19,7 +19,7 @@ import {
   loadRouterConfig,
   resolveModelId,
   writeRouterConfig
-} from "@routekit/config";
+} from "@velum-labs/routekit-config";
 
 const loaded = loadRouterConfig();
 const providers = configuredProviderIds(loaded.config);

@@ -1,5 +1,5 @@
 {
-  "name": "@routekit/gateway",
+  "name": "@velum-labs/routekit-gateway",
   "private": false,
   "version": "0.8.0",
   "repository": {
@@ -26,10 +26,10 @@
     "provenance": true
   },
   "dependencies": {
-    "@routekit/contracts": "workspace:*",
-    "@routekit/registry": "workspace:*",
-    "@routekit/runtime": "workspace:*",
-    "@routekit/tracing": "workspace:*",
+    "@velum-labs/routekit-contracts": "workspace:*",
+    "@velum-labs/routekit-registry": "workspace:*",
+    "@velum-labs/routekit-runtime": "workspace:*",
+    "@velum-labs/routekit-tracing": "workspace:*",
     "zod": "4.4.3"
   },
   "keywords": [

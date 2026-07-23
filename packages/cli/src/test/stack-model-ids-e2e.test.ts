@@ -13,7 +13,7 @@ import {
   stackToolingSkip,
   startProviderSim
 } from "@fusionkit/testkit";
-import { parseRouterConfig } from "@routekit/gateway";
+import { parseRouterConfig } from "@velum-labs/routekit-gateway";
 
 import { startFusionStack } from "../fusion/stack.js";
 

@@ -7,7 +7,7 @@
  * model-family capability quirks, default pricing, and FusionKit-only model
  * identities/panel presets. This script keeps the ownership boundary explicit:
  *
- *   - packages/routekit-registry/src/generated/data.ts (@routekit/registry)
+ *   - packages/routekit-registry/src/generated/data.ts (@velum-labs/routekit-registry)
  *   - packages/registry/src/generated/data.ts          (@fusionkit/registry)
  *   - python/fusionkit-core/src/fusionkit_core/_generated/fusion_registry_data.py
  *

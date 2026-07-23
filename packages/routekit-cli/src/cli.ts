@@ -1,4 +1,4 @@
-import { contextFor, readPackageVersion } from "@routekit/cli-core";
+import { contextFor, readPackageVersion } from "@velum-labs/routekit-cli-core";
 import { Command } from "commander";
 
 import { registerCommands } from "./commands/index.js";
@@ -12,7 +12,7 @@ export function buildProgram(): Command {
   const program = new Command()
     .name("routekit")
     .description("configure and run model routes for coding tools")
-    .version(`@routekit/cli ${version}`, "-v, --version", "print the RouteKit CLI version")
+    .version(`@velum-labs/routekit ${version}`, "-v, --version", "print the RouteKit CLI version")
     .enablePositionalOptions();
   registerCommands(program);
   program.addHelpText(
@@ -33,8 +33,8 @@ export function buildProgram(): Command {
     .description("show the RouteKit CLI version")
     .action((_options: unknown, command: Command) => {
       const ctx = contextFor(command);
-      if (ctx.json) ctx.emit({ package: "@routekit/cli", version });
-      else process.stdout.write(`@routekit/cli ${version}\n`);
+      if (ctx.json) ctx.emit({ package: "@velum-labs/routekit", version });
+      else process.stdout.write(`@velum-labs/routekit ${version}\n`);
     });
   return program;
 }

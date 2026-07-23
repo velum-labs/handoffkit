@@ -9,16 +9,16 @@ import type {
   SessionStore
 } from "@fusionkit/gateway";
 import { fusionModelId } from "@fusionkit/registry";
-import { OpenAiBackend, startGateway } from "@routekit/gateway";
+import { OpenAiBackend, startGateway } from "@velum-labs/routekit-gateway";
 import type {
   Gateway,
   ProviderId,
   ProviderSource,
   RouterConfig
-} from "@routekit/gateway";
-import { assertModelsAvailable } from "@routekit/config";
-import { startRouter as startRouteKitRouter } from "@routekit/router";
-import type { RunningRouter } from "@routekit/router";
+} from "@velum-labs/routekit-gateway";
+import { assertModelsAvailable } from "@velum-labs/routekit-config";
+import { startRouter as startRouteKitRouter } from "@velum-labs/routekit-router";
+import type { RunningRouter } from "@velum-labs/routekit-router";
 import {
   buildChildEnv,
   normalizeApiBaseUrl,
@@ -27,7 +27,7 @@ import {
   terminate,
   trimTrailingSlashes,
   waitForHttp
-} from "@routekit/runtime";
+} from "@velum-labs/routekit-runtime";
 import { stringify } from "yaml";
 
 import { startFusionStepGateway } from "../gateway.js";

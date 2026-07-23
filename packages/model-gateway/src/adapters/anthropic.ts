@@ -9,7 +9,7 @@
  */
 
 import type { Backend, BackendRequestOptions } from "../backend.js";
-import { estimateTokens, randomId } from "@routekit/runtime";
+import { estimateTokens, randomId } from "@velum-labs/routekit-runtime";
 import { SseDecoder, SseParseError } from "../sse/parse.js";
 import {
   ANTHROPIC_MESSAGE_CONTENT,

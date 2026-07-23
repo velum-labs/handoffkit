@@ -10,7 +10,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
 import type { ManifestFile, WorkspaceManifest } from "@fusionkit/protocol";
-import { sha256Hex } from "@routekit/contracts";
+import { sha256Hex } from "@velum-labs/routekit-contracts";
 import { minimatch } from "minimatch";
 
 import { gitBinary, gitText } from "./git.js";

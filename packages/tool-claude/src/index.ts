@@ -1,5 +1,5 @@
-import type { ToolIntegration } from "@routekit/tools";
-import { trimTrailingSlashes } from "@routekit/runtime";
+import type { ToolIntegration } from "@velum-labs/routekit-tools";
+import { trimTrailingSlashes } from "@velum-labs/routekit-runtime";
 
 import { claudeDriverConfigSchema, createClaudeDriver } from "./driver.js";
 import { claudeEnv, launchClaude } from "./launch.js";
@@ -12,7 +12,7 @@ export const claudeTool: ToolIntegration = {
   displayName: "Claude Code",
   pickerHint: "Claude Code",
   binary: "claude",
-  packageName: "@routekit/tool-claude",
+  packageName: "@velum-labs/routekit-tool-claude",
   installHint: "install Claude Code: https://docs.anthropic.com/en/docs/claude-code/overview",
   authSummary: "Claude Code uses the gateway's Anthropic-compatible surface.",
   setupSnippet: ({ gatewayUrl, model = "gateway-model" }) =>

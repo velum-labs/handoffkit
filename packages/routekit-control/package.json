@@ -1,5 +1,5 @@
 {
-  "name": "@routekit/control",
+  "name": "@velum-labs/routekit-control",
   "private": false,
   "version": "0.8.0",
   "description": "Typed control protocol for the singleton RouteKit daemon.",
@@ -24,8 +24,8 @@
   },
   "keywords": ["routekit", "daemon", "control-protocol", "rpc"],
   "dependencies": {
-    "@routekit/contracts": "workspace:*",
-    "@routekit/runtime": "workspace:*"
+    "@velum-labs/routekit-contracts": "workspace:*",
+    "@velum-labs/routekit-runtime": "workspace:*"
   },
   "scripts": {
     "build": "tsc -b",

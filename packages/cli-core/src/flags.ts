@@ -1,6 +1,6 @@
 import type { Command } from "commander";
 
-import { cyan, dim, glyph, uiStream, yellow } from "@routekit/cli-ui";
+import { cyan, dim, glyph, uiStream, yellow } from "@velum-labs/routekit-cli-ui";
 
 export function levenshtein(left: string, right: string): number {
   const distance: number[] = Array.from({ length: right.length + 1 }, (_, index) => index);

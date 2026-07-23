@@ -1,4 +1,4 @@
-import type { ToolIntegration } from "@routekit/tools";
+import type { ToolIntegration } from "@velum-labs/routekit-tools";
 
 import { createOpencodeDriver, opencodeDriverConfigSchema } from "./driver.js";
 import { launchOpencode } from "./launch.js";
@@ -10,7 +10,7 @@ export const opencodeTool: ToolIntegration = {
   displayName: "OpenCode",
   pickerHint: "OpenCode CLI",
   binary: "opencode",
-  packageName: "@routekit/tool-opencode",
+  packageName: "@velum-labs/routekit-tool-opencode",
   installHint: "install OpenCode: https://opencode.ai/docs",
   authSummary: "OpenCode uses an OpenAI-compatible gateway provider.",
   setupSnippet: ({ gatewayUrl, model = "gateway-model" }) =>

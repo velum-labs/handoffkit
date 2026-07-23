@@ -10,7 +10,7 @@
 import { createServer } from "node:http";
 import type { IncomingHttpHeaders, IncomingMessage, ServerResponse } from "node:http";
 
-import { assertAuthenticatedBind, trimTrailingSlashes } from "@routekit/runtime";
+import { assertAuthenticatedBind, trimTrailingSlashes } from "@velum-labs/routekit-runtime";
 
 import { authorizedRequest } from "./auth.js";
 

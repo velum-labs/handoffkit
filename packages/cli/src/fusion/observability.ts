@@ -19,8 +19,8 @@ import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { spawnLogged, superviseSpawn, terminate, waitForHttp } from "@routekit/runtime";
-import type { LoggedChild } from "@routekit/runtime";
+import { spawnLogged, superviseSpawn, terminate, waitForHttp } from "@velum-labs/routekit-runtime";
+import type { LoggedChild } from "@velum-labs/routekit-runtime";
 import type { PortlessSession } from "../shared/portless.js";
 
 import type { StackReporter } from "./env.js";

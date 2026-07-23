@@ -982,7 +982,7 @@ function bumpFusionkitPypiPin(repoAbs, version) {
   return [];
 }
 
-// handoffkit: root + all publishable @routekit/* and @fusionkit/* packages +
+// handoffkit: root + all publishable @velum-labs/routekit and @velum-labs/routekit-* and @fusionkit/* packages +
 // release/npm-packages.json protocol.version.
 function bumpPnpmMonorepo(unit, version) {
   const touched = ["package.json"];

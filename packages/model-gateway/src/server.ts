@@ -2,11 +2,11 @@ import { once } from "node:events";
 import { createServer } from "node:http";
 import type { IncomingMessage, ServerResponse } from "node:http";
 
-import { ProviderFailureError } from "@routekit/contracts";
+import { ProviderFailureError } from "@velum-labs/routekit-contracts";
 import type {
   ModelReasoningCapabilities,
   RequestAttribution
-} from "@routekit/contracts";
+} from "@velum-labs/routekit-contracts";
 
 import {
   anthropicModelsResponse,

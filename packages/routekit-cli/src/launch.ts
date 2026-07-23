@@ -1,15 +1,15 @@
-import { toolRegistry as routekitToolRegistry } from "@routekit/tool-registry";
-import { resolveModelId } from "@routekit/config";
-import { createToolLaunchContext } from "@routekit/tools";
-import { resolveReasoningEffort } from "@routekit/contracts";
+import { toolRegistry as routekitToolRegistry } from "@velum-labs/routekit-tool-registry";
+import { resolveModelId } from "@velum-labs/routekit-config";
+import { createToolLaunchContext } from "@velum-labs/routekit-tools";
+import { resolveReasoningEffort } from "@velum-labs/routekit-contracts";
 import type {
   ToolIntegration,
   ToolLaunchSpec,
   ToolModel,
   ToolModelFeatureStatus
-} from "@routekit/tools";
-import type { RouterConfig } from "@routekit/gateway";
-import { commandOnPath } from "@routekit/runtime";
+} from "@velum-labs/routekit-tools";
+import type { RouterConfig } from "@velum-labs/routekit-gateway";
+import { commandOnPath } from "@velum-labs/routekit-runtime";
 
 import { fetchLiveCatalog, type LiveModel } from "./catalog.js";
 

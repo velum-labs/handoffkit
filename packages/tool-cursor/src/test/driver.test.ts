@@ -5,8 +5,8 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 
-import { driverContractSuite } from "@routekit/harness-core/testing";
-import type { HarnessEvent } from "@routekit/harness-core";
+import { driverContractSuite } from "@velum-labs/routekit-harness-core/testing";
+import type { HarnessEvent } from "@velum-labs/routekit-harness-core";
 
 import { createCursorDriver } from "../driver.js";
 

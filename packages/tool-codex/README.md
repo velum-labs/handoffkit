@@ -1,4 +1,4 @@
-# @routekit/tool-codex
+# @velum-labs/routekit-tool-codex
 
 Product-neutral Codex launcher and canonical harness driver.
 
@@ -8,10 +8,10 @@ This package owns the one Codex configuration serializer, launcher, and driver.
 
 ## Usage
 
-Register `codexTool` in an `@routekit/tools` registry.
+Register `codexTool` in an `@velum-labs/routekit-tools` registry.
 
 ```ts
-import { codexTool } from "@routekit/tool-codex";
+import { codexTool } from "@velum-labs/routekit-tool-codex";
 ```
 
 ## Docs

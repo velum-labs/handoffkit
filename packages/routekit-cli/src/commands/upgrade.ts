@@ -1,10 +1,10 @@
-import { contextFor, CliError } from "@routekit/cli-core";
+import { contextFor, CliError } from "@velum-labs/routekit-cli-core";
 import {
   acquireLifecycleLock,
   supervisorOperationTimeoutMs,
   waitForServiceReady,
   waitForProcessExit
-} from "@routekit/runtime";
+} from "@velum-labs/routekit-runtime";
 import type { Command } from "commander";
 
 import {

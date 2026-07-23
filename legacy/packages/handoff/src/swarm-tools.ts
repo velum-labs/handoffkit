@@ -17,7 +17,7 @@ import type {
   RunStatus,
   SessionIsolation
 } from "@fusionkit/protocol";
-import { DEFAULT_RUNTIME_TIMEOUTS } from "@routekit/runtime";
+import { DEFAULT_RUNTIME_TIMEOUTS } from "@velum-labs/routekit-runtime";
 import { PlaneClient } from "@fusionkit/sdk";
 
 /**

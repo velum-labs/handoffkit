@@ -641,7 +641,7 @@ const TRUSTED_THIRD_PARTY = new Map([
   ["ai", "6.0.200"],
   ["commander", "14.0.3"],
   ["figlet", "1.11.0"],
-  // The CLI's Ink-based presentation layer (@routekit/cli-ui): React for
+  // The CLI's Ink-based presentation layer (@velum-labs/routekit-cli-ui): React for
   // terminals plus its testing harness, pinned exactly like everything else.
   ["ink", "7.1.0"],
   ["ink-testing-library", "4.0.0"],
@@ -794,7 +794,7 @@ for (const violation of fusionkitCompositionViolations(workspaceManifests)) {
 for (const violation of toolRegistryCompositionViolations(workspaceManifests)) {
   fail(`tool registry composition violation: ${violation}`);
 }
-for (const consumerName of ["@routekit/cli", "@fusionkit/cli"]) {
+for (const consumerName of ["@velum-labs/routekit", "@fusionkit/cli"]) {
   const consumer = workspaceManifests.find(({ manifest }) => manifest.name === consumerName);
   const sources =
     consumer !== undefined && existsSync(join(consumer.dir, "src"))
@@ -868,7 +868,7 @@ for (const { manifestPath, manifest } of workspaceManifests) {
 // Tests and docs are intentionally excluded: they need to assert the boundary
 // and explain FusionKit without triggering vocabulary false positives.
 for (const { manifest, dir } of workspaceManifests) {
-  if (!manifest.name?.startsWith("@routekit/") || !existsSync(join(dir, "src"))) continue;
+  if (!manifest.name?.startsWith("@velum-labs/routekit") || !existsSync(join(dir, "src"))) continue;
   for (const { file, source } of routekitProductionSources(dir)) {
     for (const violation of routekitSourceViolations(file, source)) {
       fail(`${file}: RouteKit architecture violation: ${violation}`);
@@ -885,7 +885,7 @@ if (protocolManifest.name !== "@fusionkit/protocol") {
 }
 for (const file of ["types.ts", "api.ts", "receipt.ts", "contract.ts", "chain.ts"]) {
   if (existsSync(join("packages", "contracts", "src", file))) {
-    fail(`legacy governance protocol ${file} must not move into @routekit/contracts`);
+    fail(`legacy governance protocol ${file} must not move into @velum-labs/routekit-contracts`);
   }
 }
 
@@ -911,7 +911,7 @@ if (sourceListing.status === 0) {
   }
 }
 
-// The CLI renders exclusively through the @routekit/cli-ui presenter (UI on
+// The CLI renders exclusively through the @velum-labs/routekit-cli-ui presenter (UI on
 // stderr, machine payloads on stdout). Raw console.* calls bypass that
 // contract — non-interactive degradation, --json purity, NO_COLOR — so they
 // are disallowed in the CLI and UI sources (tests excluded).
@@ -934,7 +934,7 @@ if (noConsoleListing.status === 0) {
     const lines = readFileSync(file, "utf8").split("\n");
     for (let i = 0; i < lines.length; i++) {
       if (consolePattern.test(lines[i])) {
-        fail(`raw console output in ${file}:${i + 1} — render through the @routekit/cli-ui presenter instead`);
+        fail(`raw console output in ${file}:${i + 1} — render through the @velum-labs/routekit-cli-ui presenter instead`);
       }
     }
   }
@@ -943,7 +943,7 @@ if (noConsoleListing.status === 0) {
 // Spawned children must never inherit the full parent environment: a panel
 // model or harness child that can run shell commands would see every
 // credential the parent holds (and persist them into trajectories/artifacts).
-// All spawn/exec env objects must be built through @routekit/runtime's
+// All spawn/exec env objects must be built through @velum-labs/routekit-runtime's
 // buildChildEnv allowlist; spreading process.env into an env literal is only
 // permitted inside the canonical runtime itself (which implements the policy).
 const envSpreadListing = spawnSync(
@@ -966,7 +966,7 @@ if (envSpreadListing.status === 0) {
     for (let i = 0; i < lines.length; i++) {
       if (envSpreadPattern.test(lines[i]) && !waiverPattern.test(lines[i - 1] ?? "")) {
         fail(
-            `full parent env spread in ${file}:${i + 1} — build the child env with buildChildEnv (@routekit/runtime), ` +
+            `full parent env spread in ${file}:${i + 1} — build the child env with buildChildEnv (@velum-labs/routekit-runtime), ` +
             `or add an "env-spread-allowed: <reason>" comment for a trusted infra child`
         );
       }

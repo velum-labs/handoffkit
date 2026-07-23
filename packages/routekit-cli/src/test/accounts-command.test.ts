@@ -15,8 +15,8 @@ import { test } from "node:test";
 import {
   captureLoginCredential,
   claudeProfileKeychainService
-} from "@routekit/accounts";
-import type { ManagedAccountLoginInvocation } from "@routekit/accounts";
+} from "@velum-labs/routekit-accounts";
+import type { ManagedAccountLoginInvocation } from "@velum-labs/routekit-accounts";
 
 import { buildProgram } from "../cli.js";
 

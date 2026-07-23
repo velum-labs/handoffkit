@@ -3,7 +3,7 @@ import { join } from "node:path";
 import {
   CLI_COMMAND_TELEMETRY_FIELDS,
   createConsentManager
-} from "@routekit/telemetry-core";
+} from "@velum-labs/routekit-telemetry-core";
 
 import { routekitHome } from "./config.js";
 

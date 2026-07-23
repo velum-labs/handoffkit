@@ -3,8 +3,8 @@ import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import type { ModelFusionArtifactKind } from "@fusionkit/protocol";
-import { artifactHash } from "@routekit/contracts";
-import { ensureRunOutputDir } from "@routekit/runtime";
+import { artifactHash } from "@velum-labs/routekit-contracts";
+import { ensureRunOutputDir } from "@velum-labs/routekit-runtime";
 
 import type { HarnessArtifact } from "./harness.js";
 

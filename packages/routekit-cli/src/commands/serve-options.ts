@@ -1,4 +1,4 @@
-import { CliError } from "@routekit/cli-core";
+import { CliError } from "@velum-labs/routekit-cli-core";
 import type { Command } from "commander";
 
 /** Options shared by `start` and `daemon service install`. */

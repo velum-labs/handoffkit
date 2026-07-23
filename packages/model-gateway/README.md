@@ -1,4 +1,4 @@
-# @routekit/gateway
+# @velum-labs/routekit-gateway
 
 Product-neutral model routing and provider egress for RouteKit.
 
@@ -18,11 +18,11 @@ import {
   CatalogBackend,
   parseRouterConfig,
   startGateway
-} from "@routekit/gateway";
+} from "@velum-labs/routekit-gateway";
 ```
 
 API-key providers use registry-defined credentials and URLs. Multi-account
-subscription providers and relays are in `@routekit/accounts`; they expose the
+subscription providers and relays are in `@velum-labs/routekit-accounts`; they expose the
 same source interface with per-model account eligibility and quota-aware
 selection.
 Product-specific orchestration is in `@fusionkit/gateway`.

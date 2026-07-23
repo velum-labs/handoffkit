@@ -9,7 +9,7 @@ import type {
   ModelUsage,
   ProviderError,
   ProviderErrorKind
-} from "@routekit/contracts";
+} from "@velum-labs/routekit-contracts";
 
 export const MODEL_FUSION_SCHEMA_NAMES = [
   "model-call-record.v1",

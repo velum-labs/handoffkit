@@ -4,7 +4,7 @@ OpenTelemetry-based tracing for the fusion stack.
 
 ## Architecture
 
-`@routekit/tracing` owns the generic OTel provider, W3C propagation, listeners, and policy-based export redaction. This package is the one-way FusionKit conventions facade: typed span/event helpers, Fusion baggage and attributes, and the generated semantic conventions in `spec/fusion-trace/registry.json`.
+`@velum-labs/routekit-tracing` owns the generic OTel provider, W3C propagation, listeners, and policy-based export redaction. This package is the one-way FusionKit conventions facade: typed span/event helpers, Fusion baggage and attributes, and the generated semantic conventions in `spec/fusion-trace/registry.json`.
 
 ## Usage
 

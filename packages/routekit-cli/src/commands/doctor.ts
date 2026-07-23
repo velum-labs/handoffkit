@@ -1,8 +1,8 @@
 import { existsSync, readFileSync } from "node:fs";
 import { parse as parseYaml } from "yaml";
 
-import { contextFor, probeBinaryVersion } from "@routekit/cli-core";
-import { commandOnPath } from "@routekit/runtime";
+import { contextFor, probeBinaryVersion } from "@velum-labs/routekit-cli-core";
+import { commandOnPath } from "@velum-labs/routekit-runtime";
 import type { Command } from "commander";
 
 import { routekitClient } from "../client.js";

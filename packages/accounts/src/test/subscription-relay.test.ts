@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 
-import { startGateway } from "@routekit/gateway";
+import { startGateway } from "@velum-labs/routekit-gateway";
 import {
   AnthropicBackendRelay,
   RelayOnlyBackend,

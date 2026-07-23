@@ -17,7 +17,7 @@ flowchart LR
   CLI --> Ensemble[Ensemble runner]
   FusionGateway --> Sessions[Session store and aggregate cost ledger]
   FusionGateway --> Ensemble
-  Ensemble --> RouteKitGateway["RouteKit gateway: @routekit/gateway"]
+  Ensemble --> RouteKitGateway["RouteKit gateway: @velum-labs/routekit-gateway"]
   RouteKitGateway --> Providers[Provider adapters and accounts]
   Ensemble --> PythonServer[Python fusionkit-sidecar]
   Ensemble --> Tools[Tool adapters]
@@ -138,13 +138,13 @@ await runWorkflow(workflow, {
 });
 ```
 
-### `@routekit/gateway`, `@routekit/accounts`, and `@fusionkit/gateway`
+### `@velum-labs/routekit-gateway`, `@velum-labs/routekit-accounts`, and `@fusionkit/gateway`
 
-`@routekit/gateway` is the canonical neutral router and HTTP boundary. It owns
+`@velum-labs/routekit-gateway` is the canonical neutral router and HTTP boundary. It owns
 wire dialects, SSE, ACP, provider egress, live namespaced catalogs, reusable
 capacity pooling, and normalized single-call cost/provenance.
 
-`@routekit/accounts` owns subscription credential sources, quota/health
+`@velum-labs/routekit-accounts` owns subscription credential sources, quota/health
 tracking, account pools, relays, and the proxy/client wire contract.
 
 `@fusionkit/gateway` depends on those neutral packages and owns only the Fusion
@@ -198,15 +198,15 @@ await materializeWorkspace({
 });
 ```
 
-### `@routekit/tools`
+### `@velum-labs/routekit-tools`
 
-`@routekit/tools` defines product-neutral launcher, canonical-driver, and capability metadata. A host registers `ToolIntegration` values and supplies opaque model entries plus generic agent profiles through one `ToolLaunchSpec`.
+`@velum-labs/routekit-tools` defines product-neutral launcher, canonical-driver, and capability metadata. A host registers `ToolIntegration` values and supplies opaque model entries plus generic agent profiles through one `ToolLaunchSpec`.
 
 Important exports include `ToolIntegration`, `ToolLaunchSpec`, `ToolLaunchContext`, `AgentProfile`, `createToolRegistry`, and `createToolCapabilityMatrix`.
 
-### `@routekit/tool-registry`
+### `@velum-labs/routekit-tool-registry`
 
-`@routekit/tool-registry` imports every shipped `@routekit/tool-*` integration,
+`@velum-labs/routekit-tool-registry` imports every shipped `@velum-labs/routekit-tool-*` integration,
 owns the single canonical `toolIntegrations` list, and exports the constructed
 `toolRegistry`. RouteKit and FusionKit consume the same instance; FusionKit's
 only product composition is passing it to `setToolDriverRegistry`.
@@ -214,29 +214,29 @@ only product composition is passing it to `setToolDriverRegistry`.
 Example:
 
 ```ts
-import { toolRegistry } from "@routekit/tool-registry";
+import { toolRegistry } from "@velum-labs/routekit-tool-registry";
 
 console.log(toolRegistry.list().map((tool) => tool.id));
 ```
 
 ### Tool integration packages
 
-`@routekit/tool-codex`, `@routekit/tool-claude`, `@routekit/tool-cursor`, and `@routekit/tool-opencode` each own one launcher/serializer and one canonical `HarnessDriver`.
+`@velum-labs/routekit-tool-codex`, `@velum-labs/routekit-tool-claude`, `@velum-labs/routekit-tool-cursor`, and `@velum-labs/routekit-tool-opencode` each own one launcher/serializer and one canonical `HarnessDriver`.
 
-`@routekit/tool-codex` owns Codex catalog/profile serialization, launch, and its SDK driver.
+`@velum-labs/routekit-tool-codex` owns Codex catalog/profile serialization, launch, and its SDK driver.
 
-`@routekit/tool-claude` owns Claude agent-profile serialization, launch, and its Agent SDK driver.
+`@velum-labs/routekit-tool-claude` owns Claude agent-profile serialization, launch, and its Agent SDK driver.
 
-`@routekit/tool-cursor` owns Cursor CLI/IDE launch, bridge configuration, and its ACP driver.
+`@velum-labs/routekit-tool-cursor` owns Cursor CLI/IDE launch, bridge configuration, and its ACP driver.
 
-`@routekit/tool-opencode` owns OpenCode configuration, launch, and its SDK driver.
+`@velum-labs/routekit-tool-opencode` owns OpenCode configuration, launch, and its SDK driver.
 
 Example:
 
 ```ts
-import { claudeTool } from "@routekit/tool-claude";
-import { codexTool } from "@routekit/tool-codex";
-import { cursorTool } from "@routekit/tool-cursor";
+import { claudeTool } from "@velum-labs/routekit-tool-claude";
+import { codexTool } from "@velum-labs/routekit-tool-codex";
+import { cursorTool } from "@velum-labs/routekit-tool-cursor";
 
 const tools = [codexTool, claudeTool, cursorTool];
 for (const tool of tools) {
@@ -285,21 +285,21 @@ if (issues.length > 0) {
 
 ### Product support packages
 
-`@routekit/cli-ui` is the brand-configurable terminal presentation layer; `@routekit/cli-core` owns command context, errors, common option parsing, completion, package-version formatting, and reusable CLI test helpers. FusionKit composes both and keeps product options in `@fusionkit/cli`.
+`@velum-labs/routekit-cli-ui` is the brand-configurable terminal presentation layer; `@velum-labs/routekit-cli-core` owns command context, errors, common option parsing, completion, package-version formatting, and reusable CLI test helpers. FusionKit composes both and keeps product options in `@fusionkit/cli`.
 
-`@routekit/harness-core` is the product-neutral coding-agent harness contract: driver, instance, and session interfaces, canonical events, tagged errors, approval policies, status probes, and shared stream/process primitives. The `@routekit/tool-*` packages implement it; product orchestrators adapt those drivers.
+`@velum-labs/routekit-harness-core` is the product-neutral coding-agent harness contract: driver, instance, and session interfaces, canonical events, tagged errors, approval policies, status probes, and shared stream/process primitives. The `@velum-labs/routekit-tool-*` packages implement it; product orchestrators adapt those drivers.
 
 `@fusionkit/registry` contains Fusion-only identities, aliases, and panel presets
-generated from `spec/registry/fusion.json`. `@routekit/registry` owns the
+generated from `spec/registry/fusion.json`. `@velum-labs/routekit-registry` owns the
 product-neutral provider/auth metadata, model and local catalogs, capability
 quirks, discovery, and pricing generated from the other `spec/registry` sources.
 Python receives the matching split generated bindings.
 
-`@routekit/runtime` is the canonical owner for process supervision, child environments, cleanup, atomic files and locks, ports, and product-parameterized portless service registration.
+`@velum-labs/routekit-runtime` is the canonical owner for process supervision, child environments, cleanup, atomic files and locks, ports, and product-parameterized portless service registration.
 
-`@routekit/config-core` and `@routekit/telemetry-core` provide the layered config IO/migration and parameterized consent/redaction/event plumbing used by the FusionKit CLI.
+`@velum-labs/routekit-config-core` and `@velum-labs/routekit-telemetry-core` provide the layered config IO/migration and parameterized consent/redaction/event plumbing used by the FusionKit CLI.
 
-`@routekit/tracing` owns the generic OpenTelemetry provider, propagation, listener, and export-redaction runtime. `@fusionkit/tracing` is a one-way conventions facade that supplies Fusion attributes, scopes, baggage, and names.
+`@velum-labs/routekit-tracing` owns the generic OpenTelemetry provider, propagation, listener, and export-redaction runtime. `@fusionkit/tracing` is a one-way conventions facade that supplies Fusion attributes, scopes, baggage, and names.
 
 ### Legacy and platform TypeScript packages
 
@@ -392,7 +392,7 @@ client, fusion engine, native run APIs, and tool-resume APIs.
 
 Its routes are `/health`, `/v1/fusion/trajectories:fuse`, and the required
 `/v1/fusion/runs` read/write/resume routes. The public protocol gateway lives
-in Node `@routekit/gateway`.
+in Node `@velum-labs/routekit-gateway`.
 
 Example:
 
@@ -595,7 +595,7 @@ To add a new coding tool, create `packages/tool-<name>/`, implement a `ToolInteg
 To add a model-fusion contract field, update the JSON Schema, add or update fixtures, regenerate TypeScript and Python bindings, update protocol assertion exports, update server and client code, and run schema, TypeScript, and Python tests.
 
 To add a provider, implement its backend and wire normalization in
-`@routekit/gateway`, add RouteKit config/catalog support, and test success,
+`@velum-labs/routekit-gateway`, add RouteKit config/catalog support, and test success,
 streaming, usage, and failure behavior there. The Python sidecar remains
 provider-neutral and continues to call namespaced model IDs through
 `RouteKitClient`; it must not gain provider credentials or provider-specific

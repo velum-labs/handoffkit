@@ -1,7 +1,7 @@
 import { resolve } from "node:path";
 
-import { contextFor } from "@routekit/cli-core";
-import { commandOnPath, isLoopbackHost, trimTrailingSlashes } from "@routekit/runtime";
+import { contextFor } from "@velum-labs/routekit-cli-core";
+import { commandOnPath, isLoopbackHost, trimTrailingSlashes } from "@velum-labs/routekit-runtime";
 import type { Command } from "commander";
 
 import { launchTool, routekitToolRegistry } from "../launch.js";

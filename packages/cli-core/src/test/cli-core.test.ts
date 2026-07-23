@@ -17,5 +17,5 @@ test("shared option and flag mechanics are deterministic", () => {
   assert.deepEqual(findFlagTypos(["--budget"], ["--buget"]), [
     { given: "--buget", suggestion: "--budget" }
   ]);
-  assert.equal(formatPackageVersion("@routekit/example", "1.2.3"), "@routekit/example@1.2.3");
+  assert.equal(formatPackageVersion("@velum-labs/routekit-example", "1.2.3"), "@velum-labs/routekit-example@1.2.3");
 });

@@ -1,6 +1,6 @@
-# @routekit/runtime
+# @velum-labs/routekit-runtime
 
-`packages/runtime-utils` publishes `@routekit/runtime`: brand-neutral runtime
+`packages/runtime-utils` publishes `@velum-labs/routekit-runtime`: brand-neutral runtime
 utilities shared by RouteKit and product packages.
 
 ## Architecture
@@ -9,7 +9,7 @@ This package contains leaf helpers for process supervision and process-group
 termination, timeouts, cleanup, atomic files and locks, held/free ports,
 formatting, and runtime defaults. It also owns shared child-environment policy,
 URL/bind validation, and optional portless service discovery and registration.
-All APIs use the stable `@routekit/runtime` root export even though source is
+All APIs use the stable `@velum-labs/routekit-runtime` root export even though source is
 split across focused modules in this directory.
 
 ## Usage
@@ -23,7 +23,7 @@ import {
   createPortlessSession,
   superviseSpawn,
   writeFileAtomic
-} from "@routekit/runtime";
+} from "@velum-labs/routekit-runtime";
 ```
 
 Key API groups:
@@ -67,7 +67,7 @@ Combined product daemons extend that record with a monotonic authority
 `generation`, negotiated `protocolVersion`, private `controlToken`, and stable
 `dataUrl` / `dataPort`. A client must verify authenticated control health, not
 merely PID liveness, before trusting the record. Product-specific method
-schemas stay outside this neutral package (`@routekit/control` for RouteKit);
+schemas stay outside this neutral package (`@velum-labs/routekit-control` for RouteKit);
 raw argv is never an RPC protocol.
 
 ## Docs

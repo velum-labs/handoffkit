@@ -10,18 +10,18 @@ import { createHash } from "node:crypto";
 import {
   ControlClient,
   ControlError
-} from "@routekit/runtime";
+} from "@velum-labs/routekit-runtime";
 import type {
   ModelCallStatus,
   ModelUsage,
   ProviderErrorKind,
   RequestBillingMode
-} from "@routekit/contracts";
+} from "@velum-labs/routekit-contracts";
 import type {
   ControlClientOptions,
   ControlHandler,
   ControlHandlerContext
-} from "@routekit/runtime";
+} from "@velum-labs/routekit-runtime";
 
 export const ROUTEKIT_CONTROL_CAPABILITY = "routekit.control.v1";
 

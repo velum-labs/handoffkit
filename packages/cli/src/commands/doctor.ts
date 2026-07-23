@@ -7,10 +7,10 @@ import type { EnsembleConfig } from "@fusionkit/config";
 import {
   loadRouterConfig,
   missingModelIds
-} from "@routekit/config";
-import { contextFor, probeBinaryVersion } from "@routekit/cli-core";
-import { startRouter } from "@routekit/router";
-import { trimTrailingSlashes } from "@routekit/runtime";
+} from "@velum-labs/routekit-config";
+import { contextFor, probeBinaryVersion } from "@velum-labs/routekit-cli-core";
+import { startRouter } from "@velum-labs/routekit-router";
+import { trimTrailingSlashes } from "@velum-labs/routekit-runtime";
 
 import { gitToplevel } from "../fusion/env.js";
 import { hasBinary, INSTALL_HINTS } from "../shared/preflight.js";
