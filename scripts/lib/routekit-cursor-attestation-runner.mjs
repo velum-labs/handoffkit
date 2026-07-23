@@ -30,6 +30,12 @@ const MODEL_CALL_PATHS = new Set([
 const LOCAL_HARNESS_KEY = "routekit-attestation-local";
 const GATEWAY_TOKEN_ENV = "ROUTEKIT_CURSOR_GATEWAY_TOKEN";
 const PROXY_REQUEST_BASE = "http://routekit-attestation.invalid";
+const PROXY_PATHS = new Map([
+  ["/v1/models", "/v1/models"],
+  ["/v1/chat/completions", "/v1/chat/completions"],
+  ["/v1/cursor/chat/completions", "/v1/cursor/chat/completions"]
+]);
+export const CURSOR_ATTESTATION_GATEWAY_URL = "http://127.0.0.1:43123/";
 
 export function loopbackGatewayTarget(value) {
   const target = new URL(value);
@@ -51,7 +57,10 @@ export function proxyRequestPath(value) {
     PROXY_REQUEST_BASE,
     "proxy request target must be relative"
   );
-  return `${requestTarget.pathname}${requestTarget.search}`;
+  assert.equal(requestTarget.search, "", "proxy request target cannot contain a query");
+  const path = PROXY_PATHS.get(requestTarget.pathname);
+  assert.ok(path !== undefined, "proxy request path is not allowlisted");
+  return path;
 }
 
 function parseModel(body) {
@@ -369,7 +378,8 @@ export async function runActiveCursorIdeAttestation(input, dependencies = {}) {
   let proxy;
   try {
     proxy = await startProxy({
-      gatewayUrl: input.gatewayUrl,
+      gatewayUrl:
+        dependencies.gatewayUrl ?? CURSOR_ATTESTATION_GATEWAY_URL,
       authToken: input.authToken,
       model: context.model,
       maxCalls: context.maxGatewayRequests

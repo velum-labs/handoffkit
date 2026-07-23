@@ -64,12 +64,14 @@ test("Cursor attestation proxy accepts only relative requests to literal loopbac
   ]) {
     assert.throws(() => loopbackGatewayTarget(target));
   }
-  assert.equal(proxyRequestPath("/v1/models?limit=1"), "/v1/models?limit=1");
+  assert.equal(proxyRequestPath("/v1/models"), "/v1/models");
   for (const target of [
     "http://example.com/v1/models",
-    "//example.com/v1/models"
+    "//example.com/v1/models",
+    "/v1/models?limit=1",
+    "/not-allowlisted"
   ]) {
-    assert.throws(() => proxyRequestPath(target), /must be relative/);
+    assert.throws(() => proxyRequestPath(target));
   }
 });
 
@@ -701,13 +703,13 @@ async function runMeasuredAttestation(input = {}) {
         mapping,
         report: input.report ?? matrixReport(),
         revision: input.revision ?? REVISION,
-        gatewayUrl: upstream.url,
         authToken: "test-upstream-token",
         timeoutMs: 1_000,
         profileDirectory
       },
       {
         cursorVersion: () => "Cursor 9.9.9",
+        gatewayUrl: upstream.url,
         makeTemporaryRoot: () => activeTemporaryRoot,
         runHarness: async ({ proxyUrl, model }) => {
           runCalled = true;

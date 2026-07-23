@@ -23,7 +23,6 @@ function parseArgs(argv) {
       return next;
     };
     if (arg === "--matrix-report") options.matrixReport = resolve(value());
-    else if (arg === "--gateway-url") options.gatewayUrl = value();
     else if (arg === "--revision") options.revision = value();
     else if (arg === "--timeout-ms") {
       options.timeoutMs = Number(value());
@@ -35,7 +34,7 @@ function parseArgs(argv) {
     else throw new Error(`unknown option: ${arg}`);
   }
   options.timeoutMs ??= 180_000;
-  for (const field of ["matrixReport", "gatewayUrl", "revision", "output"]) {
+  for (const field of ["matrixReport", "revision", "output"]) {
     if (options[field] === undefined) throw new Error(`--${field.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`)} is required`);
   }
   return options;
@@ -56,7 +55,6 @@ const attestation = await runActiveCursorIdeAttestation({
   mapping,
   report: readJson(options.matrixReport),
   revision: options.revision,
-  gatewayUrl: options.gatewayUrl,
   authToken,
   timeoutMs: options.timeoutMs
 });

@@ -262,10 +262,12 @@ remain gated by `manual-evidence-unavailable`. Use the printed schema-4
 records are derived from their qualification rows and all mapped/supporting
 case results—there are no operator-authored summaries.
 
-On the desktop host, start an isolated RouteKit gateway for `$REVISION`. Supply
-its data-plane bearer only through `ROUTEKIT_CURSOR_GATEWAY_TOKEN`; the wrapper
-replaces the child harness's local placeholder authorization at its proxy and
-never prints, writes, or passes the real token to Cursorkit:
+On the desktop host, start an isolated RouteKit gateway for `$REVISION` on the
+attestation-only loopback address `http://127.0.0.1:43123`. The wrapper rejects
+non-loopback or alternate destinations. Supply its data-plane bearer only
+through `ROUTEKIT_CURSOR_GATEWAY_TOKEN`; the wrapper replaces the child
+harness's local placeholder authorization at its proxy and never prints,
+writes, or passes the real token to Cursorkit:
 
 ```bash
 read -rsp "RouteKit gateway token: " ROUTEKIT_CURSOR_GATEWAY_TOKEN
@@ -273,7 +275,6 @@ echo
 export ROUTEKIT_CURSOR_GATEWAY_TOKEN
 node scripts/generate-routekit-cursor-attestation.mjs \
   --matrix-report .artifacts/routekit-e2e/<run>/report.json \
-  --gateway-url http://127.0.0.1:<gateway-port> \
   --revision "$REVISION" \
   --timeout-ms 180000 \
   --output .artifacts/routekit-e2e/<run>/cursor-ide-attestation.json
