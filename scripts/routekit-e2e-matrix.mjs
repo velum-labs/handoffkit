@@ -51,6 +51,7 @@ import {
   cursorConfigDirectory,
   prepareCursorAuthentication
 } from "./lib/routekit-cursor-state.mjs";
+import { cursorWorkspaceTrustDecision } from "./lib/routekit-pty-trust.mjs";
 import {
   cursorAuthTmuxSessionArgs,
   ensureTmuxCursorAuthUpdate,
@@ -1149,24 +1150,25 @@ async function runPtyCase(input) {
       );
     }
     if (
-      /Workspace Trust Required|Do you trust|trust this folder|project you created/i.test(
+      /Workspace Trust Required|Do you trust|trust this (?:folder|workspace)|project you created/i.test(
         transcript
       )
     ) {
-      await new Promise((resolveWait) =>
-        setTimeout(resolveWait, input.door === "claude" ? 1_500 : 500)
-      );
       if (input.door === "cursor") {
-        tmux("send-keys", "-l", "-t", session, "a");
-        await new Promise((resolveWait) => setTimeout(resolveWait, 250));
-      }
-      tmux("send-keys", "-t", session, "Enter");
-      if (input.door === "cursor") {
-        await new Promise((resolveWait) => setTimeout(resolveWait, 1_500));
-        if (/Trusting workspace/i.test(capturePane(session))) {
-          tmux("send-keys", "-l", "-t", session, "a");
-          tmux("send-keys", "-t", session, "Enter");
+        const trustSendPane = capturePane(session);
+        const decision = cursorWorkspaceTrustDecision(trustSendPane, {
+          ready: modelVisible(trustSendPane, input.door, input.model)
+        });
+        if (decision.action?.type === "literal") {
+          tmux("send-keys", "-l", "-t", session, decision.action.value);
+        } else if (decision.action?.type === "key") {
+          tmux("send-keys", "-t", session, decision.action.value);
+        } else if (decision.state === "unsupported") {
+          throw new Error("Cursor displayed an unsupported workspace trust prompt");
         }
+      } else {
+        await new Promise((resolveWait) => setTimeout(resolveWait, 1_500));
+        tmux("send-keys", "-t", session, "Enter");
       }
       transcript = await waitForPane(
         session,
