@@ -472,7 +472,7 @@ async function startDeterministicStack(tempRoot) {
           wireShape: "openai"
         },
         [publicModels.anthropic]: {
-          efforts: [{ id: "quick" }, { id: "deep" }],
+          efforts: [{ id: "quick" }, { id: "deep" }, { id: "high" }],
           defaultEffort: "quick",
           wireShape: "anthropic"
         },
@@ -640,6 +640,35 @@ async function verifyToolsAndReasoning(stack, provider, door) {
     door.streamReasoningOf(parsed.frames).length > 0,
     `${door.id} omitted deterministic reasoning`
   );
+}
+
+async function verifyAnthropicHighEffort(stack) {
+  await stack.simulator.reset();
+  await stack.simulator.queue(stack.nativeModels.anthropic, [
+    "ANTHROPIC_HIGH_EFFORT_OK"
+  ]);
+  const door = API_DOORS.find((candidate) => candidate.id === "anthropic-messages");
+  assert.ok(door !== undefined);
+  const requestBody = door.buildRequest({
+    model: stack.publicModels.anthropic,
+    user: "Deterministic Anthropic high-effort probe."
+  });
+  requestBody.thinking = { type: "adaptive" };
+  requestBody.output_config = { effort: "high" };
+  const response = await fetch(`${stack.proxy.url}${door.path}`, {
+    method: "POST",
+    headers: { "content-type": "application/json", ...(door.headers ?? {}) },
+    body: JSON.stringify(requestBody)
+  });
+  const responseBody = await response.json();
+  assert.equal(response.status, 200, JSON.stringify(responseBody));
+  assert.match(door.textOf(responseBody), /ANTHROPIC_HIGH_EFFORT_OK/);
+  const calls = await stack.simulator.calls({
+    model: stack.nativeModels.anthropic
+  });
+  assert.equal(calls.length, 1, await stack.simulator.describeJournal());
+  assert.deepEqual(calls[0].request.thinking, { type: "adaptive" });
+  assert.deepEqual(calls[0].request.output_config, { effort: "high" });
 }
 
 async function verifyCancellationPropagation() {
@@ -1852,6 +1881,20 @@ async function runDeterministic(options, results, artifactDir, tempRoot) {
         },
         async () => {
           await verifyLosslessAnthropicThinking(stack);
+          return {};
+        }
+      );
+    }
+    if (selected("anthropic", options.providers)) {
+      await recordCase(
+        results,
+        {
+          phase: "deterministic",
+          provider: "anthropic",
+          door: "anthropic-high-effort"
+        },
+        async () => {
+          await verifyAnthropicHighEffort(stack);
           return {};
         }
       );
