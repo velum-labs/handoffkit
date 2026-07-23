@@ -1,7 +1,7 @@
 {
   "name": "@velum-labs/routekit-daemon",
   "private": false,
-  "version": "0.8.0",
+  "version": "0.9.0",
   "description": "Singleton RouteKit control daemon and stable model gateway.",
   "repository": {
     "type": "git",
@@ -16,13 +16,22 @@
       "default": "./dist/index.js"
     }
   },
-  "files": ["dist", "README.md", "LICENSE"],
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "publishConfig": {
     "registry": "https://registry.npmjs.org",
     "access": "public",
     "provenance": true
   },
-  "keywords": ["routekit", "daemon", "model-gateway", "service"],
+  "keywords": [
+    "routekit",
+    "daemon",
+    "model-gateway",
+    "service"
+  ],
   "dependencies": {
     "@velum-labs/routekit-accounts": "workspace:*",
     "@velum-labs/routekit-config": "workspace:*",

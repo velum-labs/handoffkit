@@ -1,7 +1,7 @@
 {
   "name": "@velum-labs/routekit-control",
   "private": false,
-  "version": "0.8.0",
+  "version": "0.9.0",
   "description": "Typed control protocol for the singleton RouteKit daemon.",
   "repository": {
     "type": "git",
@@ -16,13 +16,22 @@
       "default": "./dist/index.js"
     }
   },
-  "files": ["dist", "README.md", "LICENSE"],
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "publishConfig": {
     "registry": "https://registry.npmjs.org",
     "access": "public",
     "provenance": true
   },
-  "keywords": ["routekit", "daemon", "control-protocol", "rpc"],
+  "keywords": [
+    "routekit",
+    "daemon",
+    "control-protocol",
+    "rpc"
+  ],
   "dependencies": {
     "@velum-labs/routekit-contracts": "workspace:*",
     "@velum-labs/routekit-runtime": "workspace:*"
