@@ -43,6 +43,9 @@ const memberStatusSchema = z.object({
   expiresAt: z.number().optional(),
   coolingUntil: z.number().optional(),
   active: z.boolean(),
+  credentialValid: z.boolean().optional(),
+  relayReady: z.boolean().optional(),
+  poolEligible: z.boolean().optional(),
   models: z.array(z.string()),
   limits: accountLimitsSchema.optional()
 });

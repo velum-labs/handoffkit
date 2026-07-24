@@ -40,6 +40,14 @@ export type {
 
 // Account set (selection, cooldown, refresh, usage tracking)
 export {
+  hasUsableCredits,
+  isOverSwitchThreshold,
+  isPoolEligible,
+  memberHeadroom,
+  windowAdmissionStatus,
+  windowHeadroom
+} from "./admission.js";
+export {
   RateLimitTracker,
   SubscriptionAccountSet,
   SubscriptionAccountSetExhaustedError

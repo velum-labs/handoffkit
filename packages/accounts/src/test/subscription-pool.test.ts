@@ -601,3 +601,83 @@ test("usage refresh throttles failed provider probes", async () => {
     rmSync(directory, { recursive: true, force: true });
   }
 });
+
+function fullWindowUsageLimits(hasCredits: boolean): AccountLimits {
+  const observedAt = Date.now() / 1000;
+  return {
+    windows: {
+      primary: {
+        utilization: 1,
+        resetsAt: observedAt + 604_800,
+        observedAt,
+        source: "usage"
+      }
+    },
+    credits: { hasCredits, unlimited: false },
+    observedAt,
+    source: "usage",
+    completeness: "snapshot"
+  };
+}
+
+test("pool still attempts a sole member over threshold when credits remain", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "routekit-pool-credits-"));
+  writeMember(directory, "velum", { accessToken: "token-velum" });
+  const provider = fakeProvider({ refreshes: 0 });
+  provider.fetchUsage = async () => fullWindowUsageLimits(true);
+  const pool = await SubscriptionAccountSet.open(provider, {
+    mode: "codex",
+    source: { kind: "directory", path: directory },
+    strategy: "capacity_weighted",
+    switchThreshold: 0.9
+  });
+  const attemptedAccounts: string[] = [];
+  try {
+    await pool.refreshUsage(0);
+    const response = await pool.execute(
+      "gpt-5.3-codex",
+      (credential) => Promise.resolve(new Response(credential.accessToken)),
+      undefined,
+      { onAttempt: (account) => attemptedAccounts.push(account.seat) }
+    );
+    assert.equal(await response.text(), "token-velum");
+    assert.equal(attemptedAccounts.length, 1);
+    assert.equal(pool.statusSnapshot().members[0]?.poolEligible, true);
+    assert.equal(pool.statusSnapshot().members[0]?.relayReady, true);
+  } finally {
+    await pool.close();
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("pool rejects a sole member over threshold locally when credits are gone", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "routekit-pool-no-credits-"));
+  writeMember(directory, "velum", { accessToken: "token-velum" });
+  const provider = fakeProvider({ refreshes: 0 });
+  provider.fetchUsage = async () => fullWindowUsageLimits(false);
+  const pool = await SubscriptionAccountSet.open(provider, {
+    mode: "codex",
+    source: { kind: "directory", path: directory },
+    strategy: "capacity_weighted",
+    switchThreshold: 0.9
+  });
+  const attemptedAccounts: string[] = [];
+  try {
+    await pool.refreshUsage(0);
+    await assert.rejects(
+      pool.execute(
+        "gpt-5.3-codex",
+        () => Promise.resolve(new Response("should-not-run")),
+        undefined,
+        { onAttempt: (account) => attemptedAccounts.push(account.seat) }
+      ),
+      /all codex subscription pool members are unavailable until/
+    );
+    assert.deepEqual(attemptedAccounts, []);
+    assert.equal(pool.statusSnapshot().members[0]?.poolEligible, false);
+    assert.equal(pool.statusSnapshot().members[0]?.relayReady, false);
+  } finally {
+    await pool.close();
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
