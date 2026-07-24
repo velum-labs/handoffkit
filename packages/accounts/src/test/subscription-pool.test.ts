@@ -434,6 +434,45 @@ test("tracker safely migrates hostile object keys into map-backed state", async 
   }
 });
 
+test("tracker moves quota and cooldown state to a renamed member", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "routekit-pool-rename-state-"));
+  const statePath = join(directory, ".state.json");
+  const tracker = new RateLimitTracker(statePath, "codex");
+  const observedAt = Date.now() / 1000;
+  try {
+    tracker.update("work", {
+      windows: {
+        primary: {
+          utilization: 0.75,
+          observedAt,
+          source: "usage"
+        }
+      },
+      observedAt,
+      source: "usage",
+      completeness: "snapshot"
+    });
+    tracker.cool("work", 123_456);
+    tracker.cool("personal", 999_999);
+
+    tracker.renameMember("work", "personal");
+
+    assert.equal(tracker.limits("work"), undefined);
+    assert.equal(tracker.coolingUntil("work"), undefined);
+    assert.equal(tracker.limits("personal")?.windows.primary?.utilization, 0.75);
+    assert.equal(tracker.coolingUntil("personal"), 123_456);
+    const persisted = JSON.parse(await readFile(statePath, "utf8")) as {
+      members: Array<{ id: string; coolingUntil?: number }>;
+    };
+    assert.deepEqual(
+      persisted.members.map((member) => [member.id, member.coolingUntil]),
+      [["personal", 123_456]]
+    );
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 test("tracker migrates legacy partial observations to canonical windows", async () => {
   const directory = mkdtempSync(join(tmpdir(), "routekit-pool-window-state-"));
   const statePath = join(directory, ".state.json");

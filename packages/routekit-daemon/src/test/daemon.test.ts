@@ -401,6 +401,133 @@ test("singleton daemon exposes authenticated control and a stable reloadable dat
   }
 });
 
+for (const kind of ["claude-code", "codex"] as const) {
+  test(`native ${kind} account rename preserves routing and usage state`, async () => {
+    const root = mkdtempSync(join(tmpdir(), `routekit-daemon-rename-${kind}-`));
+    const stateHome = join(root, "state");
+    const configPath = join(root, "router.yaml");
+    const accountsDirectory = join(stateHome, "subscriptions", kind);
+    const sourcePath = join(accountsDirectory, "work.json");
+    const targetPath = join(accountsDirectory, "personal.json");
+    const occupiedPath = join(accountsDirectory, "occupied.json");
+    const credential = `${JSON.stringify(nativeCredential(kind))}\n`;
+    const coolingUntil = Date.now() + 60_000;
+    mkdirSync(accountsDirectory, { recursive: true });
+    writeFileSync(sourcePath, credential, { mode: 0o600 });
+    writeFileSync(
+      join(accountsDirectory, ".state.json"),
+      JSON.stringify({ members: [{ id: "work", coolingUntil }] }),
+      { mode: 0o600 }
+    );
+    writeFileSync(
+      configPath,
+      `providers:\n  ${kind}: {}\ndefaultModel: ${kind}/${
+        kind === "claude-code" ? "claude-test-model" : "gpt-test-model"
+      }\n`
+    );
+    try {
+      await withMockNativeDiscovery(kind, async () => {
+        const daemon = await startRouteKitDaemon({
+          packageVersion: "1.2.3",
+          stateHome,
+          configPath,
+          port: 0,
+          portless: false,
+          env: {
+            HOME: root,
+            ROUTEKIT_HOME: stateHome,
+            ROUTEKIT_PORTLESS: "0"
+          }
+        });
+        try {
+          const client = new RouteKitControlClient({
+            url: daemon.record.url,
+            token: daemon.record.controlToken!
+          });
+          const before = await client.call("daemon.status", {});
+          const beforeConfig = await client.call("config.get", {});
+          const renamed = await client.call(
+            "accounts.rename",
+            { kind, source: "work", target: "personal" },
+            { idempotencyKey: `rename-${kind}-work` }
+          );
+          assert.deepEqual(renamed, {
+            renamed: true,
+            revision: before.accountRevision + 1
+          });
+          assert.equal(existsSync(sourcePath), false);
+          assert.equal(readFileSync(targetPath, "utf8"), credential);
+          assert.deepEqual(await client.call("config.get", {}), beforeConfig);
+          assert.deepEqual((await client.call("accounts.list", {})).accounts, [
+            { subscriptionKind: kind, label: "personal", connector: "native" }
+          ]);
+          const status = await client.call("accounts.status", {});
+          assert.equal(status.accounts[0]?.label, "personal");
+          assert.equal(status.accounts[0]?.subscriptionKind, kind);
+          const usage = (await client.call("accounts.usage", {})) as {
+            accountSets: Array<{
+              members: Array<{ label: string; coolingUntil?: number }>;
+            }>;
+          };
+          assert.equal(usage.accountSets[0]?.members[0]?.label, "personal");
+          assert.equal(
+            usage.accountSets[0]?.members[0]?.coolingUntil,
+            coolingUntil
+          );
+          const tracker = JSON.parse(
+            readFileSync(join(accountsDirectory, ".state.json"), "utf8")
+          ) as { members: Array<{ id: string; coolingUntil?: number }> };
+          assert.deepEqual(
+            tracker.members.map((member) => [member.id, member.coolingUntil]),
+            [["personal", coolingUntil]]
+          );
+          assert.equal(
+            (
+              await client.call("doctor.run", {})
+            ).checks.find(
+              (check) => check.name === "account/provider consistency"
+            )?.ok,
+            true
+          );
+
+          const afterRename = await client.call("daemon.status", {});
+          await assert.rejects(
+            client.call(
+              "accounts.rename",
+              { kind, source: "missing", target: "available" },
+              { idempotencyKey: `rename-${kind}-missing` }
+            ),
+            (error: unknown) =>
+              error instanceof ControlError &&
+              error.code === "not_found" &&
+              /not enrolled/.test(error.message)
+          );
+          writeFileSync(occupiedPath, credential, { mode: 0o600 });
+          await assert.rejects(
+            client.call(
+              "accounts.rename",
+              { kind, source: "personal", target: "occupied" },
+              { idempotencyKey: `rename-${kind}-occupied` }
+            ),
+            (error: unknown) =>
+              error instanceof ControlError &&
+              error.code === "conflict" &&
+              /already enrolled/.test(error.message)
+          );
+          assert.equal(readFileSync(targetPath, "utf8"), credential);
+          assert.equal(readFileSync(occupiedPath, "utf8"), credential);
+          assert.deepEqual(await client.call("daemon.status", {}), afterRename);
+          assert.equal(existsSync(join(stateHome, "account-transactions")), false);
+        } finally {
+          await daemon.close();
+        }
+      });
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+}
+
 test("native provider stays enabled until its last account is removed", async () => {
   const root = mkdtempSync(join(tmpdir(), "routekit-daemon-native-remove-"));
   const stateHome = join(root, "state");

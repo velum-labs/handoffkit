@@ -39,6 +39,27 @@ test("method-specific validators reject malformed mutations at the protocol edge
     () => validateRouteKitParams("accounts.remove", { label: "work" }),
     /kind/
   );
+  assert.deepEqual(
+    validateRouteKitParams("accounts.rename", {
+      kind: "codex",
+      source: "work",
+      target: "personal"
+    }),
+    { kind: "codex", source: "work", target: "personal" }
+  );
+  assert.throws(
+    () =>
+      validateRouteKitParams("accounts.rename", {
+        kind: "gemini",
+        source: "work",
+        target: "personal"
+      }),
+    /must be one of/
+  );
+  assert.throws(
+    () => validateRouteKitParams("accounts.rename", { kind: "codex", source: "work" }),
+    /target/
+  );
   assert.throws(
     () =>
       validateRouteKitParams("accounts.enroll", {

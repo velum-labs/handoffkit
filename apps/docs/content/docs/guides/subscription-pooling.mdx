@@ -30,6 +30,24 @@ private temporary state, imports the credential, and never replaces the user's
 normal CLI login; use `accounts add` only to import the current official CLI
 login. The Claude Code tool command remains `routekit claude [provider/model]`.
 
+Rename a native account label without another OAuth login:
+
+```bash
+routekit accounts rename codex work personal
+```
+
+The command supports `claude-code` and `codex`, rejects missing sources and
+existing targets, and migrates quota/cooldown state with the credential in one
+recoverable daemon transaction. Account lists, status, usage, doctor, and pool
+routing use the new label after the router generation is replaced.
+
+API-key providers such as `openai`, `anthropic`, and `openrouter` use one
+unlabeled, registry-defined environment variable such as `OPENAI_API_KEY`.
+RouteKit does not currently have named API credential slots, so API keys cannot
+be listed or renamed independently of provider configuration. Replace the
+environment variable and restart RouteKit to change an API credential;
+`accounts rename` is only for enrolled subscriptions.
+
 Pool policy lives on the provider:
 
 ```yaml
