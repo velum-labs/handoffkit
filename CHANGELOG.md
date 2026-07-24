@@ -7,6 +7,8 @@ package, and the PyPI FusionKit sidecar package set. Release tags are named
 
 ## Unreleased
 
+## 0.9.7 - 2026-07-24
+
 - Added `modelAliases` to the router config so a namespaced model can also be
   served under a custom slash-free name (for example
   `velum-fable-5: claude-code/claude-fable-5`). Live testing showed Cursor's
