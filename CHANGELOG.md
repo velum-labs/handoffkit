@@ -7,6 +7,8 @@ package, and the PyPI FusionKit sidecar package set. Release tags are named
 
 ## Unreleased
 
+## 0.9.2 - 2026-07-24
+
 - Fixed non-streaming Codex subscription completions returning empty assistant
   content when the upstream SSE terminal response omitted output already
   delivered through `response.output_item.done`.
