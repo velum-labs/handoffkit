@@ -91,7 +91,7 @@ test("independent command surface is complete and has no compatibility aliases",
   // implementation-detail) subtree is exposed.
   assert.deepEqual(
     command(program, "accounts").commands.map((entry) => entry.name()).sort(),
-    ["add", "list", "login", "remove", "status"]
+    ["add", "list", "login", "remove", "rename", "status"]
   );
   assert.deepEqual(
     command(program, "providers").commands.map((entry) => entry.name()).sort(),
