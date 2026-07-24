@@ -704,8 +704,8 @@ importers:
   packages/tool-opencode:
     dependencies:
       '@opencode-ai/sdk':
-        specifier: 1.17.13
-        version: 1.17.13
+        specifier: 1.18.4
+        version: 1.18.4
       '@velum-labs/routekit-harness-core':
         specifier: workspace:*
         version: link:../harness-core
@@ -1699,8 +1699,8 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@opencode-ai/sdk@1.17.13':
-    resolution: {integrity: sha512-VItOGjMzRQx3zypwmeFLNhCiIx32kxS7FqzIJvVZLfyNGCifs3rfGC9qzNKWcxQo4SjNvAw++v4gWWU6Inv+JQ==}
+  '@opencode-ai/sdk@1.18.4':
+    resolution: {integrity: sha512-p/3P0KtWknoLvpsk8QrUzCKd4Q1A5Z3RmACEvwuQBGxnUy4AGo379lUYMgt7fczFn53079oroLuo6BosQri+HA==}
 
   '@opentelemetry/api-logs@0.220.0':
     resolution: {integrity: sha512-CmVa4ImJ+ynfrPMNaAXHET6Bhb44SwzmfyVJFq9ni2jgXJR/l7C6gfVFddNmHP+ZOkP9cf4f9DBe68qVLTHc9w==}
@@ -6409,7 +6409,7 @@ snapshots:
   '@openai/codex@0.145.0-win32-x64':
     optional: true
 
-  '@opencode-ai/sdk@1.17.13':
+  '@opencode-ai/sdk@1.18.4':
     dependencies:
       cross-spawn: 7.0.6
 
