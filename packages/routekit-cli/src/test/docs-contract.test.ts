@@ -64,7 +64,8 @@ test("config init help documents every first-launch bootstrap", () => {
   ]) {
     assert.match(initHelp, new RegExp(credential));
   }
-  assert.match(initHelp, /accounts login claude-code\|codex/);
+  assert.match(initHelp, /accounts login claude-code/);
+  assert.match(initHelp, /or use `codex`/);
 });
 
 test("public docs use config init for every first-launch bootstrap", () => {

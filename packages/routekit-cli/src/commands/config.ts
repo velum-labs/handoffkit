@@ -142,7 +142,7 @@ export function registerConfig(program: Command): void {
       "  anthropic   ANTHROPIC_API_KEY",
       "  openrouter  OPENROUTER_API_KEY",
       "",
-      "With --empty, continue with `routekit accounts login claude-code|codex --name <label>`."
+      "With --empty, run `routekit accounts login claude-code --name <label>` or use `codex`."
     ].join("\n")
   );
 
