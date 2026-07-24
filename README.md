@@ -26,6 +26,8 @@ routekit codex                      # or: routekit claude | cursor
 ```
 
 RouteKit has no FusionKit runtime dependency and does not download local models.
+The no-flag initializer uses OpenAI; choose `--provider anthropic`,
+`--provider openrouter`, or `--empty` for a subscription-only first launch.
 
 For model ensembles:
 

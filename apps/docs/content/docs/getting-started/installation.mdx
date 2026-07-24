@@ -9,6 +9,7 @@ For standalone routing without the ensemble runtime, install RouteKit:
 
 ```bash
 npm install -g @velum-labs/routekit
+export OPENAI_API_KEY=...
 routekit config init
 routekit doctor
 ```
@@ -18,6 +19,28 @@ Python executable. RouteKit uses explicitly configured providers and does not
 download or start local models. Its singleton daemon owns
 `~/.config/routekit/router.yaml`; `routekit config init` creates that canonical
 document.
+
+Choose one starter when OpenAI is not your first provider:
+
+```bash
+# Direct Anthropic API
+export ANTHROPIC_API_KEY=...
+routekit config init --provider anthropic
+
+# OpenRouter
+export OPENROUTER_API_KEY=...
+routekit config init --provider openrouter
+
+# Claude Code or Codex subscription only (no API key required)
+routekit config init --empty
+routekit accounts login claude-code --name personal
+```
+
+The no-flag command remains the OpenAI starter. If the selected API credential
+is not set, `config init` still creates the canonical config but leaves the
+daemon stopped. Export the variable shown by the command, then run `routekit
+start`. Use `--empty` before `accounts login claude-code` or `accounts login
+codex`; the login enables its subscription provider.
 
 For model ensembles, install FusionKit:
 
@@ -73,10 +96,13 @@ To use it with the singleton daemon, replace the canonical document explicitly:
 routekit config import --from .routekit/router.yaml
 ```
 
-API providers read the registry-defined environment variable:
+API providers read the registry-defined environment variable for the selected
+starter:
 
 ```bash
 export OPENAI_API_KEY=...
+export ANTHROPIC_API_KEY=...
+export OPENROUTER_API_KEY=...
 ```
 
 The first-launch subscription providers are `claude-code` and `codex`. Enroll

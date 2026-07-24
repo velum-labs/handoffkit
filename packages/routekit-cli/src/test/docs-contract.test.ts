@@ -24,6 +24,7 @@ test("documented safe CLI commands remain executable", () => {
     [routekitCli, ["start", "--help"]],
     [routekitCli, ["status", "--help"]],
     [routekitCli, ["stop", "--help"]],
+    [routekitCli, ["config", "init", "--help"]],
     [routekitCli, ["accounts", "add", "--help"]],
     [routekitCli, ["providers", "add", "--help"]],
     [routekitCli, ["accounts", "login", "--help"]],
@@ -49,6 +50,47 @@ test("documented safe CLI commands remain executable", () => {
   assert.match(rootHelp, /^\s+stop\b/m);
   assert.doesNotMatch(rootHelp, /^\s+daemon\b/m);
   assert.doesNotMatch(rootHelp, /^\s+gateway\b/m);
+});
+
+test("config init help documents every first-launch bootstrap", () => {
+  const initHelp = help(["config", "init", "--help"]);
+  assert.match(initHelp, /--provider <provider>/);
+  assert.match(initHelp, /openai, anthropic, or openrouter/);
+  assert.match(initHelp, /--empty/);
+  for (const credential of [
+    "OPENAI_API_KEY",
+    "ANTHROPIC_API_KEY",
+    "OPENROUTER_API_KEY"
+  ]) {
+    assert.match(initHelp, new RegExp(credential));
+  }
+  assert.match(initHelp, /accounts login claude-code/);
+  assert.match(initHelp, /or use `codex`/);
+});
+
+test("public docs use config init for every first-launch bootstrap", () => {
+  const installation = readFileSync(
+    join(root, "apps/docs/content/docs/getting-started/installation.mdx"),
+    "utf8"
+  );
+  for (const snippet of [
+    "routekit config init --provider anthropic",
+    "routekit config init --provider openrouter",
+    "routekit config init --empty",
+    "ANTHROPIC_API_KEY",
+    "OPENROUTER_API_KEY"
+  ]) {
+    assert.ok(installation.includes(snippet), `installation is missing ${snippet}`);
+  }
+
+  const subscriptionPooling = readFileSync(
+    join(root, "apps/docs/content/docs/guides/subscription-pooling.mdx"),
+    "utf8"
+  );
+  const emptyInit = subscriptionPooling.indexOf("routekit config init --empty");
+  const firstLogin = subscriptionPooling.indexOf("routekit accounts login");
+  assert.notEqual(emptyInit, -1);
+  assert.ok(emptyInit < firstLogin, "empty init must precede subscription login");
 });
 
 test("first-launch help exposes only supported RouteKit routes", () => {

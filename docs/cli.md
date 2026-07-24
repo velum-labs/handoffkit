@@ -18,6 +18,11 @@ routekit start
 routekit codex openai/gpt-5.5
 ```
 
+`routekit config init` defaults to the OpenAI starter. Select Anthropic or
+OpenRouter with `--provider anthropic|openrouter`, or use `--empty` before
+subscription enrollment. The API starters require `OPENAI_API_KEY`,
+`ANTHROPIC_API_KEY`, or `OPENROUTER_API_KEY`.
+
 FusionKit has no forwarding aliases for those commands.
 
 RouteKit is a thin client of one singleton daemon per `ROUTEKIT_HOME`. The

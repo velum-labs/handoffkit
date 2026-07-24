@@ -14,6 +14,12 @@ routekit start
 routekit codex
 ```
 
+The no-flag initializer creates the OpenAI starter and uses `OPENAI_API_KEY`.
+For a different first launch, use `config init --provider anthropic` with
+`ANTHROPIC_API_KEY`, `config init --provider openrouter` with
+`OPENROUTER_API_KEY`, or `config init --empty` before enrolling a Claude Code
+or Codex subscription with `accounts login`.
+
 The singleton daemon loads `~/.config/routekit/router.yaml`; replace that
 canonical document from a project file explicitly with
 `routekit config import --from .routekit/router.yaml`. Import validates and

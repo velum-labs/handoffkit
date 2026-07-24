@@ -11,13 +11,18 @@ Install the independent CLI and enroll a supported subscription:
 
 ```bash
 npm install -g @velum-labs/routekit
-routekit config init
+routekit config init --empty
 routekit accounts login claude-code --name personal
 routekit accounts login codex --name work
 routekit accounts status
 routekit models list
 routekit start
 ```
+
+`--empty` creates the canonical singleton config without requiring an API key,
+so the daemon is ready for the first subscription login. If RouteKit is already
+configured, skip `config init`; do not replace an existing canonical config
+just to add an account.
 
 The first-launch subscription kinds are `claude-code` and `codex`.
 `accounts login <kind>` runs the official CLI OAuth flow, enrolls the

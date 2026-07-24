@@ -76,8 +76,22 @@ enrollment are invalid in this file.
 The standalone `routekit` CLI daemon uses exactly one canonical config:
 `~/.config/routekit/router.yaml`. It does not vary routing policy by the
 caller's working directory; that would make one gateway ambiguous when two
-projects run concurrently. To migrate a project file into the daemon, replace
-the canonical document explicitly:
+projects run concurrently. Bootstrap it directly with one of:
+
+```sh
+routekit config init
+routekit config init --provider anthropic
+routekit config init --provider openrouter
+routekit config init --empty
+```
+
+The API starters require `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, and
+`OPENROUTER_API_KEY`, respectively. Missing credentials still create the
+config; set the reported variable and run `routekit start`. The empty starter
+is for subscription enrollment through `routekit accounts login`.
+
+To migrate a project file into the daemon, replace the canonical document
+explicitly:
 
 ```sh
 routekit config import --from .routekit/router.yaml

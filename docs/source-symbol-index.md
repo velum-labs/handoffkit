@@ -279,7 +279,7 @@ Use it with the narrative references when you need to find the module that owns 
 - `packages/routekit-cli/src/client.ts`: daemonDataTokenPath (function), ensureDaemonDataToken (function), daemonStore (function), readDaemonRecord (function), controlClientForRecord (function), daemonRecordHealthy (function), canonicalConfigOrMigrationError (function), daemonServeArgs (function), ensureDaemon (function), routekitClient (function), connectDaemon (function), daemonLogPath (function), daemonLifecycleLockPath (function)
 - `packages/routekit-cli/src/commands/accounts.ts`: registerAccounts (function)
 - `packages/routekit-cli/src/commands/calls.ts`: registerCalls (function)
-- `packages/routekit-cli/src/commands/config.ts`: configImportIdempotencyKey (function), registerConfig (function)
+- `packages/routekit-cli/src/commands/config.ts`: CONFIG_INIT_PROVIDER_IDS (const), ConfigInitProviderId (type), configInitRouterConfig (function), configImportIdempotencyKey (function), registerConfig (function)
 - `packages/routekit-cli/src/commands/context.ts`: configOverride (function), loaded (function), numberOption (function)
 - `packages/routekit-cli/src/commands/daemon.ts`: registerDaemon (function)
 - `packages/routekit-cli/src/commands/doctor.ts`: registerDoctor (function)
