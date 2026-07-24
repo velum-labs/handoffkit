@@ -366,12 +366,19 @@ test("forceModel overrides the requested model on every upstream call", async ()
 test("lists models from the backend", async () => {
   const mock = await startMock();
   const gateway = await startGateway({
-    backend: new OpenAiBackend({ baseUrl: `${mock.url}/v1` })
+    backend: new OpenAiBackend({
+      baseUrl: `${mock.url}/v1`,
+      defaultModel: "mlx-default"
+    })
   });
   try {
     const response = await fetch(`${gateway.url()}/v1/models`);
     assert.equal(response.status, 200);
-    const json = (await response.json()) as { data: unknown[] };
+    const json = (await response.json()) as {
+      default_model: string;
+      data: unknown[];
+    };
+    assert.equal(json.default_model, "mlx-default");
     assert.equal(json.data.length, 1);
   } finally {
     await gateway.close();

@@ -373,6 +373,81 @@ test("catalog applies configured opaque efforts and rejects unavailable values b
   );
 });
 
+test("catalog treats Codex none as disabled only for models without reasoning controls", async () => {
+  const exercise = async (
+    reasoning: DiscoveredModel["reasoning"],
+    effort: string
+  ): Promise<{ response: Response; bodies: Array<Record<string, unknown>> }> => {
+    const bodies: Array<Record<string, unknown>> = [];
+    const backend = await CatalogBackend.create({
+      config: {
+        providers: { openai: {} },
+        defaultModel: "openai/model"
+      },
+      sources: {
+        openai: {
+          sourceId: "openai",
+          async discoverModels() {
+            return [{ id: "model", ...(reasoning !== undefined ? { reasoning } : {}) }];
+          },
+          async chat(body: unknown) {
+            bodies.push(body as Record<string, unknown>);
+            return Response.json({});
+          },
+          async embeddings() {
+            return Response.json({});
+          }
+        }
+      }
+    });
+    return {
+      response: await backend.chat({
+        model: "openai/model",
+        reasoning_effort: effort,
+        messages: []
+      }),
+      bodies
+    };
+  };
+
+  for (const reasoning of [
+    undefined,
+    { status: "unknown", provenance: "unknown" } as const,
+    { status: "unsupported", provenance: "provider" } as const
+  ]) {
+    const normalized = await exercise(reasoning, "none");
+    assert.equal(normalized.response.status, 200);
+    assert.equal(normalized.bodies.length, 1);
+    assert.equal(normalized.bodies[0]?.reasoning_effort, undefined);
+  }
+
+  const undiscoveredEffort = await exercise(undefined, "medium");
+  assert.equal(undiscoveredEffort.response.status, 400);
+  assert.equal(undiscoveredEffort.bodies.length, 0);
+
+  const advertisedNone = await exercise(
+    {
+      status: "supported",
+      efforts: [{ id: "none" }, { id: "high" }],
+      provenance: "provider"
+    },
+    "none"
+  );
+  assert.equal(advertisedNone.response.status, 200);
+  assert.equal(advertisedNone.bodies[0]?.reasoning_effort, "none");
+
+  const unsupportedNone = await exercise(
+    {
+      status: "supported",
+      efforts: [{ id: "low" }, { id: "high" }],
+      provenance: "provider"
+    },
+    "none"
+  );
+  assert.equal(unsupportedNone.response.status, 400);
+  assert.equal(unsupportedNone.bodies.length, 0);
+});
+
 test("unknown models never fall through to the default source", async () => {
   const backend = await CatalogBackend.create({
     config: { providers: { openai: {} } },

@@ -68,6 +68,7 @@ test("Codex launcher serializes namespaced models without interpreting provider 
   // Codex rejects the whole catalog file when any entry omits this field, so
   // undiscovered models must serialize an explicit empty list.
   assert.deepEqual(entries[2]?.supported_reasoning_levels, []);
+  assert.equal(entries[2]?.default_reasoning_level, undefined);
   assert.ok(
     entries
       .slice(0, 3)

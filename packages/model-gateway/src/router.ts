@@ -501,6 +501,8 @@ export class CatalogBackend implements Backend {
       if (selection.mode === "effort") {
         (nativeBody as Record<string, unknown>).reasoning_effort =
           selection.effort;
+      } else {
+        delete (nativeBody as Record<string, unknown>).reasoning_effort;
       }
     }
     return entry.source.chat(nativeBody, signal, {
@@ -592,6 +594,15 @@ export class CatalogBackend implements Backend {
       return selection;
     }
     const capability = entry.reasoning;
+    if (
+      selection.mode === "effort" &&
+      selection.effort === "none" &&
+      (capability === undefined ||
+        capability.status === "unknown" ||
+        capability.status === "unsupported")
+    ) {
+      return { mode: "disabled" };
+    }
     if (capability === undefined || capability.status === "unknown") {
       return `model "${entry.publicId}" has no discovered reasoning controls`;
     }

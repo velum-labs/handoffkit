@@ -796,9 +796,11 @@ test("Codex picker aliases use the canonical catalog and pooled native relay", a
       "a projected managed catalog must not reuse the upstream ETag"
     );
     const catalog = (await catalogResponse.json()) as {
+      default_model: string;
       data: Array<{ id: string }>;
       models: Array<{ slug: string; display_name: string }>;
     };
+    assert.equal(catalog.default_model, "codex/gpt-5.5");
     assert.deepEqual(
       catalog.data.map((model) => model.id),
       ["codex/gpt-5.5", "claude-code/claude-sonnet-4-6"]
@@ -860,11 +862,13 @@ test("Codex picker aliases use the canonical catalog and pooled native relay", a
       body: JSON.stringify({
         model: "claude-code/claude-sonnet-4-6",
         instructions: "You are Codex, a coding agent based on GPT-5.",
-        input: "hi"
+        input: "hi",
+        reasoning: { effort: "none" }
       })
     });
     assert.equal(foreign.status, 200);
     assert.deepEqual(sourceCalls, ["claude-sonnet-4-6"]);
+    assert.equal(sourceBodies[0]?.reasoning_effort, undefined);
     assert.ok(
       !JSON.stringify(sourceBodies[0]?.messages).includes("based on GPT-5"),
       "a stale startup-model identity must not cross into a foreign provider"

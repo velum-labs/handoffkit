@@ -433,6 +433,7 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
               : base.data ?? [];
           writeJson(res, 200, {
             object: "list",
+            default_model: backend.defaultModel,
             data,
             models: codexPickerModels(
               backend,
@@ -457,6 +458,7 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
       writeJson(res, 200, {
         ...modelPayload,
         object: typeof modelPayload.object === "string" ? modelPayload.object : "list",
+        default_model: backend.defaultModel,
         data,
         models: codexPickerModels(
           backend,
