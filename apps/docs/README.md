@@ -1,21 +1,18 @@
-# fusionkit docs
+# RouteKit and FusionKit docs
 
-The production documentation site for fusionkit, built with
-[Fumadocs](https://fumadocs.dev) (Next.js App Router). It covers the
-`@fusionkit/cli` product and the Python fusion engine behind it. It is
-published at `fusionkit.velum-labs.com`.
+The production documentation site for RouteKit and FusionKit, built with
+[Fumadocs](https://fumadocs.dev) and the Next.js App Router. It covers the
+standalone `@velum-labs/routekit` router, `@fusionkit/cli`, and the internal
+Python fusion engine. It is published at `fusionkit.velum-labs.com`.
 
-This is a **standalone app**: like `apps/scope`, it is not part of the root
-`packages/*` + `examples/*` pnpm workspace, so its UI dependency tree stays out
-of the governed core's frozen lockfile and trust surface. It has its own
-`pnpm-workspace.yaml` and is installed/built on its own.
+The app is part of the root pnpm/Turborepo workspace and uses the shared
+lockfile.
 
 ## Develop
 
 ```bash
-cd apps/docs
-pnpm install
-pnpm dev:app    # http://localhost:4318  (or `pnpm dev` for the portless proxy)
+pnpm install --frozen-lockfile
+pnpm --filter fusionkit-docs dev:app    # http://localhost:4318
 ```
 
 `fumadocs-mdx` runs on install/dev/build to generate the `.source` content index.
@@ -23,8 +20,8 @@ pnpm dev:app    # http://localhost:4318  (or `pnpm dev` for the portless proxy)
 ## Build
 
 ```bash
-pnpm build
-pnpm start
+pnpm exec turbo run build --filter=fusionkit-docs
+pnpm --filter fusionkit-docs start
 ```
 
 ## Content
@@ -33,7 +30,7 @@ Docs live in `content/docs/**/*.mdx`, grouped into folder-based sidebar sections
 each ordered by its own `meta.json` (and the root `content/docs/meta.json`).
 The sidebar is organized by reader intent:
 
-- **Get started**: installation and the quickstart.
+- **Get started**: installation, RouteKit from zero, and the FusionKit quickstart.
 - **Tools**: one page per supported coding agent (Codex, Claude Code, Cursor).
 - **Guides**: workflow guides for the inference endpoint, rate-limit handoff,
   cost control, observability, troubleshooting, and examples.
@@ -74,7 +71,8 @@ The site deploys as its own Vercel project:
   OpenAPI source path resolves; the generated MDX is committed, so the build does
   not depend on regeneration).
 - **Framework preset**: Next.js. Install/build commands and security headers are
-  declared in [`vercel.json`](./vercel.json) (`pnpm install` / `pnpm build`).
+  declared in [`vercel.json`](./vercel.json); both commands enter the repository
+  root and use the shared pnpm/Turbo workspace.
 - **Node**: 22 (pinned via `engines` in `package.json`).
 - **Previews**: every PR gets an automatic preview deployment once the repo is
   linked.

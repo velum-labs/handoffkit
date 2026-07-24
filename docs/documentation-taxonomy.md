@@ -2,7 +2,12 @@
 
 This repository has two documentation layers. The public site in `apps/docs/content/docs/` is the user-facing source of truth. The Markdown tree in `docs/` is the maintainer and contributor layer. Legacy Warrant governance material lives under `legacy/docs/`.
 
-A page belongs in the public site when it helps a user install, run, configure, understand, or integrate FusionKit. A page belongs in `docs/` when it explains implementation detail, code ownership, release process, protocol maintenance, benchmarks, examples, or historical design context. A page belongs in `legacy/docs/` when it documents the quarantined governance plane, runner, SDK, handoff SDK, Docker stack, or governed-run examples.
+A page belongs in the public site when it helps a user install, run, configure,
+understand, or integrate RouteKit or FusionKit. A page belongs in `docs/` when
+it explains implementation detail, code ownership, release process, protocol
+maintenance, benchmarks, examples, or historical design context. A page
+belongs in `legacy/docs/` when it documents the quarantined governance plane,
+runner, SDK, handoff SDK, Docker stack, or governed-run examples.
 
 ## Categories
 
@@ -40,6 +45,7 @@ A page belongs in the public site when it helps a user install, run, configure, 
 | `quickstart-inference.md` | Task guide mirror | In-repo mirror of the public raw endpoint workflow. |
 | `quickstart-harness.md` | Task guide mirror | In-repo mirror of the public coding-harness workflow. |
 | `quickstart-handoff.md` | Task guide mirror | In-repo mirror of rate-limit failover; not legacy handoff SDK. |
+| `routekit-user-guide.md` | Task guide mirror | In-repo mirror of the public zero-context RouteKit install, provider, pooling, tool-launch, and gateway workflow. |
 | `configuration.md` | Reference | `.fusionkit/fusion.json` fields, precedence, default panels, prompts, and YAML export. |
 | `cli.md` | Reference | Complete CLI command surface and shared flags. |
 | `privacy.md` | Privacy and policy | Local session storage, retention, provider egress, failover expansion, and opt-in telemetry. |
@@ -119,13 +125,13 @@ A page belongs in the public site when it helps a user install, run, configure, 
 
 | Site section | Category | Purpose |
 | --- | --- | --- |
-| Introduction | Orientation | Explain FusionKit and route users to setup, CLI, concepts, packages, privacy, examples, and APIs. |
+| Introduction | Orientation | Explain RouteKit and FusionKit, distinguish standalone routing from model fusion, and route users to the correct setup path. |
 | Documentation taxonomy | Orientation | Explain site organization. |
-| Get Started | Task guides | Install, run the first session, configure a repo, run the raw endpoint, and recover from rate limits. |
+| Get Started | Task guides | Install RouteKit or FusionKit, run the first routed or fused session, configure a repo, run an endpoint, and recover from rate limits. |
 | fusionkit CLI | Reference and task guides | Commands, flags, cost controls, model panels, observability, and troubleshooting. |
 | Concepts | Concepts and architecture | Product vocabulary, model fusion, runtime kernel, and product scope. |
 | Packages | Reference | Product package map with legacy archive pointer. |
-| Privacy | Privacy and policy | Local storage, retention, provider egress, rate-limit expansion, and no telemetry. |
+| Privacy | Privacy and policy | Local storage, retention, provider egress, rate-limit expansion, and opt-in telemetry. |
 | Examples | Task guide | Product examples and legacy demo archive pointer. |
 | API Reference | Reference | Runtime gateway routes and generated harness-executor contract. |
 

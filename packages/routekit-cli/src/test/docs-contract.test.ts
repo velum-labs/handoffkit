@@ -68,7 +68,9 @@ test("public RouteKit docs contain no not-offered onboarding commands", () => {
     "README.md",
     "packages/routekit-cli/README.md",
     "docs/configuration.md",
+    "docs/routekit-user-guide.md",
     "docs/subscription-pooling.md",
+    "apps/docs/content/docs/getting-started/routekit.mdx",
     "apps/docs/content/docs/guides/subscription-pooling.mdx",
     "apps/docs/content/docs/getting-started/installation.mdx",
     "configs/models.example.yaml"
@@ -78,6 +80,48 @@ test("public RouteKit docs contain no not-offered onboarding commands", () => {
       source,
       /\broutekit\s+(?:opencode\b|accounts\s+login\s+(?:gemini|grok|kimi)\b|providers\s+add\s+(?:google|cliproxy)\b)/i,
       `${path} advertises a route that is not offered at first launch`
+    );
+  }
+});
+
+test("zero-context RouteKit guides keep viable first-launch paths", () => {
+  for (const path of [
+    "docs/routekit-user-guide.md",
+    "apps/docs/content/docs/getting-started/routekit.mdx"
+  ]) {
+    const source = readFileSync(join(root, path), "utf8");
+    for (const expected of [
+      "npm install -g @velum-labs/routekit",
+      "export OPENAI_API_KEY=",
+      "routekit config init",
+      "providers: {}",
+      "routekit config import --from ./routekit.yaml",
+      "npm install -g @anthropic-ai/claude-code",
+      "npm install -g @openai/codex",
+      "routekit accounts login claude-code --name personal",
+      "routekit accounts login codex --name personal",
+      "routekit start",
+      "routekit models list",
+      "routekit models info",
+      "routekit calls inspect",
+      "/v1/chat/completions"
+    ]) {
+      assert.ok(source.includes(expected), `${path} is missing ${expected}`);
+    }
+    assert.ok(
+      source.indexOf("providers: {}") <
+        source.indexOf("routekit accounts login claude-code --name personal"),
+      `${path} must bootstrap an empty config before subscription-only login`
+    );
+    assert.ok(
+      source.indexOf("npm install -g @anthropic-ai/claude-code") <
+        source.indexOf("routekit accounts login claude-code --name personal"),
+      `${path} must install Claude Code before its login flow`
+    );
+    assert.ok(
+      source.indexOf("npm install -g @openai/codex") <
+        source.indexOf("routekit accounts login codex --name personal"),
+      `${path} must install Codex before its login flow`
     );
   }
 });
@@ -316,6 +360,7 @@ test("public onboarding links to the route disclosure contract", () => {
 
   for (const path of [
     "apps/docs/content/docs/getting-started/installation.mdx",
+    "apps/docs/content/docs/getting-started/routekit.mdx",
     "apps/docs/content/docs/concepts/privacy.mdx"
   ]) {
     const source = readFileSync(join(root, path), "utf8");

@@ -20,12 +20,17 @@ For independent routing through explicit providers:
 
 ```bash
 npm install -g @velum-labs/routekit
+export OPENAI_API_KEY=...
 routekit config init
 routekit start                      # product commands also start RouteKit automatically
-routekit codex                      # or: routekit claude | cursor
+routekit codex                      # alternatives: routekit claude, routekit cursor
 ```
 
 RouteKit has no FusionKit runtime dependency and does not download local models.
+If RouteKit is new to you, follow the
+[start-from-zero guide](https://fusionkit.velum-labs.com/docs/getting-started/routekit)
+for provider setup, subscription pooling, coding-tool launchers, and gateway
+code examples.
 
 For model ensembles:
 

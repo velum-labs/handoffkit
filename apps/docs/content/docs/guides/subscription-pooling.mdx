@@ -7,28 +7,56 @@ Subscription accounts and single-model routing are RouteKit responsibilities.
 FusionKit v4 references live namespaced model IDs but does not expose account
 commands.
 
-Install the independent CLI and enroll a supported subscription:
+For a brand-new subscription-only setup, install the independent CLI, create an
+empty canonical router, and enroll a subscription:
 
 ```bash
 npm install -g @velum-labs/routekit
-routekit config init
+npm install -g @anthropic-ai/claude-code  # for a Claude subscription
+# npm install -g @openai/codex             # for a ChatGPT subscription
+
+cat > routekit.yaml <<'YAML'
+providers: {}
+YAML
+
+routekit config import --from ./routekit.yaml
 routekit accounts login claude-code --name personal
-routekit accounts login codex --name work
 routekit accounts status
 routekit models list
 routekit start
 ```
 
+If RouteKit is already configured, skip the `providers: {}` import because
+import replaces the complete canonical config. Install the matching official
+CLI and run only the relevant `accounts login` command.
+
 The first-launch subscription kinds are `claude-code` and `codex`.
 `accounts login <kind>` runs the official CLI OAuth flow, enrolls the
 credential, enables the matching provider, and verifies live model discovery.
-Pass `--no-browser` on a headless host to prefer a device-code or copyable-URL
-flow you can finish from a browser on another device.
+For Codex on a headless host,
+`routekit accounts login codex --name personal --no-browser` uses
+`codex login --device-auth`. Claude Code still uses its official
+`claude auth login --claudeai` flow, which may present a URL that you can open
+on another device.
+
+These routes are exposed in the first-launch interface, but public support
+remains conditional until L06 qualification closes. Check their current
+[qualification evidence](/docs/reference/routes-and-billing) before relying on
+them.
 
 For `claude-code` and `codex`, RouteKit runs the official provider login in
 private temporary state, imports the credential, and never replaces the user's
 normal CLI login; use `accounts add` only to import the current official CLI
 login. The Claude Code tool command remains `routekit claude [provider/model]`.
+The empty starter config matters for subscription-only setup:
+`routekit config init` creates an OpenAI route and therefore expects
+`OPENAI_API_KEY`.
+
+<Callout type="warn">
+  First-launch subscription connectors are intended for personal, local use.
+  Do not expose pooled personal subscriptions through a shared gateway unless
+  the provider explicitly permits it.
+</Callout>
 
 Pool policy lives on the provider:
 
@@ -79,8 +107,8 @@ Models from other providers stay source-qualified, and Fusion/configuration
 surfaces remain strictly namespaced.
 
 Inspect current limits at any time with `routekit usage` (or
-`routekit usage --watch 10`). It reads live pools from the normal RouteKit
-gateway when one is running and otherwise checks enrolled accounts directly.
+`routekit usage --watch 10`). It connects to the singleton daemon, starting it
+when needed, and reads the daemon-owned live pools.
 
 `fusionkit stop` never stops an external RouteKit daemon. An embedded RouteKit
 router composed by FusionKit is process-owned and closes with the Fusion stack.
