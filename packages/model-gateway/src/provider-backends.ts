@@ -1309,7 +1309,7 @@ export class CodexResponsesBackend extends HttpProviderBackend {
         ...decoder.feed(await response.text()),
         ...decoder.flush()
       ];
-      const completedOutput: Array<Record<string, unknown>> = [];
+      const completedOutput = new Map<number, Record<string, unknown>>();
       let completedResponse: Record<string, unknown> | undefined;
       for (const event of events) {
         let payload: unknown;
@@ -1335,7 +1335,14 @@ export class CodexResponsesBackend extends HttpProviderBackend {
           typeof record.item === "object" &&
           record.item !== null
         ) {
-          completedOutput.push(record.item as Record<string, unknown>);
+          const outputIndex =
+            typeof record.output_index === "number"
+              ? record.output_index
+              : completedOutput.size;
+          completedOutput.set(
+            outputIndex,
+            record.item as Record<string, unknown>
+          );
         }
         if (
           eventType === "response.completed" &&
@@ -1346,12 +1353,15 @@ export class CodexResponsesBackend extends HttpProviderBackend {
         }
       }
       if (completedResponse !== undefined) {
-        const terminalOutput = completedResponse.output;
-        const payload =
-          (!Array.isArray(terminalOutput) || terminalOutput.length === 0) &&
-          completedOutput.length > 0
-            ? { ...completedResponse, output: completedOutput }
-            : completedResponse;
+        const terminalOutput = Array.isArray(completedResponse.output)
+          ? [...completedResponse.output]
+          : [];
+        for (const [outputIndex, output] of completedOutput) {
+          if (terminalOutput[outputIndex] === undefined) {
+            terminalOutput[outputIndex] = output;
+          }
+        }
+        const payload = { ...completedResponse, output: terminalOutput };
         return codexCompletionResponse(model, payload);
       }
       throw new SseParseError(

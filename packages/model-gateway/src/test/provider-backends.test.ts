@@ -517,6 +517,71 @@ test("Codex subscription egress recovers output from completed stream items", as
   }
 });
 
+test("Codex subscription egress merges completed items into partial terminal output", async () => {
+  const original = globalThis.fetch;
+  globalThis.fetch = async () =>
+    sse([
+      {
+        event: "response.output_item.done",
+        data: {
+          item: {
+            type: "reasoning",
+            summary: [{ type: "summary_text", text: "brief reasoning" }]
+          },
+          output_index: 0
+        }
+      },
+      {
+        event: "response.output_item.done",
+        data: {
+          item: {
+            type: "message",
+            role: "assistant",
+            content: [{ type: "output_text", text: "RouteKit works" }]
+          },
+          output_index: 1
+        }
+      },
+      {
+        event: "response.completed",
+        data: {
+          response: {
+            output: [
+              {
+                type: "reasoning",
+                summary: [{ type: "summary_text", text: "brief reasoning" }]
+              }
+            ],
+            usage: { input_tokens: 8, output_tokens: 8, total_tokens: 16 }
+          }
+        }
+      }
+    ]);
+  try {
+    const backend = new CodexResponsesBackend({
+      baseUrl: "https://chatgpt.test/backend-api/codex",
+      apiKey: "oauth",
+      defaultModel: "gpt-5.5",
+      forceStream: true,
+      omitSampling: true
+    });
+    const response = await backend.chat({
+      stream: false,
+      messages: [{ role: "user", content: "Reply with: RouteKit works" }]
+    });
+    const body = (await response.json()) as {
+      choices: Array<{
+        message: { content: string; reasoning: string };
+      }>;
+    };
+    assert.equal(response.status, 200);
+    assert.equal(body.choices[0]?.message.content, "RouteKit works");
+    assert.equal(body.choices[0]?.message.reasoning, "brief reasoning");
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
 test("Codex subscription streaming recovers text when only the completed item carries it", async () => {
   const original = globalThis.fetch;
   globalThis.fetch = async () =>
@@ -711,6 +776,38 @@ test("Codex subscription streaming surfaces a silent reasoning-only completion a
     const text = await response.text();
     assert.match(text, /"type":"upstream_empty_response"/);
     assert.doesNotMatch(text, /"finish_reason":"stop"/);
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
+test("Codex subscription streaming surfaces terminal failure events", async () => {
+  const original = globalThis.fetch;
+  const backend = new CodexResponsesBackend({
+    baseUrl: "https://chatgpt.test/backend-api/codex",
+    apiKey: "oauth",
+    defaultModel: "gpt-5.5"
+  });
+  try {
+    for (const terminal of [
+      { event: "response.failed", data: { response: { status: "failed" } } },
+      {
+        event: "response.incomplete",
+        data: { response: { status: "incomplete" } }
+      },
+      {
+        data: { type: "response.failed", response: { status: "failed" } }
+      }
+    ]) {
+      globalThis.fetch = async () => sse([terminal]);
+      const response = await backend.chat({
+        stream: true,
+        messages: [{ role: "user", content: "Reply with: RouteKit works" }]
+      });
+      const text = await response.text();
+      assert.match(text, /"type":"upstream_error"/);
+      assert.doesNotMatch(text, /"finish_reason":"stop"/);
+    }
   } finally {
     globalThis.fetch = original;
   }
