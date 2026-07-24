@@ -3,6 +3,7 @@ import {
   existsSync,
   mkdtempSync,
   mkdirSync,
+  readFileSync,
   rmSync,
   statSync,
   symlinkSync,
@@ -12,7 +13,58 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 
-import { removeSubscriptionAccount } from "../credentials.js";
+import {
+  removeSubscriptionAccount,
+  renameSubscriptionAccount
+} from "../credentials.js";
+
+test("account rename preserves the credential and rejects missing or occupied labels", () => {
+  const root = mkdtempSync(join(tmpdir(), "routekit-account-rename-"));
+  const directory = join(root, "accounts");
+  const sourcePath = join(directory, "work.json");
+  const targetPath = join(directory, "personal.json");
+  const credential = '{"accessToken":"never-print-this"}\n';
+  mkdirSync(directory, { mode: 0o777 });
+  writeFileSync(sourcePath, credential, { mode: 0o666 });
+  try {
+    assert.deepEqual(
+      renameSubscriptionAccount("codex", "work", "personal", {
+        accountsDirectory: directory
+      }),
+      {
+        mode: "codex",
+        sourceLabel: "work",
+        targetLabel: "personal",
+        sourcePath,
+        targetPath
+      }
+    );
+    assert.equal(existsSync(sourcePath), false);
+    assert.equal(readFileSync(targetPath, "utf8"), credential);
+    assert.equal(statSync(directory).mode & 0o777, 0o700);
+    assert.equal(statSync(targetPath).mode & 0o777, 0o600);
+
+    writeFileSync(sourcePath, "{}\n", { mode: 0o600 });
+    assert.throws(
+      () =>
+        renameSubscriptionAccount("codex", "work", "personal", {
+          accountsDirectory: directory
+        }),
+      /already exists/
+    );
+    assert.equal(readFileSync(sourcePath, "utf8"), "{}\n");
+    assert.equal(readFileSync(targetPath, "utf8"), credential);
+    assert.throws(
+      () =>
+        renameSubscriptionAccount("codex", "missing", "available", {
+          accountsDirectory: directory
+        }),
+      /not enrolled/
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
 
 test("account removal is private, contained, and idempotent", () => {
   const root = mkdtempSync(join(tmpdir(), "routekit-account-remove-"));

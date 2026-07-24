@@ -27,6 +27,18 @@ automatically enables the subscription provider in the effective router
 config; `accounts remove`, `list`, and `status` operate uniformly across all
 kinds.
 
+Rename a native account label without repeating OAuth:
+
+```sh
+routekit accounts rename codex work personal
+```
+
+`accounts rename <kind> <source> <target>` supports `claude-code` and `codex`.
+It rejects a missing source or an already-enrolled target. The daemon moves the
+credential and its quota/cooldown state in the same recoverable transaction,
+then replaces the router generation so `list`, `status`, `usage`, and `doctor`
+immediately use the new label.
+
 Enrollment and activation are one daemon-owned transaction. OAuth runs against
 disposable profiles first; the authenticated daemon then commits every account
 file, the provider config, both revisions, and the replacement router
@@ -37,6 +49,16 @@ Retries of an already committed account/provider pair are no-ops. Transaction
 manifests contain paths, hashes, phases, and revision metadata only—credential
 values remain in mode-`0600` opaque rollback files and are deleted after commit
 or recovery.
+
+## API-key credential identities
+
+API-key providers such as `openai`, `anthropic`, and `openrouter` still read one
+unlabeled key from their registry-defined environment variable (for example,
+`OPENAI_API_KEY`). RouteKit does not currently store named API credential slots,
+so there is no API-key identity to list or rename. `accounts rename` applies
+only to enrolled subscription accounts. To replace an API credential, update
+the provider's environment variable and restart the RouteKit daemon; enabling
+or disabling the provider remains a separate configuration action.
 
 ## Supported connectors
 

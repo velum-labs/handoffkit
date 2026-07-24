@@ -170,6 +170,11 @@ test("dynamic completion follows the command tree", () => {
     "claude-code",
     "codex"
   ]);
+  assert.deepEqual(completionCandidates(program, ["accounts", "rename", ""]), [
+    "claude",
+    "claude-code",
+    "codex"
+  ]);
   assert.deepEqual(completionCandidates(program, ["accounts", "login", "a"]), []);
   assert.deepEqual(completionCandidates(program, ["accounts", "add", ""]), [
     "claude",
@@ -255,6 +260,14 @@ test("account removal completion only suggests managed labels for its provider",
     assert.deepEqual(
       completionCandidates(buildProgram(), ["accounts", "remove", "codex", "w"]),
       ["work"]
+    );
+    assert.deepEqual(
+      completionCandidates(buildProgram(), ["accounts", "rename", "codex", "w"]),
+      ["work"]
+    );
+    assert.deepEqual(
+      completionCandidates(buildProgram(), ["accounts", "rename", "claude", "w"]),
+      []
     );
     assert.deepEqual(
       completionCandidates(buildProgram(), ["accounts", "remove", "claude", "w"]),

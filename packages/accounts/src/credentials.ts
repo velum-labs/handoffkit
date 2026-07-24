@@ -7,6 +7,7 @@ import {
   mkdirSync,
   readFileSync,
   realpathSync,
+  renameSync,
   unlinkSync
 } from "node:fs";
 import { homedir, platform, userInfo } from "node:os";
@@ -298,6 +299,14 @@ export type RemoveSubscriptionAccountResult = {
   removed: boolean;
 };
 
+export type RenameSubscriptionAccountResult = {
+  mode: SubscriptionMode;
+  sourceLabel: string;
+  targetLabel: string;
+  sourcePath: string;
+  targetPath: string;
+};
+
 function isMissingPath(error: unknown): boolean {
   return (
     typeof error === "object" &&
@@ -319,6 +328,76 @@ function assertManagedAccountLabel(label: string): void {
       "account name must be its exact lowercase managed label and contain only letters, numbers, dots, underscores, or hyphens"
     );
   }
+}
+
+/**
+ * Rename one enrolled account without reading or rewriting its credential.
+ *
+ * The caller owns higher-level transaction recovery. This primitive validates
+ * both managed paths, rejects an occupied target, and uses one filesystem
+ * rename so the credential is never partially copied.
+ */
+export function renameSubscriptionAccount(
+  mode: SubscriptionMode,
+  sourceLabel: string,
+  targetLabel: string,
+  options: { accountsDirectory?: string } = {}
+): RenameSubscriptionAccountResult {
+  assertManagedAccountLabel(sourceLabel);
+  assertManagedAccountLabel(targetLabel);
+  if (sourceLabel === targetLabel) {
+    throw new Error(`account ${mode}/${targetLabel} already exists`);
+  }
+  const managedDirectory = resolve(
+    options.accountsDirectory ?? defaultSubscriptionAccountDirectory(mode)
+  );
+  const sourcePath = resolve(managedDirectory, `${sourceLabel}.json`);
+  const targetPath = resolve(managedDirectory, `${targetLabel}.json`);
+  if (
+    dirname(sourcePath) !== managedDirectory ||
+    dirname(targetPath) !== managedDirectory
+  ) {
+    throw new Error("account path escapes the managed account directory");
+  }
+
+  let directoryStat: ReturnType<typeof lstatSync>;
+  try {
+    directoryStat = lstatSync(managedDirectory);
+  } catch (error) {
+    if (isMissingPath(error)) {
+      throw new Error(`account ${mode}/${sourceLabel} is not enrolled`);
+    }
+    throw error;
+  }
+  if (directoryStat.isSymbolicLink() || !directoryStat.isDirectory()) {
+    throw new Error(`managed account directory is not a real directory: ${managedDirectory}`);
+  }
+  const canonicalDirectory = realpathSync(managedDirectory);
+  chmodSync(managedDirectory, 0o700);
+
+  let sourceStat: ReturnType<typeof lstatSync>;
+  try {
+    sourceStat = lstatSync(sourcePath);
+  } catch (error) {
+    if (isMissingPath(error)) {
+      throw new Error(`account ${mode}/${sourceLabel} is not enrolled`);
+    }
+    throw error;
+  }
+  if (sourceStat.isSymbolicLink() || !sourceStat.isFile()) {
+    throw new Error(`managed account is not a regular file: ${sourcePath}`);
+  }
+  if (dirname(realpathSync(sourcePath)) !== canonicalDirectory) {
+    throw new Error("account resolves outside the managed account directory");
+  }
+  if (existsSync(targetPath)) {
+    throw new Error(`account ${mode}/${targetLabel} already exists`);
+  }
+
+  chmodSync(sourcePath, 0o600);
+  renameSync(sourcePath, targetPath);
+  chmodSync(targetPath, 0o600);
+  return { mode, sourceLabel, targetLabel, sourcePath, targetPath };
 }
 
 /**

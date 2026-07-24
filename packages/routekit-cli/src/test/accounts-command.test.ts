@@ -284,10 +284,13 @@ test("one unified accounts surface: no connector subcommands leak to the CLI", (
   const accounts = program.commands.find((command) => command.name() === "accounts");
   assert.ok(accounts);
   const subcommands = accounts.commands.map((command) => command.name()).sort();
-  assert.deepEqual(subcommands, ["add", "list", "login", "remove", "status"]);
+  assert.deepEqual(subcommands, ["add", "list", "login", "remove", "rename", "status"]);
   const login = accounts.commands.find((command) => command.name() === "login");
   assert.ok(login);
   assert.match(login.helpInformation(), /--no-browser/);
   assert.match(login.description(), /claude-code, codex/);
   assert.doesNotMatch(login.description(), /gemini|grok|kimi|cliproxy/i);
+  const rename = accounts.commands.find((command) => command.name() === "rename");
+  assert.ok(rename);
+  assert.match(rename.description(), /claude-code or codex/);
 });

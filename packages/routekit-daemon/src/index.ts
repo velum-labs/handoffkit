@@ -26,8 +26,10 @@ import {
   cliproxyBaseUrl,
   cliproxyCredentialValid,
   defaultSubscriptionAccountDirectory,
+  RateLimitTracker,
   removeCliproxyAccount,
   removeSubscriptionAccount,
+  renameSubscriptionAccount,
   sanitizeSubscriptionLabel
 } from "@velum-labs/routekit-accounts";
 import type { AccountStoreEntry, SubscriptionCredential } from "@velum-labs/routekit-accounts";
@@ -1172,6 +1174,89 @@ export async function startRouteKitDaemon(
           }
         });
         return { removed, revision: revisions.accounts };
+      },
+      "accounts.rename": async (params) => {
+        const resolved = resolveAccountConnector(params.kind);
+        if (resolved === undefined || resolved.info.connector !== "native") {
+          throw new ControlError({
+            code: "bad_request",
+            message: "account rename supports only claude-code and codex"
+          });
+        }
+        const kind = resolved.kind as SubscriptionMode;
+        for (const [field, label] of [
+          ["source", params.source],
+          ["target", params.target]
+        ] as const) {
+          if (sanitizeSubscriptionLabel(label) !== label || label.startsWith(".")) {
+            throw new ControlError({
+              code: "bad_request",
+              message: `${field} account label must already be normalized`
+            });
+          }
+        }
+        await serializeMutation(async () => {
+          const directory = defaultSubscriptionAccountDirectory(kind, env);
+          const sourcePath = join(directory, `${params.source}.json`);
+          const targetPath = join(directory, `${params.target}.json`);
+          const trackerPath = join(directory, ".state.json");
+          if (!existsSync(sourcePath)) {
+            throw new ControlError({
+              code: "not_found",
+              message: `${kind}/${params.source} is not enrolled`
+            });
+          }
+          if (existsSync(targetPath)) {
+            throw new ControlError({
+              code: "conflict",
+              message: `${kind}/${params.target} is already enrolled`
+            });
+          }
+          const transaction = prepareAccountTransaction({
+            home,
+            configPath,
+            accountPaths: [sourcePath, targetPath, trackerPath],
+            accountRoots: [directory],
+            kind,
+            provider: kind,
+            labels: [params.source, params.target]
+          });
+          try {
+            renameSubscriptionAccount(kind, params.source, params.target, {
+              accountsDirectory: directory
+            });
+            new RateLimitTracker(trackerPath, kind).renameMember(
+              params.source,
+              params.target
+            );
+            options.onAccountTransactionPhase?.("credentials-written");
+            await replaceRouter(currentConfig, currentDocument, {
+              write: false,
+              accountRevision: true,
+              beforeSwap: () => markAccountTransactionCommitted(transaction)
+            });
+            try {
+              cleanupAccountTransaction(transaction);
+            } catch {
+              // A committed manifest is cleanup-only on the next daemon start.
+            }
+          } catch (error) {
+            const rollbackFailures: unknown[] = [];
+            try {
+              rollbackAccountTransaction(transaction, home);
+            } catch (rollbackError) {
+              rollbackFailures.push(rollbackError);
+            }
+            if (rollbackFailures.length > 0) {
+              throw new AggregateError(
+                [error, ...rollbackFailures],
+                `could not rename ${kind}/${params.source}; rollback failed`
+              );
+            }
+            throw error;
+          }
+        });
+        return { renamed: true, revision: revisions.accounts };
       },
       "accounts.sync": async () => {
         // A connector login wrote new account state outside the control
