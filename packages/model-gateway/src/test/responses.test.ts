@@ -4,6 +4,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { test } from "node:test";
 
 import { OpenAiBackend } from "../backend.js";
+import { AnthropicBackend } from "../provider-backends.js";
 import { MODEL_CALL_ID_HEADER } from "../provenance.js";
 import { CatalogBackend } from "../router.js";
 import {
@@ -286,6 +287,94 @@ test("serves a Responses request carrying reasoning: null end to end", async () 
   } finally {
     await gateway.close();
     await mock.close();
+  }
+});
+
+test("Responses routes discovered Claude efforts to adaptive Anthropic egress", async () => {
+  const requests: Request[] = [];
+  const anthropic = new AnthropicBackend({
+    baseUrl: "https://api.anthropic.test/v1",
+    apiKey: "unused",
+    transport: async (input, init) => {
+      requests.push(new Request(input, init));
+      return Response.json({
+        id: "msg_fable",
+        type: "message",
+        role: "assistant",
+        model: "claude-fable-5",
+        content: [{ type: "text", text: "FABLE_OK" }],
+        stop_reason: "end_turn",
+        usage: { input_tokens: 1, output_tokens: 1 }
+      });
+    }
+  });
+  const backend = await CatalogBackend.create({
+    config: {
+      providers: { "claude-code": {} },
+      defaultModel: "claude-code/claude-fable-5"
+    },
+    sources: {
+      "claude-code": {
+        sourceId: "claude-code",
+        async discoverModels() {
+          return [
+            {
+              id: "claude-fable-5",
+              reasoning: {
+                status: "supported",
+                efforts: [{ id: "low" }, { id: "high" }],
+                budget: { minTokens: 1_024 },
+                adaptive: true,
+                wireShape: "anthropic",
+                provenance: "provider"
+              }
+            }
+          ];
+        },
+        chat: (body, signal, options) =>
+          anthropic.chat(body, signal, options),
+        embeddings: async () => Response.json({})
+      }
+    }
+  });
+  const gateway = await startGateway({ backend });
+  try {
+    const supported = await fetch(`${gateway.url()}/v1/responses`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        model: "claude-code/claude-fable-5",
+        input: "hi",
+        max_output_tokens: 64,
+        reasoning: { effort: "high" }
+      })
+    });
+    assert.equal(supported.status, 200);
+    const outbound = (await requests[0]?.json()) as {
+      thinking?: unknown;
+      output_config?: unknown;
+    };
+    assert.deepEqual(outbound.thinking, { type: "adaptive" });
+    assert.deepEqual(outbound.output_config, { effort: "high" });
+
+    const unsupported = await fetch(`${gateway.url()}/v1/responses`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        model: "claude-code/claude-fable-5",
+        input: "hi",
+        reasoning: { effort: "max" }
+      })
+    });
+    assert.equal(unsupported.status, 400);
+    assert.equal(
+      ((await unsupported.json()) as { error?: { message?: string } }).error
+        ?.message,
+      'reasoning effort "max" is not supported by model "claude-code/claude-fable-5"'
+    );
+    assert.equal(requests.length, 1);
+  } finally {
+    await gateway.close();
   }
 });
 

@@ -374,6 +374,55 @@ test("capability conflicts resolve by account order across reversed response tim
   }
 });
 
+test("Claude Code pools retain discovered effort and thinking metadata", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "routekit-pool-claude-capabilities-"));
+  writeMember(directory, "b", { accessToken: "token-b" });
+  writeMember(directory, "a", { accessToken: "token-a" });
+  const base = fakeProvider({ refreshes: 0 });
+  const provider: SubscriptionProvider = {
+    ...base,
+    mode: "claude-code",
+    requestPath: "/v1/messages",
+    async loadCredential(path) {
+      const credential = await base.loadCredential(path);
+      return { ...credential, mode: "claude-code" };
+    },
+    async discoverModels(credential) {
+      return [
+        {
+          id: "claude-fable-5",
+          reasoning: {
+            status: "supported",
+            efforts: [{ id: credential.accessToken === "token-a" ? "low" : "high" }],
+            budget: { minTokens: 1_024 },
+            adaptive: true,
+            wireShape: "anthropic",
+            provenance: "provider"
+          }
+        }
+      ];
+    }
+  };
+  const pool = await SubscriptionAccountSet.open(provider, {
+    mode: "claude-code",
+    source: { kind: "directory", path: directory }
+  });
+  try {
+    await pool.discoverModels();
+    assert.deepEqual(pool.reasoningCapabilities("claude-fable-5"), {
+      status: "supported",
+      efforts: [{ id: "low" }],
+      budget: { minTokens: 1_024 },
+      adaptive: true,
+      wireShape: "anthropic",
+      provenance: "provider"
+    });
+  } finally {
+    await pool.close();
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 test("capability precedence skips failed and capability-omitting accounts", async () => {
   for (const firstAccount of ["failed", "omitted"] as const) {
     const directory = mkdtempSync(join(tmpdir(), "routekit-pool-capability-fallback-"));

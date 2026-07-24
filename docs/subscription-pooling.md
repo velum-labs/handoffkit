@@ -102,6 +102,12 @@ that reports reasoning metadata for the model: directory-backed accounts are
 ordered by account filename, and explicit account paths retain caller order.
 Failed accounts and accounts that omit the metadata are skipped.
 
+Anthropic model discovery supplies nested `capabilities.effort` and
+`capabilities.thinking` metadata. RouteKit projects only levels explicitly
+marked supported into Codex's effort picker; it does not invent a default or
+offer levels omitted by the provider. Explicit router overrides still take
+precedence over discovered metadata.
+
 Claude Code and Codex present their own subscription models under bare native
 names in their `/model` pickers. This is only a client-facing alias:
 `claude-sonnet-4-6` still resolves to

@@ -78,6 +78,39 @@ test("Codex launcher serializes namespaced models without interpreting provider 
   assert.deepEqual(JSON.parse(codexModelCatalogJson(SPEC, template)).models, entries.slice(0, 3));
 });
 
+test("Codex launcher exposes only provider-discovered Claude effort levels", () => {
+  const spec: ToolLaunchSpec = {
+    gatewayUrl: "http://127.0.0.1:9999",
+    defaultModel: "claude-code/claude-fable-5",
+    models: [
+      {
+        id: "claude-code/claude-fable-5",
+        reasoning: {
+          status: "supported",
+          efforts: [{ id: "low" }, { id: "high" }, { id: "max" }],
+          budget: { minTokens: 1_024 },
+          adaptive: true,
+          wireShape: "anthropic",
+          provenance: "provider"
+        }
+      }
+    ],
+    args: []
+  };
+  const [entry] = codexCatalogEntries(spec, {
+    slug: "stock",
+    visibility: "list",
+    supported_reasoning_levels: [{ effort: "template" }],
+    default_reasoning_level: "template"
+  });
+  assert.deepEqual(entry?.supported_reasoning_levels, [
+    { effort: "low", description: "low" },
+    { effort: "high", description: "high" },
+    { effort: "max", description: "max" }
+  ]);
+  assert.equal(entry?.default_reasoning_level, undefined);
+});
+
 test("Codex launcher neutralizes stock-model behavior fields from the template", () => {
   const template = {
     slug: "gpt-stock",

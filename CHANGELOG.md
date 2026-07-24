@@ -12,6 +12,9 @@ package, and the PyPI FusionKit sidecar package set. Release tags are named
   reasoning-only upstream completion returns an explicit error instead of a
   successful empty assistant turn.
 
+- Added Anthropic model capability discovery so Codex exposes only the
+  provider-advertised effort levels for Claude Code subscription models.
+
 ## 0.9.4 - 2026-07-24
 
 - Fixed normalized Codex `none` requests from emitting unsupported explicit

@@ -69,6 +69,12 @@ model. Directory-backed accounts are ordered by account filename; explicit
 paths retain caller order. Failed accounts and accounts without that metadata
 are skipped.
 
+Anthropic model discovery supplies nested `capabilities.effort` and
+`capabilities.thinking` metadata. RouteKit projects only levels explicitly
+marked supported into Codex's effort picker; it does not invent a default or
+offer levels omitted by the provider. Explicit router overrides still take
+precedence over discovered metadata.
+
 ```json
 {
   "version": "fusionkit.fusion.v4",
