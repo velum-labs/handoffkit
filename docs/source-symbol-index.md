@@ -10,6 +10,7 @@ Use it with the narrative references when you need to find the module that owns 
 
 - `packages/accounts/src/account-set.ts`: SubscriptionAccountSetOptions (type), SubscriptionExecutionObserver (type), RateLimitTracker (class), SubscriptionAccountSetExhaustedError (class), SubscriptionAccountSet (class)
 - `packages/accounts/src/account-source.ts`: SubscriptionAccountSource (type), ResolvedSubscriptionAccounts (type), resolveSubscriptionAccounts (function)
+- `packages/accounts/src/admission.ts`: hasUsableCredits (function), windowHeadroom (function), memberHeadroom (function), isOverSwitchThreshold (function), isPoolEligible (function), windowAdmissionStatus (function)
 - `packages/accounts/src/backend.ts`: SubscriptionAccountBackendOptions (type), SubscriptionAccountBackend (class)
 - `packages/accounts/src/client.ts`: SubscriptionProxyClientOptions (type), SubscriptionProxyClient (class), SubscriptionProxyClientError (class)
 - `packages/accounts/src/cliproxy.ts`: CLIPROXY_PINNED_VERSION (const), CLIPROXY_API_KEY_ENV (const), CLIPROXY_BASE_URL_ENV (const), CLIPROXY_HOME_ENV (const), cliproxyHome (function), cliproxyBaseUrl (function), cliproxyConfigPath (function), cliproxyManagedPort (function), cliproxyBinaryPath (function), cliproxyAssetName (function), cliproxyApiKey (function), ensureCliproxyConfig (function), writeCliproxyLoginConfig (function), CliproxyInstallResult (type), installCliproxy (function), spawnCliproxy (function), CliproxyStatus (type), cliproxyStatus (function)

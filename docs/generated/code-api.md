@@ -24,6 +24,7 @@ contract. Product CLIs can wrap this module without owning account logic.
 - `export type { ResolvedSubscriptionAccounts, SubscriptionAccountSource } from "./account-source.js";`
 - `export { subscriptionProvider } from "./provider.js";`
 - `export type { AdminUsageCost, AdminUsageRange, SubscriptionProvider } from "./provider.js";`
+- `export { hasUsableCredits, isOverSwitchThreshold, isPoolEligible, memberHeadroom, windowAdmissionStatus, windowHeadroom } from "./admission.js";`
 - `export { RateLimitTracker, SubscriptionAccountSet, SubscriptionAccountSetExhaustedError } from "./account-set.js";`
 - `export type { SubscriptionAccountSetOptions, SubscriptionExecutionObserver } from "./account-set.js";`
 - `export { SubscriptionAccountBackend } from "./backend.js";`
