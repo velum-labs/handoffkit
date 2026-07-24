@@ -9,6 +9,10 @@ import {
 import { buildProgram } from "../cli.js";
 import { completionCandidates } from "../completion.js";
 import {
+  CONFIG_INIT_PROVIDER_IDS,
+  configInitRouterConfig
+} from "../commands/config.js";
+import {
   isLaunchProviderId,
   LAUNCH_ACCOUNT_KINDS,
   LAUNCH_PROVIDER_IDS,
@@ -42,4 +46,14 @@ test("default setup and public completion cannot drift outside the contract", ()
   for (const notOffered of ["google", "cliproxy"]) {
     assert.equal(providerCandidates.includes(notOffered), false);
   }
+});
+
+test("config init starters stay inside the API launch contract", () => {
+  assert.deepEqual(CONFIG_INIT_PROVIDER_IDS, ["openai", "anthropic", "openrouter"]);
+  for (const provider of CONFIG_INIT_PROVIDER_IDS) {
+    const config = configInitRouterConfig({ provider });
+    assert.deepEqual(configuredProviderIds(config), [provider]);
+    assert.match(config.defaultModel ?? "", new RegExp(`^${provider}/`));
+  }
+  assert.deepEqual(configInitRouterConfig({ empty: true }), { providers: {} });
 });

@@ -141,6 +141,19 @@ test("config help describes import-only singleton policy", () => {
     init.options.find((option) => option.long === "--global")?.hidden,
     true
   );
+  assert.deepEqual(
+    init.options.find((option) => option.long === "--provider")?.argChoices,
+    ["openai", "anthropic", "openrouter"]
+  );
+  assert.ok(init.options.some((option) => option.long === "--empty"));
+  const initHelp = init.helpInformation();
+  for (const credential of [
+    "OPENAI_API_KEY",
+    "ANTHROPIC_API_KEY",
+    "OPENROUTER_API_KEY"
+  ]) {
+    assert.match(initHelp, new RegExp(credential));
+  }
   assert.equal(
     edit.options.find((option) => option.long === "--global")?.hidden,
     true

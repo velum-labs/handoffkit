@@ -12,6 +12,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
+import { parse as parseYaml } from "yaml";
 
 const CLI_ENTRY = resolve(dirname(fileURLToPath(import.meta.url)), "..", "index.js");
 
@@ -145,9 +146,105 @@ test("config init does not install a crash-looping daemon when credentials are m
       existsSync(join(home, ".config", "routekit", "router.yaml")),
       true
     );
+    const config = parseYaml(
+      readFileSync(join(home, ".config", "routekit", "router.yaml"), "utf8")
+    ) as {
+      providers: Record<string, unknown>;
+      defaultModel?: string;
+    };
+    assert.deepEqual(Object.keys(config.providers), ["openai"]);
+    assert.equal(config.defaultModel, "openai/gpt-5.5");
     assert.equal(existsSync(join(stateHome, "services", "daemon.json")), false);
   } finally {
     rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("config init supports each first-launch provider and an empty bootstrap", async (t) => {
+  const cases = [
+    {
+      name: "anthropic",
+      args: ["--provider", "anthropic"],
+      providers: ["anthropic"],
+      defaultModel: "anthropic/claude-sonnet-4-5",
+      requiredCredential: "ANTHROPIC_API_KEY"
+    },
+    {
+      name: "openrouter",
+      args: ["--provider", "openrouter"],
+      providers: ["openrouter"],
+      defaultModel: "openrouter/anthropic/claude-sonnet-4.5",
+      requiredCredential: "OPENROUTER_API_KEY"
+    },
+    {
+      name: "empty",
+      args: ["--empty"],
+      providers: [],
+      defaultModel: undefined,
+      requiredCredential: undefined
+    }
+  ] as const;
+
+  for (const fixture of cases) {
+    await t.test(fixture.name, () => {
+      const root = mkdtempSync(join(tmpdir(), `routekit-config-init-${fixture.name}-`));
+      const home = join(root, "home");
+      const project = join(root, "project");
+      const stateHome = join(root, "state");
+      mkdirSync(home);
+      mkdirSync(project);
+      const env = {
+        ...process.env,
+        HOME: home,
+        ROUTEKIT_HOME: stateHome,
+        ROUTEKIT_NO_SUPERVISOR: "1",
+        ROUTEKIT_TELEMETRY: "0",
+        PORTLESS: "0",
+        NO_COLOR: "1",
+        OPENAI_API_KEY: undefined,
+        ANTHROPIC_API_KEY: undefined,
+        ANTHROPIC_AUTH_TOKEN: undefined,
+        OPENROUTER_API_KEY: undefined
+      };
+      const input = { cwd: project, env };
+      const configPath = join(home, ".config", "routekit", "router.yaml");
+      const daemonRecordPath = join(stateHome, "services", "daemon.json");
+      try {
+        const result = runCli(
+          ["config", "init", "--global", ...fixture.args, "--json"],
+          input
+        );
+        assert.equal(result.status, 0, result.stderr);
+        const payload = JSON.parse(result.stdout) as {
+          created?: boolean;
+          daemonStarted?: boolean;
+          missingCredentials?: string[];
+        };
+        assert.equal(payload.created, true);
+
+        const config = parseYaml(readFileSync(configPath, "utf8")) as {
+          providers: Record<string, unknown>;
+          defaultModel?: string;
+        };
+        assert.deepEqual(Object.keys(config.providers), fixture.providers);
+        assert.equal(config.defaultModel, fixture.defaultModel);
+
+        if (fixture.requiredCredential !== undefined) {
+          assert.equal(payload.daemonStarted, false);
+          assert.ok(payload.missingCredentials?.includes(fixture.requiredCredential));
+          assert.equal(existsSync(daemonRecordPath), false);
+        } else {
+          assert.equal(payload.missingCredentials, undefined);
+          assert.equal(existsSync(daemonRecordPath), true);
+        }
+      } finally {
+        if (existsSync(daemonRecordPath)) {
+          const stopped = runCli(["stop", "--json"], input);
+          assert.equal(stopped.status, 0, stopped.stderr);
+        }
+        rmSync(root, { recursive: true, force: true });
+      }
+    });
   }
 });
 

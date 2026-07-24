@@ -15,29 +15,21 @@ providers:
 defaultModel: openai/gpt-5.5
 ```
 
-For subscription logins, enable the provider and pool any number of named
-accounts:
-
-```yaml
-# .routekit/router.yaml
-providers:
-  codex:
-    strategy: capacity_weighted
-    switchThreshold: 0.9
-```
+For a fresh standalone subscription-only setup, create an empty canonical
+config, then pool any number of named accounts:
 
 ```bash
-routekit config import --from .routekit/router.yaml
+routekit config init --empty
 routekit accounts login codex --name personal
 routekit accounts login codex --name work
 routekit providers status codex
 routekit models list
 ```
 
-The import is required before using daemon-backed RouteKit commands with this
-project policy. It validates and replaces the singleton's complete canonical
-document; project files are never implicit daemon scopes and are not merged
-with the existing global file. For embedded-only API providers,
+The first login enables the subscription provider in the canonical config.
+Import is reserved for intentionally replacing the singleton with a complete
+existing project policy; project files are never implicit daemon scopes and
+are not merged with the existing global file. For embedded-only API providers,
 `fusionkit doctor` validates the project catalog without importing it.
 
 RouteKit authenticates every configured provider at startup and publishes a

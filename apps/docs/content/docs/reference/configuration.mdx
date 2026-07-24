@@ -62,6 +62,19 @@ daemon reads exactly one canonical document:
 from the caller's working directory because concurrent projects share the same
 gateway.
 
+Create that document directly for the first provider:
+
+```bash
+routekit config init                              # OpenAI
+routekit config init --provider anthropic         # Anthropic API
+routekit config init --provider openrouter        # OpenRouter
+routekit config init --empty                      # subscription-only
+```
+
+The API starters use `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, and
+`OPENROUTER_API_KEY`, respectively. A missing credential does not prevent
+config creation; set the reported variable and run `routekit start`.
+
 Project `.routekit/router.yaml` files remain valid as explicit inputs to
 FusionKit embedded mode and the embeddable RouteKit SDK. To migrate one into
 the singleton daemon, replace the complete canonical document explicitly:

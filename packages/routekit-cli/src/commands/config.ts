@@ -11,6 +11,11 @@ import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 
 import { contextFor } from "@velum-labs/routekit-cli-core";
+import {
+  parseRouterConfig,
+  type RouterConfig
+} from "@velum-labs/routekit-gateway";
+import { catalogDefaultModel } from "@velum-labs/routekit-registry";
 import { acquireLifecycleLock } from "@velum-labs/routekit-runtime";
 import { Option, type Command } from "commander";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
@@ -30,8 +35,33 @@ import {
   routekitClient
 } from "../client.js";
 import { missingServiceCredentialVariables } from "../daemon.js";
+import type { LaunchProviderId } from "../launch-support.js";
 
 import { configOverride } from "./context.js";
+
+export const CONFIG_INIT_PROVIDER_IDS = [
+  "openai",
+  "anthropic",
+  "openrouter"
+] as const satisfies readonly LaunchProviderId[];
+
+export type ConfigInitProviderId = (typeof CONFIG_INIT_PROVIDER_IDS)[number];
+
+export function configInitRouterConfig(input: {
+  provider?: ConfigInitProviderId;
+  empty?: boolean;
+} = {}): RouterConfig {
+  if (input.empty === true) return parseRouterConfig({ providers: {} });
+  const provider = input.provider ?? "openai";
+  const defaultModel = catalogDefaultModel(provider);
+  if (defaultModel === undefined) {
+    throw new Error(`no default model is registered for ${provider}`);
+  }
+  return parseRouterConfig({
+    providers: { [provider]: {} },
+    defaultModel: `${provider}/${defaultModel}`
+  });
+}
 
 export function configImportIdempotencyKey(input: {
   revision: number;
@@ -83,16 +113,55 @@ export function registerConfig(program: Command): void {
       } else process.stdout.write(result.document);
     });
 
-  config
+  const init = config
     .command("init")
     .description("create the canonical singleton router config")
     .addOption(new Option("--global").hideHelp())
-    .option("--force", "replace an existing config")
-    .action(async (options: { force?: boolean }, command: Command) => {
+    .addOption(
+      new Option(
+        "--provider <provider>",
+        "API provider starter (openai, anthropic, or openrouter)"
+      )
+        .choices([...CONFIG_INIT_PROVIDER_IDS])
+        .conflicts("empty")
+    )
+    .addOption(
+      new Option(
+        "--empty",
+        "create an empty config before logging in a subscription account"
+      ).conflicts("provider")
+    )
+    .option("--force", "replace an existing config");
+
+  init.addHelpText(
+    "after",
+    [
+      "",
+      "Provider credentials:",
+      "  openai      OPENAI_API_KEY",
+      "  anthropic   ANTHROPIC_API_KEY",
+      "  openrouter  OPENROUTER_API_KEY",
+      "",
+      "With --empty, continue with `routekit accounts login claude-code|codex --name <label>`."
+    ].join("\n")
+  );
+
+  init.action(
+    async (
+      options: {
+        provider?: ConfigInitProviderId;
+        empty?: boolean;
+        force?: boolean;
+      },
+      command: Command
+    ) => {
       const ctx = contextFor(command);
       const path = globalRouterConfigPath();
-      const missingCredentials =
-        missingServiceCredentialVariables(DEFAULT_ROUTER_CONFIG);
+      const starterConfig =
+        options.provider === undefined && options.empty !== true
+          ? DEFAULT_ROUTER_CONFIG
+          : configInitRouterConfig(options);
+      const missingCredentials = missingServiceCredentialVariables(starterConfig);
       if (existsSync(path) && options.force !== true) {
         throw new Error(`${path} already exists (pass --force to replace it)`);
       }
@@ -106,7 +175,7 @@ export function registerConfig(program: Command): void {
             if (existsSync(path) && options.force !== true) {
               throw new Error(`${path} already exists (pass --force to replace it)`);
             }
-            writeRouterConfig(path, DEFAULT_ROUTER_CONFIG);
+            writeRouterConfig(path, starterConfig);
             if (missingCredentials.length === 0) {
               await ensureDaemon({
                 configPath: path,
@@ -157,13 +226,14 @@ export function registerConfig(program: Command): void {
         "config.update",
         {
           expectedRevision: current.revision,
-          document: stringifyYaml(DEFAULT_ROUTER_CONFIG)
+          document: stringifyYaml(starterConfig)
         },
         { idempotencyKey: `config-init-${current.revision}` }
       );
       if (ctx.json) ctx.emit({ path, created: true });
       else ctx.presenter.success(`created ${path}`);
-    });
+    }
+  );
 
   config
     .command("edit")
