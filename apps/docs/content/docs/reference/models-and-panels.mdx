@@ -81,6 +81,25 @@ shows its matching subscription models under bare provider-native names. Those
 aliases are accepted only on that native protocol boundary and resolve to the
 same namespaced RouteKit model and managed account pool.
 
+When both an API-key provider and a subscription provider expose the same model
+family, RouteKit keeps separate namespaced ids (for example
+`anthropic/claude-sonnet-4-5` and `claude-code/claude-sonnet-4-5`, or
+`openai/gpt-5.5` and `codex/gpt-5.5`). Picker labels and `routekit models list`
+make the billing source obvious:
+
+| provider | model | billing | account |
+| -- | -- | -- | -- |
+| anthropic | anthropic/claude-sonnet-4-5 | metered API | api-key |
+| claude-code | claude-code/claude-sonnet-4-5 | subscription | subscription |
+| openai | openai/gpt-5.5 | metered API | api-key |
+| codex | codex/gpt-5.5 | subscription | subscription |
+
+Human picker labels follow the same source, for example
+`Claude Sonnet 4.5 · Anthropic API` versus `Claude Sonnet 4.5 · Claude Max`, or
+`GPT-5.5 · OpenAI API` versus `GPT-5.5 · ChatGPT subscription`. Technical ids
+stay namespaced for routing and API clients; use `routekit models info` when you
+need the full route explanation JSON.
+
 `fusionkit models` remains the lifecycle command for the Fusion-owned local MLX
 cache. It is separate from `routekit models list`, which performs live provider
 discovery.

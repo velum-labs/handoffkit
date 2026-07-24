@@ -187,6 +187,9 @@ test("singleton daemon exposes authenticated control and a stable reloadable dat
     assert.equal(status.dataUrl, daemon.dataUrl);
     const models = await client.call("models.list", {});
     assert.deepEqual(models.models.map((model) => model.id), ["openai/mock-model"]);
+    assert.equal(models.models[0]?.accountClass, "api-key");
+    assert.equal(models.models[0]?.billingMode, "metered-api");
+    assert.match(models.models[0]?.displayLabel ?? "", /OpenAI API/);
     const modelInfo = await client.call("models.info", { model: "openai/mock-model" });
     assert.equal(modelInfo.id, "openai/mock-model");
     assert.equal(modelInfo.provider, "openai");

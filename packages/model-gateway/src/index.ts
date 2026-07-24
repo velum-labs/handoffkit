@@ -1,4 +1,17 @@
-/** Product-neutral RouteKit gateway and router. */
+export {
+  formatAccountClassLabel,
+  formatBillingModeLabel,
+  formatBillingSourceLabel,
+  formatModelHumanName,
+  formatPickerLabel,
+  providerBillingMetadata,
+  sanitizeModelLabel
+} from "./model-labels.js";
+export type {
+  ModelAccountClass,
+  ModelBillingMode,
+  ModelLabelRoute
+} from "./model-labels.js";
 export { startGateway } from "./server.js";
 export type {
   Gateway,

@@ -35,7 +35,7 @@ function liveModels(models: readonly LiveModel[]): ToolModel[] {
   return models.map((model) => {
     return {
       id: model.id,
-      label: model.id,
+      label: model.displayLabel ?? model.id,
       features: {
         streaming: featureStatus(model.capabilities.streaming),
         tools: featureStatus(model.capabilities.tools),

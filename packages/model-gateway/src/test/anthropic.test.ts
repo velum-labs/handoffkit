@@ -96,19 +96,19 @@ test("anthropicModelsResponse exposes Claude subscription models as bare native 
   assert.deepEqual(body.data, [
     {
       id: "claude-sonnet-4-6",
-      display_name: "claude-sonnet-4-6",
+      display_name: "Claude Sonnet 4.6 · Claude Max",
       created_at: new Date(0).toISOString(),
       type: "model"
     },
     {
       id: "claude-codex/gpt-5.5",
-      display_name: "codex/gpt-5.5",
+      display_name: "GPT-5.5 · ChatGPT subscription",
       created_at: new Date(0).toISOString(),
       type: "model"
     },
     {
       id: "anthropic/claude-opus-4-8",
-      display_name: "anthropic/claude-opus-4-8",
+      display_name: "Claude Opus 4.8 · Anthropic API",
       created_at: new Date(0).toISOString(),
       type: "model"
     }
@@ -887,8 +887,8 @@ test("Claude picker aliases use the canonical catalog and pooled native relay", 
     assert.deepEqual(
       catalog.data.map(({ id, display_name }) => [id, display_name]),
       [
-        ["claude-codex/gpt-5.5", "codex/gpt-5.5"],
-        ["claude-sonnet-4-6", "claude-sonnet-4-6"]
+        ["claude-codex/gpt-5.5", "GPT-5.5 · ChatGPT subscription"],
+        ["claude-sonnet-4-6", "Claude Sonnet 4.6 · Claude Max"]
       ]
     );
 

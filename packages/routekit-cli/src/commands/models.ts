@@ -1,6 +1,10 @@
 import { CliError, contextFor } from "@velum-labs/routekit-cli-core";
 import type { ModelRouteInfo } from "@velum-labs/routekit-control";
 import { ControlError } from "@velum-labs/routekit-runtime";
+import {
+  formatAccountClassLabel,
+  formatBillingModeLabel
+} from "@velum-labs/routekit-gateway";
 import type { Command } from "commander";
 
 import { routekitClient } from "../client.js";
@@ -60,9 +64,15 @@ export function registerModels(program: Command): void {
           filtered.map((model) => [
             providerFor(model),
             model.id,
+            model.billingMode === undefined
+              ? ""
+              : formatBillingModeLabel(model.billingMode),
+            model.accountClass === undefined
+              ? ""
+              : formatAccountClassLabel(model.accountClass),
             model.id === catalog.defaultModel ? "default" : ""
           ]),
-          { head: ["provider", "model", ""] }
+          { head: ["provider", "model", "billing", "account", ""] }
         );
       } else {
         for (const model of modelIds) process.stdout.write(`${model}\n`);

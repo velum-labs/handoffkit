@@ -1367,6 +1367,8 @@ function isAnthropicFamilyId(id: string): boolean {
 /** The `claude-` prefix used to alias non-Anthropic models past Claude's filter. */
 export const CLAUDE_ALIAS_PREFIX = "claude-";
 
+import { formatPickerLabel } from "../model-labels.js";
+
 export type ClaudePickerModelRoute = {
   publicId: string;
   nativeId: string;
@@ -1421,8 +1423,15 @@ export function anthropicModelsResponse(
   for (const realId of source) {
     const route = routes.get(realId);
     const displayName =
-      route?.provider === "claude-code" ? route.nativeId : realId;
-    const id = claudeModelAlias(displayName);
+      route === undefined
+        ? realId
+        : formatPickerLabel({
+            provider: route.provider,
+            nativeModel: route.nativeId
+          });
+    const id = claudeModelAlias(
+      route?.provider === "claude-code" ? route.nativeId : realId
+    );
     if (seen.has(id)) continue;
     seen.add(id);
     models.push({

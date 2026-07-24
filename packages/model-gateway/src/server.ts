@@ -43,6 +43,7 @@ import type {
   ProvenanceSink
 } from "./provenance.js";
 import { NoModelAvailableError, UnknownModelError } from "./router.js";
+import { formatPickerLabel } from "./model-labels.js";
 
 /**
  * The local-model gateway HTTP server. It fronts a single OpenAI Chat
@@ -126,17 +127,28 @@ export type Gateway = {
 function codexModelInfo(
   id: string,
   priority: number,
-  reasoning?: ModelReasoningCapabilities
+  reasoning?: ModelReasoningCapabilities,
+  route?: BackendModelRoute
 ): Record<string, unknown> {
   const levels = (reasoning?.efforts ?? []).map((effort) => ({
     effort: effort.id,
     description: effort.description ?? effort.label ?? effort.id
   }));
+  const displayName =
+    route === undefined
+      ? id
+      : formatPickerLabel({
+          provider: route.provider,
+          nativeModel: route.nativeId
+        });
   return {
     slug: id,
     prefer_websockets: false,
-    display_name: id,
-    description: "RouteKit live model",
+    display_name: displayName,
+    description:
+      route === undefined
+        ? "RouteKit live model"
+        : `${displayName} via RouteKit`,
     ...(reasoning?.defaultEffort !== undefined
       ? { default_reasoning_level: reasoning.defaultEffort }
       : {}),
@@ -270,9 +282,26 @@ function codexPickerModels(
       route?.provider === "codex" ? route.nativeId : entry.id;
     seen.add(slug);
     const upstream = nativeBySlug.get(slug);
+    const pickerLabel =
+      route === undefined
+        ? undefined
+        : formatPickerLabel({
+            provider: route.provider,
+            nativeModel: route.nativeId
+          });
     return upstream === undefined
-      ? codexModelInfo(slug, priority, route?.reasoning)
-      : { ...upstream, slug, priority };
+      ? codexModelInfo(slug, priority, route?.reasoning, route)
+      : {
+          ...upstream,
+          slug,
+          priority,
+          ...(pickerLabel === undefined
+            ? {}
+            : {
+                display_name: pickerLabel,
+                description: `${pickerLabel} via RouteKit`
+              })
+        };
   });
   if (!includeUnroutedNative) return models;
   for (const entry of native) {

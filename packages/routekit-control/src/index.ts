@@ -113,6 +113,9 @@ export type ConfigSnapshot = {
 export type ModelInfo = {
   id: string;
   provider?: string;
+  accountClass?: ModelAccountClass;
+  billingMode?: ModelBillingMode;
+  displayLabel?: string;
   capabilities?: Record<string, unknown>;
   reasoning?: Record<string, unknown>;
 };

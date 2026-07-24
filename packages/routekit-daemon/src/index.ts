@@ -667,10 +667,26 @@ export async function startRouteKitDaemon(
             message: `gateway model discovery failed (${response.status})`
           });
         }
-        const body = (await response.json()) as { data?: ModelInfo[] };
-        const models = (body.data ?? []).filter(
-          (model) => params.provider === undefined || model.id.startsWith(`${params.provider}/`)
-        );
+        const body = (await response.json()) as {
+          data?: Array<ModelInfo & { display_name?: string }>;
+        };
+        const models = (body.data ?? [])
+          .filter(
+            (model) =>
+              params.provider === undefined ||
+              model.id.startsWith(`${params.provider}/`)
+          )
+          .map((model) => {
+            const info = activeRouter!.modelInfo(model.id);
+            if (info === undefined) return model;
+            return {
+              ...model,
+              provider: info.provider,
+              accountClass: info.accountClass,
+              billingMode: info.billingMode,
+              displayLabel: model.displayLabel ?? model.display_name
+            };
+          });
         const result = {
           models,
           ...(currentConfig.defaultModel !== undefined

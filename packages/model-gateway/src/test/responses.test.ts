@@ -809,10 +809,10 @@ test("Codex picker aliases use the canonical catalog and pooled native relay", a
     assert.deepEqual(
       catalog.models.map(({ slug, display_name }) => [slug, display_name]),
       [
-        ["gpt-5.5", "GPT-5.5"],
+        ["gpt-5.5", "GPT-5.5 · ChatGPT subscription"],
         [
           "claude-code/claude-sonnet-4-6",
-          "claude-code/claude-sonnet-4-6"
+          "Claude Sonnet 4.6 · Claude Max"
         ]
       ]
     );

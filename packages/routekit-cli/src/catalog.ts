@@ -4,6 +4,9 @@ import { trimTrailingSlashes } from "@velum-labs/routekit-runtime";
 export type LiveModel = {
   id: string;
   provider?: string;
+  accountClass?: "api-key" | "subscription" | "proxy";
+  billingMode?: "metered-api" | "subscription" | "upstream-managed";
+  displayLabel?: string;
   capabilities: Readonly<Record<string, string>>;
   reasoning?: ModelReasoningCapabilities;
 };
@@ -48,6 +51,21 @@ export async function fetchLiveCatalog(
         id: entry.id,
         ...(typeof entry.owned_by === "string"
           ? { provider: entry.owned_by }
+          : {}),
+        ...(typeof entry.displayLabel === "string"
+          ? { displayLabel: entry.displayLabel }
+          : typeof entry.display_name === "string"
+            ? { displayLabel: entry.display_name }
+            : {}),
+        ...(entry.accountClass === "api-key" ||
+        entry.accountClass === "subscription" ||
+        entry.accountClass === "proxy"
+          ? { accountClass: entry.accountClass }
+          : {}),
+        ...(entry.billingMode === "metered-api" ||
+        entry.billingMode === "subscription" ||
+        entry.billingMode === "upstream-managed"
+          ? { billingMode: entry.billingMode }
           : {}),
         capabilities: Object.fromEntries(
           Object.entries(capabilities ?? {}).flatMap(([name, status]) =>

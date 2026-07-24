@@ -27,6 +27,10 @@ import type {
   ProviderId,
   ProviderSource
 } from "./provider-source.js";
+import {
+  formatPickerLabel,
+  providerBillingMetadata
+} from "./model-labels.js";
 
 export class UnknownModelError extends Error {
   constructor(readonly model: string) {
@@ -224,22 +228,7 @@ function routeBilling(provider: ProviderId): Pick<
   CatalogModelInfo,
   "accountClass" | "billingMode"
 > {
-  switch (provider) {
-    case "openai":
-    case "anthropic":
-    case "google":
-    case "openrouter":
-      return { accountClass: "api-key", billingMode: "metered-api" };
-    case "codex":
-    case "claude-code":
-      return { accountClass: "subscription", billingMode: "subscription" };
-    case "cliproxy":
-      return { accountClass: "proxy", billingMode: "upstream-managed" };
-    default: {
-      const unreachable: never = provider;
-      throw new Error(`unsupported route provider: ${String(unreachable)}`);
-    }
-  }
+  return providerBillingMetadata(provider);
 }
 
 export type CatalogBackendOptions = {
@@ -521,13 +510,24 @@ export class CatalogBackend implements Backend {
   }
 
   models(): Promise<Response> {
-    const data = [...this.#entries.values()].map((entry) => ({
-      id: entry.publicId,
-      object: "model",
-      owned_by: entry.provider,
-      capabilities: entry.capabilities,
-      ...(entry.reasoning !== undefined ? { reasoning: entry.reasoning } : {})
-    }));
+    const data = [...this.#entries.values()].map((entry) => {
+      const billing = routeBilling(entry.provider);
+      const displayLabel = formatPickerLabel({
+        provider: entry.provider,
+        nativeModel: entry.nativeId,
+        ...billing
+      });
+      return {
+        id: entry.publicId,
+        object: "model",
+        owned_by: entry.provider,
+        capabilities: entry.capabilities,
+        ...billing,
+        displayLabel,
+        display_name: displayLabel,
+        ...(entry.reasoning !== undefined ? { reasoning: entry.reasoning } : {})
+      };
+    });
     return Promise.resolve(
       new Response(JSON.stringify({ object: "list", data }), {
         headers: { "content-type": "application/json" }

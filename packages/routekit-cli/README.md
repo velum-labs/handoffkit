@@ -55,7 +55,7 @@ Set `ROUTEKIT_DEV_SKIP_BUILD=1` after a build for a faster local check.
 | `codex install`, `codex uninstall` | Add or remove RouteKit-owned Codex provider/profile blocks. |
 | `claude install`, `claude uninstall` | Add or remove RouteKit-owned Claude Code gateway settings while preserving user configuration. |
 | `providers add`, `remove`, `status` | Manage explicit providers and run live discovery without printing credentials. |
-| `models list` | Discover and list the live namespaced model catalog. |
+| `models list` | Discover and list the live namespaced model catalog with billing source columns (`billing`, `account`) so API-key and subscription duplicates are distinguishable at a glance. |
 | `models info <provider/model>` | Explain the effective provider and native model, account class, billing mode, default status, capabilities, and reasoning metadata without printing credentials. |
 | `accounts login` | Enroll a supported subscription kind (`claude-code` or `codex`), import the credential, and enable the matching provider. `--no-browser` prefers a device-code / copyable-URL flow for headless hosts. |
 | `accounts add`, `remove`, `list`, `status` | Import the current official CLI login or manage enrolled subscription accounts. |
@@ -108,7 +108,10 @@ billing explanation surface. Its JSON fields are `id`, `provider`,
 `reasoning`; unavailable reasoning metadata is reported as `null`. API-key
 routes report `api-key` / `metered-api`, managed subscription routes report
 `subscription` / `subscription`, and retained proxy routes report `proxy` /
-`upstream-managed`.
+`upstream-managed`. The default `models list` table shows the same billing
+fields without requiring `models info`; coding-tool pickers use human labels
+such as `Claude Sonnet 4.5 · Anthropic API` versus `Claude Sonnet 4.5 · Claude
+Max` while keeping namespaced routing ids unchanged.
 
 ## First-launch support contract
 
