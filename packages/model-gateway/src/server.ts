@@ -17,7 +17,12 @@ import {
 import type { AnthropicRequest } from "./adapters/anthropic.js";
 import { effectiveModel, isStream, withDefaultModel } from "./adapters/chat.js";
 import { authorizedRequest } from "./auth.js";
-import { isCursorChatBody, translateCursorRequest } from "./adapters/cursor.js";
+import {
+  cursorModelAliasId,
+  isCursorChatBody,
+  resolveCursorModelAlias,
+  translateCursorRequest
+} from "./adapters/cursor.js";
 import { handleResponses } from "./adapters/responses.js";
 import type { ResponsesRequest } from "./adapters/responses.js";
 import type {
@@ -475,9 +480,26 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
     }
 
     // Cursor may probe the models list relative to its BYOK base URL
-    // (`.../v1/cursor`); mirror /v1/models there.
+    // (`.../v1/cursor`); mirror /v1/models there. Namespaced ids are respelled
+    // with dashes because Cursor's custom-model settings reject "/" in names;
+    // the chat route below resolves the dashed spelling back.
     if (method === "GET" && path === "/v1/cursor/models") {
-      await pipeUpstream(res, await backend.models());
+      const upstream = await backend.models();
+      if (!upstream.ok) {
+        await pipeUpstream(res, upstream);
+        return;
+      }
+      const payload = (await upstream.json()) as {
+        data?: Array<{ id?: unknown } & Record<string, unknown>>;
+      } & Record<string, unknown>;
+      writeJson(res, 200, {
+        ...payload,
+        data: (payload.data ?? []).map((entry) =>
+          typeof entry.id === "string"
+            ? { ...entry, id: cursorModelAliasId(entry.id) }
+            : entry
+        )
+      });
       return;
     }
 
@@ -556,6 +578,11 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
       // Validate the translated body before invoking the backend.
       const translated = translateCursorRequest(raw);
       if (rejectInvalid(res, validateChatRequest(translated))) return;
+      const aliased = resolveCursorModelAlias(
+        translated.model,
+        backend.listModelIds?.() ?? []
+      );
+      if (aliased !== undefined) translated.model = aliased;
       const body = withDefaultModel(translated, backend.defaultModel);
       await handleModelCall(res, provenance, {
         dialect: "openai-chat",

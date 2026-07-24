@@ -52,6 +52,36 @@ export function isCursorChatBody(body: unknown): body is JsonObject {
 }
 
 /**
+ * Spell a namespaced model id the way Cursor's custom-model settings accept
+ * it. Cursor rejects ids containing "/" ("Model name is not valid"), so the
+ * cursor route advertises and answers to a dash-separated spelling
+ * (`claude-code/claude-fable-5` -> `claude-code-claude-fable-5`). Dashes are
+ * preferred over dots because dotted names can collide with Cursor's managed
+ * model catalog.
+ */
+export function cursorModelAliasId(id: string): string {
+  return id.replace("/", "-");
+}
+
+/**
+ * Resolve Cursor's dash-separated spelling back to a served namespaced id.
+ *
+ * Resolution is an exact lookup over the gateway's served ids rather than a
+ * separator split, because namespaces themselves contain dashes. A rewrite
+ * only happens when the model is not served as spelled; if two served ids
+ * produce the same alias, the first one listed wins.
+ */
+export function resolveCursorModelAlias(
+  model: unknown,
+  servedIds: readonly string[]
+): string | undefined {
+  if (typeof model !== "string" || model.length === 0 || servedIds.includes(model)) {
+    return undefined;
+  }
+  return servedIds.find((id) => id.includes("/") && cursorModelAliasId(id) === model);
+}
+
+/**
  * Map a Cursor BYOK request body onto a Chat Completions body.
  *
  * Dual-shape tolerance: Cursor only sends the Responses hybrid for some

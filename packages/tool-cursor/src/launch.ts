@@ -39,10 +39,12 @@ export function cursorInstructions(
   model: string,
   apiKey?: string
 ): string {
+  // Cursor's custom-model settings reject ids containing "/", so advertise
+  // the dash-separated spelling the gateway's /v1/cursor routes resolve.
   return [
     "In Cursor Settings -> Models, enable Override OpenAI Base URL and set:",
     `  Override OpenAI Base URL : ${publicUrl}/v1/cursor`,
-    `  Model name               : ${model}`,
+    `  Model name               : ${model.replace("/", "-")}`,
     `  OpenAI API Key           : ${apiKey ?? "routekit-local"}`
   ].join("\n");
 }

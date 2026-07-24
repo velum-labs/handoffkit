@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { isCursorChatBody, translateCursorRequest } from "../adapters/cursor.js";
+import {
+  cursorModelAliasId,
+  isCursorChatBody,
+  resolveCursorModelAlias,
+  translateCursorRequest
+} from "../adapters/cursor.js";
 import type { Backend } from "../backend.js";
 import { startGateway } from "../server.js";
 
@@ -53,6 +58,23 @@ test("Cursor hybrid requests translate to chat messages and tools", () => {
     (translated.tools as Array<{ function: { name: string } }>)[0]?.function.name,
     "read_file"
   );
+});
+
+test("Cursor model aliases respell namespaced ids with dashes", () => {
+  assert.equal(cursorModelAliasId("claude-code/claude-fable-5"), "claude-code-claude-fable-5");
+  assert.equal(cursorModelAliasId("openai/gpt-4o"), "openai-gpt-4o");
+  assert.equal(cursorModelAliasId("route-primary"), "route-primary");
+
+  const served = ["claude-code/claude-fable-5", "openai/gpt-4o", "route-primary"];
+  assert.equal(
+    resolveCursorModelAlias("claude-code-claude-fable-5", served),
+    "claude-code/claude-fable-5"
+  );
+  assert.equal(resolveCursorModelAlias("openai-gpt-4o", served), "openai/gpt-4o");
+  // Served-as-spelled ids and unknown names never rewrite.
+  assert.equal(resolveCursorModelAlias("route-primary", served), undefined);
+  assert.equal(resolveCursorModelAlias("claude-fable-5", served), undefined);
+  assert.equal(resolveCursorModelAlias(undefined, served), undefined);
 });
 
 test("Cursor hybrid detection rejects unrelated bodies", () => {
@@ -110,6 +132,65 @@ test("RouteKit serves the Cursor hybrid through its neutral HTTP boundary", asyn
     assert.deepEqual(
       ((await models.json()) as { data: Array<{ id: string }> }).data.map((model) => model.id),
       ["route-primary"]
+    );
+  } finally {
+    await gateway.close();
+  }
+});
+
+test("Cursor route resolves dashed model aliases to namespaced ids", async () => {
+  let received: { model?: unknown } | undefined;
+  const backend: Backend = {
+    defaultModel: "claude-code/claude-fable-5",
+    chat(body) {
+      received = body as { model?: unknown };
+      return Promise.resolve(
+        Response.json({
+          id: "chatcmpl_2",
+          object: "chat.completion",
+          model: "claude-code/claude-fable-5",
+          choices: [
+            {
+              index: 0,
+              message: { role: "assistant", content: "done" },
+              finish_reason: "stop"
+            }
+          ]
+        })
+      );
+    },
+    models: () =>
+      Promise.resolve(
+        Response.json({
+          object: "list",
+          data: [
+            { id: "claude-code/claude-fable-5", object: "model" },
+            { id: "openai/gpt-4o", object: "model" }
+          ]
+        })
+      ),
+    listModelIds: () => ["claude-code/claude-fable-5", "openai/gpt-4o"],
+    embeddings: () => Promise.resolve(new Response(null, { status: 501 }))
+  };
+  const gateway = await startGateway({ backend });
+  try {
+    const response = await fetch(`${gateway.url()}/v1/cursor/chat/completions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        model: "claude-code-claude-fable-5",
+        messages: [{ role: "user", content: "hi" }]
+      })
+    });
+    assert.equal(response.status, 200);
+    assert.equal(received?.model, "claude-code/claude-fable-5");
+
+    // The models mirror advertises the dashed spelling Cursor accepts.
+    const models = await fetch(`${gateway.url()}/v1/cursor/models`);
+    assert.equal(models.status, 200);
+    assert.deepEqual(
+      ((await models.json()) as { data: Array<{ id: string }> }).data.map((model) => model.id),
+      ["claude-code-claude-fable-5", "openai-gpt-4o"]
     );
   } finally {
     await gateway.close();

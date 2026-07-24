@@ -7,6 +7,11 @@ package, and the PyPI FusionKit sidecar package set. Release tags are named
 
 ## Unreleased
 
+- The gateway's `/v1/cursor` routes now accept and advertise dash-separated
+  model aliases (for example `claude-code-claude-fable-5`) because Cursor's
+  custom-model settings reject ids containing `/`. `routekit cursor` remote
+  instructions print the dashed spelling.
+
 ## 0.9.5 - 2026-07-24
 
 - Codex subscription chat completions now recover final assistant text from
