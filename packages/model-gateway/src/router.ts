@@ -130,6 +130,7 @@ export const routerConfigSchema = z
       })
       .strict(),
     defaultModel: z.string().min(3).optional(),
+    modelAliases: z.record(z.string().min(1), z.string().min(3)).optional(),
     reasoningCapabilities: z
       .record(z.string().min(3), reasoningCapabilityOverrideSchema)
       .optional()
@@ -194,6 +195,19 @@ export function parseRouterConfig(value: unknown): RouterConfig {
     if (config.providers[selected.provider] === undefined) {
       throw new Error(
         `default model provider "${selected.provider}" is not configured`
+      );
+    }
+  }
+  for (const [alias, target] of Object.entries(config.modelAliases ?? {})) {
+    if (alias.includes("/")) {
+      throw new Error(
+        `model alias "${alias}" must not contain "/"; aliases exist to give namespaced models slash-free names`
+      );
+    }
+    const selected = splitNamespacedModel(target);
+    if (config.providers[selected.provider] === undefined) {
+      throw new Error(
+        `model alias "${alias}" targets "${target}" but provider "${selected.provider}" is not configured`
       );
     }
   }
@@ -340,6 +354,20 @@ export class CatalogBackend implements Backend {
             ...(reasoning !== undefined ? { reasoning } : {})
           });
         }
+      }
+      for (const [alias, target] of Object.entries(config.modelAliases ?? {})) {
+        const entry = entries.get(target);
+        if (entry === undefined) {
+          throw new Error(
+            `model alias "${alias}" targets "${target}", which no configured provider serves`
+          );
+        }
+        if (entries.has(alias)) {
+          throw new Error(
+            `model alias "${alias}" collides with a served model id`
+          );
+        }
+        entries.set(alias, { ...entry, publicId: alias });
       }
       const first = entries.keys().next().value as string | undefined;
       const defaultModel = config.defaultModel ?? first;

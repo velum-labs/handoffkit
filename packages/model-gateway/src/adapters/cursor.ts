@@ -60,7 +60,7 @@ export function isCursorChatBody(body: unknown): body is JsonObject {
  * model catalog.
  */
 export function cursorModelAliasId(id: string): string {
-  return id.replace("/", "-");
+  return id.replaceAll("/", "-");
 }
 
 /**

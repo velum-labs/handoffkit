@@ -245,6 +245,82 @@ test("catalog namespaces live models and strips the source before dispatch", asy
   assert.equal(backend.modelInfo("openai/not-real"), undefined);
 });
 
+test("configured model aliases serve namespaced models under slash-free names", async () => {
+  const calls: Array<{ source: string; model?: string }> = [];
+  const backend = await CatalogBackend.create({
+    config: {
+      providers: { "claude-code": {} },
+      modelAliases: { "velum-fable-5": "claude-code/claude-fable-5" }
+    },
+    sources: {
+      "claude-code": fakeSource(
+        "claude-code",
+        [{ id: "claude-fable-5" }],
+        calls
+      )
+    }
+  });
+
+  assert.deepEqual(backend.listModelIds(), [
+    "claude-code/claude-fable-5",
+    "velum-fable-5"
+  ]);
+  assert.equal(backend.servesModel("velum-fable-5"), true);
+  assert.deepEqual(backend.resolveModelRoute("velum-fable-5"), {
+    publicId: "velum-fable-5",
+    nativeId: "claude-fable-5",
+    provider: "claude-code"
+  });
+  assert.equal(backend.modelInfo("velum-fable-5")?.id, "velum-fable-5");
+  assert.equal(
+    backend.modelInfo("velum-fable-5")?.nativeModel,
+    "claude-fable-5"
+  );
+  await backend.chat({ model: "velum-fable-5", messages: [] });
+  assert.deepEqual(calls, [
+    { source: "claude-code", model: "claude-fable-5" }
+  ]);
+});
+
+test("model aliases reject bad shapes and unknown targets", async () => {
+  assert.throws(
+    () =>
+      parseRouterConfig({
+        providers: { openai: {} },
+        modelAliases: { "bad/alias": "openai/gpt-5.5" }
+      }),
+    /must not contain "\/"/
+  );
+  assert.throws(
+    () =>
+      parseRouterConfig({
+        providers: { openai: {} },
+        modelAliases: { "velum-fable-5": "claude-code/claude-fable-5" }
+      }),
+    /provider "claude-code" is not configured/
+  );
+  await assert.rejects(
+    CatalogBackend.create({
+      config: {
+        providers: { openai: {} },
+        modelAliases: { "velum-gpt": "openai/not-discovered" }
+      },
+      sources: { openai: fakeSource("openai", [{ id: "gpt-5.5" }]) }
+    }),
+    /targets "openai\/not-discovered", which no configured provider serves/
+  );
+  await assert.rejects(
+    CatalogBackend.create({
+      config: {
+        providers: { openai: {} },
+        modelAliases: { "openai/gpt-5.5": "openai/gpt-5.5" }
+      },
+      sources: { openai: fakeSource("openai", [{ id: "gpt-5.5" }]) }
+    }),
+    /must not contain "\/"/
+  );
+});
+
 test("model info exhaustively classifies subscription and proxy billing", async () => {
   const backend = await CatalogBackend.create({
     config: {

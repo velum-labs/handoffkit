@@ -12,6 +12,16 @@ package, and the PyPI FusionKit sidecar package set. Release tags are named
 
 ## Unreleased
 
+- Added `modelAliases` to the router config so a namespaced model can also be
+  served under a custom slash-free name (for example
+  `velum-fable-5: claude-code/claude-fable-5`). Live testing showed Cursor's
+  custom-model validation rejects any name that resembles a known model family
+  (`claude-*`, dashed or not) before a request is ever sent, so BYOK setups
+  need a neutral alias rather than a respelled provider id.
+
+- Fixed the `/v1/cursor` models mirror to respell every `/` in a model id, so
+  OpenRouter's three-segment ids produce usable dashed aliases.
+
 ## 0.9.6 - 2026-07-24
 
 - The gateway's `/v1/cursor` routes now accept and advertise dash-separated

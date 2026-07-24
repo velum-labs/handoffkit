@@ -44,7 +44,7 @@ export function cursorInstructions(
   return [
     "In Cursor Settings -> Models, enable Override OpenAI Base URL and set:",
     `  Override OpenAI Base URL : ${publicUrl}/v1/cursor`,
-    `  Model name               : ${model.replace("/", "-")}`,
+    `  Model name               : ${model.replaceAll("/", "-")}`,
     `  OpenAI API Key           : ${apiKey ?? "routekit-local"}`
   ].join("\n");
 }

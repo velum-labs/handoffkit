@@ -64,8 +64,20 @@ test("Cursor model aliases respell namespaced ids with dashes", () => {
   assert.equal(cursorModelAliasId("claude-code/claude-fable-5"), "claude-code-claude-fable-5");
   assert.equal(cursorModelAliasId("openai/gpt-4o"), "openai-gpt-4o");
   assert.equal(cursorModelAliasId("route-primary"), "route-primary");
+  assert.equal(
+    cursorModelAliasId("openrouter/moonshotai/kimi-k2-thinking"),
+    "openrouter-moonshotai-kimi-k2-thinking",
+    "every slash is respelled, not just the namespace separator"
+  );
 
   const served = ["claude-code/claude-fable-5", "openai/gpt-4o", "route-primary"];
+  assert.equal(
+    resolveCursorModelAlias("openrouter-moonshotai-kimi-k2-thinking", [
+      ...served,
+      "openrouter/moonshotai/kimi-k2-thinking"
+    ]),
+    "openrouter/moonshotai/kimi-k2-thinking"
+  );
   assert.equal(
     resolveCursorModelAlias("claude-code-claude-fable-5", served),
     "claude-code/claude-fable-5"
