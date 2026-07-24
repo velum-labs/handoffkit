@@ -59,7 +59,7 @@ export type StackEvent =
 
 export type StackReporter = (event: StackEvent) => void;
 
-export const FUSIONKIT_PYPI_VERSION = "0.9.4";
+export const FUSIONKIT_PYPI_VERSION = "0.9.5";
 
 export function fusionkitPyCommand(fusionkitDir?: string): {
   command: string;
