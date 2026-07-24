@@ -390,8 +390,11 @@ export function renameSubscriptionAccount(
   if (dirname(realpathSync(sourcePath)) !== canonicalDirectory) {
     throw new Error("account resolves outside the managed account directory");
   }
-  if (existsSync(targetPath)) {
+  try {
+    lstatSync(targetPath);
     throw new Error(`account ${mode}/${targetLabel} already exists`);
+  } catch (error) {
+    if (!isMissingPath(error)) throw error;
   }
 
   chmodSync(sourcePath, 0o600);

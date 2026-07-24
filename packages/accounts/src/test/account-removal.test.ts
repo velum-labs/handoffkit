@@ -119,7 +119,27 @@ test("account removal rejects traversal and symbolic links", () => {
         }),
       /not a regular file/
     );
+    assert.throws(
+      () =>
+        renameSubscriptionAccount("claude-code", "linked", "renamed", {
+          accountsDirectory: directory
+        }),
+      /not a regular file/
+    );
     assert.equal(existsSync(outside), true);
+
+    const source = join(directory, "source.json");
+    const danglingTarget = join(directory, "occupied.json");
+    writeFileSync(source, "{}\n", { mode: 0o600 });
+    symlinkSync(join(root, "missing.json"), danglingTarget);
+    assert.throws(
+      () =>
+        renameSubscriptionAccount("claude-code", "source", "occupied", {
+          accountsDirectory: directory
+        }),
+      /already exists/
+    );
+    assert.equal(existsSync(source), true);
 
     const linkedDirectory = join(root, "linked-accounts");
     symlinkSync(directory, linkedDirectory);

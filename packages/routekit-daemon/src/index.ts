@@ -9,6 +9,7 @@
 import {
   chmodSync,
   existsSync,
+  lstatSync,
   mkdirSync,
   readFileSync,
   rmSync
@@ -1206,11 +1207,22 @@ export async function startRouteKitDaemon(
               message: `${kind}/${params.source} is not enrolled`
             });
           }
-          if (existsSync(targetPath)) {
+          try {
+            lstatSync(targetPath);
             throw new ControlError({
               code: "conflict",
               message: `${kind}/${params.target} is already enrolled`
             });
+          } catch (error) {
+            if (
+              error instanceof ControlError ||
+              typeof error !== "object" ||
+              error === null ||
+              !("code" in error) ||
+              error.code !== "ENOENT"
+            ) {
+              throw error;
+            }
           }
           const transaction = prepareAccountTransaction({
             home,
