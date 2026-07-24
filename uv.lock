@@ -628,7 +628,7 @@ http = [
 
 [[package]]
 name = "fusionkit"
-version = "0.9.3"
+version = "0.9.4"
 source = { editable = "python/fusionkit-cli" }
 dependencies = [
     { name = "fusionkit-core" },
@@ -647,7 +647,7 @@ requires-dist = [
 
 [[package]]
 name = "fusionkit-core"
-version = "0.9.3"
+version = "0.9.4"
 source = { editable = "python/fusionkit-core" }
 dependencies = [
     { name = "httpx" },
@@ -670,7 +670,7 @@ requires-dist = [
 
 [[package]]
 name = "fusionkit-evals"
-version = "0.9.3"
+version = "0.9.4"
 source = { editable = "python/fusionkit-evals" }
 dependencies = [
     { name = "fusionkit-core" },
@@ -702,7 +702,7 @@ provides-extras = ["evals", "livecodebench"]
 
 [[package]]
 name = "fusionkit-mlx"
-version = "0.9.3"
+version = "0.9.4"
 source = { editable = "python/fusionkit-mlx" }
 dependencies = [
     { name = "fusionkit-core" },
@@ -722,7 +722,7 @@ provides-extras = ["mlx"]
 
 [[package]]
 name = "fusionkit-server"
-version = "0.9.3"
+version = "0.9.4"
 source = { editable = "python/fusionkit-server" }
 dependencies = [
     { name = "fastapi" },
