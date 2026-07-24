@@ -7,6 +7,8 @@ package, and the PyPI FusionKit sidecar package set. Release tags are named
 
 ## Unreleased
 
+## 0.9.3 - 2026-07-24
+
 - Fixed Codex gateway launches to honor the configured RouteKit default model
   and to treat Codex's synthetic `none` reasoning effort as disabled only for
   models without discovered reasoning controls.
