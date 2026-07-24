@@ -12,6 +12,12 @@ import type { CapacityLease } from "@velum-labs/routekit-gateway";
 import type { SubscriptionMode } from "@velum-labs/routekit-registry";
 import { writeFileAtomic } from "@velum-labs/routekit-runtime";
 
+import {
+  hasUsableCredits,
+  isOverSwitchThreshold,
+  isPoolEligible,
+  memberHeadroom
+} from "./admission.js";
 import { resolveSubscriptionAccounts } from "./account-source.js";
 import type { SubscriptionAccountSource } from "./account-source.js";
 import { subscriptionCredentialLabel } from "./credentials.js";
@@ -451,6 +457,7 @@ export class SubscriptionAccountSet {
 
   statusSnapshot(): SubscriptionAccountSetSnapshot {
     const snapshot = this.snapshot();
+    const now = Date.now() / 1000;
     return {
       ...snapshot,
       members: snapshot.members.map((status) => {
@@ -460,11 +467,14 @@ export class SubscriptionAccountSet {
           (member.credential.expiresAt === undefined ||
             member.credential.expiresAt > Date.now() / 1000 ||
             (member.credential.refreshToken?.length ?? 0) > 0);
+        const poolEligible = this.#eligible(member, undefined, now);
         return {
           ...status,
           credentialValid,
+          poolEligible,
           relayReady:
             credentialValid &&
+            poolEligible &&
             (member.coolingUntil === undefined || member.coolingUntil <= Date.now())
         };
       })
@@ -696,7 +706,7 @@ export class SubscriptionAccountSet {
     }
     for (const member of this.#members) {
       this.#capacityPool.update(member.id, {
-        quotaUtilization: 1 - this.#headroom(member, model),
+        quotaUtilization: this.#quotaUtilization(member, model),
         ...(member.coolingUntil !== undefined
           ? { coolingUntil: member.coolingUntil * 1000 }
           : { coolingUntil: undefined })
@@ -725,29 +735,39 @@ export class SubscriptionAccountSet {
   }
 
   #eligible(member: PoolMember, model: string | undefined, now: number): boolean {
-    if (this.#catalogReady && member.models.size === 0) return false;
-    if (this.#catalogReady && model !== undefined && !member.models.has(model)) {
-      return false;
-    }
-    if (member.coolingUntil !== undefined && member.coolingUntil > now) return false;
-    if (
-      member.credential.expiresAt !== undefined &&
-      member.credential.expiresAt <= now &&
-      member.credential.refreshToken === undefined
-    ) {
-      return false;
-    }
-    return this.#headroom(member, model) > 1 - this.#options.switchThreshold;
+    return isPoolEligible({
+      limits: this.#tracker.limits(member.id),
+      switchThreshold: this.#options.switchThreshold,
+      ...(member.coolingUntil !== undefined ? { coolingUntil: member.coolingUntil } : {}),
+      ...(member.credential.expiresAt !== undefined
+        ? { credentialExpiresAt: member.credential.expiresAt }
+        : {}),
+      hasRefreshToken: member.credential.refreshToken !== undefined,
+      catalogReady: this.#catalogReady,
+      models: [...member.models],
+      ...(model !== undefined ? { model } : {}),
+      now,
+      isWindowRelevant: (key, limitName) => this.#windowRelevant(key, limitName, model)
+    });
   }
 
   #headroom(member: PoolMember, model: string | undefined): number {
-    const limits = this.#tracker.limits(member.id);
-    if (limits === undefined) return 1;
-    const relevant = Object.entries(limits.windows).filter(([key, window]) =>
-      this.#windowRelevant(key, window.limitName, model)
+    return memberHeadroom(this.#tracker.limits(member.id), (key, limitName) =>
+      this.#windowRelevant(key, limitName, model)
     );
-    if (relevant.length === 0) return 1;
-    return Math.min(...relevant.map(([, window]) => 1 - window.utilization));
+  }
+
+  #quotaUtilization(member: PoolMember, model: string | undefined): number {
+    const utilization = 1 - this.#headroom(member, model);
+    if (
+      isOverSwitchThreshold(this.#headroom(member, model), this.#options.switchThreshold) &&
+      hasUsableCredits(this.#tracker.limits(member.id)?.credits)
+    ) {
+      // Credits keep the member routable, but capacity selection should still
+      // prefer members below the proactive switch threshold.
+      return Math.min(utilization, this.#options.switchThreshold);
+    }
+    return utilization;
   }
 
   #windowRelevant(key: string, limitName: string | undefined, model: string | undefined): boolean {
@@ -763,22 +783,27 @@ export class SubscriptionAccountSet {
     const now = Date.now() / 1000;
     const resets: number[] = [];
     for (const member of this.#members) {
-      if (this.#catalogReady && member.models.size === 0) continue;
-      if (this.#catalogReady && model !== undefined && !member.models.has(model)) {
-        continue;
-      }
-      if (member.coolingUntil !== undefined && member.coolingUntil > now) {
-        resets.push(member.coolingUntil);
-      }
-      const limits = this.#tracker.limits(member.id);
-      if (limits === undefined) continue;
-      for (const [key, window] of Object.entries(limits.windows)) {
-        if (
-          window.resetsAt !== undefined &&
-          window.resetsAt > now &&
-          this.#windowRelevant(key, window.limitName, model)
-        ) {
-          resets.push(window.resetsAt);
+      if (!this.#eligible(member, model, now)) {
+        if (member.coolingUntil !== undefined && member.coolingUntil > now) {
+          resets.push(member.coolingUntil);
+        }
+        const limits = this.#tracker.limits(member.id);
+        if (limits === undefined) continue;
+        for (const [key, window] of Object.entries(limits.windows)) {
+          if (
+            window.resetsAt !== undefined &&
+            window.resetsAt > now &&
+            this.#windowRelevant(key, window.limitName, model) &&
+            isOverSwitchThreshold(
+              memberHeadroom(limits, (candidateKey, limitName) =>
+                this.#windowRelevant(candidateKey, limitName, model)
+              ),
+              this.#options.switchThreshold
+            ) &&
+            !hasUsableCredits(limits.credits)
+          ) {
+            resets.push(window.resetsAt);
+          }
         }
       }
     }
