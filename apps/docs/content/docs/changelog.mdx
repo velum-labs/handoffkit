@@ -12,14 +12,28 @@ package, and the PyPI FusionKit sidecar package set. Release tags are named
 
 ## Unreleased
 
+- Established why Cursor BYOK rejects Claude Code model names, from Cursor's
+  own `byokModelUtils.js`: Cursor selects the BYOK provider by model-name
+  prefix. `claude-*` is routed to the Anthropic key and `gemini-*` to the Google
+  key; only a name matching neither prefix uses the OpenAI key together with the
+  base-URL override. With no Anthropic key configured, a `claude-`prefixed name
+  never reaches the custom endpoint at all, and Cursor's backend answers "Model
+  name is not valid".
+
+  Verified against a gateway behind a request log: `velum/fable-5` (contains a
+  slash, non-matching prefix) was sent to the endpoint, while an invented
+  `claude-zzz-9` was rejected with no request sent. Model names containing `/`
+  are therefore fine as far as Cursor is concerned, and the 0.9.6 note claiming
+  Cursor rejects them was wrong. Pick any alias not starting with `claude-` or
+  `gemini-`.
+
 ## 0.9.7 - 2026-07-24
 
 - Added `modelAliases` to the router config so a namespaced model can also be
-  served under a custom slash-free name (for example
-  `velum-fable-5: claude-code/claude-fable-5`). Live testing showed Cursor's
-  custom-model validation rejects any name that resembles a known model family
-  (`claude-*`, dashed or not) before a request is ever sent, so BYOK setups
-  need a neutral alias rather than a respelled provider id.
+  served under a second, freely chosen name, for example
+  `velum-fable-5: claude-code/claude-fable-5`. Any name without `/` that does
+  not collide with a served model id is accepted. Cursor BYOK needs such an
+  alias for Claude Code models; see the Unreleased entry for the reason.
 
 - Fixed the `/v1/cursor` models mirror to respell every `/` in a model id, so
   OpenRouter's three-segment ids produce usable dashed aliases.
