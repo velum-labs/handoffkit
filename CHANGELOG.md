@@ -7,6 +7,9 @@ package, and the PyPI FusionKit sidecar package set. Release tags are named
 
 ## Unreleased
 
+- Fixed normalized Codex `none` requests from emitting unsupported explicit
+  disabled-thinking controls to Claude Code models such as Fable.
+
 ## 0.9.3 - 2026-07-24
 
 - Fixed Codex gateway launches to honor the configured RouteKit default model

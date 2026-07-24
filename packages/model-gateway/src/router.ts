@@ -464,7 +464,8 @@ export class CatalogBackend implements Backend {
         )
       );
     }
-    const selection = this.#validatedReasoning(entry, reasoningSelectionOf(body));
+    const requestedSelection = reasoningSelectionOf(body);
+    const selection = this.#validatedReasoning(entry, requestedSelection);
     if (typeof selection === "string") {
       return Promise.resolve(
         Response.json(
@@ -494,9 +495,15 @@ export class CatalogBackend implements Backend {
       typeof nativeBody === "object" &&
       !Array.isArray(nativeBody)
     ) {
+      const egressSelection =
+        requestedSelection.mode === "effort" &&
+        requestedSelection.effort === "none" &&
+        selection.mode === "disabled"
+          ? ({ mode: "auto" } as const)
+          : selection;
       attachReasoningSelection(
         nativeBody as Record<PropertyKey, unknown>,
-        selection
+        egressSelection
       );
       if (selection.mode === "effort") {
         (nativeBody as Record<string, unknown>).reasoning_effort =

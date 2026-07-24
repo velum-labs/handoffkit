@@ -13,6 +13,7 @@ import {
   responsesToChat,
   responsesToolRegistry
 } from "../adapters/responses.js";
+import { reasoningSelectionOf } from "../adapters/openai-chat-wire.js";
 import { startGateway } from "../server.js";
 import type { ProviderRelay } from "../server.js";
 
@@ -869,6 +870,7 @@ test("Codex picker aliases use the canonical catalog and pooled native relay", a
     assert.equal(foreign.status, 200);
     assert.deepEqual(sourceCalls, ["claude-sonnet-4-6"]);
     assert.equal(sourceBodies[0]?.reasoning_effort, undefined);
+    assert.deepEqual(reasoningSelectionOf(sourceBodies[0]), { mode: "auto" });
     assert.ok(
       !JSON.stringify(sourceBodies[0]?.messages).includes("based on GPT-5"),
       "a stale startup-model identity must not cross into a foreign provider"
