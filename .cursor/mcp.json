@@ -2,8 +2,8 @@
   "mcpServers": {
     "matter": {
       "type": "stdio",
-      "command": "bash",
-      "args": ["${workspaceFolder}/scripts/run-matter-mcp.sh"],
+      "command": "npx",
+      "args": ["-y", "matter-cursor-mcp"],
       "env": {
         "MATTER_API_TOKEN": "${env:MATTER_API_TOKEN}",
         "MATTER_MCP_CACHE_MODE": "on",
