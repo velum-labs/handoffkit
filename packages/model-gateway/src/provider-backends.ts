@@ -1221,34 +1221,56 @@ export class CodexResponsesBackend extends HttpProviderBackend {
         ...decoder.feed(await response.text()),
         ...decoder.flush()
       ];
-      for (let index = events.length - 1; index >= 0; index -= 1) {
-        const event = events[index];
-        if (event?.event !== "response.completed") continue;
-        let completed: unknown;
+      const completedOutput: Array<Record<string, unknown>> = [];
+      let completedResponse: Record<string, unknown> | undefined;
+      for (const event of events) {
+        let payload: unknown;
         try {
-          completed = JSON.parse(event.data);
+          payload = JSON.parse(event.data);
         } catch {
+          if (
+            event.event !== "response.output_item.done" &&
+            event.event !== "response.completed"
+          ) {
+            continue;
+          }
           throw new SseParseError(
             "provider SSE event contained malformed JSON",
             event.data.slice(0, 200)
           );
         }
+        if (typeof payload !== "object" || payload === null) continue;
+        const record = payload as Record<string, unknown>;
+        const eventType = event.event ?? record.type;
         if (
-          typeof completed === "object" &&
-          completed !== null &&
-          typeof (completed as Record<string, unknown>).response === "object" &&
-          (completed as Record<string, unknown>).response !== null
+          eventType === "response.output_item.done" &&
+          typeof record.item === "object" &&
+          record.item !== null
         ) {
-          const payload = (completed as { response: Record<string, unknown> })
-            .response;
-          return jsonResponse(
-            chatCompletion(
-              model,
-              responsesOutput(payload),
-              normalizedOpenAiUsage(payload.usage)
-            )
-          );
+          completedOutput.push(record.item as Record<string, unknown>);
         }
+        if (
+          eventType === "response.completed" &&
+          typeof record.response === "object" &&
+          record.response !== null
+        ) {
+          completedResponse = record.response as Record<string, unknown>;
+        }
+      }
+      if (completedResponse !== undefined) {
+        const terminalOutput = completedResponse.output;
+        const payload =
+          (!Array.isArray(terminalOutput) || terminalOutput.length === 0) &&
+          completedOutput.length > 0
+            ? { ...completedResponse, output: completedOutput }
+            : completedResponse;
+        return jsonResponse(
+          chatCompletion(
+            model,
+            responsesOutput(payload),
+            normalizedOpenAiUsage(payload.usage)
+          )
+        );
       }
       throw new SseParseError(
         "provider SSE stream ended without response.completed"

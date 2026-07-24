@@ -12,6 +12,10 @@ package, and the PyPI FusionKit sidecar package set. Release tags are named
 
 ## Unreleased
 
+- Fixed non-streaming Codex subscription completions returning empty assistant
+  content when the upstream SSE terminal response omitted output already
+  delivered through `response.output_item.done`.
+
 ## 0.9.0 - 2026-07-23
 
 - Enforced RouteKit's first-launch public support allowlist across help,

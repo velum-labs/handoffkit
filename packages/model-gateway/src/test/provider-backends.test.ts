@@ -468,6 +468,54 @@ test("Codex subscription egress forces SSE and omits unsupported sampling", asyn
   }
 });
 
+test("Codex subscription egress recovers output from completed stream items", async () => {
+  const original = globalThis.fetch;
+  globalThis.fetch = async () =>
+    sse([
+      {
+        data: {
+          type: "response.output_item.done",
+          item: {
+            type: "message",
+            role: "assistant",
+            content: [{ type: "output_text", text: "ok" }]
+          },
+          output_index: 0
+        }
+      },
+      {
+        data: {
+          type: "response.completed",
+          response: {
+            output: [],
+            usage: { input_tokens: 8, output_tokens: 5, total_tokens: 13 }
+          }
+        }
+      }
+    ]);
+  try {
+    const backend = new CodexResponsesBackend({
+      baseUrl: "https://chatgpt.test/backend-api/codex",
+      apiKey: "oauth",
+      defaultModel: "gpt-5.4-mini",
+      forceStream: true,
+      omitSampling: true
+    });
+    const response = await backend.chat({
+      stream: false,
+      messages: [{ role: "user", content: "Say ok" }]
+    });
+    const body = (await response.json()) as {
+      choices: Array<{ message: { content: string } }>;
+      usage: { completion_tokens: number };
+    };
+    assert.equal(body.choices[0]?.message.content, "ok");
+    assert.equal(body.usage.completion_tokens, 5);
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
 test("Anthropic streaming egress preserves tool calls and terminal usage", async () => {
   const original = globalThis.fetch;
   globalThis.fetch = async () =>
