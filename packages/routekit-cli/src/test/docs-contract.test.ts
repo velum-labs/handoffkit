@@ -27,7 +27,8 @@ test("documented safe CLI commands remain executable", () => {
     [routekitCli, ["accounts", "add", "--help"]],
     [routekitCli, ["providers", "add", "--help"]],
     [routekitCli, ["accounts", "login", "--help"]],
-    [routekitCli, ["accounts", "remove", "--help"]]
+    [routekitCli, ["accounts", "remove", "--help"]],
+    [routekitCli, ["accounts", "rename", "--help"]]
   ] as const) {
     const output = execFileSync(process.execPath, [cli, ...args], {
       encoding: "utf8",
@@ -79,6 +80,18 @@ test("public RouteKit docs contain no not-offered onboarding commands", () => {
       /\broutekit\s+(?:opencode\b|accounts\s+login\s+(?:gemini|grok|kimi)\b|providers\s+add\s+(?:google|cliproxy)\b)/i,
       `${path} advertises a route that is not offered at first launch`
     );
+  }
+});
+
+test("subscription docs expose rename and keep API keys explicitly unlabeled", () => {
+  for (const path of [
+    "docs/subscription-pooling.md",
+    "apps/docs/content/docs/guides/subscription-pooling.mdx"
+  ]) {
+    const source = readFileSync(join(root, path), "utf8");
+    assert.match(source, /routekit accounts rename codex work personal/);
+    assert.match(source, /API[- ]key providers[\s\S]{0,300}unlabeled/i);
+    assert.match(source, /does not currently (?:store |have )named API credential slots/i);
   }
 });
 

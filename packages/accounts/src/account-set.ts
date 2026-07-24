@@ -315,6 +315,14 @@ export class RateLimitTracker {
     this.#persist();
   }
 
+  renameMember(sourceId: string, targetId: string): void {
+    const source = this.#state.get(sourceId);
+    const removedSource = this.#state.delete(sourceId);
+    const removedStaleTarget = this.#state.delete(targetId);
+    if (source !== undefined) this.#state.set(targetId, source);
+    if (removedSource || removedStaleTarget || source !== undefined) this.#persist();
+  }
+
   #persist(): void {
     const file: PersistedTrackerFile = {
       members: [...this.#state].map(([id, member]) => ({ id, ...member }))

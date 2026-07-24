@@ -18,8 +18,8 @@ protocols. `startSubscriptionProxy` is the one-call programmatic entrypoint;
 `SubscriptionProxyClient` reads a running proxy's usage over a typed wire
 contract. Product CLIs can wrap this module without owning account logic.
 
-- `export { defaultSubscriptionAccountDirectory, defaultSubscriptionCredentialPath, enrollCurrentSubscription, loadSubscriptionCredential, persistSubscriptionCredential, removeSubscriptionAccount, sanitizeSubscriptionLabel, subscriptionCredentialLabel } from "./credentials.js";`
-- `export type { RemoveSubscriptionAccountResult } from "./credentials.js";`
+- `export { defaultSubscriptionAccountDirectory, defaultSubscriptionCredentialPath, enrollCurrentSubscription, loadSubscriptionCredential, persistSubscriptionCredential, removeSubscriptionAccount, renameSubscriptionAccount, sanitizeSubscriptionLabel, subscriptionCredentialLabel } from "./credentials.js";`
+- `export type { RemoveSubscriptionAccountResult, RenameSubscriptionAccountResult } from "./credentials.js";`
 - `export { resolveSubscriptionAccounts } from "./account-source.js";`
 - `export type { ResolvedSubscriptionAccounts, SubscriptionAccountSource } from "./account-source.js";`
 - `export { subscriptionProvider } from "./provider.js";`

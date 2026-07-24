@@ -78,7 +78,7 @@ function dynamicValues(
   }
   if (
     group === "accounts" &&
-    subcommand === "login" &&
+    (subcommand === "login" || subcommand === "rename") &&
     argumentDepth === 0
   ) {
     return [...LAUNCH_ACCOUNT_KIND_CHOICES];
@@ -113,6 +113,20 @@ function dynamicValues(
           resolveAccountConnector(entry.subscriptionKind)?.kind === resolved.kind
         );
       })
+      .map((entry) => entry.label);
+  }
+  if (group === "accounts" && subcommand === "rename" && argumentDepth === 1) {
+    const suppliedKind = positional[0] ?? "";
+    const resolved = resolveAccountConnector(suppliedKind);
+    if (resolved?.info.connector !== "native" || !isLaunchAccountKind(resolved.kind)) {
+      return [];
+    }
+    return listAccounts()
+      .filter(
+        (entry) =>
+          entry.connector === "native" &&
+          entry.subscriptionKind === resolved.kind
+      )
       .map((entry) => entry.label);
   }
   if (group === "completion" && argumentDepth === 0) return ["bash", "zsh", "fish"];

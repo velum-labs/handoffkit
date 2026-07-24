@@ -91,7 +91,7 @@ test("independent command surface is complete and has no compatibility aliases",
   // implementation-detail) subtree is exposed.
   assert.deepEqual(
     command(program, "accounts").commands.map((entry) => entry.name()).sort(),
-    ["add", "list", "login", "remove", "status"]
+    ["add", "list", "login", "remove", "rename", "status"]
   );
   assert.deepEqual(
     command(program, "providers").commands.map((entry) => entry.name()).sort(),
@@ -166,6 +166,11 @@ test("dynamic completion follows the command tree", () => {
     completionCandidates(program, ["start", "--p"]).includes("--port")
   );
   assert.deepEqual(completionCandidates(program, ["accounts", "remove", ""]), [
+    "claude",
+    "claude-code",
+    "codex"
+  ]);
+  assert.deepEqual(completionCandidates(program, ["accounts", "rename", ""]), [
     "claude",
     "claude-code",
     "codex"
@@ -255,6 +260,14 @@ test("account removal completion only suggests managed labels for its provider",
     assert.deepEqual(
       completionCandidates(buildProgram(), ["accounts", "remove", "codex", "w"]),
       ["work"]
+    );
+    assert.deepEqual(
+      completionCandidates(buildProgram(), ["accounts", "rename", "codex", "w"]),
+      ["work"]
+    );
+    assert.deepEqual(
+      completionCandidates(buildProgram(), ["accounts", "rename", "claude", "w"]),
+      []
     );
     assert.deepEqual(
       completionCandidates(buildProgram(), ["accounts", "remove", "claude", "w"]),
