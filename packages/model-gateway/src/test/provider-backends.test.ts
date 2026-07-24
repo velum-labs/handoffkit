@@ -8,7 +8,8 @@ import {
 } from "../provider-backends.js";
 import { anthropicToChat } from "../adapters/anthropic.js";
 import { attachReasoningSelection } from "../adapters/openai-chat-wire.js";
-import { SseParseError } from "../sse/parse.js";
+import { ChatStreamAssembler } from "../sse/chat-assembler.js";
+import { SseDecoder, SseParseError } from "../sse/parse.js";
 
 function sse(
   events: readonly { event?: string; data: unknown }[],
@@ -511,6 +512,205 @@ test("Codex subscription egress recovers output from completed stream items", as
     };
     assert.equal(body.choices[0]?.message.content, "ok");
     assert.equal(body.usage.completion_tokens, 5);
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
+test("Codex subscription streaming recovers text when only the completed item carries it", async () => {
+  const original = globalThis.fetch;
+  globalThis.fetch = async () =>
+    sse([
+      {
+        data: {
+          type: "response.output_item.done",
+          item: {
+            type: "message",
+            role: "assistant",
+            content: [{ type: "output_text", text: "RouteKit works" }]
+          },
+          output_index: 0
+        }
+      },
+      {
+        data: {
+          type: "response.completed",
+          response: {
+            output: [],
+            usage: { input_tokens: 8, output_tokens: 5, total_tokens: 13 }
+          }
+        }
+      }
+    ]);
+  try {
+    const backend = new CodexResponsesBackend({
+      baseUrl: "https://chatgpt.test/backend-api/codex",
+      apiKey: "oauth",
+      defaultModel: "gpt-5.5",
+      forceStream: true,
+      omitSampling: true
+    });
+    const response = await backend.chat({
+      stream: true,
+      messages: [{ role: "user", content: "Reply with: RouteKit works" }]
+    });
+    const text = await response.text();
+    assert.match(text, /"content":"RouteKit works"/);
+    assert.match(text, /"finish_reason":"stop"/);
+    assert.match(text, /"completion_tokens":5/);
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
+test("Codex subscription streaming does not duplicate delta and completed-item text", async () => {
+  const original = globalThis.fetch;
+  globalThis.fetch = async () =>
+    sse([
+      {
+        event: "response.output_text.delta",
+        data: { output_index: 0, delta: "RouteKit " }
+      },
+      {
+        event: "response.output_item.done",
+        data: {
+          item: {
+            type: "message",
+            role: "assistant",
+            content: [{ type: "output_text", text: "RouteKit works" }]
+          },
+          output_index: 0
+        }
+      },
+      {
+        event: "response.completed",
+        data: {
+          response: {
+            output: [
+              {
+                type: "message",
+                role: "assistant",
+                content: [{ type: "output_text", text: "RouteKit works" }]
+              }
+            ],
+            usage: { input_tokens: 8, output_tokens: 5, total_tokens: 13 }
+          }
+        }
+      }
+    ]);
+  try {
+    const backend = new CodexResponsesBackend({
+      baseUrl: "https://chatgpt.test/backend-api/codex",
+      apiKey: "oauth",
+      defaultModel: "gpt-5.5"
+    });
+    const response = await backend.chat({
+      stream: true,
+      messages: [{ role: "user", content: "Reply with: RouteKit works" }]
+    });
+    const decoder = new SseDecoder();
+    const events = [
+      ...decoder.feed(await response.text()),
+      ...decoder.flush()
+    ];
+    const assembler = new ChatStreamAssembler();
+    for (const event of events) assembler.push(event);
+    assert.equal(assembler.result().content, "RouteKit works");
+    assert.equal(assembler.result().finishReason, "stop");
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
+test("Codex subscription egress rejects a silent reasoning-only completion", async () => {
+  const original = globalThis.fetch;
+  globalThis.fetch = async () =>
+    sse([
+      {
+        data: {
+          type: "response.output_item.done",
+          item: {
+            type: "reasoning",
+            summary: [{ type: "summary_text", text: "internal reasoning" }]
+          },
+          output_index: 0
+        }
+      },
+      {
+        data: {
+          type: "response.completed",
+          response: {
+            output: [],
+            usage: {
+              input_tokens: 22,
+              output_tokens: 31,
+              output_tokens_details: { reasoning_tokens: 22 },
+              total_tokens: 53
+            }
+          }
+        }
+      }
+    ]);
+  try {
+    const backend = new CodexResponsesBackend({
+      baseUrl: "https://chatgpt.test/backend-api/codex",
+      apiKey: "oauth",
+      defaultModel: "gpt-5.5",
+      forceStream: true,
+      omitSampling: true
+    });
+    const response = await backend.chat({
+      stream: false,
+      messages: [{ role: "user", content: "Reply with: RouteKit works" }]
+    });
+    assert.equal(response.status, 502);
+    assert.deepEqual(await response.json(), {
+      error: {
+        message: "Codex completed without assistant content or tool calls",
+        type: "upstream_empty_response"
+      }
+    });
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
+test("Codex subscription streaming surfaces a silent reasoning-only completion as an error", async () => {
+  const original = globalThis.fetch;
+  globalThis.fetch = async () =>
+    sse([
+      {
+        event: "response.reasoning_summary_text.delta",
+        data: { output_index: 0, delta: "internal reasoning" }
+      },
+      {
+        event: "response.completed",
+        data: {
+          response: {
+            output: [],
+            usage: {
+              input_tokens: 22,
+              output_tokens: 31,
+              output_tokens_details: { reasoning_tokens: 22 },
+              total_tokens: 53
+            }
+          }
+        }
+      }
+    ]);
+  try {
+    const backend = new CodexResponsesBackend({
+      baseUrl: "https://chatgpt.test/backend-api/codex",
+      apiKey: "oauth",
+      defaultModel: "gpt-5.5"
+    });
+    const response = await backend.chat({
+      stream: true,
+      messages: [{ role: "user", content: "Reply with: RouteKit works" }]
+    });
+    const text = await response.text();
+    assert.match(text, /"type":"upstream_empty_response"/);
+    assert.doesNotMatch(text, /"finish_reason":"stop"/);
   } finally {
     globalThis.fetch = original;
   }

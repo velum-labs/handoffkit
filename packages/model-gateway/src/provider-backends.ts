@@ -1049,6 +1049,34 @@ function responsesOutput(payload: Record<string, unknown>): Record<string, unkno
   };
 }
 
+const CODEX_EMPTY_RESPONSE_ERROR = {
+  message: "Codex completed without assistant content or tool calls",
+  type: "upstream_empty_response"
+} as const;
+
+function responsesItemText(item: Record<string, unknown>): string {
+  if (item.type !== "message") return "";
+  const content = item.content as Array<Record<string, unknown>> | undefined;
+  return (content ?? [])
+    .flatMap((part) => typeof part.text === "string" ? [part.text] : [])
+    .join("");
+}
+
+function codexCompletionResponse(
+  model: string,
+  payload: Record<string, unknown>
+): Response {
+  const message = responsesOutput(payload);
+  const hasOutput =
+    (typeof message.content === "string" && message.content.length > 0) ||
+    (Array.isArray(message.tool_calls) && message.tool_calls.length > 0);
+  return hasOutput
+    ? jsonResponse(
+        chatCompletion(model, message, normalizedOpenAiUsage(payload.usage))
+      )
+    : jsonResponse({ error: CODEX_EMPTY_RESPONSE_ERROR }, 502);
+}
+
 export class CodexResponsesBackend extends HttpProviderBackend {
   readonly #accountId: string | undefined;
   readonly #forceStream: boolean;
@@ -1110,11 +1138,35 @@ export class CodexResponsesBackend extends HttpProviderBackend {
     if (!response.ok) return copyFailure(response, await response.text());
     if (body.stream === true) {
       let hasToolCalls = false;
+      let hasAssistantContent = false;
+      const emittedText = new Map<number, string>();
+      const contentChunk = (content: string): Record<string, unknown> => ({
+        id: randomId(18, "chatcmpl_"),
+        object: "chat.completion.chunk",
+        model,
+        choices: [{ index: 0, delta: { content }, finish_reason: null }]
+      });
+      const recoverMessage = (
+        output: Record<string, unknown>,
+        outputIndex: number
+      ): Record<string, unknown>[] => {
+        const complete = responsesItemText(output);
+        const previous = emittedText.get(outputIndex) ?? "";
+        const suffix = complete.startsWith(previous)
+          ? complete.slice(previous.length)
+          : "";
+        if (suffix.length === 0) return [];
+        emittedText.set(outputIndex, complete);
+        hasAssistantContent = true;
+        return [contentChunk(suffix)];
+      };
       return mapSse(response, (event, data) => {
         const item = data as Record<string, unknown>;
+        const eventType =
+          event === "message" && typeof item.type === "string" ? item.type : event;
         if (
-          event === "response.reasoning_summary_text.delta" ||
-          event === "response.reasoning_text.delta"
+          eventType === "response.reasoning_summary_text.delta" ||
+          eventType === "response.reasoning_text.delta"
         ) {
           return [
             {
@@ -1131,17 +1183,16 @@ export class CodexResponsesBackend extends HttpProviderBackend {
             }
           ];
         }
-        if (event === "response.output_text.delta") {
-          return [
-            {
-              id: randomId(18, "chatcmpl_"),
-              object: "chat.completion.chunk",
-              model,
-              choices: [{ index: 0, delta: { content: item.delta }, finish_reason: null }]
-            }
-          ];
+        if (eventType === "response.output_text.delta") {
+          const outputIndex =
+            typeof item.output_index === "number" ? item.output_index : 0;
+          const delta = typeof item.delta === "string" ? item.delta : "";
+          emittedText.set(outputIndex, `${emittedText.get(outputIndex) ?? ""}${delta}`);
+          if (delta.length === 0) return [];
+          hasAssistantContent = true;
+          return [contentChunk(delta)];
         }
-        if (event === "response.function_call_arguments.delta") {
+        if (eventType === "response.function_call_arguments.delta") {
           return [
             {
               id: randomId(18, "chatcmpl_"),
@@ -1164,7 +1215,7 @@ export class CodexResponsesBackend extends HttpProviderBackend {
             }
           ];
         }
-        if (event === "response.output_item.added") {
+        if (eventType === "response.output_item.added") {
           const output = item.item as Record<string, unknown> | undefined;
           if (output?.type !== "function_call") return [];
           hasToolCalls = true;
@@ -1192,9 +1243,32 @@ export class CodexResponsesBackend extends HttpProviderBackend {
             }
           ];
         }
-        if (event === "response.completed") {
+        if (eventType === "response.output_item.done") {
+          const output = item.item as Record<string, unknown> | undefined;
+          if (output?.type !== "message") return [];
+          const outputIndex =
+            typeof item.output_index === "number" ? item.output_index : 0;
+          return recoverMessage(output, outputIndex);
+        }
+        if (eventType === "response.completed") {
           const completed = item.response as Record<string, unknown> | undefined;
+          const recovered = Array.isArray(completed?.output)
+            ? completed.output.flatMap((output, outputIndex) =>
+                typeof output === "object" &&
+                output !== null &&
+                (output as Record<string, unknown>).type === "message"
+                  ? recoverMessage(
+                      output as Record<string, unknown>,
+                      outputIndex
+                    )
+                  : []
+              )
+            : [];
+          if (!hasAssistantContent && !hasToolCalls) {
+            return [...recovered, { error: CODEX_EMPTY_RESPONSE_ERROR }];
+          }
           return [
+            ...recovered,
             {
               id: randomId(18, "chatcmpl_"),
               object: "chat.completion.chunk",
@@ -1209,6 +1283,20 @@ export class CodexResponsesBackend extends HttpProviderBackend {
               ...(completed?.usage !== undefined
                 ? { usage: normalizedOpenAiUsage(completed.usage) }
                 : {})
+            }
+          ];
+        }
+        if (
+          eventType === "response.failed" ||
+          eventType === "response.incomplete" ||
+          eventType === "error"
+        ) {
+          return [
+            {
+              error: {
+                message: "Codex response did not complete",
+                type: "upstream_error"
+              }
             }
           ];
         }
@@ -1264,21 +1352,13 @@ export class CodexResponsesBackend extends HttpProviderBackend {
           completedOutput.length > 0
             ? { ...completedResponse, output: completedOutput }
             : completedResponse;
-        return jsonResponse(
-          chatCompletion(
-            model,
-            responsesOutput(payload),
-            normalizedOpenAiUsage(payload.usage)
-          )
-        );
+        return codexCompletionResponse(model, payload);
       }
       throw new SseParseError(
         "provider SSE stream ended without response.completed"
       );
     }
     const payload = (await response.json()) as Record<string, unknown>;
-    return jsonResponse(
-      chatCompletion(model, responsesOutput(payload), normalizedOpenAiUsage(payload.usage))
-    );
+    return codexCompletionResponse(model, payload);
   }
 }

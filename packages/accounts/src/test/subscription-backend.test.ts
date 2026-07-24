@@ -110,19 +110,22 @@ test("Codex account backend translates OpenAI chat through the managed Responses
   globalThis.fetch = async (_url, init) => {
     seenHeaders = new Headers(init?.headers);
     seenBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
+    const completedItem = {
+      item: {
+        type: "message",
+        content: [{ type: "output_text", text: "CODEX_POOLED" }]
+      },
+      output_index: 0
+    };
     const completed = {
       response: {
-        output: [
-          {
-            type: "message",
-            content: [{ type: "output_text", text: "CODEX_POOLED" }]
-          }
-        ],
+        output: [],
         usage: { input_tokens: 4, output_tokens: 3, total_tokens: 7 }
       }
     };
     return new Response(
-      `event: response.completed\ndata: ${JSON.stringify(completed)}\n\n`,
+      `event: response.output_item.done\ndata: ${JSON.stringify(completedItem)}\n\n` +
+        `event: response.completed\ndata: ${JSON.stringify(completed)}\n\n`,
       { headers: { "content-type": "text/event-stream" } }
     );
   };
