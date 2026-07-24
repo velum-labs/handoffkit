@@ -7,6 +7,11 @@ package, and the PyPI FusionKit sidecar package set. Release tags are named
 
 ## Unreleased
 
+- Codex subscription chat completions now recover final assistant text from
+  completed SSE items in both buffered and streaming requests. A genuinely
+  reasoning-only upstream completion returns an explicit error instead of a
+  successful empty assistant turn.
+
 ## 0.9.4 - 2026-07-24
 
 - Fixed normalized Codex `none` requests from emitting unsupported explicit
