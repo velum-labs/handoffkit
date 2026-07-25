@@ -2,7 +2,7 @@ import { once } from "node:events";
 import { createServer } from "node:http";
 import type { IncomingMessage, ServerResponse } from "node:http";
 
-import { ProviderFailureError, cursorModelName } from "@velum-labs/routekit-contracts";
+import { ProviderFailureError } from "@velum-labs/routekit-contracts";
 import type {
   ModelReasoningCapabilities,
   RequestAttribution
@@ -18,10 +18,12 @@ import type { AnthropicRequest } from "./adapters/anthropic.js";
 import { effectiveModel, isStream, withDefaultModel } from "./adapters/chat.js";
 import { authorizedRequest } from "./auth.js";
 import {
+  cursorModelVariants,
   isCursorChatBody,
-  resolveCursorModelAlias,
+  resolveCursorModelSelection,
   translateCursorRequest
 } from "./adapters/cursor.js";
+import { attachReasoningSelection } from "./adapters/openai-chat-wire.js";
 import { handleResponses } from "./adapters/responses.js";
 import type { ResponsesRequest } from "./adapters/responses.js";
 import type {
@@ -482,7 +484,9 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
     // (`.../v1/cursor`); mirror /v1/models there. Every id is namespaced under
     // `routekit/` so no advertised name starts with `claude-` or `gemini-`,
     // which Cursor routes to the Anthropic/Google keys instead of the OpenAI
-    // base-URL override. The chat route below strips the namespace back.
+    // base-URL override. Reasoning-capable models also get one `:<effort>`
+    // variant per discovered effort because Cursor does not expose its effort
+    // picker for custom OpenAI-compatible endpoints.
     if (method === "GET" && path === "/v1/cursor/models") {
       const upstream = await backend.models();
       if (!upstream.ok) {
@@ -494,11 +498,13 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
       } & Record<string, unknown>;
       writeJson(res, 200, {
         ...payload,
-        data: (payload.data ?? []).map((entry) =>
-          typeof entry.id === "string"
-            ? { ...entry, id: cursorModelName(entry.id) }
-            : entry
-        )
+        data: (payload.data ?? []).flatMap((entry) => {
+          if (typeof entry.id !== "string") return [entry];
+          return cursorModelVariants(entry.id, entry.reasoning).map((variant) => ({
+            ...entry,
+            id: variant.model
+          }));
+        })
       });
       return;
     }
@@ -578,11 +584,21 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
       // Validate the translated body before invoking the backend.
       const translated = translateCursorRequest(raw);
       if (rejectInvalid(res, validateChatRequest(translated))) return;
-      const aliased = resolveCursorModelAlias(
+      const selection = resolveCursorModelSelection(
         translated.model,
-        backend.listModelIds?.() ?? []
+        backend.listModelIds?.() ?? [],
+        backend.reasoningCapabilities?.bind(backend)
       );
-      if (aliased !== undefined) translated.model = aliased;
+      if (selection !== undefined) {
+        translated.model = selection.model;
+        if (selection.reasoningEffort !== undefined) {
+          translated.reasoning_effort = selection.reasoningEffort;
+          attachReasoningSelection(translated, {
+            mode: "effort",
+            effort: selection.reasoningEffort
+          });
+        }
+      }
       const body = withDefaultModel(translated, backend.defaultModel);
       await handleModelCall(res, provenance, {
         dialect: "openai-chat",

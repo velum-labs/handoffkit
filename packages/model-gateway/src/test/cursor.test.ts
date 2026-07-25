@@ -3,8 +3,10 @@ import { test } from "node:test";
 
 import {
   cursorModelAliasId,
+  cursorModelVariants,
   isCursorChatBody,
   resolveCursorModelAlias,
+  resolveCursorModelSelection,
   translateCursorRequest
 } from "../adapters/cursor.js";
 import type { Backend } from "../backend.js";
@@ -89,6 +91,55 @@ test("Cursor model names namespace under routekit/ and resolve back", () => {
   assert.equal(resolveCursorModelAlias(undefined, served), undefined);
 });
 
+test("Cursor exposes and resolves reasoning effort model variants", () => {
+  const reasoning = {
+    status: "supported" as const,
+    efforts: [
+      { id: "low" },
+      { id: "high", aliases: ["max"] },
+      { id: "high" }
+    ],
+    provenance: "provider" as const
+  };
+  assert.deepEqual(cursorModelVariants("openai/gpt-5.5", reasoning), [
+    { model: "routekit/openai/gpt-5.5" },
+    { model: "routekit/openai/gpt-5.5:low", reasoningEffort: "low" },
+    { model: "routekit/openai/gpt-5.5:high", reasoningEffort: "high" }
+  ]);
+  assert.deepEqual(cursorModelVariants("openai/gpt-4o", undefined), [
+    { model: "routekit/openai/gpt-4o" }
+  ]);
+
+  const served = ["openai/gpt-5.5", "openai/literal:high"];
+  const capabilities = (model: string) =>
+    model === "openai/gpt-5.5" ? reasoning : undefined;
+  assert.deepEqual(
+    resolveCursorModelSelection(
+      "routekit/openai/gpt-5.5:high",
+      served,
+      capabilities
+    ),
+    { model: "openai/gpt-5.5", reasoningEffort: "high" }
+  );
+  assert.deepEqual(
+    resolveCursorModelSelection("openai/gpt-5.5:max", served, capabilities),
+    { model: "openai/gpt-5.5", reasoningEffort: "high" }
+  );
+  assert.deepEqual(
+    resolveCursorModelSelection("routekit/openai/literal:high", served, capabilities),
+    { model: "openai/literal:high" },
+    "an exact provider model id wins over suffix parsing"
+  );
+  assert.equal(
+    resolveCursorModelSelection(
+      "routekit/openai/gpt-5.5:unknown",
+      served,
+      capabilities
+    ),
+    undefined
+  );
+});
+
 test("Cursor hybrid detection rejects unrelated bodies", () => {
   assert.equal(isCursorChatBody({ input: "hello" }), true);
   assert.equal(isCursorChatBody({ messages: [] }), true);
@@ -150,12 +201,18 @@ test("RouteKit serves the Cursor hybrid through its neutral HTTP boundary", asyn
   }
 });
 
-test("Cursor route namespaces advertised ids and resolves them on ingress", async () => {
-  let received: { model?: unknown } | undefined;
+test("Cursor route advertises reasoning variants and applies their effort", async () => {
+  let received: { model?: unknown; reasoning_effort?: unknown } | undefined;
+  const reasoning = {
+    status: "supported" as const,
+    efforts: [{ id: "low" }, { id: "high" }],
+    defaultEffort: "low",
+    provenance: "provider" as const
+  };
   const backend: Backend = {
     defaultModel: "claude-code/claude-fable-5",
     chat(body) {
-      received = body as { model?: unknown };
+      received = body as { model?: unknown; reasoning_effort?: unknown };
       return Promise.resolve(
         Response.json({
           id: "chatcmpl_2",
@@ -177,7 +234,7 @@ test("Cursor route namespaces advertised ids and resolves them on ingress", asyn
           object: "list",
           data: [
             { id: "claude-code/claude-fable-5", object: "model" },
-            { id: "openai/gpt-4o", object: "model" },
+            { id: "openai/gpt-4o", object: "model", reasoning },
             { id: "gemini-proxy/gemini-zzz-9", object: "model" }
           ]
         })
@@ -187,6 +244,8 @@ test("Cursor route namespaces advertised ids and resolves them on ingress", asyn
       "openai/gpt-4o",
       "gemini-proxy/gemini-zzz-9"
     ],
+    reasoningCapabilities: (model) =>
+      model === "openai/gpt-4o" ? reasoning : undefined,
     embeddings: () => Promise.resolve(new Response(null, { status: 501 }))
   };
   const gateway = await startGateway({ backend });
@@ -201,6 +260,23 @@ test("Cursor route namespaces advertised ids and resolves them on ingress", asyn
     });
     assert.equal(namespaced.status, 200);
     assert.equal(received?.model, "claude-code/claude-fable-5");
+
+    const high = await fetch(`${gateway.url()}/v1/cursor/chat/completions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        model: "routekit/openai/gpt-4o:high",
+        reasoning_effort: "low",
+        messages: [{ role: "user", content: "hi" }]
+      })
+    });
+    assert.equal(high.status, 200);
+    assert.equal(received?.model, "openai/gpt-4o");
+    assert.equal(
+      received?.reasoning_effort,
+      "high",
+      "the selected model variant overrides Cursor's omitted or stale effort"
+    );
 
     // Legacy dashed spelling still resolves for one-release back-compat.
     const legacy = await fetch(`${gateway.url()}/v1/cursor/chat/completions`, {
@@ -224,6 +300,8 @@ test("Cursor route namespaces advertised ids and resolves them on ingress", asyn
     assert.deepEqual(ids, [
       "routekit/claude-code/claude-fable-5",
       "routekit/openai/gpt-4o",
+      "routekit/openai/gpt-4o:low",
+      "routekit/openai/gpt-4o:high",
       "routekit/gemini-proxy/gemini-zzz-9"
     ]);
     for (const id of ids) {
