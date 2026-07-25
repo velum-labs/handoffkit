@@ -1,6 +1,6 @@
 [project]
 name = "fusionkit-server"
-version = "0.9.7"
+version = "0.9.8"
 description = "Internal HTTP sidecar for FusionKit synthesis."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -25,7 +25,7 @@ classifiers = [
 ]
 dependencies = [
   "fastapi>=0.139.0",
-  "fusionkit-core==0.9.7",
+  "fusionkit-core==0.9.8",
   "uvicorn>=0.51.0",
 ]
 
