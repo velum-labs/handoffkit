@@ -187,11 +187,11 @@ export function attachReasoningSelectionError(
  * The clone is intentional: attached symbol metadata is non-configurable on
  * its source object, while object spread creates replaceable own properties.
  */
-export function withReasoningSelection<T extends Record<string, unknown>>(
-  target: T,
+export function withReasoningSelection(
+  target: Record<string, unknown>,
   selection: ReasoningSelection
-): T {
-  const replaced = { ...target } as T & Record<PropertyKey, unknown>;
+): Record<string, unknown> {
+  const replaced: Record<PropertyKey, unknown> = { ...target };
   delete replaced[REASONING_SELECTION_ERROR];
   if (selection.mode === "effort") {
     replaced["reasoning_effort"] = selection.effort;
@@ -199,7 +199,7 @@ export function withReasoningSelection<T extends Record<string, unknown>>(
     delete replaced["reasoning_effort"];
   }
   attachReasoningSelection(replaced, selection);
-  return replaced;
+  return replaced as Record<string, unknown>;
 }
 
 export function reasoningSelectionErrorOf(value: unknown): string | undefined {
