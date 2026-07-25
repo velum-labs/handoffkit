@@ -12,7 +12,8 @@ onlyBuiltDependencies:
 # Keep security overrides in the workspace manifest so both the pinned pnpm 10
 # install and CI's pnpm 11 audit apply them.
 overrides:
-  "brace-expansion@>=3.0.0 <5.0.7": ">=5.0.7 <6"
+  "brace-expansion@>=3.0.0 <5.0.8": ">=5.0.8 <6"
+  "postcss@<=8.5.17": ">=8.5.18"
   "sharp@<0.35.0": "0.35.3"
   "undici@>=7.0.0 <7.28.0": ">=7.28.0 <8"
 
