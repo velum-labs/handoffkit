@@ -10,6 +10,9 @@
   "description": "RouteKit CLI for configuring, serving, and using model gateways.",
   "license": "Apache-2.0",
   "type": "module",
+  "engines": {
+    "node": ">=22.19.0"
+  },
   "bin": {
     "routekit": "./dist/index.js"
   },

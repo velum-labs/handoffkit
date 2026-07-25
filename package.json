@@ -7,7 +7,7 @@
   "type": "module",
   "packageManager": "pnpm@10.33.4",
   "engines": {
-    "node": ">=22.0.0",
+    "node": ">=22.19.0",
     "pnpm": ">=10.33.4"
   },
   "scripts": {
@@ -22,6 +22,8 @@
     "test:fusionkit-pack": "node scripts/check-fusionkit-cli-pack.mjs",
     "test:dual-cli-pack": "node scripts/check-dual-cli-pack.mjs",
     "test:e2e:matrix": "turbo run build --filter=@velum-labs/routekit... --filter=@fusionkit/testkit... && node scripts/routekit-e2e-matrix.mjs",
+    "test:e2e:portable": "turbo run build --filter=@velum-labs/routekit... --filter=@fusionkit/testkit... && node scripts/routekit-e2e-matrix.mjs --no-pty",
+    "test:e2e:macos": "node scripts/routekit-macos-smoke.mjs",
     "demo": "node scripts/demo.mjs",
     "dev:link-cli": "node scripts/link-fusionkit-dev.mjs",
     "dev:run-cli": "node scripts/fusionkit-dev.mjs",

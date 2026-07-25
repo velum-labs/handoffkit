@@ -248,6 +248,7 @@ const requiredFiles = [
   "scripts/generate-routekit-cursor-attestation.mjs",
   "scripts/generate-routekit-l06-evidence.mjs",
   "scripts/generate-routekit-manual-records.mjs",
+  "scripts/lib/routekit-client-model-ui.mjs",
   "scripts/lib/routekit-cursor-attestation-runner.mjs",
   "scripts/lib/routekit-cursor-state.mjs",
   "scripts/lib/routekit-pty-trust.mjs",

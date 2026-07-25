@@ -51,6 +51,11 @@ import {
   cursorConfigDirectory,
   prepareCursorAuthentication
 } from "./lib/routekit-cursor-state.mjs";
+import {
+  modelMatchesRequest,
+  modelVisible,
+  nativeDoorModel
+} from "./lib/routekit-client-model-ui.mjs";
 import { cursorWorkspaceTrustDecision } from "./lib/routekit-pty-trust.mjs";
 import {
   cursorAuthTmuxSessionArgs,
@@ -61,7 +66,10 @@ import {
   stageSubscriptionAccounts,
   subscriptionStoresUnchanged
 } from "./lib/routekit-subscription-state.mjs";
-import { processAlive } from "../packages/runtime-utils/dist/index.js";
+import {
+  buildChildEnv,
+  processAlive
+} from "../packages/runtime-utils/dist/index.js";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const ROUTEKIT_ENTRY = join(ROOT, "packages", "routekit-cli", "dist", "index.js");
@@ -75,8 +83,7 @@ const API_DOORS = DOOR_PROFILES.filter((door) =>
 const CLI_DOORS = [
   { id: "claude", binary: "claude" },
   { id: "codex", binary: "codex" },
-  { id: "cursor", binary: "cursor-agent" },
-  { id: "opencode", binary: "opencode" }
+  { id: "cursor", binary: "cursor-agent" }
 ];
 const PROVIDERS = [...new Set(ROUTE_CASES.map((route) => route.provider))];
 const ACTIVE_LIVE_CHILDREN = new Set();
@@ -97,7 +104,8 @@ function parseArgs(argv) {
     timeoutMs: Number(process.env.ROUTEKIT_E2E_TIMEOUT_MS ?? 120_000),
     maxLiveCalls: Number(process.env.ROUTEKIT_E2E_MAX_LIVE_CALLS ?? 48),
     models: {},
-    routes: undefined
+    routes: undefined,
+    pty: process.env.ROUTEKIT_E2E_PTY !== "0"
   };
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
@@ -109,6 +117,7 @@ function parseArgs(argv) {
     };
     if (arg === "--") continue;
     if (arg === "--live") options.live = true;
+    else if (arg === "--no-pty") options.pty = false;
     else if (arg === "--route") options.routes = csv(value());
     else if (arg === "--provider") options.providers = csv(value());
     else if (arg === "--door") options.doors = csv(value());
@@ -125,6 +134,7 @@ function parseArgs(argv) {
           "Usage: pnpm test:e2e:matrix -- [options]",
           "",
           "  --live                    run live cases (also ROUTEKIT_LIVE_E2E=1)",
+          "  --no-pty                  run portable HTTP/process cases only",
           "  --route <ids>             comma-separated L05 route-anchor filter",
           "  --provider <ids>          comma-separated provider filter",
           "  --door <ids>              API/CLI door filter",
@@ -259,6 +269,56 @@ function commandAvailable(binary) {
     stdio: ["ignore", "ignore", "ignore"]
   });
   return result.error === undefined && result.status === 0;
+}
+
+const LIVE_PROVIDER_ENV = [
+  "OPENAI_API_KEY",
+  "OPENAI_BASE_URL",
+  "ANTHROPIC_API_KEY",
+  "ANTHROPIC_AUTH_TOKEN",
+  "ANTHROPIC_BASE_URL",
+  "OPENROUTER_API_KEY"
+];
+
+function liveChildEnv(extra = {}) {
+  return buildChildEnv({
+    allow: [...LIVE_PROVIDER_ENV, "CURSOR_API_KEY"],
+    extra: {
+      ROUTEKIT_TELEMETRY: "0",
+      ROUTEKIT_WEB_SEARCH: "0",
+      ROUTEKIT_NO_UPDATE_CHECK: "1",
+      HTTP_PROXY: "",
+      HTTPS_PROXY: "",
+      ALL_PROXY: "",
+      http_proxy: "",
+      https_proxy: "",
+      all_proxy: "",
+      NO_PROXY: "127.0.0.1,localhost",
+      no_proxy: "127.0.0.1,localhost",
+      NO_COLOR: "1",
+      ...extra
+    }
+  });
+}
+
+function prepareMatrixCursorAuthentication(clientHome, env = process.env) {
+  const staged = prepareCursorAuthentication(
+    cursorConfigDirectory(env),
+    join(clientHome, ".cursor"),
+    env
+  );
+  if (staged.authSource === "env-key") return staged;
+  return {
+    authSource: "browser-login",
+    directory: join(clientHome, ".cursor"),
+    verify() {
+      const evidence = staged.verify();
+      return {
+        authSource: "browser-login",
+        unchanged: evidence.unchanged
+      };
+    }
+  };
 }
 
 function writeRouterConfig(path, defaultModel) {
@@ -978,43 +1038,6 @@ function cliArgs(door) {
   }
 }
 
-function nativeDoorModel(door, model) {
-  if (door === "codex" && model.startsWith("codex/")) {
-    return model.slice("codex/".length);
-  }
-  if (door !== "claude") return model;
-  const pickerId = model.startsWith("claude-code/")
-    ? model.slice("claude-code/".length)
-    : model;
-  return pickerId.startsWith("claude") || pickerId.startsWith("anthropic")
-    ? pickerId
-    : `claude-${pickerId}`;
-}
-
-function modelVisible(transcript, door, model) {
-  const candidates = [model, nativeDoorModel(door, model)];
-  if (
-    candidates.some(
-    (candidate) =>
-      transcript.includes(candidate) ||
-      transcript.includes(`${candidate.slice(0, 24)}…`)
-    )
-  ) {
-    return true;
-  }
-  const separator = model.indexOf("/");
-  const provider = model.slice(0, separator);
-  const native = model.slice(separator + 1);
-  return (
-    transcript.includes(door === "claude" ? `claude-${provider}/` : `${provider}/`) &&
-    transcript.includes(native.slice(0, 8))
-  );
-}
-
-function modelMatchesRequest(requested, door, expected) {
-  return requested === expected || requested === nativeDoorModel(door, expected);
-}
-
 function toolBehavior(door, proofPath) {
   const command = `printf ROUTEKIT_TOOL_OK > ${JSON.stringify(proofPath)}`;
   if (door === "claude") {
@@ -1057,6 +1080,10 @@ async function runPtyCase(input) {
   mkdirSync(xdgData);
   mkdirSync(xdgCache);
   mkdirSync(xdgState);
+  const cursorAuthentication =
+    input.door === "cursor"
+      ? prepareMatrixCursorAuthentication(clientHome)
+      : undefined;
   if (input.door === "claude") {
     writeFileSync(
       join(claudeConfig, ".claude.json"),
@@ -1089,7 +1116,9 @@ async function runPtyCase(input) {
       : "Give one short deterministic response to this RouteKit matrix probe.";
   if (input.simulator !== undefined) {
     const behaviors = [];
-    if (input.door === "claude") behaviors.push("RouteKit Claude session ready");
+    if (input.door === "claude") {
+      behaviors.push(input.toolCase ? "RouteKit Claude session ready" : marker);
+    }
     const tool = input.toolCase ? toolBehavior(input.door, proofPath) : undefined;
     if (tool !== undefined) behaviors.push(tool);
     behaviors.push(marker);
@@ -1121,7 +1150,13 @@ async function runPtyCase(input) {
     "-c",
     workingDir,
     "-e",
-    `HOME=${clientHome}`,
+    `HOME=${
+      input.door === "cursor" &&
+      (process.env.CURSOR_API_KEY === undefined ||
+        process.env.CURSOR_API_KEY.length === 0)
+        ? process.env.HOME
+        : clientHome
+    }`,
     "-e",
     `XDG_CONFIG_HOME=${xdgConfig}`,
     "-e",
@@ -1139,9 +1174,9 @@ async function runPtyCase(input) {
     "-e",
     "DISABLE_UPDATES=1",
     ...cursorAuthTmuxSessionArgs(),
-    ...(input.cursorConfigDir === undefined
+    ...(cursorAuthentication?.directory === undefined
       ? []
-      : ["-e", `CURSOR_CONFIG_DIR=${input.cursorConfigDir}`]),
+      : ["-e", `CURSOR_CONFIG_DIR=${cursorAuthentication.directory}`]),
     "--",
     "sleep",
     "3600"
@@ -1159,7 +1194,9 @@ async function runPtyCase(input) {
       session,
       (value) =>
         modelVisible(value, input.door, input.model) ||
-        /trust|press enter|what can i help|type a message|ask anything|RouteKit matrix session/i.test(value),
+        /trust|press enter|what can i help|type a message|ask anything|bypass permissions on|❯|RouteKit matrix session/i.test(
+          value
+        ),
       Math.min(input.timeoutMs, 45_000),
       `${input.provider}/${input.door} startup`
     );
@@ -1283,11 +1320,30 @@ async function runPtyCase(input) {
       );
       assert.equal(readFileSync(proofPath, "utf8"), "ROUTEKIT_TOOL_OK");
     }
-    return { transcript, gatewayRequests: caseCalls.length };
+    const cursorEvidence = cursorAuthentication?.verify();
+    if (cursorEvidence !== undefined) {
+      assert.equal(
+        cursorEvidence.unchanged,
+        true,
+        "Cursor qualification mutated the source auth state"
+      );
+    }
+    return {
+      transcript,
+      gatewayRequests: caseCalls.length,
+      cursorEvidence
+    };
   } finally {
     tmux("send-keys", "-t", session, "C-c");
     tmux("send-keys", "-t", session, "C-c");
     tmux("kill-session", "-t", session);
+    if (cursorAuthentication !== undefined) {
+      assert.equal(
+        cursorAuthentication.verify().unchanged,
+        true,
+        "Cursor qualification mutated the source auth state"
+      );
+    }
   }
 }
 
@@ -1348,11 +1404,10 @@ async function startLiveRoutekit(configPath, tempRoot, providers) {
     ],
     {
       cwd: ROOT,
-      env: {
-        ...process.env,
+      env: liveChildEnv({
         ROUTEKIT_HOME: isolatedStateHome,
         ROUTEKIT_PORTLESS: "0"
-      },
+      }),
       detached: true,
       stdio: ["ignore", "pipe", "pipe"]
     }
@@ -1490,16 +1545,14 @@ async function liveRouteInfo(configPath, chosen, tempRoot) {
         await subscriptionProvider(provider).loadCredential(path)
     }
   );
-  const env = {
-    ...process.env,
+  const env = liveChildEnv({
     HOME: home,
     ROUTEKIT_HOME: stateHome,
     ROUTEKIT_PORTLESS: "0",
     ROUTEKIT_DAEMON_PORT: "0",
     ROUTEKIT_NO_SUPERVISOR: "1",
     NO_COLOR: "1"
-  };
-  delete env.ROUTEKIT_CONFIG;
+  });
   const records = {};
   try {
     for (const [provider, model] of Object.entries(chosen)) {
@@ -1913,6 +1966,34 @@ async function runDeterministic(options, results, artifactDir, tempRoot) {
         }
       );
     }
+    await recordCase(
+      results,
+      { phase: "deterministic", door: "unsupported-opencode" },
+      async () => {
+        const unsupported = spawnSync(
+          process.execPath,
+          [ROUTEKIT_ENTRY, "opencode"],
+          {
+            cwd: ROOT,
+            env: buildChildEnv({
+              extra: {
+                HOME: join(tempRoot, "unsupported-opencode-home"),
+                ROUTEKIT_HOME: join(tempRoot, "unsupported-opencode-state"),
+                NO_COLOR: "1"
+              }
+            }),
+            encoding: "utf8",
+            timeout: 15_000
+          }
+        );
+        assert.notEqual(unsupported.status, 0);
+        assert.match(
+          `${unsupported.stdout}\n${unsupported.stderr}`,
+          /unknown command ['"]?opencode/i
+        );
+        return {};
+      }
+    );
     for (const provider of PROVIDERS) {
       if (!selected(provider, options.providers)) continue;
       for (const door of API_DOORS) {
@@ -1947,12 +2028,30 @@ async function runDeterministic(options, results, artifactDir, tempRoot) {
         );
       }
     }
-    for (const provider of PROVIDERS) {
-      if (!selected(provider, options.providers)) continue;
-      for (const door of CLI_DOORS) {
-        if (!caseSelected(provider, door.id, options)) continue;
-        if (!commandAvailable(door.binary)) {
-          skipCase(
+    if (options.pty) {
+      for (const provider of PROVIDERS) {
+        if (!selected(provider, options.providers)) continue;
+        for (const door of CLI_DOORS) {
+          if (!caseSelected(provider, door.id, options)) continue;
+          if (!commandAvailable(door.binary)) {
+            skipCase(
+              results,
+              {
+                phase: "deterministic",
+                routeId: routeIdForCase(provider, door.id, options),
+                provider,
+                door: door.id
+              },
+              `${door.binary} is not installed`
+            );
+            continue;
+          }
+          await stack.simulator.reset();
+          const transcriptPath = join(
+            artifactDir,
+            `deterministic-${provider}-${door.id}.txt`
+          );
+          const entry = await recordCase(
             results,
             {
               phase: "deterministic",
@@ -1960,55 +2059,42 @@ async function runDeterministic(options, results, artifactDir, tempRoot) {
               provider,
               door: door.id
             },
-            `${door.binary} is not installed`
+            async () => {
+              const toolCase =
+                provider === "openrouter" &&
+                (door.id === "claude" || door.id === "codex");
+              const output = await runPtyCase({
+                tempRoot,
+                provider,
+                door: door.id,
+                model: stack.publicModels[provider],
+                nativeModel: stack.nativeModels[provider],
+                configPath: stack.configPath,
+                proxy: stack.proxy,
+                simulator: stack.simulator,
+                timeoutMs: options.timeoutMs,
+                toolCase,
+                live: false
+              });
+              writeFileSync(
+                transcriptPath,
+                `${sanitize(output.transcript).trim()}\n`
+              );
+              const nativeCalls = await stack.simulator.calls({
+                model: stack.nativeModels[provider]
+              });
+              assert.ok(
+                nativeCalls.length > 0,
+                `selected provider ${provider} received no simulator call`
+              );
+              return {
+                gatewayRequests: 0,
+                artifact: relative(ROOT, transcriptPath)
+              };
+            }
           );
-          continue;
+          if (entry.status === "pass") entry.gatewayRequests = 0;
         }
-        await stack.simulator.reset();
-        const transcriptPath = join(
-          artifactDir,
-          `deterministic-${provider}-${door.id}.txt`
-        );
-        const entry = await recordCase(
-          results,
-          {
-            phase: "deterministic",
-            routeId: routeIdForCase(provider, door.id, options),
-            provider,
-            door: door.id
-          },
-          async () => {
-            const toolCase =
-              provider === "openrouter" &&
-              (door.id === "claude" || door.id === "codex");
-            const output = await runPtyCase({
-              tempRoot,
-              provider,
-              door: door.id,
-              model: stack.publicModels[provider],
-              nativeModel: stack.nativeModels[provider],
-              configPath: stack.configPath,
-              proxy: stack.proxy,
-              simulator: stack.simulator,
-              timeoutMs: options.timeoutMs,
-              toolCase,
-              live: false
-            });
-            writeFileSync(transcriptPath, `${sanitize(output.transcript).trim()}\n`);
-            const nativeCalls = await stack.simulator.calls({
-              model: stack.nativeModels[provider]
-            });
-            assert.ok(
-              nativeCalls.length > 0,
-              `selected provider ${provider} received no simulator call`
-            );
-            return {
-              gatewayRequests: 0,
-              artifact: relative(ROOT, transcriptPath)
-            };
-          }
-        );
-        if (entry.status === "pass") entry.gatewayRequests = 0;
       }
     }
     if (poolCasesEnabled(options)) {
@@ -2111,7 +2197,7 @@ async function runLive(options, results, artifactDir, tempRoot) {
     }
     const estimatedMinimum =
       activeProviders.flatMap((provider) =>
-        [...API_DOORS, ...CLI_DOORS].filter((door) =>
+        [...API_DOORS, ...(options.pty ? CLI_DOORS : [])].filter((door) =>
           caseSelected(provider, door.id, options)
         )
       ).length;
@@ -2148,33 +2234,25 @@ async function runLive(options, results, artifactDir, tempRoot) {
         );
       }
     }
-    for (const provider of activeProviders) {
-      for (const door of CLI_DOORS) {
-        if (!caseSelected(provider, door.id, options)) continue;
-        if (!commandAvailable(door.binary)) {
-          skipCase(
-            results,
-            {
-              phase: "live",
-              routeId: routeIdForCase(provider, door.id, options),
-              provider,
-              door: door.id
-            },
-            `${door.binary} is not installed`
-          );
-          continue;
-        }
-        const transcriptPath = join(artifactDir, `live-${provider}-${door.id}.txt`);
-        const cursorAuthentication =
-          door.id === "cursor"
-            ? prepareCursorAuthentication(
-                cursorConfigDirectory(),
-                join(tempRoot, "cursor-agent-config")
-              )
-            : undefined;
-        let entry;
-        try {
-          entry = await recordCase(
+    if (options.pty) {
+      for (const provider of activeProviders) {
+        for (const door of CLI_DOORS) {
+          if (!caseSelected(provider, door.id, options)) continue;
+          if (!commandAvailable(door.binary)) {
+            skipCase(
+              results,
+              {
+                phase: "live",
+                routeId: routeIdForCase(provider, door.id, options),
+                provider,
+                door: door.id
+              },
+              `${door.binary} is not installed`
+            );
+            continue;
+          }
+          const transcriptPath = join(artifactDir, `live-${provider}-${door.id}.txt`);
+          await recordCase(
             results,
             {
               phase: "live",
@@ -2194,8 +2272,7 @@ async function runLive(options, results, artifactDir, tempRoot) {
                   proxy,
                   timeoutMs: options.timeoutMs,
                   toolCase: provider === "openrouter" && door.id === "claude",
-                  live: true,
-                  cursorConfigDir: cursorAuthentication?.directory
+                  live: true
                 });
                 writeFileSync(
                   transcriptPath,
@@ -2203,19 +2280,24 @@ async function runLive(options, results, artifactDir, tempRoot) {
                 );
                 return {
                   artifact: relative(ROOT, transcriptPath),
-                  model: chosen[provider]
+                  model: chosen[provider],
+                  ...(output.cursorEvidence === undefined
+                    ? {}
+                    : {
+                        setupRestore: {
+                          setup:
+                            output.cursorEvidence.authSource === "none"
+                              ? "fail"
+                              : "pass",
+                          restore: output.cursorEvidence.unchanged
+                            ? "pass"
+                            : "fail",
+                          evidence: output.cursorEvidence
+                        }
+                      })
                 };
               })
           );
-        } finally {
-          if (cursorAuthentication !== undefined && entry !== undefined) {
-            const evidence = cursorAuthentication.verify();
-            entry.setupRestore = {
-              setup: evidence.authSource === "none" ? "fail" : "pass",
-              restore: evidence.unchanged ? "pass" : "fail",
-              evidence
-            };
-          }
         }
       }
     }
@@ -2454,7 +2536,7 @@ async function main() {
   if (!existsSync(ROUTEKIT_ENTRY)) {
     throw new Error("RouteKit is not built; run pnpm build:routekit");
   }
-  if (!commandAvailable("tmux")) {
+  if (options.pty && !commandAvailable("tmux")) {
     throw new Error("tmux is required for RouteKit PTY matrix coverage");
   }
   const startedAt = new Date().toISOString();
@@ -2473,7 +2555,12 @@ async function main() {
       );
     } finally {
       cleanupMatrixTmuxSessions();
-      rmSync(tempRoot, { recursive: true, force: true });
+      rmSync(tempRoot, {
+        recursive: true,
+        force: true,
+        maxRetries: 5,
+        retryDelay: 100
+      });
       process.kill(process.pid, signal);
     }
   };
@@ -2511,7 +2598,12 @@ async function main() {
   } finally {
     removeSignalHandlers();
     cleanupMatrixTmuxSessions();
-    rmSync(tempRoot, { recursive: true, force: true });
+    rmSync(tempRoot, {
+      recursive: true,
+      force: true,
+      maxRetries: 5,
+      retryDelay: 100
+    });
   }
   const caseCounts = {
     pass: results.filter((entry) => entry.status === "pass").length,
@@ -2562,7 +2654,8 @@ async function main() {
         options.doors ??
         [...API_DOORS.map((door) => door.id), ...CLI_DOORS.map((door) => door.id), "pool"],
       timeoutMs: options.timeoutMs,
-      maxLiveCalls: options.maxLiveCalls
+      maxLiveCalls: options.maxLiveCalls,
+      pty: options.pty
     },
     summary,
     liveGatewayRequestsObserved,

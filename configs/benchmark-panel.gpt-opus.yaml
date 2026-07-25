@@ -4,7 +4,8 @@
 # Provider URLs and credentials live in RouteKit.
 # configs/benchmark-router.example.yaml.
 #
-#   routekit --config configs/benchmark-router.example.yaml serve --no-portless --port 8787
+#   routekit config import --from configs/benchmark-router.example.yaml
+#   routekit start --no-portless --port 8787
 #   FUSIONKIT_BENCH_CONFIG=configs/benchmark-panel.gpt-opus.yaml \
 #     uv run --package fusionkit-evals fusionkit-bench public ...
 routekit_url: http://127.0.0.1:8787

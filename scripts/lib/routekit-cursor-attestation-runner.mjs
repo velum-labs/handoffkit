@@ -275,7 +275,7 @@ async function cleanupExactProcesses(root, child) {
   }
 }
 
-async function runBundledHarness(input) {
+export async function runBundledHarness(input) {
   const artifactsDirectory = join(input.temporaryRoot, "cursorkit-artifacts");
   const cursorkit = bundledCursorkitPaths(input.root);
   const quotedServeCli = cursorkit.serveCli.replaceAll('"', '\\"');
@@ -340,8 +340,66 @@ async function runBundledHarness(input) {
         resolveExit(code);
       });
     });
-    assert.equal(exitCode, 0, "Cursorkit desktop harness child failed");
     const summaryPath = join(artifactsDirectory, "summary.json");
+    if (exitCode !== 0) {
+      let diagnosis = { status: "summary-missing", results: [] };
+      if (existsSync(summaryPath)) {
+        const failed = JSON.parse(readFileSync(summaryPath, "utf8"));
+        diagnosis = {
+          status:
+            typeof failed.status === "string" ? failed.status : "unavailable",
+          results: Array.isArray(failed.results)
+            ? failed.results.map((result) => ({
+                id: typeof result.id === "string" ? result.id : "unavailable",
+                status:
+                  typeof result.status === "string"
+                    ? result.status
+                    : "unavailable",
+                failureCode:
+                  typeof result.failureCode === "string"
+                    ? result.failureCode
+                    : "unavailable",
+                message:
+                  typeof result.message === "string"
+                    ? result.message
+                        .replaceAll(input.root, "<repo>")
+                        .replaceAll(input.temporaryRoot, "<temp>")
+                        .replaceAll(/https?:\/\/\S+/g, "<url>")
+                        .slice(0, 500)
+                    : "unavailable",
+                details:
+                  result.details !== null && typeof result.details === "object"
+                    ? Object.fromEntries(
+                        [
+                          "signInRequired",
+                          "workspaceOpened",
+                          "composerVisible",
+                          "modelPickerOpened",
+                          "modelTextSeen",
+                          "selectedModelTextSeen",
+                          "desktopPromptSubmitted",
+                          "desktopProbeTextSeen",
+                          "desktopModelErrorSeen",
+                          "modelBackendRequestSeen",
+                          "modelBackendResponseComplete",
+                          "cursorToolResultSeen",
+                          "requiredCursorToolResultsSeen",
+                          "localModelSeedStatus"
+                        ].flatMap((field) =>
+                          Object.hasOwn(result.details, field)
+                            ? [[field, result.details[field]]]
+                            : []
+                        )
+                      )
+                    : {}
+              }))
+            : []
+        };
+      }
+      throw new Error(
+        `Cursorkit desktop harness child failed: ${JSON.stringify(diagnosis)}`
+      );
+    }
     assert.ok(existsSync(summaryPath), "Cursorkit desktop harness summary is missing");
     return JSON.parse(readFileSync(summaryPath, "utf8"));
   } finally {
@@ -372,7 +430,13 @@ export async function runActiveCursorIdeAttestation(input, dependencies = {}) {
   assert.ok(before.count > 0, "Cursor default-profile state is unavailable");
   const temporaryRoot = (
     dependencies.makeTemporaryRoot ??
-    (() => mkdtempSync(join(tmpdir(), "routekit-cursor-attestation-")))
+    (() =>
+      mkdtempSync(
+        join(
+          process.platform === "darwin" ? "/tmp" : tmpdir(),
+          "rk-cursor-"
+        )
+      ))
   )();
   const startProxy = dependencies.startProxy ?? startCursorGatewayProxy;
   let proxy;

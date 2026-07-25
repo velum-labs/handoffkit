@@ -51,6 +51,8 @@ Each coding tool is its own workspace package implementing a `ToolIntegration`:
 2. Export a `ToolIntegration` with a `launch(ctx)` implementation.
 3. Add it to `toolIntegrations` in `@velum-labs/routekit-tool-registry`.
 
-That one canonical entry wires the tool into both CLIs and internal harness
-composition through a neutral `ToolLaunchSpec`; consumers do not keep parallel
-imports or lists. The existing integrations are documented under [Tools](/docs/tools).
+That canonical entry makes the integration available to product consumers and
+internal harness composition through a neutral `ToolLaunchSpec`. RouteKit and
+FusionKit expose tools through separate product allowlists, so adding a
+registry entry alone does not create a public command. The existing
+integrations are documented under [Tools](/docs/tools).

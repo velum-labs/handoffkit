@@ -1,12 +1,15 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
   chmodSync,
+  closeSync,
   copyFileSync,
   existsSync,
+  openSync,
   lstatSync,
   mkdirSync,
-  readFileSync
+  readSync
 } from "node:fs";
 import { isAbsolute, join, normalize } from "node:path";
 
@@ -14,11 +17,27 @@ const CURSOR_STATE_FILES = Object.freeze([
   "cli-config.json",
   "agent-cli-state.json"
 ]);
-const CURSOR_DEFAULT_PROFILE_FILES = Object.freeze([
+const CURSOR_DEFAULT_PROFILE_DATABASES = Object.freeze([
   join("User", "globalStorage", "state.vscdb"),
-  join("User", "globalStorage", "state.vscdb.backup"),
+  join("User", "globalStorage", "state.vscdb.backup")
+]);
+const CURSOR_DEFAULT_PROFILE_SETTINGS = Object.freeze([
   join("User", "settings.json")
 ]);
+
+function updateHashFromFile(hash, path) {
+  const descriptor = openSync(path, "r");
+  const buffer = Buffer.allocUnsafe(1024 * 1024);
+  try {
+    for (;;) {
+      const bytesRead = readSync(descriptor, buffer, 0, buffer.length, null);
+      if (bytesRead === 0) break;
+      hash.update(buffer.subarray(0, bytesRead));
+    }
+  } finally {
+    closeSync(descriptor);
+  }
+}
 
 export function cursorConfigDirectory(env = process.env) {
   if (env.CURSOR_CONFIG_DIR) return env.CURSOR_CONFIG_DIR;
@@ -56,9 +75,8 @@ export function snapshotAllowlistedState(directory, relativePaths) {
     }
     const stat = lstatSync(path);
     assert.ok(stat.isFile(), "Cursor state must be regular files");
-    const bytes = readFileSync(path);
-    hash.update(`file:${bytes.length}:`);
-    hash.update(bytes);
+    hash.update(`file:${stat.size}:`);
+    updateHashFromFile(hash, path);
     hash.update(";");
     count += 1;
   });
@@ -85,7 +103,57 @@ export function cursorDefaultProfileDirectory(
 }
 
 export function snapshotCursorDefaultProfile(directory) {
-  return snapshotAllowlistedState(directory, CURSOR_DEFAULT_PROFILE_FILES);
+  const hash = createHash("sha256");
+  let count = 0;
+  const settings = snapshotAllowlistedState(
+    directory,
+    CURSOR_DEFAULT_PROFILE_SETTINGS
+  );
+  hash.update(`settings:${settings.count}:${settings.digest};`);
+  count += settings.count;
+  for (const name of CURSOR_DEFAULT_PROFILE_DATABASES) {
+    const path = join(directory, name);
+    hash.update(`${name}:`);
+    if (!existsSync(path)) {
+      hash.update("missing;");
+      continue;
+    }
+    const stat = lstatSync(path);
+    assert.equal(
+      stat.isSymbolicLink(),
+      false,
+      "Cursor default-profile databases cannot be symbolic links"
+    );
+    assert.ok(
+      stat.isFile(),
+      "Cursor default-profile databases must be regular files"
+    );
+    const selected = spawnSync(
+      "sqlite3",
+      [
+        "-readonly",
+        path,
+        "SELECT key, hex(value) FROM ItemTable " +
+          "WHERE key GLOB 'cursorAuth/*' ORDER BY key;"
+      ],
+      {
+        encoding: "buffer",
+        maxBuffer: 4 * 1024 * 1024,
+        stdio: ["ignore", "pipe", "pipe"]
+      }
+    );
+    assert.equal(
+      selected.status,
+      0,
+      "failed to snapshot Cursor default-profile auth rows"
+    );
+    const rows = selected.stdout;
+    hash.update(`auth-rows:${rows.length}:`);
+    hash.update(rows);
+    hash.update(";");
+    if (rows.length > 0) count += 1;
+  }
+  return { count, digest: hash.digest("hex") };
 }
 
 export function stageCursorState(sourceDirectory, destinationDirectory) {

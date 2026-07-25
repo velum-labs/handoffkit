@@ -106,8 +106,8 @@ then run a subset:
 
 ```bash
 set -a && source .env && set +a
-routekit --config configs/benchmark-router.example.yaml \
-  gateway serve --no-portless --port 8787
+routekit config import --from configs/benchmark-router.example.yaml
+routekit start --no-portless --port 8787
 ```
 
 In another shell:

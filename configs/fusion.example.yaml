@@ -6,7 +6,8 @@
 #
 # For direct maintainer use, start the matching RouteKit gateway first:
 #
-#   routekit --config configs/benchmark-router.example.yaml serve --no-portless --port 8787
+#   routekit config import --from configs/benchmark-router.example.yaml
+#   routekit start --no-portless --port 8787
 routekit_url: http://127.0.0.1:8787
 routekit_model_ids:
   - openai/gpt-5.5

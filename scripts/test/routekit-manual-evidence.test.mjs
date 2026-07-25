@@ -685,7 +685,17 @@ function createDefaultProfile(root) {
   const profile = join(root, "profile");
   const storage = join(profile, "User", "globalStorage");
   mkdirSync(storage, { recursive: true });
-  writeFileSync(join(storage, "state.vscdb"), "machine-profile-state");
+  const database = join(storage, "state.vscdb");
+  const created = spawnSync(
+    "sqlite3",
+    [
+      database,
+      "CREATE TABLE ItemTable (key TEXT UNIQUE ON CONFLICT REPLACE, value BLOB);" +
+        "INSERT INTO ItemTable(key, value) VALUES ('cursorAuth/accessToken', 'machine-profile-state');"
+    ],
+    { encoding: "utf8" }
+  );
+  assert.equal(created.status, 0, created.stderr);
   return profile;
 }
 
@@ -714,10 +724,21 @@ async function runMeasuredAttestation(input = {}) {
         runHarness: async ({ proxyUrl, model }) => {
           runCalled = true;
           if (input.mutateState) {
-            writeFileSync(
-              join(profileDirectory, "User", "globalStorage", "state.vscdb"),
-              "mutated-machine-profile-state"
-            );
+              const mutated = spawnSync(
+                "sqlite3",
+                [
+                  join(
+                    profileDirectory,
+                    "User",
+                    "globalStorage",
+                    "state.vscdb"
+                  ),
+                  "UPDATE ItemTable SET value = 'mutated-machine-profile-state' " +
+                    "WHERE key = 'cursorAuth/accessToken';"
+                ],
+                { encoding: "utf8" }
+              );
+              assert.equal(mutated.status, 0, mutated.stderr);
           }
           if (input.childFailure) throw new Error("mock harness child failed");
           for (let index = 0; index < (input.calls ?? 1); index += 1) {
@@ -984,13 +1005,24 @@ const cursorAgentAvailable =
   }).status === 0;
 
 test(
-  "official cursor-agent status honors CURSOR_CONFIG_DIR isolation",
+  "official cursor-agent status honors the matrix home and config isolation",
   { skip: !cursorAgentAvailable },
   () => {
-    const isolated = mkdtempSync(join(tmpdir(), "routekit-cursor-config-contract-"));
+    const isolated = mkdtempSync(join(tmpdir(), "routekit-cursor-isolation-contract-"));
     try {
+      const home = join(isolated, "home");
+      const xdgConfig = join(isolated, "xdg-config");
+      const cursorConfig = join(isolated, "cursor-config");
+      mkdirSync(home, { mode: 0o700 });
+      mkdirSync(xdgConfig, { mode: 0o700 });
+      mkdirSync(cursorConfig, { mode: 0o700 });
       const status = spawnSync("cursor-agent", ["status"], {
-        env: { ...process.env, CURSOR_CONFIG_DIR: isolated },
+        env: {
+          ...process.env,
+          HOME: home,
+          XDG_CONFIG_HOME: xdgConfig,
+          CURSOR_CONFIG_DIR: cursorConfig
+        },
         encoding: "utf8",
         timeout: 15_000,
         stdio: ["ignore", "pipe", "pipe"]

@@ -79,8 +79,9 @@ Models from other providers stay source-qualified, and Fusion/configuration
 surfaces remain strictly namespaced.
 
 Inspect current limits at any time with `routekit usage` (or
-`routekit usage --watch 10`). It reads live pools from the normal RouteKit
-gateway when one is running and otherwise checks enrolled accounts directly.
+`routekit usage --watch 10`). Like other daemon-backed commands, it
+race-safely starts the singleton when needed and reads the daemon-owned live
+account pools.
 
 `fusionkit stop` never stops an external RouteKit daemon. An embedded RouteKit
 router composed by FusionKit is process-owned and closes with the Fusion stack.

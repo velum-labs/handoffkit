@@ -208,6 +208,40 @@ systemd/launchd unit. The only foreground entrypoint is the internal
 `daemon run`, which supervisors and the detached spawner execute; it is not a
 user workflow.
 
+### Tailnet-only gateway
+
+Keep the RouteKit listener on loopback and let Tailscale Serve provide the
+tailnet-only HTTPS ingress. Use a fixed, explicit Serve port so the command
+does not replace another service on the default HTTPS listener:
+
+```sh
+routekit daemon service install \
+  --host 127.0.0.1 \
+  --port 8787 \
+  --no-portless
+tailscale serve --bg --https=8787 http://127.0.0.1:8787
+```
+
+The supervised daemon survives crashes and reboots. RouteKit generates its
+gateway bearer at `~/.routekit/secrets/data-token` with mode `0600` and passes
+only the token-file path in process arguments. Retrieve it explicitly when
+configuring a tailnet client:
+
+```sh
+routekit daemon auth show
+routekit status
+routekit daemon logs --lines 100
+```
+
+Send the bearer as `Authorization: Bearer <token>` or `x-api-key: <token>`.
+Tailscale Serve is private to the tailnet; do not enable Funnel for a model
+gateway. Remove both layers explicitly:
+
+```sh
+tailscale serve --https=8787 off
+routekit daemon service uninstall
+```
+
 ### Migrating existing lifecycle commands
 
 - Replace `routekit daemon start` with `routekit start`, `routekit daemon

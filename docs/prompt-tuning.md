@@ -32,8 +32,8 @@ prompt hash so repeats are free and the loop is resumable.
 Install `fusionkit-evals` and use its maintainer-only entrypoint:
 
 ```bash
-routekit --config configs/benchmark-router.example.yaml \
-  gateway serve --no-portless --port 8787
+routekit config import --from configs/benchmark-router.example.yaml
+routekit start --no-portless --port 8787
 ```
 
 In another shell:

@@ -6,10 +6,16 @@ Run the credential-free matrix:
 pnpm test:e2e:matrix
 ```
 
+Run the portable HTTP/process subset used by Linux CI:
+
+```bash
+pnpm test:e2e:portable
+```
+
 It exercises the five launch provider classes (`openai`, `anthropic`,
 `openrouter`, `codex`, and `claude-code`) through the OpenAI Chat, Anthropic
-Messages, and Responses HTTP boundaries. It also launches every installed
-coding-agent CLI through the real
+Messages, and Responses HTTP boundaries. The full matrix also launches the
+three public coding-agent CLIs (Claude Code, Codex, and Cursor Agent) through the real
 `routekit` command in a tmux PTY. Each CLI case selects a non-default
 namespaced model, types a deterministic prompt, waits for a response, and
 checks the model that reached the gateway. Claude Code and Codex additionally
@@ -57,7 +63,7 @@ Live mode first reruns the deterministic matrix, then starts RouteKit with
 failure. An installed CLI that cannot complete is also a failure; a missing
 optional CLI is an explicit skip. Prompts and HTTP output limits are kept
 small. The default hard limit is 48 client-to-RouteKit model requests,
-including extra agent turns such as a tool result or OpenCode title generation.
+including extra agent turns such as a tool result.
 This is not an invoice or provider-egress counter: a provider backend can make
 bounded internal retries or same-kind subscription rotations after one gateway
 request. Authorize provider-account spend separately under the route's
@@ -207,13 +213,15 @@ matrix and optional RouteKit-owned Cursor attestation before applying them.
 For Codex and Claude Code, the live runner copies only the selected enrolled
 credential files into its mode-`0600` temporary RouteKit home, verifies the
 source account store is unchanged after shutdown, and removes the temporary
-home. For `cursor-agent`, the runner copies only the allowlisted Cursor CLI
-auth/config state into a private `CURSOR_CONFIG_DIR`, hashes the allowlisted
-source bytes before and after the isolated live launch, and emits only
-setup/restore pass/fail. File names, contents, and individual digests are never
-serialized. A response alone does not prove setup/restore; every required setup
-and restore outcome must pass. API-key routes correctly mark setup/restore as
-not applicable.
+home. For `cursor-agent`, automation prefers `CURSOR_API_KEY`. On macOS, a
+browser login remains in Keychain, so the runner preserves the real `HOME` only
+for Keychain lookup while using a private `CURSOR_CONFIG_DIR`, isolated XDG
+directories, and an isolated working directory. It hashes the allowlisted
+source config bytes before and after launch and emits only setup/restore
+pass/fail. File names, contents, and individual digests are never serialized. A
+response alone does not prove setup/restore; every required setup and restore
+outcome must pass. API-key provider routes correctly mark setup/restore as not
+applicable.
 
 ## Artifacts and interpretation
 
@@ -222,8 +230,9 @@ Each run writes a timestamped `report.json` and sanitized PTY transcripts under
 exact case and route pass/fail/skip counts, top-level failure count, per-case
 duration and gateway-request counts, and the total number of client-to-RouteKit
 model requests observed at the local counting proxy. Every result has a stable
-`caseId` and the applicable L05 `routeIds`; cases for not-offered doors such as
-OpenCode deliberately have an empty `routeIds` list.
+`caseId` and the applicable L05 `routeIds`. The deterministic matrix verifies
+OpenCode as an unsupported command with no route mapping rather than treating
+it as a launch door.
 Schema version 4 also records the exact Git SHA, RouteKit and client versions,
 authorized budget, selected route anchors, fixed reason codes, route
 capabilities, billing basis, setup/restore outcomes, evidence-map digest, exact

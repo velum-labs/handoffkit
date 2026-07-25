@@ -87,11 +87,12 @@ test("public RouteKit lifecycle: start, idempotency, upgrade, drain-on-stop", as
     releaseSlowResponse = resolveReleased;
   });
   const drainObservationTimeoutMs = 10_000;
+  let availableModel = "mock-model";
   const upstream = createServer((request, response) => {
     if (request.url === "/v1/models") {
       response.setHeader("content-type", "application/json");
       response.end(
-        JSON.stringify({ object: "list", data: [{ id: "mock-model", object: "model" }] })
+        JSON.stringify({ object: "list", data: [{ id: availableModel, object: "model" }] })
       );
       return;
     }
@@ -105,7 +106,7 @@ test("public RouteKit lifecycle: start, idempotency, upgrade, drain-on-stop", as
             id: "chatcmpl-e2e",
             object: "chat.completion",
             created: 0,
-            model: "mock-model",
+            model: availableModel,
             choices: [
               {
                 index: 0,
@@ -177,6 +178,31 @@ test("public RouteKit lifecycle: start, idempotency, upgrade, drain-on-stop", as
     const dataToken = readFileSync(record.authTokenFile, "utf8").trim();
     assert.equal(record.args?.join(" ").includes(dataToken), false);
 
+    // Reload: atomically replace the generation while preserving the stable
+    // authenticated data URL.
+    availableModel = "mock-model-reloaded";
+    writeFileSync(
+      configPath,
+      [
+        "providers:",
+        "  openai: {}",
+        "defaultModel: openai/mock-model-reloaded",
+        ""
+      ].join("\n")
+    );
+    const reloaded = json(await runCli(["daemon", "reload", "--json"], cli));
+    assert.equal(typeof reloaded.configRevision, "number");
+    const reloadedCatalog = await fetch(`${url}/v1/models`, {
+      headers: { authorization: `Bearer ${dataToken}` }
+    });
+    assert.equal(reloadedCatalog.status, 200);
+    assert.deepEqual(
+      ((await reloadedCatalog.json()) as { data: Array<{ id: string }> }).data.map(
+        (entry) => entry.id
+      ),
+      ["openai/mock-model-reloaded"]
+    );
+
     // upgrade without skew is a no-op; --force performs a drain-restart.
     const upToDate = json(await runCli(["daemon", "upgrade", "--json"], cli));
     assert.equal(upToDate.action, "up-to-date");
@@ -205,7 +231,7 @@ test("public RouteKit lifecycle: start, idempotency, upgrade, drain-on-stop", as
         authorization: `Bearer ${dataToken}`
       },
       body: JSON.stringify({
-        model: "openai/mock-model",
+        model: "openai/mock-model-reloaded",
         messages: [{ role: "user", content: "slow" }]
       })
     });
@@ -231,7 +257,7 @@ test("public RouteKit lifecycle: start, idempotency, upgrade, drain-on-stop", as
         authorization: `Bearer ${dataToken}`
       },
       body: JSON.stringify({
-        model: "openai/mock-model",
+        model: "openai/mock-model-reloaded",
         messages: [{ role: "user", content: "new work during drain" }]
       })
     });

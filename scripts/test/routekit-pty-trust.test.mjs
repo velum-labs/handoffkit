@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import {
+  modelMatchesRequest,
+  modelVisible
+} from "../lib/routekit-client-model-ui.mjs";
 import { cursorWorkspaceTrustDecision } from "../lib/routekit-pty-trust.mjs";
 
 const CURRENT_CURSOR_TRUST = `
@@ -60,4 +64,14 @@ test("Cursor trust handling never sends a key during transition or after readine
     state: "absent",
     action: undefined
   });
+});
+
+test("Claude model evidence accepts the current friendly label but verifies the request ID", () => {
+  const model = "claude-code/claude-fable-5";
+  assert.equal(
+    modelVisible("Claude Code\nFable 5 · API Usage Billing", "claude", model),
+    true
+  );
+  assert.equal(modelMatchesRequest("claude-fable-5", "claude", model), true);
+  assert.equal(modelMatchesRequest("claude-sonnet-4-6", "claude", model), false);
 });

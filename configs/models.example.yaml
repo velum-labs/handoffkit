@@ -1,6 +1,7 @@
 # Current RouteKit router schema. Use with:
 #
-#   routekit --config configs/models.example.yaml serve --no-portless --port 8787
+#   routekit config import --from configs/models.example.yaml
+#   routekit start --no-portless --port 8787
 #
 # Fusion v4 references live namespaced provider/model ids. Provider URLs,
 # credentials, wire protocols, and discovery metadata come from the registry.

@@ -5,6 +5,7 @@ import {
   existsSync,
   mkdtempSync,
   mkdirSync,
+  readFileSync,
   rmSync,
   writeFileSync
 } from "node:fs";
@@ -148,6 +149,29 @@ test("real routekit daemon run process reports JSON readiness and serves every s
           : {}),
         body
       });
+      if (request.url === "/v1/embeddings") {
+        response.setHeader("content-type", "application/json");
+        response.end(
+          JSON.stringify({
+            object: "list",
+            data: [{ object: "embedding", index: 0, embedding: [0.1, 0.2] }],
+            model: "provider-model",
+            usage: { prompt_tokens: 1, total_tokens: 1 }
+          })
+        );
+        return;
+      }
+      if (body.stream === true) {
+        response.statusCode = 200;
+        response.setHeader("content-type", "text/event-stream");
+        response.write(
+          'data: {"id":"chatcmpl-routekit-stream","object":"chat.completion.chunk","created":0,"model":"provider-model","choices":[{"index":0,"delta":{"role":"assistant","content":"mock stream answer"},"finish_reason":null}]}\n\n'
+        );
+        response.end(
+          'data: {"id":"chatcmpl-routekit-stream","object":"chat.completion.chunk","created":0,"model":"provider-model","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n'
+        );
+        return;
+      }
       response.setHeader("content-type", "application/json");
       response.end(
         JSON.stringify({
@@ -218,6 +242,9 @@ test("real routekit daemon run process reports JSON readiness and serves every s
     assert.equal(typeof readiness.pid, "number");
     assert.equal(typeof readiness.dataUrl, "string");
     const routekitUrl = readiness.dataUrl as string;
+    const unauthorized = await fetch(`${routekitUrl}/v1/models`);
+    assert.equal(unauthorized.status, 401);
+    assert.equal((await fetch(`${routekitUrl}/health`)).status, 200);
 
     const importer = spawnCli(
       ["config", "import", "--from", configPath, "--json"],
@@ -239,13 +266,92 @@ test("real routekit daemon run process reports JSON readiness and serves every s
       ((await models.json()) as { data: Array<{ id: string }> }).data.map((entry) => entry.id),
       ["openai/provider-model"]
     );
+    for (const catalogPath of [
+      "/models",
+      "/v1/cursor/models",
+      "/backend-api/codex/models"
+    ]) {
+      assert.equal((await requestJson(routekitUrl, catalogPath)).status, 200);
+    }
 
     const openai = await requestJson(routekitUrl, "/v1/chat/completions", {
       model: "openai/provider-model",
       messages: [{ role: "user", content: "openai door" }]
     });
     assert.equal(openai.status, 200);
+    const callId = openai.headers.get("x-routekit-model-call-id");
+    assert.ok(callId);
     assert.match(await openai.text(), /mock upstream answer/);
+    const canonicalConfig = join(home, ".config", "routekit", "router.yaml");
+    mkdirSync(dirname(canonicalConfig), { recursive: true });
+    writeFileSync(canonicalConfig, readFileSync(configPath, "utf8"));
+    const inspection = spawnCli(
+      ["calls", "inspect", callId, "--json"],
+      { cwd: root, env: cliEnv }
+    );
+    assert.equal(
+      await waitForExit(inspection),
+      0,
+      `${inspection.stdout()}\n${inspection.stderr()}`
+    );
+    const attributed = JSON.parse(inspection.stdout()) as {
+      callId?: string;
+      effectiveModel?: string;
+      provider?: string;
+      billingMode?: string;
+    };
+    assert.equal(attributed.callId, callId);
+    assert.equal(attributed.effectiveModel, "openai/provider-model");
+    assert.equal(attributed.provider, "openai");
+    assert.equal(attributed.billingMode, "api_key");
+
+    const streamed = await requestJson(routekitUrl, "/v1/chat/completions", {
+      model: "openai/provider-model",
+      stream: true,
+      messages: [{ role: "user", content: "streaming door" }]
+    });
+    assert.equal(streamed.status, 200);
+    assert.match(streamed.headers.get("content-type") ?? "", /text\/event-stream/);
+    const streamedText = await streamed.text();
+    assert.match(streamedText, /mock stream answer/);
+    assert.match(streamedText, /\[DONE\]/);
+
+    const chatAlias = await requestJson(routekitUrl, "/chat/completions", {
+      model: "openai/provider-model",
+      messages: [{ role: "user", content: "chat alias" }]
+    });
+    assert.equal(chatAlias.status, 200);
+
+    const malformed = await fetch(`${routekitUrl}/v1/chat/completions`, {
+      method: "POST",
+      headers: {
+        authorization: "Bearer test-gateway-token",
+        "content-type": "application/json"
+      },
+      body: "{"
+    });
+    assert.equal(malformed.status, 400);
+
+    const unknownModel = await requestJson(routekitUrl, "/v1/chat/completions", {
+      model: "openai/does-not-exist",
+      messages: [{ role: "user", content: "unknown model" }]
+    });
+    assert.equal(unknownModel.status, 400);
+
+    const beforeOversized = upstreamRequests.length;
+    const oversized = await fetch(`${routekitUrl}/v1/chat/completions`, {
+      method: "POST",
+      headers: {
+        authorization: "Bearer test-gateway-token",
+        "content-type": "application/json"
+      },
+      body: JSON.stringify({ padding: "x".repeat(16 * 1024 * 1024) })
+    });
+    assert.equal(oversized.status, 413);
+    assert.equal(upstreamRequests.length, beforeOversized);
+
+    const missingRoute = await requestJson(routekitUrl, "/v1/not-a-route");
+    assert.equal(missingRoute.status, 404);
 
     const anthropic = await requestJson(routekitUrl, "/v1/messages", {
       model: "openai/provider-model",
@@ -261,6 +367,15 @@ test("real routekit daemon run process reports JSON readiness and serves every s
     });
     assert.equal(responses.status, 200);
     assert.equal(((await responses.json()) as { object?: string }).object, "response");
+    const codexResponses = await requestJson(
+      routekitUrl,
+      "/backend-api/codex/responses",
+      {
+        model: "openai/provider-model",
+        input: "codex responses alias"
+      }
+    );
+    assert.equal(codexResponses.status, 200);
 
     const cursor = await requestJson(routekitUrl, "/v1/cursor/chat/completions", {
       model: "openai/provider-model",
@@ -268,9 +383,29 @@ test("real routekit daemon run process reports JSON readiness and serves every s
     });
     assert.equal(cursor.status, 200);
 
-    assert.equal(upstreamRequests.length, 4);
+    const tokenCount = await requestJson(routekitUrl, "/v1/messages/count_tokens", {
+      model: "openai/provider-model",
+      messages: [{ role: "user", content: "count these tokens" }]
+    });
+    assert.equal(tokenCount.status, 200);
+    assert.equal(typeof ((await tokenCount.json()) as { input_tokens?: number }).input_tokens, "number");
+
+    const embeddings = await requestJson(routekitUrl, "/v1/embeddings", {
+      model: "openai/provider-model",
+      input: "embed this"
+    });
+    assert.equal(embeddings.status, 200);
+    assert.deepEqual(
+      ((await embeddings.json()) as { data: Array<{ embedding: number[] }> }).data[0]?.embedding,
+      [0.1, 0.2]
+    );
+
+    assert.equal(upstreamRequests.length, 8);
     for (const request of upstreamRequests) {
-      assert.equal(request.url, "/v1/chat/completions");
+      assert.ok(
+        request.url === "/v1/chat/completions" ||
+          request.url === "/v1/embeddings"
+      );
       assert.equal(request.authorization, "Bearer mock-secret");
       assert.equal(request.body.model, "provider-model");
     }

@@ -88,6 +88,7 @@ function managedLoginInvocation(
         env: buildChildEnv({
           extra: {
             CLAUDE_CONFIG_DIR: profileDirectory,
+            CLAUDE_SECURESTORAGE_CONFIG_DIR: profileDirectory,
             DISABLE_AUTOUPDATER: "1",
             DISABLE_UPDATES: "1"
           }
@@ -110,6 +111,16 @@ function managedLoginInvocation(
 }
 
 export function claudeProfileKeychainService(profileDirectory: string): string {
+  const suffix = createHash("sha256")
+    .update(profileDirectory)
+    .digest("hex")
+    .slice(0, 8);
+  return `Claude Code-${suffix}`;
+}
+
+export function legacyClaudeProfileKeychainService(
+  profileDirectory: string
+): string {
   const suffix = createHash("sha256")
     .update(profileDirectory)
     .digest("hex")
@@ -171,8 +182,28 @@ async function materializeManagedCredential(
 ): Promise<void> {
   if (existsSync(invocation.sourcePath)) return;
   if (subscriptionKind !== "claude-code" || hostPlatform !== "darwin") return;
-  const service = claudeProfileKeychainService(invocation.profileDirectory);
-  const blob = await keychain.read(service);
+  const services = [
+    claudeProfileKeychainService(invocation.profileDirectory),
+    legacyClaudeProfileKeychainService(invocation.profileDirectory)
+  ];
+  let service: string | undefined;
+  let blob: string | undefined;
+  for (const candidate of services) {
+    try {
+      blob = await keychain.read(candidate);
+      service = candidate;
+      break;
+    } catch {
+      // Claude Code changed its production service prefix in 2.1.216. Try
+      // both current and legacy profile-scoped names without reading the
+      // caller's unscoped default-profile credential.
+    }
+  }
+  if (service === undefined || blob === undefined) {
+    throw new Error(
+      "Claude login did not create an isolated profile-scoped Keychain item"
+    );
+  }
   writeFileSync(invocation.sourcePath, `${blob}\n`, { mode: 0o600 });
   chmodSync(invocation.sourcePath, 0o600);
   try {

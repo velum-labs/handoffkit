@@ -146,6 +146,9 @@ jobs:
           --filter=@fusionkit/cli...
           --filter=@velum-labs/routekit...
 
+      - name: Portable RouteKit qualification matrix
+        run: pnpm test:e2e:portable
+
       # The cross-process suites: the Node testkit spawns the provider
       # simulator and internal `fusionkit-sidecar`; the CLI stack composes the
       # Node RouteKit gateway with the Node Fusion front door, then drives both
@@ -198,6 +201,36 @@ jobs:
 
       - name: Real CLI command-surface suite
         run: PORTLESS=0 node --test packages/cli/dist/test/cli-command-surfaces-e2e.test.js
+
+  routekit-macos:
+    name: RouteKit macOS lifecycle (launchd + Portless)
+    runs-on: macos-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Setup Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Pin pnpm
+        run: corepack prepare pnpm@10.33.4 --activate
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Build RouteKit
+        run: pnpm build:routekit
+
+      - name: Exercise launchd and Portless
+        run: CI=true pnpm test:e2e:macos
 
   python:
     name: uv workspace (python/*)

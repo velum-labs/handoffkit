@@ -118,6 +118,19 @@ try {
   if (existsSync(join(install, "node_modules", "@fusionkit"))) {
     throw new Error("smoke install unexpectedly contains @fusionkit packages");
   }
+  const installedManifest = JSON.parse(
+    readFileSync(
+      join(install, "node_modules", "@velum-labs", "routekit", "package.json"),
+      "utf8"
+    )
+  );
+  if (installedManifest.engines?.node !== ">=22.19.0") {
+    throw new Error(
+      `packed RouteKit must declare Node >=22.19.0, got ${JSON.stringify(
+        installedManifest.engines?.node
+      )}`
+    );
+  }
   const output = execFileSync(
     join(install, "node_modules", ".bin", "routekit"),
     ["version"],
@@ -184,6 +197,22 @@ try {
     );
     if (!Array.isArray(catalog.models)) {
       throw new Error(`packed daemon returned an invalid model catalog: ${JSON.stringify(catalog)}`);
+    }
+    const tokenPath = join(stateHome, "secrets", "data-token");
+    const token = readFileSync(tokenPath, "utf8").trim();
+    const completion = await fetch(`${started.url}/v1/chat/completions`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${token}`,
+        "content-type": "application/json"
+      },
+      body: JSON.stringify({
+        model: "openai/pack-model",
+        messages: [{ role: "user", content: "packed install E2E" }]
+      })
+    });
+    if (!completion.ok || !(await completion.text()).includes("ok")) {
+      throw new Error(`packed daemon completion failed with ${completion.status}`);
     }
   } finally {
     if (daemonStarted) {

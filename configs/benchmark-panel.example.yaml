@@ -2,7 +2,8 @@
 #
 # Provider URLs and credentials belong to RouteKit. Start the example router:
 #
-#   routekit --config configs/benchmark-router.example.yaml serve --no-portless --port 8787
+#   routekit config import --from configs/benchmark-router.example.yaml
+#   routekit start --no-portless --port 8787
 #
 # Then pass this file to `fusionkit-bench --config` or set
 # FUSIONKIT_BENCH_CONFIG. It is not a public `fusionkit serve` config.

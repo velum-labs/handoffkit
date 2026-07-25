@@ -25,6 +25,7 @@ const HOP_BY_HOP = new Set([
   "transfer-encoding",
   "upgrade"
 ]);
+class ProxyRequestBodyTooLargeError extends Error {}
 
 export type SwitchingGatewayProxy = {
   url(): string;
@@ -50,14 +51,24 @@ function requestHeaders(headers: IncomingHttpHeaders): Headers {
 }
 async function requestBody(req: IncomingMessage): Promise<Buffer | undefined> {
   if (req.method === "GET" || req.method === "HEAD") return undefined;
+  const declaredLength = Number(req.headers["content-length"]);
+  if (Number.isFinite(declaredLength) && declaredLength > MAX_BODY_BYTES) {
+    req.resume();
+    throw new ProxyRequestBodyTooLargeError();
+  }
   const chunks: Buffer[] = [];
   let total = 0;
+  let tooLarge = false;
   for await (const value of req) {
     const chunk = value as Buffer;
     total += chunk.length;
-    if (total > MAX_BODY_BYTES) throw new Error("proxy request body too large");
+    if (total > MAX_BODY_BYTES) {
+      tooLarge = true;
+      continue;
+    }
     chunks.push(chunk);
   }
+  if (tooLarge) throw new ProxyRequestBodyTooLargeError();
   return Buffer.concat(chunks);
 }
 
@@ -164,11 +175,20 @@ export async function startSwitchingGatewayProxy(input: {
           ])
         });
         await pipe(res, upstream);
-      } catch {
+      } catch (error) {
         if (!res.destroyed && !res.headersSent) {
-          writeJson(res, 502, {
-            error: { message: "router generation unavailable", type: "upstream_error" }
-          });
+          if (error instanceof ProxyRequestBodyTooLargeError) {
+            writeJson(res, 413, {
+              error: {
+                message: "request body exceeds the 16 MiB limit",
+                type: "payload_too_large"
+              }
+            });
+          } else {
+            writeJson(res, 502, {
+              error: { message: "router generation unavailable", type: "upstream_error" }
+            });
+          }
         } else if (!res.writableEnded) {
           res.destroy();
         }
