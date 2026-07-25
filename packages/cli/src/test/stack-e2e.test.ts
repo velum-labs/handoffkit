@@ -259,9 +259,17 @@ test("model discovery doors advertise the fused model and every member", { skip:
   assert.equal(single.type, "model");
   assert.equal(single.id, "fusion-panel");
 
-  // Cursor probes the models list relative to its BYOK base URL.
+  // Cursor probes the models list relative to its BYOK base URL; ids are
+  // namespaced under routekit/ so they never trip Cursor's claude-/gemini-
+  // BYOK provider-selection prefixes.
   const cursorModels = (await (await stack.door.cursorModels()).json()) as { data: Array<{ id: string }> };
-  assert.ok(cursorModels.data.some((entry) => entry.id === "fusion-panel"));
+  assert.ok(cursorModels.data.some((entry) => entry.id === "routekit/fusion-panel"));
+  const cursorChat = await stack.door.cursorChat({
+    model: "routekit/fusion-panel",
+    messages: [{ role: "user", content: "hi" }],
+    stream: false
+  });
+  assert.equal(cursorChat.status, 200);
 });
 
 test("count_tokens door answers Claude Code's preflight and scales with input", { skip: SKIP }, async () => {

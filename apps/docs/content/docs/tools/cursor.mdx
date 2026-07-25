@@ -51,6 +51,23 @@ settings, and its built-in models are untouched; the isolated window adds the
 fusion models additively. No public tunnel and no Settings changes are needed.
 Leave the `fusionkit` process running while you use the window.
 
+## Custom OpenAI endpoint (BYOK)
+
+When you point Cursor's own Settings at a public RouteKit (or FusionKit)
+gateway instead of using `--ide`, set:
+
+| Field | Value |
+| --- | --- |
+| Override OpenAI Base URL | `https://<host>/v1/cursor` |
+| Model name | `routekit/<served-id>`, for example `routekit/claude-code/claude-fable-5` or `routekit/fusion-panel` |
+| OpenAI API Key | the gateway bearer token |
+
+Cursor routes BYOK by model-name prefix (`claude-*` → Anthropic key,
+`gemini-*` → Google key). The `/v1/cursor` mirror namespaces every id under
+`routekit/` so pasted names always use the OpenAI key and the base-URL
+override. The endpoint must be publicly reachable: Cursor's backend, not the
+desktop, makes the request. See [Troubleshooting](/docs/guides/troubleshooting).
+
 ## Sub-agents
 
 Cursor reads agent definitions from the repo's `.cursor/agents/` directory, so

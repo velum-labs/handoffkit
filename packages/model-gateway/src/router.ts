@@ -201,7 +201,7 @@ export function parseRouterConfig(value: unknown): RouterConfig {
   for (const [alias, target] of Object.entries(config.modelAliases ?? {})) {
     if (alias.includes("/")) {
       throw new Error(
-        `model alias "${alias}" must not contain "/"; aliases exist to give namespaced models slash-free names`
+        `model alias "${alias}" must not contain "/"; alias keys must stay distinct from namespaced model ids`
       );
     }
     const selected = splitNamespacedModel(target);

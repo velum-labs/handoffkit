@@ -2,7 +2,7 @@ import { once } from "node:events";
 import { createServer } from "node:http";
 import type { IncomingMessage, ServerResponse } from "node:http";
 
-import { ProviderFailureError } from "@velum-labs/routekit-contracts";
+import { ProviderFailureError, cursorModelName } from "@velum-labs/routekit-contracts";
 import type {
   ModelReasoningCapabilities,
   RequestAttribution
@@ -18,7 +18,6 @@ import type { AnthropicRequest } from "./adapters/anthropic.js";
 import { effectiveModel, isStream, withDefaultModel } from "./adapters/chat.js";
 import { authorizedRequest } from "./auth.js";
 import {
-  cursorModelAliasId,
   isCursorChatBody,
   resolveCursorModelAlias,
   translateCursorRequest
@@ -480,9 +479,10 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
     }
 
     // Cursor may probe the models list relative to its BYOK base URL
-    // (`.../v1/cursor`); mirror /v1/models there. Namespaced ids are respelled
-    // with dashes because Cursor's custom-model settings reject "/" in names;
-    // the chat route below resolves the dashed spelling back.
+    // (`.../v1/cursor`); mirror /v1/models there. Every id is namespaced under
+    // `routekit/` so no advertised name starts with `claude-` or `gemini-`,
+    // which Cursor routes to the Anthropic/Google keys instead of the OpenAI
+    // base-URL override. The chat route below strips the namespace back.
     if (method === "GET" && path === "/v1/cursor/models") {
       const upstream = await backend.models();
       if (!upstream.ok) {
@@ -496,7 +496,7 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
         ...payload,
         data: (payload.data ?? []).map((entry) =>
           typeof entry.id === "string"
-            ? { ...entry, id: cursorModelAliasId(entry.id) }
+            ? { ...entry, id: cursorModelName(entry.id) }
             : entry
         )
       });

@@ -153,6 +153,34 @@ export function classifyProviderFailure(
   };
 }
 
+/**
+ * Namespace applied to every model id advertised on RouteKit's `/v1/cursor`
+ * surface. Cursor selects the BYOK provider by a case-sensitive prefix on the
+ * model name (`claude-*` → Anthropic key, `gemini-*` → Google key, otherwise
+ * OpenAI key + base-URL override). Prefixing every served id under this
+ * namespace guarantees the advertised name can never trip those prefixes.
+ */
+export const CURSOR_MODEL_NAMESPACE = "routekit";
+
+/**
+ * Spell a served model id the way `/v1/cursor` advertises it to Cursor BYOK.
+ * Always `routekit/<id>`; never conditional.
+ */
+export function cursorModelName(id: string): string {
+  return `${CURSOR_MODEL_NAMESPACE}/${id}`;
+}
+
+/**
+ * Strip the Cursor-facing `routekit/` namespace, returning the served id when
+ * present. Returns `undefined` when the name is not namespaced.
+ */
+export function stripCursorNamespace(name: string): string | undefined {
+  const prefix = `${CURSOR_MODEL_NAMESPACE}/`;
+  if (!name.startsWith(prefix)) return undefined;
+  const stripped = name.slice(prefix.length);
+  return stripped.length > 0 ? stripped : undefined;
+}
+
 export type ModelEndpoint = {
   endpointId: string;
   model: string;

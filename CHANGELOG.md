@@ -7,55 +7,43 @@ package, and the PyPI FusionKit sidecar package set. Release tags are named
 
 ## Unreleased
 
-- Established why Cursor BYOK rejects Claude Code model names, from Cursor's
-  own `byokModelUtils.js`: Cursor selects the BYOK provider by model-name
-  prefix. `claude-*` is routed to the Anthropic key and `gemini-*` to the Google
-  key; only a name matching neither prefix uses the OpenAI key together with the
-  base-URL override. With no Anthropic key configured, a `claude-`prefixed name
-  never reaches the custom endpoint at all, and Cursor's backend answers "Model
-  name is not valid".
+- The `/v1/cursor` models mirror now namespaces every advertised id under
+  `routekit/` (for example `routekit/claude-code/claude-fable-5`). Cursor
+  selects the BYOK provider by a case-sensitive model-name prefix: `claude-*`
+  goes to the Anthropic key, `gemini-*` to the Google key, and everything else
+  to the OpenAI key plus the base-URL override. Prefixing every id guarantees
+  no advertised name trips those prefixes. Ingress strips `routekit/` and still
+  accepts the legacy 0.9.6 dashed spelling for one release. `routekit cursor`
+  instructions print the namespaced name. Manual `modelAliases` entries are no
+  longer required for Cursor BYOK.
 
-  Verified against a gateway behind a request log: `velum/fable-5` (contains a
-  slash, non-matching prefix) was sent to the endpoint, while an invented
-  `claude-zzz-9` was rejected with no request sent. Model names containing `/`
-  are therefore fine as far as Cursor is concerned, and the 0.9.6 note claiming
-  Cursor rejects them was wrong. Pick any alias not starting with `claude-` or
-  `gemini-`.
-
-  Pinned the boundary against a permissive probe endpoint that accepts every
-  model name, one message per name from an isolated Cursor profile:
-  `probe-plain-1`, `claudex-9`, `Claude-zzz-9`, and `velum-claude-fable-5` each
-  reached the endpoint and rendered its reply, while `claude-zzz-9` and
-  `gemini-zzz-9` were stopped in the client ("The model you chose is not
-  available") with no request logged. The comparison is an exact, case-sensitive
-  prefix: dropping the hyphen (`claudex-9`) or capitalising it (`Claude-zzz-9`)
-  passes, and a `claude-` further inside the name does not count. `gemini-`
-  behaves the same way as `claude-`, so this is a general provider-selection
-  rule rather than an Anthropic quirk.
-
-  The probe log also recorded the call arriving from an AWS address carrying
-  `Tailscale-Funnel-Request: ?1`, confirming that Cursor's backend rather than
-  the desktop client connects to a BYOK endpoint. That is why the endpoint has
-  to be reachable from the public internet, and why the configured key travels
-  through Cursor's infrastructure.
+  Established from Cursor's own `byokModelUtils.js` and pinned against a
+  permissive probe: `probe-plain-1`, `claudex-9`, `Claude-zzz-9`, and
+  `velum-claude-fable-5` reached the endpoint, while `claude-zzz-9` and
+  `gemini-zzz-9` were stopped in the client with no request logged. Slashes are
+  fine; the 0.9.6 note claiming Cursor rejects them was wrong. The probe also
+  showed Cursor's backend (not the desktop) connects to the BYOK endpoint, so
+  the URL must be publicly reachable.
 
 ## 0.9.7 - 2026-07-24
 
 - Added `modelAliases` to the router config so a namespaced model can also be
   served under a second, freely chosen name, for example
   `velum-fable-5: claude-code/claude-fable-5`. Any name without `/` that does
-  not collide with a served model id is accepted. Cursor BYOK needs such an
-  alias for Claude Code models; see the Unreleased entry for the reason.
+  not collide with a served model id is accepted. Prefer the automatic
+  `routekit/` Cursor namespace over hand-written aliases for BYOK.
 
 - Fixed the `/v1/cursor` models mirror to respell every `/` in a model id, so
-  OpenRouter's three-segment ids produce usable dashed aliases.
+  OpenRouter's three-segment ids produce usable dashed aliases. Superseded by
+  the automatic `routekit/` namespace.
 
 ## 0.9.6 - 2026-07-24
 
 - The gateway's `/v1/cursor` routes now accept and advertise dash-separated
-  model aliases (for example `claude-code-claude-fable-5`) because Cursor's
-  custom-model settings reject ids containing `/`. `routekit cursor` remote
-  instructions print the dashed spelling.
+  model aliases (for example `claude-code-claude-fable-5`). The original claim
+  that Cursor rejects `/` was wrong; the real constraint is the `claude-` /
+  `gemini-` prefix rule. Legacy dashed spelling remains accepted on ingress
+  for one release after the `routekit/` namespace shipped.
 
 ## 0.9.5 - 2026-07-24
 

@@ -60,24 +60,23 @@ test("Cursor hybrid requests translate to chat messages and tools", () => {
   );
 });
 
-test("Cursor model aliases respell namespaced ids with dashes", () => {
+test("Cursor model names namespace under routekit/ and resolve back", () => {
   assert.equal(cursorModelAliasId("claude-code/claude-fable-5"), "claude-code-claude-fable-5");
-  assert.equal(cursorModelAliasId("openai/gpt-4o"), "openai-gpt-4o");
-  assert.equal(cursorModelAliasId("route-primary"), "route-primary");
   assert.equal(
     cursorModelAliasId("openrouter/moonshotai/kimi-k2-thinking"),
     "openrouter-moonshotai-kimi-k2-thinking",
-    "every slash is respelled, not just the namespace separator"
+    "legacy dashed spelling still respells every slash"
   );
 
   const served = ["claude-code/claude-fable-5", "openai/gpt-4o", "route-primary"];
+  // Namespaced Cursor-facing spelling.
   assert.equal(
-    resolveCursorModelAlias("openrouter-moonshotai-kimi-k2-thinking", [
-      ...served,
-      "openrouter/moonshotai/kimi-k2-thinking"
-    ]),
-    "openrouter/moonshotai/kimi-k2-thinking"
+    resolveCursorModelAlias("routekit/claude-code/claude-fable-5", served),
+    "claude-code/claude-fable-5"
   );
+  assert.equal(resolveCursorModelAlias("routekit/openai/gpt-4o", served), "openai/gpt-4o");
+  assert.equal(resolveCursorModelAlias("routekit/route-primary", served), "route-primary");
+  // Legacy 0.9.6 dashed spelling still resolves.
   assert.equal(
     resolveCursorModelAlias("claude-code-claude-fable-5", served),
     "claude-code/claude-fable-5"
@@ -86,6 +85,7 @@ test("Cursor model aliases respell namespaced ids with dashes", () => {
   // Served-as-spelled ids and unknown names never rewrite.
   assert.equal(resolveCursorModelAlias("route-primary", served), undefined);
   assert.equal(resolveCursorModelAlias("claude-fable-5", served), undefined);
+  assert.equal(resolveCursorModelAlias("routekit/", served), undefined);
   assert.equal(resolveCursorModelAlias(undefined, served), undefined);
 });
 
@@ -143,14 +143,14 @@ test("RouteKit serves the Cursor hybrid through its neutral HTTP boundary", asyn
     assert.equal(models.status, 200);
     assert.deepEqual(
       ((await models.json()) as { data: Array<{ id: string }> }).data.map((model) => model.id),
-      ["route-primary"]
+      ["routekit/route-primary"]
     );
   } finally {
     await gateway.close();
   }
 });
 
-test("Cursor route resolves dashed model aliases to namespaced ids", async () => {
+test("Cursor route namespaces advertised ids and resolves them on ingress", async () => {
   let received: { model?: unknown } | undefined;
   const backend: Backend = {
     defaultModel: "claude-code/claude-fable-5",
@@ -177,16 +177,33 @@ test("Cursor route resolves dashed model aliases to namespaced ids", async () =>
           object: "list",
           data: [
             { id: "claude-code/claude-fable-5", object: "model" },
-            { id: "openai/gpt-4o", object: "model" }
+            { id: "openai/gpt-4o", object: "model" },
+            { id: "gemini-proxy/gemini-zzz-9", object: "model" }
           ]
         })
       ),
-    listModelIds: () => ["claude-code/claude-fable-5", "openai/gpt-4o"],
+    listModelIds: () => [
+      "claude-code/claude-fable-5",
+      "openai/gpt-4o",
+      "gemini-proxy/gemini-zzz-9"
+    ],
     embeddings: () => Promise.resolve(new Response(null, { status: 501 }))
   };
   const gateway = await startGateway({ backend });
   try {
-    const response = await fetch(`${gateway.url()}/v1/cursor/chat/completions`, {
+    const namespaced = await fetch(`${gateway.url()}/v1/cursor/chat/completions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        model: "routekit/claude-code/claude-fable-5",
+        messages: [{ role: "user", content: "hi" }]
+      })
+    });
+    assert.equal(namespaced.status, 200);
+    assert.equal(received?.model, "claude-code/claude-fable-5");
+
+    // Legacy dashed spelling still resolves for one-release back-compat.
+    const legacy = await fetch(`${gateway.url()}/v1/cursor/chat/completions`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
@@ -194,16 +211,25 @@ test("Cursor route resolves dashed model aliases to namespaced ids", async () =>
         messages: [{ role: "user", content: "hi" }]
       })
     });
-    assert.equal(response.status, 200);
+    assert.equal(legacy.status, 200);
     assert.equal(received?.model, "claude-code/claude-fable-5");
 
-    // The models mirror advertises the dashed spelling Cursor accepts.
+    // The models mirror advertises routekit/-namespaced ids that never start
+    // with claude- or gemini- (Cursor's BYOK provider-selection prefixes).
     const models = await fetch(`${gateway.url()}/v1/cursor/models`);
     assert.equal(models.status, 200);
-    assert.deepEqual(
-      ((await models.json()) as { data: Array<{ id: string }> }).data.map((model) => model.id),
-      ["claude-code-claude-fable-5", "openai-gpt-4o"]
+    const ids = ((await models.json()) as { data: Array<{ id: string }> }).data.map(
+      (model) => model.id
     );
+    assert.deepEqual(ids, [
+      "routekit/claude-code/claude-fable-5",
+      "routekit/openai/gpt-4o",
+      "routekit/gemini-proxy/gemini-zzz-9"
+    ]);
+    for (const id of ids) {
+      assert.equal(id.startsWith("claude-"), false, id);
+      assert.equal(id.startsWith("gemini-"), false, id);
+    }
   } finally {
     await gateway.close();
   }

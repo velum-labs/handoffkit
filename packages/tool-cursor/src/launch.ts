@@ -1,6 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 
+import { cursorModelName } from "@velum-labs/routekit-contracts";
 import {
   definedEnv,
   spawnLogged,
@@ -39,13 +40,16 @@ export function cursorInstructions(
   model: string,
   apiKey?: string
 ): string {
-  // Cursor's custom-model settings reject ids containing "/", so advertise
-  // the dash-separated spelling the gateway's /v1/cursor routes resolve.
+  // Cursor routes BYOK by model-name prefix (`claude-*` → Anthropic,
+  // `gemini-*` → Google). The gateway's /v1/cursor mirror namespaces every
+  // id under `routekit/` so the pasted name always uses the OpenAI key +
+  // base-URL override.
   return [
     "In Cursor Settings -> Models, enable Override OpenAI Base URL and set:",
     `  Override OpenAI Base URL : ${publicUrl}/v1/cursor`,
-    `  Model name               : ${model.replaceAll("/", "-")}`,
-    `  OpenAI API Key           : ${apiKey ?? "routekit-local"}`
+    `  Model name               : ${cursorModelName(model)}`,
+    `  OpenAI API Key           : ${apiKey ?? "routekit-local"}`,
+    "Names are namespaced under routekit/ so Cursor does not route them to Anthropic/Google keys."
   ].join("\n");
 }
 

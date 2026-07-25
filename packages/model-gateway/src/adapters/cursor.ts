@@ -15,6 +15,8 @@
  * boundary stays defensive without 4xx-ing on new shapes.
  */
 
+import { stripCursorNamespace } from "@velum-labs/routekit-contracts";
+
 import { droppedField } from "./dropped.js";
 import {
   attachReasoningSelection,
@@ -52,24 +54,24 @@ export function isCursorChatBody(body: unknown): body is JsonObject {
 }
 
 /**
- * Spell a namespaced model id the way Cursor's custom-model settings accept
- * it. Cursor rejects ids containing "/" ("Model name is not valid"), so the
- * cursor route advertises and answers to a dash-separated spelling
- * (`claude-code/claude-fable-5` -> `claude-code-claude-fable-5`). Dashes are
- * preferred over dots because dotted names can collide with Cursor's managed
- * model catalog.
+ * Spell a namespaced model id with dashes. Kept for one-release back-compat
+ * with clients that still send the 0.9.6 `/v1/cursor` spelling
+ * (`claude-code/claude-fable-5` → `claude-code-claude-fable-5`). New
+ * advertising uses `cursorModelName` from `@velum-labs/routekit-contracts`
+ * (`routekit/<id>`) so no advertised name starts with `claude-` or
+ * `gemini-`, which Cursor routes to the Anthropic/Google keys instead of
+ * the OpenAI base-URL override. Deprecated: prefer `cursorModelName`.
  */
 export function cursorModelAliasId(id: string): string {
   return id.replaceAll("/", "-");
 }
 
 /**
- * Resolve Cursor's dash-separated spelling back to a served namespaced id.
+ * Resolve a Cursor-facing model name back to a served id.
  *
- * Resolution is an exact lookup over the gateway's served ids rather than a
- * separator split, because namespaces themselves contain dashes. A rewrite
- * only happens when the model is not served as spelled; if two served ids
- * produce the same alias, the first one listed wins.
+ * Order: served as spelled (no rewrite) → strip `routekit/` → legacy
+ * 0.9.6 dashed spelling. Returns `undefined` when the name is already a
+ * served id or cannot be resolved.
  */
 export function resolveCursorModelAlias(
   model: unknown,
@@ -77,6 +79,10 @@ export function resolveCursorModelAlias(
 ): string | undefined {
   if (typeof model !== "string" || model.length === 0 || servedIds.includes(model)) {
     return undefined;
+  }
+  const stripped = stripCursorNamespace(model);
+  if (stripped !== undefined && servedIds.includes(stripped)) {
+    return stripped;
   }
   return servedIds.find((id) => id.includes("/") && cursorModelAliasId(id) === model);
 }
