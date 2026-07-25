@@ -62,6 +62,15 @@ model only to members that advertise it. Quota windows, refresh, cooldowns, and
 reset times remain independent per account. Use the advertised namespaced ID
 in `.fusionkit/fusion.json`:
 
+A provider can stop honoring an access token while the token's own expiry claim
+still looks valid, so RouteKit does not rely on that claim alone. A rejected
+discovery, or a `401` or `403` on a served request, spends one OAuth refresh for
+that account, rate limited to one every five minutes, and retries before the
+rejection is believed. If discovery still fails the member keeps its last known
+model list instead of dropping out of rotation, so an upstream blip degrades a
+pool rather than emptying it. `routekit accounts status` shows the live
+per-account view.
+
 Capability conflicts are deterministic. Explicit `reasoningCapabilities`
 configuration wins first. Otherwise, native pools use the first successfully
 discovered account in configured order that reports reasoning metadata for the

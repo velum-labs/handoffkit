@@ -8,7 +8,7 @@ import {
   isRetryableProviderFailure
 } from "@velum-labs/routekit-contracts";
 import { CapacityPool, SseDecoder, SseParseError } from "@velum-labs/routekit-gateway";
-import type { CapacityLease } from "@velum-labs/routekit-gateway";
+import type { CapacityLease, DiscoveredModel } from "@velum-labs/routekit-gateway";
 import type { SubscriptionMode } from "@velum-labs/routekit-registry";
 import { writeFileAtomic } from "@velum-labs/routekit-runtime";
 
@@ -71,11 +71,13 @@ type PoolMember = {
   lastUsed: number;
   inFlight: number;
   switchedAt: number;
+  forcedRefreshAt?: number;
 };
 
 const DEFAULT_SWITCH_THRESHOLD = 0.9;
 const DEFAULT_REFRESH_SKEW_SECONDS = 300;
 const DEFAULT_FALLBACK_COOLDOWN_SECONDS = 300;
+const FORCED_REFRESH_COOLDOWN_MS = 300_000;
 const RAMP_WINDOW_MS = 30_000;
 const RAMP_STEP_MS = 250;
 const ATTRIBUTION_SEAT_KEY = randomBytes(32);
@@ -482,15 +484,12 @@ export class SubscriptionAccountSet {
   }
 
   async discoverModels(signal?: AbortSignal): Promise<readonly string[]> {
+    const previousReasoning = new Map(this.#reasoning);
     this.#reasoning.clear();
     const discoveries = await Promise.allSettled(
       this.#members.map(async (member) => {
-        member.models.clear();
         await this.#ensureFresh(member, signal);
-        const discovered = await this.#provider.discoverModels(
-          member.credential,
-          signal
-        );
+        const discovered = await this.#discoverMemberModels(member, signal);
         const normalized = discovered.map((model) =>
           typeof model === "string" ? { id: model } : model
         );
@@ -506,6 +505,14 @@ export class SubscriptionAccountSet {
         if (model.reasoning !== undefined && !this.#reasoning.has(model.id)) {
           this.#reasoning.set(model.id, model.reasoning);
         }
+      }
+    }
+    // Models retained from a failed discovery keep the controls we last saw,
+    // so a blip cannot silently downgrade them to no reasoning support.
+    const served = new Set(this.listModelIds());
+    for (const [model, capabilities] of previousReasoning) {
+      if (served.has(model) && !this.#reasoning.has(model)) {
+        this.#reasoning.set(model, capabilities);
       }
     }
     this.#catalogReady = true;
@@ -589,6 +596,7 @@ export class SubscriptionAccountSet {
     if (this.#members.length === 0) throw new SubscriptionAccountSetExhaustedError(this.mode);
     const excluded = new Set<string>();
     const absorbed = new Set<string>();
+    const reauthenticated = new Set<string>();
     let transientFailovers = 0;
 
     while (excluded.size < this.#members.length) {
@@ -611,6 +619,17 @@ export class SubscriptionAccountSet {
           statusText: response.statusText,
           headers: response.headers
         });
+        // A rejected credential is worth exactly one re-mint before the caller
+        // sees the failure, since the stored token can be dead while its own
+        // expiry claim still looks healthy.
+        if (
+          (response.status === 401 || response.status === 403) &&
+          !reauthenticated.has(member.id) &&
+          (await this.#forceRefresh(member, signal))
+        ) {
+          reauthenticated.add(member.id);
+          continue;
+        }
         if (failure === undefined || !isRetryableProviderFailure(failure.category)) return passthrough;
 
         if (failure.category === "transient") {
@@ -814,6 +833,61 @@ export class SubscriptionAccountSet {
     member.coolingUntil = until;
     this.#tracker.cool(member.id, until);
     if (this.#activeId === member.id) this.#activeId = undefined;
+  }
+
+  /**
+   * A member keeps its previous catalog when discovery fails, because an empty
+   * model set makes it pool-ineligible: a provider blip would otherwise take
+   * every account dark until discovery succeeds again.
+   */
+  async #discoverMemberModels(
+    member: PoolMember,
+    signal?: AbortSignal
+  ): Promise<readonly (string | DiscoveredModel)[]> {
+    try {
+      return await this.#provider.discoverModels(member.credential, signal);
+    } catch (error) {
+      if (!(await this.#forceRefresh(member, signal))) throw error;
+      return await this.#provider.discoverModels(member.credential, signal);
+    }
+  }
+
+  /**
+   * Providers can stop honoring an access token long before the token's own
+   * expiry claim lapses, which `#ensureFresh` cannot see. Spend one refresh,
+   * rate limited per member, before blaming the account.
+   */
+  async #forceRefresh(member: PoolMember, signal?: AbortSignal): Promise<boolean> {
+    if (member.credential.refreshToken === undefined) return false;
+    const existing = this.#refreshes.get(member.id);
+    if (existing !== undefined) {
+      try {
+        await existing;
+        return true;
+      } catch {
+        return false;
+      }
+    }
+    const now = Date.now();
+    if (
+      member.forcedRefreshAt !== undefined &&
+      now - member.forcedRefreshAt < FORCED_REFRESH_COOLDOWN_MS
+    ) {
+      return false;
+    }
+    member.forcedRefreshAt = now;
+    const refresh = (async () => {
+      member.credential = await this.#provider.refresh(member.credential, signal);
+      this.#tracker.resetAfterRefresh(member.id);
+      delete member.coolingUntil;
+    })().finally(() => this.#refreshes.delete(member.id));
+    this.#refreshes.set(member.id, refresh);
+    try {
+      await refresh;
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   async #ensureFresh(member: PoolMember, signal?: AbortSignal): Promise<void> {

@@ -289,6 +289,154 @@ test("pool coalesces near-expiry credential refresh before serving", async () =>
   }
 });
 
+test("discovery re-mints a credential the provider stopped honoring", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "routekit-pool-stale-"));
+  // A far-future expiry claim: nothing about this token looks refreshable.
+  writeMember(directory, "a", {
+    accessToken: "token-a",
+    refreshToken: "refresh-a",
+    expiresAt: Date.now() / 1000 + 86_400
+  });
+  const state = { refreshes: 0 };
+  const provider = fakeProvider(state);
+  const attempts: string[] = [];
+  provider.discoverModels = async (credential) => {
+    attempts.push(credential.accessToken);
+    if (credential.accessToken === "token-a") {
+      throw new Error("model discovery returned HTTP 503");
+    }
+    return ["gpt-5.3-codex"];
+  };
+  const pool = await SubscriptionAccountSet.open(provider, {
+    mode: "codex",
+    source: { kind: "directory", path: directory }
+  });
+  try {
+    assert.deepEqual(await pool.discoverModels(), ["gpt-5.3-codex"]);
+    assert.deepEqual(attempts, ["token-a", "token-a-refreshed"]);
+    assert.equal(state.refreshes, 1);
+    assert.equal(pool.statusSnapshot().members[0]?.relayReady, true);
+  } finally {
+    await pool.close();
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("a failed discovery keeps the last known catalog instead of darkening the pool", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "routekit-pool-retain-"));
+  // No refresh token, so the failure survives the one re-mint attempt.
+  writeMember(directory, "a", { accessToken: "token-a" });
+  const provider = fakeProvider({ refreshes: 0 });
+  let discoveryFails = false;
+  provider.discoverModels = async () => {
+    if (discoveryFails) throw new Error("model discovery returned HTTP 503");
+    return reasoningModel("high");
+  };
+  const pool = await SubscriptionAccountSet.open(provider, {
+    mode: "codex",
+    source: { kind: "directory", path: directory }
+  });
+  try {
+    assert.deepEqual(await pool.discoverModels(), ["gpt-shared"]);
+    discoveryFails = true;
+    assert.deepEqual(await pool.discoverModels(), ["gpt-shared"]);
+    assert.deepEqual(pool.reasoningCapabilities("gpt-shared")?.efforts, [{ id: "high" }]);
+    assert.equal(pool.statusSnapshot().members[0]?.poolEligible, true);
+    const response = await pool.execute("gpt-shared", (credential) =>
+      Promise.resolve(new Response(credential.accessToken))
+    );
+    assert.equal(await response.text(), "token-a");
+  } finally {
+    await pool.close();
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("a discovery in flight does not report members as unavailable", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "routekit-pool-inflight-"));
+  writeMember(directory, "a", { accessToken: "token-a" });
+  const provider = fakeProvider({ refreshes: 0 });
+  const pool = await SubscriptionAccountSet.open(provider, {
+    mode: "codex",
+    source: { kind: "directory", path: directory }
+  });
+  try {
+    await pool.discoverModels();
+    // `routekit status` reads account state while refreshing providers, so a
+    // refresh must never make a healthy member look dark.
+    const gate = deferred<DiscoveryResult>();
+    provider.discoverModels = () => gate.promise;
+    const discovering = pool.discoverModels();
+    await Promise.resolve();
+    assert.deepEqual(pool.snapshot().members[0]?.models, ["gpt-5.3-codex"]);
+    assert.equal(pool.statusSnapshot().members[0]?.relayReady, true);
+    gate.resolve(["gpt-5.3-codex"]);
+    await discovering;
+  } finally {
+    await pool.close();
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("a rejected request re-mints the credential and retries once", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "routekit-pool-reauth-"));
+  writeMember(directory, "a", {
+    accessToken: "token-a",
+    refreshToken: "refresh-a",
+    expiresAt: Date.now() / 1000 + 86_400
+  });
+  const state = { refreshes: 0 };
+  const pool = await SubscriptionAccountSet.open(fakeProvider(state), {
+    mode: "codex",
+    source: { kind: "directory", path: directory }
+  });
+  const seen: string[] = [];
+  try {
+    const response = await pool.execute("gpt-5.3-codex", (credential) => {
+      seen.push(credential.accessToken);
+      return Promise.resolve(
+        credential.accessToken === "token-a"
+          ? new Response("unauthorized", { status: 401 })
+          : new Response("served")
+      );
+    });
+    assert.equal(response.status, 200);
+    assert.equal(await response.text(), "served");
+    assert.deepEqual(seen, ["token-a", "token-a-refreshed"]);
+    assert.equal(state.refreshes, 1);
+  } finally {
+    await pool.close();
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("a credential that stays rejected surfaces the rejection instead of looping", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "routekit-pool-reauth-fail-"));
+  writeMember(directory, "a", {
+    accessToken: "token-a",
+    refreshToken: "refresh-a",
+    expiresAt: Date.now() / 1000 + 86_400
+  });
+  const state = { refreshes: 0 };
+  const pool = await SubscriptionAccountSet.open(fakeProvider(state), {
+    mode: "codex",
+    source: { kind: "directory", path: directory }
+  });
+  const seen: string[] = [];
+  try {
+    const response = await pool.execute("gpt-5.3-codex", (credential) => {
+      seen.push(credential.accessToken);
+      return Promise.resolve(new Response("unauthorized", { status: 401 }));
+    });
+    assert.equal(response.status, 401);
+    assert.deepEqual(seen, ["token-a", "token-a-refreshed"]);
+    assert.equal(state.refreshes, 1);
+  } finally {
+    await pool.close();
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 test("pool unions heterogeneous member catalogs and routes only eligible accounts", async () => {
   const directory = mkdtempSync(join(tmpdir(), "routekit-pool-models-"));
   writeMember(directory, "personal", { accessToken: "token-personal" });
