@@ -7,6 +7,8 @@ package, and the PyPI FusionKit sidecar package set. Release tags are named
 
 ## Unreleased
 
+## 0.9.10 - 2026-07-25
+
 - Fixed Anthropic egress rejecting conversations that contain a turn carrying no
   translatable text. The OpenAI-to-Anthropic translation only emitted a text
   block when a message flattened to a non-empty string, so a blank turn — or one
