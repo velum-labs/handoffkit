@@ -194,9 +194,9 @@ export function withReasoningSelection<T extends Record<string, unknown>>(
   const replaced = { ...target } as T & Record<PropertyKey, unknown>;
   delete replaced[REASONING_SELECTION_ERROR];
   if (selection.mode === "effort") {
-    replaced.reasoning_effort = selection.effort;
+    replaced["reasoning_effort"] = selection.effort;
   } else {
-    delete replaced.reasoning_effort;
+    delete replaced["reasoning_effort"];
   }
   attachReasoningSelection(replaced, selection);
   return replaced;
