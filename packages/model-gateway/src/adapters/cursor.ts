@@ -15,7 +15,12 @@
  * boundary stays defensive without 4xx-ing on new shapes.
  */
 
-import { stripCursorNamespace } from "@velum-labs/routekit-contracts";
+import {
+  cursorModelName,
+  resolveReasoningEffort,
+  stripCursorNamespace
+} from "@velum-labs/routekit-contracts";
+import type { ModelReasoningCapabilities } from "@velum-labs/routekit-contracts";
 
 import { droppedField } from "./dropped.js";
 import {
@@ -66,6 +71,76 @@ export function cursorModelAliasId(id: string): string {
   return id.replaceAll("/", "-");
 }
 
+export type CursorModelSelection = {
+  model: string;
+  reasoningEffort?: string;
+};
+
+/**
+ * Expand one served model into the opaque ids Cursor can put in its picker.
+ *
+ * Cursor's OpenAI-compatible BYOK path does not expose its reasoning picker,
+ * so each discovered effort is represented as a model-name variant instead.
+ */
+export function cursorModelVariants(
+  id: string,
+  reasoning: unknown
+): CursorModelSelection[] {
+  const variants: CursorModelSelection[] = [{ model: cursorModelName(id) }];
+  if (!isObject(reasoning) || reasoning.status !== "supported") return variants;
+  if (!Array.isArray(reasoning.efforts)) return variants;
+  const seen = new Set<string>();
+  for (const option of reasoning.efforts) {
+    if (!isObject(option) || typeof option.id !== "string" || option.id.length === 0) {
+      continue;
+    }
+    if (seen.has(option.id)) continue;
+    seen.add(option.id);
+    variants.push({
+      model: cursorModelName(`${id}:${option.id}`),
+      reasoningEffort: option.id
+    });
+  }
+  return variants;
+}
+
+/**
+ * Resolve a Cursor-facing model variant back to its served model and effort.
+ *
+ * Exact served ids win before suffix parsing, so a provider model whose real
+ * id contains a colon remains addressable. Effort aliases are accepted but
+ * normalized to the provider's canonical id.
+ */
+export function resolveCursorModelSelection(
+  model: unknown,
+  servedIds: readonly string[],
+  reasoningCapabilities?: (model: string) => ModelReasoningCapabilities | undefined
+): CursorModelSelection | undefined {
+  if (typeof model !== "string" || model.length === 0 || servedIds.includes(model)) {
+    return undefined;
+  }
+  const stripped = stripCursorNamespace(model);
+  const candidate = stripped ?? model;
+  if (servedIds.includes(candidate)) return { model: candidate };
+
+  const suffixed = resolveCursorReasoningSuffix(
+    candidate,
+    servedIds,
+    reasoningCapabilities
+  );
+  if (suffixed !== undefined) return suffixed;
+
+  const legacy = servedIds.find(
+    (id) => id.includes("/") && cursorModelAliasId(id) === candidate
+  );
+  if (legacy !== undefined) return { model: legacy };
+  return resolveLegacyCursorReasoningSuffix(
+    candidate,
+    servedIds,
+    reasoningCapabilities
+  );
+}
+
 /**
  * Resolve a Cursor-facing model name back to a served id.
  *
@@ -77,14 +152,49 @@ export function resolveCursorModelAlias(
   model: unknown,
   servedIds: readonly string[]
 ): string | undefined {
-  if (typeof model !== "string" || model.length === 0 || servedIds.includes(model)) {
-    return undefined;
+  return resolveCursorModelSelection(model, servedIds)?.model;
+}
+
+function resolveCursorReasoningSuffix(
+  candidate: string,
+  servedIds: readonly string[],
+  reasoningCapabilities:
+    | ((model: string) => ModelReasoningCapabilities | undefined)
+    | undefined
+): CursorModelSelection | undefined {
+  if (reasoningCapabilities === undefined) return undefined;
+  for (const id of [...servedIds].sort((left, right) => right.length - left.length)) {
+    const prefix = `${id}:`;
+    if (!candidate.startsWith(prefix)) continue;
+    const requested = candidate.slice(prefix.length);
+    if (requested.length === 0) continue;
+    const capabilities = reasoningCapabilities(id);
+    if (capabilities === undefined || capabilities.status !== "supported") continue;
+    const effort = resolveReasoningEffort(capabilities, requested);
+    if (effort !== undefined) return { model: id, reasoningEffort: effort };
   }
-  const stripped = stripCursorNamespace(model);
-  if (stripped !== undefined && servedIds.includes(stripped)) {
-    return stripped;
+  return undefined;
+}
+
+function resolveLegacyCursorReasoningSuffix(
+  candidate: string,
+  servedIds: readonly string[],
+  reasoningCapabilities:
+    | ((model: string) => ModelReasoningCapabilities | undefined)
+    | undefined
+): CursorModelSelection | undefined {
+  if (reasoningCapabilities === undefined) return undefined;
+  for (const id of servedIds) {
+    if (!id.includes("/")) continue;
+    const prefix = `${cursorModelAliasId(id)}:`;
+    if (!candidate.startsWith(prefix)) continue;
+    const requested = candidate.slice(prefix.length);
+    const capabilities = reasoningCapabilities(id);
+    if (capabilities === undefined || capabilities.status !== "supported") continue;
+    const effort = resolveReasoningEffort(capabilities, requested);
+    if (effort !== undefined) return { model: id, reasoningEffort: effort };
   }
-  return servedIds.find((id) => id.includes("/") && cursorModelAliasId(id) === model);
+  return undefined;
 }
 
 /**

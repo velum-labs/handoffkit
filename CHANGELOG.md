@@ -7,6 +7,12 @@ package, and the PyPI FusionKit sidecar package set. Release tags are named
 
 ## Unreleased
 
+- Cursor BYOK users can now select reasoning effort through model variants such
+  as `routekit/openai/gpt-5.5:high`. The `/v1/cursor/models` mirror advertises
+  one suffixed variant per effort discovered for each model, and ingress strips
+  the suffix before routing while applying its effort as an explicit reasoning
+  control. Unsuffixed models retain automatic provider-default behavior.
+
 ## 0.9.10 - 2026-07-25
 
 - Fixed Anthropic egress rejecting conversations that contain a turn carrying no
