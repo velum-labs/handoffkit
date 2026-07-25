@@ -129,7 +129,7 @@ No module JSDoc was found.
 - `export type { JsonValue } from "./jcs.js";`
 - `export { SHA256_PREFIX, artifactHash, hashCanonical, hashCanonicalSha256, requestHash, responseHash, schemaBundleHash, sha256Hex, sha256PrefixedHex } from "./hash.js";`
 - `export type { CapabilityStatus, ModelCallContract, ModelCallSideEffects, ModelCallStatus, ModelChatMessage, ModelChatRole, ModelEndpoint, ModelUsage, RequestAttribution, RequestBillingMode, ProviderError, ProviderErrorKind, ProviderFailure, ProviderFailureCategory } from "./model.js";`
-- `export { ProviderFailureError, classifyProviderFailure, isRetryableProviderFailure, parseRetryAfterSeconds } from "./model.js";`
+- `export { CURSOR_MODEL_NAMESPACE, ProviderFailureError, classifyProviderFailure, cursorModelName, isRetryableProviderFailure, parseRetryAfterSeconds, stripCursorNamespace } from "./model.js";`
 - `export type { ModelReasoningCapabilities, ReasoningCapabilityProvenance, ReasoningCapabilityStatus, ReasoningEffortOption, ReasoningSelection } from "./reasoning.js";`
 - `export { resolveReasoningEffort } from "./reasoning.js";`
 - `export type { HarnessApprovalDecision, HarnessContentStream, HarnessEvent, HarnessEventRaw, HarnessEventType, HarnessItemType, HarnessRequestType, HarnessTokenUsage, HarnessTurnEndReason } from "./harness-event.js";`
