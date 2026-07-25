@@ -197,6 +197,32 @@ export function registerAccounts(program: Command): void {
     });
 
   accounts
+    .command("rename <subscription-kind> <source> <target>")
+    .description("rename an enrolled claude-code or codex account label")
+    .action(
+      async (
+        subscriptionKind: string,
+        source: string,
+        target: string,
+        _options: unknown,
+        command: Command
+      ) => {
+        const ctx = contextFor(command);
+        const kind = parseAccountMode(subscriptionKind);
+        const result = await (await routekitClient()).call(
+          "accounts.rename",
+          { kind, source, target },
+          { idempotencyKey: `account-rename-${randomId(16)}` }
+        );
+        if (ctx.json) {
+          ctx.emit({ ...result, subscriptionKind: kind, source, target });
+        } else {
+          ctx.presenter.success(`renamed ${kind}/${source} to ${kind}/${target}`);
+        }
+      }
+    );
+
+  accounts
     .command("remove <subscription-kind> <name>")
     .description("remove an enrolled account from RouteKit-managed state")
     .action(async (provider: string, name: string, _options: unknown, command: Command) => {

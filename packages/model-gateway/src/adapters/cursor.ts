@@ -15,10 +15,20 @@
  * boundary stays defensive without 4xx-ing on new shapes.
  */
 
+import {
+  cursorModelName,
+  resolveReasoningEffort,
+  stripCursorNamespace
+} from "@velum-labs/routekit-contracts";
+import type { ModelReasoningCapabilities } from "@velum-labs/routekit-contracts";
+
 import { droppedField } from "./dropped.js";
 import {
   attachReasoningSelection,
-  attachReasoningSelectionError
+  attachReasoningSelectionError,
+  hasExplicitReasoningSelection,
+  reasoningSelectionErrorOf,
+  reasoningSelectionOf
 } from "./openai-chat-wire.js";
 
 type JsonObject = Record<string, unknown>;
@@ -52,6 +62,145 @@ export function isCursorChatBody(body: unknown): body is JsonObject {
 }
 
 /**
+ * Spell a namespaced model id with dashes. Kept for one-release back-compat
+ * with clients that still send the 0.9.6 `/v1/cursor` spelling
+ * (`claude-code/claude-fable-5` → `claude-code-claude-fable-5`). New
+ * advertising uses `cursorModelName` from `@velum-labs/routekit-contracts`
+ * (`routekit/<id>`) so no advertised name starts with `claude-` or
+ * `gemini-`, which Cursor routes to the Anthropic/Google keys instead of
+ * the OpenAI base-URL override. Deprecated: prefer `cursorModelName`.
+ */
+export function cursorModelAliasId(id: string): string {
+  return id.replaceAll("/", "-");
+}
+
+export type CursorModelSelection = {
+  model: string;
+  reasoningEffort?: string;
+};
+
+/**
+ * Expand one served model into the opaque ids Cursor can put in its picker.
+ *
+ * Cursor's OpenAI-compatible BYOK path does not expose its reasoning picker,
+ * so each discovered effort is represented as a model-name variant instead.
+ */
+export function cursorModelVariants(
+  id: string,
+  reasoning: unknown
+): CursorModelSelection[] {
+  const variants: CursorModelSelection[] = [{ model: cursorModelName(id) }];
+  if (!isObject(reasoning) || reasoning.status !== "supported") return variants;
+  if (!Array.isArray(reasoning.efforts)) return variants;
+  const seen = new Set<string>();
+  for (const option of reasoning.efforts) {
+    if (!isObject(option) || typeof option.id !== "string" || option.id.length === 0) {
+      continue;
+    }
+    if (seen.has(option.id)) continue;
+    seen.add(option.id);
+    variants.push({
+      model: cursorModelName(`${id}:${option.id}`),
+      reasoningEffort: option.id
+    });
+  }
+  return variants;
+}
+
+/**
+ * Resolve a Cursor-facing model variant back to its served model and effort.
+ *
+ * Exact served ids win before suffix parsing, so a provider model whose real
+ * id contains a colon remains addressable. Effort aliases are accepted but
+ * normalized to the provider's canonical id.
+ */
+export function resolveCursorModelSelection(
+  model: unknown,
+  servedIds: readonly string[],
+  reasoningCapabilities?: (model: string) => ModelReasoningCapabilities | undefined
+): CursorModelSelection | undefined {
+  if (typeof model !== "string" || model.length === 0 || servedIds.includes(model)) {
+    return undefined;
+  }
+  const stripped = stripCursorNamespace(model);
+  const candidate = stripped ?? model;
+  if (servedIds.includes(candidate)) return { model: candidate };
+
+  const suffixed = resolveCursorReasoningSuffix(
+    candidate,
+    servedIds,
+    reasoningCapabilities
+  );
+  if (suffixed !== undefined) return suffixed;
+
+  const legacy = servedIds.find(
+    (id) => id.includes("/") && cursorModelAliasId(id) === candidate
+  );
+  if (legacy !== undefined) return { model: legacy };
+  return resolveLegacyCursorReasoningSuffix(
+    candidate,
+    servedIds,
+    reasoningCapabilities
+  );
+}
+
+/**
+ * Resolve a Cursor-facing model name back to a served id.
+ *
+ * Order: served as spelled (no rewrite) → strip `routekit/` → legacy
+ * 0.9.6 dashed spelling. Returns `undefined` when the name is already a
+ * served id or cannot be resolved.
+ */
+export function resolveCursorModelAlias(
+  model: unknown,
+  servedIds: readonly string[]
+): string | undefined {
+  return resolveCursorModelSelection(model, servedIds)?.model;
+}
+
+function resolveCursorReasoningSuffix(
+  candidate: string,
+  servedIds: readonly string[],
+  reasoningCapabilities:
+    | ((model: string) => ModelReasoningCapabilities | undefined)
+    | undefined
+): CursorModelSelection | undefined {
+  if (reasoningCapabilities === undefined) return undefined;
+  for (const id of [...servedIds].sort((left, right) => right.length - left.length)) {
+    const prefix = `${id}:`;
+    if (!candidate.startsWith(prefix)) continue;
+    const requested = candidate.slice(prefix.length);
+    if (requested.length === 0) continue;
+    const capabilities = reasoningCapabilities(id);
+    if (capabilities === undefined || capabilities.status !== "supported") continue;
+    const effort = resolveReasoningEffort(capabilities, requested);
+    if (effort !== undefined) return { model: id, reasoningEffort: effort };
+  }
+  return undefined;
+}
+
+function resolveLegacyCursorReasoningSuffix(
+  candidate: string,
+  servedIds: readonly string[],
+  reasoningCapabilities:
+    | ((model: string) => ModelReasoningCapabilities | undefined)
+    | undefined
+): CursorModelSelection | undefined {
+  if (reasoningCapabilities === undefined) return undefined;
+  for (const id of servedIds) {
+    if (!id.includes("/")) continue;
+    const prefix = `${cursorModelAliasId(id)}:`;
+    if (!candidate.startsWith(prefix)) continue;
+    const requested = candidate.slice(prefix.length);
+    const capabilities = reasoningCapabilities(id);
+    if (capabilities === undefined || capabilities.status !== "supported") continue;
+    const effort = resolveReasoningEffort(capabilities, requested);
+    if (effort !== undefined) return { model: id, reasoningEffort: effort };
+  }
+  return undefined;
+}
+
+/**
  * Map a Cursor BYOK request body onto a Chat Completions body.
  *
  * Dual-shape tolerance: Cursor only sends the Responses hybrid for some
@@ -74,10 +223,15 @@ export function translateCursorRequest(body: JsonObject): JsonObject {
     }
   }
   translated.messages = inputItemsToMessages(body.input);
+  if (body.x_routekit !== undefined) translated.x_routekit = body.x_routekit;
+  const originalSelectionError = reasoningSelectionErrorOf(body);
+  if (originalSelectionError !== undefined) {
+    attachReasoningSelectionError(translated, originalSelectionError);
+  }
   const tools = translateTools(body.tools);
   if (tools !== undefined) translated.tools = tools;
   translateSampling(body, translated);
-  translateReasoning(body, translated);
+  if (originalSelectionError === undefined) translateReasoning(body, translated);
   translateTextFormat(body, translated);
   if (translated.stream === true) {
     translated.stream_options = { include_usage: true };
@@ -248,6 +402,10 @@ function translateSampling(body: JsonObject, translated: JsonObject): void {
 }
 
 function translateReasoning(body: JsonObject, translated: JsonObject): void {
+  const hasCanonicalSelection = hasExplicitReasoningSelection(body);
+  if (hasCanonicalSelection) {
+    attachReasoningSelection(translated, reasoningSelectionOf(body));
+  }
   const reasoning = body.reasoning;
   if (reasoning === undefined || reasoning === null) return;
   if (!isObject(reasoning)) {
@@ -259,8 +417,10 @@ function translateReasoning(body: JsonObject, translated: JsonObject): void {
   }
   const effort = reasoning.effort;
   if (typeof effort === "string" && effort.length > 0) {
-    translated.reasoning_effort = effort;
-    attachReasoningSelection(translated, { mode: "effort", effort });
+    if (!hasCanonicalSelection) {
+      translated.reasoning_effort = effort;
+      attachReasoningSelection(translated, { mode: "effort", effort });
+    }
     return;
   }
   attachReasoningSelectionError(

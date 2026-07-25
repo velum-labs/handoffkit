@@ -85,6 +85,9 @@ class FuseTrajectoriesRequest(BaseModel):
     prompts: PromptOverrides | None = None
     panel_mode: PanelMode = "trajectory"
     stream: bool = False
+    # Versioned opaque metadata owned by RouteKit. Pydantic retains the exact
+    # JSON object; the sidecar never interprets it as natural-language input.
+    x_routekit: dict[str, Any] | None = None
 
     @model_validator(mode="after")
     def _require_successful_trajectory(self) -> FuseTrajectoriesRequest:
@@ -249,6 +252,11 @@ def create_app(
                 tool_choice=tool_choice,
                 prompts=request.prompts,
                 panel_mode=request.panel_mode,
+                routekit_extra=(
+                    {"x_routekit": request.x_routekit}
+                    if request.x_routekit is not None
+                    else None
+                ),
                 trace=trace,
             )
             return StreamingResponse(
@@ -266,6 +274,11 @@ def create_app(
                 tool_choice=tool_choice,
                 prompts=request.prompts,
                 panel_mode=request.panel_mode,
+                routekit_extra=(
+                    {"x_routekit": request.x_routekit}
+                    if request.x_routekit is not None
+                    else None
+                ),
                 trace=trace,
             )
         except Exception:  # noqa: BLE001 - internal boundary returns a stable error
@@ -457,6 +470,8 @@ def _step_response(
     message: dict[str, Any] = {"role": "assistant", "content": response.content or ""}
     if response.reasoning:
         message["reasoning_content"] = response.reasoning
+    if response.x_routekit is not None:
+        message["x_routekit"] = response.x_routekit
     tool_calls = _tool_calls_payload(response)
     if tool_calls:
         message["tool_calls"] = tool_calls
@@ -527,6 +542,8 @@ async def _fused_completion_sse(
         return
     response = final_result.response if final_result is not None else None
     tool_calls = _tool_calls_payload(response) if response is not None else []
+    if response is not None and response.x_routekit is not None:
+        yield chunk({"x_routekit": response.x_routekit}, None)
     if response is not None and not streamed_content and response.content and not tool_calls:
         yield chunk({"content": response.content}, None)
     if tool_calls:

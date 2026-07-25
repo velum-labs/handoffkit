@@ -18,10 +18,14 @@ export {
   loadSubscriptionCredential,
   persistSubscriptionCredential,
   removeSubscriptionAccount,
+  renameSubscriptionAccount,
   sanitizeSubscriptionLabel,
   subscriptionCredentialLabel
 } from "./credentials.js";
-export type { RemoveSubscriptionAccountResult } from "./credentials.js";
+export type {
+  RemoveSubscriptionAccountResult,
+  RenameSubscriptionAccountResult
+} from "./credentials.js";
 
 // Account sources (canonical / directory / explicit)
 export { resolveSubscriptionAccounts } from "./account-source.js";
@@ -39,6 +43,14 @@ export type {
 } from "./provider.js";
 
 // Account set (selection, cooldown, refresh, usage tracking)
+export {
+  hasUsableCredits,
+  isOverSwitchThreshold,
+  isPoolEligible,
+  memberHeadroom,
+  windowAdmissionStatus,
+  windowHeadroom
+} from "./admission.js";
 export {
   RateLimitTracker,
   SubscriptionAccountSet,

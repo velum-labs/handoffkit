@@ -13,6 +13,7 @@ import type {
   UnifiedHarnessKind
 } from "@fusionkit/ensemble";
 import type { ResumeCursor } from "@velum-labs/routekit-harness-core";
+import type { ModelReasoningCapabilities } from "@velum-labs/routekit-contracts";
 import { ATTR, normalizeWireTrajectories } from "@fusionkit/protocol";
 import { emitFusionEvent, initFusionTracing, jsonAttr } from "@fusionkit/tracing";
 import { FusionBackend } from "@fusionkit/gateway";
@@ -69,13 +70,19 @@ export type GatewayEnsembleConfig = {
   prompts?: PromptOverrides;
 };
 
+export type GatewayModel = EnsembleModel & {
+  /** RouteKit inventory provider identity (`owned_by` on `/v1/models`). */
+  provider?: string;
+  reasoning?: ModelReasoningCapabilities;
+};
+
 export type GatewayRunnerConfig = {
   fusionBackendUrl: string;
   repo: string;
   outputRoot: string;
   harnesses: UnifiedHarnessKind[];
   /** The union of panel members across every ensemble. */
-  models: EnsembleModel[];
+  models: GatewayModel[];
   /**
    * Named ensembles, session-default first. Each registers as its own fused
    * model; a request to it fans out only its members. When unset, `models` is
@@ -247,6 +254,22 @@ export function gatewaySetupSnippets(
   ].join("\n");
 }
 
+export function passthroughModelsFor(
+  models: readonly GatewayModel[],
+  routekitUrl: string | undefined
+): PassthroughModel[] {
+  if (routekitUrl === undefined) return [];
+  return models.map((model) => {
+    const reasoningWireShape =
+      model.provider === "codex" ? "openai-responses" : model.reasoning?.wireShape;
+    return {
+      routekitModelId: model.id,
+      routekitUrl,
+      ...(reasoningWireShape !== undefined ? { reasoningWireShape } : {})
+    };
+  });
+}
+
 /**
  * The judge-streamed-trajectory front door: the panel runs once per session to
  * produce candidate trajectories, then the judge acts as a streaming tool-calling
@@ -322,6 +345,8 @@ export async function startFusionStepGateway(input: {
     panelDepth,
     tools,
     toolChoice,
+    reasoningSelection,
+    reasoningEffort,
     k,
     signal
   }) => {
@@ -388,6 +413,11 @@ export async function startFusionStepGateway(input: {
         turn,
         ...(tools !== undefined ? { tools } : {}),
         ...(toolChoice !== undefined ? { toolChoice } : {}),
+        ...(reasoningSelection !== undefined
+          ? { reasoningSelection }
+          : reasoningEffort !== undefined
+            ? { reasoningEffort }
+            : {}),
         ...(k !== undefined ? { k } : {}),
         ...(config.routekitUrl !== undefined
           ? {
@@ -436,14 +466,8 @@ export async function startFusionStepGateway(input: {
   };
 
   // Expose every namespaced RouteKit model id as passthrough alongside fused models.
-  // RouteKit remains the only owner of provider details and credentials.
-  const passthrough: PassthroughModel[] =
-    config.routekitUrl === undefined
-      ? []
-      : config.models.map((model) => ({
-          routekitModelId: model.id,
-          routekitUrl: config.routekitUrl as string
-        }));
+  // RouteKit inventory is authoritative for provider protocol and reasoning wire metadata.
+  const passthrough = passthroughModelsFor(config.models, config.routekitUrl);
 
   // Each named ensemble is advertised as its own fused model. The route carries
   // what a fused turn for it needs: which members fan out (checked by the panel

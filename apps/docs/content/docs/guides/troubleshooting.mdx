@@ -71,6 +71,20 @@ Cursor's backend, which deliberately blocks loopback and private addresses
 `fusionkit cursor --ide`, which needs no public tunnel, or arrange external
 network exposure outside FusionKit. See [Cursor](/docs/tools/cursor).
 
+## Cursor says the model is not available or not valid
+
+Cursor selects the BYOK provider by a case-sensitive prefix on the model name:
+`claude-*` uses the Anthropic key, `gemini-*` uses the Google key, and every
+other name uses the OpenAI key together with the base-URL override. A name
+that starts with `claude-` (including the dashed spelling of a Claude Code
+model such as `claude-code-claude-fable-5`) never reaches a custom OpenAI
+endpoint when no Anthropic key is configured.
+
+RouteKit's `/v1/cursor` surface namespaces every advertised id under
+`routekit/` (for example `routekit/claude-code/claude-fable-5`). Paste that
+namespaced id as the Model name in Cursor Settings. See
+[Cursor](/docs/tools/cursor).
+
 ## Where are the logs?
 
 Each run writes full per-process logs to a temp directory; fusionkit prints the

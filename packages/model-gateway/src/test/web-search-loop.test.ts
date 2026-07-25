@@ -15,9 +15,14 @@ import {
 } from "../adapters/server-tool-loop.js";
 import {
   ANTHROPIC_MESSAGE_CONTENT,
+  attachResponsesReasoningMetadata,
+  googleToolCallIndexesOf,
+  responsesReasoningMetadataOf,
   type AnthropicNativeContentBlock
 } from "../adapters/openai-chat-wire.js";
 import { resolveWebSearchExecutor } from "../adapters/web-search.js";
+import { CodexResponsesBackend, GoogleGenAiBackend } from "../provider-backends.js";
+import { OpenAiBackend } from "../backend.js";
 import type { WebSearchExecutor, WebSearchOutcome } from "../adapters/web-search.js";
 
 /**
@@ -235,6 +240,186 @@ test("runBufferedServerToolLoop replays signed Anthropic thinking before a serve
   );
 });
 
+test("runBufferedServerToolLoop preserves encrypted Responses reasoning for Codex continuation", async () => {
+  const message: Record<PropertyKey, unknown> = {
+    content: null,
+    tool_calls: [{
+      index: 1,
+      id: "call_search",
+      function: { name: "web_search", arguments: '{"query":"routekit"}' }
+    }]
+  };
+  attachResponsesReasoningMetadata(message, {
+    items: [{
+      type: "reasoning",
+      id: "rs_encrypted",
+      summary: [],
+      content: null,
+      encrypted_content: "opaque-ciphertext"
+    }],
+    includeEncryptedContent: true
+  });
+  let nextAssistant: Record<PropertyKey, unknown> | undefined;
+  let codexRequest: Record<string, unknown> | undefined;
+  const codex = new CodexResponsesBackend({
+    baseUrl: "https://codex.test",
+    apiKey: "unused",
+    defaultModel: "gpt-test",
+    transport: async (_input, init) => {
+      codexRequest = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      return Response.json({
+        output: [{ type: "message", content: [{ type: "output_text", text: "done" }] }]
+      });
+    }
+  });
+  const outcome = await runBufferedServerToolLoop({
+    chat: { model: "gpt-test", messages: [] },
+    firstStep: jsonResponse(chatCompletion(message as Record<string, unknown>, "tool_calls")),
+    runStep: async (next) => {
+      nextAssistant = (next.messages as Array<Record<PropertyKey, unknown>>)[0];
+      return await codex.chat(next);
+    },
+    serverToolNames: new Set(["web_search"]),
+    executor: fakeExecutor({ routekit: { text: "result", citations: [] } })
+  });
+  assert.equal(outcome.kind, "openai");
+  assert.deepEqual(responsesReasoningMetadataOf(nextAssistant), {
+    items: [{
+      type: "reasoning",
+      id: "rs_encrypted",
+      summary: [],
+      content: null,
+      encrypted_content: "opaque-ciphertext"
+    }],
+    includeEncryptedContent: true
+  });
+  const input = codexRequest?.input as Array<Record<string, unknown>>;
+  assert.deepEqual(input.map((item) => item.type), [
+    "reasoning",
+    "function_call",
+    "function_call_output"
+  ]);
+  assert.equal(JSON.stringify(nextAssistant?.content).includes("opaque-ciphertext"), false);
+  assert.deepEqual(codexRequest?.include, ["reasoning.encrypted_content"]);
+});
+
+test("server-tool continuation strips stream indexes from strict OpenAI wire", async () => {
+  const originalFetch = globalThis.fetch;
+  let outbound: Record<string, unknown> | undefined;
+  globalThis.fetch = async (_input, init) => {
+    outbound = JSON.parse(String(init?.body)) as Record<string, unknown>;
+    return Response.json(chatCompletion({ content: "done" }));
+  };
+  try {
+    const backend = new OpenAiBackend({
+      baseUrl: "https://openai.test/v1",
+      defaultModel: "strict-model"
+    });
+    const outcome = await runBufferedServerToolLoop({
+      chat: { model: "strict-model", messages: [] },
+      firstStep: jsonResponse(chatCompletion({
+        content: null,
+        tool_calls: [{
+          index: 7,
+          id: "call_search",
+          function: { name: "web_search", arguments: '{"query":"routekit"}' }
+        }]
+      }, "tool_calls")),
+      runStep: async (next) => await backend.chat(next),
+      serverToolNames: new Set(["web_search"]),
+      executor: fakeExecutor({ routekit: { text: "result", citations: [] } })
+    });
+    assert.equal(outcome.kind, "openai");
+    const messages = outbound?.messages as Array<Record<string, unknown>>;
+    const calls = messages[0]?.tool_calls as Array<Record<string, unknown>>;
+    assert.equal(Object.hasOwn(calls[0] ?? {}, "index"), false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("runBufferedServerToolLoop replays Google signed calls by private provider index", async () => {
+  const chat: Record<string, unknown> = { model: "m", messages: [] };
+  let replayed: Record<string, unknown> | undefined;
+  let googleRequest: Record<string, unknown> | undefined;
+  let providerStep = 0;
+  const google = new GoogleGenAiBackend({
+    baseUrl: "https://google.test/v1beta",
+    apiKey: "unused",
+    defaultModel: "gemini-test",
+    transport: async (_input, init) => {
+      providerStep += 1;
+      if (providerStep === 1) {
+        return Response.json({
+          candidates: [{
+            content: {
+              parts: [
+                {
+                  text: "search first",
+                  thought: true,
+                  thoughtSignature: "thought-sig"
+                },
+                { text: "I'll check." },
+                {
+                  functionCall: { name: "web_search", args: { query: "routekit" } },
+                  thoughtSignature: "call-sig"
+                }
+              ]
+            }
+          }]
+        });
+      }
+      googleRequest = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      return Response.json({ candidates: [{ content: { parts: [{ text: "done" }] } }] });
+    }
+  });
+  const firstStep = await google.chat(chat);
+  const firstPayload = await firstStep.clone().json() as {
+    choices: Array<{ message: Record<string, unknown> }>
+  };
+  const firstMessage = firstPayload.choices[0]?.message;
+  const firstCalls = firstMessage?.tool_calls as Array<{ id?: string; index?: number }> | undefined;
+  assert.equal(firstCalls?.[0]?.index, 0, "public tool indexes must stay densely zero-based");
+  assert.deepEqual(googleToolCallIndexesOf(firstMessage), {
+    [firstCalls?.[0]?.id ?? ""]: 2
+  });
+  const outcome = await runBufferedServerToolLoop({
+    chat,
+    firstStep,
+    runStep: async (next) => {
+      replayed = (next.messages as Array<Record<string, unknown>>)[0];
+      return await google.chat(next);
+    },
+    serverToolNames: new Set(["web_search"]),
+    executor: fakeExecutor({ routekit: { text: "result", citations: [] } })
+  });
+  assert.equal(outcome.kind, "openai");
+  assert.deepEqual(replayed?.reasoning_details, [
+    {
+      type: "google_thought",
+      index: 0,
+      thought: "search first",
+      thoughtSignature: "thought-sig"
+    },
+    { type: "google_thought", index: 2, thoughtSignature: "call-sig" }
+  ]);
+  const replayedCalls = replayed?.tool_calls as Array<{ id?: string; index?: number }> | undefined;
+  assert.equal(replayedCalls?.[0]?.index, undefined);
+  assert.deepEqual(googleToolCallIndexesOf(replayed), {
+    [replayedCalls?.[0]?.id ?? ""]: 2
+  });
+  const modelParts = (googleRequest?.contents as Array<{ role: string; parts: Array<Record<string, unknown>> }>)
+    .find((entry) => entry.role === "model")?.parts ?? [];
+  assert.deepEqual(modelParts, [
+    { text: "search first", thought: true, thoughtSignature: "thought-sig" },
+    { text: "I'll check." },
+    {
+      functionCall: { name: "web_search", args: { query: "routekit" } },
+      thoughtSignature: "call-sig"
+    }
+  ]);
+});
+
 test("runBufferedServerToolLoop surfaces mixed batches and drops the server calls", async () => {
   const step = chatCompletion(
     {
@@ -361,6 +546,131 @@ test("composeServerToolStream renders native web_search_call items and one compl
   // The full text of both steps reached the message item.
   assert.ok(text.includes("Let me check."));
   assert.ok(text.includes("Node 24 is the LTS."));
+});
+
+test("composeServerToolStream preserves encrypted Responses reasoning for Codex continuation", async () => {
+  const encryptedDelta: Record<PropertyKey, unknown> = {};
+  attachResponsesReasoningMetadata(encryptedDelta, {
+    items: [{
+      type: "reasoning",
+      id: "rs_stream",
+      summary: [],
+      content: null,
+      encrypted_content: "stream-ciphertext"
+    }],
+    includeEncryptedContent: true
+  });
+  const firstStep = sseStream(
+    chunk(encryptedDelta as Record<string, unknown>),
+    chunk({
+      tool_calls: [{
+        index: 1,
+        id: "call_stream",
+        function: { name: "web_search", arguments: '{"query":"routekit"}' }
+      }]
+    }),
+    chunk({}, "tool_calls"),
+    "data: [DONE]\n\n"
+  );
+  let nextAssistant: Record<PropertyKey, unknown> | undefined;
+  let codexRequest: Record<string, unknown> | undefined;
+  const codex = new CodexResponsesBackend({
+    baseUrl: "https://codex.test",
+    apiKey: "unused",
+    defaultModel: "gpt-test",
+    forceStream: true,
+    transport: async (_input, init) => {
+      codexRequest = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      return sseStream(
+        chunk({ content: "done" }),
+        chunk({}, "stop"),
+        "data: [DONE]\n\n"
+      );
+    }
+  });
+  const chat: Record<string, unknown> = { model: "gpt-test", messages: [], stream: true };
+  const composed = composeServerToolStream({
+    chat,
+    firstStep,
+    runStep: async (next) => {
+      nextAssistant = (next.messages as Array<Record<PropertyKey, unknown>>)[0];
+      return await codex.chat(next);
+    },
+    serverToolNames: new Set(["web_search"]),
+    executor: fakeExecutor({ routekit: { text: "result", citations: [] } })
+  });
+  await new Response(composed).text();
+  assert.deepEqual(responsesReasoningMetadataOf(nextAssistant)?.items.map((item) => item.id), [
+    "rs_stream"
+  ]);
+  assert.equal(responsesReasoningMetadataOf(nextAssistant)?.includeEncryptedContent, true);
+  const input = codexRequest?.input as Array<Record<string, unknown>>;
+  assert.deepEqual(input.map((item) => item.type), [
+    "reasoning",
+    "function_call",
+    "function_call_output"
+  ]);
+  assert.equal(JSON.stringify(nextAssistant?.content).includes("stream-ciphertext"), false);
+  assert.deepEqual(codexRequest?.include, ["reasoning.encrypted_content"]);
+});
+
+test("composeServerToolStream preserves Google signatures in continuation", async () => {
+  const firstStep = sseStream(
+    chunk({
+      reasoning_details: [{
+        type: "google_thought",
+        index: 0,
+        thought: "search first",
+        thoughtSignature: "thought-sig"
+      }]
+    }),
+    chunk({
+      tool_calls: [{
+        index: 2,
+        id: "call_google",
+        function: { name: "web_search", arguments: '{"query":"routekit"}' }
+      }],
+      reasoning_details: [{
+        type: "google_thought",
+        index: 2,
+        thoughtSignature: "call-sig"
+      }]
+    }),
+    chunk({}, "tool_calls"),
+    "data: [DONE]\n\n"
+  );
+  const secondStep = sseStream(
+    chunk({ content: "done" }),
+    chunk({}, "stop"),
+    "data: [DONE]\n\n"
+  );
+  const chat: Record<string, unknown> = { model: "m", messages: [], stream: true };
+  let replayed: Record<string, unknown> | undefined;
+  const composed = composeServerToolStream({
+    chat,
+    firstStep,
+    runStep: async (next) => {
+      replayed = (next.messages as Array<Record<string, unknown>>)[0];
+      return secondStep;
+    },
+    serverToolNames: new Set(["web_search"]),
+    executor: fakeExecutor({ routekit: { text: "result", citations: [] } })
+  });
+  await new Response(composed).text();
+  assert.deepEqual(replayed?.reasoning_details, [
+    {
+      type: "google_thought",
+      index: 0,
+      thought: "search first",
+      thoughtSignature: "thought-sig"
+    },
+    { type: "google_thought", index: 2, thoughtSignature: "call-sig" }
+  ]);
+  assert.equal(
+    ((replayed?.tool_calls as Array<{ index?: number }> | undefined)?.[0]?.index),
+    undefined,
+    "generic persisted OpenAI tool calls must not carry stream-local indexes"
+  );
 });
 
 test("composeServerToolStream carries streamed signed thinking into the continuation request", async () => {

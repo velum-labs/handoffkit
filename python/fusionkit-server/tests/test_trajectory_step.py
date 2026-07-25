@@ -20,6 +20,7 @@ class _ScriptedClient:
         self.max_context: int | None = None
         self._responses = list(responses)
         self.calls: list[list[ChatMessage]] = []
+        self.extras: list[Mapping[str, Any] | None] = []
 
     async def chat(
         self,
@@ -29,8 +30,9 @@ class _ScriptedClient:
         tool_choice: str | Mapping[str, Any] | None = None,
         extra: Mapping[str, Any] | None = None,
     ) -> ModelResponse:
-        del sampling, tools, tool_choice, extra
+        del sampling, tools, tool_choice
         self.calls.append(list(messages))
+        self.extras.append(extra)
         response = self._responses.pop(0)
         if isinstance(response, Exception):
             raise response
@@ -163,6 +165,17 @@ def test_internal_fuse_surfaces_reasoning_and_exact_usage() -> None:
                 model_id="synth",
                 content="fused answer",
                 reasoning="synth private reasoning",
+                x_routekit={
+                    "version": 1,
+                    "responses": {
+                        "items": [{
+                            "type": "reasoning",
+                            "id": "rs_synth",
+                            "encrypted_content": "synth-ciphertext",
+                        }],
+                        "includeEncryptedContent": True,
+                    },
+                },
                 usage=Usage(prompt_tokens=12, completion_tokens=8),
             )
         ],
@@ -184,6 +197,61 @@ def test_internal_fuse_surfaces_reasoning_and_exact_usage() -> None:
         "completion_tokens": 12,
         "total_tokens": 30,
     }
+
+
+def test_internal_fuse_preserves_routekit_envelopes_without_prompt_leakage() -> None:
+    judge = _ScriptedClient(
+        "judge", [ModelResponse(model_id="judge", content=_ANALYSIS)]
+    )
+    synth = _ScriptedClient(
+        "synth", [ModelResponse(model_id="synth", content="fused answer")]
+    )
+    responses_envelope = {
+        "version": 1,
+        "responses": {
+            "items": [
+                {
+                    "type": "reasoning",
+                    "id": "rs_opaque",
+                    "encrypted_content": "ciphertext-never-prompt",
+                }
+            ],
+            "includeEncryptedContent": True,
+        },
+    }
+    anthropic_envelope = {
+        "version": 1,
+        "anthropic": {
+            "content": [
+                {
+                    "type": "thinking",
+                    "thinking": "signed thought",
+                    "signature": "signature-never-prompt",
+                }
+            ]
+        },
+    }
+    response = _scripted_sidecar(judge, synth).post(
+        "/v1/fusion/trajectories:fuse",
+        json=_fuse_payload(
+            x_routekit=responses_envelope,
+            messages=[
+                {"role": "user", "content": "fuse"},
+                {
+                    "role": "assistant",
+                    "content": "prior answer",
+                    "x_routekit": anthropic_envelope,
+                },
+            ],
+        ),
+    )
+    assert response.status_code == 200
+    assert judge.extras == [{"x_routekit": responses_envelope}]
+    assert synth.extras == [{"x_routekit": responses_envelope}]
+    assert synth.calls[0][2].x_routekit == anthropic_envelope
+    natural_language = "\n".join(message.content for message in synth.calls[0])
+    assert "ciphertext-never-prompt" not in natural_language
+    assert "signature-never-prompt" not in natural_language
 
 
 def test_internal_fuse_returns_nonterminal_tool_step_verbatim() -> None:

@@ -4,11 +4,21 @@ import { test } from "node:test";
 import { ModelRoutedBackend } from "../backend.js";
 import type { Backend } from "../backend.js";
 
-function stubBackend(id: string, defaultModel?: string): Backend & { chats: unknown[] } {
+function stubBackend(
+  id: string,
+  defaultModel?: string,
+  wireShape?: string
+): Backend & { chats: unknown[]; wireModels: string[] } {
   const chats: unknown[] = [];
+  const wireModels: string[] = [];
   return {
     defaultModel,
     chats,
+    wireModels,
+    reasoningWireShape(model: string) {
+      wireModels.push(model);
+      return wireShape;
+    },
     chat(body: unknown) {
       chats.push(body);
       return Promise.resolve(
@@ -24,8 +34,8 @@ function stubBackend(id: string, defaultModel?: string): Backend & { chats: unkn
 }
 
 test("ModelRoutedBackend dispatches by requested model id", async () => {
-  const primary = stubBackend("primary", "qwen3");
-  const routed = stubBackend("front-door");
+  const primary = stubBackend("primary", "qwen3", "openai-chat");
+  const routed = stubBackend("front-door", undefined, "openai-responses");
   const backend = new ModelRoutedBackend({
     routedModelIds: ["route-primary", "route-secondary"],
     routed,
@@ -44,4 +54,8 @@ test("ModelRoutedBackend dispatches by requested model id", async () => {
   assert.deepEqual([...backend.listModelIds()], ["qwen3", "route-primary", "route-secondary"]);
   assert.equal(backend.resolveModel("route-primary"), "route-primary");
   assert.equal(backend.resolveModel("anything-else"), "qwen3");
+  assert.equal(backend.reasoningWireShape("route-secondary"), "openai-responses");
+  assert.equal(backend.reasoningWireShape("qwen3"), "openai-chat");
+  assert.deepEqual(routed.wireModels, ["route-secondary"]);
+  assert.deepEqual(primary.wireModels, ["qwen3"]);
 });

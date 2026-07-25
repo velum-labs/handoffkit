@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 
 import { isFiniteK } from "@fusionkit/protocol";
 import type { WireTrajectory } from "@fusionkit/protocol";
+import type { ReasoningSelection } from "@velum-labs/routekit-contracts";
 import { randomId } from "@velum-labs/routekit-runtime";
 import { newSpanId, sessionCarrier } from "@fusionkit/tracing";
 
@@ -306,6 +307,7 @@ export class FusionSessionManager {
     panelDepth?: number;
     tools?: unknown;
     toolChoice?: unknown;
+    reasoningSelection?: ReasoningSelection;
     reasoningEffort?: string;
     k?: number;
     signal?: AbortSignal;
@@ -347,6 +349,9 @@ export class FusionSessionManager {
       ...(input.panelDepth !== undefined && input.panelDepth > 0 ? { panelDepth: input.panelDepth } : {}),
       ...(input.tools !== undefined ? { tools: input.tools } : {}),
       ...(input.toolChoice !== undefined ? { toolChoice: input.toolChoice } : {}),
+      ...(input.reasoningSelection !== undefined
+        ? { reasoningSelection: input.reasoningSelection }
+        : {}),
       ...(input.reasoningEffort !== undefined
         ? { reasoningEffort: input.reasoningEffort }
         : {}),

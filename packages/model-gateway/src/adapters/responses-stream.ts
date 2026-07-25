@@ -1,12 +1,12 @@
 import { randomId } from "@velum-labs/routekit-runtime";
 import { SseDecoder, SseParseError } from "../sse/parse.js";
-import type { OpenAiChoice } from "./openai-chat-wire.js";
+import { responsesReasoningMetadataOf, type OpenAiChoice } from "./openai-chat-wire.js";
 import { serverToolMarkerOf } from "./server-tool-loop.js";
 import type { ServerToolMarker } from "./server-tool-loop.js";
+import { chatUsageToResponses, type OpenAiUsage } from "./responses-usage.js";
 
 const ENCODER = new TextEncoder();
 
-type OpenAiUsage = { prompt_tokens?: number; completion_tokens?: number };
 type OpenAiStreamError = { message?: string; type?: string; code?: string };
 type OpenAiChunk = {
   choices?: OpenAiChoice[];
@@ -158,14 +158,18 @@ export function openAiSseToResponses(
   let reasoningOpen = false;
   let reasoningClosed = false;
   const reasoningParts: string[] = [];
+  const encryptedReasoningItems: Array<{
+    outputIndex: number;
+    item: Record<string, unknown>;
+  }> = [];
   let reasoningOutputIndex = -1;
   /** Index into `reasoningParts` of the open token-accumulating part, or -1. */
   let tokenPartIndex = -1;
   let nextOutputIndex = 0;
   let messageOutputIndex = -1;
   let finished = false;
-  let inputTokens: number | undefined;
-  let outputTokens: number | undefined;
+  let sawFinishReason = false;
+  let usage: OpenAiUsage | undefined;
   let providerCost: unknown;
   let sequenceNumber = 0;
 
@@ -180,7 +184,10 @@ export function openAiSseToResponses(
   // Gateway-executed web searches (server-tool loop markers): open item per
   // search, completed items collected for the terminal response payload.
   const openSearches = new Map<string, { outputIndex: number }>();
-  const completedSearchItems: Record<string, unknown>[] = [];
+  const completedSearchItems: Array<{
+    outputIndex: number;
+    item: Record<string, unknown>;
+  }> = [];
 
   const baseResponse = (status: string, output: Record<string, unknown>[]): Record<string, unknown> => ({
     id: responseId,
@@ -189,18 +196,7 @@ export function openAiSseToResponses(
     status,
     model,
     output,
-    usage:
-      status === "completed"
-        ? inputTokens !== undefined || outputTokens !== undefined
-          ? {
-              ...(inputTokens !== undefined ? { input_tokens: inputTokens } : {}),
-              ...(outputTokens !== undefined ? { output_tokens: outputTokens } : {}),
-              ...(inputTokens !== undefined && outputTokens !== undefined
-                ? { total_tokens: inputTokens + outputTokens }
-                : {})
-            }
-          : null
-        : null,
+    usage: status === "completed" ? chatUsageToResponses(usage) : null,
     ...(status === "completed" && providerCost !== undefined ? { provider_cost: providerCost } : {})
   });
 
@@ -357,30 +353,40 @@ export function openAiSseToResponses(
       status: marker.status === "failed" ? "failed" : "completed",
       action: { type: "search", query: marker.query }
     };
-    completedSearchItems.push(item);
+    completedSearchItems.push({ outputIndex, item });
     controller.enqueue(emit("response.web_search_call.completed", { output_index: outputIndex, item_id: marker.item_id }));
     controller.enqueue(emit("response.output_item.done", { output_index: outputIndex, item }));
   };
 
   const assembleOutput = (): Record<string, unknown>[] => {
-    const output: Record<string, unknown>[] = [];
+    const indexed: Array<{ outputIndex: number; item: Record<string, unknown> }> = [
+      ...encryptedReasoningItems,
+      ...completedSearchItems
+    ];
     if (reasoningParts.length > 0) {
-      output.push({ type: "reasoning", id: reasoningItemId, summary: reasoningSummary() });
+      indexed.push({
+        outputIndex: reasoningOutputIndex,
+        item: { type: "reasoning", id: reasoningItemId, summary: reasoningSummary() }
+      });
     }
-    output.push(...completedSearchItems);
     if (textOpen) {
-      output.push({
-        type: "message",
-        id: messageItemId,
-        status: "completed",
-        role: "assistant",
-        content: [{ type: "output_text", text: textValue, annotations: [] }]
+      indexed.push({
+        outputIndex: messageOutputIndex,
+        item: {
+          type: "message",
+          id: messageItemId,
+          status: "completed",
+          role: "assistant",
+          content: [{ type: "output_text", text: textValue, annotations: [] }]
+        }
       });
     }
     for (const tool of toolList) {
-      output.push(streamedToolItem(tool));
+      indexed.push({ outputIndex: tool.outputIndex, item: streamedToolItem(tool) });
     }
-    return output;
+    return indexed
+      .sort((a, b) => a.outputIndex - b.outputIndex)
+      .map(({ item }) => item);
   };
 
   const finalize = (controller: Controller, terminal: "completed" | "incomplete" = "completed"): void => {
@@ -491,12 +497,44 @@ export function openAiSseToResponses(
     }
     // Real OpenAI streams carry `"usage": null` on every chunk except the
     // final usage chunk, so a null must read as "absent".
-    inputTokens = chunk.usage?.prompt_tokens ?? inputTokens;
-    outputTokens = chunk.usage?.completion_tokens ?? outputTokens;
+    if (chunk.usage != null) {
+      usage = {
+        ...usage,
+        ...chunk.usage,
+        ...(chunk.usage.prompt_tokens_details != null
+          ? {
+              prompt_tokens_details: {
+                ...usage?.prompt_tokens_details,
+                ...chunk.usage.prompt_tokens_details
+              }
+            }
+          : {}),
+        ...(chunk.usage.completion_tokens_details != null
+          ? {
+              completion_tokens_details: {
+                ...usage?.completion_tokens_details,
+                ...chunk.usage.completion_tokens_details
+              }
+            }
+          : {})
+      };
+    }
     if (chunk.provider_cost !== undefined) providerCost = chunk.provider_cost;
     const choice = chunk.choices?.[0];
     if (choice === undefined) return;
     const delta = choice.delta ?? {};
+    for (const sourceItem of responsesReasoningMetadataOf(delta)?.items ?? []) {
+      ensureCreated(controller);
+      const outputIndex = nextOutputIndex++;
+      const item = { ...sourceItem };
+      encryptedReasoningItems.push({ outputIndex, item });
+      controller.enqueue(
+        emit("response.output_item.added", { output_index: outputIndex, item })
+      );
+      controller.enqueue(
+        emit("response.output_item.done", { output_index: outputIndex, item })
+      );
+    }
 
     if (typeof delta.reasoning_content === "string" && delta.reasoning_content.length > 0 && !reasoningClosed) {
       emitReasoningPart(controller, delta.reasoning_content);
@@ -595,7 +633,10 @@ export function openAiSseToResponses(
     }
 
     if (choice.finish_reason !== null && choice.finish_reason !== undefined) {
-      finalize(controller);
+      // OpenAI can emit token usage/provider cost in a later choices:[] chunk.
+      // Record that the turn ended cleanly, but wait for [DONE] or EOF before
+      // emitting the one terminal Responses event.
+      sawFinishReason = true;
     }
   };
 
@@ -613,7 +654,7 @@ export function openAiSseToResponses(
     if (data.length === 0) return;
     if (data === "[DONE]") {
       // A `[DONE]` with no prior finish_reason is truncation, not a clean stop.
-      if (!finished) finalize(controller, "incomplete");
+      if (!finished) finalize(controller, sawFinishReason ? "completed" : "incomplete");
       return;
     }
     let chunk: OpenAiChunk;
@@ -640,8 +681,9 @@ export function openAiSseToResponses(
         const { done, value } = await reader.read();
         if (done) {
           for (const event of sseDecoder.flush()) handleEvent(controller, event.data);
-          // Upstream closed with no finish_reason: incomplete, not completed.
-          if (!finished) finalize(controller, "incomplete");
+          // EOF is clean only after an observed finish_reason. Waiting until
+          // here also captures usage-only chunks that follow the finish chunk.
+          if (!finished) finalize(controller, sawFinishReason ? "completed" : "incomplete");
           controller.close();
           return;
         }

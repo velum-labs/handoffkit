@@ -32,8 +32,15 @@ import type { AssembledToolCall } from "../sse/chat-assembler.js";
 import {
   ANTHROPIC_MESSAGE_CONTENT,
   anthropicReasoningDetailsOf,
+  attachGoogleToolCallIndexes,
+  attachResponsesReasoningMetadata,
+  googleThoughtDetailsOf,
+  googleToolCallIndexesOf,
+  responsesReasoningMetadataOf,
   type AnthropicNativeContentBlock,
-  type AnthropicReasoningDetail
+  type AnthropicReasoningDetail,
+  type CanonicalReasoningDetail,
+  type ResponsesReasoningMetadata
 } from "./openai-chat-wire.js";
 import { MAX_WEB_SEARCHES_PER_TURN } from "./web-search.js";
 import type { WebSearchExecutor, WebSearchOutcome } from "./web-search.js";
@@ -133,9 +140,16 @@ function chatMessages(chat: Record<string, unknown>): Record<string, unknown>[] 
  */
 async function executeServerCalls(input: {
   options: ServerToolLoopOptions;
-  calls: readonly { id?: string; name?: string; arguments?: string }[];
+  calls: readonly {
+    index?: number;
+    providerIndex?: number;
+    id?: string;
+    name?: string;
+    arguments?: string;
+  }[];
   stepContent: string | undefined;
-  reasoningDetails?: readonly AnthropicReasoningDetail[];
+  reasoningDetails?: readonly CanonicalReasoningDetail[];
+  responsesReasoning?: ResponsesReasoningMetadata;
   searches: ExecutedSearch[];
   onSearchStart?: (search: { itemId: string; query: string }) => void;
   onSearchDone?: (search: ExecutedSearch) => void;
@@ -153,8 +167,29 @@ async function executeServerCalls(input: {
     content: typeof input.stepContent === "string" && input.stepContent.length > 0 ? input.stepContent : null,
     tool_calls: toolCalls
   };
+  const canonicalReasoning: CanonicalReasoningDetail[] = [
+    ...anthropicReasoningDetailsOf(input.reasoningDetails, "message"),
+    ...googleThoughtDetailsOf(input.reasoningDetails)
+  ].sort((a, b) => a.index - b.index);
+  if (canonicalReasoning.length > 0) {
+    assistant.reasoning_details = canonicalReasoning;
+  }
+  const googleIndexes = Object.fromEntries(
+    calls.flatMap((call, index) => {
+      const id = toolCalls[index]?.id;
+      return id !== undefined && call.providerIndex !== undefined
+        ? [[id, call.providerIndex]]
+        : [];
+    })
+  );
+  if (Object.keys(googleIndexes).length > 0) {
+    attachGoogleToolCallIndexes(assistant, googleIndexes);
+  }
+  if (input.responsesReasoning !== undefined) {
+    attachResponsesReasoningMetadata(assistant, input.responsesReasoning);
+  }
   const nativeReasoning = anthropicReasoningDetailsOf(
-    input.reasoningDetails,
+    canonicalReasoning,
     "message"
   )
     .filter(
@@ -261,7 +296,7 @@ export async function runBufferedServerToolLoop(
       | {
           message?: {
             content?: unknown;
-            reasoning_details?: AnthropicReasoningDetail[];
+            reasoning_details?: CanonicalReasoningDetail[];
             tool_calls?: unknown;
           };
           finish_reason?: unknown;
@@ -294,8 +329,12 @@ export async function runBufferedServerToolLoop(
     // Past the search budget, executeServerCalls answers each call with a
     // limit notice instead of executing — the model gets one more step to
     // answer from what it has (MAX_LOOP_STEPS bounds a model that will not).
+    const canonicalStepReasoning: CanonicalReasoningDetail[] = [
+      ...anthropicReasoningDetailsOf(message?.reasoning_details, "message"),
+      ...googleThoughtDetailsOf(message?.reasoning_details)
+    ];
     const stepReasoning = anthropicReasoningDetailsOf(
-      message?.reasoning_details,
+      canonicalStepReasoning,
       "message"
     ).filter(
       (detail) =>
@@ -307,11 +346,21 @@ export async function runBufferedServerToolLoop(
     if (stepReasoning.length > 0) {
       events.push({ kind: "reasoning", details: stepReasoning });
     }
+    const googleToolCallIndexes = googleToolCallIndexesOf(message);
     await executeServerCalls({
       options,
-      calls: server.map((call) => ({ id: call.id, name: call.function?.name, arguments: call.function?.arguments })),
+      calls: server.map((call) => ({
+        ...(typeof call.index === "number" ? { index: call.index } : {}),
+        ...(typeof call.id === "string" && Number.isInteger(googleToolCallIndexes[call.id])
+          ? { providerIndex: googleToolCallIndexes[call.id] }
+          : {}),
+        id: call.id,
+        name: call.function?.name,
+        arguments: call.function?.arguments
+      })),
       stepContent: typeof message?.content === "string" ? message.content : undefined,
-      reasoningDetails: message?.reasoning_details,
+      reasoningDetails: canonicalStepReasoning,
+      responsesReasoning: responsesReasoningMetadataOf(message),
       searches,
       onSearchDone: (search) => events.push({ kind: "search", search })
     });
@@ -583,9 +632,16 @@ export function composeServerToolStream(
 
     await executeServerCalls({
       options,
-      calls: server.map((call) => ({ id: call.id, name: call.name, arguments: call.arguments })),
+      calls: server.map((call) => ({
+        ...(call.index !== undefined ? { index: call.index } : {}),
+        ...(call.providerIndex !== undefined ? { providerIndex: call.providerIndex } : {}),
+        id: call.id,
+        name: call.name,
+        arguments: call.arguments
+      })),
       stepContent: stepContent.length > 0 ? stepContent : undefined,
       reasoningDetails: turn.reasoningDetails,
+      responsesReasoning: turn.responsesReasoning,
       searches,
       onSearchStart: (search) => {
         controller.enqueue(

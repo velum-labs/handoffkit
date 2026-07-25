@@ -79,15 +79,14 @@ function contentText(content: unknown): string {
   return parts.join("");
 }
 
-/** Reasoning text carried on an OpenAI-style message or delta: the raw
- *  `reasoning` field (local MLX / router passthrough) or the vLLM-style
- *  `reasoning_content`. */
-function reasoningField(obj: Record<string, unknown> | undefined): string {
-  if (obj === undefined) return "";
-  const raw = asString(obj.reasoning);
-  if (raw !== undefined && raw.length > 0) return raw;
-  const content = asString(obj.reasoning_content);
-  return content !== undefined && content.length > 0 ? content : "";
+/** Distinct reasoning values carried on an OpenAI-style message or delta.
+ *  Preserve the streaming translator's order (`reasoning_content`, then raw
+ *  `reasoning`) instead of letting the two wire fields overwrite each other. */
+function reasoningFields(obj: Record<string, unknown> | undefined): string[] {
+  if (obj === undefined) return [];
+  return [asString(obj.reasoning_content), asString(obj.reasoning)].filter(
+    (text): text is string => text !== undefined && text.length > 0
+  );
 }
 
 /** Joined text of a Responses reasoning item's `summary` parts. */
@@ -116,8 +115,7 @@ function fromOpenAiChat(messages: unknown[]): CapturedStep[] {
     if (obj === undefined) continue;
     const role = asString(obj.role);
     if (role === "assistant") {
-      const reasoning = reasoningField(obj);
-      if (reasoning.length > 0) {
+      for (const reasoning of reasoningFields(obj)) {
         push({ type: "reasoning", text: truncate(reasoning, MAX_TEXT) });
       }
       const text = contentText(obj.content);
@@ -374,11 +372,11 @@ function finalOutputFromSse(call: RawCall): string {
 /** Reasoning text carried in a response body (per dialect), stream or not.
  *  Request items only carry reasoning once the caller echoes it back on the
  *  next turn — a single-step run's reasoning exists solely in the response. */
-function reasoningFromResponse(call: RawCall): string {
+function reasoningFromResponse(call: RawCall): string[] {
   const body = asObject(tryParseJson(call.responseText));
   if (body !== undefined) {
     if (call.dialect === "openai-chat") {
-      return reasoningField(asObject(asObject(asArray(body.choices)[0])?.message));
+      return reasoningFields(asObject(asObject(asArray(body.choices)[0])?.message));
     }
     if (call.dialect === "openai-responses") {
       return asArray(body.output)
@@ -386,7 +384,7 @@ function reasoningFromResponse(call: RawCall): string {
           const obj = asObject(item);
           return obj?.type === "reasoning" ? summaryText(obj.summary) : "";
         })
-        .join("");
+        .filter((text) => text.length > 0);
     }
     if (call.dialect === "anthropic-messages") {
       return asArray(body.content)
@@ -394,9 +392,9 @@ function reasoningFromResponse(call: RawCall): string {
           const obj = asObject(block);
           return obj?.type === "thinking" ? asString(obj.thinking) ?? "" : "";
         })
-        .join("");
+        .filter((text) => text.length > 0);
     }
-    return "";
+    return [];
   }
   const events = parseSseEvents(call.responseText);
   if (call.dialect === "openai-responses") {
@@ -409,18 +407,20 @@ function reasoningFromResponse(call: RawCall): string {
             const obj = asObject(item);
             return obj?.type === "reasoning" ? summaryText(obj.summary) : "";
           })
-          .join("");
+          .filter((text) => text.length > 0);
       }
     }
-    return "";
+    return [];
   }
   if (call.dialect === "openai-chat") {
-    let accumulated = "";
+    const accumulated = ["", ""];
     for (const event of events) {
       const choice = asObject(asArray(event.choices)[0]);
-      accumulated += reasoningField(asObject(choice?.delta));
+      const delta = asObject(choice?.delta);
+      accumulated[0] += asString(delta?.reasoning_content) ?? "";
+      accumulated[1] += asString(delta?.reasoning) ?? "";
     }
-    return accumulated;
+    return accumulated.filter((text) => text.length > 0);
   }
   let accumulated = "";
   for (const event of events) {
@@ -428,7 +428,7 @@ function reasoningFromResponse(call: RawCall): string {
     const delta = asObject(event.delta);
     if (asString(delta?.type) === "thinking_delta") accumulated += asString(delta?.thinking) ?? "";
   }
-  return accumulated;
+  return accumulated.length > 0 ? [accumulated] : [];
 }
 
 /** Pull the final assistant text out of a model response body (per dialect). */
@@ -475,7 +475,9 @@ export function reconstructTrajectory(calls: readonly RawCall[]): CapturedTrajec
   // reasoning step ahead of the final answer.
   const finalReasoning = reasoningFromResponse(source);
   if (finalReasoning.length > 0 && steps.at(-1)?.type !== "reasoning") {
-    steps.push({ index: steps.length, type: "reasoning", text: truncate(finalReasoning, MAX_TEXT) });
+    for (const reasoning of finalReasoning) {
+      steps.push({ index: steps.length, type: "reasoning", text: truncate(reasoning, MAX_TEXT) });
+    }
   }
   // Ensure the final answer is the trailing output step.
   if (finalOutput.length > 0 && steps.at(-1)?.text !== finalOutput) {

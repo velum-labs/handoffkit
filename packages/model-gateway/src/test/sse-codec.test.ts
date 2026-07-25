@@ -124,7 +124,12 @@ test("merges fragmented tool-call arguments across chunks by index", () => {
   );
   const turn = assembler.result();
   assert.equal(turn.toolCalls.length, 1);
-  assert.deepEqual(turn.toolCalls[0], { id: "call_a", name: "read", arguments: '{"path":"a.txt"}' });
+  assert.deepEqual(turn.toolCalls[0], {
+    index: 0,
+    id: "call_a",
+    name: "read",
+    arguments: '{"path":"a.txt"}'
+  });
   assert.equal(turn.finishReason, "tool_calls");
 });
 
@@ -141,8 +146,8 @@ test("keeps parallel tool calls separate when interleaved by index", () => {
   );
   const turn = assembler.result();
   assert.deepEqual(turn.toolCalls, [
-    { id: "call_a", name: "read", arguments: '{"a":1}' },
-    { id: "call_b", name: "write", arguments: '{"b":2}' }
+    { index: 0, id: "call_a", name: "read", arguments: '{"a":1}' },
+    { index: 1, id: "call_b", name: "write", arguments: '{"b":2}' }
   ]);
 });
 

@@ -12,7 +12,11 @@ export type ReasoningEffortOption = {
   aliases?: readonly string[];
 };
 
-export type ReasoningCapabilityProvenance = "provider" | "config" | "unknown";
+export type ReasoningCapabilityProvenance =
+  | "provider"
+  | "config"
+  | "builtin"
+  | "unknown";
 export type ReasoningCapabilityStatus = "supported" | "unsupported" | "unknown";
 
 export type ModelReasoningCapabilities = {

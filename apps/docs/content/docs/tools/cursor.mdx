@@ -51,6 +51,40 @@ settings, and its built-in models are untouched; the isolated window adds the
 fusion models additively. No public tunnel and no Settings changes are needed.
 Leave the `fusionkit` process running while you use the window.
 
+## Custom OpenAI endpoint (BYOK)
+
+When you point Cursor's own Settings at a public RouteKit (or FusionKit)
+gateway instead of using `--ide`, set:
+
+| Field | Value |
+| --- | --- |
+| Override OpenAI Base URL | `https://<host>/v1/cursor` |
+| Model name | `routekit/<served-id>`, optionally followed by a discovered reasoning effort such as `:high` |
+| OpenAI API Key | the gateway bearer token |
+
+Cursor routes BYOK by model-name prefix (`claude-*` → Anthropic key,
+`gemini-*` → Google key). The `/v1/cursor` mirror namespaces every id under
+`routekit/` so pasted names always use the OpenAI key and the base-URL
+override. The endpoint must be publicly reachable: Cursor's backend, not the
+desktop, makes the request. See [Troubleshooting](/docs/guides/troubleshooting).
+
+Cursor does not expose its reasoning-effort control for custom
+OpenAI-compatible endpoints. Without a suffix, RouteKit sends no explicit
+effort and the upstream model applies its provider default. For a model whose
+catalog metadata advertises `low`, `medium`, and `high`, RouteKit mirrors these
+as separate model names:
+
+```text
+routekit/openai/gpt-5.5
+routekit/openai/gpt-5.5:low
+routekit/openai/gpt-5.5:medium
+routekit/openai/gpt-5.5:high
+```
+
+Selecting the last name routes to `openai/gpt-5.5` and sends
+`reasoning_effort: "high"`. RouteKit only accepts efforts advertised for that
+model; the suffix is not forwarded as part of the provider model id.
+
 ## Sub-agents
 
 Cursor reads agent definitions from the repo's `.cursor/agents/` directory, so

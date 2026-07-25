@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from collections.abc import AsyncIterator, Sequence
+from collections.abc import AsyncIterator, Mapping, Sequence
+from typing import Any
 
 from fusionkit_core.clients import ChatClient, ToolChoice, ToolDefinition
 from fusionkit_core.config import FusionConfig, FusionMode, PromptOverrides, SamplingConfig
@@ -165,6 +166,7 @@ class FusionKernel:
         tool_choice: ToolChoice | None = None,
         prompts: PromptOverrides | None = None,
         panel_mode: PanelMode = "trajectory",
+        routekit_extra: Mapping[str, Any] | None = None,
         trace: TraceContext | None = None,
     ) -> FuseResult:
         return await self._judge_synthesizer_for(prompts, panel_mode).fuse(
@@ -175,6 +177,7 @@ class FusionKernel:
             sampling=sampling,
             tools=tools,
             tool_choice=tool_choice,
+            routekit_extra=routekit_extra,
             trace=trace,
         )
 
@@ -190,6 +193,7 @@ class FusionKernel:
         tool_choice: ToolChoice | None = None,
         prompts: PromptOverrides | None = None,
         panel_mode: PanelMode = "trajectory",
+        routekit_extra: Mapping[str, Any] | None = None,
         trace: TraceContext | None = None,
     ) -> AsyncIterator[StreamChunk | FuseResult]:
         return self._judge_synthesizer_for(prompts, panel_mode).fuse_stream(
@@ -200,5 +204,6 @@ class FusionKernel:
             sampling=sampling,
             tools=tools,
             tool_choice=tool_choice,
+            routekit_extra=routekit_extra,
             trace=trace,
         )

@@ -30,10 +30,13 @@ export type {
   ProviderFailureCategory
 } from "./model.js";
 export {
+  CURSOR_MODEL_NAMESPACE,
   ProviderFailureError,
   classifyProviderFailure,
+  cursorModelName,
   isRetryableProviderFailure,
-  parseRetryAfterSeconds
+  parseRetryAfterSeconds,
+  stripCursorNamespace
 } from "./model.js";
 
 export type {

@@ -120,6 +120,22 @@ function reasoningWireShape(provider: ProviderId | undefined): string | undefine
   }
 }
 
+const ANTHROPIC_EFFORT_ORDER = [
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max"
+] as const;
+
+function capabilitySupported(value: unknown): boolean | undefined {
+  if (typeof value === "boolean") return value;
+  if (!isRecord(value) || typeof value.supported !== "boolean") {
+    return undefined;
+  }
+  return value.supported;
+}
+
 export function parseReasoningCapabilities(
   entry: unknown,
   provider?: ProviderId,
@@ -130,12 +146,39 @@ export function parseReasoningCapabilities(
   const nested =
     (isRecord(entry.reasoning) ? entry.reasoning : undefined) ??
     (isRecord(capabilities?.reasoning) ? capabilities.reasoning : undefined);
-  const efforts = effortOptions(
+  const discoveredEfforts = effortOptions(
     entry.supported_reasoning_levels ??
       entry.supported_reasoning_efforts ??
       nested?.efforts ??
       nested?.supported_efforts
   );
+  const anthropicEffort =
+    provider === "anthropic" || provider === "claude-code"
+      ? isRecord(capabilities?.effort)
+        ? capabilities.effort
+        : undefined
+      : undefined;
+  const anthropicThinking =
+    provider === "anthropic" || provider === "claude-code"
+      ? isRecord(capabilities?.thinking)
+        ? capabilities.thinking
+        : undefined
+      : undefined;
+  const thinkingTypes = isRecord(anthropicThinking?.types)
+    ? anthropicThinking.types
+    : undefined;
+  const effortSupported = capabilitySupported(anthropicEffort?.supported);
+  const thinkingSupported = capabilitySupported(anthropicThinking?.supported);
+  const adaptiveSupported = capabilitySupported(thinkingTypes?.adaptive);
+  const enabledSupported = capabilitySupported(thinkingTypes?.enabled);
+  const anthropicEfforts =
+    effortSupported === true
+      ? ANTHROPIC_EFFORT_ORDER.flatMap((id): ReasoningEffortOption[] =>
+          capabilitySupported(anthropicEffort?.[id]) === true ? [{ id }] : []
+        )
+      : [];
+  const efforts =
+    discoveredEfforts.length > 0 ? discoveredEfforts : anthropicEfforts;
   const supportedParameters = Array.isArray(entry.supported_parameters)
     ? entry.supported_parameters.filter(
         (parameter): parameter is string => typeof parameter === "string"
@@ -147,11 +190,22 @@ export function parseReasoningCapabilities(
     entry.reasoning_controls;
   const supported =
     efforts.length > 0 ||
+    effortSupported === true ||
+    thinkingSupported === true ||
+    adaptiveSupported === true ||
+    enabledSupported === true ||
     supportedParameters.includes("reasoning") ||
     supportedParameters.includes("reasoning_effort") ||
     explicitStatus === "supported";
-  const unsupported = explicitStatus === "unsupported" || nested?.supported === false;
-  if (!supported && !unsupported && nested === undefined) return undefined;
+  const unsupported =
+    explicitStatus === "unsupported" ||
+    nested?.supported === false ||
+    (effortSupported === false && thinkingSupported === false);
+  const hasAnthropicMetadata =
+    anthropicEffort !== undefined || anthropicThinking !== undefined;
+  if (!supported && !unsupported && nested === undefined && !hasAnthropicMetadata) {
+    return undefined;
+  }
   const defaultEffort =
     typeof entry.default_reasoning_level === "string"
       ? entry.default_reasoning_level
@@ -161,7 +215,7 @@ export function parseReasoningCapabilities(
           ? nested.defaultEffort
           : undefined;
   const budgetSource = isRecord(nested?.budget) ? nested.budget : undefined;
-  const budget =
+  const nestedBudget =
     budgetSource === undefined
       ? undefined
       : {
@@ -181,12 +235,18 @@ export function parseReasoningCapabilities(
               ? { defaultTokens: budgetSource.defaultTokens }
               : {})
         };
+  const budget =
+    nestedBudget ?? (enabledSupported === true ? { minTokens: 1_024 } : undefined);
+  const adaptive =
+    typeof nested?.adaptive === "boolean"
+      ? nested.adaptive
+      : adaptiveSupported;
   return {
     status: unsupported ? "unsupported" : supported ? "supported" : "unknown",
     ...(efforts.length > 0 ? { efforts } : {}),
     ...(defaultEffort !== undefined ? { defaultEffort } : {}),
     ...(budget !== undefined ? { budget } : {}),
-    ...(typeof nested?.adaptive === "boolean" ? { adaptive: nested.adaptive } : {}),
+    ...(adaptive !== undefined ? { adaptive } : {}),
     ...(reasoningWireShape(provider) !== undefined
       ? { wireShape: reasoningWireShape(provider) }
       : {}),

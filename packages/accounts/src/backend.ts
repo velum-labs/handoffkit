@@ -180,6 +180,11 @@ export class SubscriptionAccountBackend implements Backend, ProviderSource {
     return this.#accountSet.reasoningCapabilities(model);
   }
 
+  reasoningWireShape(model: string): string | undefined {
+    const delegatedModel = this.#backend.resolveModel?.(model) ?? this.#backend.defaultModel ?? model;
+    return this.#backend.reasoningWireShape?.(delegatedModel);
+  }
+
   async discoverModels(signal?: AbortSignal): Promise<readonly DiscoveredModel[]> {
     const models = await this.#accountSet.discoverModels(signal);
     return models.map((id) => ({

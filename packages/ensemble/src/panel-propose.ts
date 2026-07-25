@@ -16,6 +16,8 @@ import { ATTR } from "@fusionkit/protocol";
 import type { WireTrajectory } from "@fusionkit/protocol";
 import { jsonAttr, startFusionSpan } from "@fusionkit/tracing";
 import type { FusionTraceCarrier } from "@fusionkit/tracing";
+import type { ReasoningSelection } from "@velum-labs/routekit-contracts";
+import { attachReasoningSelection } from "@velum-labs/routekit-gateway";
 
 import { PanelGenerateOperator } from "./fusion-operators.js";
 import { FusionRuntime, StaticDAGScheduler, createArtifact } from "./runtime.js";
@@ -35,6 +37,8 @@ export type ProposalPanelOptions = {
   /** The caller's tool definitions / tool_choice, verbatim. */
   tools?: unknown;
   toolChoice?: unknown;
+  reasoningSelection?: ReasoningSelection;
+  /** @deprecated compatibility projection; prefer reasoningSelection. */
   reasoningEffort?: string;
   /** Fallback OpenAI-compatible base URL (the shared router). */
   fusionBackendUrl: string;
@@ -174,23 +178,26 @@ async function proposeOne(
   candidateSpan?.event("panel-model", "fusion.candidate.started", identity);
   let wire: WireTrajectory;
   try {
+    const requestBody: Record<string, unknown> = {
+      // The shared router routes by namespaced model id; a dedicated backend ignores it.
+      model: model.id,
+      messages: options.messages,
+      ...(options.tools !== undefined ? { tools: options.tools } : {}),
+      ...(options.toolChoice !== undefined ? { tool_choice: options.toolChoice } : {}),
+      stream: false
+    };
+    const selection = options.reasoningSelection ??
+      (options.reasoningEffort !== undefined
+        ? ({ mode: "effort", effort: options.reasoningEffort } as const)
+        : undefined);
+    if (selection !== undefined) attachReasoningSelection(requestBody, selection);
     const response = await fetch(chatCompletionsUrl(baseUrl), {
       method: "POST",
       headers: {
         "content-type": "application/json",
         ...(options.fusionApiKey !== undefined ? { authorization: `Bearer ${options.fusionApiKey}` } : {})
       },
-      body: JSON.stringify({
-        // The shared router routes by namespaced model id; a dedicated backend ignores it.
-        model: model.id,
-        messages: options.messages,
-        ...(options.tools !== undefined ? { tools: options.tools } : {}),
-        ...(options.toolChoice !== undefined ? { tool_choice: options.toolChoice } : {}),
-        ...(options.reasoningEffort !== undefined
-          ? { reasoning_effort: options.reasoningEffort }
-          : {}),
-        stream: false
-      }),
+      body: JSON.stringify(requestBody),
       signal
     });
     if (!response.ok) {
