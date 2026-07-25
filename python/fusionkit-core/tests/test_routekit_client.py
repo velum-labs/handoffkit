@@ -91,6 +91,75 @@ async def test_routekit_client_sends_namespaced_model_id_and_parses_tools() -> N
 
 
 @pytest.mark.asyncio
+async def test_routekit_client_serializes_message_and_top_level_envelopes_exactly() -> None:
+    observed: dict[str, object] = {}
+    message_envelope = {
+        "version": 1,
+        "anthropic": {"content": [{"type": "thinking", "signature": "sig"}]},
+    }
+    request_envelope = {
+        "version": 1,
+        "responses": {
+            "items": [{"type": "reasoning", "encrypted_content": "opaque"}],
+            "includeEncryptedContent": True,
+        },
+    }
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        observed.update(json.loads(request.content))
+        return httpx.Response(
+            200,
+            json={"choices": [{"message": {"content": "done"}, "finish_reason": "stop"}]},
+        )
+
+    http_client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    client = RouteKitClient("http://routekit.test", "test/judge", http_client=http_client)
+    try:
+        await client.chat(
+            [ChatMessage(role="assistant", content="prior", x_routekit=message_envelope)],
+            extra={"x_routekit": request_envelope},
+        )
+    finally:
+        await http_client.aclose()
+
+    assert observed["x_routekit"] == request_envelope
+    assert observed["messages"][0]["x_routekit"] == message_envelope  # type: ignore[index]
+    assert observed["messages"][0]["content"] == "prior"  # type: ignore[index]
+
+
+@pytest.mark.asyncio
+async def test_routekit_client_parses_returned_message_envelope() -> None:
+    envelope = {
+        "version": 1,
+        "responses": {
+            "items": [{"type": "reasoning", "id": "rs_new", "encrypted_content": "new"}],
+            "includeEncryptedContent": True,
+        },
+    }
+
+    async def handler(_: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "choices": [{
+                    "message": {"content": "done", "x_routekit": envelope},
+                    "finish_reason": "stop",
+                }],
+            },
+        )
+
+    http_client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    client = RouteKitClient("http://routekit.test", "test/synth", http_client=http_client)
+    try:
+        response = await client.chat([ChatMessage(role="user", content="finish")])
+    finally:
+        await http_client.aclose()
+
+    assert response.x_routekit == envelope
+    assert "new" not in response.content
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "field",
     ["model", "messages", "stream", "stream_options", "tools", "tool_choice"],
@@ -369,3 +438,40 @@ async def test_close_only_closes_an_owned_http_client() -> None:
     assert injected.is_closed is False
     assert owned._client.is_closed is True
     await injected.aclose()
+
+
+@pytest.mark.asyncio
+async def test_routekit_client_parses_streamed_message_envelope() -> None:
+    envelope = {
+        "version": 1,
+        "responses": {
+            "items": [{"type": "reasoning", "id": "rs_stream", "encrypted_content": "stream-new"}],
+            "includeEncryptedContent": True,
+        },
+    }
+    metadata_event = {
+        "choices": [{"delta": {"x_routekit": envelope}, "finish_reason": None}]
+    }
+    body = (
+        f"data: {json.dumps(metadata_event)}\n\n"
+        'data: {"choices":[{"delta":{"content":"done"},"finish_reason":"stop"}]}\n\n'
+        'data: [DONE]\n\n'
+    )
+
+    async def handler(_: httpx.Request) -> httpx.Response:
+        return _stream_response(body, chunk_size=11)
+
+    http_client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    client = RouteKitClient("http://routekit.test", "test/synth", http_client=http_client)
+    try:
+        chunks = [
+            chunk
+            async for chunk in client.stream_chat(
+                [ChatMessage(role="user", content="finish")]
+            )
+        ]
+    finally:
+        await http_client.aclose()
+
+    assert chunks[0].x_routekit == envelope
+    assert all("stream-new" not in chunk.delta for chunk in chunks)

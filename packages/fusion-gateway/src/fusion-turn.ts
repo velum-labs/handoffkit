@@ -308,6 +308,7 @@ export class FusionTurnAssembler {
     if (req.chat.reasoning_effort !== undefined) {
       stepBody.reasoning_effort = req.chat.reasoning_effort;
     }
+    if (req.chat.x_routekit !== undefined) stepBody.x_routekit = req.chat.x_routekit;
     const route = this.#routeFor(req);
     // Finite k fuses receding-horizon step proposals (candidates end in a
     // proposed tool-call batch); the router selects step-mode judge/synth

@@ -323,6 +323,61 @@ test("redacts thrown backend failures from stderr and the wire response", async 
   }
 });
 
+test("HTTP chat rejects conflicting canonical and Anthropic controls before upstream I/O", async () => {
+  const mock = await startMock();
+  const gateway = await startGateway({
+    host: "127.0.0.1",
+    port: 0,
+    backend: new OpenAiBackend({ baseUrl: mock.url, defaultModel: "mock-model" })
+  });
+  try {
+    const response = await fetch(`${gateway.url()}/v1/chat/completions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        model: "mock-model",
+        messages: [{ role: "user", content: "hello" }],
+        x_routekit: {
+          version: 1,
+          selection: { mode: "disabled" },
+          anthropic: { request: { thinking: { type: "adaptive" } } }
+        }
+      })
+    });
+    assert.equal(response.status, 400);
+    const error = (await response.json()) as { error: { code?: string; param?: string } };
+    assert.equal(error.error.code, "invalid_reasoning_control");
+    assert.equal(error.error.param, "x_routekit.anthropic.request");
+    assert.equal(mock.lastChatBody(), undefined);
+  } finally {
+    await gateway.close();
+    await mock.close();
+  }
+});
+
+test("HTTP canonical auto suppresses deprecated reasoning_effort", async () => {
+  const mock = await startMock();
+  const gateway = await startGateway({
+    host: "127.0.0.1", port: 0,
+    backend: new OpenAiBackend({ baseUrl: `${mock.url}/v1`, defaultModel: "mock-model" })
+  });
+  try {
+    const response = await fetch(`${gateway.url()}/v1/chat/completions`, {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        model: "mock-model", messages: [{ role: "user", content: "hello" }],
+        reasoning_effort: "legacy-high",
+        x_routekit: { version: 1, selection: { mode: "auto" } }
+      })
+    });
+    assert.equal(response.status, 200, await response.text());
+    assert.equal(mock.lastChatBody()?.reasoning_effort, undefined);
+  } finally {
+    await gateway.close();
+    await mock.close();
+  }
+});
+
 test("preserves an explicitly requested model", async () => {
   const mock = await startMock();
   const gateway = await startGateway({

@@ -10,8 +10,10 @@ import {
   translateCursorRequest
 } from "../adapters/cursor.js";
 import {
+  REASONING_SELECTION,
   reasoningSelectionErrorOf,
-  reasoningSelectionOf
+  reasoningSelectionOf,
+  withReasoningSelection
 } from "../adapters/openai-chat-wire.js";
 import type { Backend } from "../backend.js";
 import { startGateway } from "../server.js";
@@ -203,6 +205,179 @@ test("RouteKit serves the Cursor hybrid through its neutral HTTP boundary", asyn
   } finally {
     await gateway.close();
   }
+});
+
+test("Cursor hybrid forwards effort and preserves Chat reasoning and usage", async () => {
+  let received: Record<string, unknown> | undefined;
+  const upstream = {
+    id: "chatcmpl_reasoning",
+    object: "chat.completion",
+    model: "openai/gpt-5.5",
+    choices: [{
+      index: 0,
+      message: {
+        role: "assistant",
+        content: "answer",
+        reasoning: "hidden-compatible-field",
+        reasoning_content: "display summary"
+      },
+      finish_reason: "stop"
+    }],
+    usage: {
+      prompt_tokens: 11,
+      completion_tokens: 9,
+      total_tokens: 20,
+      prompt_tokens_details: { cached_tokens: 6 },
+      completion_tokens_details: { reasoning_tokens: 7 }
+    }
+  };
+  const backend: Backend = {
+    defaultModel: "openai/gpt-5.5",
+    chat(body) {
+      received = body as Record<string, unknown>;
+      return Promise.resolve(Response.json(upstream));
+    },
+    models: () => Promise.resolve(Response.json({ object: "list", data: [] })),
+    embeddings: () => Promise.resolve(new Response(null, { status: 501 }))
+  };
+  const gateway = await startGateway({ backend });
+  try {
+    const response = await fetch(`${gateway.url()}/v1/cursor/chat/completions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        model: "openai/gpt-5.5",
+        input: [
+          { type: "message", role: "user", content: "solve" },
+          { type: "reasoning", summary: [{ type: "summary_text", text: "old" }] }
+        ],
+        reasoning: { effort: "none" },
+        stream: false
+      })
+    });
+    assert.equal(response.status, 200);
+    assert.equal(received?.reasoning_effort, "none");
+    assert.deepEqual(received?.messages, [{ role: "user", content: "solve" }]);
+    assert.deepEqual(await response.json(), upstream);
+  } finally {
+    await gateway.close();
+  }
+});
+
+test("Cursor hybrid validates and propagates x_routekit reasoning controls", async () => {
+  let calls = 0;
+  let received: Record<string, unknown> | undefined;
+  const backend: Backend = {
+    defaultModel: "openai/gpt-5.5",
+    chat(body) { calls += 1; received = body as Record<string, unknown>; return Promise.resolve(Response.json({ choices: [] })); },
+    models: () => Promise.resolve(Response.json({ data: [] })),
+    embeddings: () => Promise.resolve(new Response(null, { status: 501 }))
+  };
+  const gateway = await startGateway({ backend });
+  try {
+    for (const body of [
+      {
+        input: "hello",
+        reasoning: { effort: "high" },
+        x_routekit: { version: 1, selection: { mode: "future" } }
+      },
+      {
+        input: "hello",
+        reasoning: { effort: "budget" },
+        x_routekit: { version: 1, selection: { mode: "budget", budgetTokens: 0 } }
+      },
+      {
+        input: "hello",
+        x_routekit: { version: 1, responses: { items: [null], includeEncryptedContent: true } }
+      }
+    ]) {
+      const malformed = await fetch(`${gateway.url()}/v1/cursor/chat/completions`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body)
+      });
+      assert.equal(malformed.status, 400);
+      const code = ((await malformed.json()) as { error: { code: string } }).error.code;
+      assert.ok(code === "invalid_reasoning_control" || code === "invalid_reasoning_metadata");
+    }
+    assert.equal(calls, 0);
+
+    const selections = [
+      { mode: "auto" }, { mode: "disabled" }, { mode: "adaptive" },
+      { mode: "budget", budgetTokens: 2048 }, { mode: "effort", effort: "canonical" }
+    ] as const;
+    for (const selection of selections) {
+      const response = await fetch(`${gateway.url()}/v1/cursor/chat/completions`, {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          input: "hello", reasoning: { effort: "native" },
+          x_routekit: { version: 1, selection }
+        })
+      });
+      assert.equal(response.status, 200, selection.mode);
+      assert.deepEqual(reasoningSelectionOf(received), selection);
+      assert.equal(received?.reasoning_effort, undefined);
+    }
+    const native = await fetch(`${gateway.url()}/v1/cursor/chat/completions`, {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ input: "hello", reasoning: { effort: "native" } })
+    });
+    assert.equal(native.status, 200);
+    assert.deepEqual(reasoningSelectionOf(received), { mode: "effort", effort: "native" });
+    assert.equal(received?.reasoning_effort, "native");
+    assert.equal(calls, selections.length + 1);
+  } finally {
+    await gateway.close();
+  }
+});
+
+
+test("Cursor symbol auto suppresses native effort", () => {
+  const body: Record<PropertyKey, unknown> = { input: "hello", reasoning: { effort: "native" } };
+  Object.defineProperty(body, REASONING_SELECTION, {
+    value: { mode: "auto" }, enumerable: true
+  });
+  const translated = translateCursorRequest(body as Record<string, unknown>);
+  assert.deepEqual(reasoningSelectionOf(translated), { mode: "auto" });
+  assert.equal(translated.reasoning_effort, undefined);
+});
+
+test("Cursor translation preserves malformed symbol selection before native effort", () => {
+  const body: Record<PropertyKey, unknown> = {
+    input: "hello",
+    reasoning: { effort: "high" }
+  };
+  Object.defineProperty(body, REASONING_SELECTION, {
+    value: { mode: "effort", effort: "" },
+    enumerable: true
+  });
+  const translated = translateCursorRequest(body as Record<string, unknown>);
+  assert.match(reasoningSelectionErrorOf(translated) ?? "", /effort must be a non-empty string/);
+});
+
+
+test("Cursor authoritative reasoning selection clones non-configurable metadata", () => {
+  const source: Record<PropertyKey, unknown> = {
+    reasoning_effort: "stale",
+    x_routekit: { version: 1, trace: { id: "keep" }, selection: { mode: "auto" } }
+  };
+  Object.defineProperty(source, REASONING_SELECTION, {
+    value: { mode: "auto" },
+    enumerable: true
+  });
+  const replaced = withReasoningSelection(
+    source as Record<string, unknown>,
+    { mode: "effort", effort: "high" }
+  );
+  assert.notEqual(replaced, source);
+  assert.deepEqual(reasoningSelectionOf(source), { mode: "auto" });
+  assert.deepEqual(reasoningSelectionOf(replaced), { mode: "effort", effort: "high" });
+  assert.equal(replaced.reasoning_effort, "high");
+  assert.deepEqual(replaced.x_routekit, {
+    version: 1,
+    trace: { id: "keep" },
+    selection: { mode: "effort", effort: "high" }
+  });
 });
 
 test("Cursor route advertises reasoning variants and applies their effort", async () => {

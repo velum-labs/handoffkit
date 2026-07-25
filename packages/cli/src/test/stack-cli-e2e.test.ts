@@ -38,9 +38,45 @@ const CODEX_SKIP = STACK_SKIP !== false ? STACK_SKIP : cliSkip("codex");
 const OPENCODE_SKIP = STACK_SKIP !== false ? STACK_SKIP : cliSkip("opencode");
 
 const MEMBERS = [
-  { id: "alpha", model: "gpt-panel-a", provider: "openai" },
-  { id: "beta", model: "claude-panel-b", provider: "anthropic" },
-  { id: "judge", model: "gpt-judge", provider: "openai" }
+  {
+    id: "alpha",
+    model: "gpt-panel-a",
+    provider: "openai",
+    reasoning: {
+      status: "supported",
+      efforts: [{ id: "high" }],
+      budget: { minTokens: 1, maxTokens: 100_000 },
+      adaptive: true,
+      wireShape: "openrouter",
+      provenance: "provider"
+    }
+  },
+  {
+    id: "beta",
+    model: "claude-panel-b",
+    provider: "anthropic",
+    reasoning: {
+      status: "supported",
+      efforts: [{ id: "high" }],
+      budget: { minTokens: 1, maxTokens: 100_000 },
+      adaptive: true,
+      wireShape: "anthropic",
+      provenance: "provider"
+    }
+  },
+  {
+    id: "judge",
+    model: "gpt-judge",
+    provider: "openai",
+    reasoning: {
+      status: "supported",
+      efforts: [{ id: "high" }],
+      budget: { minTokens: 1, maxTokens: 100_000 },
+      adaptive: true,
+      wireShape: "openrouter",
+      provenance: "provider"
+    }
+  }
 ] as const;
 
 let stack: SimFusionStack;

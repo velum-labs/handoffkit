@@ -25,7 +25,10 @@ import type { ModelReasoningCapabilities } from "@velum-labs/routekit-contracts"
 import { droppedField } from "./dropped.js";
 import {
   attachReasoningSelection,
-  attachReasoningSelectionError
+  attachReasoningSelectionError,
+  hasExplicitReasoningSelection,
+  reasoningSelectionErrorOf,
+  reasoningSelectionOf
 } from "./openai-chat-wire.js";
 
 type JsonObject = Record<string, unknown>;
@@ -220,10 +223,15 @@ export function translateCursorRequest(body: JsonObject): JsonObject {
     }
   }
   translated.messages = inputItemsToMessages(body.input);
+  if (body.x_routekit !== undefined) translated.x_routekit = body.x_routekit;
+  const originalSelectionError = reasoningSelectionErrorOf(body);
+  if (originalSelectionError !== undefined) {
+    attachReasoningSelectionError(translated, originalSelectionError);
+  }
   const tools = translateTools(body.tools);
   if (tools !== undefined) translated.tools = tools;
   translateSampling(body, translated);
-  translateReasoning(body, translated);
+  if (originalSelectionError === undefined) translateReasoning(body, translated);
   translateTextFormat(body, translated);
   if (translated.stream === true) {
     translated.stream_options = { include_usage: true };
@@ -394,6 +402,10 @@ function translateSampling(body: JsonObject, translated: JsonObject): void {
 }
 
 function translateReasoning(body: JsonObject, translated: JsonObject): void {
+  const hasCanonicalSelection = hasExplicitReasoningSelection(body);
+  if (hasCanonicalSelection) {
+    attachReasoningSelection(translated, reasoningSelectionOf(body));
+  }
   const reasoning = body.reasoning;
   if (reasoning === undefined || reasoning === null) return;
   if (!isObject(reasoning)) {
@@ -405,8 +417,10 @@ function translateReasoning(body: JsonObject, translated: JsonObject): void {
   }
   const effort = reasoning.effort;
   if (typeof effort === "string" && effort.length > 0) {
-    translated.reasoning_effort = effort;
-    attachReasoningSelection(translated, { mode: "effort", effort });
+    if (!hasCanonicalSelection) {
+      translated.reasoning_effort = effort;
+      attachReasoningSelection(translated, { mode: "effort", effort });
+    }
     return;
   }
   attachReasoningSelectionError(

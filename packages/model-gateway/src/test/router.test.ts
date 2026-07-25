@@ -8,6 +8,11 @@ import type {
   ProviderSource
 } from "../index.js";
 import {
+  REASONING_SELECTION,
+  reasoningSelectionErrorOf,
+  reasoningSelectionOf
+} from "../adapters/openai-chat-wire.js";
+import {
   CatalogBackend,
   NoModelAvailableError,
   parseDiscoveredModels,
@@ -196,7 +201,8 @@ test("catalog namespaces live models and strips the source before dispatch", asy
   assert.deepEqual(backend.resolveModelRoute("gpt-5.5", "openai"), {
     publicId: "openai/gpt-5.5",
     nativeId: "gpt-5.5",
-    provider: "openai"
+    provider: "openai",
+    reasoning: backend.reasoningCapabilities("openai/gpt-5.5")
   });
   assert.equal(
     backend.resolveModelRoute("gpt-5.5"),
@@ -240,9 +246,69 @@ test("catalog namespaces live models and strips the source before dispatch", asy
     billingMode: "metered-api",
     default: false,
     capabilities: {},
-    reasoning: null
+    reasoning: {
+      status: "supported",
+      efforts: ["none", "low", "medium", "high", "xhigh"].map((id) => ({ id })),
+      wireShape: "openai-chat",
+      provenance: "builtin"
+    }
   });
   assert.equal(backend.modelInfo("openai/not-real"), undefined);
+});
+
+test("catalog infers verified OpenAI gpt-5.5 reasoning controls and honors precedence", async () => {
+  const bodies: Array<Record<string, unknown>> = [];
+  const backend = await CatalogBackend.create({
+    config: { providers: { openai: {} }, defaultModel: "openai/gpt-5.5" },
+    sources: {
+      openai: {
+        ...fakeSource("openai", [{ id: "gpt-5.5" }]),
+        async chat(body: unknown) {
+          bodies.push(body as Record<string, unknown>);
+          return Response.json({});
+        }
+      }
+    }
+  });
+  assert.deepEqual(
+    backend.reasoningCapabilities("openai/gpt-5.5")?.efforts?.map((effort) => effort.id),
+    ["none", "low", "medium", "high", "xhigh"]
+  );
+  assert.equal(backend.reasoningCapabilities("openai/gpt-5.5")?.provenance, "builtin");
+  const models = (await (await backend.models()).json()) as {
+    data: Array<{ reasoning?: { efforts?: Array<{ id: string }> } }>;
+  };
+  assert.deepEqual(models.data[0]?.reasoning?.efforts?.map((effort) => effort.id), [
+    "none", "low", "medium", "high", "xhigh"
+  ]);
+  for (const effort of ["none", "low", "medium", "high", "xhigh"]) {
+    assert.equal(
+      (await backend.chat({ model: "openai/gpt-5.5", reasoning_effort: effort, messages: [] })).status,
+      200
+    );
+  }
+  for (const effort of ["minimal", "max"]) {
+    assert.equal(
+      (await backend.chat({ model: "openai/gpt-5.5", reasoning_effort: effort, messages: [] })).status,
+      400
+    );
+  }
+  assert.deepEqual(bodies.map((body) => body.reasoning_effort), [
+    "none", "low", "medium", "high", "xhigh"
+  ]);
+
+  const providerMetadata = await CatalogBackend.create({
+    config: { providers: { openai: {} } },
+    sources: {
+      openai: fakeSource("openai", [{
+        id: "gpt-5.5",
+        reasoning: { status: "supported", efforts: [{ id: "provider-only" }], provenance: "provider" }
+      }])
+    }
+  });
+  assert.deepEqual(providerMetadata.reasoningCapabilities("openai/gpt-5.5")?.efforts, [
+    { id: "provider-only" }
+  ]);
 });
 
 test("configured model aliases serve namespaced models under slash-free names", async () => {
@@ -564,4 +630,72 @@ test("startup reports provider-specific discovery and credential failures", asyn
     }),
     /provider "codex" requires enrolled subscription accounts/
   );
+});
+
+
+test("reasoning selection validation rejects malformed public and internal metadata", async () => {
+  const valid = [
+    { mode: "auto" },
+    { mode: "disabled" },
+    { mode: "adaptive" },
+    { mode: "effort", effort: "high" },
+    { mode: "budget", budgetTokens: 2048 }
+  ] as const;
+  for (const selection of valid) {
+    const body = { x_routekit: { version: 1, selection } };
+    assert.equal(reasoningSelectionErrorOf(body), undefined);
+    assert.deepEqual(reasoningSelectionOf(body), selection);
+  }
+
+  const invalid: Array<[unknown, RegExp]> = [
+    [{ mode: "future" }, /mode is unsupported/],
+    [{ mode: "effort" }, /effort must be a non-empty string/],
+    [{ mode: "effort", effort: "" }, /effort must be a non-empty string/],
+    [{ mode: "budget", budgetTokens: 1.5 }, /budgetTokens must be a positive integer/],
+    [{ mode: "budget", budgetTokens: 0 }, /budgetTokens must be a positive integer/],
+    [[{ mode: "auto" }], /must be an object/]
+  ];
+  for (const [selection, expected] of invalid) {
+    const publicBody = { x_routekit: { version: 1, selection } };
+    assert.match(reasoningSelectionErrorOf(publicBody) ?? "", expected);
+    assert.deepEqual(reasoningSelectionOf(publicBody), { mode: "auto" });
+    const internalBody: Record<PropertyKey, unknown> = {};
+    Object.defineProperty(internalBody, REASONING_SELECTION, {
+      value: selection,
+      enumerable: true
+    });
+    assert.match(reasoningSelectionErrorOf(internalBody) ?? "", expected);
+    assert.deepEqual(reasoningSelectionOf(internalBody), { mode: "auto" });
+  }
+  assert.equal(reasoningSelectionErrorOf({ x_routekit: [] }), "x_routekit must be an object");
+  assert.deepEqual(reasoningSelectionOf({ x_routekit: [] }), { mode: "auto" });
+
+  const calls: Array<{ source: string; model?: string }> = [];
+  const backend = await CatalogBackend.create({
+    config: {
+      providers: { openai: {} },
+      defaultModel: "openai/opaque",
+      reasoningCapabilities: {
+        "openai/opaque": {
+          efforts: [{ id: "high" }],
+          budget: { minTokens: 1, maxTokens: 100_000 },
+          adaptive: true,
+          wireShape: "openrouter"
+        }
+      }
+    },
+    sources: { openai: fakeSource("openai", [{ id: "opaque" }], calls) }
+  });
+  for (const [selection, expected] of invalid.slice(0, 5)) {
+    const response = await backend.chat({
+      model: "openai/opaque",
+      messages: [],
+      x_routekit: { version: 1, selection }
+    });
+    assert.equal(response.status, 400);
+    const body = (await response.json()) as { error: { code: string; message: string } };
+    assert.equal(body.error.code, "invalid_reasoning_control");
+    assert.match(body.error.message, expected);
+  }
+  assert.equal(calls.length, 0, "malformed public metadata must never reach provider I/O");
 });

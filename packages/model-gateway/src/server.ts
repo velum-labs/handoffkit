@@ -25,6 +25,9 @@ import {
 } from "./adapters/cursor.js";
 import { withReasoningSelection } from "./adapters/openai-chat-wire.js";
 import { handleResponses } from "./adapters/responses.js";
+import {
+  routeKitRequestValidationErrorOf
+} from "./adapters/openai-chat-wire.js";
 import type { ResponsesRequest } from "./adapters/responses.js";
 import type {
   Backend,
@@ -160,7 +163,11 @@ function codexModelInfo(
       instructions_template: "You are a coding agent.",
       instructions_variables: null
     },
-    supports_reasoning_summaries: reasoning?.status === "supported",
+    supports_reasoning_summaries:
+      reasoning?.status === "supported" &&
+      (reasoning.wireShape === "openai-responses" ||
+        reasoning.wireShape === "anthropic" ||
+        reasoning.wireShape === "openrouter"),
     default_reasoning_summary: "none",
     support_verbosity: true,
     default_verbosity: "low",
@@ -583,7 +590,6 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
       if ("input" in raw && rejectInvalid(res, validateResponsesRequest(raw))) return;
       // Validate the translated body before invoking the backend.
       let translated = translateCursorRequest(raw);
-      if (rejectInvalid(res, validateChatRequest(translated))) return;
       const selection = resolveCursorModelSelection(
         translated.model,
         backend.listModelIds?.() ?? [],
@@ -597,6 +603,19 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
             : { mode: "effort", effort: selection.reasoningEffort }
         );
       }
+      const validationError = routeKitRequestValidationErrorOf(translated);
+      if (validationError !== undefined) {
+        writeJson(res, 400, {
+          error: {
+            type: "invalid_request_error",
+            code: validationError.code,
+            param: validationError.path,
+            message: validationError.message
+          }
+        });
+        return;
+      }
+      if (rejectInvalid(res, validateChatRequest(translated))) return;
       const body = withDefaultModel(translated, backend.defaultModel);
       await handleModelCall(res, provenance, {
         dialect: "openai-chat",

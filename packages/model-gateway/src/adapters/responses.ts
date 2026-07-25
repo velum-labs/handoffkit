@@ -18,11 +18,21 @@ import { randomId } from "@velum-labs/routekit-runtime";
 import {
   attachReasoningSelection,
   attachReasoningSelectionError,
+  attachResponsesReasoningMetadata,
+  reasoningSelectionErrorOf,
+  hasExplicitReasoningSelection,
+  reasoningSelectionOf,
+  routeKitRequestValidationErrorOf,
+  responsesReasoningMetadataErrorOf,
+  responsesReasoningMetadataOf,
+  type ResponsesReasoningItem,
+  type RouteKitReasoningEnvelope,
   type OpenAiChoice
 } from "./openai-chat-wire.js";
 import { droppedField } from "./dropped.js";
 import { unwrapUpstreamError } from "./upstream-error.js";
 import { openAiSseToResponses } from "./responses-stream.js";
+import { chatUsageToResponses, type OpenAiUsage } from "./responses-usage.js";
 import { composeServerToolStream, runBufferedServerToolLoop } from "./server-tool-loop.js";
 import type { ExecutedSearch } from "./server-tool-loop.js";
 import { resolveWebSearchExecutor } from "./web-search.js";
@@ -31,12 +41,13 @@ export { openAiSseToResponses } from "./responses-stream.js";
 // ---- Responses request types (the subset Codex sends) ----
 
 type ResponsesContentPart = { type: string; text?: string; image_url?: string; [key: string]: unknown };
-type ResponsesInputItem =
+export type ResponsesInputItem =
   | { type?: "message"; role: "user" | "assistant" | "system" | "developer"; content: string | ResponsesContentPart[] }
   | { type: "function_call"; call_id?: string; id?: string; name: string; arguments: string }
   | { type: "function_call_output"; call_id: string; output: unknown }
   | { type: "custom_tool_call"; call_id?: string; id?: string; name: string; input?: string }
   | { type: "custom_tool_call_output"; call_id: string; output: unknown }
+  | { type: "reasoning"; id?: string; summary?: unknown; content?: unknown; encrypted_content?: unknown }
   | { type: string; [key: string]: unknown };
 
 /** A tool declaration on a Responses request: a function tool (JSON-schema
@@ -62,6 +73,15 @@ type ResponsesTool = {
  * nullable field below must be read with a null-tolerant guard; reading
  * `.effort` off a null `reasoning` previously failed every such Codex turn.
  */
+class ResponsesTranslationError extends Error {
+  readonly code = "invalid_encrypted_reasoning_order";
+
+  constructor(message: string) {
+    super(message);
+    this.name = "ResponsesTranslationError";
+  }
+}
+
 export type ResponsesRequest = {
   model?: string;
   instructions?: string;
@@ -79,6 +99,7 @@ export type ResponsesRequest = {
    * info, which has none. Null must translate as "no reasoning", never throw.
    */
   reasoning?: { effort?: string | null; [key: string]: unknown } | null;
+  x_routekit?: RouteKitReasoningEnvelope | unknown;
   text?: { format?: { type?: string; name?: string; schema?: unknown; strict?: boolean; [key: string]: unknown } } | null;
   previous_response_id?: string | null;
   truncation?: string | unknown;
@@ -89,7 +110,6 @@ export type ResponsesRequest = {
 
 // ---- OpenAI chat shapes we read back ----
 
-type OpenAiUsage = { prompt_tokens?: number; completion_tokens?: number };
 type OpenAiChunk = { choices?: OpenAiChoice[]; usage?: OpenAiUsage; provider_cost?: unknown };
 type OpenAiResponse = {
   id?: string;
@@ -243,7 +263,7 @@ const WEB_SEARCH_TOOL_PARAMETERS = {
 } as const;
 
 /** Options gating server-executed tool projection (on iff an executor exists). */
-export type ResponsesTranslationOptions = { serverTools?: boolean };
+export type ResponsesTranslationOptions = { serverTools?: boolean; destinationWireShape?: string };
 
 /** A tool definition harvested from an echoed `tool_search_output` item. */
 type DiscoveredTool = {
@@ -395,6 +415,8 @@ export function responsesToChat(
   options: ResponsesTranslationOptions = {}
 ): Record<string, unknown> {
   const messages: Record<string, unknown>[] = [];
+  const includeEncryptedContent =
+    Array.isArray(body.include) && body.include.includes("reasoning.encrypted_content");
   if (typeof body.instructions === "string" && body.instructions.length > 0) {
     messages.push({ role: "system", content: body.instructions });
   }
@@ -409,6 +431,20 @@ export function responsesToChat(
     // following tool messages before the next assistant message, so each call
     // must not become its own assistant turn.
     let pendingToolCalls: Array<Record<string, unknown>> = [];
+    let pendingEncryptedReasoning: ResponsesReasoningItem[] = [];
+    const attachPendingReasoning = (carrier: Record<string, unknown>): void => {
+      if (pendingEncryptedReasoning.length === 0) return;
+      attachResponsesReasoningMetadata(carrier, {
+        items: pendingEncryptedReasoning,
+        includeEncryptedContent: false
+      });
+      pendingEncryptedReasoning = [];
+    };
+    const rejectPendingReasoning = (boundary: string): never => {
+      throw new ResponsesTranslationError(
+        `encrypted reasoning must be followed by an assistant message or tool call before ${boundary}`
+      );
+    };
     // The assistant text message immediately preceding the pending function
     // calls, if any. A model that answered with text + tool calls in one turn
     // is replayed by Codex as a message item followed by function_call items;
@@ -420,8 +456,15 @@ export function responsesToChat(
       if (pendingToolCalls.length === 0) return;
       if (pendingAssistantText !== undefined) {
         pendingAssistantText.tool_calls = pendingToolCalls;
+        attachPendingReasoning(pendingAssistantText);
       } else {
-        messages.push({ role: "assistant", content: null, tool_calls: pendingToolCalls });
+        const carrier: Record<string, unknown> = {
+          role: "assistant",
+          content: null,
+          tool_calls: pendingToolCalls
+        };
+        attachPendingReasoning(carrier);
+        messages.push(carrier);
       }
       pendingToolCalls = [];
       pendingAssistantText = undefined;
@@ -458,10 +501,12 @@ export function responsesToChat(
         pendingAssistantText = undefined;
         const action = (item as { action?: { query?: unknown } }).action;
         const query = typeof action?.query === "string" ? action.query : "";
-        messages.push({
+        const carrier: Record<string, unknown> = {
           role: "assistant",
           content: query.length > 0 ? `[searched the web for: ${JSON.stringify(query)}]` : "[searched the web]"
-        });
+        };
+        attachPendingReasoning(carrier);
+        messages.push(carrier);
         continue;
       }
       // A prior *typed* tool call echoed back (e.g. `tool_search_call`): replay
@@ -490,19 +535,30 @@ export function responsesToChat(
         continue;
       }
       flushToolCalls();
-      // Reasoning items round-trip: Codex echoes the reasoning item back
-      // verbatim on the next request (with `summary`, and `content` that may be
-      // null). Drop it — narration must never leak into the provider prompt
-      // (mirrors the Anthropic adapter dropping thinking blocks). A reasoning
-      // item may sit between an assistant message and its function calls, so
-      // dropping it must not break their adjacency (`pendingAssistantText`
-      // survives; every other item type invalidates it below).
+      // Responses emits encrypted reasoning before the assistant output it
+      // belongs to. Buffer it until that assistant carrier appears; attaching
+      // immediately would mutate the previous turn or create a phantom turn.
       if (item.type === "reasoning") {
-        droppedField("responses", "reasoning", "input");
+        const encrypted = (item as { encrypted_content?: unknown }).encrypted_content;
+        if (typeof encrypted === "string" && encrypted.length > 0) {
+          pendingEncryptedReasoning.push({
+            type: "reasoning",
+            ...(typeof item.id === "string" ? { id: item.id } : {}),
+            ...(Object.hasOwn(item, "summary") ? { summary: item.summary } : {}),
+            ...(Object.hasOwn(item, "content") ? { content: item.content } : {}),
+            encrypted_content: encrypted
+          });
+          // Calls after reasoning belong to a new output carrier, never to an
+          // assistant message that appeared before the reasoning item.
+          pendingAssistantText = undefined;
+        } else {
+          droppedField("responses", "reasoning", "input");
+        }
         continue;
       }
       pendingAssistantText = undefined;
       if (item.type === "function_call_output" || item.type === "custom_tool_call_output") {
+        if (pendingEncryptedReasoning.length > 0) rejectPendingReasoning(item.type);
         const out = item as { call_id: string; output: unknown };
         const content = typeof out.output === "string" ? out.output : JSON.stringify(out.output);
         messages.push({ role: "tool", tool_call_id: out.call_id, content });
@@ -516,6 +572,7 @@ export function responsesToChat(
         item.type.endsWith("_output") &&
         typeof (item as { call_id?: unknown }).call_id === "string"
       ) {
+        if (pendingEncryptedReasoning.length > 0) rejectPendingReasoning(item.type);
         const { type: _type, call_id, id: _id, ...rest } = item as {
           type: string;
           call_id: string;
@@ -528,13 +585,21 @@ export function responsesToChat(
       // message item (explicit type "message" or a bare {role, content}); any
       // other item type without string/array content is skipped, never iterated.
       const message = item as { role?: string; content?: string | ResponsesContentPart[] | null };
-      if (typeof message.content !== "string" && !Array.isArray(message.content)) continue;
+      if (typeof message.content !== "string" && !Array.isArray(message.content)) {
+        if (pendingEncryptedReasoning.length > 0) rejectPendingReasoning(`item type ${JSON.stringify(item.type)}`);
+        continue;
+      }
       const role = message.role === "developer" ? "system" : message.role ?? "user";
+      if (pendingEncryptedReasoning.length > 0 && role !== "assistant") {
+        rejectPendingReasoning(`${role} message`);
+      }
       const chatMessage: Record<string, unknown> = { role, content: contentToParts(message.content) };
+      if (role === "assistant") attachPendingReasoning(chatMessage);
       messages.push(chatMessage);
       if (role === "assistant") pendingAssistantText = chatMessage;
     }
     flushToolCalls();
+    if (pendingEncryptedReasoning.length > 0) rejectPendingReasoning("end of input");
   }
 
   const chat: Record<string, unknown> = {
@@ -546,17 +611,28 @@ export function responsesToChat(
   if (typeof body.temperature === "number") chat.temperature = body.temperature;
   if (typeof body.top_p === "number") chat.top_p = body.top_p;
   if (typeof body.parallel_tool_calls === "boolean") chat.parallel_tool_calls = body.parallel_tool_calls;
+  if (body.x_routekit !== undefined) chat.x_routekit = body.x_routekit;
+  const originalSelectionError = reasoningSelectionErrorOf(body);
+  const envelopeSelection = reasoningSelectionOf(body);
+  const hasCanonicalSelection = hasExplicitReasoningSelection(body);
+  if (originalSelectionError !== undefined) {
+    attachReasoningSelectionError(chat, originalSelectionError);
+  } else if (hasCanonicalSelection) {
+    attachReasoningSelection(chat, envelopeSelection);
+  }
   // `reasoning: null` means "this model has no reasoning config" (Codex sends
   // it for every custom provider model slug) — skip silently rather
   // than treating it as an untranslatable field, and never dereference it.
-  if (body.reasoning != null) {
+  if (body.reasoning != null && originalSelectionError === undefined) {
     const effort = body.reasoning.effort;
     if (effort == null) {
       // Current Codex releases send `{ effort: null }` when no reasoning
       // control was selected. Treat it exactly like `reasoning: null`.
     } else if (typeof effort === "string" && effort.length > 0) {
-      chat.reasoning_effort = effort;
-      attachReasoningSelection(chat, { mode: "effort", effort });
+      if (!hasCanonicalSelection) {
+        attachReasoningSelection(chat, { mode: "effort", effort });
+        chat.reasoning_effort = effort;
+      }
     } else {
       attachReasoningSelectionError(
         chat,
@@ -568,10 +644,22 @@ export function responsesToChat(
     const responseFormat = mapTextFormat(body.text);
     if (responseFormat !== undefined) chat.response_format = responseFormat;
   }
+  // Stateful response lookup is intentionally unsupported by this stateless
+  // conversion path. handleResponses rejects non-null ids before provider I/O.
   if (body.previous_response_id != null) droppedField("responses", "previous_response_id");
   if (body.truncation != null) droppedField("responses", "truncation");
   if (body.metadata != null) droppedField("responses", "metadata");
-  if (body.include != null && body.include.length > 0) droppedField("responses", "include");
+  if (body.include != null && body.include.length > 0) {
+    for (const value of body.include) {
+      if (value !== "reasoning.encrypted_content") droppedField("responses", "include");
+    }
+  }
+  if (includeEncryptedContent) {
+    attachResponsesReasoningMetadata(chat, {
+      items: [],
+      includeEncryptedContent: true
+    });
+  }
   {
     // Every callable tool is forwarded as a chat function tool (Chat
     // Completions only speaks JSON function tools):
@@ -729,20 +817,22 @@ function buildOutput(
   toolRegistry: ResponsesToolRegistry
 ): Record<string, unknown>[] {
   const output: Record<string, unknown>[] = [];
-  const reasoning =
-    typeof message?.reasoning === "string" && message.reasoning.length > 0
-      ? message.reasoning
-      : typeof message?.reasoning_content === "string" && message.reasoning_content.length > 0
-        ? message.reasoning_content
-        : "";
-  if (reasoning.length > 0) {
+  for (const item of responsesReasoningMetadataOf(message)?.items ?? []) output.push({ ...item });
+  // Match the streaming translator's ordering and part boundaries: provider
+  // summary/narration (`reasoning_content`) is a complete part, while raw model
+  // reasoning (`reasoning`) is a distinct token-accumulated part. Never choose
+  // one spelling over the other when an upstream supplies both.
+  const reasoningParts = [message?.reasoning_content, message?.reasoning]
+    .filter((text): text is string => typeof text === "string" && text.length > 0)
+    .map((text) => ({ type: "summary_text", text }));
+  if (reasoningParts.length > 0) {
     // A reasoning-only turn must still produce output: without this item an
     // all-thinking response assembles as `output: []`, which callers (codex)
     // treat as an empty turn and retry.
     output.push({
       type: "reasoning",
       id: `rs_${randomId()}`,
-      summary: [{ type: "summary_text", text: reasoning }]
+      summary: reasoningParts
     });
   }
   const text = typeof message?.content === "string" ? message.content : "";
@@ -820,8 +910,6 @@ export function chatToResponses(
   const message = openai.choices?.[0]?.message;
   // Gateway-executed searches happened before the terminal step's output.
   const output = [...searches.map(executedSearchItem), ...buildOutput(message, toolRegistry)];
-  const inputTokens = openai.usage?.prompt_tokens;
-  const outputTokens = openai.usage?.completion_tokens;
   return {
     id: `resp_${openai.id ?? randomId()}`,
     object: "response",
@@ -829,16 +917,7 @@ export function chatToResponses(
     status: "completed",
     model,
     output,
-    usage:
-      inputTokens !== undefined || outputTokens !== undefined
-        ? {
-            ...(inputTokens !== undefined ? { input_tokens: inputTokens } : {}),
-            ...(outputTokens !== undefined ? { output_tokens: outputTokens } : {}),
-            ...(inputTokens !== undefined && outputTokens !== undefined
-              ? { total_tokens: inputTokens + outputTokens }
-              : {})
-          }
-        : null,
+    usage: chatUsageToResponses(openai.usage),
     ...(openai.provider_cost !== undefined ? { provider_cost: openai.provider_cost } : {})
   };
 }
@@ -861,6 +940,32 @@ export async function handleResponses(
   backendOptions: BackendRequestOptions = {}
 ): Promise<Response> {
   const requestedModel = body.model ?? backend.defaultModel ?? "";
+  const validationError = routeKitRequestValidationErrorOf(body);
+  if (validationError !== undefined) {
+    return jsonResponse(400, {
+      error: {
+        type: "invalid_request_error",
+        code: validationError.code,
+        param: validationError.path,
+        message: validationError.message
+      }
+    });
+  }
+  const nativeEffort = body.reasoning?.effort;
+  const envelopeSelection = reasoningSelectionOf(body);
+  if (typeof nativeEffort === "string" && nativeEffort.length > 0 && envelopeSelection.mode !== "auto") {
+    const same = envelopeSelection.mode === "effort" && envelopeSelection.effort === nativeEffort;
+    if (!same) {
+      return jsonResponse(400, {
+        error: {
+          type: "invalid_request_error",
+          code: "invalid_reasoning_control",
+          param: "reasoning",
+          message: "reasoning.effort conflicts with x_routekit.selection"
+        }
+      });
+    }
+  }
   const resolvedModel = backend.resolveModel?.(body.model);
   if (
     body.model !== undefined &&
@@ -885,6 +990,38 @@ export async function handleResponses(
       }
     });
   }
+  if (body.previous_response_id != null) {
+    return jsonResponse(400, {
+      error: {
+        type: "invalid_request_error",
+        code: "unsupported_previous_response_id",
+        param: "previous_response_id",
+        message: "previous_response_id is not supported by this stateless gateway; replay prior output items in input"
+      }
+    });
+  }
+  const hasEncryptedReasoning =
+    Array.isArray(body.input) &&
+    body.input.some((item) =>
+      item.type === "reasoning" &&
+      typeof (item as { encrypted_content?: unknown }).encrypted_content === "string" &&
+      (item as { encrypted_content: string }).encrypted_content.length > 0
+    );
+  const requestsEncryptedReasoning =
+    Array.isArray(body.include) && body.include.includes("reasoning.encrypted_content");
+  const destinationWireShape = backend.reasoningWireShape?.(upstreamModel);
+  const preservesOpaqueReasoning =
+    destinationWireShape === "openai-responses" || destinationWireShape === "routekit-envelope";
+  if (hasEncryptedReasoning && !preservesOpaqueReasoning) {
+    return jsonResponse(400, {
+      error: {
+        type: "invalid_request_error",
+        code: "unsupported_encrypted_reasoning",
+        param: "input",
+        message: `model "${requestedModel}" cannot consume OpenAI Responses encrypted reasoning`
+      }
+    });
+  }
   // Server-executed web search is honored when the caller declared the tool,
   // an executor is available (a provider key exists), and no *client* tool
   // already owns the projected name; otherwise the ingress keeps its
@@ -894,7 +1031,24 @@ export async function handleResponses(
   const executor = declaresWebSearch && !clientNameCollision ? resolveWebSearchExecutor("responses") : undefined;
   const serverTools = executor !== undefined;
   const toolRegistry = responsesToolRegistry(body, { serverTools });
-  const chat = responsesToChat(body, upstreamModel, { serverTools });
+  const translatedBody =
+    requestsEncryptedReasoning && !preservesOpaqueReasoning
+      ? { ...body, include: body.include?.filter((value) => value !== "reasoning.encrypted_content") }
+      : body;
+  let chat: Record<string, unknown>;
+  try {
+    chat = responsesToChat(translatedBody, upstreamModel, { serverTools, destinationWireShape });
+  } catch (error) {
+    if (!(error instanceof ResponsesTranslationError)) throw error;
+    return jsonResponse(400, {
+      error: {
+        type: "invalid_request_error",
+        code: error.code,
+        param: "input",
+        message: error.message
+      }
+    });
+  }
   const requestOptions = {
     ...backendOptions,
     modelCallId,

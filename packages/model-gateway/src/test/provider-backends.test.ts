@@ -1,13 +1,21 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
+import { responsesToChat } from "../adapters/responses.js";
 import {
   AnthropicBackend,
   CodexResponsesBackend,
   GoogleGenAiBackend
 } from "../provider-backends.js";
 import { anthropicToChat } from "../adapters/anthropic.js";
-import { attachReasoningSelection } from "../adapters/openai-chat-wire.js";
+import { OpenAiBackend } from "../backend.js";
+import {
+  ANTHROPIC_MESSAGE_CONTENT,
+  ANTHROPIC_REQUEST_METADATA,
+  REASONING_SELECTION,
+  attachGoogleToolCallIndexes,
+  attachReasoningSelection
+} from "../adapters/openai-chat-wire.js";
 import { ChatStreamAssembler } from "../sse/chat-assembler.js";
 import { SseDecoder, SseParseError } from "../sse/parse.js";
 
@@ -24,6 +32,351 @@ function sse(
     headers: { "content-type": "text/event-stream" }
   });
 }
+
+test("direct provider backends reject malformed reasoning controls before transport", async () => {
+  const cases = [
+    {
+      name: "openai",
+      make: (transport: typeof globalThis.fetch) => {
+        const original = globalThis.fetch;
+        globalThis.fetch = transport;
+        return { backend: new OpenAiBackend({ baseUrl: "https://openai.test/v1", defaultModel: "m" }), restore: () => { globalThis.fetch = original; } };
+      }
+    },
+    { name: "anthropic", make: (transport: typeof globalThis.fetch) => ({ backend: new AnthropicBackend({ baseUrl: "https://anthropic.test", apiKey: "x", defaultModel: "m", transport }), restore: () => {} }) },
+    { name: "google", make: (transport: typeof globalThis.fetch) => ({ backend: new GoogleGenAiBackend({ baseUrl: "https://google.test", apiKey: "x", defaultModel: "m", transport }), restore: () => {} }) },
+    { name: "codex", make: (transport: typeof globalThis.fetch) => ({ backend: new CodexResponsesBackend({ baseUrl: "https://codex.test", apiKey: "x", defaultModel: "m", transport }), restore: () => {} }) }
+  ];
+  for (const item of cases) {
+    let calls = 0;
+    const transport: typeof globalThis.fetch = async () => {
+      calls += 1;
+      return Response.json({ choices: [{ message: { content: "ok" } }] });
+    };
+    const { backend, restore } = item.make(transport);
+    try {
+      for (const body of [
+        { model: "m", messages: [], x_routekit: { version: 1, selection: { mode: "future" } } },
+        { model: "m", messages: [], reasoning_effort: "" },
+        { model: "m", messages: [], x_routekit: { version: 1, responses: { items: [null], includeEncryptedContent: true } } },
+        { model: "m", messages: [], x_routekit: { version: 1, anthropic: { request: { thinking: { type: "enabled", budget_tokens: 0 } } } } },
+        { model: "m", messages: [], x_routekit: { version: 1, selection: { mode: "disabled" }, anthropic: { request: { thinking: { type: "adaptive" } } } } },
+        { model: "m", messages: [], x_routekit: { version: 1, selection: { mode: "budget", budgetTokens: 1024 }, anthropic: { request: { thinking: { type: "enabled", budget_tokens: 2048 } } } } },
+        { model: "m", messages: [], x_routekit: { version: 1, selection: { mode: "effort", effort: "high" }, anthropic: { request: { thinking: { type: "adaptive" }, output_config: { effort: "low" } } } } },
+        { model: "m", messages: [], x_routekit: { version: 1, selection: { mode: "adaptive" }, anthropic: { request: { thinking: { type: "adaptive" }, output_config: { effort: "high" } } } } },
+        { model: "m", messages: [{ role: "assistant", content: "x", x_routekit: { version: 1, responses: { items: [null], includeEncryptedContent: true } } }] },
+        { model: "m", messages: [{ role: "assistant", content: "x", x_routekit: [] }] },
+        { model: "m", messages: [{ role: "assistant", content: "x", x_routekit: { version: 2 } }] },
+        { model: "m", messages: [{ role: "assistant", content: "x", x_routekit: { version: 1, google: { toolCallIndexes: { call_1: "two" } } } }] },
+        { model: "m", messages: [{ role: "assistant", content: "x", x_routekit: { version: 1, anthropic: { content: [null] } } }] }
+      ]) {
+        const response = await backend.chat(body);
+        assert.equal(response.status, 400, item.name);
+        const error = (await response.json()) as { error: { code?: string } };
+        assert.ok(
+          error.error.code === "invalid_reasoning_control" || error.error.code === "invalid_reasoning_metadata",
+          item.name
+        );
+      }
+      const symbolBody: Record<PropertyKey, unknown> = { model: "m", messages: [] };
+      Object.defineProperty(symbolBody, REASONING_SELECTION, {
+        value: { mode: "budget", budgetTokens: 0 },
+        enumerable: true
+      });
+      const symbolResponse = await backend.chat(symbolBody);
+      assert.equal(symbolResponse.status, 400, item.name);
+      assert.equal(calls, 0, `${item.name} transport must not run`);
+    } finally {
+      restore();
+    }
+  }
+});
+
+test("direct provider backends reject malformed Anthropic metadata before transport", async () => {
+  const malformedRequests: unknown[] = [
+    { thinking: "enabled" },
+    { thinking: { type: "enabled" } },
+    { thinking: { type: "enabled", budget_tokens: 0 } },
+    { thinking: { type: "enabled", budget_tokens: 1.5 } },
+    { thinking: { type: "adaptive", display: "full" } },
+    { thinking: { type: "disabled", budget_tokens: 1024 } },
+    { thinking: { type: "disabled", display: null } },
+    { output_config: [] },
+    { output_config: { effort: "" } }
+  ];
+  const malformedBlocks: unknown[] = [
+    null,
+    { type: "text", text: 1 },
+    { type: "thinking", thinking: 1, signature: "sig" },
+    { type: "thinking", thinking: "private", signature: "" },
+    { type: "redacted_thinking", data: "" },
+    { type: "tool_use", id: "", name: "read", input: {} },
+    { type: "tool_use", id: "tool_1", name: "", input: {} },
+    { type: "tool_use", id: "tool_1", name: "read" }
+  ];
+  let calls = 0;
+  const backend = new AnthropicBackend({
+    baseUrl: "https://anthropic.test",
+    apiKey: "x",
+    defaultModel: "m",
+    transport: async () => {
+      calls += 1;
+      return Response.json({ content: [], usage: {} });
+    }
+  });
+  for (const request of malformedRequests) {
+    const response = await backend.chat({
+      model: "m",
+      messages: [],
+      x_routekit: { version: 1, anthropic: { request } }
+    });
+    assert.equal(response.status, 400);
+    const error = (await response.json()) as { error: { code?: string; param?: string } };
+    assert.equal(error.error.code, "invalid_reasoning_metadata");
+    assert.match(error.error.param ?? "", /^x_routekit\.anthropic\.request/);
+  }
+  for (const block of malformedBlocks) {
+    const response = await backend.chat({
+      model: "m",
+      messages: [{
+        role: "assistant",
+        content: "prior",
+        x_routekit: { version: 1, anthropic: { content: [block] } }
+      }]
+    });
+    assert.equal(response.status, 400);
+    const error = (await response.json()) as { error: { code?: string; param?: string } };
+    assert.equal(error.error.code, "invalid_reasoning_metadata");
+    assert.match(error.error.param ?? "", /^messages\[0\]\.x_routekit\.anthropic\.content/);
+  }
+  const cyclic: Record<string, unknown> = {};
+  cyclic.self = cyclic;
+  const cyclicResponse = await backend.chat({
+    model: "m",
+    messages: [],
+    x_routekit: { version: 1, anthropic: { request: { output_config: { future: cyclic } } } }
+  });
+  assert.equal(cyclicResponse.status, 400);
+
+  const symbolRequest: Record<PropertyKey, unknown> = { model: "m", messages: [] };
+  Object.defineProperty(symbolRequest, ANTHROPIC_REQUEST_METADATA, {
+    value: { thinking: { type: "enabled", budget_tokens: 0 } },
+    enumerable: true
+  });
+  assert.equal((await backend.chat(symbolRequest)).status, 400);
+  const symbolMessage: Record<PropertyKey, unknown> = { role: "assistant", content: "prior" };
+  Object.defineProperty(symbolMessage, ANTHROPIC_MESSAGE_CONTENT, {
+    value: [{ type: "thinking", thinking: "private", signature: "" }],
+    enumerable: true
+  });
+  assert.equal((await backend.chat({ model: "m", messages: [symbolMessage] })).status, 400);
+  const accessorRequest: Record<PropertyKey, unknown> = { model: "m", messages: [] };
+  Object.defineProperty(accessorRequest, ANTHROPIC_REQUEST_METADATA, {
+    get: () => { throw new Error("must not execute"); },
+    enumerable: true
+  });
+  assert.equal((await backend.chat(accessorRequest)).status, 400);
+  assert.equal(calls, 0, "Anthropic transport must not run for malformed metadata");
+});
+
+test("Anthropic native and canonical reasoning controls require exact semantic agreement", async () => {
+  const conflicting = [
+    { selection: { mode: "disabled" }, request: { thinking: { type: "enabled", budget_tokens: 1024 } } },
+    { selection: { mode: "disabled" }, request: { thinking: { type: "adaptive" } } },
+    { selection: { mode: "budget", budgetTokens: 1024 }, request: { thinking: { type: "enabled", budget_tokens: 2048 } } },
+    { selection: { mode: "effort", effort: "high" }, request: { thinking: { type: "adaptive" }, output_config: { effort: "low" } } },
+    { selection: { mode: "adaptive" }, request: { thinking: { type: "adaptive" }, output_config: { effort: "high" } } },
+    { selection: { mode: "auto" }, request: { thinking: { type: "disabled" } } }
+  ];
+  const matching = [
+    { selection: { mode: "disabled" }, request: { thinking: { type: "disabled" } } },
+    { selection: { mode: "adaptive" }, request: { thinking: { type: "adaptive" } } },
+    { selection: { mode: "budget", budgetTokens: 1024 }, request: { thinking: { type: "enabled", budget_tokens: 1024 } } },
+    { selection: { mode: "effort", effort: "high" }, request: { thinking: { type: "adaptive" }, output_config: { effort: "high" } } },
+    { selection: { mode: "effort", effort: "high" }, request: { thinking: { type: "enabled", budget_tokens: 1024 }, output_config: { effort: "high" } } }
+  ];
+  let calls = 0;
+  const outbound: Record<string, unknown>[] = [];
+  const backend = new AnthropicBackend({
+    baseUrl: "https://anthropic.test",
+    apiKey: "x",
+    defaultModel: "m",
+    transport: async (_url, init) => {
+      calls += 1;
+      outbound.push(JSON.parse(String(init.body)) as Record<string, unknown>);
+      return Response.json({ id: "msg", content: [{ type: "text", text: "ok" }], usage: {} });
+    }
+  });
+  for (const item of conflicting) {
+    const response = await backend.chat({
+      model: "m", max_tokens: 4096, messages: [],
+      x_routekit: { version: 1, selection: item.selection, anthropic: { request: item.request } }
+    });
+    assert.equal(response.status, 400);
+    const error = (await response.json()) as { error: { code?: string; param?: string } };
+    assert.equal(error.error.code, "invalid_reasoning_control");
+    assert.equal(error.error.param, "x_routekit.anthropic.request");
+  }
+  assert.equal(calls, 0);
+  for (const item of matching) {
+    const response = await backend.chat({
+      model: "m", max_tokens: 4096, messages: [{ role: "user", content: "go" }],
+      x_routekit: { version: 1, selection: item.selection, anthropic: { request: item.request } }
+    });
+    assert.equal(response.status, 200);
+  }
+  assert.equal(calls, matching.length);
+  assert.deepEqual(outbound.map((body) => ({ thinking: body.thinking, output_config: body.output_config })),
+    matching.map((item) => ({
+      thinking: item.request.thinking,
+      output_config: "output_config" in item.request ? item.request.output_config : undefined
+    }))
+  );
+
+  const symbolBody: Record<PropertyKey, unknown> = { model: "m", messages: [] };
+  Object.defineProperty(symbolBody, REASONING_SELECTION, {
+    value: { mode: "budget", budgetTokens: 1024 }, enumerable: true
+  });
+  Object.defineProperty(symbolBody, ANTHROPIC_REQUEST_METADATA, {
+    value: { thinking: { type: "enabled", budget_tokens: 2048 } }, enumerable: true
+  });
+  const symbolResponse = await backend.chat(symbolBody);
+  assert.equal(symbolResponse.status, 400);
+  const symbolError = (await symbolResponse.json()) as { error: { code?: string; param?: string } };
+  assert.equal(symbolError.error.code, "invalid_reasoning_control");
+  assert.equal(symbolError.error.param, "x_routekit.anthropic.request");
+  assert.equal(calls, matching.length);
+});
+
+test("canonical reasoning selection suppresses deprecated reasoning_effort", async () => {
+  const canonical = [
+    { mode: "auto" },
+    { mode: "disabled" },
+    { mode: "adaptive" },
+    { mode: "budget", budgetTokens: 1024 },
+    { mode: "effort", effort: "high" }
+  ];
+  let calls = 0;
+  const backend = new AnthropicBackend({
+    baseUrl: "https://anthropic.test", apiKey: "x", defaultModel: "m",
+    transport: async () => { calls += 1; return Response.json({ content: [], usage: {} }); }
+  });
+  for (const selection of canonical) {
+    const response = await backend.chat({
+      model: "m", max_tokens: 4096, messages: [{ role: "user", content: "go" }],
+      reasoning_effort: "legacy-conflict",
+      x_routekit: { version: 1, selection }
+    });
+    assert.equal(response.status, 200, selection.mode);
+  }
+  assert.equal(calls, canonical.length);
+
+  const nativeConflict = await backend.chat({
+    model: "m", messages: [], reasoning_effort: "low",
+    x_routekit: { version: 1, anthropic: { request: {
+      thinking: { type: "adaptive" }, output_config: { effort: "high" }
+    } } }
+  });
+  assert.equal(nativeConflict.status, 400);
+  const error = (await nativeConflict.json()) as { error: { code?: string; param?: string } };
+  assert.equal(error.error.code, "invalid_reasoning_control");
+  assert.equal(error.error.param, "reasoning_effort");
+  assert.equal(calls, canonical.length);
+});
+
+test("Anthropic output effort requires compatible thinking", async () => {
+  let calls = 0;
+  const backend = new AnthropicBackend({
+    baseUrl: "https://anthropic.test", apiKey: "x", defaultModel: "m",
+    transport: async () => { calls += 1; return Response.json({ content: [], usage: {} }); }
+  });
+  for (const request of [
+    { output_config: { effort: "high" } },
+    { thinking: { type: "disabled" }, output_config: { effort: "high" } }
+  ]) {
+    const response = await backend.chat({ model: "m", messages: [], x_routekit: { version: 1, anthropic: { request } } });
+    assert.equal(response.status, 400);
+    const error = (await response.json()) as { error: { code?: string; param?: string } };
+    assert.equal(error.error.code, "invalid_reasoning_metadata");
+    assert.equal(error.error.param, "x_routekit.anthropic.request.output_config.effort");
+  }
+  assert.equal(calls, 0);
+});
+
+test("Anthropic metadata variants and future JSON-safe fields egress exactly", async () => {
+  const outbound: Record<string, unknown>[] = [];
+  const backend = new AnthropicBackend({
+    baseUrl: "https://anthropic.test",
+    apiKey: "x",
+    defaultModel: "m",
+    transport: async (_url, init) => {
+      outbound.push(JSON.parse(String(init.body)) as Record<string, unknown>);
+      return Response.json({ id: "msg", content: [{ type: "text", text: "ok" }], usage: {} });
+    }
+  });
+  const requests = [
+    { thinking: { type: "enabled", budget_tokens: 1024, display: "summarized", future: { nested: [true, null] } }, output_config: { effort: "high", future: 1 } },
+    { thinking: { type: "adaptive", display: "omitted" }, output_config: null },
+    { thinking: { type: "disabled" } }
+  ];
+  for (const request of requests) {
+    const response = await backend.chat({
+      model: "m",
+      max_tokens: 4096,
+      messages: request === requests[0] ? [{ role: "user", content: "go" }, {
+        role: "assistant",
+        content: "prior",
+        x_routekit: { version: 1, anthropic: { content: [{ type: "future_block", payload: { safe: true } }] } }
+      }] : [{ role: "user", content: "go" }],
+      x_routekit: { version: 1, anthropic: { request } }
+    });
+    assert.equal(response.status, 200);
+  }
+  assert.deepEqual(
+    (outbound[0]?.messages as Array<{ content: unknown[] }> | undefined)?.[1]?.content,
+    [{ type: "future_block", payload: { safe: true } }]
+  );
+  assert.deepEqual(outbound.map((body) => ({ thinking: body.thinking, output_config: body.output_config })), [
+    { thinking: requests[0]?.thinking, output_config: requests[0]?.output_config },
+    { thinking: requests[1]?.thinking, output_config: undefined },
+    { thinking: requests[2]?.thinking, output_config: undefined }
+  ]);
+});
+
+test("direct provider backends preserve valid reasoning controls", async () => {
+  let openAiBody: Record<string, unknown> | undefined;
+  const original = globalThis.fetch;
+  globalThis.fetch = async (_input, init) => {
+    openAiBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
+    return Response.json({ choices: [{ message: { content: "ok" } }] });
+  };
+  try {
+    const openai = new OpenAiBackend({ baseUrl: "https://openai.test/v1", defaultModel: "m" });
+    const response = await openai.chat({
+      model: "m",
+      messages: [{
+        role: "assistant",
+        content: "prior",
+        x_routekit: {
+          version: 1,
+          responses: {
+            items: [{ type: "reasoning", encrypted_content: "opaque" }],
+            includeEncryptedContent: true
+          },
+          google: { toolCallIndexes: { call_1: 2 } },
+          anthropic: { content: [{ type: "thinking", thinking: "private", signature: "sig" }] },
+          future: { retained: true }
+        }
+      }],
+      x_routekit: { version: 1, selection: { mode: "effort", effort: "high" } }
+    });
+    assert.equal(response.status, 200);
+    assert.equal(openAiBody?.x_routekit, undefined, "provider boundary strips RouteKit metadata");
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
 
 test("Anthropic egress preserves tools and normalizes the response", async () => {
   const original = globalThis.fetch;
@@ -460,7 +813,10 @@ test("Google GenAI egress maps content, usage, and API-key auth", async () => {
   globalThis.fetch = async (input, init) => {
     request = new Request(input, init);
     return Response.json({
-      candidates: [{ content: { parts: [{ text: "answer" }] } }],
+      candidates: [{ content: { parts: [
+        { text: "answer" },
+        { text: "must not leak", thought: "true", thoughtSignature: { bad: true } }
+      ] } }],
       usageMetadata: {
         promptTokenCount: 3,
         candidatesTokenCount: 1,
@@ -493,6 +849,161 @@ test("Google GenAI egress maps content, usage, and API-key auth", async () => {
     };
     assert.equal(body.choices[0]?.message.content, "answer");
     assert.equal(body.usage.total_tokens, 4);
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
+test("Google GenAI separates thoughts and replays signed continuation parts", async () => {
+  const original = globalThis.fetch;
+  const requests: Request[] = [];
+  globalThis.fetch = async (input, init) => {
+    requests.push(new Request(input, init));
+    return Response.json({
+      candidates: [{ content: { parts: [
+        { text: "private analysis", thought: true, thoughtSignature: "thought-sig" },
+        { text: "visible answer" },
+        {
+          functionCall: { name: "search", args: { query: "routekit" } },
+          thoughtSignature: "call-sig"
+        }
+      ] } }]
+    });
+  };
+  try {
+    const backend = new GoogleGenAiBackend({
+      baseUrl: "https://generativelanguage.test/v1beta",
+      apiKey: "google-secret",
+      defaultModel: "gemini-test"
+    });
+    const first = await backend.chat({ messages: [{ role: "user", content: "solve" }] });
+    const payload = (await first.json()) as {
+      choices: Array<{ message: Record<string, unknown> }>;
+    };
+    const assistant = payload.choices[0]?.message as {
+      content: string;
+      reasoning: string;
+      reasoning_details: Array<Record<string, unknown>>;
+      tool_calls: Array<Record<string, unknown>>;
+    };
+    assert.equal(assistant.content, "visible answer");
+    assert.equal(assistant.reasoning, "private analysis");
+    assert.deepEqual(
+      assistant.tool_calls.map((call) => (call as { index?: number }).index),
+      [0],
+      "OpenAI tool-call indexes are dense, independent of Google part position"
+    );
+    assert.deepEqual(assistant.reasoning_details, [
+      {
+        type: "google_thought",
+        index: 0,
+        thought: "private analysis",
+        thoughtSignature: "thought-sig"
+      },
+      { type: "google_thought", index: 2, thoughtSignature: "call-sig" }
+    ]);
+
+    await backend.chat({
+      messages: [
+        { role: "user", content: "solve" },
+        assistant,
+        { role: "tool", tool_call_id: (assistant.tool_calls[0] as { id: string }).id, content: "result" }
+      ]
+    });
+    const continuation = (await requests[1]?.json()) as {
+      contents: Array<{ role: string; parts: Array<Record<string, unknown>> }>;
+    };
+    const replayed = continuation.contents.find((content) => content.role === "model")?.parts ?? [];
+    assert.deepEqual(replayed, [
+      { text: "private analysis", thought: true, thoughtSignature: "thought-sig" },
+      { text: "visible answer" },
+      {
+        functionCall: { name: "search", args: { query: "routekit" } },
+        thoughtSignature: "call-sig"
+      }
+    ]);
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
+test("Google GenAI ignores malformed and unknown canonical thought metadata", async () => {
+  const original = globalThis.fetch;
+  let request: Request | undefined;
+  globalThis.fetch = async (input, init) => {
+    request = new Request(input, init);
+    return Response.json({ candidates: [{ content: { parts: [{ text: "answer" }] } }] });
+  };
+  try {
+    const backend = new GoogleGenAiBackend({
+      baseUrl: "https://generativelanguage.test/v1beta",
+      apiKey: "google-secret",
+      defaultModel: "gemini-test"
+    });
+    const response = await backend.chat({ messages: [{
+      role: "assistant",
+      content: "safe",
+      reasoning_details: [
+        { type: "google_thought", index: 0, thought: "secret", thoughtSignature: 42 },
+        { type: "future_thought", index: 1, thoughtSignature: "unknown" }
+      ]
+    }] });
+    const outbound = (await request?.json()) as {
+      contents: Array<{ parts: Array<Record<string, unknown>> }>;
+    };
+    assert.deepEqual(outbound.contents[0]?.parts, [{ text: "safe" }]);
+    const payload = (await response.json()) as {
+      choices: Array<{ message: Record<string, unknown> }>;
+    };
+    assert.equal(payload.choices[0]?.message.content, "answer");
+    assert.equal(payload.choices[0]?.message.reasoning, undefined);
+    assert.equal(payload.choices[0]?.message.reasoning_details, undefined);
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
+
+
+test("Codex Responses egress replays encrypted reasoning and include around tool continuation", async () => {
+  const original = globalThis.fetch;
+  let request: Request | undefined;
+  globalThis.fetch = async (input, init) => {
+    request = new Request(input, init);
+    return Response.json({
+      output: [{ type: "message", content: [{ type: "output_text", text: "done" }] }]
+    });
+  };
+  try {
+    const backend = new CodexResponsesBackend({
+      baseUrl: "https://chatgpt.test/backend-api/codex",
+      apiKey: "oauth",
+      defaultModel: "codex-test"
+    });
+    const responseChat = responsesToChat(
+      {
+        input: [
+          { type: "reasoning", id: "rs_1", summary: [], content: null, encrypted_content: "opaque" },
+          { type: "message", role: "assistant", content: "checking" },
+          { type: "function_call", call_id: "call_1", name: "read", arguments: "{}" },
+          { type: "function_call_output", call_id: "call_1", output: "source" }
+        ],
+        include: ["reasoning.encrypted_content"]
+      },
+      "codex-test"
+    );
+    await backend.chat(responseChat);
+    const outbound = (await request?.json()) as {
+      input: Array<Record<string, unknown>>;
+      include?: string[];
+    };
+    assert.deepEqual(outbound.include, ["reasoning.encrypted_content"]);
+    assert.deepEqual(outbound.input.map((item) => item.type ?? item.role), [
+      "reasoning", "assistant", "function_call", "function_call_output"
+    ]);
+    assert.deepEqual(outbound.input[0], {
+      type: "reasoning", id: "rs_1", summary: [], content: null, encrypted_content: "opaque"
+    });
   } finally {
     globalThis.fetch = original;
   }
@@ -1087,7 +1598,14 @@ test("Google streaming egress preserves function history, tools, and usage", asy
           candidates: [
             {
               content: {
-                parts: [{ functionCall: { name: "search", args: { query: "routekit" } } }]
+                parts: [
+                  { text: "stream thought", thought: true, thoughtSignature: "stream-thought-sig" },
+                  { text: "stream answer" },
+                  {
+                    functionCall: { name: "search", args: { query: "routekit" } },
+                    thoughtSignature: "stream-call-sig"
+                  }
+                ]
               },
               finishReason: "STOP"
             }
@@ -1137,9 +1655,151 @@ test("Google streaming egress preserves function history, tools, and usage", asy
     assert.ok(outbound.contents.some((content) => content.parts.some((part) => "functionCall" in part)));
     assert.ok(outbound.contents.some((content) => content.parts.some((part) => "functionResponse" in part)));
     const text = await response.text();
+    assert.match(text, /"reasoning":"stream thought"/);
+    assert.match(text, /"content":"stream answer"/);
+    assert.match(text, /"type":"google_thought"/);
+    assert.match(text, /"thoughtSignature":"stream-thought-sig"/);
+    assert.match(text, /"thoughtSignature":"stream-call-sig"/);
     assert.match(text, /"name":"search"/);
     assert.match(text, /"finish_reason":"stop"/);
     assert.match(text, /"total_tokens":6/);
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
+test("Google streaming assigns stable indexes across restarting local part arrays", async () => {
+  const original = globalThis.fetch;
+  const requests: Request[] = [];
+  let invocation = 0;
+  globalThis.fetch = async (input, init) => {
+    requests.push(new Request(input, init));
+    invocation += 1;
+    if (invocation === 1) {
+      return sse([
+        { data: { candidates: [{ content: { parts: [
+          { text: "think ", thought: true }
+        ] } }] } },
+        { data: { candidates: [{ content: { parts: [
+          { text: "carefully", thought: true, thoughtSignature: "thought-sig" }
+        ] } }] } },
+        { data: { candidates: [{ content: { parts: [
+          { text: "visible answer" }
+        ] } }] } },
+        { data: { candidates: [{ content: { parts: [
+          {
+            functionCall: { name: "web_search", args: { query: "routekit" } },
+            thoughtSignature: "call-sig"
+          }
+        ] } }] } },
+        { data: { candidates: [{ content: { parts: [
+          { text: "compare alternatives", thought: true, thoughtSignature: "second-thought-sig" }
+        ] } }] } },
+        { data: { candidates: [{ content: { parts: [
+          {
+            functionCall: { name: "web_search", args: { query: "routekit" } },
+            thoughtSignature: "second-call-sig"
+          }
+        ] }, finishReason: "STOP" }] } }
+      ]);
+    }
+    return sse([{ data: {
+      candidates: [{ content: { parts: [{ text: "done" }] }, finishReason: "STOP" }]
+    } }]);
+  };
+  try {
+    const backend = new GoogleGenAiBackend({
+      baseUrl: "https://generativelanguage.test/v1beta",
+      apiKey: "google-secret",
+      defaultModel: "gemini-test"
+    });
+    const first = await backend.chat({
+      stream: true,
+      messages: [{ role: "user", content: "solve" }],
+      tools: [{
+        type: "function",
+        function: { name: "web_search", parameters: { type: "object" } }
+      }]
+    });
+    const assembler = new ChatStreamAssembler();
+    for (const event of new SseDecoder().feed(new TextEncoder().encode(await first.text()))) {
+      assembler.push(event);
+    }
+    const turn = assembler.result();
+    assert.equal(turn.reasoning, "think carefullycompare alternatives");
+    assert.deepEqual(turn.reasoningDetails, [
+      {
+        type: "google_thought",
+        index: 0,
+        thought: "think carefully",
+        thoughtSignature: "thought-sig"
+      },
+      { type: "google_thought", index: 2, thoughtSignature: "call-sig" },
+      {
+        type: "google_thought",
+        index: 3,
+        thought: "compare alternatives",
+        thoughtSignature: "second-thought-sig"
+      },
+      { type: "google_thought", index: 4, thoughtSignature: "second-call-sig" }
+    ]);
+    assert.equal(turn.toolCalls.length, 2);
+    assert.deepEqual(turn.toolCalls.map((call) => call.index), [0, 1]);
+    assert.deepEqual(turn.toolCalls.map((call) => call.name), ["web_search", "web_search"]);
+    assert.deepEqual(turn.toolCalls.map((call) => call.providerIndex), [2, 4]);
+
+    await backend.chat({
+      stream: true,
+      messages: [
+        { role: "user", content: "solve" },
+        (() => {
+          const assistant: Record<PropertyKey, unknown> = {
+            role: "assistant",
+            content: turn.content,
+            reasoning_details: turn.reasoningDetails,
+            tool_calls: turn.toolCalls.map((call) => ({
+              id: call.id,
+              type: "function",
+              function: { name: call.name, arguments: call.arguments }
+            }))
+          };
+          attachGoogleToolCallIndexes(
+            assistant,
+            Object.fromEntries(
+              turn.toolCalls.flatMap((call) =>
+                call.id !== undefined && call.providerIndex !== undefined
+                  ? [[call.id, call.providerIndex]]
+                  : []
+              )
+            )
+          );
+          return assistant;
+        })(),
+        { role: "tool", tool_call_id: turn.toolCalls[0]?.id, content: "first result" },
+        { role: "tool", tool_call_id: turn.toolCalls[1]?.id, content: "second result" }
+      ]
+    });
+    const continuation = (await requests[1]?.json()) as {
+      contents: Array<{ role: string; parts: Array<Record<string, unknown>> }>;
+    };
+    const replayed = continuation.contents.find((entry) => entry.role === "model")?.parts ?? [];
+    assert.deepEqual(replayed, [
+      { text: "think carefully", thought: true, thoughtSignature: "thought-sig" },
+      { text: "visible answer" },
+      {
+        functionCall: { name: "web_search", args: { query: "routekit" } },
+        thoughtSignature: "call-sig"
+      },
+      {
+        text: "compare alternatives",
+        thought: true,
+        thoughtSignature: "second-thought-sig"
+      },
+      {
+        functionCall: { name: "web_search", args: { query: "routekit" } },
+        thoughtSignature: "second-call-sig"
+      }
+    ]);
   } finally {
     globalThis.fetch = original;
   }
@@ -1253,6 +1913,56 @@ test("provider streaming surfaces malformed and truncated SSE", async () => {
       });
       await assert.rejects(response.text(), SseParseError);
     }
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
+
+test("ordinary OpenAI Chat egress strips RouteKit provider-only envelopes", async () => {
+  const original = globalThis.fetch;
+  let request: Request | undefined;
+  globalThis.fetch = async (input, init) => {
+    request = new Request(input, init);
+    return Response.json({ choices: [{ message: { content: "ok" } }] });
+  };
+  try {
+    const backend = new OpenAiBackend({
+      baseUrl: "https://api.openai.test/v1",
+      apiKey: "secret",
+      defaultModel: "gpt-test"
+    });
+    await backend.chat({
+      model: "gpt-test",
+      messages: [
+        {
+          role: "assistant",
+          content: null,
+          x_routekit: {
+            version: 1,
+            anthropic: {
+              content: [{ type: "thinking", thinking: "private", signature: "sig" }]
+            }
+          }
+        }
+      ],
+      x_routekit: {
+        version: 1,
+        selection: { mode: "effort", effort: "high" },
+        anthropic: {
+          request: {
+            thinking: { type: "adaptive" },
+            output_config: { effort: "high" }
+          }
+        }
+      }
+    });
+    const outbound = (await request?.json()) as {
+      x_routekit?: unknown;
+      messages?: Array<{ x_routekit?: unknown }>;
+    };
+    assert.equal(outbound.x_routekit, undefined);
+    assert.equal(outbound.messages?.[0]?.x_routekit, undefined);
   } finally {
     globalThis.fetch = original;
   }

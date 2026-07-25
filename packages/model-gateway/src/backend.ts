@@ -10,7 +10,12 @@ import type {
   ModelReasoningCapabilities,
   RequestAttribution
 } from "@velum-labs/routekit-contracts";
-import { reasoningSelectionOf } from "./adapters/openai-chat-wire.js";
+import {
+  REASONING_SELECTION,
+  reasoningSelectionOf,
+  routeKitRequestValidationErrorOf,
+  withoutRouteKitExtensions
+} from "./adapters/openai-chat-wire.js";
 
 export type BackendModelRoute = {
   /** Stable RouteKit catalog id (`provider/model`). */
@@ -62,6 +67,12 @@ export type Backend = {
   capabilities?(model: string): Readonly<Record<string, string>>;
   /** Structured reasoning controls advertised for a model id. */
   reasoningCapabilities?(model: string): ModelReasoningCapabilities | undefined;
+  /**
+   * Reasoning transport accepted by this destination. `routekit-envelope`
+   * means a compound backend can carry opaque provider state losslessly until
+   * the eventual provider boundary without interpreting it as prompt text.
+   */
+  reasoningWireShape?(model: string): string | undefined;
   /** POST <base>/chat/completions — supports streaming (SSE) upstream. */
   chat(body: unknown, signal?: AbortSignal, options?: BackendRequestOptions): Promise<Response>;
   /** GET <base>/models. */
@@ -138,6 +149,13 @@ export function joinPath(baseUrl: string, path: string): string {
   return `${base}${suffix}`;
 }
 
+function invalidReasoningControlResponse(message: string, metadata = false, path?: string): Response {
+  return Response.json(
+    { error: { type: "invalid_request_error", code: metadata ? "invalid_reasoning_metadata" : "invalid_reasoning_control", ...(path !== undefined ? { param: path } : {}), message } },
+    { status: 400 }
+  );
+}
+
 /** An OpenAI Chat Completions backend reached over HTTP. */
 export class OpenAiBackend implements Backend {
   readonly #baseUrl: string;
@@ -172,6 +190,16 @@ export class OpenAiBackend implements Backend {
       this.#forceModel !== undefined && typeof body === "object" && body !== null && !Array.isArray(body)
         ? { ...(body as Record<string, unknown>), model: this.#forceModel }
         : body;
+    const validationError = routeKitRequestValidationErrorOf(routed);
+    if (validationError !== undefined) {
+      return Promise.resolve(
+        invalidReasoningControlResponse(
+          validationError.message,
+          validationError.code === "invalid_reasoning_metadata",
+          validationError.path
+        )
+      );
+    }
     const selection = reasoningSelectionOf(routed);
     if (
       (selection.mode === "budget" || selection.mode === "adaptive") &&
@@ -189,17 +217,33 @@ export class OpenAiBackend implements Backend {
         )
       );
     }
+    const canonicalSelection =
+      routed !== null && typeof routed === "object" && !Array.isArray(routed) &&
+      ((routed as Record<PropertyKey, unknown>)[REASONING_SELECTION] !== undefined ||
+        (routed as { x_routekit?: { selection?: unknown } }).x_routekit?.selection !== undefined);
+    const selectedPayload = canonicalSelection && routed !== null &&
+      typeof routed === "object" && !Array.isArray(routed)
+      ? {
+          ...(routed as Record<string, unknown>),
+          ...(selection.mode === "effort" ? { reasoning_effort: selection.effort } : {})
+        }
+      : routed;
+    if (canonicalSelection && selection.mode !== "effort" && selectedPayload !== null &&
+      typeof selectedPayload === "object" && !Array.isArray(selectedPayload)) {
+      delete (selectedPayload as Record<string, unknown>).reasoning_effort;
+    }
     const payload =
       options.reasoningCapabilities?.wireShape === "openrouter" &&
-      routed !== null &&
-      typeof routed === "object" &&
-      !Array.isArray(routed)
-        ? this.#openRouterReasoning(routed as Record<string, unknown>, selection)
-        : routed;
+      selectedPayload !== null &&
+      typeof selectedPayload === "object" &&
+      !Array.isArray(selectedPayload)
+        ? this.#openRouterReasoning(selectedPayload as Record<string, unknown>, selection)
+        : selectedPayload;
+    const providerPayload = withoutRouteKitExtensions(payload);
     return fetch(joinPath(this.#baseUrl, "/chat/completions"), {
       method: "POST",
       headers: this.#headers(options),
-      body: JSON.stringify(payload),
+      body: JSON.stringify(providerPayload),
       ...(signal ? { signal } : {})
     });
   }
@@ -286,6 +330,14 @@ export class ModelRoutedBackend implements Backend {
   resolveModel(requested: string | undefined): string | undefined {
     if (requested !== undefined && this.#routedIds.has(requested)) return requested;
     return this.#primary.resolveModel?.(requested) ?? this.#primary.defaultModel;
+  }
+
+  reasoningWireShape(model: string): string | undefined {
+    const backend = this.#backendFor(model);
+    const delegatedModel = backend === this.#routed
+      ? (backend.resolveModel?.(model) ?? model)
+      : (backend.resolveModel?.(model) ?? backend.defaultModel ?? model);
+    return backend.reasoningWireShape?.(delegatedModel);
   }
 
   chat(body: unknown, signal?: AbortSignal, options: BackendRequestOptions = {}): Promise<Response> {

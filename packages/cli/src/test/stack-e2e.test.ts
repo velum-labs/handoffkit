@@ -17,6 +17,8 @@
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 
+import { attachReasoningSelection } from "@velum-labs/routekit-gateway";
+import type { ReasoningSelection } from "@velum-labs/routekit-contracts";
 import {
   DOOR_PROFILES,
   callDoor,
@@ -315,4 +317,79 @@ test("panel degradation: one member's provider 401 still yields a fused answer",
   assert.match(body.choices[0]?.message.content ?? "", /fused from the survivors/);
   const failed = await stack.sim.calls({ model: "gpt-panel-a" });
   assert.deepEqual(failed.map((entry) => entry.status), [401], "permanent auth failure is not retried");
+});
+
+
+test("production panel fanout preserves every canonical reasoning mode", { skip: SKIP }, async () => {
+  const reasoningStack = await startSimFusionStack({
+    members: [
+      {
+        id: "reasoner",
+        model: "claude-reasoner",
+        provider: "anthropic",
+        reasoning: {
+          status: "supported",
+          efforts: [{ id: "high" }],
+          budget: { minTokens: 1, maxTokens: 100_000 },
+          adaptive: true,
+          wireShape: "anthropic",
+          provenance: "provider"
+        }
+      },
+      {
+        id: "judge",
+        model: "reasoning-judge",
+        provider: "anthropic",
+        reasoning: {
+          status: "supported",
+          efforts: [{ id: "high" }],
+          budget: { minTokens: 1, maxTokens: 100_000 },
+          adaptive: true,
+          wireShape: "anthropic",
+          provenance: "provider"
+        }
+      }
+    ],
+    judgeId: "judge",
+    k: 1
+  });
+  try {
+    const cases: Array<{
+      selection?: ReasoningSelection;
+      legacyEffort: string;
+      expectedThinking: unknown;
+      expectedEffort?: string;
+    }> = [
+      { selection: { mode: "auto" }, legacyEffort: "high", expectedThinking: undefined },
+      { selection: { mode: "disabled" }, legacyEffort: "high", expectedThinking: { type: "disabled" } },
+      { selection: { mode: "adaptive" }, legacyEffort: "high", expectedThinking: { type: "adaptive" } },
+      { selection: { mode: "effort", effort: "high" }, legacyEffort: "legacy-conflict", expectedThinking: { type: "adaptive" }, expectedEffort: "high" },
+      { selection: { mode: "budget", budgetTokens: 2048 }, legacyEffort: "high", expectedThinking: { type: "enabled", budget_tokens: 2048 } },
+      { legacyEffort: "high", expectedThinking: { type: "adaptive" }, expectedEffort: "high" }
+    ];
+    for (const [index, item] of cases.entries()) {
+      await reasoningStack.sim.reset();
+      await reasoningStack.sim.queue("claude-reasoner", [`candidate-${index}`]);
+      await reasoningStack.sim.queue("reasoning-judge", [
+        { reply: '{"consensus":["ok"],"contradictions":[],"unique_insights":[],"coverage_gaps":[],"likely_errors":[],"recommended_final_structure":[]}' },
+        { reply: `answer-${index}` }
+      ]);
+      const body: Record<string, unknown> = {
+        model: "fusion-panel",
+        messages: [{ role: "user", content: `reasoning mode ${index}` }],
+        reasoning_effort: item.legacyEffort
+      };
+      if (item.selection !== undefined) attachReasoningSelection(body, item.selection);
+      const response = await reasoningStack.door.chat(body);
+      assert.equal(response.status, 200, await response.text());
+      const calls = await reasoningStack.sim.calls({ model: "claude-reasoner" });
+      assert.equal(calls.length, 1, await reasoningStack.sim.describeJournal());
+      const request = calls[0]?.request as Record<string, unknown>;
+      assert.deepEqual(request.thinking, item.expectedThinking);
+      const outputConfig = request.output_config as Record<string, unknown> | undefined;
+      assert.equal(outputConfig?.effort, item.expectedEffort);
+    }
+  } finally {
+    await reasoningStack.close();
+  }
 });

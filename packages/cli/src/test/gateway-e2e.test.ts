@@ -11,6 +11,7 @@ import {
   stackToolingSkip
 } from "@fusionkit/testkit";
 
+import { passthroughModelsFor } from "../gateway.js";
 import { startSimFusionStack } from "./sim-stack.js";
 import type { SimFusionStack } from "./sim-stack.js";
 
@@ -80,4 +81,63 @@ test("FusionBackend discovery exposes fused and namespaced RouteKit model ids", 
     ),
     "passthrough models must stay namespaced"
   );
+});
+
+test("CLI passthrough construction uses inventory provider identity, never model naming", () => {
+  const [codex, openai, unknown] = passthroughModelsFor(
+    [
+      { id: "opaque-a", model: "opaque-a", provider: "codex" },
+      {
+        id: "codex-looking-openai-id",
+        model: "codex-looking-openai-id",
+        provider: "openai",
+        reasoning: { status: "supported", provenance: "provider", wireShape: "openai-chat" }
+      },
+      { id: "codex-looking-unknown-id", model: "codex-looking-unknown-id" }
+    ],
+    "http://routekit.test"
+  );
+  assert.equal(codex?.reasoningWireShape, "openai-responses");
+  assert.equal(openai?.reasoningWireShape, "openai-chat");
+  assert.equal(unknown?.reasoningWireShape, undefined);
+});
+
+test("Responses encrypted reasoning reaches a codex passthrough downstream", {
+  skip: SKIP
+}, async () => {
+  const codexStack = await startSimFusionStack({
+    members: [
+      { id: "member", model: "panel-member", provider: "openai" },
+      { id: "codex", model: "opaque-codex-model", provider: "codex" },
+      { id: "judge", model: "panel-judge", provider: "openai" }
+    ],
+    judgeId: "judge"
+  });
+  try {
+    await codexStack.sim.queue("opaque-codex-model", ["codex passthrough answer"]);
+    const response = await codexStack.door.responses({
+      model: "codex/opaque-codex-model",
+      input: [
+        { role: "user", content: "continue" },
+        {
+          type: "reasoning",
+          id: "rs_passthrough",
+          summary: [],
+          encrypted_content: "opaque-passthrough"
+        },
+        { type: "message", role: "assistant", content: "continuing" }
+      ],
+      include: ["reasoning.encrypted_content"]
+    });
+    assert.equal(response.status, 200, await response.text());
+    const calls = await codexStack.sim.calls({
+      model: "opaque-codex-model",
+      dialect: "openai-responses"
+    });
+    assert.equal(calls.length, 1, await codexStack.sim.describeJournal());
+    assert.equal(JSON.stringify(calls[0]?.request).includes("opaque-passthrough"), true);
+    assert.deepEqual(calls[0]?.request.include, ["reasoning.encrypted_content"]);
+  } finally {
+    await codexStack.close();
+  }
 });

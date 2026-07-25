@@ -5,7 +5,14 @@ import { test } from "node:test";
 
 import { FusionBackend } from "../fusion-backend.js";
 import type { WireTrajectory } from "../fusion-backend.js";
-import { startGateway } from "@velum-labs/routekit-gateway";
+import {
+  AnthropicBackend,
+  REASONING_SELECTION,
+  anthropicToChat,
+  reasoningSelectionOf,
+  startGateway
+} from "@velum-labs/routekit-gateway";
+import type { PanelRunInput } from "../fusion-backend.js";
 
 function candidate(modelId: string, status = "succeeded"): WireTrajectory {
   return { trajectory_id: `t_${modelId}`, model_id: modelId, status, final_output: "ok" };
@@ -99,6 +106,44 @@ test("resolveModel keeps a RouteKit model id but folds fusion/unknown ids to the
   assert.equal(backend.resolveModel("fusion-panel"), "fusion-panel");
   assert.equal(backend.resolveModel("claude-fusion-panel"), "fusion-panel", "the claude fusion alias fuses");
   assert.equal(backend.resolveModel(undefined), "fusion-panel");
+});
+
+test("reasoningWireShape reports fused and inventory-authored passthrough wire shapes", () => {
+  const backend = new FusionBackend({
+    stepUrl: UNREACHABLE_STEP,
+    runPanels: async () => [candidate("a")],
+    defaultModel: "fusion-panel",
+    fusedModels: [{
+      modelId: "fusion-mini",
+      name: "mini",
+      memberRoutekitModelIds: ["openai/member"]
+    }],
+    passthrough: [
+      {
+        routekitModelId: "arbitrary-coding-model",
+        routekitUrl: "http://127.0.0.1:1",
+        reasoningWireShape: "openai-responses"
+      },
+      {
+        routekitModelId: "openai/member",
+        routekitUrl: "http://127.0.0.1:1",
+        reasoningWireShape: "openai-chat"
+      },
+      { routekitModelId: "looks-like-codex", routekitUrl: "http://127.0.0.1:1" }
+    ]
+  });
+  assert.equal(backend.reasoningWireShape("fusion-mini"), "routekit-envelope");
+  assert.equal(backend.reasoningWireShape("claude-fusion-mini"), "routekit-envelope");
+  assert.equal(
+    backend.reasoningWireShape("fusion-panel"),
+    "routekit-envelope",
+    "the implicit default dispatches through #defaultRoute even when its id is not explicit"
+  );
+  assert.equal(backend.reasoningWireShape("claude-fusion-panel"), "routekit-envelope");
+  assert.equal(backend.reasoningWireShape("arbitrary-coding-model"), "openai-responses");
+  assert.equal(backend.reasoningWireShape("openai/member"), "openai-chat");
+  assert.equal(backend.reasoningWireShape("looks-like-codex"), undefined);
+  assert.equal(backend.reasoningWireShape("unknown"), undefined);
 });
 
 test("servesModel distinguishes gateway-served ids from unknown ids (no default fold)", () => {
@@ -473,5 +518,342 @@ test("a harness-injected subagent notification continues the turn instead of fan
     assert.deepEqual(tasksSeen, ["spawn a sub-agent and ask it to say OK"]);
   } finally {
     await step.close();
+  }
+});
+
+
+test("Fusion ingress rejects malformed reasoning controls before any work", async () => {
+  const invalid = [
+    [{ mode: "future" }, /mode is unsupported/],
+    [{ mode: "effort" }, /effort must be a non-empty string/],
+    [{ mode: "effort", effort: "" }, /effort must be a non-empty string/],
+    [{ mode: "budget", budgetTokens: 0 }, /budgetTokens must be a positive integer/],
+    [{ mode: "budget", budgetTokens: 1.5 }, /budgetTokens must be a positive integer/]
+  ] as const;
+  let panelCalls = 0;
+  let stepCalls = 0;
+  const backend = new FusionBackend({
+    stepUrl: UNREACHABLE_STEP,
+    defaultModel: "fusion-panel",
+    runPanels: async () => { panelCalls += 1; return [candidate("a")]; },
+    runFuseStep: async () => {
+      stepCalls += 1;
+      return Response.json({ choices: [{ message: { role: "assistant", content: "fused" } }] });
+    }
+  });
+  for (const [selection, expected] of invalid) {
+    const direct = await backend.chat({
+      model: "fusion-panel",
+      messages: [{ role: "user", content: "solve" }],
+      x_routekit: { version: 1, selection }
+    });
+    assert.equal(direct.status, 400);
+    const error = (await direct.json()) as { error: { code: string; type: string; message: string } };
+    assert.equal(error.error.code, "invalid_reasoning_control");
+    assert.equal(error.error.type, "invalid_request_error");
+    assert.match(error.error.message, expected);
+  }
+  const symbolBody: Record<PropertyKey, unknown> = {
+    model: "fusion-panel",
+    messages: [{ role: "user", content: "solve" }]
+  };
+  Object.defineProperty(symbolBody, REASONING_SELECTION, {
+    value: { mode: "budget", budgetTokens: -1 },
+    enumerable: true
+  });
+  const symbolResponse = await backend.chat(symbolBody);
+  assert.equal(symbolResponse.status, 400);
+  const metadataResponse = await backend.chat({
+    model: "fusion-panel",
+    messages: [{ role: "user", content: "solve" }],
+    x_routekit: {
+      version: 1,
+      responses: { items: [null], includeEncryptedContent: true }
+    }
+  });
+  assert.equal(metadataResponse.status, 400);
+  assert.equal(
+    ((await metadataResponse.json()) as { error: { code: string } }).error.code,
+    "invalid_reasoning_metadata"
+  );
+  const nestedMetadataResponse = await backend.chat({
+    model: "fusion-panel",
+    messages: [{
+      role: "assistant",
+      content: "prior",
+      x_routekit: { version: 1, google: { toolCallIndexes: { call_1: -1 } } }
+    }]
+  });
+  assert.equal(nestedMetadataResponse.status, 400);
+  const nestedError = (await nestedMetadataResponse.json()) as { error: { code: string; param: string } };
+  assert.equal(nestedError.error.code, "invalid_reasoning_metadata");
+  assert.equal(nestedError.error.param, "messages[0].x_routekit.google.toolCallIndexes");
+  assert.equal(panelCalls, 0);
+  assert.equal(stepCalls, 0);
+
+  for (const selection of [
+    { mode: "auto" },
+    { mode: "disabled" },
+    { mode: "adaptive" },
+    { mode: "effort", effort: "high" },
+    { mode: "budget", budgetTokens: 2048 }
+  ] as const) {
+    const response = await backend.chat({
+      model: "fusion-panel",
+      messages: [{ role: "user", content: "solve" }],
+      x_routekit: { version: 1, selection }
+    });
+    assert.equal(response.status, 200);
+  }
+  assert.equal(panelCalls, 1, "same-turn valid retries reuse the cached panel");
+  assert.equal(stepCalls, 5);
+
+  const gateway = await startGateway({ backend, host: "127.0.0.1", port: 0 });
+  try {
+    const external = await fetch(`${gateway.url()}/v1/chat/completions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        model: "fusion-panel",
+        messages: [{ role: "user", content: "solve" }],
+        x_routekit: { version: 1, selection: { mode: "effort" } }
+      })
+    });
+    assert.equal(external.status, 400);
+    const error = (await external.json()) as { error: { code: string } };
+    assert.equal(error.error.code, "invalid_reasoning_control");
+    assert.equal(panelCalls, 1);
+    assert.equal(stepCalls, 5);
+  } finally {
+    await gateway.close();
+  }
+});
+
+test("fused steps preserve every Anthropic reasoning mode in the serializable envelope", async () => {
+  const cases = [
+    {
+      thinking: { type: "enabled" as const, budget_tokens: 2048 },
+      expected: { mode: "budget", budgetTokens: 2048 }
+    },
+    {
+      thinking: { type: "adaptive" as const, display: "omitted" as const },
+      expected: { mode: "adaptive" }
+    },
+    {
+      thinking: { type: "disabled" as const },
+      expected: { mode: "disabled" }
+    }
+  ];
+  for (const item of cases) {
+    let panelInput: PanelRunInput | undefined;
+    let stepBody: Record<string, unknown> | undefined;
+    const backend = new FusionBackend({
+      stepUrl: UNREACHABLE_STEP,
+      defaultModel: "fusion-panel",
+      runPanels: async (input) => {
+        panelInput = input;
+        return [candidate("a")];
+      },
+      runFuseStep: async (request) => {
+        stepBody = JSON.parse(request.body) as Record<string, unknown>;
+        return Response.json({ choices: [{ message: { role: "assistant", content: "fused" } }] });
+      }
+    });
+    const chat = anthropicToChat(
+      {
+        model: "claude-client",
+        max_tokens: 4096,
+        thinking: item.thinking,
+        messages: [{ role: "user", content: "solve" }]
+      },
+      "fusion-panel"
+    );
+    const response = await backend.chat(chat);
+    assert.equal(response.status, 200);
+    assert.deepEqual(panelInput?.reasoningSelection, item.expected);
+    assert.deepEqual(reasoningSelectionOf(stepBody), item.expected);
+    assert.deepEqual(
+      (stepBody?.x_routekit as { anthropic?: { request?: { thinking?: unknown } } })
+        .anthropic?.request?.thinking,
+      item.thinking
+    );
+  }
+});
+
+test("fused Responses emits new synthesizer encrypted reasoning buffered and streamed", async () => {
+  for (const streaming of [false, true]) {
+    const items = streaming
+      ? [
+          { type: "reasoning", id: "rs_synth_stream_a", encrypted_content: "synth-stream-cipher-a" },
+          { type: "reasoning", id: "rs_synth_stream_b", encrypted_content: "synth-stream-cipher-b" }
+        ]
+      : [{ type: "reasoning", id: "rs_synth_buffered", encrypted_content: "synth-buffered-cipher" }];
+    const envelope = {
+      version: 1 as const,
+      responses: { items, includeEncryptedContent: true }
+    };
+    let stepBody: Record<string, unknown> | undefined;
+    const backend = new FusionBackend({
+      stepUrl: UNREACHABLE_STEP,
+      defaultModel: "fusion-panel",
+      runPanels: async () => [candidate("a")],
+      runFuseStep: async (request) => {
+        stepBody = JSON.parse(request.body) as Record<string, unknown>;
+        if (!request.streaming) {
+          return Response.json({
+            choices: [{
+              message: { role: "assistant", content: "fused answer", x_routekit: envelope },
+              finish_reason: "stop"
+            }]
+          });
+        }
+        const encoder = new TextEncoder();
+        return new Response(new ReadableStream<Uint8Array>({
+          start(controller) {
+            for (const data of [
+              { choices: [{ index: 0, delta: { role: "assistant" }, finish_reason: null }] },
+              ...(streaming
+                ? items.map((item) => ({
+                    choices: [{
+                      index: 0,
+                      delta: {
+                        x_routekit: {
+                          version: 1,
+                          responses: { items: [item], includeEncryptedContent: true }
+                        }
+                      },
+                      finish_reason: null
+                    }]
+                  }))
+                : [{ choices: [{ index: 0, delta: { x_routekit: envelope }, finish_reason: null }] }]),
+              { choices: [{ index: 0, delta: { content: "fused answer" }, finish_reason: null }] },
+              { choices: [{ index: 0, delta: {}, finish_reason: "stop" }] }
+            ]) controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
+            controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+            controller.close();
+          }
+        }), { headers: { "content-type": "text/event-stream" } });
+      }
+    });
+    const gateway = await startGateway({ backend, host: "127.0.0.1", port: 0 });
+    try {
+      const response = await fetch(`${gateway.url()}/v1/responses`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          model: "fusion-panel",
+          input: "solve",
+          include: ["reasoning.encrypted_content"],
+          stream: streaming
+        })
+      });
+      const text = await response.text();
+      assert.equal(response.status, 200, text);
+      assert.deepEqual(
+        (stepBody?.x_routekit as { responses?: { includeEncryptedContent?: boolean } })
+          ?.responses?.includeEncryptedContent,
+        true
+      );
+      const ciphers = streaming
+        ? ["synth-stream-cipher-a", "synth-stream-cipher-b"]
+        : ["synth-buffered-cipher"];
+      for (const cipher of ciphers) assert.equal(text.includes(cipher), true);
+      if (streaming) {
+        assert.equal(text.indexOf(ciphers[0] ?? "") < text.indexOf(ciphers[1] ?? ""), true);
+      }
+      assert.equal(text.indexOf('"type":"reasoning"') < text.indexOf("fused answer"), true);
+      const outputText = streaming
+        ? [...text.matchAll(/"delta":"([^"]*)"/g)].map((match) => match[1]).join("")
+        : String(((JSON.parse(text) as { output: Array<{ type: string; content?: Array<{ text?: string }> }> })
+            .output.find((item) => item.type === "message")?.content?.[0]?.text));
+      for (const cipher of ciphers) assert.equal(outputText.includes(cipher), false);
+    } finally {
+      await gateway.close();
+    }
+  }
+});
+
+
+test("signed and redacted Anthropic history survives fused and passthrough JSON hops", async () => {
+  const source = anthropicToChat(
+    {
+      model: "claude-client",
+      max_tokens: 4096,
+      thinking: { type: "adaptive", display: "omitted" },
+      output_config: { effort: "xhigh", vendor_hint: "exact" },
+      messages: [
+        { role: "user", content: "continue" },
+        {
+          role: "assistant",
+          content: [
+            { type: "thinking", thinking: "private", signature: "sig-valid" },
+            { type: "redacted_thinking", data: "opaque-redacted" },
+            { type: "tool_use", id: "tool_1", name: "read", input: { path: "a.ts" } }
+          ]
+        },
+        { role: "user", content: [{ type: "tool_result", tool_use_id: "tool_1", content: "source" }] }
+      ]
+    },
+    "fusion-panel"
+  );
+
+  let stepBody: Record<string, unknown> | undefined;
+  const fused = new FusionBackend({
+    stepUrl: UNREACHABLE_STEP,
+    defaultModel: "fusion-panel",
+    runPanels: async () => [candidate("a")],
+    runFuseStep: async (request) => {
+      stepBody = JSON.parse(request.body) as Record<string, unknown>;
+      return Response.json({ choices: [{ message: { role: "assistant", content: "fused" } }] });
+    }
+  });
+  assert.equal((await fused.chat(source)).status, 200);
+
+  let providerRequest: Request | undefined;
+  const anthropic = new AnthropicBackend({
+    baseUrl: "https://api.anthropic.test/v1",
+    apiKey: "secret",
+    defaultModel: "claude-native",
+    transport: async (input, init) => {
+      providerRequest = new Request(input, init);
+      return Response.json({ content: [{ type: "text", text: "done" }], stop_reason: "end_turn" });
+    }
+  });
+  assert.equal((await anthropic.chat(stepBody)).status, 200);
+  const outbound = (await providerRequest?.json()) as {
+    thinking?: unknown;
+    output_config?: unknown;
+    messages: Array<{ content: Array<Record<string, unknown>> }>;
+  };
+  assert.deepEqual(outbound.thinking, { type: "adaptive", display: "omitted" });
+  assert.deepEqual(outbound.output_config, { effort: "xhigh", vendor_hint: "exact" });
+  assert.deepEqual(outbound.messages[1]?.content.map((block) => block.type), [
+    "thinking",
+    "redacted_thinking",
+    "tool_use"
+  ]);
+  assert.equal(outbound.messages[1]?.content[0]?.signature, "sig-valid");
+  assert.equal(outbound.messages[1]?.content[1]?.data, "opaque-redacted");
+
+  const passthrough = await startChatServer();
+  try {
+    const proxy = new FusionBackend({
+      stepUrl: UNREACHABLE_STEP,
+      defaultModel: "fusion-panel",
+      runPanels: async () => [candidate("a")],
+      passthrough: [{ routekitModelId: "claude-native", routekitUrl: passthrough.baseUrl }]
+    });
+    assert.equal(
+      (await proxy.chat({ ...source, model: "claude-native" })).status,
+      200
+    );
+    const serialized = passthrough.lastBody() as {
+      x_routekit?: unknown;
+      messages?: Array<{ x_routekit?: unknown }>;
+    };
+    assert.ok(serialized.x_routekit, "passthrough intentionally retains the namespaced envelope");
+    assert.ok(serialized.messages?.[1]?.x_routekit, "assistant history retains its namespaced envelope");
+  } finally {
+    await passthrough.close();
   }
 });

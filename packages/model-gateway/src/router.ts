@@ -18,8 +18,8 @@ import {
 } from "./provider-source.js";
 import {
   attachReasoningSelection,
-  reasoningSelectionErrorOf,
-  reasoningSelectionOf
+  reasoningSelectionOf,
+  routeKitRequestValidationErrorOf
 } from "./adapters/openai-chat-wire.js";
 import type {
   ApiProviderId,
@@ -279,6 +279,29 @@ function namespaced(provider: ProviderId, model: string): string {
   return `${provider}/${model}`;
 }
 
+/**
+ * Conservative fallback for models whose discovery API omits reasoning metadata.
+ * Keep this allowlist tied to model families whose exact controls have been
+ * verified; provider discovery and explicit config always take precedence.
+ */
+export function inferKnownReasoningCapabilities(
+  provider: ProviderId,
+  model: string
+): ModelReasoningCapabilities | undefined {
+  if (
+    provider === "openai" &&
+    /^gpt-5\.5(?:-\d{4}-\d{2}-\d{2})?$/.test(model)
+  ) {
+    return {
+      status: "supported",
+      efforts: ["none", "low", "medium", "high", "xhigh"].map((id) => ({ id })),
+      wireShape: "openai-chat",
+      provenance: "builtin"
+    };
+  }
+  return undefined;
+}
+
 export class CatalogBackend implements Backend {
   readonly defaultModel: string | undefined;
   readonly #entries: ReadonlyMap<string, CatalogEntry>;
@@ -344,7 +367,9 @@ export class CatalogBackend implements Backend {
                   ...override,
                   provenance: "config" as const
                 }
-              : model.reasoning ?? source.reasoningCapabilities?.(model.id);
+              : model.reasoning ??
+                source.reasoningCapabilities?.(model.id) ??
+                inferKnownReasoningCapabilities(provider, model.id);
           entries.set(publicId, {
             publicId,
             nativeId: model.id,
@@ -471,21 +496,33 @@ export class CatalogBackend implements Backend {
     return this.#entries.get(model)?.reasoning;
   }
 
+  reasoningWireShape(model: string): string | undefined {
+    const entry = this.#entries.get(model);
+    if (entry === undefined) return undefined;
+    // Protocol identity is stronger than optional model capability metadata:
+    // Codex sources always egress through Responses even when discovery omits
+    // reasoning controls for a particular model.
+    return entry.provider === "codex"
+      ? "openai-responses"
+      : entry.reasoning?.wireShape;
+  }
+
   chat(
     body: unknown,
     signal?: AbortSignal,
     options?: BackendRequestOptions
   ): Promise<Response> {
     const entry = this.#entry(this.#requestedModel(body));
-    const selectionError = reasoningSelectionErrorOf(body);
-    if (selectionError !== undefined) {
+    const validationError = routeKitRequestValidationErrorOf(body);
+    if (validationError !== undefined) {
       return Promise.resolve(
         Response.json(
           {
             error: {
               type: "invalid_request_error",
-              code: "invalid_reasoning_control",
-              message: selectionError
+              code: validationError.code,
+              param: validationError.path,
+              message: validationError.message
             }
           },
           { status: 400 }

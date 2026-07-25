@@ -5,22 +5,38 @@ import type { Backend, BackendRequestOptions } from "./backend.js";
 import { droppedField } from "./adapters/dropped.js";
 import { SseDecoder, SseParseError } from "./sse/parse.js";
 import {
-  ANTHROPIC_MESSAGE_CONTENT,
-  ANTHROPIC_REQUEST_METADATA,
+  anthropicMessageContentOf,
   anthropicReasoningDetailsOf,
+  anthropicRequestMetadataOf,
+  attachGoogleToolCallIndexes,
+  googleThoughtDetailsOf,
+  googleToolCallIndexesOf,
   reasoningSelectionOf,
+  routeKitRequestValidationErrorOf,
+  attachResponsesReasoningMetadata,
+  responsesReasoningMetadataOf,
+  type ResponsesReasoningItem,
   type AnthropicNativeContentBlock,
   type AnthropicReasoningDetail,
+  type CanonicalReasoningDetail,
   type AnthropicRequestMetadata
 } from "./adapters/openai-chat-wire.js";
+
+function invalidReasoningControlResponse(message: string, metadata = false, path?: string): Response {
+  return jsonResponse(
+    { error: { type: "invalid_request_error", code: metadata ? "invalid_reasoning_metadata" : "invalid_reasoning_control", ...(path !== undefined ? { param: path } : {}), message } },
+    400
+  );
+}
 
 type ChatMessage = {
   role?: string;
   content?: unknown;
   reasoning?: string;
-  reasoning_details?: AnthropicReasoningDetail[];
+  reasoning_details?: CanonicalReasoningDetail[];
   tool_calls?: Array<{
     id?: string;
+    index?: number;
     function?: { name?: string; arguments?: string };
   }>;
   tool_call_id?: string;
@@ -292,9 +308,7 @@ function anthropicContentBlocks(
 }
 
 function anthropicNativeContent(message: ChatMessage): AnthropicNativeContentBlock[] | undefined {
-  const content = (message as ChatMessage & {
-    [ANTHROPIC_MESSAGE_CONTENT]?: AnthropicNativeContentBlock[];
-  })[ANTHROPIC_MESSAGE_CONTENT];
+  const content = anthropicMessageContentOf(message);
   if (Array.isArray(content)) return content;
   const details = anthropicReasoningDetailsOf(
     message.reasoning_details,
@@ -339,9 +353,7 @@ function anthropicNativeContent(message: ChatMessage): AnthropicNativeContentBlo
 }
 
 function anthropicMetadata(body: ChatBody): AnthropicRequestMetadata | undefined {
-  return (body as ChatBody & {
-    [ANTHROPIC_REQUEST_METADATA]?: AnthropicRequestMetadata;
-  })[ANTHROPIC_REQUEST_METADATA];
+  return anthropicRequestMetadataOf(body);
 }
 
 function anthropicToolChoice(
@@ -497,6 +509,16 @@ export class AnthropicBackend extends HttpProviderBackend {
     signal?: AbortSignal,
     options?: BackendRequestOptions
   ): Promise<Response> {
+    const validationError = routeKitRequestValidationErrorOf(body);
+    if (validationError !== undefined) {
+      return Promise.resolve(
+        invalidReasoningControlResponse(
+          validationError.message,
+          validationError.code === "invalid_reasoning_metadata",
+          validationError.path
+        )
+      );
+    }
     return this.#chat(bodyRecord(body), signal, options);
   }
 
@@ -816,6 +838,87 @@ export class AnthropicBackend extends HttpProviderBackend {
   }
 }
 
+function googleThoughtDetail(
+  part: Record<string, unknown>,
+  index: number
+): CanonicalReasoningDetail | undefined {
+  if (typeof part.thoughtSignature !== "string" || part.thoughtSignature.length === 0) {
+    return undefined;
+  }
+  return {
+    type: "google_thought",
+    index,
+    ...(part.thought === true && typeof part.text === "string"
+      ? { thought: part.text }
+      : {}),
+    thoughtSignature: part.thoughtSignature
+  };
+}
+
+function googleAssistantParts(message: ChatMessage): Array<Record<string, unknown>> {
+  const details = googleThoughtDetailsOf(message.reasoning_details);
+  const detailsByIndex = new Map(details.map((detail) => [detail.index, detail]));
+  const privateIndexes = googleToolCallIndexesOf(message);
+  const callsByIndex = new Map(
+    (message.tool_calls ?? []).flatMap((call, fallbackIndex) => {
+      const index =
+        typeof call.id === "string" && Number.isInteger(privateIndexes[call.id])
+          ? (privateIndexes[call.id] as number)
+          : Number.isInteger((call as { index?: unknown }).index)
+            ? ((call as { index: number }).index)
+            : fallbackIndex;
+      return [[index, call] as const];
+    })
+  );
+  if (details.length === 0) {
+    const parts: Array<Record<string, unknown>> = [];
+    const text = textContent(message.content);
+    if (text.length > 0) parts.push({ text });
+    for (const call of message.tool_calls ?? []) parts.push(googleFunctionCallPart(call));
+    return parts;
+  }
+
+  const parts: Array<Record<string, unknown>> = [];
+  const text = textContent(message.content);
+  let textAdded = false;
+  const addText = (): void => {
+    if (!textAdded && text.length > 0) parts.push({ text });
+    textAdded = true;
+  };
+  const consumedCalls = new Set<NonNullable<ChatMessage["tool_calls"]>[number]>();
+  for (const index of [...new Set([...detailsByIndex.keys(), ...callsByIndex.keys()])].sort((a, b) => a - b)) {
+    const detail = detailsByIndex.get(index);
+    const call = callsByIndex.get(index);
+    if (typeof detail?.thought === "string") {
+      parts.push({ text: detail.thought, thought: true, thoughtSignature: detail.thoughtSignature });
+    } else if (call !== undefined) {
+      addText();
+      parts.push({
+        ...googleFunctionCallPart(call),
+        ...(detail !== undefined ? { thoughtSignature: detail.thoughtSignature } : {})
+      });
+      consumedCalls.add(call);
+    }
+  }
+  addText();
+  for (const call of message.tool_calls ?? []) {
+    if (!consumedCalls.has(call)) parts.push(googleFunctionCallPart(call));
+  }
+  return parts;
+}
+
+function googleFunctionCallPart(
+  call: NonNullable<ChatMessage["tool_calls"]>[number]
+): Record<string, unknown> {
+  let args: unknown = {};
+  try {
+    args = JSON.parse(call.function?.arguments ?? "{}");
+  } catch {
+    args = { raw: call.function?.arguments ?? "" };
+  }
+  return { functionCall: { name: call.function?.name ?? "tool", args } };
+}
+
 function googleRequest(body: ChatBody): Record<string, unknown> {
   const systemText = (body.messages ?? [])
     .filter((message) => message.role === "system")
@@ -844,37 +947,16 @@ function googleRequest(body: ChatBody): Record<string, unknown> {
     contents: (body.messages ?? []).flatMap((message) => {
       if (message.role === "system") return [];
       if (message.role === "tool") {
-        return [
-          {
-            role: "user",
-            parts: [
-              {
-                functionResponse: {
-                  name: toolNames.get(message.tool_call_id ?? "") ?? "tool",
-                  response: { output: textContent(message.content) }
-                }
-              }
-            ]
-          }
-        ];
+        return [{ role: "user", parts: [{ functionResponse: {
+          name: toolNames.get(message.tool_call_id ?? "") ?? "tool",
+          response: { output: textContent(message.content) }
+        } }] }];
       }
-      const parts: Array<Record<string, unknown>> = [];
-      const text = textContent(message.content);
-      if (text.length > 0) parts.push({ text });
-      for (const call of message.tool_calls ?? []) {
-        let args: unknown = {};
-        try {
-          args = JSON.parse(call.function?.arguments ?? "{}");
-        } catch {
-          args = { raw: call.function?.arguments ?? "" };
-        }
-        parts.push({
-          functionCall: {
-            name: call.function?.name ?? "tool",
-            args
-          }
-        });
-      }
+      const parts = message.role === "assistant"
+        ? googleAssistantParts(message)
+        : textContent(message.content).length > 0
+          ? [{ text: textContent(message.content) }]
+          : [];
       return [{ role: message.role === "assistant" ? "model" : "user", parts }];
     }),
     ...(systemText.length > 0
@@ -885,51 +967,143 @@ function googleRequest(body: ChatBody): Record<string, unknown> {
       ...(body.temperature !== undefined ? { temperature: body.temperature } : {}),
       ...(thinkingConfig !== undefined ? { thinkingConfig } : {})
     },
-    ...(body.tools !== undefined
-      ? {
-          tools: [
-            {
-              functionDeclarations: body.tools.flatMap((tool) =>
-                tool.function === undefined
-                  ? []
-                  : [
-                      {
-                        name: tool.function.name,
-                        description: tool.function.description,
-                        parameters: tool.function.parameters
-                      }
-                    ]
-              )
-            }
-          ]
-        }
-      : {})
+    ...(body.tools !== undefined ? { tools: [{ functionDeclarations: body.tools.flatMap((tool) =>
+      tool.function === undefined ? [] : [{
+        name: tool.function.name,
+        description: tool.function.description,
+        parameters: tool.function.parameters
+      }]) }] } : {})
   };
 }
 
-function googleMessage(payload: Record<string, unknown>): Record<string, unknown> {
+type GoogleStreamToolPart = {
+  providerIndex: number;
+  toolIndex: number;
+  id: string;
+};
+
+type GoogleStreamPartState = {
+  nextProviderIndex: number;
+  nextToolIndex: number;
+  openThoughtIndex?: number;
+  toolParts: Map<string, GoogleStreamToolPart>;
+  thoughtText: Map<number, string>;
+};
+
+function googleFunctionIdentity(call: Record<string, unknown>): string | undefined {
+  const providerId = call.id ?? call.callId ?? call.functionCallId;
+  return typeof providerId === "string" && providerId.length > 0
+    ? `id:${providerId}`
+    : undefined;
+}
+
+function googleMessage(
+  payload: Record<string, unknown>,
+  streamState?: GoogleStreamPartState
+): Record<string, unknown> {
   const candidates = payload.candidates as Array<Record<string, unknown>> | undefined;
   const content = candidates?.[0]?.content as Record<string, unknown> | undefined;
-  const parts = content?.parts as Array<Record<string, unknown>> | undefined;
-  const text = (parts ?? []).map((part) => (typeof part.text === "string" ? part.text : "")).join("");
-  const toolCalls = (parts ?? []).flatMap((part, index) => {
+  const parts = Array.isArray(content?.parts)
+    ? (content.parts as Array<Record<string, unknown>>)
+    : [];
+  let bufferedToolIndex = 0;
+  const indexedParts: Array<{
+    part: Record<string, unknown>;
+    detailPart: Record<string, unknown>;
+    providerIndex: number;
+    toolIndex?: number;
+    id?: string;
+  }> = parts.map((part, localIndex) => {
     const call = part.functionCall as Record<string, unknown> | undefined;
-    return call === undefined
-      ? []
-      : [
-          {
-            id: randomId(12, "call_"),
-            type: "function",
-            index,
-            function: { name: call.name, arguments: JSON.stringify(call.args ?? {}) }
-          }
-        ];
+    if (streamState === undefined) {
+      return {
+        part,
+        detailPart: part,
+        providerIndex: localIndex,
+        ...(call !== undefined ? { toolIndex: bufferedToolIndex++ } : {})
+      };
+    }
+    if (call !== undefined) {
+      streamState.openThoughtIndex = undefined;
+      const identity = googleFunctionIdentity(call);
+      let toolPart = identity === undefined ? undefined : streamState.toolParts.get(identity);
+      if (toolPart === undefined) {
+        toolPart = {
+          providerIndex: streamState.nextProviderIndex++,
+          toolIndex: streamState.nextToolIndex++,
+          id: randomId(12, "call_")
+        };
+        if (identity !== undefined) streamState.toolParts.set(identity, toolPart);
+      }
+      return { part, detailPart: part, ...toolPart };
+    }
+    if (part.thought === true) {
+      const signature =
+        typeof part.thoughtSignature === "string" && part.thoughtSignature.length > 0
+          ? part.thoughtSignature
+          : undefined;
+      let providerIndex = streamState.openThoughtIndex;
+      if (providerIndex === undefined) {
+        providerIndex = streamState.nextProviderIndex++;
+        streamState.openThoughtIndex = providerIndex;
+      }
+      const priorText = streamState.thoughtText.get(providerIndex) ?? "";
+      const incomingText = typeof part.text === "string" ? part.text : "";
+      const thought = `${priorText}${incomingText}`;
+      streamState.thoughtText.set(providerIndex, thought);
+      if (signature !== undefined) streamState.openThoughtIndex = undefined;
+      return {
+        part,
+        detailPart:
+          signature !== undefined
+            ? { ...part, thought: true, text: thought, thoughtSignature: signature }
+            : part,
+        providerIndex
+      };
+    }
+    streamState.openThoughtIndex = undefined;
+    return { part, detailPart: part, providerIndex: streamState.nextProviderIndex++ };
   });
-  return {
+  const text = indexedParts
+    .filter(({ part }) => part.thought === undefined || part.thought === false)
+    .map(({ part }) => typeof part.text === "string" ? part.text : "")
+    .join("");
+  const reasoning = indexedParts
+    .filter(({ part }) => part.thought === true)
+    .map(({ part }) => typeof part.text === "string" ? part.text : "")
+    .join("");
+  const reasoningDetails = indexedParts.flatMap(({ detailPart, providerIndex }) => {
+    const detail = googleThoughtDetail(detailPart, providerIndex);
+    return detail === undefined ? [] : [detail];
+  });
+  const toolCalls = indexedParts.flatMap(({ part, providerIndex, toolIndex, id }) => {
+    const call = part.functionCall as Record<string, unknown> | undefined;
+    return call === undefined || toolIndex === undefined ? [] : [{
+      id: id ?? randomId(12, "call_"),
+      type: "function",
+      index: toolIndex,
+      function: { name: call.name, arguments: JSON.stringify(call.args ?? {}) },
+      providerIndex
+    }];
+  });
+  const message: Record<PropertyKey, unknown> = {
     role: "assistant",
     content: text,
-    ...(toolCalls.length > 0 ? { tool_calls: toolCalls } : {})
+    ...(reasoning.length > 0 ? { reasoning } : {}),
+    ...(reasoningDetails.length > 0 ? { reasoning_details: reasoningDetails } : {}),
+    ...(toolCalls.length > 0
+      ? {
+          tool_calls: toolCalls.map(({ providerIndex: _providerIndex, ...call }) => call)
+        }
+      : {})
   };
+  const providerIndexes = Object.fromEntries(
+    toolCalls.map((call) => [call.id, call.providerIndex])
+  );
+  if (Object.keys(providerIndexes).length > 0) {
+    attachGoogleToolCallIndexes(message, providerIndexes);
+  }
+  return message;
 }
 
 export class GoogleGenAiBackend extends HttpProviderBackend {
@@ -938,6 +1112,16 @@ export class GoogleGenAiBackend extends HttpProviderBackend {
     signal?: AbortSignal,
     options?: BackendRequestOptions
   ): Promise<Response> {
+    const validationError = routeKitRequestValidationErrorOf(body);
+    if (validationError !== undefined) {
+      return Promise.resolve(
+        invalidReasoningControlResponse(
+          validationError.message,
+          validationError.code === "invalid_reasoning_metadata",
+          validationError.path
+        )
+      );
+    }
     return this.#chat(bodyRecord(body), signal, options);
   }
 
@@ -966,6 +1150,12 @@ export class GoogleGenAiBackend extends HttpProviderBackend {
     );
     if (!response.ok) return copyFailure(response, await response.text());
     if (body.stream === true) {
+      const streamState: GoogleStreamPartState = {
+        nextProviderIndex: 0,
+        nextToolIndex: 0,
+        toolParts: new Map(),
+        thoughtText: new Map()
+      };
       return mapSse(response, (_event, data) => {
         const payload = data as Record<string, unknown>;
         const candidates = payload.candidates as Array<Record<string, unknown>> | undefined;
@@ -979,7 +1169,7 @@ export class GoogleGenAiBackend extends HttpProviderBackend {
             choices: [
               {
                 index: 0,
-                delta: googleMessage(payload),
+                delta: googleMessage(payload, streamState),
                 finish_reason:
                   finishReason === undefined
                     ? null
@@ -1030,6 +1220,16 @@ function responsesRequest(
       ];
     }
     const items: Record<string, unknown>[] = [];
+    const reasoningMetadata = responsesReasoningMetadataOf(message);
+    for (const item of reasoningMetadata?.items ?? []) {
+      items.push({
+        type: "reasoning",
+        ...(item.id !== undefined ? { id: item.id } : {}),
+        ...(Object.hasOwn(item, "summary") ? { summary: item.summary } : {}),
+        ...(Object.hasOwn(item, "content") ? { content: item.content } : {}),
+        encrypted_content: item.encrypted_content
+      });
+    }
     const text = textContent(message.content);
     if (text.length > 0) {
       items.push({
@@ -1052,11 +1252,17 @@ function responsesRequest(
     }
     return items;
   });
+  const includeEncryptedContent =
+    responsesReasoningMetadataOf(body)?.includeEncryptedContent === true ||
+    (body.messages ?? []).some(
+      (message) => responsesReasoningMetadataOf(message)?.includeEncryptedContent === true
+    );
   return {
     model,
     input,
     stream: options.forceStream || body.stream === true,
     store: false,
+    ...(includeEncryptedContent ? { include: ["reasoning.encrypted_content"] } : {}),
     ...(reasoning.mode === "effort"
       ? { reasoning: { effort: reasoning.effort } }
       : {}),
@@ -1103,6 +1309,11 @@ function responsesOutput(payload: Record<string, unknown>): Record<string, unkno
       typeof part.text === "string" ? [part.text] : []
     );
   }).join("");
+  const reasoningItems = (output ?? []).filter(
+    (item) => item.type === "reasoning" &&
+      typeof item.encrypted_content === "string" &&
+      item.encrypted_content.length > 0
+  );
   const toolCalls = (output ?? []).flatMap((item, index) =>
     item.type === "function_call"
       ? [
@@ -1115,12 +1326,19 @@ function responsesOutput(payload: Record<string, unknown>): Record<string, unkno
         ]
       : []
   );
-  return {
+  const message: Record<string, unknown> = {
     role: "assistant",
     content: text,
     ...(reasoning.length > 0 ? { reasoning } : {}),
     ...(toolCalls.length > 0 ? { tool_calls: toolCalls } : {})
   };
+  if (reasoningItems.length > 0) {
+    attachResponsesReasoningMetadata(message, {
+      items: reasoningItems as ResponsesReasoningItem[],
+      includeEncryptedContent: false
+    });
+  }
+  return message;
 }
 
 const CODEX_EMPTY_RESPONSE_ERROR = {
@@ -1163,11 +1381,25 @@ export class CodexResponsesBackend extends HttpProviderBackend {
     this.#omitSampling = options.omitSampling ?? false;
   }
 
+  reasoningWireShape(): string {
+    return "openai-responses";
+  }
+
   chat(
     body: unknown,
     signal?: AbortSignal,
     options?: BackendRequestOptions
   ): Promise<Response> {
+    const validationError = routeKitRequestValidationErrorOf(body);
+    if (validationError !== undefined) {
+      return Promise.resolve(
+        invalidReasoningControlResponse(
+          validationError.message,
+          validationError.code === "invalid_reasoning_metadata",
+          validationError.path
+        )
+      );
+    }
     return this.#chat(bodyRecord(body), signal, options);
   }
 
@@ -1319,6 +1551,23 @@ export class CodexResponsesBackend extends HttpProviderBackend {
         }
         if (eventType === "response.output_item.done") {
           const output = item.item as Record<string, unknown> | undefined;
+          if (
+            output?.type === "reasoning" &&
+            typeof output.encrypted_content === "string" &&
+            output.encrypted_content.length > 0
+          ) {
+            const delta: Record<string, unknown> = {};
+            attachResponsesReasoningMetadata(delta, {
+              items: [output as ResponsesReasoningItem],
+              includeEncryptedContent: false
+            });
+            return [{
+              id: randomId(18, "chatcmpl_"),
+              object: "chat.completion.chunk",
+              model,
+              choices: [{ index: 0, delta, finish_reason: null }]
+            }];
+          }
           if (output?.type !== "message") return [];
           const outputIndex =
             typeof item.output_index === "number" ? item.output_index : 0;

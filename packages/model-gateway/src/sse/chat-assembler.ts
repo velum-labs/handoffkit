@@ -12,15 +12,30 @@
 import { SseParseError, type SseEvent } from "./parse.js";
 import {
   anthropicReasoningDetailsOf,
-  type AnthropicReasoningDetail
+  attachResponsesReasoningMetadata,
+  googleThoughtDetailsOf,
+  googleToolCallIndexesOf,
+  responsesReasoningMetadataOf,
+  type AnthropicReasoningDetail,
+  type CanonicalReasoningDetail,
+  type GoogleThoughtDetail,
+  type ResponsesReasoningMetadata
 } from "../adapters/openai-chat-wire.js";
 
-export type AssembledToolCall = { id?: string; name?: string; arguments: string };
+export type AssembledToolCall = {
+  index?: number;
+  /** Google provider content-part position; never emitted as OpenAI tool index. */
+  providerIndex?: number;
+  id?: string;
+  name?: string;
+  arguments: string;
+};
 
 export type AssembledTurn = {
   content: string;
   reasoning: string;
-  reasoningDetails: AnthropicReasoningDetail[];
+  reasoningDetails: CanonicalReasoningDetail[];
+  responsesReasoning?: ResponsesReasoningMetadata;
   toolCalls: AssembledToolCall[];
   finishReason?: string;
   usage?: unknown;
@@ -42,12 +57,20 @@ type RawChunk = {
   [key: string]: unknown;
 };
 
-type OpenCall = { id?: string; name?: string; arguments: string };
+type OpenCall = {
+  index?: number;
+  providerIndex?: number;
+  id?: string;
+  name?: string;
+  arguments: string;
+};
 
 export class ChatStreamAssembler {
   #content = "";
   #reasoning = "";
-  readonly #reasoningDetails = new Map<number, AnthropicReasoningDetail>();
+  readonly #anthropicReasoningDetails = new Map<number, AnthropicReasoningDetail>();
+  readonly #googleThoughtDetails = new Map<number, GoogleThoughtDetail>();
+  #responsesReasoning: ResponsesReasoningMetadata | undefined;
   readonly #toolCalls: OpenCall[] = [];
   readonly #byIndex = new Map<number, OpenCall>();
   readonly #byId = new Map<string, OpenCall>();
@@ -89,10 +112,16 @@ export class ChatStreamAssembler {
     return {
       content: this.#content,
       reasoning: this.#reasoning,
-      reasoningDetails: [...this.#reasoningDetails.values()].sort(
-        (a, b) => a.index - b.index
-      ),
+      reasoningDetails: [
+        ...this.#anthropicReasoningDetails.values(),
+        ...this.#googleThoughtDetails.values()
+      ].sort((a, b) => a.index - b.index),
+      ...(this.#responsesReasoning !== undefined
+        ? { responsesReasoning: this.#responsesReasoning }
+        : {}),
       toolCalls: this.#toolCalls.map((call) => ({
+        ...(call.index !== undefined ? { index: call.index } : {}),
+        ...(call.providerIndex !== undefined ? { providerIndex: call.providerIndex } : {}),
         ...(call.id !== undefined ? { id: call.id } : {}),
         ...(call.name !== undefined ? { name: call.name } : {}),
         arguments: call.arguments
@@ -144,6 +173,15 @@ export class ChatStreamAssembler {
     const choice = chunk.choices?.[0];
     if (choice === undefined) return;
     const delta = choice.delta ?? {};
+    const responsesReasoning = responsesReasoningMetadataOf(delta);
+    if (responsesReasoning !== undefined) {
+      const carrier: Record<PropertyKey, unknown> = {};
+      if (this.#responsesReasoning !== undefined) {
+        attachResponsesReasoningMetadata(carrier, this.#responsesReasoning);
+      }
+      attachResponsesReasoningMetadata(carrier, responsesReasoning);
+      this.#responsesReasoning = responsesReasoningMetadataOf(carrier);
+    }
     if (typeof delta.content === "string") this.#content += delta.content;
     // `reasoning` (raw model thinking) and `reasoning_content` (narration beats)
     // both count as reasoning for reconstruction purposes.
@@ -153,10 +191,14 @@ export class ChatStreamAssembler {
       delta.reasoning_details,
       "stream"
     )) {
-      this.#mergeReasoningDetail(detail);
+      this.#mergeAnthropicReasoningDetail(detail);
     }
+    for (const detail of googleThoughtDetailsOf(delta.reasoning_details)) {
+      this.#googleThoughtDetails.set(detail.index, detail);
+    }
+    const googleToolIndexes = googleToolCallIndexesOf(delta);
     if (Array.isArray(delta.tool_calls)) {
-      for (const call of delta.tool_calls) this.#mergeToolCall(call as RawToolCall);
+      for (const call of delta.tool_calls) this.#mergeToolCall(call as RawToolCall, googleToolIndexes);
     }
     if (typeof choice.finish_reason === "string") {
       this.#finishReason = choice.finish_reason;
@@ -164,16 +206,16 @@ export class ChatStreamAssembler {
     }
   }
 
-  #mergeReasoningDetail(detail: AnthropicReasoningDetail): void {
+  #mergeAnthropicReasoningDetail(detail: AnthropicReasoningDetail): void {
     if (detail.type === "redacted_thinking") {
-      this.#reasoningDetails.set(detail.index, {
+      this.#anthropicReasoningDetails.set(detail.index, {
         type: "redacted_thinking",
         index: detail.index,
         data: detail.data
       });
       return;
     }
-    const existing = this.#reasoningDetails.get(detail.index);
+    const existing = this.#anthropicReasoningDetails.get(detail.index);
     const thinking =
       existing?.type === "thinking"
         ? existing
@@ -190,10 +232,13 @@ export class ChatStreamAssembler {
     }
     if (typeof detail.signature === "string") thinking.signature = detail.signature;
     delete thinking.phase;
-    this.#reasoningDetails.set(detail.index, thinking);
+    this.#anthropicReasoningDetails.set(detail.index, thinking);
   }
 
-  #mergeToolCall(raw: RawToolCall): void {
+  #mergeToolCall(
+    raw: RawToolCall,
+    googleToolIndexes: Readonly<Record<string, number>> = {}
+  ): void {
     const index = typeof raw.index === "number" ? raw.index : undefined;
     const id = typeof raw.id === "string" && raw.id.length > 0 ? raw.id : undefined;
     const name = typeof raw.function?.name === "string" ? raw.function.name : undefined;
@@ -205,13 +250,19 @@ export class ChatStreamAssembler {
     else target = this.#lastOpen; // id/index-less fragment appends to the last open call
 
     if (target === undefined) {
-      target = { arguments: "" };
+      target = {
+        ...(index !== undefined ? { index } : {}),
+        arguments: ""
+      };
       this.#toolCalls.push(target);
     }
     if (index !== undefined && !this.#byIndex.has(index)) this.#byIndex.set(index, target);
     if (id !== undefined && !this.#byId.has(id)) this.#byId.set(id, target);
 
     if (id !== undefined && target.id === undefined) target.id = id;
+    if (id !== undefined && Number.isInteger(googleToolIndexes[id])) {
+      target.providerIndex = googleToolIndexes[id];
+    }
     if (name !== undefined && name.length > 0 && (target.name === undefined || target.name.length === 0)) {
       target.name = name;
     }

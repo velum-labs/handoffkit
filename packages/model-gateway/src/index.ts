@@ -82,6 +82,28 @@ export type {
 } from "./capacity-pool.js";
 
 export { effectiveModel, isStream, withDefaultModel } from "./adapters/chat.js";
+export {
+  ANTHROPIC_MESSAGE_CONTENT,
+  ANTHROPIC_REQUEST_METADATA,
+  REASONING_SELECTION,
+  ROUTEKIT_EXTENSION_KEY,
+  attachAnthropicMessageContent,
+  attachAnthropicRequestMetadata,
+  attachReasoningSelection,
+  anthropicMessageContentOf,
+  anthropicRequestMetadataOf,
+  routeKitRequestValidationErrorOf,
+  reasoningSelectionErrorOf,
+  reasoningSelectionOf,
+  responsesReasoningMetadataErrorOf,
+  withoutRouteKitExtensions
+} from "./adapters/openai-chat-wire.js";
+export type {
+  AnthropicNativeContentBlock,
+  AnthropicRequestMetadata,
+  RouteKitMessageEnvelope,
+  RouteKitReasoningEnvelope
+} from "./adapters/openai-chat-wire.js";
 export { isCursorChatBody, translateCursorRequest } from "./adapters/cursor.js";
 export {
   anthropicModelsResponse,

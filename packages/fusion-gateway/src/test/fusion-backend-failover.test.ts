@@ -110,6 +110,35 @@ function streamingMidStream429(_body: Record<string, unknown>, res: ServerRespon
   res.end("data: [DONE]\n\n");
 }
 
+function streamingReasoningThen429(
+  field: "reasoning" | "reasoning_content"
+): (_body: Record<string, unknown>, res: ServerResponse) => void {
+  return (_body, res) => {
+    res.writeHead(200, { "content-type": "text/event-stream" });
+    res.write(`data: ${JSON.stringify({ choices: [{ index: 0, delta: { [field]: "thinking prefix" } }] })}\n\n`);
+    res.write(`data: ${JSON.stringify({ error: { error_category: "quota_exhausted", message: "no quota" } })}\n\n`);
+    res.end("data: [DONE]\n\n");
+  };
+}
+
+function streamingMetadataThen429(
+  delta: Record<string, unknown>
+): (_body: Record<string, unknown>, res: ServerResponse) => void {
+  return (_body, res) => {
+    res.writeHead(200, { "content-type": "text/event-stream" });
+    res.write(`data: ${JSON.stringify({ choices: [{ index: 0, delta, finish_reason: null }] })}\n\n`);
+    res.write(`data: ${JSON.stringify({ error: { error_category: "quota_exhausted", message: "no quota" } })}\n\n`);
+    res.end("data: [DONE]\n\n");
+  };
+}
+
+function streamingToolThen429(_body: Record<string, unknown>, res: ServerResponse): void {
+  res.writeHead(200, { "content-type": "text/event-stream" });
+  res.write(`data: ${JSON.stringify({ choices: [{ index: 0, delta: { tool_calls: [{ index: 0, id: "call_1", function: { name: "run", arguments: "" } }] } }] })}\n\n`);
+  res.write(`data: ${JSON.stringify({ error: { error_category: "quota_exhausted", message: "no quota" } })}\n\n`);
+  res.end("data: [DONE]\n\n");
+}
+
 function makeBackend(
   router: Awaited<ReturnType<typeof startRouter>>,
   onRateLimit: OnRateLimitPolicy | undefined,
@@ -202,6 +231,85 @@ test("streaming mid-stream failure emits a one-tap resume notice (no transparent
     assert.match(text, /fusion-panel/, "the resume notice points at the fused model");
     assert.doesNotMatch(text, /fused answer/, "the ensemble is NOT silently spliced mid-stream");
     assert.equal(panelInputs.length, 0, "mid-stream failures do not run the panel");
+    assert.equal(router.stepCalls(), 0);
+  } finally {
+    await router.close();
+  }
+});
+
+for (const field of ["reasoning", "reasoning_content"] as const) {
+  test(`streaming ${field}-first failure preserves committed output`, async () => {
+    const router = await startRouter(streamingReasoningThen429(field));
+    const panelInputs: PanelRunInput[] = [];
+    try {
+      const backend = makeBackend(router, undefined, panelInputs);
+      const res = await backend.chat({ ...userTurn, model: "openai/gpt-5.5", stream: true });
+      const text = await res.text();
+
+      assert.match(text, /thinking prefix/, "the reasoning prefix is preserved");
+      assert.match(text, /Re-run on the/, "the later error becomes a resume notice");
+      assert.doesNotMatch(text, /fused answer/, "committed reasoning prevents transparent failover");
+      assert.equal(panelInputs.length, 0);
+      assert.equal(router.stepCalls(), 0);
+    } finally {
+      await router.close();
+    }
+  });
+}
+
+for (const [name, delta, marker] of [
+  [
+    "RouteKit encrypted metadata",
+    { x_routekit: { version: 1, responses: { items: [{ type: "reasoning", encrypted_content: "opaque-state" }] } } },
+    "opaque-state"
+  ],
+  [
+    "Anthropic signed reasoning detail",
+    { reasoning_details: [{ type: "thinking", index: 0, signature: "signed-state" }] },
+    "signed-state"
+  ],
+  [
+    "Anthropic redacted reasoning detail",
+    { reasoning_details: [{ type: "redacted_thinking", index: 0, data: "redacted-state" }] },
+    "redacted-state"
+  ],
+  [
+    "Google thought detail",
+    { reasoning_details: [{ type: "google_thought", index: 0, thoughtSignature: "google-state" }] },
+    "google-state"
+  ]
+] as const) {
+  test(`streaming ${name}-first failure preserves committed metadata`, async () => {
+    const router = await startRouter(streamingMetadataThen429(delta));
+    const panelInputs: PanelRunInput[] = [];
+    try {
+      const backend = makeBackend(router, undefined, panelInputs);
+      const response = await backend.chat({ ...userTurn, model: "openai/gpt-5.5", stream: true });
+      const text = await response.text();
+      assert.match(text, new RegExp(marker), "the metadata prefix is preserved");
+      assert.match(text, /Re-run on the/, "the later error becomes a resume notice");
+      assert.doesNotMatch(text, /fused answer/, "metadata commit prevents transparent failover");
+      assert.equal(panelInputs.length, 0);
+      assert.equal(router.stepCalls(), 0);
+    } finally {
+      await router.close();
+    }
+  });
+}
+
+
+test("streaming tool-first failure preserves the committed tool call", async () => {
+  const router = await startRouter(streamingToolThen429);
+  const panelInputs: PanelRunInput[] = [];
+  try {
+    const backend = makeBackend(router, undefined, panelInputs);
+    const res = await backend.chat({ ...userTurn, model: "openai/gpt-5.5", stream: true });
+    const text = await res.text();
+
+    assert.match(text, /call_1/, "the tool-call start is preserved");
+    assert.match(text, /Re-run on the/, "the later error becomes a resume notice");
+    assert.doesNotMatch(text, /fused answer/, "a tool-call start prevents transparent failover");
+    assert.equal(panelInputs.length, 0);
     assert.equal(router.stepCalls(), 0);
   } finally {
     await router.close();
