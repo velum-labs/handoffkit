@@ -23,7 +23,7 @@ import {
   resolveCursorModelSelection,
   translateCursorRequest
 } from "./adapters/cursor.js";
-import { attachReasoningSelection } from "./adapters/openai-chat-wire.js";
+import { withReasoningSelection } from "./adapters/openai-chat-wire.js";
 import { handleResponses } from "./adapters/responses.js";
 import type { ResponsesRequest } from "./adapters/responses.js";
 import type {
@@ -582,7 +582,7 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
       }
       if ("input" in raw && rejectInvalid(res, validateResponsesRequest(raw))) return;
       // Validate the translated body before invoking the backend.
-      const translated = translateCursorRequest(raw);
+      let translated = translateCursorRequest(raw);
       if (rejectInvalid(res, validateChatRequest(translated))) return;
       const selection = resolveCursorModelSelection(
         translated.model,
@@ -590,14 +590,12 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
         backend.reasoningCapabilities?.bind(backend)
       );
       if (selection !== undefined) {
-        translated.model = selection.model;
-        if (selection.reasoningEffort !== undefined) {
-          translated.reasoning_effort = selection.reasoningEffort;
-          attachReasoningSelection(translated, {
-            mode: "effort",
-            effort: selection.reasoningEffort
-          });
-        }
+        translated = withReasoningSelection(
+          { ...translated, model: selection.model },
+          selection.reasoningEffort === undefined
+            ? { mode: "auto" }
+            : { mode: "effort", effort: selection.reasoningEffort }
+        );
       }
       const body = withDefaultModel(translated, backend.defaultModel);
       await handleModelCall(res, provenance, {

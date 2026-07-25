@@ -9,6 +9,10 @@ import {
   resolveCursorModelSelection,
   translateCursorRequest
 } from "../adapters/cursor.js";
+import {
+  reasoningSelectionErrorOf,
+  reasoningSelectionOf
+} from "../adapters/openai-chat-wire.js";
 import type { Backend } from "../backend.js";
 import { startGateway } from "../server.js";
 
@@ -202,7 +206,7 @@ test("RouteKit serves the Cursor hybrid through its neutral HTTP boundary", asyn
 });
 
 test("Cursor route advertises reasoning variants and applies their effort", async () => {
-  let received: { model?: unknown; reasoning_effort?: unknown } | undefined;
+  let received: Record<string, unknown> | undefined;
   const reasoning = {
     status: "supported" as const,
     efforts: [{ id: "low" }, { id: "high" }],
@@ -212,7 +216,7 @@ test("Cursor route advertises reasoning variants and applies their effort", asyn
   const backend: Backend = {
     defaultModel: "claude-code/claude-fable-5",
     chat(body) {
-      received = body as { model?: unknown; reasoning_effort?: unknown };
+      received = body as Record<string, unknown>;
       return Promise.resolve(
         Response.json({
           id: "chatcmpl_2",
@@ -266,8 +270,8 @@ test("Cursor route advertises reasoning variants and applies their effort", asyn
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         model: "routekit/openai/gpt-4o:high",
-        reasoning_effort: "low",
-        messages: [{ role: "user", content: "hi" }]
+        reasoning: { effort: "low" },
+        input: "hi"
       })
     });
     assert.equal(high.status, 200);
@@ -277,6 +281,37 @@ test("Cursor route advertises reasoning variants and applies their effort", asyn
       "high",
       "the selected model variant overrides Cursor's omitted or stale effort"
     );
+    assert.deepEqual(reasoningSelectionOf(received), {
+      mode: "effort",
+      effort: "high"
+    });
+
+    const malformed = await fetch(`${gateway.url()}/v1/cursor/chat/completions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        model: "routekit/openai/gpt-4o:high",
+        reasoning: {},
+        input: "hi"
+      })
+    });
+    assert.equal(malformed.status, 200);
+    assert.equal(reasoningSelectionErrorOf(received), undefined);
+    assert.equal(received?.reasoning_effort, "high");
+
+    const automatic = await fetch(`${gateway.url()}/v1/cursor/chat/completions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        model: "routekit/openai/gpt-4o",
+        reasoning_effort: "high",
+        messages: [{ role: "user", content: "hi" }]
+      })
+    });
+    assert.equal(automatic.status, 200);
+    assert.equal(received?.model, "openai/gpt-4o");
+    assert.equal(received?.reasoning_effort, undefined);
+    assert.deepEqual(reasoningSelectionOf(received), { mode: "auto" });
 
     // Legacy dashed spelling still resolves for one-release back-compat.
     const legacy = await fetch(`${gateway.url()}/v1/cursor/chat/completions`, {

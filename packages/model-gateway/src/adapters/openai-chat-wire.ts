@@ -181,6 +181,27 @@ export function attachReasoningSelectionError(
   });
 }
 
+/**
+ * Replace all request-local reasoning state with one authoritative selection.
+ *
+ * The clone is intentional: attached symbol metadata is non-configurable on
+ * its source object, while object spread creates replaceable own properties.
+ */
+export function withReasoningSelection<T extends Record<string, unknown>>(
+  target: T,
+  selection: ReasoningSelection
+): T {
+  const replaced = { ...target } as T & Record<PropertyKey, unknown>;
+  delete replaced[REASONING_SELECTION_ERROR];
+  if (selection.mode === "effort") {
+    replaced.reasoning_effort = selection.effort;
+  } else {
+    delete replaced.reasoning_effort;
+  }
+  attachReasoningSelection(replaced, selection);
+  return replaced;
+}
+
 export function reasoningSelectionErrorOf(value: unknown): string | undefined {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
     return undefined;
