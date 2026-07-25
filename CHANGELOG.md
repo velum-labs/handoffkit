@@ -7,6 +7,27 @@ package, and the PyPI FusionKit sidecar package set. Release tags are named
 
 ## Unreleased
 
+- Fixed Anthropic egress rejecting conversations that contain a turn carrying no
+  translatable text. The OpenAI-to-Anthropic translation only emitted a text
+  block when a message flattened to a non-empty string, so a blank turn — or one
+  whose only parts were images — went upstream as `content: []` and Anthropic
+  answered `messages.N: user messages must have non-empty content`. This
+  surfaced when a client replayed history onto a Claude model, for example
+  switching a Cursor thread from `codex/gpt-5.6-sol` to
+  `claude-code/claude-fable-5`, because the Responses path accepts turns that
+  the Anthropic path rejects.
+
+  OpenAI `image_url` parts now translate into Anthropic `image` blocks, covering
+  both base64 data URLs and `http(s)` URLs; previously every image was dropped
+  on the floor, so vision requests reached Claude with the picture missing.
+  Parts that still cannot be translated are reported through the usual dropped
+  field telemetry instead of disappearing. Empty and whitespace-only text no
+  longer produces a block, since Anthropic rejects those separately. Turns that
+  translate to nothing are dropped, which costs nothing because Anthropic
+  coalesces adjacent same-role turns — except for a closing turn, where a
+  placeholder keeps the conversation ending on a user message for models that
+  forbid assistant prefill.
+
 ## 0.9.9 - 2026-07-25
 
 - Subscription pools now re-mint an access token the provider has stopped

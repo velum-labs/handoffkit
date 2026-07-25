@@ -2,6 +2,7 @@ import { randomId } from "@velum-labs/routekit-runtime";
 
 import { joinPath } from "./backend.js";
 import type { Backend, BackendRequestOptions } from "./backend.js";
+import { droppedField } from "./adapters/dropped.js";
 import { SseDecoder, SseParseError } from "./sse/parse.js";
 import {
   ANTHROPIC_MESSAGE_CONTENT,
@@ -226,6 +227,70 @@ function mapSse(
   });
 }
 
+// Stands in for a closing turn that translated to nothing. Anthropic rejects
+// empty and whitespace-only text, so the stand-in has to say something.
+const BLANK_TURN_PLACEHOLDER = "(continue)";
+
+function anthropicContentIsEmpty(message: Record<string, unknown> | undefined): boolean {
+  return Array.isArray(message?.content) && message.content.length === 0;
+}
+
+function anthropicImageBlock(part: Record<string, unknown>): Record<string, unknown> | undefined {
+  const imageUrl = part.image_url;
+  const url =
+    typeof imageUrl === "string"
+      ? imageUrl
+      : typeof imageUrl === "object" &&
+          imageUrl !== null &&
+          typeof (imageUrl as { url?: unknown }).url === "string"
+        ? (imageUrl as { url: string }).url
+        : undefined;
+  if (url === undefined) return undefined;
+  const dataUrl = /^data:([^;,]+);base64,(.+)$/s.exec(url);
+  if (dataUrl !== null) {
+    return {
+      type: "image",
+      source: { type: "base64", media_type: dataUrl[1], data: dataUrl[2] }
+    };
+  }
+  if (/^https?:\/\//i.test(url)) return { type: "image", source: { type: "url", url } };
+  return undefined;
+}
+
+/**
+ * Translate OpenAI chat content into Anthropic content blocks.
+ *
+ * Anthropic rejects text blocks that are empty or whitespace-only, so those are
+ * skipped here rather than sent upstream. Callers must handle the resulting
+ * empty block list; see {@link anthropicMessages}.
+ */
+function anthropicContentBlocks(
+  content: unknown,
+  context: string
+): Record<string, unknown>[] {
+  if (typeof content === "string") {
+    return content.trim().length > 0 ? [{ type: "text", text: content }] : [];
+  }
+  if (!Array.isArray(content)) return [];
+  const blocks: Record<string, unknown>[] = [];
+  for (const part of content) {
+    if (typeof part !== "object" || part === null) continue;
+    const record = part as Record<string, unknown>;
+    if (record.type === "image_url") {
+      const image = anthropicImageBlock(record);
+      if (image !== undefined) blocks.push(image);
+      else droppedField("anthropic", "image_url", context);
+      continue;
+    }
+    if (typeof record.text === "string") {
+      if (record.text.trim().length > 0) blocks.push({ type: "text", text: record.text });
+      continue;
+    }
+    if (typeof record.type === "string") droppedField("anthropic", record.type, context);
+  }
+  return blocks;
+}
+
 function anthropicNativeContent(message: ChatMessage): AnthropicNativeContentBlock[] | undefined {
   const content = (message as ChatMessage & {
     [ANTHROPIC_MESSAGE_CONTENT]?: AnthropicNativeContentBlock[];
@@ -255,7 +320,7 @@ function anthropicNativeContent(message: ChatMessage): AnthropicNativeContentBlo
           }
   );
   const text = textContent(message.content);
-  if (text.length > 0) native.push({ type: "text", text });
+  if (text.trim().length > 0) native.push({ type: "text", text });
   for (const call of message.tool_calls ?? []) {
     let input: unknown = {};
     try {
@@ -322,9 +387,10 @@ function anthropicMessages(body: ChatBody, model: string): Record<string, unknow
         }
       ];
     }
-    const content: unknown[] = [];
-    const text = textContent(message.content);
-    if (text.length > 0) content.push({ type: "text", text });
+    const content: unknown[] = anthropicContentBlocks(
+      message.content,
+      `${message.role ?? "user"}_message`
+    );
     for (const call of message.tool_calls ?? []) {
       let input: unknown = {};
       try {
@@ -341,6 +407,14 @@ function anthropicMessages(body: ChatBody, model: string): Record<string, unknow
     }
     return [{ role: message.role === "assistant" ? "assistant" : "user", content }];
   });
+  // Anthropic rejects any user turn whose content list is empty, and OpenAI
+  // clients legitimately send blank turns. Adjacent turns of the same role are
+  // coalesced upstream, so dropping a blank turn loses nothing — except when it
+  // was the closing turn, which models that forbid assistant prefill require.
+  const kept = messages.filter((message) => !anthropicContentIsEmpty(message));
+  if (anthropicContentIsEmpty(messages.at(-1)) && kept.at(-1)?.role !== "user") {
+    kept.push({ role: "user", content: [{ type: "text", text: BLANK_TURN_PLACEHOLDER }] });
+  }
   const maxTokens = body.max_completion_tokens ?? body.max_tokens ?? 4096;
   const metadata = anthropicMetadata(body);
   const selection = reasoningSelectionOf(body);
@@ -358,10 +432,10 @@ function anthropicMessages(body: ChatBody, model: string): Record<string, unknow
   const toolChoice = anthropicToolChoice(body.tool_choice, body.parallel_tool_calls);
   return {
     model,
-    messages,
+    messages: kept,
     max_tokens: maxTokens,
     stream: body.stream === true,
-    ...(system.length > 0 ? { system } : {}),
+    ...(system.trim().length > 0 ? { system } : {}),
     ...(body.temperature !== undefined ? { temperature: body.temperature } : {}),
     ...(body.top_p !== undefined ? { top_p: body.top_p } : {}),
     ...(body.top_k !== undefined ? { top_k: body.top_k } : {}),

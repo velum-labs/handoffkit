@@ -75,6 +75,138 @@ test("Anthropic egress preserves tools and normalizes the response", async () =>
   }
 });
 
+test("Anthropic egress drops blank turns and translates image parts", async () => {
+  const original = globalThis.fetch;
+  let request: Request | undefined;
+  globalThis.fetch = async (input, init) => {
+    request = new Request(input, init);
+    return Response.json({
+      id: "msg_blank",
+      content: [{ type: "text", text: "ok" }],
+      usage: { input_tokens: 1, output_tokens: 1 }
+    });
+  };
+  try {
+    const backend = new AnthropicBackend({
+      baseUrl: "https://api.anthropic.test/v1",
+      apiKey: "secret",
+      defaultModel: "claude-test"
+    });
+    await backend.chat({
+      messages: [
+        { role: "system", content: "be brief" },
+        { role: "user", content: "first" },
+        { role: "assistant", content: "reply" },
+        { role: "user", content: "" },
+        { role: "user", content: [] },
+        { role: "user", content: null },
+        { role: "user", content: "   " },
+        {
+          role: "user",
+          content: [
+            { type: "image_url", image_url: { url: "data:image/png;base64,AAAB" } }
+          ]
+        }
+      ]
+    });
+    const outbound = (await request?.json()) as {
+      system: string;
+      messages: Array<{ role: string; content: Array<Record<string, unknown>> }>;
+    };
+    assert.equal(outbound.system, "be brief");
+    assert.deepEqual(
+      outbound.messages.map((message) => message.role),
+      ["user", "assistant", "user"]
+    );
+    assert.ok(outbound.messages.every((message) => message.content.length > 0));
+    assert.deepEqual(outbound.messages[2]?.content, [
+      { type: "image", source: { type: "base64", media_type: "image/png", data: "AAAB" } }
+    ]);
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
+test("Anthropic egress keeps a closing user turn when the caller's is blank", async () => {
+  const original = globalThis.fetch;
+  let request: Request | undefined;
+  globalThis.fetch = async (input, init) => {
+    request = new Request(input, init);
+    return Response.json({
+      id: "msg_closing",
+      content: [{ type: "text", text: "ok" }],
+      usage: { input_tokens: 1, output_tokens: 1 }
+    });
+  };
+  try {
+    const backend = new AnthropicBackend({
+      baseUrl: "https://api.anthropic.test/v1",
+      apiKey: "secret",
+      defaultModel: "claude-test"
+    });
+    await backend.chat({
+      messages: [
+        { role: "user", content: "first" },
+        { role: "assistant", content: "reply" },
+        { role: "user", content: "" }
+      ]
+    });
+    const outbound = (await request?.json()) as {
+      messages: Array<{ role: string; content: Array<Record<string, unknown>> }>;
+    };
+    assert.deepEqual(
+      outbound.messages.map((message) => message.role),
+      ["user", "assistant", "user"]
+    );
+    assert.equal(outbound.messages[2]?.content[0]?.type, "text");
+    assert.ok(String(outbound.messages[2]?.content[0]?.text).trim().length > 0);
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
+test("Anthropic egress keeps tool calls on assistant turns without text", async () => {
+  const original = globalThis.fetch;
+  let request: Request | undefined;
+  globalThis.fetch = async (input, init) => {
+    request = new Request(input, init);
+    return Response.json({
+      id: "msg_tools",
+      content: [{ type: "text", text: "ok" }],
+      usage: { input_tokens: 1, output_tokens: 1 }
+    });
+  };
+  try {
+    const backend = new AnthropicBackend({
+      baseUrl: "https://api.anthropic.test/v1",
+      apiKey: "secret",
+      defaultModel: "claude-test"
+    });
+    await backend.chat({
+      messages: [
+        { role: "user", content: "read a.ts" },
+        {
+          role: "assistant",
+          content: null,
+          tool_calls: [
+            { id: "call_1", function: { name: "read", arguments: "{\"path\":\"a.ts\"}" } }
+          ]
+        },
+        { role: "tool", tool_call_id: "call_1", content: "" }
+      ]
+    });
+    const outbound = (await request?.json()) as {
+      messages: Array<{ role: string; content: Array<Record<string, unknown>> }>;
+    };
+    assert.deepEqual(
+      outbound.messages.map((message) => message.content[0]?.type),
+      ["text", "tool_use", "tool_result"]
+    );
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
 test("Anthropic egress preserves native thinking controls, signed history, and buffered blocks", async () => {
   const original = globalThis.fetch;
   let request: Request | undefined;
