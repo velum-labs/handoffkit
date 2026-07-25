@@ -22,6 +22,23 @@ package, and the PyPI FusionKit sidecar package set. Release tags are named
   Cursor rejects them was wrong. Pick any alias not starting with `claude-` or
   `gemini-`.
 
+  Pinned the boundary against a permissive probe endpoint that accepts every
+  model name, one message per name from an isolated Cursor profile:
+  `probe-plain-1`, `claudex-9`, `Claude-zzz-9`, and `velum-claude-fable-5` each
+  reached the endpoint and rendered its reply, while `claude-zzz-9` and
+  `gemini-zzz-9` were stopped in the client ("The model you chose is not
+  available") with no request logged. The comparison is an exact, case-sensitive
+  prefix: dropping the hyphen (`claudex-9`) or capitalising it (`Claude-zzz-9`)
+  passes, and a `claude-` further inside the name does not count. `gemini-`
+  behaves the same way as `claude-`, so this is a general provider-selection
+  rule rather than an Anthropic quirk.
+
+  The probe log also recorded the call arriving from an AWS address carrying
+  `Tailscale-Funnel-Request: ?1`, confirming that Cursor's backend rather than
+  the desktop client connects to a BYOK endpoint. That is why the endpoint has
+  to be reachable from the public internet, and why the configured key travels
+  through Cursor's infrastructure.
+
 ## 0.9.7 - 2026-07-24
 
 - Added `modelAliases` to the router config so a namespaced model can also be
