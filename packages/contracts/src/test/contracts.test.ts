@@ -3,10 +3,12 @@ import { test } from "node:test";
 
 import {
   canonicalize,
+  cursorModelName,
   hashCanonical,
   parseRetryAfterSeconds,
   requestHash,
-  responseHash
+  responseHash,
+  stripCursorNamespace
 } from "../index.js";
 import type {
   CapabilityStatus,
@@ -20,6 +22,18 @@ test("canonical hashing is stable across object insertion order", () => {
   assert.equal(canonicalize({ b: 2, a: 1 }), '{"a":1,"b":2}');
   assert.equal(hashCanonical({ b: 2, a: 1 }), hashCanonical({ a: 1, b: 2 }));
   assert.equal(requestHash({ b: 2, a: 1 }), responseHash({ a: 1, b: 2 }));
+});
+
+test("Cursor BYOK model names namespace under routekit/ and strip cleanly", () => {
+  assert.equal(cursorModelName("claude-code/claude-fable-5"), "routekit/claude-code/claude-fable-5");
+  assert.equal(cursorModelName("fusion-panel"), "routekit/fusion-panel");
+  assert.equal(
+    stripCursorNamespace("routekit/claude-code/claude-fable-5"),
+    "claude-code/claude-fable-5"
+  );
+  assert.equal(stripCursorNamespace("claude-code/claude-fable-5"), undefined);
+  assert.equal(stripCursorNamespace("routekit/"), undefined);
+  assert.equal(cursorModelName("claude-code/claude-fable-5").startsWith("claude-"), false);
 });
 
 test("Retry-After parsing supports delay seconds and HTTP dates", () => {

@@ -12,8 +12,8 @@ import type { Backend, BackendRequestOptions } from "../backend.js";
 import { estimateTokens, randomId } from "@velum-labs/routekit-runtime";
 import { SseDecoder, SseParseError } from "../sse/parse.js";
 import {
-  ANTHROPIC_MESSAGE_CONTENT,
-  ANTHROPIC_REQUEST_METADATA,
+  attachAnthropicMessageContent,
+  attachAnthropicRequestMetadata,
   attachReasoningSelection,
   attachReasoningSelectionError,
   anthropicReasoningDetailsOf,
@@ -221,16 +221,6 @@ function toolResultContent(result: AnthropicToolResultBlock): string {
   return result.is_error === true ? `[tool_error]\n${text}` : text;
 }
 
-function attachAnthropicContent(
-  message: Record<string, unknown>,
-  content: readonly AnthropicNativeContentBlock[]
-): void {
-  Object.defineProperty(message, ANTHROPIC_MESSAGE_CONTENT, {
-    value: [...content],
-    enumerable: true
-  });
-}
-
 /**
  * Translate an Anthropic Messages request to an OpenAI Chat Completions body.
  * The upstream model is always the backend's own model (Claude Code sends a
@@ -377,7 +367,7 @@ export function anthropicToChat(
       if (text.length > 0 || toolCalls.length > 0 || serverToolUses.length === 0) {
         const assistant: Record<string, unknown> = { role: "assistant", content: text.length > 0 ? text : null };
         if (toolCalls.length > 0) assistant.tool_calls = toolCalls;
-        if (hasReplayableThinking) attachAnthropicContent(assistant, nativeContent);
+        if (hasReplayableThinking) attachAnthropicMessageContent(assistant, nativeContent);
         messages.push(assistant);
       }
       continue;
@@ -451,10 +441,7 @@ export function anthropicToChat(
     ...(body.output_config !== undefined ? { output_config: body.output_config } : {})
   };
   if (Object.keys(metadata).length > 0) {
-    Object.defineProperty(chat, ANTHROPIC_REQUEST_METADATA, {
-      value: metadata,
-      enumerable: true
-    });
+    attachAnthropicRequestMetadata(chat, metadata);
   }
   if (Array.isArray(body.stop_sequences) && body.stop_sequences.length > 0) {
     chat.stop = body.stop_sequences;

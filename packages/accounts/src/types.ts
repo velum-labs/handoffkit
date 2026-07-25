@@ -60,6 +60,8 @@ export type SubscriptionMemberStatus = {
   active: boolean;
   credentialValid?: boolean;
   relayReady?: boolean;
+  /** Whether routing would currently select this member for a generic request. */
+  poolEligible?: boolean;
   models: string[];
   limits?: AccountLimits;
 };

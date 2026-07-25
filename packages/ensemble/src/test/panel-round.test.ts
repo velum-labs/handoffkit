@@ -3,6 +3,8 @@ import { createServer } from "node:http";
 import type { IncomingMessage } from "node:http";
 import { test } from "node:test";
 
+import { reasoningSelectionOf } from "@velum-labs/routekit-gateway";
+
 import { runPanelRound } from "../panel-round.js";
 
 async function readJson(req: IncomingMessage): Promise<Record<string, unknown>> {
@@ -79,4 +81,33 @@ test("each mode names its missing requirements with guidance", async () => {
     }),
     /rollout mode \(k=∞\) needs `repo`, `outputRoot`, and `prompt`/
   );
+});
+
+
+test("runPanelRound preserves canonical-auto precedence through proposal dispatch", async () => {
+  const bodies: Array<Record<string, unknown>> = [];
+  const server = createServer((req, res) => {
+    void readJson(req).then((body) => {
+      bodies.push(body);
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ choices: [{ message: { content: "proposal" } }] }));
+    });
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+  const port = typeof address === "object" && address !== null ? address.port : 0;
+  try {
+    await runPanelRound({
+      models: [{ id: "alpha", model: "provider/alpha" }],
+      fusionBackendUrl: `http://127.0.0.1:${port}`,
+      k: 1,
+      messages: [{ role: "user", content: "task" }],
+      reasoningSelection: { mode: "auto" },
+      reasoningEffort: "legacy-conflict"
+    });
+    assert.deepEqual(reasoningSelectionOf(bodies[0]), { mode: "auto" });
+    assert.equal(bodies[0]?.reasoning_effort, undefined);
+  } finally {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
 });

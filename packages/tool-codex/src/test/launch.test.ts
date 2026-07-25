@@ -68,6 +68,7 @@ test("Codex launcher serializes namespaced models without interpreting provider 
   // Codex rejects the whole catalog file when any entry omits this field, so
   // undiscovered models must serialize an explicit empty list.
   assert.deepEqual(entries[2]?.supported_reasoning_levels, []);
+  assert.equal(entries[2]?.default_reasoning_level, undefined);
   assert.ok(
     entries
       .slice(0, 3)
@@ -75,6 +76,39 @@ test("Codex launcher serializes namespaced models without interpreting provider 
     "every gateway-routed entry carries supported_reasoning_levels"
   );
   assert.deepEqual(JSON.parse(codexModelCatalogJson(SPEC, template)).models, entries.slice(0, 3));
+});
+
+test("Codex launcher exposes only provider-discovered Claude effort levels", () => {
+  const spec: ToolLaunchSpec = {
+    gatewayUrl: "http://127.0.0.1:9999",
+    defaultModel: "claude-code/claude-fable-5",
+    models: [
+      {
+        id: "claude-code/claude-fable-5",
+        reasoning: {
+          status: "supported",
+          efforts: [{ id: "low" }, { id: "high" }, { id: "max" }],
+          budget: { minTokens: 1_024 },
+          adaptive: true,
+          wireShape: "anthropic",
+          provenance: "provider"
+        }
+      }
+    ],
+    args: []
+  };
+  const [entry] = codexCatalogEntries(spec, {
+    slug: "stock",
+    visibility: "list",
+    supported_reasoning_levels: [{ effort: "template" }],
+    default_reasoning_level: "template"
+  });
+  assert.deepEqual(entry?.supported_reasoning_levels, [
+    { effort: "low", description: "low" },
+    { effort: "high", description: "high" },
+    { effort: "max", description: "max" }
+  ]);
+  assert.equal(entry?.default_reasoning_level, undefined);
 });
 
 test("Codex launcher neutralizes stock-model behavior fields from the template", () => {

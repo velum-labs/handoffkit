@@ -20,8 +20,8 @@ The neutral routes are implemented by `@velum-labs/routekit-gateway` and compose
 | `/v1/messages` | Anthropic Messages dialect used by Claude Code. |
 | `/v1/messages/count_tokens` | Anthropic token-count helper. |
 | `/v1/models` | Model listing in OpenAI or Anthropic shape. |
-| `/v1/cursor/chat/completions` | Cursor BYOK hybrid: accepts Cursor's Responses-shaped body posted to a Chat Completions path (set Cursor's base URL override to `.../v1/cursor`). Plain Chat Completions bodies pass through untranslated. |
-| `/v1/cursor/models` | Mirror of `/v1/models` for Cursor probing relative to its BYOK base URL. |
+| `/v1/cursor/chat/completions` | Cursor BYOK hybrid: accepts Cursor's Responses-shaped body posted to a Chat Completions path (set Cursor's base URL override to `.../v1/cursor`). Plain Chat Completions bodies pass through untranslated. Model ids may be sent as `routekit/<served-id>`. |
+| `/v1/cursor/models` | Mirror of `/v1/models` for Cursor probing relative to its BYOK base URL. Every id is advertised as `routekit/<served-id>` so no name starts with `claude-` or `gemini-`. |
 | `/v1/embeddings` | Embeddings when the backend supports it. |
 | `/health` | Unauthenticated health check. |
 

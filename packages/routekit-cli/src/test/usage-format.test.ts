@@ -114,3 +114,60 @@ test("usage rendering keeps provenance accurate for mixed observations", () => {
   assert.match(output, /1m ago via usage/);
   assert.match(output, /5s ago via headers/);
 });
+
+test("usage rendering shows credits-only and exhausted window admission", () => {
+  const now = Date.UTC(2026, 0, 1);
+  const baseMember = {
+    id: "velum",
+    mode: "codex" as const,
+    label: "velum",
+    sourcePath: "/private/velum.json",
+    active: true,
+    models: [] as string[],
+    limits: {
+      windows: {
+        primary: {
+          utilization: 1,
+          resetsAt: now / 1000 + 604_800,
+          observedAt: now / 1000 - 60,
+          source: "usage" as const
+        }
+      },
+      planType: "team",
+      observedAt: now / 1000 - 60,
+      source: "usage" as const,
+      completeness: "snapshot" as const
+    }
+  };
+  const withCredits = renderUsageLines({
+    accountSets: [{
+      mode: "codex",
+      strategy: "capacity_weighted",
+      switchThreshold: 0.9,
+      members: [{
+        ...baseMember,
+        limits: {
+          ...baseMember.limits,
+          credits: { hasCredits: true, unlimited: false }
+        }
+      }]
+    }]
+  }, now).join("\n");
+  const withoutCredits = renderUsageLines({
+    accountSets: [{
+      mode: "codex",
+      strategy: "capacity_weighted",
+      switchThreshold: 0.9,
+      members: [{
+        ...baseMember,
+        limits: {
+          ...baseMember.limits,
+          credits: { hasCredits: false, unlimited: false }
+        }
+      }]
+    }]
+  }, now).join("\n");
+  assert.match(withCredits, /credits-only/);
+  assert.match(withoutCredits, /exhausted/);
+  assert.doesNotMatch(withCredits, /exhausted/);
+});

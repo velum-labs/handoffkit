@@ -17,8 +17,17 @@ import {
 import type { AnthropicRequest } from "./adapters/anthropic.js";
 import { effectiveModel, isStream, withDefaultModel } from "./adapters/chat.js";
 import { authorizedRequest } from "./auth.js";
-import { isCursorChatBody, translateCursorRequest } from "./adapters/cursor.js";
+import {
+  cursorModelVariants,
+  isCursorChatBody,
+  resolveCursorModelSelection,
+  translateCursorRequest
+} from "./adapters/cursor.js";
+import { withReasoningSelection } from "./adapters/openai-chat-wire.js";
 import { handleResponses } from "./adapters/responses.js";
+import {
+  routeKitRequestValidationErrorOf
+} from "./adapters/openai-chat-wire.js";
 import type { ResponsesRequest } from "./adapters/responses.js";
 import type {
   Backend,
@@ -154,7 +163,11 @@ function codexModelInfo(
       instructions_template: "You are a coding agent.",
       instructions_variables: null
     },
-    supports_reasoning_summaries: reasoning?.status === "supported",
+    supports_reasoning_summaries:
+      reasoning?.status === "supported" &&
+      (reasoning.wireShape === "openai-responses" ||
+        reasoning.wireShape === "anthropic" ||
+        reasoning.wireShape === "openrouter"),
     default_reasoning_summary: "none",
     support_verbosity: true,
     default_verbosity: "low",
@@ -433,6 +446,7 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
               : base.data ?? [];
           writeJson(res, 200, {
             object: "list",
+            default_model: backend.defaultModel,
             data,
             models: codexPickerModels(
               backend,
@@ -457,6 +471,7 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
       writeJson(res, 200, {
         ...modelPayload,
         object: typeof modelPayload.object === "string" ? modelPayload.object : "list",
+        default_model: backend.defaultModel,
         data,
         models: codexPickerModels(
           backend,
@@ -473,9 +488,31 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
     }
 
     // Cursor may probe the models list relative to its BYOK base URL
-    // (`.../v1/cursor`); mirror /v1/models there.
+    // (`.../v1/cursor`); mirror /v1/models there. Every id is namespaced under
+    // `routekit/` so no advertised name starts with `claude-` or `gemini-`,
+    // which Cursor routes to the Anthropic/Google keys instead of the OpenAI
+    // base-URL override. Reasoning-capable models also get one `:<effort>`
+    // variant per discovered effort because Cursor does not expose its effort
+    // picker for custom OpenAI-compatible endpoints.
     if (method === "GET" && path === "/v1/cursor/models") {
-      await pipeUpstream(res, await backend.models());
+      const upstream = await backend.models();
+      if (!upstream.ok) {
+        await pipeUpstream(res, upstream);
+        return;
+      }
+      const payload = (await upstream.json()) as {
+        data?: Array<{ id?: unknown } & Record<string, unknown>>;
+      } & Record<string, unknown>;
+      writeJson(res, 200, {
+        ...payload,
+        data: (payload.data ?? []).flatMap((entry) => {
+          if (typeof entry.id !== "string") return [entry];
+          return cursorModelVariants(entry.id, entry.reasoning).map((variant) => ({
+            ...entry,
+            id: variant.model
+          }));
+        })
+      });
       return;
     }
 
@@ -552,7 +589,32 @@ export async function startGateway(options: GatewayOptions): Promise<Gateway> {
       }
       if ("input" in raw && rejectInvalid(res, validateResponsesRequest(raw))) return;
       // Validate the translated body before invoking the backend.
-      const translated = translateCursorRequest(raw);
+      let translated = translateCursorRequest(raw);
+      const selection = resolveCursorModelSelection(
+        translated.model,
+        backend.listModelIds?.() ?? [],
+        backend.reasoningCapabilities?.bind(backend)
+      );
+      if (selection !== undefined) {
+        translated = withReasoningSelection(
+          { ...translated, model: selection.model },
+          selection.reasoningEffort === undefined
+            ? { mode: "auto" }
+            : { mode: "effort", effort: selection.reasoningEffort }
+        );
+      }
+      const validationError = routeKitRequestValidationErrorOf(translated);
+      if (validationError !== undefined) {
+        writeJson(res, 400, {
+          error: {
+            type: "invalid_request_error",
+            code: validationError.code,
+            param: validationError.path,
+            message: validationError.message
+          }
+        });
+        return;
+      }
       if (rejectInvalid(res, validateChatRequest(translated))) return;
       const body = withDefaultModel(translated, backend.defaultModel);
       await handleModelCall(res, provenance, {

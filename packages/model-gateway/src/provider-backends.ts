@@ -2,24 +2,41 @@ import { randomId } from "@velum-labs/routekit-runtime";
 
 import { joinPath } from "./backend.js";
 import type { Backend, BackendRequestOptions } from "./backend.js";
+import { droppedField } from "./adapters/dropped.js";
 import { SseDecoder, SseParseError } from "./sse/parse.js";
 import {
-  ANTHROPIC_MESSAGE_CONTENT,
-  ANTHROPIC_REQUEST_METADATA,
+  anthropicMessageContentOf,
   anthropicReasoningDetailsOf,
+  anthropicRequestMetadataOf,
+  attachGoogleToolCallIndexes,
+  googleThoughtDetailsOf,
+  googleToolCallIndexesOf,
   reasoningSelectionOf,
+  routeKitRequestValidationErrorOf,
+  attachResponsesReasoningMetadata,
+  responsesReasoningMetadataOf,
+  type ResponsesReasoningItem,
   type AnthropicNativeContentBlock,
   type AnthropicReasoningDetail,
+  type CanonicalReasoningDetail,
   type AnthropicRequestMetadata
 } from "./adapters/openai-chat-wire.js";
+
+function invalidReasoningControlResponse(message: string, metadata = false, path?: string): Response {
+  return jsonResponse(
+    { error: { type: "invalid_request_error", code: metadata ? "invalid_reasoning_metadata" : "invalid_reasoning_control", ...(path !== undefined ? { param: path } : {}), message } },
+    400
+  );
+}
 
 type ChatMessage = {
   role?: string;
   content?: unknown;
   reasoning?: string;
-  reasoning_details?: AnthropicReasoningDetail[];
+  reasoning_details?: CanonicalReasoningDetail[];
   tool_calls?: Array<{
     id?: string;
+    index?: number;
     function?: { name?: string; arguments?: string };
   }>;
   tool_call_id?: string;
@@ -226,10 +243,72 @@ function mapSse(
   });
 }
 
+// Stands in for a closing turn that translated to nothing. Anthropic rejects
+// empty and whitespace-only text, so the stand-in has to say something.
+const BLANK_TURN_PLACEHOLDER = "(continue)";
+
+function anthropicContentIsEmpty(message: Record<string, unknown> | undefined): boolean {
+  return Array.isArray(message?.content) && message.content.length === 0;
+}
+
+function anthropicImageBlock(part: Record<string, unknown>): Record<string, unknown> | undefined {
+  const imageUrl = part.image_url;
+  const url =
+    typeof imageUrl === "string"
+      ? imageUrl
+      : typeof imageUrl === "object" &&
+          imageUrl !== null &&
+          typeof (imageUrl as { url?: unknown }).url === "string"
+        ? (imageUrl as { url: string }).url
+        : undefined;
+  if (url === undefined) return undefined;
+  const dataUrl = /^data:([^;,]+);base64,(.+)$/s.exec(url);
+  if (dataUrl !== null) {
+    return {
+      type: "image",
+      source: { type: "base64", media_type: dataUrl[1], data: dataUrl[2] }
+    };
+  }
+  if (/^https?:\/\//i.test(url)) return { type: "image", source: { type: "url", url } };
+  return undefined;
+}
+
+/**
+ * Translate OpenAI chat content into Anthropic content blocks.
+ *
+ * Anthropic rejects text blocks that are empty or whitespace-only, so those are
+ * skipped here rather than sent upstream. Callers must handle the resulting
+ * empty block list; see {@link anthropicMessages}.
+ */
+function anthropicContentBlocks(
+  content: unknown,
+  context: string
+): Record<string, unknown>[] {
+  if (typeof content === "string") {
+    return content.trim().length > 0 ? [{ type: "text", text: content }] : [];
+  }
+  if (!Array.isArray(content)) return [];
+  const blocks: Record<string, unknown>[] = [];
+  for (const part of content) {
+    if (typeof part !== "object" || part === null) continue;
+    const record = part as Record<string, unknown>;
+    if (record.type === "image_url") {
+      const image = anthropicImageBlock(record);
+      if (image !== undefined) blocks.push(image);
+      else droppedField("anthropic", "image_url", context);
+      continue;
+    }
+    if (typeof record.text === "string") {
+      if (record.text.trim().length > 0) blocks.push({ type: "text", text: record.text });
+      continue;
+    }
+    if (typeof record.type === "string") droppedField("anthropic", record.type, context);
+  }
+  return blocks;
+}
+
 function anthropicNativeContent(message: ChatMessage): AnthropicNativeContentBlock[] | undefined {
-  const content = (message as ChatMessage & {
-    [ANTHROPIC_MESSAGE_CONTENT]?: AnthropicNativeContentBlock[];
-  })[ANTHROPIC_MESSAGE_CONTENT];
+  const content = anthropicMessageContentOf(message);
   if (Array.isArray(content)) return content;
   const details = anthropicReasoningDetailsOf(
     message.reasoning_details,
@@ -255,7 +334,7 @@ function anthropicNativeContent(message: ChatMessage): AnthropicNativeContentBlo
           }
   );
   const text = textContent(message.content);
-  if (text.length > 0) native.push({ type: "text", text });
+  if (text.trim().length > 0) native.push({ type: "text", text });
   for (const call of message.tool_calls ?? []) {
     let input: unknown = {};
     try {
@@ -274,9 +353,7 @@ function anthropicNativeContent(message: ChatMessage): AnthropicNativeContentBlo
 }
 
 function anthropicMetadata(body: ChatBody): AnthropicRequestMetadata | undefined {
-  return (body as ChatBody & {
-    [ANTHROPIC_REQUEST_METADATA]?: AnthropicRequestMetadata;
-  })[ANTHROPIC_REQUEST_METADATA];
+  return anthropicRequestMetadataOf(body);
 }
 
 function anthropicToolChoice(
@@ -322,9 +399,10 @@ function anthropicMessages(body: ChatBody, model: string): Record<string, unknow
         }
       ];
     }
-    const content: unknown[] = [];
-    const text = textContent(message.content);
-    if (text.length > 0) content.push({ type: "text", text });
+    const content: unknown[] = anthropicContentBlocks(
+      message.content,
+      `${message.role ?? "user"}_message`
+    );
     for (const call of message.tool_calls ?? []) {
       let input: unknown = {};
       try {
@@ -341,6 +419,14 @@ function anthropicMessages(body: ChatBody, model: string): Record<string, unknow
     }
     return [{ role: message.role === "assistant" ? "assistant" : "user", content }];
   });
+  // Anthropic rejects any user turn whose content list is empty, and OpenAI
+  // clients legitimately send blank turns. Adjacent turns of the same role are
+  // coalesced upstream, so dropping a blank turn loses nothing — except when it
+  // was the closing turn, which models that forbid assistant prefill require.
+  const kept = messages.filter((message) => !anthropicContentIsEmpty(message));
+  if (anthropicContentIsEmpty(messages.at(-1)) && kept.at(-1)?.role !== "user") {
+    kept.push({ role: "user", content: [{ type: "text", text: BLANK_TURN_PLACEHOLDER }] });
+  }
   const maxTokens = body.max_completion_tokens ?? body.max_tokens ?? 4096;
   const metadata = anthropicMetadata(body);
   const selection = reasoningSelectionOf(body);
@@ -358,10 +444,10 @@ function anthropicMessages(body: ChatBody, model: string): Record<string, unknow
   const toolChoice = anthropicToolChoice(body.tool_choice, body.parallel_tool_calls);
   return {
     model,
-    messages,
+    messages: kept,
     max_tokens: maxTokens,
     stream: body.stream === true,
-    ...(system.length > 0 ? { system } : {}),
+    ...(system.trim().length > 0 ? { system } : {}),
     ...(body.temperature !== undefined ? { temperature: body.temperature } : {}),
     ...(body.top_p !== undefined ? { top_p: body.top_p } : {}),
     ...(body.top_k !== undefined ? { top_k: body.top_k } : {}),
@@ -423,6 +509,16 @@ export class AnthropicBackend extends HttpProviderBackend {
     signal?: AbortSignal,
     options?: BackendRequestOptions
   ): Promise<Response> {
+    const validationError = routeKitRequestValidationErrorOf(body);
+    if (validationError !== undefined) {
+      return Promise.resolve(
+        invalidReasoningControlResponse(
+          validationError.message,
+          validationError.code === "invalid_reasoning_metadata",
+          validationError.path
+        )
+      );
+    }
     return this.#chat(bodyRecord(body), signal, options);
   }
 
@@ -742,6 +838,87 @@ export class AnthropicBackend extends HttpProviderBackend {
   }
 }
 
+function googleThoughtDetail(
+  part: Record<string, unknown>,
+  index: number
+): CanonicalReasoningDetail | undefined {
+  if (typeof part.thoughtSignature !== "string" || part.thoughtSignature.length === 0) {
+    return undefined;
+  }
+  return {
+    type: "google_thought",
+    index,
+    ...(part.thought === true && typeof part.text === "string"
+      ? { thought: part.text }
+      : {}),
+    thoughtSignature: part.thoughtSignature
+  };
+}
+
+function googleAssistantParts(message: ChatMessage): Array<Record<string, unknown>> {
+  const details = googleThoughtDetailsOf(message.reasoning_details);
+  const detailsByIndex = new Map(details.map((detail) => [detail.index, detail]));
+  const privateIndexes = googleToolCallIndexesOf(message);
+  const callsByIndex = new Map(
+    (message.tool_calls ?? []).flatMap((call, fallbackIndex) => {
+      const index =
+        typeof call.id === "string" && Number.isInteger(privateIndexes[call.id])
+          ? (privateIndexes[call.id] as number)
+          : Number.isInteger((call as { index?: unknown }).index)
+            ? ((call as { index: number }).index)
+            : fallbackIndex;
+      return [[index, call] as const];
+    })
+  );
+  if (details.length === 0) {
+    const parts: Array<Record<string, unknown>> = [];
+    const text = textContent(message.content);
+    if (text.length > 0) parts.push({ text });
+    for (const call of message.tool_calls ?? []) parts.push(googleFunctionCallPart(call));
+    return parts;
+  }
+
+  const parts: Array<Record<string, unknown>> = [];
+  const text = textContent(message.content);
+  let textAdded = false;
+  const addText = (): void => {
+    if (!textAdded && text.length > 0) parts.push({ text });
+    textAdded = true;
+  };
+  const consumedCalls = new Set<NonNullable<ChatMessage["tool_calls"]>[number]>();
+  for (const index of [...new Set([...detailsByIndex.keys(), ...callsByIndex.keys()])].sort((a, b) => a - b)) {
+    const detail = detailsByIndex.get(index);
+    const call = callsByIndex.get(index);
+    if (typeof detail?.thought === "string") {
+      parts.push({ text: detail.thought, thought: true, thoughtSignature: detail.thoughtSignature });
+    } else if (call !== undefined) {
+      addText();
+      parts.push({
+        ...googleFunctionCallPart(call),
+        ...(detail !== undefined ? { thoughtSignature: detail.thoughtSignature } : {})
+      });
+      consumedCalls.add(call);
+    }
+  }
+  addText();
+  for (const call of message.tool_calls ?? []) {
+    if (!consumedCalls.has(call)) parts.push(googleFunctionCallPart(call));
+  }
+  return parts;
+}
+
+function googleFunctionCallPart(
+  call: NonNullable<ChatMessage["tool_calls"]>[number]
+): Record<string, unknown> {
+  let args: unknown = {};
+  try {
+    args = JSON.parse(call.function?.arguments ?? "{}");
+  } catch {
+    args = { raw: call.function?.arguments ?? "" };
+  }
+  return { functionCall: { name: call.function?.name ?? "tool", args } };
+}
+
 function googleRequest(body: ChatBody): Record<string, unknown> {
   const systemText = (body.messages ?? [])
     .filter((message) => message.role === "system")
@@ -770,37 +947,16 @@ function googleRequest(body: ChatBody): Record<string, unknown> {
     contents: (body.messages ?? []).flatMap((message) => {
       if (message.role === "system") return [];
       if (message.role === "tool") {
-        return [
-          {
-            role: "user",
-            parts: [
-              {
-                functionResponse: {
-                  name: toolNames.get(message.tool_call_id ?? "") ?? "tool",
-                  response: { output: textContent(message.content) }
-                }
-              }
-            ]
-          }
-        ];
+        return [{ role: "user", parts: [{ functionResponse: {
+          name: toolNames.get(message.tool_call_id ?? "") ?? "tool",
+          response: { output: textContent(message.content) }
+        } }] }];
       }
-      const parts: Array<Record<string, unknown>> = [];
-      const text = textContent(message.content);
-      if (text.length > 0) parts.push({ text });
-      for (const call of message.tool_calls ?? []) {
-        let args: unknown = {};
-        try {
-          args = JSON.parse(call.function?.arguments ?? "{}");
-        } catch {
-          args = { raw: call.function?.arguments ?? "" };
-        }
-        parts.push({
-          functionCall: {
-            name: call.function?.name ?? "tool",
-            args
-          }
-        });
-      }
+      const parts = message.role === "assistant"
+        ? googleAssistantParts(message)
+        : textContent(message.content).length > 0
+          ? [{ text: textContent(message.content) }]
+          : [];
       return [{ role: message.role === "assistant" ? "model" : "user", parts }];
     }),
     ...(systemText.length > 0
@@ -811,51 +967,143 @@ function googleRequest(body: ChatBody): Record<string, unknown> {
       ...(body.temperature !== undefined ? { temperature: body.temperature } : {}),
       ...(thinkingConfig !== undefined ? { thinkingConfig } : {})
     },
-    ...(body.tools !== undefined
-      ? {
-          tools: [
-            {
-              functionDeclarations: body.tools.flatMap((tool) =>
-                tool.function === undefined
-                  ? []
-                  : [
-                      {
-                        name: tool.function.name,
-                        description: tool.function.description,
-                        parameters: tool.function.parameters
-                      }
-                    ]
-              )
-            }
-          ]
-        }
-      : {})
+    ...(body.tools !== undefined ? { tools: [{ functionDeclarations: body.tools.flatMap((tool) =>
+      tool.function === undefined ? [] : [{
+        name: tool.function.name,
+        description: tool.function.description,
+        parameters: tool.function.parameters
+      }]) }] } : {})
   };
 }
 
-function googleMessage(payload: Record<string, unknown>): Record<string, unknown> {
+type GoogleStreamToolPart = {
+  providerIndex: number;
+  toolIndex: number;
+  id: string;
+};
+
+type GoogleStreamPartState = {
+  nextProviderIndex: number;
+  nextToolIndex: number;
+  openThoughtIndex?: number;
+  toolParts: Map<string, GoogleStreamToolPart>;
+  thoughtText: Map<number, string>;
+};
+
+function googleFunctionIdentity(call: Record<string, unknown>): string | undefined {
+  const providerId = call.id ?? call.callId ?? call.functionCallId;
+  return typeof providerId === "string" && providerId.length > 0
+    ? `id:${providerId}`
+    : undefined;
+}
+
+function googleMessage(
+  payload: Record<string, unknown>,
+  streamState?: GoogleStreamPartState
+): Record<string, unknown> {
   const candidates = payload.candidates as Array<Record<string, unknown>> | undefined;
   const content = candidates?.[0]?.content as Record<string, unknown> | undefined;
-  const parts = content?.parts as Array<Record<string, unknown>> | undefined;
-  const text = (parts ?? []).map((part) => (typeof part.text === "string" ? part.text : "")).join("");
-  const toolCalls = (parts ?? []).flatMap((part, index) => {
+  const parts = Array.isArray(content?.parts)
+    ? (content.parts as Array<Record<string, unknown>>)
+    : [];
+  let bufferedToolIndex = 0;
+  const indexedParts: Array<{
+    part: Record<string, unknown>;
+    detailPart: Record<string, unknown>;
+    providerIndex: number;
+    toolIndex?: number;
+    id?: string;
+  }> = parts.map((part, localIndex) => {
     const call = part.functionCall as Record<string, unknown> | undefined;
-    return call === undefined
-      ? []
-      : [
-          {
-            id: randomId(12, "call_"),
-            type: "function",
-            index,
-            function: { name: call.name, arguments: JSON.stringify(call.args ?? {}) }
-          }
-        ];
+    if (streamState === undefined) {
+      return {
+        part,
+        detailPart: part,
+        providerIndex: localIndex,
+        ...(call !== undefined ? { toolIndex: bufferedToolIndex++ } : {})
+      };
+    }
+    if (call !== undefined) {
+      streamState.openThoughtIndex = undefined;
+      const identity = googleFunctionIdentity(call);
+      let toolPart = identity === undefined ? undefined : streamState.toolParts.get(identity);
+      if (toolPart === undefined) {
+        toolPart = {
+          providerIndex: streamState.nextProviderIndex++,
+          toolIndex: streamState.nextToolIndex++,
+          id: randomId(12, "call_")
+        };
+        if (identity !== undefined) streamState.toolParts.set(identity, toolPart);
+      }
+      return { part, detailPart: part, ...toolPart };
+    }
+    if (part.thought === true) {
+      const signature =
+        typeof part.thoughtSignature === "string" && part.thoughtSignature.length > 0
+          ? part.thoughtSignature
+          : undefined;
+      let providerIndex = streamState.openThoughtIndex;
+      if (providerIndex === undefined) {
+        providerIndex = streamState.nextProviderIndex++;
+        streamState.openThoughtIndex = providerIndex;
+      }
+      const priorText = streamState.thoughtText.get(providerIndex) ?? "";
+      const incomingText = typeof part.text === "string" ? part.text : "";
+      const thought = `${priorText}${incomingText}`;
+      streamState.thoughtText.set(providerIndex, thought);
+      if (signature !== undefined) streamState.openThoughtIndex = undefined;
+      return {
+        part,
+        detailPart:
+          signature !== undefined
+            ? { ...part, thought: true, text: thought, thoughtSignature: signature }
+            : part,
+        providerIndex
+      };
+    }
+    streamState.openThoughtIndex = undefined;
+    return { part, detailPart: part, providerIndex: streamState.nextProviderIndex++ };
   });
-  return {
+  const text = indexedParts
+    .filter(({ part }) => part.thought === undefined || part.thought === false)
+    .map(({ part }) => typeof part.text === "string" ? part.text : "")
+    .join("");
+  const reasoning = indexedParts
+    .filter(({ part }) => part.thought === true)
+    .map(({ part }) => typeof part.text === "string" ? part.text : "")
+    .join("");
+  const reasoningDetails = indexedParts.flatMap(({ detailPart, providerIndex }) => {
+    const detail = googleThoughtDetail(detailPart, providerIndex);
+    return detail === undefined ? [] : [detail];
+  });
+  const toolCalls = indexedParts.flatMap(({ part, providerIndex, toolIndex, id }) => {
+    const call = part.functionCall as Record<string, unknown> | undefined;
+    return call === undefined || toolIndex === undefined ? [] : [{
+      id: id ?? randomId(12, "call_"),
+      type: "function",
+      index: toolIndex,
+      function: { name: call.name, arguments: JSON.stringify(call.args ?? {}) },
+      providerIndex
+    }];
+  });
+  const message: Record<PropertyKey, unknown> = {
     role: "assistant",
     content: text,
-    ...(toolCalls.length > 0 ? { tool_calls: toolCalls } : {})
+    ...(reasoning.length > 0 ? { reasoning } : {}),
+    ...(reasoningDetails.length > 0 ? { reasoning_details: reasoningDetails } : {}),
+    ...(toolCalls.length > 0
+      ? {
+          tool_calls: toolCalls.map(({ providerIndex: _providerIndex, ...call }) => call)
+        }
+      : {})
   };
+  const providerIndexes = Object.fromEntries(
+    toolCalls.map((call) => [call.id, call.providerIndex])
+  );
+  if (Object.keys(providerIndexes).length > 0) {
+    attachGoogleToolCallIndexes(message, providerIndexes);
+  }
+  return message;
 }
 
 export class GoogleGenAiBackend extends HttpProviderBackend {
@@ -864,6 +1112,16 @@ export class GoogleGenAiBackend extends HttpProviderBackend {
     signal?: AbortSignal,
     options?: BackendRequestOptions
   ): Promise<Response> {
+    const validationError = routeKitRequestValidationErrorOf(body);
+    if (validationError !== undefined) {
+      return Promise.resolve(
+        invalidReasoningControlResponse(
+          validationError.message,
+          validationError.code === "invalid_reasoning_metadata",
+          validationError.path
+        )
+      );
+    }
     return this.#chat(bodyRecord(body), signal, options);
   }
 
@@ -892,6 +1150,12 @@ export class GoogleGenAiBackend extends HttpProviderBackend {
     );
     if (!response.ok) return copyFailure(response, await response.text());
     if (body.stream === true) {
+      const streamState: GoogleStreamPartState = {
+        nextProviderIndex: 0,
+        nextToolIndex: 0,
+        toolParts: new Map(),
+        thoughtText: new Map()
+      };
       return mapSse(response, (_event, data) => {
         const payload = data as Record<string, unknown>;
         const candidates = payload.candidates as Array<Record<string, unknown>> | undefined;
@@ -905,7 +1169,7 @@ export class GoogleGenAiBackend extends HttpProviderBackend {
             choices: [
               {
                 index: 0,
-                delta: googleMessage(payload),
+                delta: googleMessage(payload, streamState),
                 finish_reason:
                   finishReason === undefined
                     ? null
@@ -956,6 +1220,16 @@ function responsesRequest(
       ];
     }
     const items: Record<string, unknown>[] = [];
+    const reasoningMetadata = responsesReasoningMetadataOf(message);
+    for (const item of reasoningMetadata?.items ?? []) {
+      items.push({
+        type: "reasoning",
+        ...(item.id !== undefined ? { id: item.id } : {}),
+        ...(Object.hasOwn(item, "summary") ? { summary: item.summary } : {}),
+        ...(Object.hasOwn(item, "content") ? { content: item.content } : {}),
+        encrypted_content: item.encrypted_content
+      });
+    }
     const text = textContent(message.content);
     if (text.length > 0) {
       items.push({
@@ -978,11 +1252,17 @@ function responsesRequest(
     }
     return items;
   });
+  const includeEncryptedContent =
+    responsesReasoningMetadataOf(body)?.includeEncryptedContent === true ||
+    (body.messages ?? []).some(
+      (message) => responsesReasoningMetadataOf(message)?.includeEncryptedContent === true
+    );
   return {
     model,
     input,
     stream: options.forceStream || body.stream === true,
     store: false,
+    ...(includeEncryptedContent ? { include: ["reasoning.encrypted_content"] } : {}),
     ...(reasoning.mode === "effort"
       ? { reasoning: { effort: reasoning.effort } }
       : {}),
@@ -1029,6 +1309,11 @@ function responsesOutput(payload: Record<string, unknown>): Record<string, unkno
       typeof part.text === "string" ? [part.text] : []
     );
   }).join("");
+  const reasoningItems = (output ?? []).filter(
+    (item) => item.type === "reasoning" &&
+      typeof item.encrypted_content === "string" &&
+      item.encrypted_content.length > 0
+  );
   const toolCalls = (output ?? []).flatMap((item, index) =>
     item.type === "function_call"
       ? [
@@ -1041,12 +1326,47 @@ function responsesOutput(payload: Record<string, unknown>): Record<string, unkno
         ]
       : []
   );
-  return {
+  const message: Record<string, unknown> = {
     role: "assistant",
     content: text,
     ...(reasoning.length > 0 ? { reasoning } : {}),
     ...(toolCalls.length > 0 ? { tool_calls: toolCalls } : {})
   };
+  if (reasoningItems.length > 0) {
+    attachResponsesReasoningMetadata(message, {
+      items: reasoningItems as ResponsesReasoningItem[],
+      includeEncryptedContent: false
+    });
+  }
+  return message;
+}
+
+const CODEX_EMPTY_RESPONSE_ERROR = {
+  message: "Codex completed without assistant content or tool calls",
+  type: "upstream_empty_response"
+} as const;
+
+function responsesItemText(item: Record<string, unknown>): string {
+  if (item.type !== "message") return "";
+  const content = item.content as Array<Record<string, unknown>> | undefined;
+  return (content ?? [])
+    .flatMap((part) => typeof part.text === "string" ? [part.text] : [])
+    .join("");
+}
+
+function codexCompletionResponse(
+  model: string,
+  payload: Record<string, unknown>
+): Response {
+  const message = responsesOutput(payload);
+  const hasOutput =
+    (typeof message.content === "string" && message.content.length > 0) ||
+    (Array.isArray(message.tool_calls) && message.tool_calls.length > 0);
+  return hasOutput
+    ? jsonResponse(
+        chatCompletion(model, message, normalizedOpenAiUsage(payload.usage))
+      )
+    : jsonResponse({ error: CODEX_EMPTY_RESPONSE_ERROR }, 502);
 }
 
 export class CodexResponsesBackend extends HttpProviderBackend {
@@ -1061,11 +1381,25 @@ export class CodexResponsesBackend extends HttpProviderBackend {
     this.#omitSampling = options.omitSampling ?? false;
   }
 
+  reasoningWireShape(): string {
+    return "openai-responses";
+  }
+
   chat(
     body: unknown,
     signal?: AbortSignal,
     options?: BackendRequestOptions
   ): Promise<Response> {
+    const validationError = routeKitRequestValidationErrorOf(body);
+    if (validationError !== undefined) {
+      return Promise.resolve(
+        invalidReasoningControlResponse(
+          validationError.message,
+          validationError.code === "invalid_reasoning_metadata",
+          validationError.path
+        )
+      );
+    }
     return this.#chat(bodyRecord(body), signal, options);
   }
 
@@ -1110,11 +1444,35 @@ export class CodexResponsesBackend extends HttpProviderBackend {
     if (!response.ok) return copyFailure(response, await response.text());
     if (body.stream === true) {
       let hasToolCalls = false;
+      let hasAssistantContent = false;
+      const emittedText = new Map<number, string>();
+      const contentChunk = (content: string): Record<string, unknown> => ({
+        id: randomId(18, "chatcmpl_"),
+        object: "chat.completion.chunk",
+        model,
+        choices: [{ index: 0, delta: { content }, finish_reason: null }]
+      });
+      const recoverMessage = (
+        output: Record<string, unknown>,
+        outputIndex: number
+      ): Record<string, unknown>[] => {
+        const complete = responsesItemText(output);
+        const previous = emittedText.get(outputIndex) ?? "";
+        const suffix = complete.startsWith(previous)
+          ? complete.slice(previous.length)
+          : "";
+        if (suffix.length === 0) return [];
+        emittedText.set(outputIndex, complete);
+        hasAssistantContent = true;
+        return [contentChunk(suffix)];
+      };
       return mapSse(response, (event, data) => {
         const item = data as Record<string, unknown>;
+        const eventType =
+          event === "message" && typeof item.type === "string" ? item.type : event;
         if (
-          event === "response.reasoning_summary_text.delta" ||
-          event === "response.reasoning_text.delta"
+          eventType === "response.reasoning_summary_text.delta" ||
+          eventType === "response.reasoning_text.delta"
         ) {
           return [
             {
@@ -1131,17 +1489,16 @@ export class CodexResponsesBackend extends HttpProviderBackend {
             }
           ];
         }
-        if (event === "response.output_text.delta") {
-          return [
-            {
-              id: randomId(18, "chatcmpl_"),
-              object: "chat.completion.chunk",
-              model,
-              choices: [{ index: 0, delta: { content: item.delta }, finish_reason: null }]
-            }
-          ];
+        if (eventType === "response.output_text.delta") {
+          const outputIndex =
+            typeof item.output_index === "number" ? item.output_index : 0;
+          const delta = typeof item.delta === "string" ? item.delta : "";
+          emittedText.set(outputIndex, `${emittedText.get(outputIndex) ?? ""}${delta}`);
+          if (delta.length === 0) return [];
+          hasAssistantContent = true;
+          return [contentChunk(delta)];
         }
-        if (event === "response.function_call_arguments.delta") {
+        if (eventType === "response.function_call_arguments.delta") {
           return [
             {
               id: randomId(18, "chatcmpl_"),
@@ -1164,7 +1521,7 @@ export class CodexResponsesBackend extends HttpProviderBackend {
             }
           ];
         }
-        if (event === "response.output_item.added") {
+        if (eventType === "response.output_item.added") {
           const output = item.item as Record<string, unknown> | undefined;
           if (output?.type !== "function_call") return [];
           hasToolCalls = true;
@@ -1192,9 +1549,49 @@ export class CodexResponsesBackend extends HttpProviderBackend {
             }
           ];
         }
-        if (event === "response.completed") {
+        if (eventType === "response.output_item.done") {
+          const output = item.item as Record<string, unknown> | undefined;
+          if (
+            output?.type === "reasoning" &&
+            typeof output.encrypted_content === "string" &&
+            output.encrypted_content.length > 0
+          ) {
+            const delta: Record<string, unknown> = {};
+            attachResponsesReasoningMetadata(delta, {
+              items: [output as ResponsesReasoningItem],
+              includeEncryptedContent: false
+            });
+            return [{
+              id: randomId(18, "chatcmpl_"),
+              object: "chat.completion.chunk",
+              model,
+              choices: [{ index: 0, delta, finish_reason: null }]
+            }];
+          }
+          if (output?.type !== "message") return [];
+          const outputIndex =
+            typeof item.output_index === "number" ? item.output_index : 0;
+          return recoverMessage(output, outputIndex);
+        }
+        if (eventType === "response.completed") {
           const completed = item.response as Record<string, unknown> | undefined;
+          const recovered = Array.isArray(completed?.output)
+            ? completed.output.flatMap((output, outputIndex) =>
+                typeof output === "object" &&
+                output !== null &&
+                (output as Record<string, unknown>).type === "message"
+                  ? recoverMessage(
+                      output as Record<string, unknown>,
+                      outputIndex
+                    )
+                  : []
+              )
+            : [];
+          if (!hasAssistantContent && !hasToolCalls) {
+            return [...recovered, { error: CODEX_EMPTY_RESPONSE_ERROR }];
+          }
           return [
+            ...recovered,
             {
               id: randomId(18, "chatcmpl_"),
               object: "chat.completion.chunk",
@@ -1212,6 +1609,20 @@ export class CodexResponsesBackend extends HttpProviderBackend {
             }
           ];
         }
+        if (
+          eventType === "response.failed" ||
+          eventType === "response.incomplete" ||
+          eventType === "error"
+        ) {
+          return [
+            {
+              error: {
+                message: "Codex response did not complete",
+                type: "upstream_error"
+              }
+            }
+          ];
+        }
         return [];
       });
     }
@@ -1221,42 +1632,66 @@ export class CodexResponsesBackend extends HttpProviderBackend {
         ...decoder.feed(await response.text()),
         ...decoder.flush()
       ];
-      for (let index = events.length - 1; index >= 0; index -= 1) {
-        const event = events[index];
-        if (event?.event !== "response.completed") continue;
-        let completed: unknown;
+      const completedOutput = new Map<number, Record<string, unknown>>();
+      let completedResponse: Record<string, unknown> | undefined;
+      for (const event of events) {
+        let payload: unknown;
         try {
-          completed = JSON.parse(event.data);
+          payload = JSON.parse(event.data);
         } catch {
+          if (
+            event.event !== "response.output_item.done" &&
+            event.event !== "response.completed"
+          ) {
+            continue;
+          }
           throw new SseParseError(
             "provider SSE event contained malformed JSON",
             event.data.slice(0, 200)
           );
         }
+        if (typeof payload !== "object" || payload === null) continue;
+        const record = payload as Record<string, unknown>;
+        const eventType = event.event ?? record.type;
         if (
-          typeof completed === "object" &&
-          completed !== null &&
-          typeof (completed as Record<string, unknown>).response === "object" &&
-          (completed as Record<string, unknown>).response !== null
+          eventType === "response.output_item.done" &&
+          typeof record.item === "object" &&
+          record.item !== null
         ) {
-          const payload = (completed as { response: Record<string, unknown> })
-            .response;
-          return jsonResponse(
-            chatCompletion(
-              model,
-              responsesOutput(payload),
-              normalizedOpenAiUsage(payload.usage)
-            )
+          const outputIndex =
+            typeof record.output_index === "number"
+              ? record.output_index
+              : completedOutput.size;
+          completedOutput.set(
+            outputIndex,
+            record.item as Record<string, unknown>
           );
         }
+        if (
+          eventType === "response.completed" &&
+          typeof record.response === "object" &&
+          record.response !== null
+        ) {
+          completedResponse = record.response as Record<string, unknown>;
+        }
+      }
+      if (completedResponse !== undefined) {
+        const terminalOutput = Array.isArray(completedResponse.output)
+          ? [...completedResponse.output]
+          : [];
+        for (const [outputIndex, output] of completedOutput) {
+          if (terminalOutput[outputIndex] === undefined) {
+            terminalOutput[outputIndex] = output;
+          }
+        }
+        const payload = { ...completedResponse, output: terminalOutput };
+        return codexCompletionResponse(model, payload);
       }
       throw new SseParseError(
         "provider SSE stream ended without response.completed"
       );
     }
     const payload = (await response.json()) as Record<string, unknown>;
-    return jsonResponse(
-      chatCompletion(model, responsesOutput(payload), normalizedOpenAiUsage(payload.usage))
-    );
+    return codexCompletionResponse(model, payload);
   }
 }

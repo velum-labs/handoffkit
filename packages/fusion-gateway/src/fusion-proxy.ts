@@ -4,7 +4,11 @@ import { newSpanId, newTraceId } from "@fusionkit/tracing";
 import { FUSION_PANEL_MODEL } from "@fusionkit/registry";
 import { withTimeout } from "@velum-labs/routekit-runtime";
 
-import { CLAUDE_ALIAS_PREFIX } from "@velum-labs/routekit-gateway";
+import {
+  CLAUDE_ALIAS_PREFIX,
+  reasoningSelectionOf,
+  routeKitRequestValidationErrorOf
+} from "@velum-labs/routekit-gateway";
 import type { Backend, BackendRequestOptions } from "@velum-labs/routekit-gateway";
 import type { FrontdoorRequestValue, FrontdoorServices } from "./frontdoor/types.js";
 import { FRONTDOOR_SIGNAL } from "./frontdoor/types.js";
@@ -177,6 +181,24 @@ export class FusionBackend implements Backend {
     return this.defaultModel;
   }
 
+  /**
+   * Fused routes preserve opaque provider reasoning in the namespaced RouteKit
+   * envelope until a concrete judge/synth provider adapter consumes or strips
+   * it. Native passthrough routes report the provider wire capability copied
+   * from RouteKit inventory by the host.
+   */
+  reasoningWireShape(model: string): string | undefined {
+    const passthrough = this.#passthroughFor(model);
+    if (passthrough !== undefined) return passthrough.reasoningWireShape;
+    const resolved = this.#fusedFor(model) ??
+      (model === this.defaultModel || model === `${CLAUDE_ALIAS_PREFIX}${this.defaultModel ?? ""}`
+        ? this.#defaultRoute()
+        : undefined);
+    return resolved !== undefined || (this.#fusedRoutes.length === 0 && this.servesModel(model))
+      ? "routekit-envelope"
+      : undefined;
+  }
+
   /** Exact-id serve check: a fused route or a registered passthrough (no default fold). */
   servesModel(model: string): boolean {
     if (this.#fusedFor(model) !== undefined || this.#passthroughFor(model) !== undefined) return true;
@@ -188,6 +210,20 @@ export class FusionBackend implements Backend {
 
   async chat(body: unknown, signal?: AbortSignal, options: BackendRequestOptions = {}): Promise<Response> {
     const chat = (body ?? {}) as ChatBody;
+    const validationError = routeKitRequestValidationErrorOf(body);
+    if (validationError !== undefined) {
+      return new Response(
+        JSON.stringify({
+          error: {
+            message: validationError.message,
+            type: "invalid_request_error",
+            code: validationError.code,
+            param: validationError.path
+          }
+        }),
+        { status: 400, headers: { "content-type": "application/json" } }
+      );
+    }
     // `FusionBackend` is public SDK surface, so it guards its own boundary in
     // addition to the HTTP doors: a non-string `model` used to reach route
     // resolution and explode as a 502 TypeError ("requested.startsWith is not
@@ -284,6 +320,7 @@ export class FusionBackend implements Backend {
       // `runPanelRound`, not re-encoded here.
       ...(req.chat.tools !== undefined ? { tools: req.chat.tools } : {}),
       ...(req.chat.tool_choice !== undefined ? { toolChoice: req.chat.tool_choice } : {}),
+      reasoningSelection: reasoningSelectionOf(req.chat),
       ...(req.chat.reasoning_effort !== undefined
         ? { reasoningEffort: req.chat.reasoning_effort }
         : {}),

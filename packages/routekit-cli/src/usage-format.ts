@@ -3,6 +3,7 @@ import type {
   SubscriptionMemberStatus,
   SubscriptionUsageResponse
 } from "@velum-labs/routekit-accounts";
+import { windowAdmissionStatus } from "@velum-labs/routekit-accounts";
 import { dim, renderTableLines, supportsUnicode } from "@velum-labs/routekit-cli-ui";
 
 function boundedUtilization(value: number): number {
@@ -67,7 +68,11 @@ export function formatRateLimitWindowName(name: string): string {
   return name;
 }
 
-function memberLines(member: SubscriptionMemberStatus, now: number): string[] {
+function memberLines(
+  member: SubscriptionMemberStatus,
+  switchThreshold: number,
+  now: number
+): string[] {
   const marker = member.active ? " (active)" : "";
   const lines = [`  ${member.label}${marker}`];
   if (member.limits === undefined || Object.keys(member.limits.windows).length === 0) {
@@ -86,10 +91,16 @@ function memberLines(member: SubscriptionMemberStatus, now: number): string[] {
     windows.map(([, window]) => `${window.source}:${window.observedAt}`)
   );
   const mixedObservations = observations.size > 1;
+  const credits = member.limits.credits;
   const rows = windows.map(([name, window]) => [
       window.limitName ?? formatRateLimitWindowName(name),
       formatUtilizationBar(window.utilization),
-      window.status ?? "ok",
+      windowAdmissionStatus(
+        window.utilization,
+        switchThreshold,
+        credits,
+        window.status
+      ),
       formatResetCountdown(window.resetsAt, now),
       ...(mixedObservations
         ? [`${observedAge(window.observedAt, now)} via ${window.source}`]
@@ -128,7 +139,9 @@ export function renderUsageLines(
       `${accountSet.mode} · ${accountSet.strategy} · switch at ${Math.round(accountSet.switchThreshold * 100)}%`
     );
     if (accountSet.members.length === 0) lines.push("  no enrolled accounts");
-    for (const member of accountSet.members) lines.push(...memberLines(member, now));
+    for (const member of accountSet.members) {
+      lines.push(...memberLines(member, accountSet.switchThreshold, now));
+    }
   }
   return lines;
 }

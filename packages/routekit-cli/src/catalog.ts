@@ -60,9 +60,15 @@ export async function fetchLiveCatalog(
   });
   if (models.length === 0) throw new Error("gateway model discovery returned no models");
   const ids = models.map((model) => model.id);
+  const advertisedDefault =
+    typeof payload?.default_model === "string" &&
+    ids.includes(payload.default_model)
+      ? payload.default_model
+      : undefined;
   const defaultModel =
-    input.defaultModel !== undefined && ids.includes(input.defaultModel)
+    advertisedDefault ??
+    (input.defaultModel !== undefined && ids.includes(input.defaultModel)
       ? input.defaultModel
-      : ids[0]!;
+      : ids[0]!);
   return { defaultModel, models };
 }

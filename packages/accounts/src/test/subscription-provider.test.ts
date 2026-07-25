@@ -126,7 +126,30 @@ test("subscription adapters discover native models with member credentials", asy
     const url = String(input);
     requests.push({ url, headers: new Headers(init?.headers) });
     return url.includes("anthropic")
-      ? Response.json({ data: [{ id: "claude-opus-4-1" }] })
+      ? Response.json({
+          data: [
+            {
+              id: "claude-fable-5",
+              capabilities: {
+                effort: {
+                  supported: true,
+                  low: { supported: true },
+                  medium: { supported: true },
+                  high: { supported: true },
+                  xhigh: null,
+                  max: { supported: false }
+                },
+                thinking: {
+                  supported: true,
+                  types: {
+                    adaptive: { supported: true },
+                    enabled: { supported: true }
+                  }
+                }
+              }
+            }
+          ]
+        })
       : Response.json({
           models: [
             {
@@ -149,7 +172,18 @@ test("subscription adapters discover native models with member credentials", asy
       accountId: "acct",
       sourcePath: "/tmp/codex.json"
     });
-    assert.deepEqual(claude, [{ id: "claude-opus-4-1" }]);
+    const claudeModel =
+      typeof claude[0] === "string" ? undefined : claude[0];
+    assert.ok(claudeModel);
+    assert.equal(claudeModel.id, "claude-fable-5");
+    assert.deepEqual(claudeModel.reasoning?.efforts, [
+      { id: "low" },
+      { id: "medium" },
+      { id: "high" }
+    ]);
+    assert.deepEqual(claudeModel.reasoning?.budget, { minTokens: 1_024 });
+    assert.equal(claudeModel.reasoning?.adaptive, true);
+    assert.equal(claudeModel.reasoning?.defaultEffort, undefined);
     assert.equal(typeof codex[0] === "string" ? codex[0] : codex[0]?.id, "gpt-5.5");
     assert.deepEqual(
       typeof codex[0] === "string" ? undefined : codex[0]?.reasoning?.efforts,

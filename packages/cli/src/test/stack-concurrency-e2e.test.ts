@@ -67,7 +67,13 @@ test("24 concurrent passthrough streams answer without cross-talk", { skip: SKIP
   await stack.sim.reset();
   const count = 24;
   const markers = Array.from({ length: count }, (_, index) => `xtalk-marker-${index}-${Date.now()}`);
-  const turns = await Promise.all(markers.map((marker) => streamedChat("member", marker)));
+  // Use the exact public passthrough id. The test previously sent the unknown
+  // alias `member`, which Fusion correctly folded into the default ensemble;
+  // under suite-wide contention it was stress-testing 24 panel+judge pipelines,
+  // not 24 passthrough streams.
+  const turns = await Promise.all(
+    markers.map((marker) => streamedChat("openai/conc-member", marker))
+  );
   for (const [index, turn] of turns.entries()) {
     assert.equal(turn.status, 200, `request ${index}`);
     assert.ok(
@@ -85,6 +91,11 @@ test("24 concurrent passthrough streams answer without cross-talk", { skip: SKIP
   // Accounting: exactly one provider call per passthrough request, none lost.
   const memberCalls = await stack.sim.calls({ model: "conc-member" });
   assert.equal(memberCalls.length, count, await stack.sim.describeJournal());
+  assert.equal(
+    (await stack.sim.calls({ model: "conc-judge" })).length,
+    0,
+    "passthrough concurrency must not invoke the fusion judge"
+  );
 });
 
 test("8 concurrent fused streaming turns all complete with their own answers", { skip: SKIP }, async () => {
@@ -111,12 +122,16 @@ test("a client abort mid-stream leaves concurrent siblings and the gateway intac
     { reply: "one two three four five six seven eight nine ten", chunk_delay_s: 0.15 }
   ]);
   const controller = new AbortController();
+  let firstFrame!: () => void;
+  const firstFrameSeen = new Promise<void>((resolve) => { firstFrame = resolve; });
+  let releaseAbort!: () => void;
+  const abortNow = new Promise<void>((resolve) => { releaseAbort = resolve; });
   const doomed = (async () => {
     const response = await fetch(`${stack.gatewayUrl}/v1/chat/completions`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        model: "member",
+        model: "openai/conc-member",
         messages: [{ role: "user", content: "abort-victim" }],
         stream: true
       }),
@@ -124,13 +139,21 @@ test("a client abort mid-stream leaves concurrent siblings and the gateway intac
     });
     const reader = response.body?.getReader();
     await reader?.read();
+    firstFrame();
+    await abortNow;
     controller.abort();
     await reader?.read();
   })();
+  // The simulator's queued response is model-global. Establish that the doomed
+  // request consumed its first frame before launching the unscripted survivor;
+  // otherwise suite contention can swap which request receives the slow script.
+  await firstFrameSeen;
   const survivorMarker = `survivor-${Date.now()}`;
+  const survivorPromise = streamedChat("openai/conc-member", survivorMarker);
+  releaseAbort();
   const [doomedOutcome, survivor] = await Promise.allSettled([
     doomed,
-    streamedChat("member", survivorMarker)
+    survivorPromise
   ]);
   assert.equal(doomedOutcome.status, "rejected", "the aborted stream must reject at the client");
   assert.equal(survivor.status, "fulfilled");
@@ -139,6 +162,12 @@ test("a client abort mid-stream leaves concurrent siblings and the gateway intac
     assert.ok(survivor.value.content.includes(survivorMarker), survivor.value.content.slice(0, 120));
   }
   await delay(300);
+  assert.equal((await stack.sim.calls({ model: "conc-member" })).length, 2);
+  assert.equal(
+    (await stack.sim.calls({ model: "conc-judge" })).length,
+    0,
+    "passthrough abort isolation must not invoke the fusion judge"
+  );
   const health = await fetch(`${stack.gatewayUrl}/v1/models`);
   assert.equal(health.status, 200, "gateway must survive a mid-stream client abort");
 });

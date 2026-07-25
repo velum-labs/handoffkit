@@ -379,6 +379,8 @@ export type FusionPanelOptions = {
   fusedSubagents?: FusedSubagentAccess;
   /** Finite step-boundary budget per member (see UnifiedHarnessE2EOptions.k). */
   k?: number;
+  reasoningSelection?: import("@velum-labs/routekit-contracts").ReasoningSelection;
+  /** @deprecated compatibility projection; prefer reasoningSelection. */
   reasoningEffort?: string;
   /** Native-session resume cursors keyed by model id (see UnifiedHarnessE2EOptions). */
   resumeCursors?: Map<string, ResumeCursor>;
@@ -409,14 +411,11 @@ async function captureFusionPanelWires(options: FusionPanelOptions): Promise<Wir
         ? { fusedModelIds: options.fusedSubagents.ensembles.map((ensemble) => ensemble.modelId) }
         : {})
     }),
-    ...(options.reasoningEffort !== undefined
-      ? {
-          reasoning: {
-            mode: "effort",
-            effort: options.reasoningEffort
-          }
-        }
-      : {}),
+    ...(options.reasoningSelection !== undefined
+      ? { reasoning: options.reasoningSelection }
+      : options.reasoningEffort !== undefined
+        ? { reasoning: { mode: "effort" as const, effort: options.reasoningEffort } }
+        : {}),
     harnesses: [harness],
     models: options.models,
     ...(options.modelEndpoints !== undefined ? { modelEndpoints: options.modelEndpoints } : {}),

@@ -32,6 +32,9 @@ class ChatMessage(BaseModel):
     name: str | None = None
     tool_call_id: str | None = None
     tool_calls: list[ToolCall] | None = None
+    # Opaque RouteKit transport metadata. It is serialized only as x_routekit,
+    # never folded into content or prompt text.
+    x_routekit: dict[str, Any] | None = None
 
     @field_validator("content", mode="before")
     @classmethod
@@ -127,6 +130,9 @@ class ModelResponse(BaseModel):
     # RouteKit's optional ``message.reasoning`` / ``message.reasoning_content``
     # extension fields; the caller can surface it on a thinking channel.
     reasoning: str | None = None
+    # Opaque RouteKit metadata returned on this model's assistant message.
+    # Synthesizer state is forwarded to the fused response without entering text.
+    x_routekit: dict[str, Any] | None = None
 
 
 class StreamChunk(BaseModel):
@@ -146,6 +152,8 @@ class StreamChunk(BaseModel):
     # deltas accumulate into a single part. The server re-emits these on the
     # OpenAI ``delta.reasoning`` field.
     model_reasoning_delta: str | None = None
+    # Opaque assistant-message metadata, normally present on one stream chunk.
+    x_routekit: dict[str, Any] | None = None
 
 
 class TrajectorySynthesis(BaseModel):

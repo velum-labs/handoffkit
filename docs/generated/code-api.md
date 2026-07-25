@@ -18,12 +18,13 @@ protocols. `startSubscriptionProxy` is the one-call programmatic entrypoint;
 `SubscriptionProxyClient` reads a running proxy's usage over a typed wire
 contract. Product CLIs can wrap this module without owning account logic.
 
-- `export { defaultSubscriptionAccountDirectory, defaultSubscriptionCredentialPath, enrollCurrentSubscription, loadSubscriptionCredential, persistSubscriptionCredential, removeSubscriptionAccount, sanitizeSubscriptionLabel, subscriptionCredentialLabel } from "./credentials.js";`
-- `export type { RemoveSubscriptionAccountResult } from "./credentials.js";`
+- `export { defaultSubscriptionAccountDirectory, defaultSubscriptionCredentialPath, enrollCurrentSubscription, loadSubscriptionCredential, persistSubscriptionCredential, removeSubscriptionAccount, renameSubscriptionAccount, sanitizeSubscriptionLabel, subscriptionCredentialLabel } from "./credentials.js";`
+- `export type { RemoveSubscriptionAccountResult, RenameSubscriptionAccountResult } from "./credentials.js";`
 - `export { resolveSubscriptionAccounts } from "./account-source.js";`
 - `export type { ResolvedSubscriptionAccounts, SubscriptionAccountSource } from "./account-source.js";`
 - `export { subscriptionProvider } from "./provider.js";`
 - `export type { AdminUsageCost, AdminUsageRange, SubscriptionProvider } from "./provider.js";`
+- `export { hasUsableCredits, isOverSwitchThreshold, isPoolEligible, memberHeadroom, windowAdmissionStatus, windowHeadroom } from "./admission.js";`
 - `export { RateLimitTracker, SubscriptionAccountSet, SubscriptionAccountSetExhaustedError } from "./account-set.js";`
 - `export type { SubscriptionAccountSetOptions, SubscriptionExecutionObserver } from "./account-set.js";`
 - `export { SubscriptionAccountBackend } from "./backend.js";`
@@ -128,7 +129,7 @@ No module JSDoc was found.
 - `export type { JsonValue } from "./jcs.js";`
 - `export { SHA256_PREFIX, artifactHash, hashCanonical, hashCanonicalSha256, requestHash, responseHash, schemaBundleHash, sha256Hex, sha256PrefixedHex } from "./hash.js";`
 - `export type { CapabilityStatus, ModelCallContract, ModelCallSideEffects, ModelCallStatus, ModelChatMessage, ModelChatRole, ModelEndpoint, ModelUsage, RequestAttribution, RequestBillingMode, ProviderError, ProviderErrorKind, ProviderFailure, ProviderFailureCategory } from "./model.js";`
-- `export { ProviderFailureError, classifyProviderFailure, isRetryableProviderFailure, parseRetryAfterSeconds } from "./model.js";`
+- `export { CURSOR_MODEL_NAMESPACE, ProviderFailureError, classifyProviderFailure, cursorModelName, isRetryableProviderFailure, parseRetryAfterSeconds, stripCursorNamespace } from "./model.js";`
 - `export type { ModelReasoningCapabilities, ReasoningCapabilityProvenance, ReasoningCapabilityStatus, ReasoningEffortOption, ReasoningSelection } from "./reasoning.js";`
 - `export { resolveReasoningEffort } from "./reasoning.js";`
 - `export type { HarnessApprovalDecision, HarnessContentStream, HarnessEvent, HarnessEventRaw, HarnessEventType, HarnessItemType, HarnessRequestType, HarnessTokenUsage, HarnessTurnEndReason } from "./harness-event.js";`
@@ -335,6 +336,8 @@ Product-neutral RouteKit gateway and router.
 - `export { CapacityPool } from "./capacity-pool.js";`
 - `export type { CapacityLease, CapacityPoolMember, CapacityPoolOptions, CapacityPoolStrategy } from "./capacity-pool.js";`
 - `export { effectiveModel, isStream, withDefaultModel } from "./adapters/chat.js";`
+- `export { ANTHROPIC_MESSAGE_CONTENT, ANTHROPIC_REQUEST_METADATA, REASONING_SELECTION, ROUTEKIT_EXTENSION_KEY, attachAnthropicMessageContent, attachAnthropicRequestMetadata, attachReasoningSelection, anthropicMessageContentOf, anthropicRequestMetadataOf, routeKitRequestValidationErrorOf, reasoningSelectionErrorOf, reasoningSelectionOf, responsesReasoningMetadataErrorOf, withoutRouteKitExtensions } from "./adapters/openai-chat-wire.js";`
+- `export type { AnthropicNativeContentBlock, AnthropicRequestMetadata, RouteKitMessageEnvelope, RouteKitReasoningEnvelope } from "./adapters/openai-chat-wire.js";`
 - `export { isCursorChatBody, translateCursorRequest } from "./adapters/cursor.js";`
 - `export { anthropicModelsResponse, anthropicToChat, CLAUDE_ALIAS_PREFIX, chatToAnthropicMessage, claudeModelAlias, countTokensEstimate, handleAnthropicMessages, handleCountTokens, mapStopReason, openAiSseToAnthropic } from "./adapters/anthropic.js";`
 - `export type { AnthropicRequest } from "./adapters/anthropic.js";`

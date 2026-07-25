@@ -8,10 +8,16 @@ import {
   isRetryableProviderFailure
 } from "@velum-labs/routekit-contracts";
 import { CapacityPool, SseDecoder, SseParseError } from "@velum-labs/routekit-gateway";
-import type { CapacityLease } from "@velum-labs/routekit-gateway";
+import type { CapacityLease, DiscoveredModel } from "@velum-labs/routekit-gateway";
 import type { SubscriptionMode } from "@velum-labs/routekit-registry";
 import { writeFileAtomic } from "@velum-labs/routekit-runtime";
 
+import {
+  hasUsableCredits,
+  isOverSwitchThreshold,
+  isPoolEligible,
+  memberHeadroom
+} from "./admission.js";
 import { resolveSubscriptionAccounts } from "./account-source.js";
 import type { SubscriptionAccountSource } from "./account-source.js";
 import { subscriptionCredentialLabel } from "./credentials.js";
@@ -65,11 +71,13 @@ type PoolMember = {
   lastUsed: number;
   inFlight: number;
   switchedAt: number;
+  forcedRefreshAt?: number;
 };
 
 const DEFAULT_SWITCH_THRESHOLD = 0.9;
 const DEFAULT_REFRESH_SKEW_SECONDS = 300;
 const DEFAULT_FALLBACK_COOLDOWN_SECONDS = 300;
+const FORCED_REFRESH_COOLDOWN_MS = 300_000;
 const RAMP_WINDOW_MS = 30_000;
 const RAMP_STEP_MS = 250;
 const ATTRIBUTION_SEAT_KEY = randomBytes(32);
@@ -315,6 +323,14 @@ export class RateLimitTracker {
     this.#persist();
   }
 
+  renameMember(sourceId: string, targetId: string): void {
+    const source = this.#state.get(sourceId);
+    const removedSource = this.#state.delete(sourceId);
+    const removedStaleTarget = this.#state.delete(targetId);
+    if (source !== undefined) this.#state.set(targetId, source);
+    if (removedSource || removedStaleTarget || source !== undefined) this.#persist();
+  }
+
   #persist(): void {
     const file: PersistedTrackerFile = {
       members: [...this.#state].map(([id, member]) => ({ id, ...member }))
@@ -443,6 +459,7 @@ export class SubscriptionAccountSet {
 
   statusSnapshot(): SubscriptionAccountSetSnapshot {
     const snapshot = this.snapshot();
+    const now = Date.now() / 1000;
     return {
       ...snapshot,
       members: snapshot.members.map((status) => {
@@ -452,11 +469,14 @@ export class SubscriptionAccountSet {
           (member.credential.expiresAt === undefined ||
             member.credential.expiresAt > Date.now() / 1000 ||
             (member.credential.refreshToken?.length ?? 0) > 0);
+        const poolEligible = this.#eligible(member, undefined, now);
         return {
           ...status,
           credentialValid,
+          poolEligible,
           relayReady:
             credentialValid &&
+            poolEligible &&
             (member.coolingUntil === undefined || member.coolingUntil <= Date.now())
         };
       })
@@ -464,15 +484,12 @@ export class SubscriptionAccountSet {
   }
 
   async discoverModels(signal?: AbortSignal): Promise<readonly string[]> {
+    const previousReasoning = new Map(this.#reasoning);
     this.#reasoning.clear();
     const discoveries = await Promise.allSettled(
       this.#members.map(async (member) => {
-        member.models.clear();
         await this.#ensureFresh(member, signal);
-        const discovered = await this.#provider.discoverModels(
-          member.credential,
-          signal
-        );
+        const discovered = await this.#discoverMemberModels(member, signal);
         const normalized = discovered.map((model) =>
           typeof model === "string" ? { id: model } : model
         );
@@ -488,6 +505,14 @@ export class SubscriptionAccountSet {
         if (model.reasoning !== undefined && !this.#reasoning.has(model.id)) {
           this.#reasoning.set(model.id, model.reasoning);
         }
+      }
+    }
+    // Models retained from a failed discovery keep the controls we last saw,
+    // so a blip cannot silently downgrade them to no reasoning support.
+    const served = new Set(this.listModelIds());
+    for (const [model, capabilities] of previousReasoning) {
+      if (served.has(model) && !this.#reasoning.has(model)) {
+        this.#reasoning.set(model, capabilities);
       }
     }
     this.#catalogReady = true;
@@ -571,6 +596,7 @@ export class SubscriptionAccountSet {
     if (this.#members.length === 0) throw new SubscriptionAccountSetExhaustedError(this.mode);
     const excluded = new Set<string>();
     const absorbed = new Set<string>();
+    const reauthenticated = new Set<string>();
     let transientFailovers = 0;
 
     while (excluded.size < this.#members.length) {
@@ -593,6 +619,17 @@ export class SubscriptionAccountSet {
           statusText: response.statusText,
           headers: response.headers
         });
+        // A rejected credential is worth exactly one re-mint before the caller
+        // sees the failure, since the stored token can be dead while its own
+        // expiry claim still looks healthy.
+        if (
+          (response.status === 401 || response.status === 403) &&
+          !reauthenticated.has(member.id) &&
+          (await this.#forceRefresh(member, signal))
+        ) {
+          reauthenticated.add(member.id);
+          continue;
+        }
         if (failure === undefined || !isRetryableProviderFailure(failure.category)) return passthrough;
 
         if (failure.category === "transient") {
@@ -688,7 +725,7 @@ export class SubscriptionAccountSet {
     }
     for (const member of this.#members) {
       this.#capacityPool.update(member.id, {
-        quotaUtilization: 1 - this.#headroom(member, model),
+        quotaUtilization: this.#quotaUtilization(member, model),
         ...(member.coolingUntil !== undefined
           ? { coolingUntil: member.coolingUntil * 1000 }
           : { coolingUntil: undefined })
@@ -717,29 +754,39 @@ export class SubscriptionAccountSet {
   }
 
   #eligible(member: PoolMember, model: string | undefined, now: number): boolean {
-    if (this.#catalogReady && member.models.size === 0) return false;
-    if (this.#catalogReady && model !== undefined && !member.models.has(model)) {
-      return false;
-    }
-    if (member.coolingUntil !== undefined && member.coolingUntil > now) return false;
-    if (
-      member.credential.expiresAt !== undefined &&
-      member.credential.expiresAt <= now &&
-      member.credential.refreshToken === undefined
-    ) {
-      return false;
-    }
-    return this.#headroom(member, model) > 1 - this.#options.switchThreshold;
+    return isPoolEligible({
+      limits: this.#tracker.limits(member.id),
+      switchThreshold: this.#options.switchThreshold,
+      ...(member.coolingUntil !== undefined ? { coolingUntil: member.coolingUntil } : {}),
+      ...(member.credential.expiresAt !== undefined
+        ? { credentialExpiresAt: member.credential.expiresAt }
+        : {}),
+      hasRefreshToken: member.credential.refreshToken !== undefined,
+      catalogReady: this.#catalogReady,
+      models: [...member.models],
+      ...(model !== undefined ? { model } : {}),
+      now,
+      isWindowRelevant: (key, limitName) => this.#windowRelevant(key, limitName, model)
+    });
   }
 
   #headroom(member: PoolMember, model: string | undefined): number {
-    const limits = this.#tracker.limits(member.id);
-    if (limits === undefined) return 1;
-    const relevant = Object.entries(limits.windows).filter(([key, window]) =>
-      this.#windowRelevant(key, window.limitName, model)
+    return memberHeadroom(this.#tracker.limits(member.id), (key, limitName) =>
+      this.#windowRelevant(key, limitName, model)
     );
-    if (relevant.length === 0) return 1;
-    return Math.min(...relevant.map(([, window]) => 1 - window.utilization));
+  }
+
+  #quotaUtilization(member: PoolMember, model: string | undefined): number {
+    const utilization = 1 - this.#headroom(member, model);
+    if (
+      isOverSwitchThreshold(this.#headroom(member, model), this.#options.switchThreshold) &&
+      hasUsableCredits(this.#tracker.limits(member.id)?.credits)
+    ) {
+      // Credits keep the member routable, but capacity selection should still
+      // prefer members below the proactive switch threshold.
+      return Math.min(utilization, this.#options.switchThreshold);
+    }
+    return utilization;
   }
 
   #windowRelevant(key: string, limitName: string | undefined, model: string | undefined): boolean {
@@ -755,22 +802,27 @@ export class SubscriptionAccountSet {
     const now = Date.now() / 1000;
     const resets: number[] = [];
     for (const member of this.#members) {
-      if (this.#catalogReady && member.models.size === 0) continue;
-      if (this.#catalogReady && model !== undefined && !member.models.has(model)) {
-        continue;
-      }
-      if (member.coolingUntil !== undefined && member.coolingUntil > now) {
-        resets.push(member.coolingUntil);
-      }
-      const limits = this.#tracker.limits(member.id);
-      if (limits === undefined) continue;
-      for (const [key, window] of Object.entries(limits.windows)) {
-        if (
-          window.resetsAt !== undefined &&
-          window.resetsAt > now &&
-          this.#windowRelevant(key, window.limitName, model)
-        ) {
-          resets.push(window.resetsAt);
+      if (!this.#eligible(member, model, now)) {
+        if (member.coolingUntil !== undefined && member.coolingUntil > now) {
+          resets.push(member.coolingUntil);
+        }
+        const limits = this.#tracker.limits(member.id);
+        if (limits === undefined) continue;
+        for (const [key, window] of Object.entries(limits.windows)) {
+          if (
+            window.resetsAt !== undefined &&
+            window.resetsAt > now &&
+            this.#windowRelevant(key, window.limitName, model) &&
+            isOverSwitchThreshold(
+              memberHeadroom(limits, (candidateKey, limitName) =>
+                this.#windowRelevant(candidateKey, limitName, model)
+              ),
+              this.#options.switchThreshold
+            ) &&
+            !hasUsableCredits(limits.credits)
+          ) {
+            resets.push(window.resetsAt);
+          }
         }
       }
     }
@@ -781,6 +833,61 @@ export class SubscriptionAccountSet {
     member.coolingUntil = until;
     this.#tracker.cool(member.id, until);
     if (this.#activeId === member.id) this.#activeId = undefined;
+  }
+
+  /**
+   * A member keeps its previous catalog when discovery fails, because an empty
+   * model set makes it pool-ineligible: a provider blip would otherwise take
+   * every account dark until discovery succeeds again.
+   */
+  async #discoverMemberModels(
+    member: PoolMember,
+    signal?: AbortSignal
+  ): Promise<readonly (string | DiscoveredModel)[]> {
+    try {
+      return await this.#provider.discoverModels(member.credential, signal);
+    } catch (error) {
+      if (!(await this.#forceRefresh(member, signal))) throw error;
+      return await this.#provider.discoverModels(member.credential, signal);
+    }
+  }
+
+  /**
+   * Providers can stop honoring an access token long before the token's own
+   * expiry claim lapses, which `#ensureFresh` cannot see. Spend one refresh,
+   * rate limited per member, before blaming the account.
+   */
+  async #forceRefresh(member: PoolMember, signal?: AbortSignal): Promise<boolean> {
+    if (member.credential.refreshToken === undefined) return false;
+    const existing = this.#refreshes.get(member.id);
+    if (existing !== undefined) {
+      try {
+        await existing;
+        return true;
+      } catch {
+        return false;
+      }
+    }
+    const now = Date.now();
+    if (
+      member.forcedRefreshAt !== undefined &&
+      now - member.forcedRefreshAt < FORCED_REFRESH_COOLDOWN_MS
+    ) {
+      return false;
+    }
+    member.forcedRefreshAt = now;
+    const refresh = (async () => {
+      member.credential = await this.#provider.refresh(member.credential, signal);
+      this.#tracker.resetAfterRefresh(member.id);
+      delete member.coolingUntil;
+    })().finally(() => this.#refreshes.delete(member.id));
+    this.#refreshes.set(member.id, refresh);
+    try {
+      await refresh;
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   async #ensureFresh(member: PoolMember, signal?: AbortSignal): Promise<void> {

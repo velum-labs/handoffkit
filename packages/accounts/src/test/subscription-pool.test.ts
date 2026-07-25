@@ -289,6 +289,154 @@ test("pool coalesces near-expiry credential refresh before serving", async () =>
   }
 });
 
+test("discovery re-mints a credential the provider stopped honoring", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "routekit-pool-stale-"));
+  // A far-future expiry claim: nothing about this token looks refreshable.
+  writeMember(directory, "a", {
+    accessToken: "token-a",
+    refreshToken: "refresh-a",
+    expiresAt: Date.now() / 1000 + 86_400
+  });
+  const state = { refreshes: 0 };
+  const provider = fakeProvider(state);
+  const attempts: string[] = [];
+  provider.discoverModels = async (credential) => {
+    attempts.push(credential.accessToken);
+    if (credential.accessToken === "token-a") {
+      throw new Error("model discovery returned HTTP 503");
+    }
+    return ["gpt-5.3-codex"];
+  };
+  const pool = await SubscriptionAccountSet.open(provider, {
+    mode: "codex",
+    source: { kind: "directory", path: directory }
+  });
+  try {
+    assert.deepEqual(await pool.discoverModels(), ["gpt-5.3-codex"]);
+    assert.deepEqual(attempts, ["token-a", "token-a-refreshed"]);
+    assert.equal(state.refreshes, 1);
+    assert.equal(pool.statusSnapshot().members[0]?.relayReady, true);
+  } finally {
+    await pool.close();
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("a failed discovery keeps the last known catalog instead of darkening the pool", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "routekit-pool-retain-"));
+  // No refresh token, so the failure survives the one re-mint attempt.
+  writeMember(directory, "a", { accessToken: "token-a" });
+  const provider = fakeProvider({ refreshes: 0 });
+  let discoveryFails = false;
+  provider.discoverModels = async () => {
+    if (discoveryFails) throw new Error("model discovery returned HTTP 503");
+    return reasoningModel("high");
+  };
+  const pool = await SubscriptionAccountSet.open(provider, {
+    mode: "codex",
+    source: { kind: "directory", path: directory }
+  });
+  try {
+    assert.deepEqual(await pool.discoverModels(), ["gpt-shared"]);
+    discoveryFails = true;
+    assert.deepEqual(await pool.discoverModels(), ["gpt-shared"]);
+    assert.deepEqual(pool.reasoningCapabilities("gpt-shared")?.efforts, [{ id: "high" }]);
+    assert.equal(pool.statusSnapshot().members[0]?.poolEligible, true);
+    const response = await pool.execute("gpt-shared", (credential) =>
+      Promise.resolve(new Response(credential.accessToken))
+    );
+    assert.equal(await response.text(), "token-a");
+  } finally {
+    await pool.close();
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("a discovery in flight does not report members as unavailable", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "routekit-pool-inflight-"));
+  writeMember(directory, "a", { accessToken: "token-a" });
+  const provider = fakeProvider({ refreshes: 0 });
+  const pool = await SubscriptionAccountSet.open(provider, {
+    mode: "codex",
+    source: { kind: "directory", path: directory }
+  });
+  try {
+    await pool.discoverModels();
+    // `routekit status` reads account state while refreshing providers, so a
+    // refresh must never make a healthy member look dark.
+    const gate = deferred<DiscoveryResult>();
+    provider.discoverModels = () => gate.promise;
+    const discovering = pool.discoverModels();
+    await Promise.resolve();
+    assert.deepEqual(pool.snapshot().members[0]?.models, ["gpt-5.3-codex"]);
+    assert.equal(pool.statusSnapshot().members[0]?.relayReady, true);
+    gate.resolve(["gpt-5.3-codex"]);
+    await discovering;
+  } finally {
+    await pool.close();
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("a rejected request re-mints the credential and retries once", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "routekit-pool-reauth-"));
+  writeMember(directory, "a", {
+    accessToken: "token-a",
+    refreshToken: "refresh-a",
+    expiresAt: Date.now() / 1000 + 86_400
+  });
+  const state = { refreshes: 0 };
+  const pool = await SubscriptionAccountSet.open(fakeProvider(state), {
+    mode: "codex",
+    source: { kind: "directory", path: directory }
+  });
+  const seen: string[] = [];
+  try {
+    const response = await pool.execute("gpt-5.3-codex", (credential) => {
+      seen.push(credential.accessToken);
+      return Promise.resolve(
+        credential.accessToken === "token-a"
+          ? new Response("unauthorized", { status: 401 })
+          : new Response("served")
+      );
+    });
+    assert.equal(response.status, 200);
+    assert.equal(await response.text(), "served");
+    assert.deepEqual(seen, ["token-a", "token-a-refreshed"]);
+    assert.equal(state.refreshes, 1);
+  } finally {
+    await pool.close();
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("a credential that stays rejected surfaces the rejection instead of looping", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "routekit-pool-reauth-fail-"));
+  writeMember(directory, "a", {
+    accessToken: "token-a",
+    refreshToken: "refresh-a",
+    expiresAt: Date.now() / 1000 + 86_400
+  });
+  const state = { refreshes: 0 };
+  const pool = await SubscriptionAccountSet.open(fakeProvider(state), {
+    mode: "codex",
+    source: { kind: "directory", path: directory }
+  });
+  const seen: string[] = [];
+  try {
+    const response = await pool.execute("gpt-5.3-codex", (credential) => {
+      seen.push(credential.accessToken);
+      return Promise.resolve(new Response("unauthorized", { status: 401 }));
+    });
+    assert.equal(response.status, 401);
+    assert.deepEqual(seen, ["token-a", "token-a-refreshed"]);
+    assert.equal(state.refreshes, 1);
+  } finally {
+    await pool.close();
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 test("pool unions heterogeneous member catalogs and routes only eligible accounts", async () => {
   const directory = mkdtempSync(join(tmpdir(), "routekit-pool-models-"));
   writeMember(directory, "personal", { accessToken: "token-personal" });
@@ -374,6 +522,55 @@ test("capability conflicts resolve by account order across reversed response tim
   }
 });
 
+test("Claude Code pools retain discovered effort and thinking metadata", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "routekit-pool-claude-capabilities-"));
+  writeMember(directory, "b", { accessToken: "token-b" });
+  writeMember(directory, "a", { accessToken: "token-a" });
+  const base = fakeProvider({ refreshes: 0 });
+  const provider: SubscriptionProvider = {
+    ...base,
+    mode: "claude-code",
+    requestPath: "/v1/messages",
+    async loadCredential(path) {
+      const credential = await base.loadCredential(path);
+      return { ...credential, mode: "claude-code" };
+    },
+    async discoverModels(credential) {
+      return [
+        {
+          id: "claude-fable-5",
+          reasoning: {
+            status: "supported",
+            efforts: [{ id: credential.accessToken === "token-a" ? "low" : "high" }],
+            budget: { minTokens: 1_024 },
+            adaptive: true,
+            wireShape: "anthropic",
+            provenance: "provider"
+          }
+        }
+      ];
+    }
+  };
+  const pool = await SubscriptionAccountSet.open(provider, {
+    mode: "claude-code",
+    source: { kind: "directory", path: directory }
+  });
+  try {
+    await pool.discoverModels();
+    assert.deepEqual(pool.reasoningCapabilities("claude-fable-5"), {
+      status: "supported",
+      efforts: [{ id: "low" }],
+      budget: { minTokens: 1_024 },
+      adaptive: true,
+      wireShape: "anthropic",
+      provenance: "provider"
+    });
+  } finally {
+    await pool.close();
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 test("capability precedence skips failed and capability-omitting accounts", async () => {
   for (const firstAccount of ["failed", "omitted"] as const) {
     const directory = mkdtempSync(join(tmpdir(), "routekit-pool-capability-fallback-"));
@@ -429,6 +626,45 @@ test("tracker safely migrates hostile object keys into map-backed state", async 
       789
     );
     assert.equal(({} as { polluted?: unknown }).polluted, undefined);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("tracker moves quota and cooldown state to a renamed member", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "routekit-pool-rename-state-"));
+  const statePath = join(directory, ".state.json");
+  const tracker = new RateLimitTracker(statePath, "codex");
+  const observedAt = Date.now() / 1000;
+  try {
+    tracker.update("work", {
+      windows: {
+        primary: {
+          utilization: 0.75,
+          observedAt,
+          source: "usage"
+        }
+      },
+      observedAt,
+      source: "usage",
+      completeness: "snapshot"
+    });
+    tracker.cool("work", 123_456);
+    tracker.cool("personal", 999_999);
+
+    tracker.renameMember("work", "personal");
+
+    assert.equal(tracker.limits("work"), undefined);
+    assert.equal(tracker.coolingUntil("work"), undefined);
+    assert.equal(tracker.limits("personal")?.windows.primary?.utilization, 0.75);
+    assert.equal(tracker.coolingUntil("personal"), 123_456);
+    const persisted = JSON.parse(await readFile(statePath, "utf8")) as {
+      members: Array<{ id: string; coolingUntil?: number }>;
+    };
+    assert.deepEqual(
+      persisted.members.map((member) => [member.id, member.coolingUntil]),
+      [["personal", 123_456]]
+    );
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
@@ -596,6 +832,86 @@ test("usage refresh throttles failed provider probes", async () => {
 
     await pool.refreshUsage(0);
     assert.equal(state.usageCalls, 2);
+  } finally {
+    await pool.close();
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+function fullWindowUsageLimits(hasCredits: boolean): AccountLimits {
+  const observedAt = Date.now() / 1000;
+  return {
+    windows: {
+      primary: {
+        utilization: 1,
+        resetsAt: observedAt + 604_800,
+        observedAt,
+        source: "usage"
+      }
+    },
+    credits: { hasCredits, unlimited: false },
+    observedAt,
+    source: "usage",
+    completeness: "snapshot"
+  };
+}
+
+test("pool still attempts a sole member over threshold when credits remain", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "routekit-pool-credits-"));
+  writeMember(directory, "velum", { accessToken: "token-velum" });
+  const provider = fakeProvider({ refreshes: 0 });
+  provider.fetchUsage = async () => fullWindowUsageLimits(true);
+  const pool = await SubscriptionAccountSet.open(provider, {
+    mode: "codex",
+    source: { kind: "directory", path: directory },
+    strategy: "capacity_weighted",
+    switchThreshold: 0.9
+  });
+  const attemptedAccounts: string[] = [];
+  try {
+    await pool.refreshUsage(0);
+    const response = await pool.execute(
+      "gpt-5.3-codex",
+      (credential) => Promise.resolve(new Response(credential.accessToken)),
+      undefined,
+      { onAttempt: (account) => attemptedAccounts.push(account.seat) }
+    );
+    assert.equal(await response.text(), "token-velum");
+    assert.equal(attemptedAccounts.length, 1);
+    assert.equal(pool.statusSnapshot().members[0]?.poolEligible, true);
+    assert.equal(pool.statusSnapshot().members[0]?.relayReady, true);
+  } finally {
+    await pool.close();
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("pool rejects a sole member over threshold locally when credits are gone", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "routekit-pool-no-credits-"));
+  writeMember(directory, "velum", { accessToken: "token-velum" });
+  const provider = fakeProvider({ refreshes: 0 });
+  provider.fetchUsage = async () => fullWindowUsageLimits(false);
+  const pool = await SubscriptionAccountSet.open(provider, {
+    mode: "codex",
+    source: { kind: "directory", path: directory },
+    strategy: "capacity_weighted",
+    switchThreshold: 0.9
+  });
+  const attemptedAccounts: string[] = [];
+  try {
+    await pool.refreshUsage(0);
+    await assert.rejects(
+      pool.execute(
+        "gpt-5.3-codex",
+        () => Promise.resolve(new Response("should-not-run")),
+        undefined,
+        { onAttempt: (account) => attemptedAccounts.push(account.seat) }
+      ),
+      /all codex subscription pool members are unavailable until/
+    );
+    assert.deepEqual(attemptedAccounts, []);
+    assert.equal(pool.statusSnapshot().members[0]?.poolEligible, false);
+    assert.equal(pool.statusSnapshot().members[0]?.relayReady, false);
   } finally {
     await pool.close();
     rmSync(directory, { recursive: true, force: true });

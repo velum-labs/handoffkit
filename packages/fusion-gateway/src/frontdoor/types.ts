@@ -9,6 +9,7 @@
  */
 
 import type { WireTrajectory } from "@fusionkit/protocol";
+import type { RouteKitReasoningEnvelope } from "@velum-labs/routekit-gateway";
 
 import type { ChatMessageLike } from "../fusion-types.js";
 import type { FusionGatewayLogger } from "../logger.js";
@@ -21,6 +22,7 @@ export type FrontdoorChatBody = {
   tools?: unknown;
   tool_choice?: unknown;
   reasoning_effort?: string;
+  x_routekit?: RouteKitReasoningEnvelope;
   stream?: boolean;
 };
 

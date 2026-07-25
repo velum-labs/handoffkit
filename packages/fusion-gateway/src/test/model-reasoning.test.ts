@@ -131,6 +131,29 @@ test("chatToResponses maps non-stream reasoning to a reasoning item ahead of the
   );
   assert.equal(withBoth.output[0]?.summary?.[0]?.text, "thought first");
 
+  const distinctFields = chatToResponses(
+    {
+      choices: [{
+        message: {
+          content: "answer",
+          reasoning_content: "provider summary",
+          reasoning: "raw model reasoning",
+          tool_calls: [{ id: "call_1", function: { name: "run", arguments: "{}" } }]
+        }
+      }]
+    },
+    "local"
+  ) as { output: Array<{ type: string; summary?: Array<{ text: string }>; name?: string }> };
+  assert.deepEqual(
+    distinctFields.output.map((item) => item.type),
+    ["reasoning", "message", "function_call"]
+  );
+  assert.deepEqual(
+    distinctFields.output[0]?.summary?.map((part) => part.text),
+    ["provider summary", "raw model reasoning"]
+  );
+  assert.equal(distinctFields.output[2]?.name, "run");
+
   // vLLM-style field spelling maps the same way.
   const vllm = chatToResponses(
     { choices: [{ message: { content: "answer", reasoning_content: "vllm thought" } }] },
@@ -218,6 +241,31 @@ test("trajectory capture emits reasoning steps from chat reasoning fields", () =
     ["reasoning", "tool_call", "observation", "output"]
   );
   assert.equal(steps[0]?.text, "I need to look at the file.");
+});
+
+test("trajectory capture preserves both chat reasoning origins as ordered steps", () => {
+  const { steps } = feed(
+    "openai-chat",
+    { messages: [{ role: "user", content: "task" }] },
+    {
+      choices: [{
+        message: {
+          role: "assistant",
+          content: "Done.",
+          reasoning_content: "provider summary",
+          reasoning: "raw model reasoning"
+        }
+      }]
+    }
+  );
+  assert.deepEqual(
+    steps.map((step) => [step.type, step.text]),
+    [
+      ["reasoning", "provider summary"],
+      ["reasoning", "raw model reasoning"],
+      ["output", "Done."]
+    ]
+  );
 });
 
 test("trajectory capture surfaces the final turn's reasoning from the response body", () => {

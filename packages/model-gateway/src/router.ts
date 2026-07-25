@@ -18,8 +18,8 @@ import {
 } from "./provider-source.js";
 import {
   attachReasoningSelection,
-  reasoningSelectionErrorOf,
-  reasoningSelectionOf
+  reasoningSelectionOf,
+  routeKitRequestValidationErrorOf
 } from "./adapters/openai-chat-wire.js";
 import type {
   ApiProviderId,
@@ -130,6 +130,7 @@ export const routerConfigSchema = z
       })
       .strict(),
     defaultModel: z.string().min(3).optional(),
+    modelAliases: z.record(z.string().min(1), z.string().min(3)).optional(),
     reasoningCapabilities: z
       .record(z.string().min(3), reasoningCapabilityOverrideSchema)
       .optional()
@@ -194,6 +195,19 @@ export function parseRouterConfig(value: unknown): RouterConfig {
     if (config.providers[selected.provider] === undefined) {
       throw new Error(
         `default model provider "${selected.provider}" is not configured`
+      );
+    }
+  }
+  for (const [alias, target] of Object.entries(config.modelAliases ?? {})) {
+    if (alias.includes("/")) {
+      throw new Error(
+        `model alias "${alias}" must not contain "/"; alias keys must stay distinct from namespaced model ids`
+      );
+    }
+    const selected = splitNamespacedModel(target);
+    if (config.providers[selected.provider] === undefined) {
+      throw new Error(
+        `model alias "${alias}" targets "${target}" but provider "${selected.provider}" is not configured`
       );
     }
   }
@@ -265,6 +279,29 @@ function namespaced(provider: ProviderId, model: string): string {
   return `${provider}/${model}`;
 }
 
+/**
+ * Conservative fallback for models whose discovery API omits reasoning metadata.
+ * Keep this allowlist tied to model families whose exact controls have been
+ * verified; provider discovery and explicit config always take precedence.
+ */
+export function inferKnownReasoningCapabilities(
+  provider: ProviderId,
+  model: string
+): ModelReasoningCapabilities | undefined {
+  if (
+    provider === "openai" &&
+    /^gpt-5\.5(?:-\d{4}-\d{2}-\d{2})?$/.test(model)
+  ) {
+    return {
+      status: "supported",
+      efforts: ["none", "low", "medium", "high", "xhigh"].map((id) => ({ id })),
+      wireShape: "openai-chat",
+      provenance: "builtin"
+    };
+  }
+  return undefined;
+}
+
 export class CatalogBackend implements Backend {
   readonly defaultModel: string | undefined;
   readonly #entries: ReadonlyMap<string, CatalogEntry>;
@@ -330,7 +367,9 @@ export class CatalogBackend implements Backend {
                   ...override,
                   provenance: "config" as const
                 }
-              : model.reasoning ?? source.reasoningCapabilities?.(model.id);
+              : model.reasoning ??
+                source.reasoningCapabilities?.(model.id) ??
+                inferKnownReasoningCapabilities(provider, model.id);
           entries.set(publicId, {
             publicId,
             nativeId: model.id,
@@ -340,6 +379,20 @@ export class CatalogBackend implements Backend {
             ...(reasoning !== undefined ? { reasoning } : {})
           });
         }
+      }
+      for (const [alias, target] of Object.entries(config.modelAliases ?? {})) {
+        const entry = entries.get(target);
+        if (entry === undefined) {
+          throw new Error(
+            `model alias "${alias}" targets "${target}", which no configured provider serves`
+          );
+        }
+        if (entries.has(alias)) {
+          throw new Error(
+            `model alias "${alias}" collides with a served model id`
+          );
+        }
+        entries.set(alias, { ...entry, publicId: alias });
       }
       const first = entries.keys().next().value as string | undefined;
       const defaultModel = config.defaultModel ?? first;
@@ -443,28 +496,41 @@ export class CatalogBackend implements Backend {
     return this.#entries.get(model)?.reasoning;
   }
 
+  reasoningWireShape(model: string): string | undefined {
+    const entry = this.#entries.get(model);
+    if (entry === undefined) return undefined;
+    // Protocol identity is stronger than optional model capability metadata:
+    // Codex sources always egress through Responses even when discovery omits
+    // reasoning controls for a particular model.
+    return entry.provider === "codex"
+      ? "openai-responses"
+      : entry.reasoning?.wireShape;
+  }
+
   chat(
     body: unknown,
     signal?: AbortSignal,
     options?: BackendRequestOptions
   ): Promise<Response> {
     const entry = this.#entry(this.#requestedModel(body));
-    const selectionError = reasoningSelectionErrorOf(body);
-    if (selectionError !== undefined) {
+    const validationError = routeKitRequestValidationErrorOf(body);
+    if (validationError !== undefined) {
       return Promise.resolve(
         Response.json(
           {
             error: {
               type: "invalid_request_error",
-              code: "invalid_reasoning_control",
-              message: selectionError
+              code: validationError.code,
+              param: validationError.path,
+              message: validationError.message
             }
           },
           { status: 400 }
         )
       );
     }
-    const selection = this.#validatedReasoning(entry, reasoningSelectionOf(body));
+    const requestedSelection = reasoningSelectionOf(body);
+    const selection = this.#validatedReasoning(entry, requestedSelection);
     if (typeof selection === "string") {
       return Promise.resolve(
         Response.json(
@@ -494,13 +560,21 @@ export class CatalogBackend implements Backend {
       typeof nativeBody === "object" &&
       !Array.isArray(nativeBody)
     ) {
+      const egressSelection =
+        requestedSelection.mode === "effort" &&
+        requestedSelection.effort === "none" &&
+        selection.mode === "disabled"
+          ? ({ mode: "auto" } as const)
+          : selection;
       attachReasoningSelection(
         nativeBody as Record<PropertyKey, unknown>,
-        selection
+        egressSelection
       );
       if (selection.mode === "effort") {
         (nativeBody as Record<string, unknown>).reasoning_effort =
           selection.effort;
+      } else {
+        delete (nativeBody as Record<string, unknown>).reasoning_effort;
       }
     }
     return entry.source.chat(nativeBody, signal, {
@@ -592,6 +666,15 @@ export class CatalogBackend implements Backend {
       return selection;
     }
     const capability = entry.reasoning;
+    if (
+      selection.mode === "effort" &&
+      selection.effort === "none" &&
+      (capability === undefined ||
+        capability.status === "unknown" ||
+        capability.status === "unsupported")
+    ) {
+      return { mode: "disabled" };
+    }
     if (capability === undefined || capability.status === "unknown") {
       return `model "${entry.publicId}" has no discovered reasoning controls`;
     }

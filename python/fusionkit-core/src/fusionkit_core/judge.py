@@ -275,6 +275,7 @@ class JudgeSynthesizer:
         tools: Sequence[Mapping[str, Any]] | None = None,
         tool_choice: str | Mapping[str, Any] | None = None,
         analysis: FusionAnalysis | None = None,
+        routekit_extra: Mapping[str, Any] | None = None,
         trace: TraceContext | None = None,
         after_judge: Callable[[ModelResponse | None], None] | None = None,
     ) -> FuseResult:
@@ -319,6 +320,7 @@ class JudgeSynthesizer:
                 sampling=sampling,
                 tools=tools,
                 analysis=analysis,
+                routekit_extra=routekit_extra,
                 trace=step_ctx,
             )
             resolved_analysis = prepared.analysis
@@ -341,6 +343,7 @@ class JudgeSynthesizer:
                     sampling,
                     tools=tools,
                     tool_choice=tool_choice,
+                    extra=routekit_extra,
                 )
                 synthesizer_called = True
             result = self._build_fuse_result(
@@ -375,6 +378,7 @@ class JudgeSynthesizer:
         tools: Sequence[Mapping[str, Any]] | None = None,
         tool_choice: str | Mapping[str, Any] | None = None,
         analysis: FusionAnalysis | None = None,
+        routekit_extra: Mapping[str, Any] | None = None,
         trace: TraceContext | None = None,
     ) -> AsyncIterator[StreamChunk | FuseResult]:
         """Streaming counterpart of :meth:`fuse`: the synthesizer turn streams.
@@ -402,6 +406,7 @@ class JudgeSynthesizer:
                 sampling=sampling,
                 tools=tools,
                 analysis=analysis,
+                routekit_extra=routekit_extra,
                 trace=step_ctx,
             )
         except Exception as exc:
@@ -441,6 +446,7 @@ class JudgeSynthesizer:
             sampling,
             tools=tools,
             tool_choice=tool_choice,
+            extra=routekit_extra,
         ):
             accumulator.add(chunk)
             yield chunk
@@ -503,6 +509,7 @@ class JudgeSynthesizer:
         sampling: SamplingConfig,
         tools: Sequence[Mapping[str, Any]] | None,
         analysis: FusionAnalysis | None,
+        routekit_extra: Mapping[str, Any] | None,
         trace: TraceContext | None,
     ) -> _PreparedTurn:
         """Build the synthesizer conversation (judge analysis + system + history).
@@ -523,6 +530,7 @@ class JudgeSynthesizer:
                 trajectories,
                 judge_client=judge_client,
                 judge_sampling=sampling.model_copy(update={"temperature": 0.0}),
+                routekit_extra=routekit_extra,
                 trace=trace,
                 diagnostics=diagnostics,
             )
@@ -667,6 +675,7 @@ class JudgeSynthesizer:
         *,
         judge_client: ChatClient,
         judge_sampling: SamplingConfig,
+        routekit_extra: Mapping[str, Any] | None = None,
         trace: TraceContext | None = None,
         diagnostics: _TurnDiagnostics | None = None,
     ) -> FusionAnalysis:
@@ -702,6 +711,7 @@ class JudgeSynthesizer:
                     ),
                 ],
                 judge_sampling,
+                extra=routekit_extra,
             )
 
         try:
@@ -847,6 +857,36 @@ def _degraded_analysis(
     )
 
 
+def _deep_merge_routekit(
+    current: Mapping[str, Any] | None, incoming: Mapping[str, Any]
+) -> dict[str, Any]:
+    """Copy/merge streamed RouteKit envelopes without mutating either input."""
+    from copy import deepcopy
+
+    def merge(left: Any, right: Any, path: tuple[str, ...]) -> Any:
+        if isinstance(left, Mapping) and isinstance(right, Mapping):
+            result = {key: deepcopy(value) for key, value in left.items()}
+            for key, value in right.items():
+                if key in result:
+                    result[key] = merge(result[key], value, (*path, str(key)))
+                else:
+                    result[key] = deepcopy(value)
+            return result
+        if path == ("selection",):
+            return deepcopy(right)
+        if path == ("responses", "items") and isinstance(left, list) and isinstance(right, list):
+            result = deepcopy(left)
+            for item in right:
+                if item not in result:
+                    result.append(deepcopy(item))
+            return result
+        if path == ("responses", "includeEncryptedContent"):
+            return bool(left) or bool(right)
+        return deepcopy(right)
+
+    return merge(current or {}, incoming, ())
+
+
 class _StreamAccumulator:
     """Folds synthesizer stream chunks into a terminal :class:`ModelResponse`."""
 
@@ -858,6 +898,7 @@ class _StreamAccumulator:
         self._seen_tool_ids: set[str] = set()
         self._finish_reason: str | None = None
         self._usage = Usage()
+        self._x_routekit: dict[str, Any] | None = None
 
     def add(self, chunk: StreamChunk) -> None:
         self.yielded = True
@@ -873,6 +914,8 @@ class _StreamAccumulator:
             self._finish_reason = chunk.finish_reason
         if chunk.usage is not None:
             self._usage = chunk.usage
+        if chunk.x_routekit is not None:
+            self._x_routekit = _deep_merge_routekit(self._x_routekit, chunk.x_routekit)
 
     def response(self, model_id: str) -> ModelResponse:
         tool_calls = [
@@ -887,6 +930,7 @@ class _StreamAccumulator:
             usage=self._usage,
             tool_calls=tool_calls,
             reasoning="".join(self._reasoning_parts) or None,
+            x_routekit=self._x_routekit,
         )
 
 

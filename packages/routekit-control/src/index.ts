@@ -42,6 +42,7 @@ export type RouteKitControlMethod =
   | "accounts.enroll"
   | "accounts.enrollActivate"
   | "accounts.remove"
+  | "accounts.rename"
   | "accounts.sync"
   | "accounts.usage"
   | "telemetry.get"
@@ -75,6 +76,12 @@ export type RouteKitControlParams = {
   };
   /** Registry kind or the raw kind returned by accounts.list for an unclassified file. */
   "accounts.remove": { kind: string; label: string };
+  /** Rename a native subscription account without re-enrolling its credential. */
+  "accounts.rename": {
+    kind: "claude-code" | "codex";
+    source: string;
+    target: string;
+  };
   /** Rescan connector account stores and reconcile the managed sidecar. */
   "accounts.sync": Record<string, never>;
   "accounts.usage": Record<string, never>;
@@ -228,6 +235,7 @@ export type RouteKitControlResults = {
     accountRevision: number;
   };
   "accounts.remove": { removed: boolean; revision: number };
+  "accounts.rename": { renamed: true; revision: number };
   "accounts.sync": { synced: true; revision: number };
   "accounts.usage": unknown;
   "telemetry.get": { enabled: boolean };
@@ -262,6 +270,7 @@ const METHODS: ReadonlySet<string> = new Set<RouteKitControlMethod>([
   "accounts.enroll",
   "accounts.enrollActivate",
   "accounts.remove",
+  "accounts.rename",
   "accounts.sync",
   "accounts.usage",
   "telemetry.get",
@@ -279,6 +288,7 @@ export const MUTATING_ROUTEKIT_METHODS: ReadonlySet<RouteKitControlMethod> = new
   "accounts.enroll",
   "accounts.enrollActivate",
   "accounts.remove",
+  "accounts.rename",
   "accounts.sync",
   "telemetry.set"
 ]);
@@ -386,6 +396,11 @@ export function validateRouteKitParams<M extends RouteKitControlMethod>(
       // Registry kinds and raw stored kinds are resolved by the daemon.
       requiredString(params, "kind", method);
       requiredString(params, "label", method);
+      break;
+    case "accounts.rename":
+      requiredEnum(params, "kind", method, ["claude-code", "codex"] as const);
+      requiredString(params, "source", method);
+      requiredString(params, "target", method);
       break;
     case "telemetry.set":
       if (typeof params.enabled !== "boolean") {
