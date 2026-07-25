@@ -7,6 +7,32 @@ package, and the PyPI FusionKit sidecar package set. Release tags are named
 
 ## Unreleased
 
+- Subscription pools now re-mint an access token the provider has stopped
+  honoring. A stored token can be rejected upstream long before its own expiry
+  claim lapses, and the previous refresh trigger only watched that claim, so a
+  dead token could wedge a pool for as long as the claim said it was valid. A
+  rejected discovery and a `401`/`403` on a served request each spend one
+  refresh, rate limited to one per member every five minutes, before the
+  failure is believed.
+
+- A failed model discovery no longer darkens a subscription pool. Members kept
+  their model set only on success and an empty set makes a member ineligible,
+  so one upstream blip took every account in the pool out of rotation until
+  discovery recovered. Members now keep their last known catalog, and the
+  reasoning controls that go with it, when discovery fails.
+
+- Fixed `routekit status` reporting every enrolled account as
+  `relay unavailable or cooling` while the accounts were serving normally. The
+  command refreshes providers and reads account state in one batch, and the
+  refresh used to blank each member's catalog first, so the account read landed
+  in that window. `routekit accounts status` was unaffected and always correct.
+
+  Found on a gateway whose two Codex accounts had been dark for 21 hours:
+  ChatGPT's backend answered `503 biscuit_baker_service_me_circuit_open` for
+  both stored tokens on every endpoint, while the same account's token from a
+  freshly logged-in CLI answered `200`. An OAuth refresh with the stored refresh
+  token fixed both accounts immediately.
+
 ## 0.9.8 - 2026-07-25
 
 - The `/v1/cursor` models mirror now namespaces every advertised id under
