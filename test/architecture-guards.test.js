@@ -54,17 +54,23 @@ test("RouteKit dependency guard rejects direct and transitive FusionKit dependen
 });
 
 test("canonical shared package guard pins every owner name to its path", () => {
-  const manifests = [...CANONICAL_SHARED_PACKAGES].map(([dir, name]) => ({
-    dir,
-    manifestPath: `${dir}/package.json`,
-    manifest: { name }
-  }));
-  assert.deepEqual(canonicalSharedPackageViolations(manifests), []);
-  const runtime = manifests.find((entry) => entry.dir === "packages/runtime-utils");
-  assert.ok(runtime);
-  runtime.manifest.name = "@fusionkit/runtime-utils";
+  // RouteKit foundation packages were extracted; production pins stay empty.
+  assert.equal(CANONICAL_SHARED_PACKAGES.size, 0);
+  assert.deepEqual(canonicalSharedPackageViolations([]), []);
+
+  // Fixture pins still exercise the mismatch detector used by check-repo.
+  const pins = new Map([["packages/runtime-utils", "@velum-labs/routekit-runtime"]]);
+  const manifests = [
+    {
+      dir: "packages/runtime-utils",
+      manifestPath: "packages/runtime-utils/package.json",
+      manifest: { name: "@velum-labs/routekit-runtime" }
+    }
+  ];
+  assert.deepEqual(canonicalSharedPackageViolations(manifests, pins), []);
+  manifests[0].manifest.name = "@fusionkit/runtime-utils";
   assert.match(
-    canonicalSharedPackageViolations(manifests)[0],
+    canonicalSharedPackageViolations(manifests, pins)[0],
     /must declare @velum-labs\/routekit-runtime/
   );
 });
@@ -96,38 +102,29 @@ test("FusionKit composition guard rejects a transitive RouteKit CLI dependency",
   ]);
 });
 
-test("tool registry guard enforces one neutral composition point for both CLIs", () => {
+test("tool registry guard enforces one neutral composition point for FusionKit CLI", () => {
+  // RouteKit CLI composition is owned by the external routekit repo; this repo
+  // only guards that FusionKit composes through the published tool-registry.
   const clean = [
-    workspacePackage("@velum-labs/routekit-tools"),
-    workspacePackage("@velum-labs/routekit-tool-codex"),
-    workspacePackage("@velum-labs/routekit-tool-claude"),
-    workspacePackage("@velum-labs/routekit-tool-cursor"),
-    workspacePackage("@velum-labs/routekit-tool-opencode"),
-    workspacePackage("@velum-labs/routekit-tool-registry", {
-      "@velum-labs/routekit-tools": "workspace:*",
-      "@velum-labs/routekit-tool-codex": "workspace:*",
-      "@velum-labs/routekit-tool-claude": "workspace:*",
-      "@velum-labs/routekit-tool-cursor": "workspace:*",
-      "@velum-labs/routekit-tool-opencode": "workspace:*"
-    }),
-    workspacePackage("@velum-labs/routekit", {
-      "@velum-labs/routekit-tool-registry": "workspace:*"
-    }),
     workspacePackage("@fusionkit/cli", {
-      "@velum-labs/routekit-tool-registry": "workspace:*"
+      "@velum-labs/routekit-tool-registry": "0.10.1"
     })
   ];
   assert.deepEqual(toolRegistryCompositionViolations(clean), []);
 
-  clean.at(-2).manifest.dependencies["@velum-labs/routekit-tool-codex"] = "workspace:*";
+  clean[0].manifest.dependencies["@velum-labs/routekit-tool-codex"] = "0.10.1";
   assert.deepEqual(toolRegistryCompositionViolations(clean), [
-    "@velum-labs/routekit must compose tools through @velum-labs/routekit-tool-registry, not @velum-labs/routekit-tool-codex"
+    "@fusionkit/cli must compose tools through @velum-labs/routekit-tool-registry, not @velum-labs/routekit-tool-codex"
   ]);
-  delete clean.at(-2).manifest.dependencies["@velum-labs/routekit-tool-codex"];
+  delete clean[0].manifest.dependencies["@velum-labs/routekit-tool-codex"];
 
-  clean.at(-1).manifest.dependencies["@velum-labs/routekit-tool-cursor"] = "workspace:*";
+  clean[0].manifest.dependencies["@velum-labs/routekit-tool-cursor"] = "0.10.1";
   assert.deepEqual(toolRegistryCompositionViolations(clean), [
     "@fusionkit/cli must compose tools through @velum-labs/routekit-tool-registry, not @velum-labs/routekit-tool-cursor"
+  ]);
+
+  assert.deepEqual(toolRegistryCompositionViolations([]), [
+    "@fusionkit/cli is missing from the workspace"
   ]);
 });
 
@@ -199,10 +196,12 @@ test("tool registry CLI source guard scans every production source", () => {
 });
 
 test("tool registry construction guard allows exactly one production owner", () => {
+  const ownerPath = "packages/tool-registry/src/index.ts";
   const owner = {
-    file: "packages/tool-registry/src/index.ts",
+    file: ownerPath,
     source: "export const toolRegistry = createToolRegistry(toolIntegrations);"
   };
+  // Production path: construction ownership moved to the routekit repo.
   assert.deepEqual(toolRegistryConstructionViolations([owner]), []);
   assert.deepEqual(
     toolRegistryConstructionViolations([
@@ -212,9 +211,26 @@ test("tool registry construction guard allows exactly one production owner", () 
         source: "export const otherRegistry = createToolRegistry([]);"
       }
     ]),
+    []
+  );
+  assert.deepEqual(toolRegistryConstructionViolations([]), []);
+
+  // Fixture path: pass an owner to keep the invariant detector covered.
+  assert.deepEqual(toolRegistryConstructionViolations([owner], ownerPath), []);
+  assert.deepEqual(
+    toolRegistryConstructionViolations(
+      [
+        owner,
+        {
+          file: "packages/other/src/tools.ts",
+          source: "export const otherRegistry = createToolRegistry([]);"
+        }
+      ],
+      ownerPath
+    ),
     ["packages/other/src/tools.ts constructs a parallel tool registry"]
   );
-  assert.deepEqual(toolRegistryConstructionViolations([]), [
+  assert.deepEqual(toolRegistryConstructionViolations([], ownerPath), [
     "packages/tool-registry/src/index.ts must construct the canonical registry exactly once"
   ]);
 });
