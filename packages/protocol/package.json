@@ -21,7 +21,7 @@
     "LICENSE"
   ],
   "dependencies": {
-    "@velum-labs/routekit-contracts": "workspace:*"
+    "@velum-labs/routekit-contracts": "0.10.1"
   },
   "publishConfig": {
     "registry": "https://registry.npmjs.org",

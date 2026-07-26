@@ -77,27 +77,39 @@
       "dependsOn": ["fusionkit-protocol"]
     },
     {
+      "key": "routekit",
+      "repo": "routekit",
+      "ecosystem": "pnpm-monorepo",
+      "description": "@velum-labs/routekit and @velum-labs/routekit-* foundation packages.",
+      "branch": "main",
+      "tagPattern": "routekit-v{version}",
+      "releaseTrigger": "github-release",
+      "publishWorkflow": "release-packages.yml",
+      "registries": [{ "kind": "npm", "package": "@velum-labs/routekit" }],
+      "versionSources": ["package.json#version"],
+      "preflight": ["pnpm", "check"],
+      "dependsOn": []
+    },
+    {
       "key": "handoffkit",
       "repo": "handoffkit",
       "ecosystem": "pnpm-monorepo",
-      "description": "The publishable @velum-labs/routekit and @velum-labs/routekit-* foundation and @fusionkit/* product npm packages, versioned in lockstep with the root and release/npm-packages.json protocol.version.",
+      "description": "The publishable @fusionkit/* product npm packages (FusionKit CLI and libraries). RouteKit foundation packages live in the routekit repo.",
       "branch": "main",
       "tagPattern": "handoffkit-v{version}",
       "releaseTrigger": "github-release",
       "publishWorkflow": "release-packages.yml",
       "registries": [
-        { "kind": "npm", "package": "@velum-labs/routekit" },
         { "kind": "npm", "package": "@fusionkit/cli" }
       ],
       "packageManifest": "release/npm-packages.json",
       "binaries": [
-        { "name": "routekit", "package": "@velum-labs/routekit" },
         { "name": "fusionkit", "package": "@fusionkit/cli" }
       ],
       "versionSources": ["package.json#version"],
       "preflight": ["pnpm", "check"],
       "changelog": "CHANGELOG.md",
-      "dependsOn": ["fusionkit-protocol"]
+      "dependsOn": ["fusionkit-protocol", "routekit"]
     },
     {
       "key": "mlx-lm",

@@ -2,9 +2,9 @@
 #
 # GPT-5.5 + Claude Opus 4.8 use stable namespaced RouteKit model IDs here.
 # Provider URLs and credentials live in RouteKit.
-# configs/benchmark-router.example.yaml.
+# RouteKit router configs live in github.com/velum-labs/routekit.
 #
-#   routekit --config configs/benchmark-router.example.yaml serve --no-portless --port 8787
+#   routekit serve --no-portless --port 8787  # see github.com/velum-labs/routekit for router configs
 #   FUSIONKIT_BENCH_CONFIG=configs/benchmark-panel.gpt-opus.yaml \
 #     uv run --package fusionkit-evals fusionkit-bench public ...
 routekit_url: http://127.0.0.1:8787

@@ -8,7 +8,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 const FUSION_CLI = "packages/cli/dist/index.js";
-const ROUTE_CLI = "packages/routekit-cli/dist/index.js";
+const ROUTE_CLI = "node_modules/@velum-labs/routekit/dist/index.js";
 
 const fail = (message) => {
   console.error(`ootb cli check failed: ${message}`);
@@ -233,30 +233,31 @@ try {
 }
 
 // 5) Packaged shape: both published names, bins, and global-install files.
-for (const expected of [
-  {
-    path: "packages/cli/package.json",
-    name: "@fusionkit/cli",
-    binary: "fusionkit"
-  },
-  {
-    path: "packages/routekit-cli/package.json",
-    name: "@velum-labs/routekit",
-    binary: "routekit"
+{
+  const pkg = JSON.parse(readFileSync("packages/cli/package.json", "utf8"));
+  if (pkg.name !== "@fusionkit/cli") {
+    fail(`packages/cli/package.json name must be "@fusionkit/cli", got "${pkg.name}"`);
   }
-]) {
-  const pkg = JSON.parse(readFileSync(expected.path, "utf8"));
-  if (pkg.name !== expected.name) {
-    fail(`${expected.path} name must be "${expected.name}", got "${pkg.name}"`);
-  }
-  if (pkg.bin?.[expected.binary] !== "./dist/index.js") {
-    fail(`${expected.name} must expose \`${expected.binary} -> ./dist/index.js\``);
+  if (pkg.bin?.fusionkit !== "./dist/index.js") {
+    fail("@fusionkit/cli must expose `fusionkit -> ./dist/index.js`");
   }
   if (!Array.isArray(pkg.files) || !pkg.files.includes("dist")) {
-    fail(`${expected.name} must publish its dist directory`);
+    fail("@fusionkit/cli must publish its dist directory");
   }
-  if (!pkg.files.includes("LICENSE")) fail(`${expected.name} must publish LICENSE`);
-  if (pkg.private !== false) fail(`${expected.name} must be publishable (private:false)`);
+  if (!pkg.files.includes("LICENSE")) fail("@fusionkit/cli must publish LICENSE");
+  if (pkg.private !== false) fail("@fusionkit/cli must be publishable (private:false)");
+}
+{
+  const pkg = JSON.parse(readFileSync("node_modules/@velum-labs/routekit/package.json", "utf8"));
+  if (pkg.name !== "@velum-labs/routekit") {
+    fail(`installed RouteKit name must be "@velum-labs/routekit", got "${pkg.name}"`);
+  }
+  if (pkg.version !== "0.10.1") {
+    fail(`installed RouteKit version must be 0.10.1, got "${pkg.version}"`);
+  }
+  if (typeof pkg.bin?.routekit !== "string") {
+    fail("@velum-labs/routekit must expose the routekit binary");
+  }
 }
 
 if (process.exitCode) process.exit(process.exitCode);

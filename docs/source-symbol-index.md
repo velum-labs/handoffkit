@@ -6,55 +6,12 @@ Use it with the narrative references when you need to find the module that owns 
 
 ## TypeScript exported declarations
 
-### `packages/accounts`
-
-- `packages/accounts/src/account-set.ts`: SubscriptionAccountSetOptions (type), SubscriptionExecutionObserver (type), RateLimitTracker (class), SubscriptionAccountSetExhaustedError (class), SubscriptionAccountSet (class)
-- `packages/accounts/src/account-source.ts`: SubscriptionAccountSource (type), ResolvedSubscriptionAccounts (type), resolveSubscriptionAccounts (function)
-- `packages/accounts/src/admission.ts`: hasUsableCredits (function), windowHeadroom (function), memberHeadroom (function), isOverSwitchThreshold (function), isPoolEligible (function), windowAdmissionStatus (function)
-- `packages/accounts/src/backend.ts`: SubscriptionAccountBackendOptions (type), SubscriptionAccountBackend (class)
-- `packages/accounts/src/client.ts`: SubscriptionProxyClientOptions (type), SubscriptionProxyClient (class), SubscriptionProxyClientError (class)
-- `packages/accounts/src/cliproxy.ts`: CLIPROXY_PINNED_VERSION (const), CLIPROXY_API_KEY_ENV (const), CLIPROXY_BASE_URL_ENV (const), CLIPROXY_HOME_ENV (const), cliproxyHome (function), cliproxyBaseUrl (function), cliproxyConfigPath (function), cliproxyManagedPort (function), cliproxyBinaryPath (function), cliproxyAssetName (function), cliproxyApiKey (function), ensureCliproxyConfig (function), writeCliproxyLoginConfig (function), CliproxyInstallResult (type), installCliproxy (function), spawnCliproxy (function), CliproxyStatus (type), cliproxyStatus (function)
-- `packages/accounts/src/codex-relay.ts`: CodexCatalogEntry (type), ProviderRelayLogger (type), CodexStockEntry (type), CodexRelayOptions (type), CodexRelayAuthSource (type), CodexRelayAuth (type), codexRelayAuth (function), CodexBackendRelay (class)
-- `packages/accounts/src/connector.ts`: ResolvedAccountKind (type), resolveAccountKind (function), CliproxyAccountEntry (type), cliproxyAuthDirectory (function), cliproxyCredentialValid (function), cliproxyAccountEntries (function), AccountStoreEntry (type), accountStoreEntries (function), cliproxyAccountMatchesKind (function), removeCliproxyAccount (function), CliproxyLoginInvocation (type), CliproxyLoginOptions (type), CapturedCliproxyCredential (type), captureCliproxyLoginCredentials (function), loginCliproxyAccount (function)
-- `packages/accounts/src/credentials.ts`: defaultSubscriptionAccountDirectory (function), defaultSubscriptionCredentialPath (function), loadSubscriptionCredential (function), persistSubscriptionCredential (function), sanitizeSubscriptionLabel (function), enrollCurrentSubscription (function), RemoveSubscriptionAccountResult (type), RenameSubscriptionAccountResult (type), renameSubscriptionAccount (function), removeSubscriptionAccount (function), subscriptionCredentialLabel (function)
-- `packages/accounts/src/gateway.ts`: SubscriptionAccountConfigs (type), OpenSubscriptionRelaysOptions (type), OpenSubscriptionRelaysResult (type), SubscriptionAccountSets (type), openSubscriptionAccountSets (function), subscriptionRelaysFromAccountSets (function), openSubscriptionRelays (function)
-- `packages/accounts/src/managed-login.ts`: parseAccountMode (function), ManagedAccountLoginInvocation (type), ManagedLoginKeychain (type), ManagedAccountLoginOptions (type), claudeProfileKeychainService (function), captureLoginCredential (function)
-- `packages/accounts/src/provider.ts`: AdminUsageRange (type), AdminUsageCost (type), SubscriptionProvider (type), canonicalRateLimitWindowKey (function), codexModelsSearch (function), subscriptionProvider (function)
-- `packages/accounts/src/proxy.ts`: StartSubscriptionProxyOptions (type), SubscriptionProxy (type), NoSubscriptionAccountsError (class), startSubscriptionProxy (function)
-- `packages/accounts/src/relay.ts`: SubscriptionRelayDialect (type), SubscriptionRelay (type), forwardRelayHeaders (function), AnthropicRelayOptions (type), RelayOnlyBackend (class), AnthropicBackendRelay (class)
-- `packages/accounts/src/types.ts`: SubscriptionSelectionStrategy (type), RateLimitObservationSource (type), SubscriptionCredential (type), RateLimitWindow (type), CreditSnapshot (type), AccountLimits (type), SubscriptionFailure (type), SubscriptionMemberStatus (type), SubscriptionAccountSetSnapshot (type)
-- `packages/accounts/src/usage.ts`: DEFAULT_SUBSCRIPTION_USAGE_REFRESH_MS (const), SubscriptionUsageSource (type), collectSubscriptionUsage (function), openLocalSubscriptionUsage (function)
-- `packages/accounts/src/wire.ts`: SUBSCRIPTION_USAGE_PATH (const), subscriptionUsageResponseSchema (const), SubscriptionUsageResponse (type), snapshotsToUsage (function)
-
 ### `packages/adapter-ai-sdk`
 
 - `packages/adapter-ai-sdk/src/managed-server.ts`: ManagedServerEvent (type), ManagedServerStatus (type), ManagedModelServerOptions (type), ManagedModelServer (class), managedModelServer (function), MlxServerOptions (type), mlxServer (function)
 - `packages/adapter-ai-sdk/src/mlx-env.ts`: MLX_LM_PIN (const), MLX_LM_STRUCTURED_PIN (const), PYTHON_PIN (const), defaultMlxDir (function), MlxEnvManifest (type), SpawnSpec (type), LocalModelInfo (type), DownloadProgress (type), ProvisionEvent (type), MlxCapabilityError (class), MlxEnvOptions (type), MlxEnv (class)
 - `packages/adapter-ai-sdk/src/mlx-helper-source.ts`: MLX_HELPER_PY (const)
 - `packages/adapter-ai-sdk/src/worktree-agent.ts`: TrajectoryStepType (type), TrajectoryStep (type), WorktreeAgentResult (type), WorktreeAgentInput (type), runWorktreeCommand (function), runWorktreeAgent (function), worktreeDiff (function)
-
-### `packages/cli-core`
-
-- `packages/cli-core/src/completion.ts`: COMPLETION_SHELLS (const), CompletionShell (type), CompletionWalk (type), CompletionValueProvider (type), isCompletionShell (function), visibleCommandNames (function), visibleLongFlags (function), filterCompletionCandidates (function), walkCompletionTree (function), completionCandidates (function), completionScript (function), registerCompletion (function)
-- `packages/cli-core/src/context.ts`: GlobalFlags (type), CommandContext (type), isJsonMode (function), resetContextForTest (function), emitJson (function), contextFor (function), attachGlobalFlags (function)
-- `packages/cli-core/src/errors.ts`: CliErrorInput (type), CliError (class), cliErrorPayload (function), renderCliError (function), fail (function)
-- `packages/cli-core/src/flags.ts`: levenshtein (function), knownLongFlags (function), findFlagTypos (function), warnPassthroughTypos (function)
-- `packages/cli-core/src/options.ts`: collect (function), parseIdValue (function), parsePort (function), parsePositiveNumber (function), parsePositiveInteger (function)
-- `packages/cli-core/src/pickers.ts`: canPickInteractively (function), argOrPick (function)
-- `packages/cli-core/src/testing.ts`: CliTestResult (type), runCliForTest (function), withEnvironment (function)
-- `packages/cli-core/src/version.ts`: readPackageVersion (function), probeBinaryVersion (function), formatPackageVersion (function)
-
-### `packages/cli-ui`
-
-- `packages/cli-ui/src/format.ts`: formatBytes (function), formatEta (function), relativeTime (function), timeUntil (function), middleEllipsis (function), wrapText (function), contentWidth (function)
-- `packages/cli-ui/src/fuzzy.ts`: FuzzyMatch (type), fuzzyMatch (function), FuzzyResult (type), fuzzyFilter (function)
-- `packages/cli-ui/src/index.ts`: createPresenter (function)
-- `packages/cli-ui/src/ink/store.ts`: Store (class)
-- `packages/cli-ui/src/plain.ts`: renderTableLines (function), renderErrorPanelLines (function), renderKeyValueLines (function), PlainPresenter (class)
-- `packages/cli-ui/src/presenter.ts`: StepStatus (type), StepInput (type), ChecklistController (type), TaskController (type), ProgressUpdate (type), ProgressController (type), LiveFrameContent (type), LiveFrameController (type), KeyValueRow (type), TableOptions (type), ErrorPanelInput (type), StatusKind (type), Presenter (interface), withTask (function), WatchOptions (type), watch (function)
-- `packages/cli-ui/src/runtime.ts`: isCI (function), uiStream (function), forceNonInteractive (function), isInteractive (function), canPromptInteractively (function)
-- `packages/cli-ui/src/theme.ts`: supportsColor (function), supportsUnicode (function), bold (const), dim (const), italic (const), underline (const), red (const), green (const), yellow (const), blue (const), magenta (const), cyan (const), gray (const), glyph (const), SPINNER_FRAMES (const), BrandOptions (type), configureBrand (function), brandHeader (function), stripAnsi (function), visibleWidth (function), wrapAnsi (function), BoxTone (type), box (function), gradient (function), brandBanner (function)
-- `packages/cli-ui/src/wizard.ts`: WizardStep (type), runWizard (function)
 
 ### `packages/cli`
 
@@ -98,18 +55,6 @@ Use it with the narrative references when you need to find the module that owns 
 - `packages/cli/src/shared/preflight.ts`: PreflightError (class), hasBinary (function), INSTALL_HINTS (const), runPreflight (function)
 - `packages/cli/src/telemetry/consent.ts`: TelemetryFile (type), TelemetryDecision (type), telemetryPath (function), resolveTelemetry (const), enableTelemetry (const), disableTelemetry (const), clearTelemetryFile (const)
 - `packages/cli/src/telemetry/telemetry.ts`: TELEMETRY_DEFAULT_HOST (const), TELEMETRY_DEFAULT_PROJECT_KEY (const), telemetryProjectKey (function), telemetryHost (function), CliCommandEvent (type), FusionSessionEvent (type), InitTelemetryOptions (type), initTelemetry (function), captureCommand (function), shutdownTelemetry (function), pendingSessionEventsForTest (function), resetTelemetryForTest (function)
-
-### `packages/config-core`
-
-- `packages/config-core/src/index.ts`: ConfigSource (type), LayeredValue (type), resolveLayer (function), isRecord (function), readJson (function), readValidatedJson (function), writeJsonAtomic (function), loadMigratingConfig (function), editConfig (function)
-
-### `packages/contracts`
-
-- `packages/contracts/src/harness-event.ts`: HarnessApprovalDecision (type), HarnessRequestType (type), HarnessEventRaw (type), HarnessItemType (type), HarnessContentStream (type), HarnessTurnEndReason (type), HarnessTokenUsage (type), HarnessEvent (type), HarnessEventType (type)
-- `packages/contracts/src/hash.ts`: SHA256_PREFIX (const), sha256Hex (function), sha256PrefixedHex (function), hashCanonical (function), hashCanonicalSha256 (function), requestHash (function), responseHash (function), artifactHash (function), schemaBundleHash (function)
-- `packages/contracts/src/jcs.ts`: JsonValue (type), canonicalize (function)
-- `packages/contracts/src/model.ts`: CapabilityStatus (type), ModelCallStatus (type), ModelCallSideEffects (type), ModelChatRole (type), ModelChatMessage (type), ModelUsage (type), RequestBillingMode (type), RequestAttribution (type), ProviderErrorKind (type), ProviderError (type), ProviderFailureCategory (type), ProviderFailure (type), ProviderFailureError (class), isRetryableProviderFailure (function), parseRetryAfterSeconds (function), classifyProviderFailure (function), CURSOR_MODEL_NAMESPACE (const), cursorModelName (function), stripCursorNamespace (function), ModelEndpoint (type), ModelCallContract (type)
-- `packages/contracts/src/reasoning.ts`: ReasoningEffortOption (type), ReasoningCapabilityProvenance (type), ReasoningCapabilityStatus (type), ModelReasoningCapabilities (type), ReasoningSelection (type), resolveReasoningEffort (function)
 
 ### `packages/ensemble`
 
@@ -185,23 +130,6 @@ Use it with the narrative references when you need to find the module that owns 
 - `packages/fusion-gateway/src/session-store.ts`: SessionTurnRecord (type), SessionMeta (type), PersistedSession (type), SessionSummary (type), SessionStore (interface), defaultSessionsDir (function), FileSystemSessionStoreOptions (type), FileSystemSessionStore (class), InMemorySessionStore (class)
 - `packages/fusion-gateway/src/trajectory-capture.ts`: CapturedStep (type), CapturedTrajectory (type), reconstructTrajectory (function), TrajectoryCapture (type), createTrajectoryCapture (function)
 
-### `packages/harness-core`
-
-- `packages/harness-core/src/approvals.ts`: ApprovalDecision (type), HarnessRequestType (type), ApprovalPolicy (type), DEFAULT_AUTOMATION_APPROVAL_POLICY (const), decideApproval (function), Deferred (type), createDeferred (function), PendingRequest (type), PendingRequests (class)
-- `packages/harness-core/src/channel.ts`: AsyncChannel (class)
-- `packages/harness-core/src/contract.ts`: ResumeCursor (type), SessionTurnInput (type), SessionHandle (interface), StartSessionOptions (type), HarnessInstance (interface), DriverContext (type), HarnessDriver (interface), AnyHarnessDriver (type)
-- `packages/harness-core/src/driver-factory.ts`: resolveDriverEnv (function), CliVersionProbeInput (type), probeCliVersion (function), CachedHarnessDriverInput (type), createCachedHarnessDriver (function)
-- `packages/harness-core/src/errors.ts`: HARNESS_ERROR_CODES (const), HarnessErrorCode (type), HarnessErrorCategory (type), HarnessError (class), isRetryable (function), asHarnessError (function)
-- `packages/harness-core/src/events.ts`: HarnessEvent (type)
-- `packages/harness-core/src/kinds.ts`: HARNESS_KINDS (const), HarnessKind (type), isHarnessKind (function)
-- `packages/harness-core/src/logging.ts`: EventLogOptions (type), EventLog (class)
-- `packages/harness-core/src/registry.ts`: DriverRegistry (class)
-- `packages/harness-core/src/status.ts`: HarnessAuthStatus (type), HarnessModelDescriptor (type), HarnessStatus (type), DEFAULT_STATUS_CACHE_DIR (const), readCachedStatus (function), writeCachedStatus (function), statusSkipReason (function)
-- `packages/harness-core/src/stream-json.ts`: STREAM_JSON_MAX_TEXT (const), STREAM_JSON_MAX_TOOL_INPUT (const), StreamJsonStepText (type), StreamJsonEmitterOptions (type), ParseStreamJsonOptions (type), ParsedStreamJson (type), truncateStreamJsonText (function), asObject (function), asArray (function), asString (function), stringifyStreamJsonValue (function), streamJsonResultContentText (function), parseStreamJsonLine (function), createStreamJsonStepEmitter (function), parseStreamJsonTrajectory (function)
-- `packages/harness-core/src/testing/contract-suite.ts`: DriverContractSuiteInput (type), driverContractSuite (function)
-- `packages/harness-core/src/testing/mock-driver.ts`: mockDriverConfigSchema (const), MockDriverConfig (type), createMockDriver (function)
-- `packages/harness-core/src/tmp-sweep.ts`: DEFAULT_TMP_MANIFEST (const), createTrackedTmpDir (function), releaseTrackedTmpDir (function), sweepTrackedTmpDirs (function)
-
 ### `packages/kernel`
 
 - `packages/kernel/src/artifact-types.ts`: ArtifactTypes (const), ArtifactType (type), OperatorKinds (const), OperatorKind (type)
@@ -216,37 +144,6 @@ Use it with the narrative references when you need to find the module that owns 
 - `packages/kernel/src/types.ts`: ArtifactVisibility (type), ArtifactLeakage (type), OperatorSideEffects (type), RuntimeStatus (type), TaskSpec (type), CostEstimate (type), BudgetUsage (type), SignalDimension (type), SignalCalibration (type), Observation (type), Signal (type), RecordObservationInput (type), RecordSignalInput (type), Provenance (type), Artifact (type), OperatorSpec (type), RetryPolicy (type), CreateArtifactInput (type), OperatorRunContext (type), ObservationFilter (type), SignalFilter (type), Operator (type), RuntimeEvent (type), StreamingOperator (type), ArtifactInputRef (type), OperatorGraphNode (type), OperatorGraph (type), BudgetPolicy (type), BudgetLedger (type), TraceEventType (type), TraceEventInput (type), TraceEvent (type), RuntimeState (type), OutcomeRecord (type), SchedulerRunResult (type), SchedulerExecutionContext (type), Scheduler (type), RuntimeExecutionResult (type), KernelTurnState (type), KernelSessionState (type), KernelStateStore (type), InMemoryKernelStateStore (class), RuntimeExecutionError (class), RuntimeReplayRecord (type), BudgetExceededError (class), OperatorGraphError (class), RuntimeCancelledError (class)
 - `packages/kernel/src/visibility.ts`: isPrivateLeakage (function), schedulerVisibleArtifact (function), schedulerVisibleObservation (function), schedulerVisibleSignal (function), maxLeakage (function)
 - `packages/kernel/src/wire-artifacts.ts`: WireResponseValue (type), WireArtifactTypes (const), captureWireResponse (function)
-
-### `packages/model-gateway`
-
-- `packages/model-gateway/src/acp-agent.ts`: ACP_PROTOCOL_VERSION (const), AcpRunnerInput (type), AcpRunnerResult (type), AcpRunner (type), AcpAgentOptions (type), runAcpAgent (function)
-- `packages/model-gateway/src/acp-registry.ts`: ACP_REGISTRY_URL (const), AcpRegistryAgent (type), AcpRegistry (type), AcpRegistryFetcher (type), InstalledAcpAdapter (type), fetchAcpRegistry (function), InstallAcpAdaptersOptions (type), installAcpAdapters (function)
-- `packages/model-gateway/src/adapters/anthropic.ts`: AnthropicRequest (type), AnthropicTranslationOptions (type), anthropicToChat (function), mapStopReason (function), chatToAnthropicMessage (function), openAiSseToAnthropic (function), countTokensEstimate (function), handleAnthropicMessages (function), handleCountTokens (function), CLAUDE_ALIAS_PREFIX (const), ClaudePickerModelRoute (type), claudeModelAlias (function), resolveClaudeModelAlias (function), anthropicModelsResponse (function)
-- `packages/model-gateway/src/adapters/chat.ts`: withDefaultModel (function), isStream (function), effectiveModel (function)
-- `packages/model-gateway/src/adapters/cursor.ts`: isCursorChatBody (function), cursorModelAliasId (function), CursorModelSelection (type), cursorModelVariants (function), resolveCursorModelSelection (function), resolveCursorModelAlias (function), translateCursorRequest (function)
-- `packages/model-gateway/src/adapters/dropped.ts`: DialectName (type), DIALECT_DROPPED_ATTRIBUTE (const), DroppedFieldSpan (type), withDroppedFieldSpan (function), droppedField (function), resetDroppedFieldWarnings (function)
-- `packages/model-gateway/src/adapters/openai-chat-wire.ts`: OpenAiToolCall (type), GoogleThoughtDetail (type), googleThoughtDetailsOf (function), AnthropicReasoningDetail (type), anthropicReasoningDetailsOf (function), AnthropicThinkingConfig (type), AnthropicRequestMetadata (type), ANTHROPIC_REQUEST_METADATA (const), ANTHROPIC_MESSAGE_CONTENT (const), REASONING_SELECTION (const), REASONING_SELECTION_ERROR (const), RESPONSES_REASONING_METADATA (const), GOOGLE_TOOL_CALL_INDEXES (const), ResponsesReasoningItem (type), ResponsesReasoningMetadata (type), attachResponsesReasoningMetadata (function), responsesReasoningMetadataErrorOf (function), responsesReasoningMetadataOf (function), RouteKitReasoningEnvelope (type), RouteKitMessageEnvelope (type), ROUTEKIT_EXTENSION_KEY (const), attachAnthropicRequestMetadata (function), anthropicRequestMetadataOf (function), hasExplicitReasoningSelection (function), attachAnthropicMessageContent (function), anthropicMessageContentOf (function), attachGoogleToolCallIndexes (function), googleToolCallIndexesOf (function), withoutRouteKitExtensions (function), attachReasoningSelection (function), attachReasoningSelectionError (function), withReasoningSelection (function), RouteKitRequestValidationError (type), routeKitRequestValidationErrorOf (function), reasoningSelectionErrorOf (function), reasoningSelectionOf (function), AnthropicNativeContentBlock (type), CanonicalReasoningDetail (type), OpenAiDelta (type), OpenAiChoice (type)
-- `packages/model-gateway/src/adapters/responses-stream.ts`: openAiSseToResponses (function)
-- `packages/model-gateway/src/adapters/responses-usage.ts`: OpenAiUsage (type), chatUsageToResponses (function)
-- `packages/model-gateway/src/adapters/responses.ts`: ResponsesInputItem (type), ResponsesRequest (type), ResponsesToolKind (type), ResponsesToolEntry (type), ResponsesToolRegistry (type), WEB_SEARCH_TOOL_NAME (const), ResponsesTranslationOptions (type), responsesToolRegistry (function), customToolNames (function), responsesToChat (function), chatToResponses (function), handleResponses (function)
-- `packages/model-gateway/src/adapters/server-tool-loop.ts`: SERVER_TOOL_MARKER_FIELD (const), ServerToolMarker (type), serverToolMarkerOf (function), ExecutedSearch (type), ServerToolLoopEvent (type), ServerToolLoopOptions (type), BufferedLoopOutcome (type), runBufferedServerToolLoop (function), composeServerToolStream (function)
-- `packages/model-gateway/src/adapters/upstream-error.ts`: unwrapUpstreamError (function)
-- `packages/model-gateway/src/adapters/validate.ts`: WireRejection (type), validateChatRequest (function), validateAnthropicRequest (function), validateCountTokensRequest (function), validateResponsesRequest (function)
-- `packages/model-gateway/src/adapters/web-search.ts`: WebSearchCitation (type), WebSearchOutcome (type), WebSearchExecutor (type), WebSearchDialect (type), MAX_WEB_SEARCHES_PER_TURN (const), resolveWebSearchExecutor (function)
-- `packages/model-gateway/src/auth.ts`: timingSafeStringEqual (function), verifyBearerToken (function), authorizedRequest (function)
-- `packages/model-gateway/src/backend.ts`: BackendModelRoute (type), Backend (type), BackendRequestOptions (type), RequestAttributionUpdate (type), OpenAiBackendOptions (type), joinPath (function), OpenAiBackend (class), ModelRoutedBackendOptions (type), ModelRoutedBackend (class)
-- `packages/model-gateway/src/capacity-pool.ts`: CapacityPoolStrategy (type), CapacityPoolMember (type), CapacityLease (type), CapacityPoolOptions (type), CapacityPool (class)
-- `packages/model-gateway/src/cost.ts`: ModelPricing (type), TokenUsage (type), ProviderCostMetadata (type), CallCostRecord (type), DEFAULT_MODEL_PRICING (const), parseUsage (function), parseUsageFromSse (function), lookupPricing (function), estimateCost (function), meterCall (function), formatUsd (function)
-- `packages/model-gateway/src/endpoint-health.ts`: UrlEndpointConfig (type), AccountEndpointConfig (type), ModelEndpointConfig (type), EndpointHealthProbe (type), EndpointHealthProbePlan (type), EndpointHealthResult (type), providerAuthHeaders (function), endpointHealthProbe (function), probeEndpointHealth (function)
-- `packages/model-gateway/src/provenance.ts`: GatewayDialect (type), MODEL_CALL_ID_HEADER (const), UNKNOWN_GIT_SHA (const), resolveProducerGitSha (function), readProducerVersion (function), ModelGatewayCallContext (type), ModelGatewayCallResult (type), ModelCallRecord (type), ProvenanceSink (type), buildModelCallRecord (function), modelCallId (function), responseBodyHash (function)
-- `packages/model-gateway/src/provider-backends.ts`: ProviderBackendOptions (type), ProviderTransport (type), AnthropicBackend (class), GoogleGenAiBackend (class), CodexResponsesBackend (class)
-- `packages/model-gateway/src/provider-source.ts`: API_PROVIDER_IDS (const), SUBSCRIPTION_PROVIDER_IDS (const), PROVIDER_IDS (const), ApiProviderId (type), SubscriptionProviderId (type), ProviderId (type), DiscoveredModel (type), ProviderSource (type), ProviderSourceTransport (type), parseReasoningCapabilities (function), parseDiscoveredModels (function), ApiProviderSourceOptions (type), ApiProviderSource (class)
-- `packages/model-gateway/src/router.ts`: UnknownModelError (class), NoModelAvailableError (class), routerConfigSchema (const), ProviderPolicy (type), RouterConfig (type), normalizeRouterConfigAliases (function), splitNamespacedModel (function), parseRouterConfig (function), CatalogModelInfo (type), CatalogBackendOptions (type), inferKnownReasoningCapabilities (function), CatalogBackend (class), isSubscriptionProvider (function)
-- `packages/model-gateway/src/server.ts`: GatewayOptions (type), ProviderRelayDialect (type), ProviderRelay (type), Gateway (type), initialAttribution (function), startGateway (function), collectAttribution (function)
-- `packages/model-gateway/src/sse-wire.ts`: noticeChunk (function), errorEvent (function), finishChunk (function), reasoningChunk (function), sseResponse (function)
-- `packages/model-gateway/src/sse/chat-assembler.ts`: AssembledToolCall (type), AssembledTurn (type), ChatStreamAssembler (class)
-- `packages/model-gateway/src/sse/parse.ts`: SseEvent (interface), SseParseError (class), decodeBufferedSse (function), SseDecoder (class)
-- `packages/model-gateway/src/switching-proxy.ts`: SwitchingGatewayProxy (type), startSwitchingGatewayProxy (function)
 
 ### `packages/protocol`
 
@@ -273,97 +170,6 @@ Use it with the narrative references when you need to find the module that owns 
 - `packages/registry/src/generated/data.ts`: FUSION_REGISTRY (const)
 - `packages/registry/src/index.ts`: FUSION_PANEL_MODEL (const), DEFAULT_ENSEMBLE_NAME (const), FUSION_MODEL_ID_PREFIX (const), fusionModelId (function), CURSOR_BRIDGE_MODEL_NAME (const), LOCAL_MODEL_LABEL (const), FUSION_MODEL_ALIASES (const), FUSION_DEFAULT_ALIAS (const), FUSION_PANEL_ALIAS (const), FUSION_GATEWAY_DEFAULT_BASE_URL (const), FUSION_GATEWAY_API_KEY_ENV (const), CatalogPanelMember (type), BenchmarkPanelPreset (type), DEFAULT_CLOUD_PANEL_MEMBERS (const), BENCHMARK_PANEL_PRESETS (const)
 
-### `packages/routekit-cli`
-
-- `packages/routekit-cli/src/accounts.ts`: AccountListEntry (type), listAccounts (function)
-- `packages/routekit-cli/src/catalog.ts`: LiveModel (type), LiveCatalog (type), fetchLiveCatalog (function)
-- `packages/routekit-cli/src/cli.ts`: routekitVersion (function), buildProgram (function)
-- `packages/routekit-cli/src/client.ts`: daemonDataTokenPath (function), ensureDaemonDataToken (function), daemonStore (function), readDaemonRecord (function), controlClientForRecord (function), daemonRecordHealthy (function), canonicalConfigOrMigrationError (function), daemonServeArgs (function), ensureDaemon (function), routekitClient (function), connectDaemon (function), daemonLogPath (function), daemonLifecycleLockPath (function)
-- `packages/routekit-cli/src/commands/accounts.ts`: registerAccounts (function)
-- `packages/routekit-cli/src/commands/calls.ts`: registerCalls (function)
-- `packages/routekit-cli/src/commands/config.ts`: configImportIdempotencyKey (function), registerConfig (function)
-- `packages/routekit-cli/src/commands/context.ts`: configOverride (function), loaded (function), numberOption (function)
-- `packages/routekit-cli/src/commands/daemon.ts`: registerDaemon (function)
-- `packages/routekit-cli/src/commands/doctor.ts`: registerDoctor (function)
-- `packages/routekit-cli/src/commands/gateway-service.ts`: daemonSupervisorController (function), platformSupervisor (function), registerDaemonService (function), registerLogs (function)
-- `packages/routekit-cli/src/commands/index.ts`: registerCommands (function)
-- `packages/routekit-cli/src/commands/install.ts`: claudeInstallTarget (function), registerCodexIntegration (function), registerClaudeIntegration (function)
-- `packages/routekit-cli/src/commands/launchers.ts`: resolveLauncherPreparation (function), registerLaunchers (function)
-- `packages/routekit-cli/src/commands/models.ts`: isModelRouteInfo (function), registerModels (function)
-- `packages/routekit-cli/src/commands/providers.ts`: registerProviders (function)
-- `packages/routekit-cli/src/commands/remote.ts`: registerRemote (function)
-- `packages/routekit-cli/src/commands/serve-options.ts`: GatewayServeCliOptions (type), DEFAULT_DRAIN_GRACE_SECONDS (const), attachServeOptions (function), drainGraceMs (function)
-- `packages/routekit-cli/src/commands/start.ts`: registerStart (function), registerRestart (function)
-- `packages/routekit-cli/src/commands/status.ts`: registerStatus (function)
-- `packages/routekit-cli/src/commands/stop.ts`: registerStop (function)
-- `packages/routekit-cli/src/commands/telemetry.ts`: registerTelemetry (function)
-- `packages/routekit-cli/src/commands/upgrade.ts`: argsWithPort (function), registerUpgrade (function)
-- `packages/routekit-cli/src/commands/usage.ts`: openSubscriptionUsageSource (function), fetchSubscriptionUsage (function), registerUsage (function)
-- `packages/routekit-cli/src/completion.ts`: completionCandidates (function), registerDynamicCompletion (function)
-- `packages/routekit-cli/src/config.ts`: MigrationAction (type), ConfigMigrationDiagnostic (type), LegacyConfigMigration (type), convertLegacyRouterConfig (function), migrateLegacyRouterConfig (function), migrateLegacyState (function)
-- `packages/routekit-cli/src/control-relay.ts`: ControlRelayEnvelope (type), ControlRelayResult (type), parseControlRelayEnvelope (function), relayLocalControl (function), readControlRelayStdin (function)
-- `packages/routekit-cli/src/daemon.ts`: ROUTEKIT_PRODUCT (const), cliEntryPath (function), serviceEnvironment (function), missingServiceCredentialVariables (function), serviceEnvFilePath (function), writeServiceEnvFile (function), removeServiceEnvFile (function), daemonUnitSpec (function)
-- `packages/routekit-cli/src/launch-support.ts`: LAUNCH_PROVIDER_IDS (const), LaunchProviderId (type), LAUNCH_ROUTE_IDS (const), LaunchRouteId (type), LAUNCH_ACCOUNT_KINDS (const), LAUNCH_ACCOUNT_KIND_CHOICES (const), LaunchAccountKind (type), LAUNCH_TOOL_IDS (const), LaunchToolId (type), isLaunchProviderId (function), isLaunchAccountKind (function), isLaunchToolId (function)
-- `packages/routekit-cli/src/launch.ts`: buildToolLaunchSpec (function), launchToolWithIntegration (function), launchTool (function)
-- `packages/routekit-cli/src/remotes.ts`: RouteKitRemote (type), RemoteRegistry (type), remotesPath (function), remoteTokenPath (function), validateRemoteName (function), validateSshHost (function), normalizeRemoteUrl (function), readRemoteRegistry (function), writeRemoteRegistry (function), findRemote (function), activeRemote (function), putRemote (function), useRemote (function), removeRemote (function), RemoteCredentialOptions (type), writeRemoteToken (function), readRemoteToken (function), deleteRemoteToken (function)
-- `packages/routekit-cli/src/ssh-control.ts`: redactSensitiveText (function), runSshRelay (function), remoteControlClient (function)
-- `packages/routekit-cli/src/state.ts`: routekitVersion (function), writeStateSnapshot (function), readStateSnapshot (function)
-- `packages/routekit-cli/src/target.ts`: TargetSelection (type), RouteKitTarget (type), setTargetSelection (function), setTargetSelectionFromCommand (function), resetTargetSelectionForTest (function), selectedRemoteMetadata (function), resolveTarget (function), assertLocalTarget (function)
-- `packages/routekit-cli/src/telemetry.ts`: telemetryPath (function), resolveTelemetry (const), enableTelemetry (const), disableTelemetry (const), TELEMETRY_FIELDS (const)
-- `packages/routekit-cli/src/update-notifier.ts`: notifyIfUpdateAvailable (function)
-- `packages/routekit-cli/src/usage-format.ts`: formatUtilizationBar (function), formatResetCountdown (function), formatRateLimitWindowName (function), renderUsageLines (function), limitsSummary (function)
-
-### `packages/routekit-config`
-
-- `packages/routekit-config/src/index.ts`: RouterConfigSource (type), LoadedRouterConfig (type), RouterConfigPaths (type), UpdateRouterConfigInput (type), configuredProviderIds (function), missingModelIds (function), assertModelsAvailable (function), resolveModelId (function), selectModelId (const), routekitHome (function), globalRouterConfigPath (function), projectRouterConfigPath (function), findProjectRouterConfig (function), routerConfigPaths (function), parseRouterConfigDocument (function), loadRouterConfig (function), writeRouterConfig (function), updateEffectiveRouterConfig (function), updateRouterConfig (function), DEFAULT_ROUTER_CONFIG (const)
-
-### `packages/routekit-control`
-
-- `packages/routekit-control/src/index.ts`: ROUTEKIT_CONTROL_CAPABILITY (const), RouteKitControlMethod (type), RouteKitControlParams (type), DaemonStatus (type), ConfigSnapshot (type), ModelInfo (type), ModelAccountClass (type), ModelBillingMode (type), ModelRouteInfo (type), LaunchPreparation (type), RouteKitCallInspection (type), RouteKitControlResults (type), RouteKitMethodHandler (type), RouteKitControlHandlers (type), MUTATING_ROUTEKIT_METHODS (const), validateRouteKitParams (function), createRouteKitControlHandler (function), RouteKitControlClient (class)
-
-### `packages/routekit-daemon`
-
-- `packages/routekit-daemon/src/account-transaction.ts`: PreparedAccountTransaction (type), AccountTransactionRecovery (type), prepareAccountTransaction (function), rollbackAccountTransaction (function), markAccountTransactionCommitted (function), cleanupAccountTransaction (function), recoverAccountTransactions (function)
-- `packages/routekit-daemon/src/call-attribution-store.ts`: DEFAULT_CALL_ATTRIBUTION_LIMIT (const), DEFAULT_CALL_ATTRIBUTION_TTL_MS (const), callInspection (function), CallAttributionStore (class)
-- `packages/routekit-daemon/src/cliproxy-sidecar.ts`: CliproxySidecar (type), cliproxyManagedLocally (function), createCliproxySidecar (function)
-- `packages/routekit-daemon/src/index.ts`: ROUTEKIT_DAEMON_KIND (const), ROUTEKIT_PRODUCT (const), RouteKitDaemonOptions (type), RunningRouteKitDaemon (type), startRouteKitDaemon (function)
-
-### `packages/routekit-registry`
-
-- `packages/routekit-registry/src/generated/data.ts`: REGISTRY (const)
-- `packages/routekit-registry/src/index.ts`: ProviderAuthStyle (type), ProviderKeyProbe (type), ProviderDiscovery (type), ProviderDiscoveryResponseShape (type), ProviderWireProtocol (type), ProviderWire (type), ProviderInfo (type), PROVIDERS (const), providerDefaultBaseUrl (function), defaultKeyEnv (function), providerKeyProbe (function), providerDiscovery (function), SubscriptionMode (type), SubscriptionOAuthInfo (type), SubscriptionRateLimitInfo (type), SubscriptionAdminInfo (type), SubscriptionInfo (type), SUBSCRIPTIONS (const), subscriptionInfo (function), providerForAuthMode (function), AccountConnector (type), AccountConnectorInfo (type), ACCOUNT_CONNECTORS (const), accountKinds (function), accountKindChoices (function), resolveAccountConnector (function), accountKindForCliproxyAuthType (function), DEFAULT_REASONING_MODEL (const), catalogDefaultModel (function), curatedModels (function), smokeModelForTool (function), samplingOverridesForModel (function), chatTemplateKwargsForModel (function), RegistryModelPricing (type), PRICING_ALIASES (const), DEFAULT_MODEL_PRICING (const), LocalModelRole (type), LocalCatalogModel (type), LOCAL_CATALOG_ENTRIES (const), PreferredLocalModel (type), PREFERRED_LOCAL_MODELS (const), GATEWAY_DEFAULT_MLX_MODEL (const), LOCAL_PROBE_MODEL (const)
-
-### `packages/routekit-router`
-
-- `packages/routekit-router/src/index.ts`: StartRouterOptions (type), RunningRouter (type), startRouter (function)
-
-### `packages/routekit-tracing`
-
-- `packages/routekit-tracing/src/carrier.ts`: TraceCarrier (type), newTraceId (function), newSpanId (function), sessionCarrier (function), newSessionCarrier (function), contextOf (function), carrierOf (function), traceIdOf (function), carrierFromHeaders (function), headersOf (function), envOf (function), carrierFromEnv (function), withBaggage (function), baggageOf (function)
-- `packages/routekit-tracing/src/exportable.ts`: AttributePolicy (type), toExportableSpan (function), toExportableEvent (function), PolicySpanExporter (class), PolicyLogExporter (class), isLoopbackOtlpEndpoint (function)
-- `packages/routekit-tracing/src/listener.ts`: SpanListener (type), EventListener (type), addSpanListener (const), removeSpanListener (const), hasSpanListeners (const), addEventListener (const), removeEventListener (const), hasEventListeners (const), listenerSpanProcessor (const), listenerLogRecordProcessor (const)
-- `packages/routekit-tracing/src/provider.ts`: InitTracingOptions (type), isTraceExportConfigured (const), isEventExportConfigured (const), initTracing (function), tracingServiceName (const), isTracingActive (const), flushTracing (function), shutdownTracing (function), resetTracingForTest (function)
-- `packages/routekit-tracing/src/readable.ts`: ReadableEvent (type), AttributeSource (type), spanTraceId (const), spanId (const), attrStr (const), attrNum (const), attrBool (const), attrJson (function), spanEndMs (function), eventNameOf (const), eventTraceId (const), eventSpanId (const), eventTimeMs (const)
-
-### `packages/runtime-utils`
-
-- `packages/runtime-utils/src/cleanup.ts`: extendCleanupGrace (function), registerCleanup (function), runCleanups (function)
-- `packages/runtime-utils/src/environment.ts`: commandOnPath (function), definedEnv (function), BuildChildEnvInput (type), buildChildEnv (function), DEFAULT_BRIDGE_SCRUB_PREFIXES (const), scrubBridgeEnv (function)
-- `packages/runtime-utils/src/index.ts`: DEFAULT_RUNTIME_TIMEOUTS (const), defineTimeouts (function), MANAGED_SERVER_DEFAULTS (const), CANDIDATE_ISOLATION_DEFAULTS (const), sleep (function), randomId (function), estimateTokens (function), withDeadline (function), formatDurationMs (function), withTimeout (function), captureWorktreeDiff (function), ensureRunOutputDir (function), writeFileAtomic (function), FileLock (type), tryAcquireFileLock (function), ReservedPort (type), reservePort (function), freePort (function), CliCaptureOptions (type), CliCaptureResult (type), runCliCapture (function), spawnTool (function), LoggedSpawnOptions (type), LoggedChild (type), spawnLogged (function), distillLog (function), waitForHttp (function), waitForOutput (function), terminate (function), escapeMarkdownCell (function), markdownTable (function)
-- `packages/runtime-utils/src/portless.ts`: RouteMapping (type), RouteStoreLike (type), PortlessModule (type), PortlessOptions (type), DetectedProxy (type), SpawnedService (type), DiscoverOrSpawnInput (type), DiscoverOrSpawnResult (type), PortlessSession (type), detectPortlessProxy (function), createActivePortlessSession (function), createPortlessSession (function), reapPortlessService (function), reapPortlessProject (function)
-- `packages/runtime-utils/src/process.ts`: ExitInfo (type), Spawned (interface), SuperviseSpawnOptions (type), terminateGroup (function), superviseSpawn (function)
-- `packages/runtime-utils/src/service/authority.ts`: LifecycleLock (type), acquireLifecycleLock (function), nextServiceGeneration (function)
-- `packages/runtime-utils/src/service/control.ts`: CONTROL_PROTOCOL_VERSION (const), CONTROL_BODY_LIMIT_BYTES (const), ControlErrorCode (type), ControlError (class), ControlRequest (type), ControlSuccess (type), ControlFailure (type), ControlResponse (type), ControlEvent (type), ControlHandlerContext (type), ControlHandler (type), RunningControlServer (type), ControlServerErrorContext (type), generateControlToken (function), controlTokenMatches (function), startControlServer (function), ControlClientOptions (type), ControlClient (class)
-- `packages/runtime-utils/src/service/daemon.ts`: ServiceDaemonSpec (type), StartDaemonOptions (type), StartDaemonResult (type), serviceLogPath (function), rotateLogFile (function), readLogTail (function), waitForProcessExit (function), waitForServiceReady (function), startDaemon (function), StopDaemonResult (type), stopDaemonProcess (function)
-- `packages/runtime-utils/src/service/records.ts`: ServiceSupervisorKind (type), SERVICE_SUPERVISOR_ENV (const), supervisorFromEnv (function), ServiceRecord (type), ServiceRecordInput (type), ServiceRecordStore (type), processIdentity (function), processAlive (function), createServiceRecordStore (function)
-- `packages/runtime-utils/src/service/supervisors.ts`: CommandRunner (type), ServiceUnitSpec (type), SupervisorStatus (type), SupervisorController (type), supervisorOperationTimeoutMs (function), systemdUnitName (function), systemdUnitPath (function), systemdServiceUnit (function), launchdLabel (function), launchdPlistPath (function), launchdAgentPlist (function), supervisorController (function), DetectSupervisorOptions (type), detectSupervisor (function)
-- `packages/runtime-utils/src/service/upgrade.ts`: UpgradeStrategy (type), planUpgrade (function), UpgradeDaemonInput (type), UpgradeDaemonResult (type), upgradeDetachedDaemon (function)
-- `packages/runtime-utils/src/url.ts`: trimTrailingSlashes (function), trimSurroundingSlashes (function), normalizeApiBaseUrl (function), isLoopbackHost (function), assertAuthenticatedBind (function)
-
-### `packages/telemetry-core`
-
-- `packages/telemetry-core/src/index.ts`: ConsentFile (type), ConsentDecision (type), ConsentOptions (type), CLI_COMMAND_TELEMETRY_FIELDS (const), TelemetryFieldMap (type), telemetryStatusMetadata (function), createConsentManager (function), durationBucket (function), allowlistedProperties (function), anonymousEventProperties (function), boundedShutdown (function)
-
 ### `packages/testkit`
 
 - `packages/testkit/src/behaviors.ts`: SimToolCall (type), SimError (type), SimBehavior (type), SimDialect (type), SimJournalEntry (type), SimBehaviorInput (type), asBehavior (function), simErrors (const)
@@ -376,47 +182,6 @@ Use it with the narrative references when you need to find the module that owns 
 - `packages/testkit/src/router-config.ts`: CODEX_TEST_TOKEN_ENV (const), SimModelSpec (type), simSidecarConfigYaml (function)
 - `packages/testkit/src/scenarios.ts`: judgeAnalysis (function), FusedTurnScript (type), scriptFusedTurn (function)
 - `packages/testkit/src/sse.ts`: SseFrame (type), parseSse (function), sseText (function), sseReasoning (function), sseDone (function)
-
-### `packages/tool-claude`
-
-- `packages/tool-claude/src/driver.ts`: claudeDriverConfigSchema (const), ClaudeDriverConfig (type), ClaudeQueryFn (type), ClaudeDriverOptions (type), createClaudeDriver (function)
-- `packages/tool-claude/src/index.ts`: claudeTool (const)
-- `packages/tool-claude/src/install.ts`: ClaudeInstallOwner (type), ClaudeInstallInput (type), ClaudeInstallResult (type), installClaudeIntegration (function), uninstallClaudeIntegration (function)
-- `packages/tool-claude/src/launch.ts`: claudeEnv (function), claudeAgentsJson (function), claudeLaunchArgs (function), launchClaude (function)
-
-### `packages/tool-codex`
-
-- `packages/tool-codex/src/driver.ts`: codexDriverConfigSchema (const), CodexDriverConfig (type), createCodexDriver (function)
-- `packages/tool-codex/src/index.ts`: codexTool (const)
-- `packages/tool-codex/src/install.ts`: CodexInstallProfile (type), CodexInstallOwner (type), CodexInstallInput (type), CodexInstallResult (type), codexIntegrationBlock (function), installCodexIntegration (function), uninstallCodexIntegration (function)
-- `packages/tool-codex/src/launch.ts`: CodexModelPreset (type), isCodexConfigFailure (function), tomlKey (function), readCodexModelsCache (function), readCodexCatalogTemplate (function), codexAuthPath (function), hasCodexLogin (function), createIsolatedCodexHome (function), codexListedStockSlugs (function), codexCatalogEntries (function), codexModelCatalogJson (function), codexProfileFileToml (function), codexProfileFiles (function), CodexAgentRole (type), codexAgentRoles (function), codexAgentRoleToml (function), codexLaunchConfigToml (function), launchCodex (function)
-
-### `packages/tool-cursor`
-
-- `packages/tool-cursor/src/acp.ts`: CursorAcpProducerInput (type), buildCursorAcpProducer (function)
-- `packages/tool-cursor/src/bridge-config.ts`: CURSOR_AGENT_TOOL_POLICY (const), CURSOR_AGENT_TOOL_MAX_ITERATIONS (const), CURSOR_BRIDGE_SCRUB_PREFIXES (const), CURSOR_IDE_SCRUB_PREFIXES (const), CursorBridgeModelEnvInput (type), CursorBridgeEnvInput (type), CursorBridgeModelDescriptor (type), CursorIdeModelsInput (type), cursorBridgeBaseUrl (function), cursorBridgeModelEnv (function), cursorBridgeEnv (function), cursorIdeEnv (function), cursorIdeModelsJson (function)
-- `packages/tool-cursor/src/bridge.ts`: startCursorBridge (function)
-- `packages/tool-cursor/src/cursorkit-path.ts`: CursorkitCli (type), resolveCursorkitCli (function)
-- `packages/tool-cursor/src/driver.ts`: cursorDriverConfigSchema (const), CursorDriverConfig (type), createCursorDriver (function)
-- `packages/tool-cursor/src/index.ts`: cursorTool (const)
-- `packages/tool-cursor/src/launch.ts`: cursorIdeInstructions (function), cursorInstructions (function), launchCursor (function)
-- `packages/tool-cursor/src/subagents.ts`: CURSOR_AGENTS_DIRNAME (const), cursorSubagentMarkdown (function), scaffoldCursorSubagents (function)
-
-### `packages/tool-opencode`
-
-- `packages/tool-opencode/src/driver.ts`: opencodeDriverConfigSchema (const), OpencodeDriverConfig (type), OpencodeTurnPart (type), OpencodeTurnResult (type), OpencodeBackend (interface), OpencodeBackendFactory (type), OpencodeDriverOptions (type), createOpencodeDriver (function)
-- `packages/tool-opencode/src/index.ts`: opencodeTool (const)
-- `packages/tool-opencode/src/launch.ts`: opencodeModelArg (function), opencodeProviderConfig (function), opencodeConfig (function), launchOpencode (function)
-
-### `packages/tool-registry`
-
-- `packages/tool-registry/src/index.ts`: toolIntegrations (const), toolRegistry (const)
-
-### `packages/tools`
-
-- `packages/tools/src/launch-context.ts`: ToolDisposer (type), DisposerRunner (type), createDisposerRunner (function), CreateToolLaunchContextInput (type), ToolLaunchContextHandle (type), createToolLaunchContext (function)
-- `packages/tools/src/registry.ts`: ToolRegistry (type), createToolRegistry (function), ToolCapabilityCell (type), createToolCapabilityMatrix (function)
-- `packages/tools/src/types.ts`: ToolModelFeature (type), ToolCapabilityGrade (type), ToolModelFeatureStatus (type), ToolModel (type), AgentProfile (type), ToolLaunchSpec (type), ToolLaunchContext (type), ToolDriverRoute (type), ToolDriverMetadata (type), ToolCapabilityMetadata (type), ToolIntegration (type)
 
 ### `packages/tracing`
 

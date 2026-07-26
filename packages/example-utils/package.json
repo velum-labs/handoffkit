@@ -17,7 +17,7 @@
   "dependencies": {
     "@ai-sdk/openai-compatible": "2.0.48",
     "@ai-sdk/provider": "4.0.2",
-    "@velum-labs/routekit-registry": "workspace:*",
+    "@velum-labs/routekit-registry": "0.10.1",
     "ai": "6.0.200"
   },
   "scripts": {

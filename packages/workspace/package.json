@@ -27,7 +27,7 @@
   },
   "dependencies": {
     "@fusionkit/protocol": "workspace:*",
-    "@velum-labs/routekit-contracts": "workspace:*",
+    "@velum-labs/routekit-contracts": "0.10.1",
     "minimatch": "10.2.5"
   },
   "keywords": [

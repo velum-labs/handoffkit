@@ -12,6 +12,7 @@ import {
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
+const ROUTEKIT_VERSION = "0.10.1";
 const root = process.cwd();
 const entries = readdirSync(join(root, "packages"), { withFileTypes: true })
   .filter((entry) => entry.isDirectory())
@@ -24,9 +25,9 @@ const entries = readdirSync(join(root, "packages"), { withFileTypes: true })
   });
 const byName = new Map(entries.map((entry) => [entry.manifest.name, entry]));
 
-function internalClosure(rootName) {
+function fusionkitClosure() {
   const closure = [];
-  const pending = [rootName];
+  const pending = ["@fusionkit/cli"];
   const seen = new Set();
   while (pending.length > 0) {
     const name = pending.shift();
@@ -36,25 +37,18 @@ function internalClosure(rootName) {
     if (entry === undefined) continue;
     closure.push(entry);
     for (const dependency of Object.keys(entry.manifest.dependencies ?? {})) {
-      if (dependency.startsWith("@velum-labs/routekit") || dependency.startsWith("@fusionkit/")) {
+      if (dependency.startsWith("@fusionkit/")) {
         pending.push(dependency);
       }
     }
   }
+  if (seen.has("@velum-labs/routekit")) {
+    throw new Error("FusionKit package closure must not include @velum-labs/routekit");
+  }
   return { closure, seen };
 }
 
-const routekit = internalClosure("@velum-labs/routekit");
-const fusionkit = internalClosure("@fusionkit/cli");
-if (routekit.seen.has("@fusionkit/cli")) {
-  throw new Error("RouteKit package closure must not include @fusionkit/cli");
-}
-if (fusionkit.seen.has("@velum-labs/routekit")) {
-  throw new Error("FusionKit package closure must not include @velum-labs/routekit");
-}
-const combined = new Map(
-  [...routekit.closure, ...fusionkit.closure].map((entry) => [entry.manifest.name, entry])
-);
+const fusionkit = fusionkitClosure();
 
 const temporary = mkdtempSync(join(tmpdir(), "dual-cli-pack-smoke-"));
 const tarballs = join(temporary, "tarballs");
@@ -62,7 +56,7 @@ const install = join(temporary, "install");
 try {
   mkdirSync(tarballs, { recursive: true });
   mkdirSync(install, { recursive: true });
-  for (const entry of combined.values()) {
+  for (const entry of fusionkit.closure) {
     execFileSync("pnpm", ["pack", "--pack-destination", tarballs], {
       cwd: entry.directory,
       stdio: "pipe"
@@ -77,7 +71,14 @@ try {
     .map((name) => resolve(tarballs, name));
   execFileSync(
     "npm",
-    ["install", "--ignore-scripts", "--no-audit", "--no-fund", ...packed],
+    [
+      "install",
+      "--ignore-scripts",
+      "--no-audit",
+      "--no-fund",
+      `@velum-labs/routekit@${ROUTEKIT_VERSION}`,
+      ...packed
+    ],
     { cwd: install, stdio: "pipe" }
   );
 
@@ -109,8 +110,8 @@ try {
     throw new Error(`fusionkit executable returned unexpected output: ${fusionkitVersion}`);
   }
   process.stdout.write(
-    `dual CLI pack/install smoke passed (${routekit.closure.length} RouteKit, ` +
-      `${fusionkit.closure.length} FusionKit, ${combined.size} unique packages)\n`
+    `dual CLI pack/install smoke passed (published RouteKit@${ROUTEKIT_VERSION}, ` +
+      `${fusionkit.closure.length} FusionKit workspace packages)\n`
   );
 } finally {
   rmSync(temporary, { recursive: true, force: true });
