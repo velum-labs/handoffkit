@@ -2,9 +2,10 @@
   "$comment": "Desired target versions per release unit (the Terraform-style config). Edit a value (or run `node scripts/release.mjs bump <unit> <version|major|minor|patch>`), then run `release plan`. Initialized to the versions currently declared in each repo so a fresh plan is a no-op.",
   "versions": {
     "fusionkit-protocol": "0.6.0",
-    "fusionkit-pypi": "0.9.0",
+    "fusionkit-pypi": "0.10.1",
     "cursorkit": "0.2.0",
-    "handoffkit": "0.9.0",
-    "mlx-lm": "0.31.3+structured.3"
+    "handoffkit": "0.10.1",
+    "mlx-lm": "0.31.3+structured.3",
+    "routekit": "0.10.1"
   }
 }

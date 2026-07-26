@@ -28,7 +28,7 @@
   "dependencies": {
     "@ai-sdk/provider": "4.0.2",
     "@fusionkit/protocol": "workspace:*",
-    "@velum-labs/routekit-runtime": "workspace:*",
+    "@velum-labs/routekit-runtime": "0.10.1",
     "@fusionkit/sdk": "workspace:*",
     "@fusionkit/workspace": "workspace:*",
     "ai": "6.0.200",

@@ -4,6 +4,8 @@
     "rootDir": "src",
     "outDir": "dist"
   },
-  "include": ["src/**/*.ts"],
-  "references": [{ "path": "../runtime-utils" }]
+  "include": [
+    "src/**/*.ts"
+  ],
+  "references": []
 }

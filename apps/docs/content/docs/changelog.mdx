@@ -12,6 +12,171 @@ package, and the PyPI FusionKit sidecar package set. Release tags are named
 
 ## Unreleased
 
+## 0.10.1 - 2026-07-26
+
+- RouteKit now supports named remote gateways with `routekit remote
+  add|list|show|use|remove`, persistent active-target selection, and per-command
+  `--remote` / `--local` overrides. Coding-tool launches and model discovery use
+  the remote HTTPS data plane, while config, account, provider, status, usage,
+  call, telemetry, and doctor operations relay the existing typed control
+  protocol through SSH without exposing the daemon's loopback control listener.
+  Remote data tokens live in macOS Keychain or private `0600` files on other
+  platforms and are never stored in the remote registry.
+
+## 0.10.0 - 2026-07-25
+
+- Reasoning now survives every protocol boundary the gateway translates across.
+  Encrypted OpenAI reasoning items were dropped when a Responses request became
+  a Chat Completions one, Anthropic thinking signatures and Google thought
+  signatures were lost whenever an assistant turn was replayed alongside tool
+  calls, and `reasoning_content` and `reasoning` were merged into a single
+  channel during trajectory capture. A thread that continued a reasoning turn
+  therefore restarted its reasoning upstream, and providers that verify signed
+  thinking rejected the replay outright.
+
+  Provider-native reasoning state now rides on a versioned `x_routekit` message
+  extension carrying the effort selection, Anthropic thinking blocks, OpenAI
+  encrypted reasoning items, and Google thought signatures. The extension is
+  stripped before a request leaves for a provider, so it is a gateway-internal
+  contract that clients only need to echo back on the next turn. Server-side web
+  search carries the same state across its continuation steps, Responses usage
+  reports `reasoning_tokens` and `cached_tokens` instead of dropping the detail,
+  and a mid-stream failover no longer discards reasoning already committed to
+  the response.
+
+  Requests that cannot be served losslessly now fail with an explicit `400`
+  rather than degrading silently: `previous_response_id` on this stateless
+  gateway (`unsupported_previous_response_id`), encrypted reasoning aimed at a
+  backend that cannot consume it (`unsupported_encrypted_reasoning`), and
+  reasoning controls that contradict each other (`invalid_reasoning_control`).
+
+  The FusionKit sidecar threads the same extension through judging and
+  synthesis, so a fused compound answer can be continued on a reasoning model.
+
+- Cursor BYOK users can now select reasoning effort through model variants such
+  as `routekit/openai/gpt-5.5:high`. The `/v1/cursor/models` mirror advertises
+  one suffixed variant per effort discovered for each model, and ingress strips
+  the suffix before routing while applying its effort as an explicit reasoning
+  control. Unsuffixed models retain automatic provider-default behavior.
+
+## 0.9.10 - 2026-07-25
+
+- Fixed Anthropic egress rejecting conversations that contain a turn carrying no
+  translatable text. The OpenAI-to-Anthropic translation only emitted a text
+  block when a message flattened to a non-empty string, so a blank turn — or one
+  whose only parts were images — went upstream as `content: []` and Anthropic
+  answered `messages.N: user messages must have non-empty content`. This
+  surfaced when a client replayed history onto a Claude model, for example
+  switching a Cursor thread from `codex/gpt-5.6-sol` to
+  `claude-code/claude-fable-5`, because the Responses path accepts turns that
+  the Anthropic path rejects.
+
+  OpenAI `image_url` parts now translate into Anthropic `image` blocks, covering
+  both base64 data URLs and `http(s)` URLs; previously every image was dropped
+  on the floor, so vision requests reached Claude with the picture missing.
+  Parts that still cannot be translated are reported through the usual dropped
+  field telemetry instead of disappearing. Empty and whitespace-only text no
+  longer produces a block, since Anthropic rejects those separately. Turns that
+  translate to nothing are dropped, which costs nothing because Anthropic
+  coalesces adjacent same-role turns — except for a closing turn, where a
+  placeholder keeps the conversation ending on a user message for models that
+  forbid assistant prefill.
+
+## 0.9.9 - 2026-07-25
+
+- Subscription pools now re-mint an access token the provider has stopped
+  honoring. A stored token can be rejected upstream long before its own expiry
+  claim lapses, and the previous refresh trigger only watched that claim, so a
+  dead token could wedge a pool for as long as the claim said it was valid. A
+  rejected discovery and a `401`/`403` on a served request each spend one
+  refresh, rate limited to one per member every five minutes, before the
+  failure is believed.
+
+- A failed model discovery no longer darkens a subscription pool. Members kept
+  their model set only on success and an empty set makes a member ineligible,
+  so one upstream blip took every account in the pool out of rotation until
+  discovery recovered. Members now keep their last known catalog, and the
+  reasoning controls that go with it, when discovery fails.
+
+- Fixed `routekit status` reporting every enrolled account as
+  `relay unavailable or cooling` while the accounts were serving normally. The
+  command refreshes providers and reads account state in one batch, and the
+  refresh used to blank each member's catalog first, so the account read landed
+  in that window. `routekit accounts status` was unaffected and always correct.
+
+  Found on a gateway whose two Codex accounts had been dark for 21 hours:
+  ChatGPT's backend answered `503 biscuit_baker_service_me_circuit_open` for
+  both stored tokens on every endpoint, while the same account's token from a
+  freshly logged-in CLI answered `200`. An OAuth refresh with the stored refresh
+  token fixed both accounts immediately.
+
+## 0.9.8 - 2026-07-25
+
+- The `/v1/cursor` models mirror now namespaces every advertised id under
+  `routekit/` (for example `routekit/claude-code/claude-fable-5`). Cursor
+  selects the BYOK provider by a case-sensitive model-name prefix: `claude-*`
+  goes to the Anthropic key, `gemini-*` to the Google key, and everything else
+  to the OpenAI key plus the base-URL override. Prefixing every id guarantees
+  no advertised name trips those prefixes. Ingress strips `routekit/` and still
+  accepts the legacy 0.9.6 dashed spelling for one release. `routekit cursor`
+  instructions print the namespaced name. Manual `modelAliases` entries are no
+  longer required for Cursor BYOK.
+
+  Established from Cursor's own `byokModelUtils.js` and pinned against a
+  permissive probe: `probe-plain-1`, `claudex-9`, `Claude-zzz-9`, and
+  `velum-claude-fable-5` reached the endpoint, while `claude-zzz-9` and
+  `gemini-zzz-9` were stopped in the client with no request logged. Slashes are
+  fine; the 0.9.6 note claiming Cursor rejects them was wrong. The probe also
+  showed Cursor's backend (not the desktop) connects to the BYOK endpoint, so
+  the URL must be publicly reachable.
+
+## 0.9.7 - 2026-07-24
+
+- Added `modelAliases` to the router config so a namespaced model can also be
+  served under a second, freely chosen name, for example
+  `velum-fable-5: claude-code/claude-fable-5`. Any name without `/` that does
+  not collide with a served model id is accepted. Prefer the automatic
+  `routekit/` Cursor namespace over hand-written aliases for BYOK.
+
+- Fixed the `/v1/cursor` models mirror to respell every `/` in a model id, so
+  OpenRouter's three-segment ids produce usable dashed aliases. Superseded by
+  the automatic `routekit/` namespace.
+
+## 0.9.6 - 2026-07-24
+
+- The gateway's `/v1/cursor` routes now accept and advertise dash-separated
+  model aliases (for example `claude-code-claude-fable-5`). The original claim
+  that Cursor rejects `/` was wrong; the real constraint is the `claude-` /
+  `gemini-` prefix rule. Legacy dashed spelling remains accepted on ingress
+  for one release after the `routekit/` namespace shipped.
+
+## 0.9.5 - 2026-07-24
+
+- Codex subscription chat completions now recover final assistant text from
+  completed SSE items in both buffered and streaming requests. A genuinely
+  reasoning-only upstream completion returns an explicit error instead of a
+  successful empty assistant turn.
+
+- Added Anthropic model capability discovery so Codex exposes only the
+  provider-advertised effort levels for Claude Code subscription models.
+
+## 0.9.4 - 2026-07-24
+
+- Fixed normalized Codex `none` requests from emitting unsupported explicit
+  disabled-thinking controls to Claude Code models such as Fable.
+
+## 0.9.3 - 2026-07-24
+
+- Fixed Codex gateway launches to honor the configured RouteKit default model
+  and to treat Codex's synthetic `none` reasoning effort as disabled only for
+  models without discovered reasoning controls.
+
+## 0.9.2 - 2026-07-24
+
+- Fixed non-streaming Codex subscription completions returning empty assistant
+  content when the upstream SSE terminal response omitted output already
+  delivered through `response.output_item.done`.
+
 ## 0.9.0 - 2026-07-23
 
 - Enforced RouteKit's first-launch public support allowlist across help,

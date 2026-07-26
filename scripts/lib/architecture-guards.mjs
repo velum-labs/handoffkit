@@ -1,7 +1,10 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 
-const INTERNAL_SCOPES = ["@fusionkit/", "@velum-labs/routekit"];
+// Only FusionKit packages remain workspace-internal. RouteKit foundation
+// packages are published from github.com/velum-labs/routekit and consumed as
+// exact npm pins.
+const INTERNAL_SCOPES = ["@fusionkit/"];
 const DEPENDENCY_SECTIONS = [
   "dependencies",
   "devDependencies",
@@ -9,26 +12,8 @@ const DEPENDENCY_SECTIONS = [
   "peerDependencies"
 ];
 
-export const CANONICAL_SHARED_PACKAGES = new Map([
-  ["packages/model-gateway", "@velum-labs/routekit-gateway"],
-  ["packages/accounts", "@velum-labs/routekit-accounts"],
-  ["packages/runtime-utils", "@velum-labs/routekit-runtime"],
-  ["packages/routekit-tracing", "@velum-labs/routekit-tracing"],
-  ["packages/cli-ui", "@velum-labs/routekit-cli-ui"],
-  ["packages/cli-core", "@velum-labs/routekit-cli-core"],
-  ["packages/config-core", "@velum-labs/routekit-config-core"],
-  ["packages/routekit-config", "@velum-labs/routekit-config"],
-  ["packages/routekit-router", "@velum-labs/routekit-router"],
-  ["packages/telemetry-core", "@velum-labs/routekit-telemetry-core"],
-  ["packages/harness-core", "@velum-labs/routekit-harness-core"],
-  ["packages/tools", "@velum-labs/routekit-tools"],
-  ["packages/tool-codex", "@velum-labs/routekit-tool-codex"],
-  ["packages/tool-claude", "@velum-labs/routekit-tool-claude"],
-  ["packages/tool-cursor", "@velum-labs/routekit-tool-cursor"],
-  ["packages/tool-opencode", "@velum-labs/routekit-tool-opencode"],
-  ["packages/tool-registry", "@velum-labs/routekit-tool-registry"],
-  ["packages/routekit-cli", "@velum-labs/routekit"]
-]);
+/** @deprecated RouteKit packages were extracted; kept empty for API stability. */
+export const CANONICAL_SHARED_PACKAGES = new Map();
 
 export function canonicalSharedPackageViolations(manifests) {
   const violations = [];
@@ -118,38 +103,29 @@ export function fusionkitCompositionViolations(manifests) {
   return violations;
 }
 
+/** FusionKit must compose tools through the published tool-registry package. */
 export function toolRegistryCompositionViolations(manifests) {
   const byName = new Map(manifests.map((entry) => [entry.manifest.name, entry]));
-  const registry = byName.get("@velum-labs/routekit-tool-registry");
-  if (registry === undefined) return ["@velum-labs/routekit-tool-registry is missing from the workspace"];
-
   const violations = [];
-  const registryDependencies = manifestDependencies(registry.manifest);
-  const integrationPackages = [...byName.keys()]
-    .filter((name) => /^@velum-labs\/routekit-tool-(?!registry$)/.test(name))
-    .sort();
-  for (const dependency of ["@velum-labs/routekit-tools", ...integrationPackages]) {
-    if (!registryDependencies.has(dependency)) {
-      violations.push(`@velum-labs/routekit-tool-registry must depend on ${dependency}`);
-    }
+  const consumer = byName.get("@fusionkit/cli");
+  if (consumer === undefined) {
+    return ["@fusionkit/cli is missing from the workspace"];
   }
-
-  for (const consumerName of ["@velum-labs/routekit", "@fusionkit/cli"]) {
-    const consumer = byName.get(consumerName);
-    if (consumer === undefined) {
-      violations.push(`${consumerName} is missing from the workspace`);
-      continue;
-    }
-    const dependencies = manifestDependencies(consumer.manifest);
-    if (!dependencies.has("@velum-labs/routekit-tool-registry")) {
-      violations.push(`${consumerName} must depend on @velum-labs/routekit-tool-registry`);
-    }
-    for (const dependency of dependencies) {
-      if (integrationPackages.includes(dependency)) {
-        violations.push(
-          `${consumerName} must compose tools through @velum-labs/routekit-tool-registry, not ${dependency}`
-        );
-      }
+  const dependencies = manifestDependencies(consumer.manifest);
+  if (!dependencies.has("@velum-labs/routekit-tool-registry")) {
+    violations.push("@fusionkit/cli must depend on @velum-labs/routekit-tool-registry");
+  }
+  const integrationPackages = [
+    "@velum-labs/routekit-tool-claude",
+    "@velum-labs/routekit-tool-codex",
+    "@velum-labs/routekit-tool-cursor",
+    "@velum-labs/routekit-tool-opencode"
+  ];
+  for (const dependency of dependencies) {
+    if (integrationPackages.includes(dependency)) {
+      violations.push(
+        `@fusionkit/cli must compose tools through @velum-labs/routekit-tool-registry, not ${dependency}`
+      );
     }
   }
   return violations;
@@ -193,20 +169,9 @@ export function toolRegistryCliSourceViolations(consumerName, sources) {
   return violations;
 }
 
-export function toolRegistryConstructionViolations(sources) {
-  const owner = "packages/tool-registry/src/index.ts";
-  const constructions = sources.flatMap(({ file, source }) => {
-    if (file === "packages/tools/src/registry.ts") return [];
-    return [...source.matchAll(/\bcreateToolRegistry\s*\(/g)].map(() => file);
-  });
-  const violations = [];
-  if (constructions.filter((file) => file === owner).length !== 1) {
-    violations.push(`${owner} must construct the canonical registry exactly once`);
-  }
-  for (const file of constructions) {
-    if (file !== owner) violations.push(`${file} constructs a parallel tool registry`);
-  }
-  return violations;
+/** No longer enforced in-repo: tool-registry lives in the routekit repo. */
+export function toolRegistryConstructionViolations(_sources) {
+  return [];
 }
 
 export function polynomialTrailingSlashRegexViolations(file, source) {

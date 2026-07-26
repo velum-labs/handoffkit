@@ -26,6 +26,26 @@ RouteKit's public lifecycle is `routekit start`, `routekit status`, and
 automatically. `routekit daemon` operations are advanced compatibility and
 administration paths, and there is no user-facing foreground serve command.
 
+### RouteKit remote gateways
+
+Use named remotes when the RouteKit daemon runs on another machine behind an
+authenticated HTTPS endpoint:
+
+| Command | What it does |
+| --- | --- |
+| `routekit remote add <name> --url <https-url> --ssh <host>` | Verify the gateway, obtain its token over SSH, and make it active. |
+| `routekit remote list` | List remotes without revealing tokens. |
+| `routekit remote show [name]` | Probe HTTPS health and SSH control compatibility. |
+| `routekit remote use <name>` | Set the persistent active remote. |
+| `routekit remote use --none` | Return to the local daemon by default. |
+| `routekit remote remove <name>` | Remove the record and stored token. |
+
+The global `--remote <name>` option overrides the active target for one
+invocation. Global `--local` forces the local daemon. Their precedence is
+`--local`, explicit `--remote`, active remote, then local. Launchers and model
+listing use the remote HTTPS data plane; control and administration commands
+use SSH and never expose the loopback control listener.
+
 ## Fusion launch commands
 
 | Command | What it does |

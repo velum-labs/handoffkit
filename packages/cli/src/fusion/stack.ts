@@ -31,7 +31,7 @@ import {
 import { stringify } from "yaml";
 
 import { startFusionStepGateway } from "../gateway.js";
-import type { GatewayEnsembleConfig, GatewayRunnerConfig } from "../gateway.js";
+import type { GatewayEnsembleConfig, GatewayModel, GatewayRunnerConfig } from "../gateway.js";
 import { fusionkitPyCommand } from "./env.js";
 import type { EnsembleRunSpec, StackReporter } from "./env.js";
 import type { PortlessSession } from "../shared/portless.js";
@@ -310,7 +310,11 @@ export async function startFusionStack(
       );
     }
     const catalog = (await catalogResponse.json()) as {
-      data?: Array<{ id?: unknown }>;
+      data?: Array<{
+        id?: unknown;
+        owned_by?: unknown;
+        reasoning?: unknown;
+      }>;
     };
     assertModelsAvailable(
       routekitModelIds,
@@ -344,10 +348,24 @@ export async function startFusionStack(
       ...(options.logsDir !== undefined ? { logsDir: options.logsDir } : {})
     });
 
-    const models: EnsembleModel[] = routekitModelIds.map((id) => ({
-      id,
-      model: id
-    }));
+    const catalogById = new Map(
+      (catalog.data ?? []).flatMap((entry) =>
+        typeof entry.id === "string" ? [[entry.id, entry] as const] : []
+      )
+    );
+    const models: GatewayModel[] = routekitModelIds.map((id) => {
+      const inventory = catalogById.get(id);
+      return {
+        id,
+        model: id,
+        ...(typeof inventory?.owned_by === "string"
+          ? { provider: inventory.owned_by }
+          : {}),
+        ...(inventory?.reasoning !== null && typeof inventory?.reasoning === "object"
+          ? { reasoning: inventory.reasoning as GatewayModel["reasoning"] }
+          : {})
+      };
+    });
     const gatewayConfig: GatewayRunnerConfig = {
       fusionBackendUrl: sidecar.url,
       repo: options.repo,

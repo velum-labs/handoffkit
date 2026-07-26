@@ -5,7 +5,8 @@ settings:
   excludeLinksFromLockfile: false
 
 overrides:
-  brace-expansion@>=3.0.0 <5.0.7: '>=5.0.7 <6'
+  brace-expansion@>=3.0.0 <5.0.8: '>=5.0.8 <6'
+  postcss@<=8.5.17: '>=8.5.18'
   sharp@<0.35.0: 0.35.3
   undici@>=7.0.0 <7.28.0: '>=7.28.0 <8'
 
@@ -19,6 +20,9 @@ importers:
       '@velum-labs/model-fusion-protocol':
         specifier: 0.6.0
         version: 0.6.0
+      '@velum-labs/routekit':
+        specifier: 0.10.1
+        version: 0.10.1
       turbo:
         specifier: 2.10.5
         version: 2.10.5
@@ -145,8 +149,8 @@ importers:
         specifier: workspace:*
         version: link:../../packages/adapter-ai-sdk
       '@velum-labs/routekit-registry':
-        specifier: workspace:*
-        version: link:../../packages/routekit-registry
+        specifier: 0.10.1
+        version: 0.10.1
       ai:
         specifier: 6.0.200
         version: 6.0.200(zod@4.4.3)
@@ -159,27 +163,6 @@ importers:
       '@fusionkit/example-utils':
         specifier: workspace:*
         version: link:../../packages/example-utils
-
-  packages/accounts:
-    dependencies:
-      '@velum-labs/routekit-contracts':
-        specifier: workspace:*
-        version: link:../contracts
-      '@velum-labs/routekit-gateway':
-        specifier: workspace:*
-        version: link:../model-gateway
-      '@velum-labs/routekit-registry':
-        specifier: workspace:*
-        version: link:../routekit-registry
-      '@velum-labs/routekit-runtime':
-        specifier: workspace:*
-        version: link:../runtime-utils
-      yaml:
-        specifier: 2.9.0
-        version: 2.9.0
-      zod:
-        specifier: 4.4.3
-        version: 4.4.3
 
   packages/adapter-ai-sdk:
     dependencies:
@@ -196,8 +179,8 @@ importers:
         specifier: workspace:*
         version: link:../tracing
       '@velum-labs/routekit-runtime':
-        specifier: workspace:*
-        version: link:../runtime-utils
+        specifier: 0.10.1
+        version: 0.10.1
       ai:
         specifier: 6.0.200
         version: 6.0.200(zod@4.4.3)
@@ -229,44 +212,44 @@ importers:
         specifier: workspace:*
         version: link:../workspace
       '@velum-labs/routekit-cli-core':
-        specifier: workspace:*
-        version: link:../cli-core
+        specifier: 0.10.1
+        version: 0.10.1(@types/react@19.2.17)
       '@velum-labs/routekit-cli-ui':
-        specifier: workspace:*
-        version: link:../cli-ui
+        specifier: 0.10.1
+        version: 0.10.1(@types/react@19.2.17)
       '@velum-labs/routekit-config':
-        specifier: workspace:*
-        version: link:../routekit-config
+        specifier: 0.10.1
+        version: 0.10.1
       '@velum-labs/routekit-config-core':
-        specifier: workspace:*
-        version: link:../config-core
+        specifier: 0.10.1
+        version: 0.10.1
       '@velum-labs/routekit-contracts':
-        specifier: workspace:*
-        version: link:../contracts
+        specifier: 0.10.1
+        version: 0.10.1
       '@velum-labs/routekit-gateway':
-        specifier: workspace:*
-        version: link:../model-gateway
+        specifier: 0.10.1
+        version: 0.10.1
       '@velum-labs/routekit-harness-core':
-        specifier: workspace:*
-        version: link:../harness-core
+        specifier: 0.10.1
+        version: 0.10.1
       '@velum-labs/routekit-registry':
-        specifier: workspace:*
-        version: link:../routekit-registry
+        specifier: 0.10.1
+        version: 0.10.1
       '@velum-labs/routekit-router':
-        specifier: workspace:*
-        version: link:../routekit-router
+        specifier: 0.10.1
+        version: 0.10.1
       '@velum-labs/routekit-runtime':
-        specifier: workspace:*
-        version: link:../runtime-utils
+        specifier: 0.10.1
+        version: 0.10.1
       '@velum-labs/routekit-telemetry-core':
-        specifier: workspace:*
-        version: link:../telemetry-core
+        specifier: 0.10.1
+        version: 0.10.1
       '@velum-labs/routekit-tool-registry':
-        specifier: workspace:*
-        version: link:../tool-registry
+        specifier: 0.10.1
+        version: 0.10.1(@modelcontextprotocol/sdk@1.29.0)
       '@velum-labs/routekit-tools':
-        specifier: workspace:*
-        version: link:../tools
+        specifier: 0.10.1
+        version: 0.10.1
       commander:
         specifier: 14.0.3
         version: 14.0.3
@@ -286,48 +269,6 @@ importers:
       '@types/figlet':
         specifier: 1.7.0
         version: 1.7.0
-
-  packages/cli-core:
-    dependencies:
-      '@velum-labs/routekit-cli-ui':
-        specifier: workspace:*
-        version: link:../cli-ui
-      commander:
-        specifier: 14.0.3
-        version: 14.0.3
-
-  packages/cli-ui:
-    dependencies:
-      figlet:
-        specifier: 1.11.0
-        version: 1.11.0
-      ink:
-        specifier: 7.1.0
-        version: 7.1.0(@types/react@19.2.17)(react@19.2.7)
-      react:
-        specifier: 19.2.7
-        version: 19.2.7
-      string-width:
-        specifier: 8.2.1
-        version: 8.2.1
-    devDependencies:
-      '@types/figlet':
-        specifier: 1.7.0
-        version: 1.7.0
-      '@types/react':
-        specifier: 19.2.17
-        version: 19.2.17
-      ink-testing-library:
-        specifier: 4.0.0
-        version: 4.0.0(@types/react@19.2.17)
-
-  packages/config-core:
-    dependencies:
-      '@velum-labs/routekit-runtime':
-        specifier: workspace:*
-        version: link:../runtime-utils
-
-  packages/contracts: {}
 
   packages/ensemble:
     dependencies:
@@ -353,20 +294,20 @@ importers:
         specifier: 0.2.0
         version: 0.2.0
       '@velum-labs/routekit-contracts':
-        specifier: workspace:*
-        version: link:../contracts
+        specifier: 0.10.1
+        version: 0.10.1
       '@velum-labs/routekit-gateway':
-        specifier: workspace:*
-        version: link:../model-gateway
+        specifier: 0.10.1
+        version: 0.10.1
       '@velum-labs/routekit-harness-core':
-        specifier: workspace:*
-        version: link:../harness-core
+        specifier: 0.10.1
+        version: 0.10.1
       '@velum-labs/routekit-runtime':
-        specifier: workspace:*
-        version: link:../runtime-utils
+        specifier: 0.10.1
+        version: 0.10.1
       '@velum-labs/routekit-tools':
-        specifier: workspace:*
-        version: link:../tools
+        specifier: 0.10.1
+        version: 0.10.1
 
   packages/example-utils:
     dependencies:
@@ -377,8 +318,8 @@ importers:
         specifier: 4.0.2
         version: 4.0.2
       '@velum-labs/routekit-registry':
-        specifier: workspace:*
-        version: link:../routekit-registry
+        specifier: 0.10.1
+        version: 0.10.1
       ai:
         specifier: 6.0.200
         version: 6.0.200(zod@4.4.3)
@@ -386,11 +327,11 @@ importers:
   packages/fusion-config:
     dependencies:
       '@velum-labs/routekit-config-core':
-        specifier: workspace:*
-        version: link:../config-core
+        specifier: 0.10.1
+        version: 0.10.1
       '@velum-labs/routekit-runtime':
-        specifier: workspace:*
-        version: link:../runtime-utils
+        specifier: 0.10.1
+        version: 0.10.1
 
   packages/fusion-gateway:
     dependencies:
@@ -410,341 +351,39 @@ importers:
         specifier: workspace:*
         version: link:../tracing
       '@velum-labs/routekit-contracts':
-        specifier: workspace:*
-        version: link:../contracts
+        specifier: 0.10.1
+        version: 0.10.1
       '@velum-labs/routekit-gateway':
-        specifier: workspace:*
-        version: link:../model-gateway
+        specifier: 0.10.1
+        version: 0.10.1
       '@velum-labs/routekit-registry':
-        specifier: workspace:*
-        version: link:../routekit-registry
+        specifier: 0.10.1
+        version: 0.10.1
       '@velum-labs/routekit-runtime':
-        specifier: workspace:*
-        version: link:../runtime-utils
+        specifier: 0.10.1
+        version: 0.10.1
       '@velum-labs/routekit-tracing':
-        specifier: workspace:*
-        version: link:../routekit-tracing
-
-  packages/harness-core:
-    dependencies:
-      '@velum-labs/routekit-contracts':
-        specifier: workspace:*
-        version: link:../contracts
-      '@velum-labs/routekit-runtime':
-        specifier: workspace:*
-        version: link:../runtime-utils
-      zod:
-        specifier: 4.4.3
-        version: 4.4.3
+        specifier: 0.10.1
+        version: 0.10.1
 
   packages/kernel: {}
-
-  packages/model-gateway:
-    dependencies:
-      '@velum-labs/routekit-contracts':
-        specifier: workspace:*
-        version: link:../contracts
-      '@velum-labs/routekit-registry':
-        specifier: workspace:*
-        version: link:../routekit-registry
-      '@velum-labs/routekit-runtime':
-        specifier: workspace:*
-        version: link:../runtime-utils
-      '@velum-labs/routekit-tracing':
-        specifier: workspace:*
-        version: link:../routekit-tracing
-      zod:
-        specifier: 4.4.3
-        version: 4.4.3
 
   packages/protocol:
     dependencies:
       '@velum-labs/routekit-contracts':
-        specifier: workspace:*
-        version: link:../contracts
+        specifier: 0.10.1
+        version: 0.10.1
 
   packages/registry: {}
-
-  packages/routekit-cli:
-    dependencies:
-      '@velum-labs/routekit-accounts':
-        specifier: workspace:*
-        version: link:../accounts
-      '@velum-labs/routekit-cli-core':
-        specifier: workspace:*
-        version: link:../cli-core
-      '@velum-labs/routekit-cli-ui':
-        specifier: workspace:*
-        version: link:../cli-ui
-      '@velum-labs/routekit-config':
-        specifier: workspace:*
-        version: link:../routekit-config
-      '@velum-labs/routekit-contracts':
-        specifier: workspace:*
-        version: link:../contracts
-      '@velum-labs/routekit-control':
-        specifier: workspace:*
-        version: link:../routekit-control
-      '@velum-labs/routekit-daemon':
-        specifier: workspace:*
-        version: link:../routekit-daemon
-      '@velum-labs/routekit-gateway':
-        specifier: workspace:*
-        version: link:../model-gateway
-      '@velum-labs/routekit-registry':
-        specifier: workspace:*
-        version: link:../routekit-registry
-      '@velum-labs/routekit-router':
-        specifier: workspace:*
-        version: link:../routekit-router
-      '@velum-labs/routekit-runtime':
-        specifier: workspace:*
-        version: link:../runtime-utils
-      '@velum-labs/routekit-telemetry-core':
-        specifier: workspace:*
-        version: link:../telemetry-core
-      '@velum-labs/routekit-tool-registry':
-        specifier: workspace:*
-        version: link:../tool-registry
-      '@velum-labs/routekit-tools':
-        specifier: workspace:*
-        version: link:../tools
-      commander:
-        specifier: 14.0.3
-        version: 14.0.3
-      yaml:
-        specifier: 2.9.0
-        version: 2.9.0
-
-  packages/routekit-config:
-    dependencies:
-      '@velum-labs/routekit-config-core':
-        specifier: workspace:*
-        version: link:../config-core
-      '@velum-labs/routekit-gateway':
-        specifier: workspace:*
-        version: link:../model-gateway
-      '@velum-labs/routekit-runtime':
-        specifier: workspace:*
-        version: link:../runtime-utils
-      yaml:
-        specifier: 2.9.0
-        version: 2.9.0
-
-  packages/routekit-control:
-    dependencies:
-      '@velum-labs/routekit-contracts':
-        specifier: workspace:*
-        version: link:../contracts
-      '@velum-labs/routekit-runtime':
-        specifier: workspace:*
-        version: link:../runtime-utils
-
-  packages/routekit-daemon:
-    dependencies:
-      '@velum-labs/routekit-accounts':
-        specifier: workspace:*
-        version: link:../accounts
-      '@velum-labs/routekit-config':
-        specifier: workspace:*
-        version: link:../routekit-config
-      '@velum-labs/routekit-control':
-        specifier: workspace:*
-        version: link:../routekit-control
-      '@velum-labs/routekit-gateway':
-        specifier: workspace:*
-        version: link:../model-gateway
-      '@velum-labs/routekit-registry':
-        specifier: workspace:*
-        version: link:../routekit-registry
-      '@velum-labs/routekit-router':
-        specifier: workspace:*
-        version: link:../routekit-router
-      '@velum-labs/routekit-runtime':
-        specifier: workspace:*
-        version: link:../runtime-utils
-      '@velum-labs/routekit-telemetry-core':
-        specifier: workspace:*
-        version: link:../telemetry-core
-      yaml:
-        specifier: 2.9.0
-        version: 2.9.0
-
-  packages/routekit-registry: {}
-
-  packages/routekit-router:
-    dependencies:
-      '@velum-labs/routekit-accounts':
-        specifier: workspace:*
-        version: link:../accounts
-      '@velum-labs/routekit-gateway':
-        specifier: workspace:*
-        version: link:../model-gateway
-      '@velum-labs/routekit-runtime':
-        specifier: workspace:*
-        version: link:../runtime-utils
-
-  packages/routekit-tracing:
-    dependencies:
-      '@opentelemetry/api':
-        specifier: 1.9.1
-        version: 1.9.1
-      '@opentelemetry/api-logs':
-        specifier: 0.220.0
-        version: 0.220.0
-      '@opentelemetry/exporter-logs-otlp-http':
-        specifier: 0.220.0
-        version: 0.220.0(@opentelemetry/api@1.9.1)
-      '@opentelemetry/exporter-trace-otlp-http':
-        specifier: 0.220.0
-        version: 0.220.0(@opentelemetry/api@1.9.1)
-      '@opentelemetry/resources':
-        specifier: 2.9.0
-        version: 2.9.0(@opentelemetry/api@1.9.1)
-      '@opentelemetry/sdk-logs':
-        specifier: 0.220.0
-        version: 0.220.0(@opentelemetry/api@1.9.1)
-      '@opentelemetry/sdk-trace-base':
-        specifier: 2.9.0
-        version: 2.9.0(@opentelemetry/api@1.9.1)
-      '@opentelemetry/sdk-trace-node':
-        specifier: 2.9.0
-        version: 2.9.0(@opentelemetry/api@1.9.1)
-
-  packages/runtime-utils:
-    optionalDependencies:
-      portless:
-        specifier: 0.15.1
-        version: 0.15.1
-
-  packages/telemetry-core:
-    dependencies:
-      '@velum-labs/routekit-runtime':
-        specifier: workspace:*
-        version: link:../runtime-utils
 
   packages/testkit:
     dependencies:
       '@velum-labs/routekit-runtime':
-        specifier: workspace:*
-        version: link:../runtime-utils
+        specifier: 0.10.1
+        version: 0.10.1
       yaml:
         specifier: 2.9.0
         version: 2.9.0
-
-  packages/tool-claude:
-    dependencies:
-      '@anthropic-ai/claude-agent-sdk':
-        specifier: 0.3.198
-        version: 0.3.198(@modelcontextprotocol/sdk@1.29.0)(zod@4.4.3)
-      '@velum-labs/routekit-harness-core':
-        specifier: workspace:*
-        version: link:../harness-core
-      '@velum-labs/routekit-registry':
-        specifier: workspace:*
-        version: link:../routekit-registry
-      '@velum-labs/routekit-runtime':
-        specifier: workspace:*
-        version: link:../runtime-utils
-      '@velum-labs/routekit-tools':
-        specifier: workspace:*
-        version: link:../tools
-      zod:
-        specifier: 4.4.3
-        version: 4.4.3
-
-  packages/tool-codex:
-    dependencies:
-      '@openai/codex-sdk':
-        specifier: 0.145.0
-        version: 0.145.0
-      '@velum-labs/routekit-harness-core':
-        specifier: workspace:*
-        version: link:../harness-core
-      '@velum-labs/routekit-registry':
-        specifier: workspace:*
-        version: link:../routekit-registry
-      '@velum-labs/routekit-runtime':
-        specifier: workspace:*
-        version: link:../runtime-utils
-      '@velum-labs/routekit-tools':
-        specifier: workspace:*
-        version: link:../tools
-      smol-toml:
-        specifier: 1.7.0
-        version: 1.7.0
-      zod:
-        specifier: 4.4.3
-        version: 4.4.3
-
-  packages/tool-cursor:
-    dependencies:
-      '@velum-labs/cursorkit':
-        specifier: 0.2.0
-        version: 0.2.0
-      '@velum-labs/routekit-contracts':
-        specifier: workspace:*
-        version: link:../contracts
-      '@velum-labs/routekit-harness-core':
-        specifier: workspace:*
-        version: link:../harness-core
-      '@velum-labs/routekit-runtime':
-        specifier: workspace:*
-        version: link:../runtime-utils
-      '@velum-labs/routekit-tools':
-        specifier: workspace:*
-        version: link:../tools
-      '@zed-industries/agent-client-protocol':
-        specifier: 0.4.5
-        version: 0.4.5
-      zod:
-        specifier: 4.4.3
-        version: 4.4.3
-
-  packages/tool-opencode:
-    dependencies:
-      '@opencode-ai/sdk':
-        specifier: 1.17.13
-        version: 1.17.13
-      '@velum-labs/routekit-harness-core':
-        specifier: workspace:*
-        version: link:../harness-core
-      '@velum-labs/routekit-runtime':
-        specifier: workspace:*
-        version: link:../runtime-utils
-      '@velum-labs/routekit-tools':
-        specifier: workspace:*
-        version: link:../tools
-      zod:
-        specifier: 4.4.3
-        version: 4.4.3
-
-  packages/tool-registry:
-    dependencies:
-      '@velum-labs/routekit-tool-claude':
-        specifier: workspace:*
-        version: link:../tool-claude
-      '@velum-labs/routekit-tool-codex':
-        specifier: workspace:*
-        version: link:../tool-codex
-      '@velum-labs/routekit-tool-cursor':
-        specifier: workspace:*
-        version: link:../tool-cursor
-      '@velum-labs/routekit-tool-opencode':
-        specifier: workspace:*
-        version: link:../tool-opencode
-      '@velum-labs/routekit-tools':
-        specifier: workspace:*
-        version: link:../tools
-
-  packages/tools:
-    dependencies:
-      '@velum-labs/routekit-contracts':
-        specifier: workspace:*
-        version: link:../contracts
-      '@velum-labs/routekit-harness-core':
-        specifier: workspace:*
-        version: link:../harness-core
 
   packages/tracing:
     dependencies:
@@ -764,8 +403,8 @@ importers:
         specifier: 2.9.0
         version: 2.9.0(@opentelemetry/api@1.9.1)
       '@velum-labs/routekit-tracing':
-        specifier: workspace:*
-        version: link:../routekit-tracing
+        specifier: 0.10.1
+        version: 0.10.1
 
   packages/workspace:
     dependencies:
@@ -773,8 +412,8 @@ importers:
         specifier: workspace:*
         version: link:../protocol
       '@velum-labs/routekit-contracts':
-        specifier: workspace:*
-        version: link:../contracts
+        specifier: 0.10.1
+        version: 0.10.1
       minimatch:
         specifier: 10.2.5
         version: 10.2.5
@@ -3107,6 +2746,73 @@ packages:
   '@velum-labs/model-fusion-protocol@0.6.0':
     resolution: {integrity: sha512-ICPuQb9zKdtuEzyBGzl/0QilkPdHED7XQO+9Goi4sSzQ5FtAygdGZxFLsLHma3qO/sDDiKEmwgtSF4iPgbYCwQ==}
 
+  '@velum-labs/routekit-accounts@0.10.1':
+    resolution: {integrity: sha512-QzhpeQRo31s4jMGPHchv+IJ7XZA31HLmkuesZQKN16NNT8NirzXv0cMH2vyyl8GPvqgSEHpsH8iguXmjWZyi/w==}
+
+  '@velum-labs/routekit-cli-core@0.10.1':
+    resolution: {integrity: sha512-hDjcY839+Ltl+ozmhUcFd3c1hXCRqTiXGNeKz73H5G+bayOk9NaLGviy42VuXtOZVtBq/hJ84Bxo4qEZVQA93A==}
+
+  '@velum-labs/routekit-cli-ui@0.10.1':
+    resolution: {integrity: sha512-BV2Pt4TrepG5mC11prcz88ZMigxGQnBzrIAVvfl6CCggB90ymSKidg6AldmNiZDvWFd48Ukmh1vSQUUMCQohLQ==}
+
+  '@velum-labs/routekit-config-core@0.10.1':
+    resolution: {integrity: sha512-NVB7wGTLoI7izaho5AfdvslKgbka3aI0YvVyYmZZCz4IE9IgA8T8W6i9GhwC+eWQi0xKAzb3ZBZ6QztiRfe9og==}
+
+  '@velum-labs/routekit-config@0.10.1':
+    resolution: {integrity: sha512-XU5EkddRoTi1PPaWSX6Qjkfk+zUrmxS/9ESXKJ5+8LDzamQd61b8kp8qchiz/f7M23b2d7BdtP5zQZBaSQSJ0Q==}
+
+  '@velum-labs/routekit-contracts@0.10.1':
+    resolution: {integrity: sha512-zmyav8vF0YMRZS5UchBRJwH5BqRb7He/+UUaNawTsvaLkOmKsdYOLuZ+e+suvqgJscX5xVez6hSYQZctxD4Ebw==}
+
+  '@velum-labs/routekit-control@0.10.1':
+    resolution: {integrity: sha512-2kyHPXg3exMgoXOkL7aLkvDMjurwCAXA2iNK7QviBsDwrtA0bIKqS1FdjnAyHuMdTpZgchjEZ1e9HvFe1r4XuA==}
+
+  '@velum-labs/routekit-daemon@0.10.1':
+    resolution: {integrity: sha512-AxZg+f+nf6HGqDejaklBdxrU7WE0e6ivZzTqCQ7KO7Wiwwxig2gdHS0Uomt85YWjJuh+E7UzFVJpZdbPFBqW1g==}
+
+  '@velum-labs/routekit-gateway@0.10.1':
+    resolution: {integrity: sha512-Hsr5DNZE7+gt8XWEDinyPKFDKlHr9fuj8MnODQjFKs0qKxfYdafOzXpqBIxniDBPCZ5gE5Hzx5D/5mvRJVa6Fw==}
+
+  '@velum-labs/routekit-harness-core@0.10.1':
+    resolution: {integrity: sha512-N9B8jnIOfNmE2f1cyIZEPkYw4cJaE9cYPkODmMu0yv3MVOdQQDYDAkSxOzRAOVJE1ZT4NotMikl7RlssNR4ziQ==}
+
+  '@velum-labs/routekit-registry@0.10.1':
+    resolution: {integrity: sha512-Lio7H1/NYWPiUboEz5WNqp6dW0hEHwqPDYVilDO6FlxXms5kS7QDv2DQwckKkD0am/tNzm83n5CjgWMrT4CSFg==}
+
+  '@velum-labs/routekit-router@0.10.1':
+    resolution: {integrity: sha512-e75ZvBvIwoLq3PujRG/fafrUJ6xKwlSNngsYjnnuD11dn7vi6NET1Cj6mDU22oWZ6YkJO70ildO954mQMfxV5w==}
+
+  '@velum-labs/routekit-runtime@0.10.1':
+    resolution: {integrity: sha512-uMy4AdN8y24/I9BHPp0LBreh3mMhKx4EBQ6PnArADqsZwdlXfkLV2JTresAhRNzrMhjWZOta2VEpCHEZLpyuhQ==}
+
+  '@velum-labs/routekit-telemetry-core@0.10.1':
+    resolution: {integrity: sha512-0wCVBnSc78P1tua4v4dCebzzB4GzKLuHeMf1Xz2XIL8IMTRS3tcwx0Hrdpz46yeWw4+X58uNomjKXF7p9v9Nwg==}
+
+  '@velum-labs/routekit-tool-claude@0.10.1':
+    resolution: {integrity: sha512-PZA31NWnQ6mY1Jur3IJU82AyZ6S+ceUlK3grFEPY5cxncLfYlIW+gxPynFQoVAtaYO9SWwAbE3TWKCB2Q9XbCg==}
+
+  '@velum-labs/routekit-tool-codex@0.10.1':
+    resolution: {integrity: sha512-cusc3HNi/SfHfsh/QZA0NS0wrTQjakrQPrFpMc74tmzVyBC7KZu/I5Auoi093P9GvT1NtQfrjztvsYkllRanqQ==}
+
+  '@velum-labs/routekit-tool-cursor@0.10.1':
+    resolution: {integrity: sha512-APEDB3Rfyuz+RH/trLbkmHDqJ7icVei9cUv7HbD2hByiSFGYzHyG8trVWqlZXWGnUWk1nWn/Yeoer2DSAOeL0g==}
+
+  '@velum-labs/routekit-tool-opencode@0.10.1':
+    resolution: {integrity: sha512-DTunAuh/4C3uxp279w8QbkB56lAH27FbFjF8d4sm0d4Z7gn37Pp7KaWuBxlma177/gC5cww/Qfjeioy/73s5Mw==}
+
+  '@velum-labs/routekit-tool-registry@0.10.1':
+    resolution: {integrity: sha512-PvKlkekqBbu9CkqV/JpuJffTK/+yI4ULUGb5v3oaTJuX+4BydAO4CS6oh/IrxT4Dzt7Y6hEjvk+5YYKvidxLXA==}
+
+  '@velum-labs/routekit-tools@0.10.1':
+    resolution: {integrity: sha512-Zi2CvhOfiZwUiXWlX8w9F2Hr5kwfu2uFG6+7dmS9Ds/NV7YFAYyFyWyYmdHwVDrU71kauEy889sr8PgY8IBOUA==}
+
+  '@velum-labs/routekit-tracing@0.10.1':
+    resolution: {integrity: sha512-8d67Bd58ZiRxI0tpvtGItawBeMQIyeaLSXAt7L64+swb0rR99pzV8q47oNEaPaW99oXGtWij3iSVM+nUXotgzQ==}
+
+  '@velum-labs/routekit@0.10.1':
+    resolution: {integrity: sha512-ifeJgSL6TC4/3cwEtUjBkv4R5MJseBmvC7LR9n19W6Hx+icZTLbvaNlomTi/FAAGVAVFDM7sd73w9XEdJLTgng==}
+    hasBin: true
+
   '@vercel/oidc@3.2.0':
     resolution: {integrity: sha512-UycprH3T6n3jH0k44NHMa7pnFHGu/N05MjojYr+Mc6I7obkoLIJujSWwin1pCvdy/eOxrI/l3uDLQsmcrOb4ug==}
     engines: {node: '>= 20'}
@@ -3227,9 +2933,9 @@ packages:
     resolution: {integrity: sha512-2cGmJupaNgg+QUwVLAucDuWuoMZ6EX9iHDRswZ5lsNYEmwPaRknMPCLZz07yTzVq/83p4o/wzbDZbBrTvGGTIw==}
     engines: {node: '>=18'}
 
-  brace-expansion@5.0.7:
-    resolution: {integrity: sha512-7oFy703dxfY3/NLxC1fh2SUCQ0H9rmAY+5EpDVfXjUTTs+HEwR2nYaqLv+GWcTsumwxPfiz6CzCNkwXwBUwqCA==}
-    engines: {node: 18 || 20 || >=22}
+  brace-expansion@5.0.8:
+    resolution: {integrity: sha512-JZyDyq3D4AUifKTPOB7DELf6XsB3WdPuNxCtob1vFXPsSXhdAiHBWJ/tJ8HAc9aH84BK+5JFZLNkJKx3G9kzQg==}
+    engines: {node: 20 || >=22}
 
   braces@3.0.3:
     resolution: {integrity: sha512-yQbXgO/OSZVD2IsiLlro+7Hf6Q18EJrKSEsdoMzKePKXct3gvD8oLcOQdIzGupr5Fj+EDe8gO/lxc1BzfMpxvA==}
@@ -4139,15 +3845,6 @@ packages:
   inherits@2.0.4:
     resolution: {integrity: sha512-k/vGaX4/Yla3WzyMCvTQOXYeIHvqOKtnqBduzTHpzpQZzAskKMhZ2K+EnBiSM9zGSoIFeMpXKxa4dYeZIQqewQ==}
 
-  ink-testing-library@4.0.0:
-    resolution: {integrity: sha512-yF92kj3pmBvk7oKbSq5vEALO//o7Z9Ck/OaLNlkzXNeYdwfpxMQkSowGTFUCS5MSu9bWfSZMewGpp7bFc66D7Q==}
-    engines: {node: '>=18'}
-    peerDependencies:
-      '@types/react': '>=18.0.0'
-    peerDependenciesMeta:
-      '@types/react':
-        optional: true
-
   ink@7.1.0:
     resolution: {integrity: sha512-VWE6/yeLtFCJBNLflyI2OSylyXK1Rc24LuXup8Qt+icwkmmycFNdbn8IkSp6Frc0h1iA0NOvvi1ajW44U/w3Qg==}
     engines: {node: '>=22'}
@@ -4915,14 +4612,6 @@ packages:
   postcss-selector-parser@7.1.4:
     resolution: {integrity: sha512-HeP7D2wyhkR+XaK6v4W8oRF62Dsz4flyuczALJp61GckGm42u1saSSJ/0auvcBqxs3jMRFEcPK34At/0JBKdOg==}
     engines: {node: '>=4'}
-
-  postcss@8.4.31:
-    resolution: {integrity: sha512-PS08Iboia9mts/2ygV3eLpY5ghnUcfLV/EXTOW1E2qYxJKGGBUtNjN76FYHnMs36RmARn41bC0AZmn+rR0OVpQ==}
-    engines: {node: ^10 || ^12 || >=14}
-
-  postcss@8.5.15:
-    resolution: {integrity: sha512-FfR8sjd4em2T6fb3I2MwAJU7HWVMr9zba+enmQeeWFfCbm+UOC/0X4DS8XtpUTMwWMGbjKYP7xjfNekzyGmB3A==}
-    engines: {node: ^10 || ^12 || >=14}
 
   postcss@8.5.21:
     resolution: {integrity: sha512-v4sDNP3fdNiWMfabO7OwOQdOX8TiQSztKyT1Wj0w+j7LDallJThJRBBBmzVGyYj0crMh7jlV4zepPkiNu9UwDQ==}
@@ -7784,7 +7473,7 @@ snapshots:
       '@alloc/quick-lru': 5.2.0
       '@tailwindcss/node': 4.3.1
       '@tailwindcss/oxide': 4.3.1
-      postcss: 8.5.15
+      postcss: 8.5.21
       tailwindcss: 4.3.1
 
   '@ts-morph/common@0.27.0':
@@ -7996,6 +7685,190 @@ snapshots:
 
   '@velum-labs/model-fusion-protocol@0.6.0': {}
 
+  '@velum-labs/routekit-accounts@0.10.1':
+    dependencies:
+      '@velum-labs/routekit-contracts': 0.10.1
+      '@velum-labs/routekit-gateway': 0.10.1
+      '@velum-labs/routekit-registry': 0.10.1
+      '@velum-labs/routekit-runtime': 0.10.1
+      yaml: 2.9.0
+      zod: 4.4.3
+
+  '@velum-labs/routekit-cli-core@0.10.1(@types/react@19.2.17)':
+    dependencies:
+      '@velum-labs/routekit-cli-ui': 0.10.1(@types/react@19.2.17)
+      commander: 14.0.3
+    transitivePeerDependencies:
+      - '@types/react'
+      - bufferutil
+      - react-devtools-core
+      - utf-8-validate
+
+  '@velum-labs/routekit-cli-ui@0.10.1(@types/react@19.2.17)':
+    dependencies:
+      figlet: 1.11.0
+      ink: 7.1.0(@types/react@19.2.17)(react@19.2.7)
+      react: 19.2.7
+      string-width: 8.2.1
+    transitivePeerDependencies:
+      - '@types/react'
+      - bufferutil
+      - react-devtools-core
+      - utf-8-validate
+
+  '@velum-labs/routekit-config-core@0.10.1':
+    dependencies:
+      '@velum-labs/routekit-runtime': 0.10.1
+
+  '@velum-labs/routekit-config@0.10.1':
+    dependencies:
+      '@velum-labs/routekit-config-core': 0.10.1
+      '@velum-labs/routekit-gateway': 0.10.1
+      '@velum-labs/routekit-runtime': 0.10.1
+      yaml: 2.9.0
+
+  '@velum-labs/routekit-contracts@0.10.1': {}
+
+  '@velum-labs/routekit-control@0.10.1':
+    dependencies:
+      '@velum-labs/routekit-contracts': 0.10.1
+      '@velum-labs/routekit-runtime': 0.10.1
+
+  '@velum-labs/routekit-daemon@0.10.1':
+    dependencies:
+      '@velum-labs/routekit-accounts': 0.10.1
+      '@velum-labs/routekit-config': 0.10.1
+      '@velum-labs/routekit-control': 0.10.1
+      '@velum-labs/routekit-gateway': 0.10.1
+      '@velum-labs/routekit-registry': 0.10.1
+      '@velum-labs/routekit-router': 0.10.1
+      '@velum-labs/routekit-runtime': 0.10.1
+      '@velum-labs/routekit-telemetry-core': 0.10.1
+      yaml: 2.9.0
+
+  '@velum-labs/routekit-gateway@0.10.1':
+    dependencies:
+      '@velum-labs/routekit-contracts': 0.10.1
+      '@velum-labs/routekit-registry': 0.10.1
+      '@velum-labs/routekit-runtime': 0.10.1
+      '@velum-labs/routekit-tracing': 0.10.1
+      zod: 4.4.3
+
+  '@velum-labs/routekit-harness-core@0.10.1':
+    dependencies:
+      '@velum-labs/routekit-contracts': 0.10.1
+      '@velum-labs/routekit-runtime': 0.10.1
+      zod: 4.4.3
+
+  '@velum-labs/routekit-registry@0.10.1': {}
+
+  '@velum-labs/routekit-router@0.10.1':
+    dependencies:
+      '@velum-labs/routekit-accounts': 0.10.1
+      '@velum-labs/routekit-gateway': 0.10.1
+      '@velum-labs/routekit-runtime': 0.10.1
+
+  '@velum-labs/routekit-runtime@0.10.1':
+    optionalDependencies:
+      portless: 0.15.1
+
+  '@velum-labs/routekit-telemetry-core@0.10.1':
+    dependencies:
+      '@velum-labs/routekit-runtime': 0.10.1
+
+  '@velum-labs/routekit-tool-claude@0.10.1(@modelcontextprotocol/sdk@1.29.0)':
+    dependencies:
+      '@anthropic-ai/claude-agent-sdk': 0.3.198(@modelcontextprotocol/sdk@1.29.0)(zod@4.4.3)
+      '@velum-labs/routekit-harness-core': 0.10.1
+      '@velum-labs/routekit-registry': 0.10.1
+      '@velum-labs/routekit-runtime': 0.10.1
+      '@velum-labs/routekit-tools': 0.10.1
+      zod: 4.4.3
+    transitivePeerDependencies:
+      - '@anthropic-ai/sdk'
+      - '@modelcontextprotocol/sdk'
+
+  '@velum-labs/routekit-tool-codex@0.10.1':
+    dependencies:
+      '@openai/codex-sdk': 0.145.0
+      '@velum-labs/routekit-harness-core': 0.10.1
+      '@velum-labs/routekit-registry': 0.10.1
+      '@velum-labs/routekit-runtime': 0.10.1
+      '@velum-labs/routekit-tools': 0.10.1
+      smol-toml: 1.7.0
+      zod: 4.4.3
+
+  '@velum-labs/routekit-tool-cursor@0.10.1':
+    dependencies:
+      '@velum-labs/cursorkit': 0.2.0
+      '@velum-labs/routekit-contracts': 0.10.1
+      '@velum-labs/routekit-harness-core': 0.10.1
+      '@velum-labs/routekit-runtime': 0.10.1
+      '@velum-labs/routekit-tools': 0.10.1
+      '@zed-industries/agent-client-protocol': 0.4.5
+      zod: 4.4.3
+
+  '@velum-labs/routekit-tool-opencode@0.10.1':
+    dependencies:
+      '@opencode-ai/sdk': 1.17.13
+      '@velum-labs/routekit-harness-core': 0.10.1
+      '@velum-labs/routekit-runtime': 0.10.1
+      '@velum-labs/routekit-tools': 0.10.1
+      zod: 4.4.3
+
+  '@velum-labs/routekit-tool-registry@0.10.1(@modelcontextprotocol/sdk@1.29.0)':
+    dependencies:
+      '@velum-labs/routekit-tool-claude': 0.10.1(@modelcontextprotocol/sdk@1.29.0)
+      '@velum-labs/routekit-tool-codex': 0.10.1
+      '@velum-labs/routekit-tool-cursor': 0.10.1
+      '@velum-labs/routekit-tool-opencode': 0.10.1
+      '@velum-labs/routekit-tools': 0.10.1
+    transitivePeerDependencies:
+      - '@anthropic-ai/sdk'
+      - '@modelcontextprotocol/sdk'
+
+  '@velum-labs/routekit-tools@0.10.1':
+    dependencies:
+      '@velum-labs/routekit-contracts': 0.10.1
+      '@velum-labs/routekit-harness-core': 0.10.1
+
+  '@velum-labs/routekit-tracing@0.10.1':
+    dependencies:
+      '@opentelemetry/api': 1.9.1
+      '@opentelemetry/api-logs': 0.220.0
+      '@opentelemetry/exporter-logs-otlp-http': 0.220.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/exporter-trace-otlp-http': 0.220.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/resources': 2.9.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/sdk-logs': 0.220.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/sdk-trace-base': 2.9.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/sdk-trace-node': 2.9.0(@opentelemetry/api@1.9.1)
+
+  '@velum-labs/routekit@0.10.1':
+    dependencies:
+      '@velum-labs/routekit-accounts': 0.10.1
+      '@velum-labs/routekit-cli-core': 0.10.1(@types/react@19.2.17)
+      '@velum-labs/routekit-cli-ui': 0.10.1(@types/react@19.2.17)
+      '@velum-labs/routekit-config': 0.10.1
+      '@velum-labs/routekit-contracts': 0.10.1
+      '@velum-labs/routekit-control': 0.10.1
+      '@velum-labs/routekit-daemon': 0.10.1
+      '@velum-labs/routekit-gateway': 0.10.1
+      '@velum-labs/routekit-registry': 0.10.1
+      '@velum-labs/routekit-router': 0.10.1
+      '@velum-labs/routekit-runtime': 0.10.1
+      '@velum-labs/routekit-telemetry-core': 0.10.1
+      '@velum-labs/routekit-tool-registry': 0.10.1(@modelcontextprotocol/sdk@1.29.0)
+      '@velum-labs/routekit-tools': 0.10.1
+      commander: 14.0.3
+      yaml: 2.9.0
+    transitivePeerDependencies:
+      - '@anthropic-ai/sdk'
+      - '@modelcontextprotocol/sdk'
+      - '@types/react'
+      - bufferutil
+      - react-devtools-core
+      - utf-8-validate
+
   '@vercel/oidc@3.2.0': {}
 
   '@zed-industries/agent-client-protocol@0.4.5':
@@ -8098,7 +7971,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  brace-expansion@5.0.7:
+  brace-expansion@5.0.8:
     dependencies:
       balanced-match: 4.0.4
 
@@ -9178,10 +9051,6 @@ snapshots:
 
   inherits@2.0.4: {}
 
-  ink-testing-library@4.0.0(@types/react@19.2.17):
-    optionalDependencies:
-      '@types/react': 19.2.17
-
   ink@7.1.0(@types/react@19.2.17)(react@19.2.7):
     dependencies:
       '@alcalzone/ansi-tokenize': 0.3.0
@@ -9924,7 +9793,7 @@ snapshots:
 
   minimatch@10.2.5:
     dependencies:
-      brace-expansion: 5.0.7
+      brace-expansion: 5.0.8
 
   minimist@1.2.8: {}
 
@@ -9944,7 +9813,7 @@ snapshots:
       '@next/env': 15.5.21
       '@swc/helpers': 0.5.15
       caniuse-lite: 1.0.30001806
-      postcss: 8.4.31
+      postcss: 8.5.21
       react: 19.2.7
       react-dom: 19.2.7(react@19.2.7)
       styled-jsx: 5.1.6(react@19.2.7)
@@ -10136,18 +10005,6 @@ snapshots:
     dependencies:
       cssesc: 3.0.0
       util-deprecate: 1.0.2
-
-  postcss@8.4.31:
-    dependencies:
-      nanoid: 3.3.16
-      picocolors: 1.1.1
-      source-map-js: 1.2.1
-
-  postcss@8.5.15:
-    dependencies:
-      nanoid: 3.3.16
-      picocolors: 1.1.1
-      source-map-js: 1.2.1
 
   postcss@8.5.21:
     dependencies:

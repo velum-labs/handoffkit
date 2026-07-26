@@ -85,11 +85,60 @@ export function sseObjectError(object: Record<string, unknown>): ProxyFailure | 
   return undefined;
 }
 
-/** Whether a single decoded SSE data object carries a non-empty content delta. */
+function nonEmptyRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value) && Object.keys(value).length > 0;
+}
+
+function substantiveRouteKitEnvelope(value: unknown): boolean {
+  if (!nonEmptyRecord(value) || value.version !== 1) return false;
+  const responses = value.responses;
+  if (nonEmptyRecord(responses)) {
+    const items = responses.items;
+    if (Array.isArray(items) && items.some(nonEmptyRecord)) return true;
+    if (responses.includeEncryptedContent === true) return true;
+  }
+  if (nonEmptyRecord(value.anthropic) || nonEmptyRecord(value.google)) return true;
+  return false;
+}
+
+function validReasoningDetail(value: unknown): boolean {
+  if (!nonEmptyRecord(value) || typeof value.type !== "string") return false;
+  if (value.type === "redacted_thinking") return typeof value.data === "string" && value.data.length > 0;
+  if (value.type === "thinking") {
+    return (typeof value.signature === "string" && value.signature.length > 0) ||
+      (typeof value.thinking === "string" && value.thinking.length > 0);
+  }
+  if (value.type === "google_thought") {
+    return Number.isInteger(value.index) && typeof value.thoughtSignature === "string" &&
+      value.thoughtSignature.length > 0;
+  }
+  return false;
+}
+
+/** Whether an SSE object commits visible/model output. Reasoning and tool-call
+ * starts count: once any of these bytes exist, a later error is mid-stream and
+ * must not discard or transparently replace the prefix. */
 export function sseObjectHasContent(object: Record<string, unknown>): boolean {
   if (!Array.isArray(object.choices)) return false;
-  const delta = (object.choices[0] as { delta?: { content?: unknown } } | undefined)?.delta;
-  return delta !== undefined && typeof delta.content === "string" && delta.content.length > 0;
+  const delta = (object.choices[0] as {
+    delta?: {
+      content?: unknown;
+      reasoning?: unknown;
+      reasoning_content?: unknown;
+      tool_calls?: unknown;
+      x_routekit?: unknown;
+      reasoning_details?: unknown;
+    };
+  } | undefined)?.delta;
+  if (delta === undefined) return false;
+  return (
+    (typeof delta.content === "string" && delta.content.length > 0) ||
+    (typeof delta.reasoning === "string" && delta.reasoning.length > 0) ||
+    (typeof delta.reasoning_content === "string" && delta.reasoning_content.length > 0) ||
+    (Array.isArray(delta.tool_calls) && delta.tool_calls.length > 0) ||
+    substantiveRouteKitEnvelope(delta.x_routekit) ||
+    (Array.isArray(delta.reasoning_details) && delta.reasoning_details.some(validReasoningDetail))
+  );
 }
 
 export function sseEventError(event: string): ProxyFailure | undefined {

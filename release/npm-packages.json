@@ -9,46 +9,10 @@
   "provenance": true,
   "protocol": {
     "packageName": "@fusionkit/protocol",
-    "version": "0.9.0",
+    "version": "0.10.1",
     "openapiSourceHash": "sha256:00da728751403fa1384b977c673f970eb68ec4e159bee0adc61109f4109d25b5"
   },
   "packages": [
-    {
-      "path": "packages/contracts",
-      "name": "@velum-labs/routekit-contracts"
-    },
-    {
-      "path": "packages/routekit-registry",
-      "name": "@velum-labs/routekit-registry"
-    },
-    {
-      "path": "packages/runtime-utils",
-      "name": "@velum-labs/routekit-runtime"
-    },
-    {
-      "path": "packages/routekit-control",
-      "name": "@velum-labs/routekit-control"
-    },
-    {
-      "path": "packages/routekit-tracing",
-      "name": "@velum-labs/routekit-tracing"
-    },
-    {
-      "path": "packages/cli-ui",
-      "name": "@velum-labs/routekit-cli-ui"
-    },
-    {
-      "path": "packages/cli-core",
-      "name": "@velum-labs/routekit-cli-core"
-    },
-    {
-      "path": "packages/config-core",
-      "name": "@velum-labs/routekit-config-core"
-    },
-    {
-      "path": "packages/telemetry-core",
-      "name": "@velum-labs/routekit-telemetry-core"
-    },
     {
       "path": "packages/registry",
       "name": "@fusionkit/registry"
@@ -78,64 +42,12 @@
       "name": "@fusionkit/adapter-ai-sdk"
     },
     {
-      "path": "packages/model-gateway",
-      "name": "@velum-labs/routekit-gateway"
-    },
-    {
-      "path": "packages/accounts",
-      "name": "@velum-labs/routekit-accounts"
-    },
-    {
       "path": "packages/fusion-gateway",
       "name": "@fusionkit/gateway"
     },
     {
-      "path": "packages/harness-core",
-      "name": "@velum-labs/routekit-harness-core"
-    },
-    {
-      "path": "packages/tools",
-      "name": "@velum-labs/routekit-tools"
-    },
-    {
-      "path": "packages/tool-codex",
-      "name": "@velum-labs/routekit-tool-codex"
-    },
-    {
-      "path": "packages/tool-claude",
-      "name": "@velum-labs/routekit-tool-claude"
-    },
-    {
-      "path": "packages/tool-cursor",
-      "name": "@velum-labs/routekit-tool-cursor"
-    },
-    {
-      "path": "packages/tool-opencode",
-      "name": "@velum-labs/routekit-tool-opencode"
-    },
-    {
-      "path": "packages/tool-registry",
-      "name": "@velum-labs/routekit-tool-registry"
-    },
-    {
-      "path": "packages/routekit-config",
-      "name": "@velum-labs/routekit-config"
-    },
-    {
-      "path": "packages/routekit-router",
-      "name": "@velum-labs/routekit-router"
-    },
-    {
-      "path": "packages/routekit-daemon",
-      "name": "@velum-labs/routekit-daemon"
-    },
-    {
       "path": "packages/ensemble",
       "name": "@fusionkit/ensemble"
-    },
-    {
-      "path": "packages/routekit-cli",
-      "name": "@velum-labs/routekit"
     },
     {
       "path": "packages/cli",

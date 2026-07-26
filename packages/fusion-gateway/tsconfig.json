@@ -22,21 +22,6 @@
     },
     {
       "path": "../tracing"
-    },
-    {
-      "path": "../contracts"
-    },
-    {
-      "path": "../model-gateway"
-    },
-    {
-      "path": "../routekit-registry"
-    },
-    {
-      "path": "../runtime-utils"
-    },
-    {
-      "path": "../routekit-tracing"
     }
   ]
 }

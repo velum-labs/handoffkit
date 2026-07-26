@@ -45,3 +45,6 @@ analysis/*/cache/
 
 # Shared HyperKit lab runtime state; intent and frozen locks stay tracked.
 lab/experiments/*/work/
+
+# Local escape hatch from scripts/link-routekit-src.mjs (sibling routekit checkout).
+.pnpmfile.cjs

@@ -39,6 +39,11 @@ export class KernelBackend implements Backend {
     return this.#inner.resolveModel?.(requested) ?? this.#inner.defaultModel;
   }
 
+  reasoningWireShape(model: string): string | undefined {
+    const delegatedModel = this.#inner.resolveModel?.(model) ?? this.#inner.defaultModel ?? model;
+    return this.#inner.reasoningWireShape?.(delegatedModel);
+  }
+
   chat(body: unknown, signal?: AbortSignal, options: BackendRequestOptions = {}): Promise<Response> {
     return this.#run("chat", body, signal, options);
   }

@@ -1,5 +1,7 @@
 import type { WireTrajectory } from "@fusionkit/protocol";
 import type { FusionTraceCarrier } from "@fusionkit/tracing";
+import type { ReasoningSelection } from "@velum-labs/routekit-contracts";
+import type { RouteKitMessageEnvelope, RouteKitReasoningEnvelope } from "@velum-labs/routekit-gateway";
 
 import type { NarrationWriter } from "./frontdoor/narration.js";
 import type { FusionGatewayLogger } from "./logger.js";
@@ -15,6 +17,7 @@ export type { WireTrajectory } from "@fusionkit/protocol";
 export type PassthroughModel = {
   routekitModelId: string;
   routekitUrl: string;
+  reasoningWireShape?: string;
 };
 
 export type FusedModelRoute = {
@@ -39,6 +42,8 @@ export type ChatMessageLike = {
   tool_calls?: unknown;
   tool_call_id?: string;
   name?: string;
+  /** Explicitly namespaced provider-fidelity metadata for RouteKit hops. */
+  x_routekit?: RouteKitMessageEnvelope;
 };
 
 export type ChatBody = {
@@ -47,6 +52,9 @@ export type ChatBody = {
   tools?: unknown;
   tool_choice?: unknown;
   stream?: boolean;
+  reasoning_effort?: string;
+  /** Explicitly namespaced provider-fidelity metadata for compound/proxy hops. */
+  x_routekit?: RouteKitReasoningEnvelope;
 };
 
 export type PanelRunInput = {
@@ -68,6 +76,10 @@ export type PanelRunInput = {
    */
   tools?: unknown;
   toolChoice?: unknown;
+  /** Exact provider-neutral selection; unlike reasoningEffort this preserves all modes. */
+  reasoningSelection?: ReasoningSelection;
+  /** Legacy projection consumed by panel harnesses that only support effort. */
+  reasoningEffort?: string;
   /** Step boundaries per member (see {@link FusedModelRoute.k}). */
   k?: number;
   signal?: AbortSignal;

@@ -373,6 +373,67 @@ async def test_stream_yields_judge_reasoning_before_content() -> None:
 
 
 @pytest.mark.asyncio
+async def test_stream_merges_routekit_metadata_chunks_without_loss_or_mutation() -> None:
+    first = {
+        "version": 1,
+        "future": {"left": 1},
+        "responses": {
+            "items": [{"type": "reasoning", "id": "rs_a", "encrypted_content": "a"}],
+            "includeEncryptedContent": False,
+        },
+        "anthropic": {"content": [{"type": "thinking", "signature": "sig"}]},
+    }
+    second = {
+        "version": 1,
+        "future": {"right": 2},
+        "responses": {
+            "items": [
+                {"type": "reasoning", "id": "rs_a", "encrypted_content": "a"},
+                {"type": "reasoning", "id": "rs_b", "encrypted_content": "b"},
+            ],
+            "includeEncryptedContent": True,
+        },
+        "google": {"toolCallIndexes": {"call_1": 2}},
+        "selection": {"mode": "effort", "effort": "high"},
+    }
+    original_first = {**first, "future": dict(first["future"])}
+    original_second = {**second, "future": dict(second["future"])}
+    judge = _ScriptedClient(
+        "judge", responses=[ModelResponse(model_id="judge", content=_ANALYSIS)]
+    )
+    synth = _ScriptedClient(
+        "synth",
+        stream=[
+            StreamChunk(x_routekit=first),
+            StreamChunk(x_routekit=second),
+            StreamChunk(delta="fused answer", finish_reason="stop"),
+        ],
+    )
+    items = [
+        item
+        async for item in JudgeSynthesizer().fuse_stream(
+            [ChatMessage(role="user", content="Fuse")],
+            [_trajectory("alpha", "candidate")],
+            judge_client=judge,
+            synthesizer_client=synth,
+            sampling=SamplingConfig(),
+        )
+    ]
+    result = items[-1]
+    assert isinstance(result, FuseResult)
+    metadata = result.response.x_routekit
+    assert metadata is not None
+    assert [item["id"] for item in metadata["responses"]["items"]] == ["rs_a", "rs_b"]
+    assert metadata["responses"]["includeEncryptedContent"] is True
+    assert metadata["future"] == {"left": 1, "right": 2}
+    assert metadata["anthropic"]["content"][0]["signature"] == "sig"
+    assert metadata["google"]["toolCallIndexes"] == {"call_1": 2}
+    assert metadata["selection"] == {"mode": "effort", "effort": "high"}
+    assert first == original_first
+    assert second == original_second
+
+
+@pytest.mark.asyncio
 async def test_failed_judge_call_degrades_without_retrying() -> None:
     class FailingJudge:
         model_id = "judge"

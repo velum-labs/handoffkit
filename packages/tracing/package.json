@@ -1,7 +1,7 @@
 {
   "name": "@fusionkit/tracing",
   "private": false,
-  "version": "0.9.0",
+  "version": "0.10.1",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/velum-labs/handoffkit.git",
@@ -27,7 +27,7 @@
   },
   "dependencies": {
     "@fusionkit/protocol": "workspace:*",
-    "@velum-labs/routekit-tracing": "workspace:*",
+    "@velum-labs/routekit-tracing": "0.10.1",
     "@opentelemetry/api": "1.9.1",
     "@opentelemetry/api-logs": "0.220.0",
     "@opentelemetry/sdk-logs": "0.220.0",

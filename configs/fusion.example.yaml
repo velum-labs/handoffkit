@@ -6,7 +6,7 @@
 #
 # For direct maintainer use, start the matching RouteKit gateway first:
 #
-#   routekit --config configs/benchmark-router.example.yaml serve --no-portless --port 8787
+#   routekit serve --no-portless --port 8787  # see github.com/velum-labs/routekit for router configs
 routekit_url: http://127.0.0.1:8787
 routekit_model_ids:
   - openai/gpt-5.5

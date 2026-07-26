@@ -1,7 +1,7 @@
 {
   "name": "@fusionkit/config",
   "private": false,
-  "version": "0.9.0",
+  "version": "0.10.1",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/velum-labs/handoffkit.git",
@@ -26,8 +26,8 @@
     "provenance": true
   },
   "dependencies": {
-    "@velum-labs/routekit-config-core": "workspace:*",
-    "@velum-labs/routekit-runtime": "workspace:*"
+    "@velum-labs/routekit-config-core": "0.10.1",
+    "@velum-labs/routekit-runtime": "0.10.1"
   },
   "keywords": [
     "fusionkit",

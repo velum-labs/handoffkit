@@ -21,6 +21,7 @@
 
 import { isLookaheadK, isProposalK } from "@fusionkit/protocol";
 import type { WireTrajectory } from "@fusionkit/protocol";
+import type { ReasoningSelection } from "@velum-labs/routekit-contracts";
 
 import { harnessSupportsFiniteK } from "./harness-factories.js";
 import { runProposalPanels } from "./panel-propose.js";
@@ -47,6 +48,8 @@ export type PanelRoundOptions = Omit<FusionPanelOptions, "repo" | "outputRoot" |
   /** The caller's tool definitions / tool_choice, verbatim (k = 1 only). */
   tools?: unknown;
   toolChoice?: unknown;
+  reasoningSelection?: ReasoningSelection;
+  /** @deprecated compatibility projection; prefer reasoningSelection. */
   reasoningEffort?: string;
 };
 
@@ -74,9 +77,11 @@ export async function runPanelRound(options: PanelRoundOptions): Promise<WireTra
       ...(options.id !== undefined ? { id: options.id } : {}),
       ...(options.tools !== undefined ? { tools: options.tools } : {}),
       ...(options.toolChoice !== undefined ? { toolChoice: options.toolChoice } : {}),
-      ...(options.reasoningEffort !== undefined
-        ? { reasoningEffort: options.reasoningEffort }
-        : {}),
+      ...(options.reasoningSelection !== undefined
+        ? { reasoningSelection: options.reasoningSelection }
+        : options.reasoningEffort !== undefined
+          ? { reasoningEffort: options.reasoningEffort }
+          : {}),
       ...(options.modelEndpoints !== undefined ? { modelEndpoints: options.modelEndpoints } : {}),
       ...(options.fusionApiKey !== undefined ? { fusionApiKey: options.fusionApiKey } : {}),
       ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),

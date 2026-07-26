@@ -31,6 +31,8 @@ def _messages(messages: Sequence[ChatMessage]) -> list[dict[str, Any]]:
             item["name"] = message.name
         if message.tool_call_id is not None:
             item["tool_call_id"] = message.tool_call_id
+        if message.x_routekit is not None:
+            item["x_routekit"] = message.x_routekit
         if message.tool_calls:
             item["tool_calls"] = [
                 {
@@ -212,6 +214,11 @@ class RouteKitClient:
             tool_calls=_tool_calls(message.get("tool_calls")),
             raw=dict(body),
             reasoning=_reasoning(message),
+            x_routekit=(
+                dict(message["x_routekit"])
+                if isinstance(message.get("x_routekit"), Mapping)
+                else None
+            ),
         )
 
     async def stream_chat(
@@ -264,6 +271,11 @@ class RouteKitClient:
                     ),
                     usage=usage,
                     model_reasoning_delta=_reasoning(delta),
+                    x_routekit=(
+                        dict(delta["x_routekit"])
+                        if isinstance(delta.get("x_routekit"), Mapping)
+                        else None
+                    ),
                 )
                 for fragment in fragments[1:]:
                     yield StreamChunk(tool_call_delta=fragment)

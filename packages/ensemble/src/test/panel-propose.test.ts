@@ -3,6 +3,8 @@ import { createServer } from "node:http";
 import type { IncomingMessage, Server } from "node:http";
 import { test } from "node:test";
 
+import { reasoningSelectionOf } from "@velum-labs/routekit-gateway";
+
 import {
   addSpanListener,
   attrJson,
@@ -94,7 +96,7 @@ test("members receive the caller's messages and tools verbatim, one completion e
       assert.deepEqual(request.body.messages, CALLER_MESSAGES, "messages must be verbatim");
       assert.deepEqual(request.body.tools, CALLER_TOOLS, "tools must be verbatim");
       assert.equal(request.body.tool_choice, "auto");
-      assert.equal(request.body.reasoning_effort, "deep");
+      assert.deepEqual(reasoningSelectionOf(request.body), { mode: "effort", effort: "deep" });
       assert.equal(request.body.stream, false);
     }
     assert.deepEqual(new Set(endpoint.requests.map((r) => r.body.model)), new Set(["alpha", "beta"]));
@@ -221,5 +223,46 @@ test("per-member endpoints route by model id; a failing member degrades with att
   } finally {
     await good.close();
     await bad.close();
+  }
+});
+
+
+test("proposal panel gives canonical selection precedence over conflicting legacy effort", async () => {
+  const originalFetch = globalThis.fetch;
+  const seen: Array<Record<string, unknown>> = [];
+  globalThis.fetch = async (_input, init) => {
+    seen.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+    return Response.json({ choices: [{ message: { content: "answer" } }] });
+  };
+  try {
+    const selections = [
+      { mode: "auto" },
+      { mode: "disabled" },
+      { mode: "adaptive" },
+      { mode: "effort", effort: "high" },
+      { mode: "budget", budgetTokens: 4096 }
+    ] as const;
+    for (const reasoningSelection of selections) {
+      await runProposalPanels({
+        models: [{ id: "openai/member", model: "member" }],
+        messages: [{ role: "user", content: "solve" }],
+        fusionBackendUrl: "http://routekit.test",
+        reasoningSelection,
+        reasoningEffort: "legacy-conflict"
+      });
+    }
+    await runProposalPanels({
+      models: [{ id: "openai/member", model: "member" }],
+      messages: [{ role: "user", content: "solve" }],
+      fusionBackendUrl: "http://routekit.test",
+      reasoningEffort: "legacy-fallback"
+    });
+    assert.deepEqual(seen.map((body) => reasoningSelectionOf(body)), [
+      ...selections,
+      { mode: "effort", effort: "legacy-fallback" }
+    ]);
+    assert.equal(seen[0]?.reasoning_effort, undefined, "canonical auto emits no provider control");
+  } finally {
+    globalThis.fetch = originalFetch;
   }
 });
