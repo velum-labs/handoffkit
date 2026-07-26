@@ -20,6 +20,8 @@ import { registerStop } from "./stop.js";
 import { registerTelemetry } from "./telemetry.js";
 import { registerUsage } from "./usage.js";
 import { configOverride } from "./context.js";
+import { setTargetSelectionFromCommand, assertLocalTarget } from "../target.js";
+import { registerRemote } from "./remote.js";
 
 const EXPLICIT_CONFIG_COMMANDS = new Set([
   "doctor",
@@ -30,6 +32,12 @@ const CONFIG_INDEPENDENT_COMMANDS = new Set([
   "completion",
   "__complete",
   "daemon run"
+]);
+const LOCAL_ONLY_COMMANDS = new Set([
+  "start",
+  "stop",
+  "config init",
+  "config migrate"
 ]);
 
 function commandPath(command: Command): string {
@@ -48,9 +56,15 @@ export function registerCommands(program: Command): void {
     "--config <path>",
     "router config path for doctor and migration recovery only"
   );
+  program.option("--remote <name>", "target a named remote gateway");
+  program.option("--local", "force the local RouteKit daemon");
   program.hook("preAction", (_root, actionCommand) => {
+    setTargetSelectionFromCommand(actionCommand);
     const override = configOverride(actionCommand) ?? process.env.ROUTEKIT_CONFIG;
     const path = commandPath(actionCommand);
+    if (LOCAL_ONLY_COMMANDS.has(path) || path.startsWith("daemon ")) {
+      assertLocalTarget(path);
+    }
     if (
       override !== undefined &&
       override.length > 0 &&
@@ -64,6 +78,7 @@ export function registerCommands(program: Command): void {
     }
   });
   program.commandsGroup("Setup");
+  registerRemote(program);
   registerAccounts(program);
   registerProviders(program);
   registerConfig(program);

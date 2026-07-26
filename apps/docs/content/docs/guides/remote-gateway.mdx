@@ -1,0 +1,85 @@
+---
+title: Shared RouteKit gateway
+description: Use a RouteKit gateway on another machine for launches and administration.
+---
+
+A named remote lets a client machine use a shared RouteKit daemon without
+maintaining a local router config or daemon. Coding-tool traffic and model
+discovery use the gateway's HTTPS URL. Configuration, account, provider, and
+diagnostic commands run through SSH, while the daemon's private control server
+remains bound to loopback.
+
+## Prepare the gateway host
+
+Start RouteKit on the gateway host with an authentication token and expose its
+data-plane port through an HTTPS endpoint such as Tailscale Funnel. The client
+also needs non-interactive SSH access to the host, and the same compatible
+RouteKit release must be installed there.
+
+The SSH account is an administrator boundary: anyone who can run `routekit` as
+that account can change the router config and enrolled accounts.
+
+## Add the remote
+
+On the client device, add the public URL and the SSH host or alias:
+
+```bash
+routekit remote add mini \
+  --url https://your-gateway.example \
+  --ssh velum-mini
+```
+
+`remote add` obtains the data-plane token with
+`ssh velum-mini routekit daemon auth show --json`, verifies the HTTPS health
+route, negotiates the private control protocol over SSH, and makes `mini` the
+active target. On macOS the token is stored in Keychain. Other platforms use a
+private `0600` file under `~/.routekit/secrets/`; it is never written to
+`remotes.json` or shown by `remote list`.
+
+Inspect or switch targets with:
+
+```bash
+routekit remote list
+routekit remote show mini
+routekit remote use mini
+routekit remote use --none
+```
+
+## Use the gateway
+
+With `mini` active, ordinary commands target it automatically:
+
+```bash
+routekit models list
+routekit status
+routekit usage
+routekit config show
+routekit accounts status
+routekit providers status
+routekit codex
+```
+
+Launchers and `models list` use HTTPS and do not require SSH after enrollment.
+Administration and rich inspection commands require SSH. RouteKit never starts
+a local daemon while a remote is active.
+
+Use `--remote <name>` for a one-off target or `--local` to bypass the active
+remote for one invocation:
+
+```bash
+routekit --remote mini status
+routekit --local status
+```
+
+Local lifecycle commands such as `start`, `stop`, and `daemon upgrade` reject a
+remote target. Run those directly on the gateway host, or pass `--local` when
+you intentionally mean the client device.
+
+## Remove access
+
+```bash
+routekit remote remove mini
+```
+
+Removing a remote also deletes its stored data-plane token. It does not stop or
+change the gateway host.

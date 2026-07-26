@@ -51,6 +51,7 @@ test("independent command surface is complete and has no compatibility aliases",
     "calls",
     "accounts",
     "providers",
+    "remote",
     "models",
     "config",
     "doctor",
@@ -69,7 +70,7 @@ test("independent command surface is complete and has no compatibility aliases",
   );
   assert.deepEqual(
     command(program, "daemon").commands.map((entry) => entry.name()).sort(),
-    ["auth", "logs", "reload", "restart", "run", "service", "start", "status", "stop", "upgrade"]
+    ["auth", "exec", "logs", "reload", "restart", "run", "service", "start", "status", "stop", "upgrade"]
   );
   assert.deepEqual(
     command(program, "daemon")
@@ -96,6 +97,10 @@ test("independent command surface is complete and has no compatibility aliases",
   assert.deepEqual(
     command(program, "providers").commands.map((entry) => entry.name()).sort(),
     ["add", "remove", "status"]
+  );
+  assert.deepEqual(
+    command(program, "remote").commands.map((entry) => entry.name()).sort(),
+    ["add", "list", "remove", "show", "use"]
   );
   assert.deepEqual(
     command(program, "models").commands.map((entry) => entry.name()).sort(),
@@ -157,6 +162,7 @@ test("dynamic completion follows the command tree", () => {
   assert.equal(topLevel.includes("daemon"), false);
   assert.equal(topLevel.includes("gateway"), false);
   assert.ok(completionCandidates(program, ["co"]).includes("config"));
+  assert.ok(completionCandidates(program, ["re"]).includes("remote"));
   assert.deepEqual(completionCandidates(program, ["accounts", "s"]), [
     "status"
   ]);

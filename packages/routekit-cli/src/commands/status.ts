@@ -2,8 +2,9 @@ import { contextFor, CliError } from "@velum-labs/routekit-cli-core";
 import { glyph, watch } from "@velum-labs/routekit-cli-ui";
 import type { Command } from "commander";
 
-import { connectDaemon, readDaemonRecord } from "../client.js";
+import { connectDaemon, readDaemonRecord, routekitClient } from "../client.js";
 import { routekitVersion } from "../state.js";
+import { selectedRemoteMetadata } from "../target.js";
 
 function stateMark(ok: boolean): string {
   return ok ? glyph.tick() : glyph.pending();
@@ -31,7 +32,10 @@ export function registerStatus(program: Command): void {
         });
       }
       const collect = async () => {
-        const connected = await connectDaemon();
+        const remote = selectedRemoteMetadata();
+        const connected = remote === undefined
+          ? await connectDaemon()
+          : { client: await routekitClient() };
         if (connected === undefined) {
           const record = readDaemonRecord();
           const unhealthy = record !== undefined;
@@ -64,6 +68,7 @@ export function registerStatus(program: Command): void {
         return {
           observedAt,
           cliVersion: routekitVersion(),
+          ...(remote !== undefined ? { remote: remote.name } : {}),
           daemon,
           services: [
             {

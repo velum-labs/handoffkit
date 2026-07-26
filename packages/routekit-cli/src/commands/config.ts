@@ -30,6 +30,7 @@ import {
   routekitClient
 } from "../client.js";
 import { missingServiceCredentialVariables } from "../daemon.js";
+import { selectedRemoteMetadata } from "../target.js";
 
 import { configOverride } from "./context.js";
 
@@ -214,11 +215,15 @@ export function registerConfig(program: Command): void {
       const document = readFileSync(source, "utf8");
       parseYaml(document);
       const canonical = globalRouterConfigPath();
+      const remote = selectedRemoteMetadata();
       let revision: number | undefined;
-      const replaceThroughDaemon = async (): Promise<number> => {
-        const client = (await connectDaemon())?.client ?? await routekitClient();
+      let destination = canonical;
+      const replaceThroughDaemon = async (): Promise<{ revision: number; path: string }> => {
+        const client = remote !== undefined
+          ? await routekitClient()
+          : (await connectDaemon())?.client ?? await routekitClient();
         const current = await client.call("config.get", {});
-        if (resolve(current.path) !== resolve(canonical)) {
+        if (remote === undefined && resolve(current.path) !== resolve(canonical)) {
           throw new Error(
             `RouteKit is running with foreground config ${current.path}; ` +
               "stop it before importing into the canonical singleton config"
@@ -239,9 +244,9 @@ export function registerConfig(program: Command): void {
             })
           }
         );
-        return imported.revision;
+        return { revision: imported.revision, path: current.path };
       };
-      if (readDaemonRecord() === undefined) {
+      if (remote === undefined && readDaemonRecord() === undefined) {
         const lock = await acquireLifecycleLock(daemonLifecycleLockPath(), {
           timeoutMs: 90_000
         });
@@ -261,10 +266,12 @@ export function registerConfig(program: Command): void {
         }
       }
       if (revision === undefined) {
-        revision = await replaceThroughDaemon();
+        const replaced = await replaceThroughDaemon();
+        revision = replaced.revision;
+        destination = replaced.path;
       }
-      if (ctx.json) ctx.emit({ imported: true, source, path: canonical, revision });
-      else ctx.presenter.success(`imported ${source} into ${canonical}`);
+      if (ctx.json) ctx.emit({ imported: true, source, path: destination, revision });
+      else ctx.presenter.success(`imported ${source} into ${destination}`);
     });
 
   config
