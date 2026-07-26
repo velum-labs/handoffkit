@@ -8,3 +8,4 @@ Generated from experiment front matter — do not edit by hand.
 | e002-sota-open-solo-screen | alen | analyzed | livecodebench | SOTA anchors and open-weight solo floor on the hypergrid dev slice | $65 | $52.40 |
 | e003-qwen37max-kernel-probes | alen | analyzed | livecodebench | multi-sample and pair kernels on the qwen3.7-max frontier | $65 | $22.00 |
 | e004-truncation-fair-rescreen | alen | analyzed | livecodebench | truncation-fair open floor and complementarity for the seven capped models | $45 | $43.93 |
+| e005-correctness-recovery-canary | alen | proposed | livecodebench | correctness-gated open-weight direction canary on a fresh hard dev cohort | $24 | $0 |
