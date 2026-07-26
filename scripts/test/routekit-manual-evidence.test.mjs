@@ -990,7 +990,12 @@ test(
     const isolated = mkdtempSync(join(tmpdir(), "routekit-cursor-config-contract-"));
     try {
       const status = spawnSync("cursor-agent", ["status"], {
-        env: { ...process.env, CURSOR_CONFIG_DIR: isolated },
+        env: {
+          ...process.env,
+          HOME: isolated,
+          XDG_CONFIG_HOME: join(isolated, ".config"),
+          CURSOR_CONFIG_DIR: join(isolated, "cursor")
+        },
         encoding: "utf8",
         timeout: 15_000,
         stdio: ["ignore", "pipe", "pipe"]
