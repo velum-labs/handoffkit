@@ -1,38 +1,72 @@
 # Matter MCP for Cursor
 
-Handoffkit cloud agents and local Cursor sessions can retrieve read-only evidence from your Matter library through the [`matter-cursor-mcp`](https://github.com/velum-labs/matter-cursor-mcp) server.
+Handoffkit agents and local Cursor sessions retrieve read-only evidence from Matter through the [`matter-cursor-mcp`](https://github.com/velum-labs/matter-cursor-mcp) stdio MCP server.
 
-## What is configured in this repo
+The server ships as the public npm package `matter-cursor-mcp`. Cloud MCP
+registrations use a shell command that locates the VM's `npx` and adds its
+directory (which also contains `node`) to `PATH`; Handoffkit does not vendor
+the server, build it during agent setup, or host a remote HTTP deployment.
+
+## What stays in this repo
 
 | File | Purpose |
 |------|---------|
-| `.cursor/mcp.json` | Registers the Matter MCP server via `scripts/run-matter-mcp.sh` |
-| `.matter-context.json` | Tags, retrieval budgets, and research output paths |
+| `.matter-context.json` | Repository tags (`cursor`, `repo-handoffkit`), retrieval budgets, and output directories (`docs/research/matter/`, `docs/decisions/`) |
+| `.matter-context.schema.json` | Schema for the Matter context file |
 | `.cursor/rules/matter-research-rule.mdc` | Agent guidance for Matter-backed research |
-| `scripts/setup-matter-mcp.sh` | Clones/links and builds `matter-cursor-mcp` during cloud startup |
-| `scripts/run-matter-mcp.sh` | MCP launcher (PATH bootstrap + ensure build + exec server) |
+| `.cursor/mcp.json` | Cursor desktop stdio MCP registration template |
+| `AGENTS.md` | Cloud-agent operating notes for Matter research |
 
-Cloud agents run `scripts/setup-matter-mcp.sh` from `.cursor/environment.json` so `matter-cursor-mcp/dist/index.js` exists before MCP tools are used. The script resolves the server source in this order:
+## Register clients
 
-1. `vendor/matter-cursor-mcp/` — vendored copy committed to this repo (works everywhere, including single-repo environments whose GitHub token cannot see the private upstream repo)
-2. A sibling checkout from a multi-repo cloud environment
-3. `gh repo clone velum-labs/matter-cursor-mcp` (requires GitHub access to the private repo)
+### Cursor cloud agents
 
-To refresh the vendored copy, see `vendor/matter-cursor-mcp/VENDORED-FROM.txt`.
+Register the npm package once as a stdio MCP server:
 
-## One-time secret setup (required)
+- Personal: [cursor.com/agents](https://cursor.com/agents) -> **MCP dropdown** -> add server
+- Team-wide: **Dashboard -> Integrations & MCP** -> add MCP server
 
-Matter tools will not work until the token is present on the **same** cloud environment your agent uses.
+Use:
 
-1. Open [Cursor Cloud Agents → Environments](https://cursor.com/dashboard/cloud-agents#environments).
-2. Open the environment that matches the agent (for this team’s multi-repo setup: [handoffkit + matter-cursor-mcp env](https://cursor.com/dashboard/cloud-agents/environments/e/d7135a87-845c-11f1-a7d1-d6b4613131ce)).
-3. Open **Secrets**.
-4. Add a **Runtime Secret** (not Build Secret) named exactly `MATTER_API_TOKEN` with your `mat_...` token.
-5. Start a **new** cloud agent after saving the secret (existing runs do not pick it up).
+| Field | Value |
+|-------|-------|
+| Name | `matter` |
+| Command | `bash` |
+| Arg 1 | `-c` |
+| Arg 2 | `for npx_bin in "$HOME"/.nvm/versions/node/*/bin/npx /usr/local/bin/npx /usr/bin/npx; do if [ -x "$npx_bin" ]; then export PATH="${npx_bin%/*}:$PATH"; exec "$npx_bin" -y matter-cursor-mcp; fi; done; echo "npx not found; install Node.js with npm in the cloud environment" >&2; exit 127` |
+| Env | `MATTER_API_TOKEN=<your Matter token>`, `MATTER_MCP_CACHE_MODE=on`, `LOG_LEVEL=info` |
 
-If you already added this secret for `matter-cursor-mcp`, reuse the same value on the Handoffkit environment.
+Enter `MATTER_API_TOKEN` directly in the registration's env block; Cursor encrypts env values for cloud MCP configs. No VM build step or Cursor Runtime Secret is needed for Matter.
 
-Allow outbound access to `api.getmatter.com` if your environment uses restricted egress.
+Enter the two arguments as separate entries. Do not add quote characters around
+the second argument. The locator is necessary because cloud MCP children can
+start with neither `npx` nor `node` on `PATH`; direct `npx`, `bash -lc`, and an
+absolute `npx` path alone are insufficient in that environment.
+
+### Cursor desktop
+
+Use this repo's `.cursor/mcp.json` or your global `~/.cursor/mcp.json`. Export `MATTER_API_TOKEN` in the shell that launches Cursor:
+
+```json
+{
+  "mcpServers": {
+    "matter": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "matter-cursor-mcp"],
+      "env": {
+        "MATTER_API_TOKEN": "${env:MATTER_API_TOKEN}",
+        "MATTER_MCP_CACHE_MODE": "on",
+        "LOG_LEVEL": "info"
+      }
+    }
+  }
+}
+```
+
+### Other MCP clients
+
+OpenClaw, Hermes, and other MCP clients use the same stdio command (`npx -y matter-cursor-mcp`) with `MATTER_API_TOKEN` in the MCP server environment.
 
 ## Tag your Matter library
 
@@ -48,71 +82,34 @@ Optional routing tags:
 - `domain-fusion`
 - `domain-routekit`
 
-## Register the MCP server for Cloud Agents (one-time, dashboard)
+## Cutover checklist
 
-Cloud Agents do **not** load this repo's `.cursor/mcp.json` into their MCP tool catalog — that file applies to the desktop IDE. For cloud agents, register the stdio server once:
-
-- Personal: [cursor.com/agents](https://cursor.com/agents) → **MCP dropdown** → add server
-- Team-wide (recommended): **Dashboard → Integrations & MCP** → add MCP server
-
-Use stdio transport with:
-
-| Field | Value |
-|-------|-------|
-| Name | `matter` |
-| Command | `bash` |
-| Args | `-lc`, `for d in /workspace /agent/repos/handoffkit; do [ -f "$d/scripts/run-matter-mcp.sh" ] && exec bash "$d/scripts/run-matter-mcp.sh"; done; echo "handoffkit checkout not found" >&2; exit 1` |
-
-The launcher self-heals (bootstraps PATH and rebuilds `matter-cursor-mcp/dist/index.js` if missing) and reads `MATTER_API_TOKEN` from the VM environment, which Cloud Agents Runtime Secrets populate. If the MCP child process is spawned with a filtered env that drops the secret, the launcher recovers it from an ancestor process (typically the exec-daemon) without printing the value. The path loop covers both single-repo (`/workspace`) and multi-repo (`/agent/repos/handoffkit`) environments.
-
-Until the server is registered, agents can still verify Matter by invoking `scripts/run-matter-mcp.sh` directly over stdio, but `matter_*` tools will not appear in their MCP catalog.
+1. Publish `matter-cursor-mcp` to npm; see the `matter-cursor-mcp` README publishing steps.
+2. Add the cloud MCP registration with the tested `bash -c` locator above and
+   the encrypted env token.
+3. Merge this PR.
+4. Delete old per-account stdio registrations pointing at `/workspace` scripts and, optionally, the `MATTER_API_TOKEN` Runtime Secret.
+5. Start a new cloud agent and verify with `matter_health`.
 
 ## Verify
 
-Start a **new** cloud agent on `main` and ask:
+Start a new cloud agent and ask:
 
 ```text
-1) Does matter-cursor-mcp/dist/index.js exist?
-2) Is MATTER_API_TOKEN set? Answer only yes/no.
-3) Call matter_health. Do not show my account email.
+Call matter_health. Do not show my account email.
 ```
 
-Expected:
+Expected: `matter_health` reports configured/healthy without exposing the account email.
 
-1. Yes
-2. Yes
-3. `matter_health` reports configured/healthy (no account email)
-
-Then:
+Then run a tagged search:
 
 ```text
 Search my Matter library for items tagged cursor and repo-handoffkit related to FusionKit.
 ```
 
-## Troubleshooting
-
-| Symptom | Likely cause | Fix |
-|---------|--------------|-----|
-| Update fails: `uv: command not found` | Old install without uv bootstrap | Ensure `main` includes the uv bootstrap in `.cursor/environment.json` |
-| Update fails: `Repository not found` cloning matter-cursor-mcp | Private repo + unauthenticated git | Ensure `main` uses `scripts/setup-matter-mcp.sh` with `gh repo clone` |
-| `matter-cursor-mcp/` missing after install | Install aborted earlier in the chain | Check update script logs; fix the first failing step |
-| Matter MCP tools missing (only Linear/Notion/etc.) | Server binary missing or MCP launch failed | Confirm `dist/index.js` exists; relaunch agent on latest `main` |
-| `MATTER_API_TOKEN` unset / `configuration_error` | Secret missing on **this** environment, wrong name/type, agent started before secret was added, or MCP child env filtered the secret | Add Runtime Secret `MATTER_API_TOKEN`, start a new agent; ensure `scripts/run-matter-mcp.sh` can inherit from the parent process tree |
-| `401` from Matter | Invalid/revoked token | Regenerate Matter token (revokes old) and update the Runtime Secret |
-
-## Local Cursor
-
-For local development:
-
-1. Run `./scripts/setup-matter-mcp.sh`
-2. Export `MATTER_API_TOKEN` in your shell (cloud Runtime Secrets do not apply to the desktop IDE)
-3. Rely on this repo’s `.cursor/mcp.json`, or point `~/.cursor/mcp.json` at a local `matter-cursor-mcp` checkout
-
 ## Research outputs
 
-By default, durable research is written to:
+Before calling Matter tools, read `.matter-context.json`. By default, durable research is written to:
 
 - `docs/research/matter/`
 - `docs/decisions/`
-
-See `.matter-context.json` to adjust budgets and paths.
