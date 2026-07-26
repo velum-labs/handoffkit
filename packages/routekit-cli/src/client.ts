@@ -38,6 +38,8 @@ import {
   missingServiceCredentialVariables,
   serviceEnvironment
 } from "./daemon.js";
+import { remoteControlClient } from "./ssh-control.js";
+import { resolveTarget } from "./target.js";
 
 const PRODUCT = "routekit";
 const KIND = "daemon";
@@ -173,7 +175,8 @@ export function canonicalConfigOrMigrationError(): string {
     );
   }
   throw new Error(
-    `canonical router config not found: ${global}; run \`routekit config init\``
+    `canonical router config not found: ${global}; run \`routekit config init\` for a local daemon ` +
+      "or `routekit remote add <name> --url <https-url> --ssh <host>` to use a shared gateway"
   );
 }
 
@@ -439,7 +442,10 @@ export async function ensureDaemon(input: {
 }
 
 export async function routekitClient(): Promise<RouteKitControlClient> {
-  return (await ensureDaemon()).client;
+  const target = await resolveTarget();
+  return target.kind === "remote"
+    ? remoteControlClient(target.remote)
+    : (await ensureDaemon()).client;
 }
 
 export async function connectDaemon(): Promise<

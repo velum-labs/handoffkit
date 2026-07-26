@@ -16,6 +16,8 @@ import type {
 import type { Command } from "commander";
 
 import { routekitClient } from "../client.js";
+import { fetchLiveCatalog } from "../catalog.js";
+import { resolveTarget } from "../target.js";
 
 const CODEX_OWNER: CodexInstallOwner = {
   id: "routekit",
@@ -91,14 +93,24 @@ export function registerCodexIntegration(codex: Command): void {
         command: Command
       ) => {
         const ctx = contextFor(command);
-        const client = await routekitClient();
-        const [daemon, catalog] = await Promise.all([
-          client.call("daemon.status", {}),
-          client.call("models.list", {})
-        ]);
+        const target = await resolveTarget();
+        const prepared = target.kind === "remote"
+          ? {
+              gatewayUrl: target.remote.gatewayUrl,
+              catalog: await fetchLiveCatalog(target.remote.gatewayUrl, { authToken: target.authToken })
+            }
+          : await (async () => {
+              const client = await routekitClient();
+              const [daemon, catalog] = await Promise.all([
+                client.call("daemon.status", {}),
+                client.call("models.list", {})
+              ]);
+              return { gatewayUrl: daemon.dataUrl, catalog };
+            })();
+        const catalog = prepared.catalog;
         const ids = catalog.models.map((model) => model.id);
         const result = installCodexIntegration({
-          gatewayUrl: trimTrailingSlashes(options.gatewayUrl ?? daemon.dataUrl),
+          gatewayUrl: trimTrailingSlashes(options.gatewayUrl ?? prepared.gatewayUrl),
           profiles: ids.map((modelId, index) => ({
             modelId,
             profileId: codexProfileId(modelId, index)
@@ -150,11 +162,18 @@ export function registerClaudeIntegration(claude: Command): void {
         command: Command
       ) => {
         const ctx = contextFor(command);
-        const client = await routekitClient();
-        const prepared = await client.call("launcher.prepare", {
-          tool: "claude",
-          cwd: process.cwd()
-        });
+        const routeTarget = await resolveTarget();
+        const prepared = routeTarget.kind === "remote"
+          ? {
+              tool: "claude" as const,
+              gatewayUrl: routeTarget.remote.gatewayUrl,
+              authToken: routeTarget.authToken,
+              env: {}
+            }
+          : await (await routekitClient()).call("launcher.prepare", {
+              tool: "claude",
+              cwd: process.cwd()
+            });
         if (prepared.authToken === undefined) {
           throw new Error("the RouteKit daemon did not provide a Claude gateway token");
         }

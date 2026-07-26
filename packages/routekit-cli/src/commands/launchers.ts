@@ -6,6 +6,7 @@ import type { Command } from "commander";
 
 import { launchTool, routekitToolRegistry } from "../launch.js";
 import { routekitClient } from "../client.js";
+import { resolveTarget } from "../target.js";
 import {
   isLaunchToolId,
   type LaunchToolId
@@ -15,6 +16,36 @@ import {
   registerClaudeIntegration,
   registerCodexIntegration
 } from "./install.js";
+
+export async function resolveLauncherPreparation(
+  input: { tool: LaunchToolId; model?: string; cwd: string },
+  dependencies: {
+    resolve?: typeof resolveTarget;
+    client?: typeof routekitClient;
+  } = {}
+): Promise<{
+  tool: LaunchToolId | "opencode";
+  gatewayUrl: string;
+  authToken?: string;
+  model?: string;
+  env: Record<string, string>;
+}> {
+  const target = await (dependencies.resolve ?? resolveTarget)();
+  if (target.kind === "remote") {
+    return {
+      tool: input.tool,
+      gatewayUrl: target.remote.gatewayUrl,
+      authToken: target.authToken,
+      ...(input.model !== undefined ? { model: input.model } : {}),
+      env: {}
+    };
+  }
+  return await (await (dependencies.client ?? routekitClient)()).call("launcher.prepare", {
+    tool: input.tool,
+    ...(input.model !== undefined ? { model: input.model } : {}),
+    cwd: input.cwd
+  });
+}
 
 export function registerLaunchers(program: Command): void {
   for (const integration of routekitToolRegistry
@@ -82,14 +113,13 @@ export function registerLaunchers(program: Command): void {
           }
         }
         const tool = integration.id as LaunchToolId;
-        const prepared =
-          options.gatewayUrl === undefined
-            ? await (await routekitClient()).call("launcher.prepare", {
-                tool,
-                ...(model !== undefined ? { model } : {}),
-                cwd
-              })
-            : undefined;
+        const prepared = options.gatewayUrl === undefined
+          ? await resolveLauncherPreparation({
+              tool,
+              ...(model !== undefined ? { model } : {}),
+              cwd
+            })
+          : undefined;
         process.exitCode = await launchTool({
           tool: integration.id,
           gatewayUrl:

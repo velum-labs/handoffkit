@@ -7,6 +7,15 @@ package, and the PyPI FusionKit sidecar package set. Release tags are named
 
 ## Unreleased
 
+- RouteKit now supports named remote gateways with `routekit remote
+  add|list|show|use|remove`, persistent active-target selection, and per-command
+  `--remote` / `--local` overrides. Coding-tool launches and model discovery use
+  the remote HTTPS data plane, while config, account, provider, status, usage,
+  call, telemetry, and doctor operations relay the existing typed control
+  protocol through SSH without exposing the daemon's loopback control listener.
+  Remote data tokens live in macOS Keychain or private `0600` files on other
+  platforms and are never stored in the remote registry.
+
 ## 0.10.0 - 2026-07-25
 
 - Reasoning now survives every protocol boundary the gateway translates across.

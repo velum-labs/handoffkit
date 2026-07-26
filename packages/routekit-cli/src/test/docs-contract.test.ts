@@ -27,6 +27,8 @@ test("documented safe CLI commands remain executable", () => {
     [routekitCli, ["config", "init", "--help"]],
     [routekitCli, ["accounts", "add", "--help"]],
     [routekitCli, ["providers", "add", "--help"]],
+    [routekitCli, ["remote", "add", "--help"]],
+    [routekitCli, ["remote", "use", "--help"]],
     [routekitCli, ["accounts", "login", "--help"]],
     [routekitCli, ["accounts", "remove", "--help"]],
     [routekitCli, ["accounts", "rename", "--help"]]
@@ -92,6 +94,28 @@ test("public docs use config init for every first-launch bootstrap", () => {
   const firstLogin = subscriptionPooling.indexOf("routekit accounts login");
   assert.notEqual(emptyInit, -1);
   assert.ok(emptyInit < firstLogin, "empty init must precede subscription login");
+});
+
+test("remote gateway commands and target overrides are documented", () => {
+  const source = readFileSync(
+    join(root, "apps/docs/content/docs/reference/commands.mdx"),
+    "utf8"
+  );
+  const guide = readFileSync(
+    join(root, "apps/docs/content/docs/guides/remote-gateway.mdx"),
+    "utf8"
+  );
+  for (const snippet of [
+    "routekit remote add",
+    "routekit remote list",
+    "routekit remote show",
+    "routekit remote use",
+    "routekit remote remove",
+    "--remote <name>",
+    "--local"
+  ]) {
+    assert.ok(source.includes(snippet) || guide.includes(snippet), `missing remote docs: ${snippet}`);
+  }
 });
 
 test("first-launch help exposes only supported RouteKit routes", () => {

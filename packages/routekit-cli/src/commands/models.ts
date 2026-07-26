@@ -4,6 +4,8 @@ import { ControlError } from "@velum-labs/routekit-runtime";
 import type { Command } from "commander";
 
 import { routekitClient } from "../client.js";
+import { fetchLiveCatalog } from "../catalog.js";
+import { resolveTarget } from "../target.js";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -44,10 +46,15 @@ export function registerModels(program: Command): void {
     .option("--provider <name>", "only show models from one provider")
     .action(async (options: { provider?: string }, command: Command) => {
       const ctx = contextFor(command);
-      const catalog = await (await routekitClient()).call("models.list", {
-        ...(options.provider !== undefined ? { provider: options.provider } : {})
-      });
-      const filtered = catalog.models;
+      const target = await resolveTarget();
+      const catalog = target.kind === "remote"
+        ? await fetchLiveCatalog(target.remote.gatewayUrl, { authToken: target.authToken })
+        : await (await routekitClient()).call("models.list", {
+            ...(options.provider !== undefined ? { provider: options.provider } : {})
+          });
+      const filtered = catalog.models.filter((model) =>
+        options.provider === undefined || providerFor(model) === options.provider
+      );
       const modelIds = filtered.map((model) => model.id);
       if (ctx.json) {
         ctx.emit({

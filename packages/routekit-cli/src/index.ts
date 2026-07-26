@@ -18,8 +18,8 @@ configureBrand({
   tagline: "model routes for coding tools"
 });
 
-const GLOBAL_VALUE_OPTIONS = new Set(["--config"]);
-const GLOBAL_BOOLEAN_OPTIONS = new Set(["--json", "--no-input", "--yes", "--quiet"]);
+const GLOBAL_VALUE_OPTIONS = new Set(["--config", "--remote"]);
+const GLOBAL_BOOLEAN_OPTIONS = new Set(["--json", "--no-input", "--yes", "--quiet", "--local"]);
 
 /**
  * Keep global output/config flags ergonomic after a subcommand

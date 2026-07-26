@@ -2,6 +2,7 @@
   "title": "Guides",
   "pages": [
     "inference-endpoint",
+    "remote-gateway",
     "rate-limit-handoff",
     "subscription-pooling",
     "cost-and-models",
