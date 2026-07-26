@@ -12,6 +12,15 @@ package, and the PyPI FusionKit sidecar package set. Release tags are named
 
 ## Unreleased
 
+- RouteKit now supports named remote gateways with `routekit remote
+  add|list|show|use|remove`, persistent active-target selection, and per-command
+  `--remote` / `--local` overrides. Coding-tool launches and model discovery use
+  the remote HTTPS data plane, while config, account, provider, status, usage,
+  call, telemetry, and doctor operations relay the existing typed control
+  protocol through SSH without exposing the daemon's loopback control listener.
+  Remote data tokens live in macOS Keychain or private `0600` files on other
+  platforms and are never stored in the remote registry.
+
 - Cursor BYOK users can now select reasoning effort through model variants such
   as `routekit/openai/gpt-5.5:high`. The `/v1/cursor/models` mirror advertises
   one suffixed variant per effort discovered for each model, and ingress strips

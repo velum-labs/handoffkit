@@ -11,6 +11,7 @@ import {
   readDaemonRecord
 } from "../client.js";
 import { routekitVersion } from "../state.js";
+import { readControlRelayStdin, relayLocalControl } from "../control-relay.js";
 import { registerDaemonService, registerLogs } from "./gateway-service.js";
 import { registerRestart, registerStart } from "./start.js";
 import { registerStop } from "./stop.js";
@@ -149,10 +150,21 @@ function registerAuth(group: Command): void {
     });
 }
 
+function registerExec(group: Command): void {
+  group
+    .command("exec", { hidden: true })
+    .description("relay one control request to the loopback daemon (internal)")
+    .action(async () => {
+      const result = await relayLocalControl(await readControlRelayStdin());
+      process.stdout.write(`${JSON.stringify(result)}\n`);
+    });
+}
+
 export function registerDaemon(program: Command): void {
   const group = new Command("daemon")
     .description("manage the singleton RouteKit daemon");
   registerRun(group);
+  registerExec(group);
   registerStart(group);
   registerRestart(group);
   registerUpgrade(group);
