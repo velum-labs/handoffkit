@@ -5,6 +5,7 @@
     "fusionkit-pypi": "0.10.1",
     "cursorkit": "0.2.0",
     "handoffkit": "0.10.1",
-    "mlx-lm": "0.31.3+structured.3"
+    "mlx-lm": "0.31.3+structured.3",
+    "routekit": "0.10.1"
   }
 }

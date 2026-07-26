@@ -29,7 +29,7 @@
     "@ai-sdk/openai-compatible": "2.0.48",
     "@ai-sdk/provider": "4.0.2",
     "@fusionkit/protocol": "workspace:*",
-    "@velum-labs/routekit-runtime": "workspace:*",
+    "@velum-labs/routekit-runtime": "0.10.1",
     "@fusionkit/tracing": "workspace:*",
     "ai": "6.0.200"
   },

@@ -4,9 +4,12 @@
     "rootDir": "src",
     "outDir": "dist"
   },
-  "include": ["src/**/*.ts"],
+  "include": [
+    "src/**/*.ts"
+  ],
   "references": [
-    { "path": "../protocol" },
-    { "path": "../routekit-tracing" }
+    {
+      "path": "../protocol"
+    }
   ]
 }

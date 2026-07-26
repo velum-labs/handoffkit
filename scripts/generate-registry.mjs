@@ -1,39 +1,23 @@
 /**
- * Generate the cross-language registry bindings from spec/registry/*.json.
+ * Generate FusionKit registry bindings from spec/registry/fusion.json.
  *
- * The JSON files under spec/registry/ are the single source of truth for
- * provider metadata (base URLs, key env vars, probes, discovery), subscription
- * auth metadata (Claude Code / Codex), cloud/local model catalogs,
- * model-family capability quirks, default pricing, and FusionKit-only model
- * identities/panel presets. This script keeps the ownership boundary explicit:
+ * Neutral RouteKit registry specs (providers, subscriptions, connectors,
+ * model catalogs, pricing) live in github.com/velum-labs/routekit. This
+ * script only regenerates FusionKit-owned bindings:
  *
- *   - packages/routekit-registry/src/generated/data.ts (@velum-labs/routekit-registry)
  *   - packages/registry/src/generated/data.ts          (@fusionkit/registry)
  *   - python/fusionkit-core/src/fusionkit_core/_generated/fusion_registry_data.py
+ *   - python/fusionkit-evals/src/fusionkit_evals/_generated/benchmark_registry_data.py
  *
- * Run `node scripts/generate-registry.mjs` after editing any spec/registry
- * file; `--check` verifies the generated files are current (used by pnpm check).
+ * Run `node scripts/generate-registry.mjs` after editing spec/registry/fusion.json;
+ * `--check` verifies the generated files are current (used by pnpm check).
  */
 import { mkdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
 import { dirname } from "node:path";
 
-const NEUTRAL_SPEC_FILES = [
-  ["providers", "spec/registry/providers.json"],
-  ["subscriptions", "spec/registry/subscriptions.json"],
-  ["connectors", "spec/registry/connectors.json"],
-  ["modelCatalog", "spec/registry/model-catalog.json"],
-  ["modelCapabilities", "spec/registry/model-capabilities.json"],
-  ["pricing", "spec/registry/pricing.json"],
-  ["localCatalog", "spec/registry/local-catalog.json"]
-];
 const FUSION_SPEC_FILES = [["fusion", "spec/registry/fusion.json"]];
 
 const TARGETS = [
-  {
-    files: NEUTRAL_SPEC_FILES,
-    exportName: "REGISTRY",
-    ts: "packages/routekit-registry/src/generated/data.ts"
-  },
   {
     files: FUSION_SPEC_FILES,
     exportName: "FUSION_REGISTRY",

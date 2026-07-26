@@ -2,42 +2,6 @@
   "files": [],
   "references": [
     {
-      "path": "packages/contracts"
-    },
-    {
-      "path": "packages/routekit-registry"
-    },
-    {
-      "path": "packages/runtime-utils"
-    },
-    {
-      "path": "packages/routekit-tracing"
-    },
-    {
-      "path": "packages/cli-ui"
-    },
-    {
-      "path": "packages/cli-core"
-    },
-    {
-      "path": "packages/config-core"
-    },
-    {
-      "path": "packages/routekit-config"
-    },
-    {
-      "path": "packages/routekit-router"
-    },
-    {
-      "path": "packages/routekit-control"
-    },
-    {
-      "path": "packages/routekit-daemon"
-    },
-    {
-      "path": "packages/telemetry-core"
-    },
-    {
       "path": "packages/registry"
     },
     {
@@ -48,12 +12,6 @@
     },
     {
       "path": "packages/adapter-ai-sdk"
-    },
-    {
-      "path": "packages/model-gateway"
-    },
-    {
-      "path": "packages/accounts"
     },
     {
       "path": "packages/fusion-gateway"
@@ -71,31 +29,7 @@
       "path": "packages/ensemble"
     },
     {
-      "path": "packages/harness-core"
-    },
-    {
       "path": "packages/testkit"
-    },
-    {
-      "path": "packages/tools"
-    },
-    {
-      "path": "packages/tool-codex"
-    },
-    {
-      "path": "packages/tool-claude"
-    },
-    {
-      "path": "packages/tool-cursor"
-    },
-    {
-      "path": "packages/tool-opencode"
-    },
-    {
-      "path": "packages/tool-registry"
-    },
-    {
-      "path": "packages/routekit-cli"
     },
     {
       "path": "packages/cli"

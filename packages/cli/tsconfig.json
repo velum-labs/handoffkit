@@ -13,34 +13,10 @@
       "path": "../adapter-ai-sdk"
     },
     {
-      "path": "../cli-ui"
-    },
-    {
-      "path": "../cli-core"
-    },
-    {
-      "path": "../config-core"
-    },
-    {
-      "path": "../routekit-config"
-    },
-    {
       "path": "../fusion-config"
     },
     {
-      "path": "../telemetry-core"
-    },
-    {
       "path": "../ensemble"
-    },
-    {
-      "path": "../harness-core"
-    },
-    {
-      "path": "../model-gateway"
-    },
-    {
-      "path": "../routekit-router"
     },
     {
       "path": "../fusion-gateway"
@@ -49,25 +25,10 @@
       "path": "../protocol"
     },
     {
-      "path": "../runtime-utils"
-    },
-    {
       "path": "../registry"
     },
     {
-      "path": "../contracts"
-    },
-    {
-      "path": "../routekit-registry"
-    },
-    {
       "path": "../testkit"
-    },
-    {
-      "path": "../tools"
-    },
-    {
-      "path": "../tool-registry"
     },
     {
       "path": "../workspace"

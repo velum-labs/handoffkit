@@ -11,8 +11,7 @@ import {
   routekitProductionSources,
   routekitSourceViolations,
   toolRegistryCliSourceViolations,
-  toolRegistryCompositionViolations,
-  toolRegistryConstructionViolations
+  toolRegistryCompositionViolations
 } from "./lib/architecture-guards.mjs";
 
 // A deliberately curated manifest of files that must exist for the repo to
@@ -32,7 +31,6 @@ const requiredFiles = [
   ".github/CODEOWNERS",
   "tsconfig.json",
   "tsconfig.base.json",
-  // uv workspace (the Python monorepo side)
   "pyproject.toml",
   "uv.lock",
   "python/uniroute/pyproject.toml",
@@ -41,40 +39,15 @@ const requiredFiles = [
   "python/uniroute-mlx/pyproject.toml",
   "python/uniroute-mlx/src/uniroute_mlx/card.py",
   "python/uniroute-mlx/tests/test_cli_end_to_end.py",
-  // cross-language registries (spec/registry is the source of truth; neutral
-  // RouteKit and FusionKit-only bindings are generated separately)
-  "spec/registry/providers.json",
-  "spec/registry/subscriptions.json",
-  "spec/registry/connectors.json",
   "spec/registry/fusion.json",
-  "spec/registry/model-catalog.json",
-  "spec/registry/model-capabilities.json",
-  "spec/registry/pricing.json",
-  "spec/registry/local-catalog.json",
-  "scripts/generate-pricing.mjs",
-  "scripts/generate-local-catalog.mjs",
   "scripts/generate-registry.mjs",
-  // fusion trace semantic conventions (spec/fusion-trace is the source of
-  // truth; TS/Python/scope bindings are generated)
   "spec/fusion-trace/registry.json",
   "scripts/generate-trace-conventions.mjs",
   "packages/tracing/src/index.ts",
-  "packages/routekit-tracing/src/index.ts",
-  "packages/runtime-utils/src/index.ts",
-  "packages/runtime-utils/src/environment.ts",
-  "packages/runtime-utils/src/url.ts",
-  "packages/cli-ui/src/index.ts",
-  "packages/cli-core/src/index.ts",
-  "packages/config-core/src/index.ts",
-  "packages/routekit-config/src/index.ts",
-  "packages/routekit-router/src/index.ts",
   "packages/fusion-config/src/index.ts",
-  "packages/telemetry-core/src/index.ts",
   "packages/protocol/src/generated/trace-conventions.ts",
   "python/fusionkit-core/src/fusionkit_core/_generated/trace_conventions.py",
   "apps/scope/lib/generated/trace-conventions.ts",
-  "packages/routekit-registry/src/index.ts",
-  "packages/routekit-registry/src/generated/data.ts",
   "packages/registry/src/index.ts",
   "packages/registry/src/generated/data.ts",
   "python/fusionkit-core/src/fusionkit_core/registry.py",
@@ -85,12 +58,6 @@ const requiredFiles = [
   "python/fusionkit-evals/src/fusionkit_evals/hyperkit_plugin.py",
   "python/fusionkit-cli/src/fusionkit_cli/main.py",
   "python/fusionkit-core/tests/test_docs_contracts.py",
-  // package entry points
-  "packages/contracts/src/index.ts",
-  "packages/contracts/src/jcs.ts",
-  "packages/contracts/src/hash.ts",
-  "packages/contracts/src/model.ts",
-  "packages/contracts/src/harness-event.ts",
   "packages/protocol/src/index.ts",
   "packages/protocol/src/types.ts",
   "packages/protocol/src/api.ts",
@@ -106,30 +73,6 @@ const requiredFiles = [
   "packages/workspace/src/index.ts",
   "packages/adapter-ai-sdk/src/mlx-env.ts",
   "packages/adapter-ai-sdk/src/managed-server.ts",
-  "packages/model-gateway/src/backend.ts",
-  "packages/model-gateway/src/router.ts",
-  "packages/model-gateway/src/provider-backends.ts",
-  "packages/model-gateway/src/endpoint-health.ts",
-  "packages/model-gateway/src/capacity-pool.ts",
-  "packages/accounts/src/index.ts",
-  "packages/accounts/src/credentials.ts",
-  "packages/accounts/src/account-source.ts",
-  "packages/accounts/src/account-set.ts",
-  "packages/accounts/src/backend.ts",
-  "packages/accounts/src/gateway.ts",
-  "packages/accounts/src/provider.ts",
-  "packages/accounts/src/relay.ts",
-  "packages/accounts/src/codex-relay.ts",
-  "packages/accounts/src/types.ts",
-  "packages/accounts/src/proxy.ts",
-  "packages/accounts/src/client.ts",
-  "packages/accounts/src/usage.ts",
-  "packages/accounts/src/cliproxy.ts",
-  "packages/accounts/src/connector.ts",
-  "packages/accounts/src/managed-login.ts",
-  "packages/accounts/src/wire.ts",
-  "packages/accounts/src/test/account-removal.test.ts",
-  "packages/accounts/src/test/subscription-backend.test.ts",
   "packages/fusion-gateway/src/fusion-backend.ts",
   "packages/fusion-gateway/src/fusion-proxy.ts",
   "packages/fusion-gateway/src/fusion-cost-meter.ts",
@@ -139,9 +82,6 @@ const requiredFiles = [
   "packages/fusion-gateway/src/fusion-types.ts",
   "packages/fusion-gateway/src/fusion-vendor-proxy.ts",
   "packages/fusion-gateway/src/logger.ts",
-  "packages/model-gateway/src/sse-wire.ts",
-  "packages/model-gateway/src/adapters/openai-chat-wire.ts",
-  "packages/model-gateway/src/adapters/responses-stream.ts",
   "packages/ensemble/src/index.ts",
   "packages/ensemble/src/unified-core.ts",
   "packages/ensemble/src/unified-types.ts",
@@ -168,63 +108,6 @@ const requiredFiles = [
   "packages/ensemble/src/isolation.ts",
   "packages/ensemble/src/mock.ts",
   "packages/ensemble/src/command.ts",
-  "packages/tools/src/index.ts",
-  "packages/tools/src/launch-context.ts",
-  "packages/tools/src/registry.ts",
-  "packages/harness-core/src/driver-factory.ts",
-  "packages/harness-core/src/stream-json.ts",
-  "packages/tool-codex/src/index.ts",
-  "packages/tool-codex/src/driver.ts",
-  "packages/tool-codex/src/launch.ts",
-  "packages/tool-claude/src/index.ts",
-  "packages/tool-claude/src/driver.ts",
-  "packages/tool-claude/src/launch.ts",
-  "packages/tool-cursor/src/index.ts",
-  "packages/tool-cursor/src/driver.ts",
-  "packages/tool-cursor/src/launch.ts",
-  "packages/tool-cursor/src/bridge.ts",
-  "packages/tool-opencode/src/index.ts",
-  "packages/tool-opencode/src/driver.ts",
-  "packages/tool-opencode/src/launch.ts",
-  "packages/tool-registry/package.json",
-  "packages/tool-registry/LICENSE",
-  "packages/tool-registry/README.md",
-  "packages/tool-registry/tsconfig.json",
-  "packages/tool-registry/src/index.ts",
-  "packages/tool-registry/src/test/registry.test.ts",
-  "packages/routekit-cli/package.json",
-  "packages/routekit-cli/LICENSE",
-  "packages/routekit-cli/src/index.ts",
-  "packages/routekit-cli/src/cli.ts",
-  "packages/routekit-cli/src/commands/index.ts",
-  "packages/routekit-cli/src/commands/context.ts",
-  "packages/routekit-cli/src/commands/launchers.ts",
-  "packages/routekit-cli/src/commands/accounts.ts",
-  "packages/routekit-cli/src/commands/providers.ts",
-  "packages/routekit-cli/src/commands/models.ts",
-  "packages/routekit-cli/src/commands/config.ts",
-  "packages/routekit-cli/src/commands/doctor.ts",
-  "packages/routekit-cli/src/commands/install.ts",
-  "packages/routekit-cli/src/commands/telemetry.ts",
-  "packages/routekit-cli/src/commands/stop.ts",
-  "packages/routekit-cli/src/config.ts",
-  "packages/routekit-cli/src/catalog.ts",
-  "packages/routekit-cli/src/launch.ts",
-  "packages/routekit-cli/src/accounts.ts",
-  "packages/routekit-cli/src/state.ts",
-  "packages/routekit-cli/src/telemetry.ts",
-  "packages/routekit-cli/src/completion.ts",
-  "packages/routekit-cli/src/test/accounts-command.test.ts",
-  "packages/routekit-cli/src/test/providers-command.test.ts",
-  "packages/routekit-cli/src/test/cli.test.ts",
-  "packages/routekit-cli/src/test/config.test.ts",
-  "packages/routekit-cli/src/test/docs-contract.test.ts",
-  "packages/routekit-cli/src/test/cli-process-e2e.test.ts",
-  "packages/routekit-cli/src/test/launch.test.ts",
-  "packages/routekit-cli/src/test/daemon-run-process-e2e.test.ts",
-  "packages/routekit-cli/src/test/serve.test.ts",
-  "packages/routekit-cli/src/test/state.test.ts",
-  "packages/model-gateway/src/test/endpoint-health.test.ts",
   "packages/cli/src/index.ts",
   "packages/cli/src/commands/completion.ts",
   "packages/cli/src/dashboard.ts",
@@ -245,20 +128,6 @@ const requiredFiles = [
   "scripts/generate-model-fusion-openapi-sdk.mjs",
   "scripts/generate-code-docs.mjs",
   "scripts/generate-expected-behaviors.mjs",
-  "scripts/generate-routekit-cursor-attestation.mjs",
-  "scripts/generate-routekit-l06-evidence.mjs",
-  "scripts/generate-routekit-manual-records.mjs",
-  "scripts/lib/routekit-cursor-attestation-runner.mjs",
-  "scripts/lib/routekit-cursor-state.mjs",
-  "scripts/lib/routekit-pty-trust.mjs",
-  "scripts/lib/routekit-tmux-auth.mjs",
-  "scripts/lib/routekit-l06-evidence.mjs",
-  "scripts/lib/routekit-manual-evidence.mjs",
-  "scripts/lib/routekit-subscription-state.mjs",
-  "scripts/test/routekit-l06-evidence.test.mjs",
-  "scripts/test/routekit-manual-evidence.test.mjs",
-  "scripts/test/routekit-pty-trust.test.mjs",
-  "scripts/test/routekit-subscription-state.test.mjs",
   "scripts/publish-npm-workspaces.mjs",
   "scripts/release.mjs",
   "scripts/lib/changelog.mjs",
@@ -268,11 +137,6 @@ const requiredFiles = [
   "release/workspace.release.json",
   "release/desired.json",
   "docs/privacy.md",
-  "docs/routekit-claude-recovery-evidence.md",
-  "docs/routekit-l06-evidence.json",
-  "docs/routekit-l06-evidence.md",
-  "docs/routekit-routes-and-billing.md",
-  "docs/subscription-pooling.md",
   "apps/docs/content/docs/guides/subscription-pooling.mdx",
   "apps/docs/content/docs/concepts/privacy.mdx",
   "apps/docs/content/docs/reference/routes-and-billing.mdx",
@@ -282,8 +146,6 @@ const requiredFiles = [
   "docs/planning/ensemble-product-plan.md",
   "docs/specs/harness-prompt-passthrough.md",
   "docs/generated/code-api.md",
-  "spec/routekit/l06-evidence-map.json",
-  "spec/routekit/l06-evidence.json",
   "spec/testing/expected-behaviors.json",
   "docs/generated/expected-behaviors.md",
   "references/trackcn.json",
@@ -294,29 +156,15 @@ const requiredFiles = [
   "CHANGELOG.md",
   "examples/manifest.json",
   "packages/example-utils/src/manifest.ts",
-  // test suites
-  "packages/contracts/src/test/contracts.test.ts",
-  "packages/routekit-registry/src/test/registry.test.ts",
   "packages/registry/src/test/registry.test.ts",
   "packages/protocol/src/test/protocol.test.ts",
   "packages/protocol/src/test/model-fusion.test.ts",
   "packages/protocol/src/test/tool-executor.test.ts",
   "packages/kernel/src/test/runtime.test.ts",
-  "packages/tools/src/test/registry.test.ts",
   "packages/ensemble/src/test/tool-executor.test.ts",
   "packages/ensemble/src/test/external-executor.test.ts",
   "packages/ensemble/src/test/isolation.test.ts",
-  "packages/tool-codex/src/test/driver.test.ts",
-  "packages/tool-cursor/src/test/driver.test.ts",
-  "packages/tool-claude/src/test/driver.test.ts",
-  "packages/tool-opencode/src/test/opencode.test.ts",
   "packages/cli/src/test/dashboard.test.ts",
-  "packages/accounts/src/test/subscription-pool.test.ts",
-  "packages/accounts/src/test/subscription-account-source.test.ts",
-  "packages/accounts/src/test/subscription-provider.test.ts",
-  "packages/accounts/src/test/subscription-relay.test.ts",
-  "packages/accounts/src/test/subscription-sdk.test.ts",
-  "packages/accounts/src/test/cliproxy.test.ts",
   "packages/protocol/src/fixtures/model-fusion-contract/artifact-ref.v1/minimal.json",
   "packages/protocol/src/fixtures/model-fusion-contract/artifact-ref.v1/realistic.json",
   "packages/protocol/src/fixtures/model-fusion-contract/benchmark-task-record.v1/minimal.json",
@@ -341,14 +189,14 @@ const requiredFiles = [
   "packages/adapter-ai-sdk/src/test/mlx-env.test.ts",
   "packages/adapter-ai-sdk/src/test/managed-server.test.ts",
   "packages/ensemble/src/test/ensemble.test.ts",
-  "packages/routekit-config/src/test/config.test.ts",
-  "packages/routekit-router/src/test/router.test.ts",
   "packages/fusion-config/src/test/config.test.ts",
   "packages/cli/src/test/composition.test.ts",
   "packages/cli/src/test/stack-model-ids-e2e.test.ts",
   "packages/cli/src/test/v4-commands.test.ts",
   "test/demos.test.js",
-  "examples/mlx/src/test/run.test.ts"
+  "examples/mlx/src/test/run.test.ts",
+  "scripts/link-routekit-src.mjs",
+  "docs/routekit.md"
 ];
 
 const fail = (message) => {
@@ -406,36 +254,6 @@ if (registryCheck.status !== 0) {
   fail("registry bindings check failed");
 }
 
-const localCatalogCheck = spawnSync(
-  process.execPath,
-  ["scripts/generate-local-catalog.mjs", "--check"],
-  { encoding: "utf8" }
-);
-if (localCatalogCheck.stdout.trim()) {
-  console.log(localCatalogCheck.stdout.trim());
-}
-if (localCatalogCheck.stderr.trim()) {
-  console.error(localCatalogCheck.stderr.trim());
-}
-if (localCatalogCheck.status !== 0) {
-  fail("local catalog check failed");
-}
-
-const pricingCheck = spawnSync(
-  process.execPath,
-  ["scripts/generate-pricing.mjs", "--check"],
-  { encoding: "utf8" }
-);
-if (pricingCheck.stdout.trim()) {
-  console.log(pricingCheck.stdout.trim());
-}
-if (pricingCheck.stderr.trim()) {
-  console.error(pricingCheck.stderr.trim());
-}
-if (pricingCheck.status !== 0) {
-  fail("pricing check failed");
-}
-
 const modelFusionProtocolCheck = spawnSync(
   process.execPath,
   ["scripts/check-model-fusion-protocol.mjs"],
@@ -479,42 +297,6 @@ if (expectedBehaviorsCheck.stderr.trim()) {
 }
 if (expectedBehaviorsCheck.status !== 0) {
   fail("expected behavior documentation check failed");
-}
-
-const routekitEvidenceCheck = spawnSync(
-  process.execPath,
-  ["scripts/generate-routekit-l06-evidence.mjs", "--check"],
-  { encoding: "utf8" }
-);
-if (routekitEvidenceCheck.stdout.trim()) {
-  console.log(routekitEvidenceCheck.stdout.trim());
-}
-if (routekitEvidenceCheck.stderr.trim()) {
-  console.error(routekitEvidenceCheck.stderr.trim());
-}
-if (routekitEvidenceCheck.status !== 0) {
-  fail("RouteKit L06 evidence mapping or generated report is stale");
-}
-
-const routekitEvidenceTests = spawnSync(
-  process.execPath,
-  [
-    "--test",
-    "scripts/test/routekit-l06-evidence.test.mjs",
-    "scripts/test/routekit-manual-evidence.test.mjs",
-    "scripts/test/routekit-pty-trust.test.mjs",
-    "scripts/test/routekit-subscription-state.test.mjs"
-  ],
-  { encoding: "utf8" }
-);
-if (routekitEvidenceTests.stdout.trim()) {
-  console.log(routekitEvidenceTests.stdout.trim());
-}
-if (routekitEvidenceTests.stderr.trim()) {
-  console.error(routekitEvidenceTests.stderr.trim());
-}
-if (routekitEvidenceTests.status !== 0) {
-  fail("RouteKit L06 evidence contract tests failed");
 }
 
 // The docs-site changelog page is generated from CHANGELOG.md; fail when it
@@ -575,7 +357,8 @@ for (const setting of [
   "strict-peer-dependencies=true",
   "ignore-scripts=true",
   "verify-store-integrity=true",
-  "minimum-release-age-exclude[]=@velum-labs/model-fusion-protocol"
+  "minimum-release-age-exclude[]=@velum-labs/model-fusion-protocol",
+  "minimum-release-age-exclude[]=@velum-labs/routekit"
 ]) {
   if (!npmrc.includes(setting)) fail(`.npmrc missing ${setting}`);
 }
@@ -637,6 +420,29 @@ const TRUSTED_THIRD_PARTY = new Map([
   // spec/model-fusion-contract but not yet published. Restore an exact
   // registry pin ("0.6.0") once the model-fusion-protocol-v0.6.0 tag ships.
   ["@velum-labs/model-fusion-protocol", "0.6.0"],
+  // Published RouteKit foundation packages (extracted to velum-labs/routekit).
+  ["@velum-labs/routekit", "0.10.1"],
+  ["@velum-labs/routekit-accounts", "0.10.1"],
+  ["@velum-labs/routekit-cli-core", "0.10.1"],
+  ["@velum-labs/routekit-cli-ui", "0.10.1"],
+  ["@velum-labs/routekit-config", "0.10.1"],
+  ["@velum-labs/routekit-config-core", "0.10.1"],
+  ["@velum-labs/routekit-contracts", "0.10.1"],
+  ["@velum-labs/routekit-control", "0.10.1"],
+  ["@velum-labs/routekit-daemon", "0.10.1"],
+  ["@velum-labs/routekit-gateway", "0.10.1"],
+  ["@velum-labs/routekit-harness-core", "0.10.1"],
+  ["@velum-labs/routekit-registry", "0.10.1"],
+  ["@velum-labs/routekit-router", "0.10.1"],
+  ["@velum-labs/routekit-runtime", "0.10.1"],
+  ["@velum-labs/routekit-telemetry-core", "0.10.1"],
+  ["@velum-labs/routekit-tool-claude", "0.10.1"],
+  ["@velum-labs/routekit-tool-codex", "0.10.1"],
+  ["@velum-labs/routekit-tool-cursor", "0.10.1"],
+  ["@velum-labs/routekit-tool-opencode", "0.10.1"],
+  ["@velum-labs/routekit-tool-registry", "0.10.1"],
+  ["@velum-labs/routekit-tools", "0.10.1"],
+  ["@velum-labs/routekit-tracing", "0.10.1"],
   ["@vercel/sandbox", "2.4.0"],
   ["ai", "6.0.200"],
   ["commander", "14.0.3"],
@@ -794,7 +600,7 @@ for (const violation of fusionkitCompositionViolations(workspaceManifests)) {
 for (const violation of toolRegistryCompositionViolations(workspaceManifests)) {
   fail(`tool registry composition violation: ${violation}`);
 }
-for (const consumerName of ["@velum-labs/routekit", "@fusionkit/cli"]) {
+for (const consumerName of ["@fusionkit/cli"]) {
   const consumer = workspaceManifests.find(({ manifest }) => manifest.name === consumerName);
   const sources =
     consumer !== undefined && existsSync(join(consumer.dir, "src"))
@@ -807,31 +613,15 @@ for (const consumerName of ["@velum-labs/routekit", "@fusionkit/cli"]) {
 const productionSources = workspaceManifests.flatMap(({ dir }) =>
   existsSync(join(dir, "src")) ? routekitProductionSources(dir) : []
 );
-for (const violation of toolRegistryConstructionViolations(productionSources)) {
-  fail(`tool registry construction violation: ${violation}`);
-}
 for (const { file, source } of productionSources) {
   for (const violation of polynomialTrailingSlashRegexViolations(file, source)) {
     fail(`unsafe trailing-slash normalization: ${violation}`);
-  }
-}
-for (const file of [
-  "packages/tool-registry/package.json",
-  "packages/tool-registry/README.md",
-  "packages/tool-registry/tsconfig.json",
-  "packages/tool-registry/src/index.ts",
-  "packages/tool-registry/src/test/registry.test.ts"
-]) {
-  if (/(?:@fusionkit\/|\b(?:fusionkit|fusion|fused)\b)/i.test(readFileSync(file, "utf8"))) {
-    fail(`${file} must not contain FusionKit dependencies or vocabulary`);
   }
 }
 
 // Shared process/config/CLI behavior has one public owner. These historical
 // local facades make duplicate implementations easy to reintroduce.
 for (const wrapper of [
-  "packages/tools/src/proc.ts",
-  "packages/tools/src/env.ts",
   "packages/cli/src/shared/proc.ts",
   "packages/cli/src/shared/context.ts",
   "packages/cli/src/shared/errors.ts",
@@ -841,17 +631,6 @@ for (const wrapper of [
   "packages/cli/src/fusion/cliproxy.ts"
 ]) {
   if (existsSync(wrapper)) fail(`forbidden local shared-core wrapper: ${wrapper}`);
-}
-
-for (const legacyHarness of [
-  "packages/tool-codex/src/harness.ts",
-  "packages/tool-claude/src/harness.ts",
-  "packages/tool-cursor/src/harness.ts",
-  "packages/tool-opencode/src/harness.ts",
-  "packages/tool-claude/src/stream-trajectory.ts",
-  "packages/tool-cursor/src/stream-trajectory.ts"
-]) {
-  if (existsSync(legacyHarness)) fail(`forbidden parallel harness implementation: ${legacyHarness}`);
 }
 
 const retiredToolNames = new RegExp(
@@ -882,11 +661,6 @@ for (const { manifest, dir } of workspaceManifests) {
 const protocolManifest = JSON.parse(readFileSync("packages/protocol/package.json", "utf8"));
 if (protocolManifest.name !== "@fusionkit/protocol") {
   fail("legacy governance protocol must remain explicitly owned by @fusionkit/protocol");
-}
-for (const file of ["types.ts", "api.ts", "receipt.ts", "contract.ts", "chain.ts"]) {
-  if (existsSync(join("packages", "contracts", "src", file))) {
-    fail(`legacy governance protocol ${file} must not move into @velum-labs/routekit-contracts`);
-  }
 }
 
 // No deferred-work markers in tracked sources: anything worth flagging is
@@ -919,10 +693,7 @@ const noConsoleListing = spawnSync(
   "git",
   [
     "ls-files",
-    "packages/cli/src/**/*.ts",
-    "packages/cli-core/src/**/*.ts",
-    "packages/cli-ui/src/**/*.ts",
-    "packages/cli-ui/src/**/*.tsx"
+    "packages/cli/src/**/*.ts"
   ],
   { encoding: "utf8" }
 );
@@ -959,7 +730,6 @@ if (envSpreadListing.status === 0) {
   const envSpreadPattern = /\.\.\.process\.env\b/;
   const waiverPattern = /env-spread-allowed:\s*\S/;
   for (const file of envSpreadListing.stdout.split("\n").filter((line) => line.length > 0)) {
-    if (file.startsWith("packages/runtime-utils/")) continue;
     if (file.includes("/test/")) continue;
     if (!existsSync(file)) continue;
     const lines = readFileSync(file, "utf8").split("\n");

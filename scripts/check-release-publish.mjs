@@ -170,7 +170,6 @@ for (const entry of manifest.packages ?? []) {
 }
 
 for (const [packageName, binary] of [
-  ["@velum-labs/routekit", "routekit"],
   ["@fusionkit/cli", "fusionkit"]
 ]) {
   const entry = (manifest.packages ?? []).find((candidate) => candidate.name === packageName);
@@ -182,6 +181,9 @@ for (const [packageName, binary] of [
   if (typeof pkg.bin?.[binary] !== "string") {
     fail(`${packageName} must publish the ${binary} executable`);
   }
+}
+if ((manifest.packages ?? []).some((entry) => entry.name?.startsWith("@velum-labs/routekit"))) {
+  fail("release manifest must not publish @velum-labs/routekit* (those live in velum-labs/routekit)");
 }
 const fusionCliEntry = (manifest.packages ?? []).find(
   (candidate) => candidate.name === "@fusionkit/cli"
@@ -201,11 +203,17 @@ if (npmUnit?.packageManifest !== RELEASE_MANIFEST) {
 if (
   JSON.stringify(npmUnit?.binaries) !==
   JSON.stringify([
-    { name: "routekit", package: "@velum-labs/routekit" },
     { name: "fusionkit", package: "@fusionkit/cli" }
   ])
 ) {
-  fail("handoffkit binary metadata must include routekit and fusionkit");
+  fail("handoffkit binary metadata must include fusionkit only");
+}
+const routekitUnit = topology.units?.find((unit) => unit.key === "routekit");
+if (routekitUnit?.repo !== "routekit") {
+  fail("workspace topology must include a routekit release unit");
+}
+if (!npmUnit?.dependsOn?.includes("routekit")) {
+  fail("handoffkit release unit must depend on routekit");
 }
 const pypiUnit = topology.units?.find((unit) => unit.key === "fusionkit-pypi");
 const expectedPythonPackages = [

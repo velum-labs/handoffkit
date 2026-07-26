@@ -12,9 +12,6 @@
       "path": "../protocol"
     },
     {
-      "path": "../runtime-utils"
-    },
-    {
       "path": "../tracing"
     }
   ]
