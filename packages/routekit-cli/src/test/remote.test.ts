@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import {
   chmodSync,
   existsSync,
+  mkdirSync,
   mkdtempSync,
   readFileSync,
   statSync,
@@ -276,6 +277,8 @@ test("active remote status uses SSH control and never creates a local daemon", (
       sshHost: "velum-mini",
       addedAt: "2026-07-26T00:00:00.000Z"
     });
+    mkdirSync(join(home, "secrets"), { recursive: true, mode: 0o700 });
+    writeFileSync(remoteTokenPath("mini"), "private-token\n", { mode: 0o600 });
   });
   const security = join(bin, "security");
   writeFileSync(security, "#!/bin/sh\nprintf '%s\\n' 'private-token'\n", { mode: 0o700 });
