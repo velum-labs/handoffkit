@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import test from "node:test";
 
 import {
@@ -18,6 +19,13 @@ import { parseRouterConfig } from "@velum-labs/routekit-gateway";
 import { startFusionStack } from "../fusion/stack.js";
 
 const SKIP = stackToolingSkip();
+
+/** Resolve the published `@velum-labs/routekit` bin (`dist/index.js`) from the workspace pin. */
+function resolveRoutekitCli(): string {
+  const require = createRequire(join(repoRoot(), "package.json"));
+  // Package exports "." -> dist/cli.js; the executable bin is the sibling index.js.
+  return join(dirname(require.resolve("@velum-labs/routekit")), "index.js");
+}
 
 function initializeRepository(): string {
   const directory = mkdtempSync(join(tmpdir(), "fusionkit-model-e2e-"));
@@ -279,7 +287,7 @@ test(
     );
     const routerPort = await freePort();
     const routerUrl = `http://127.0.0.1:${routerPort}`;
-    const routekitCli = join(repoRoot(), "packages", "routekit-cli", "dist", "index.js");
+    const routekitCli = resolveRoutekitCli();
     const routekitEnv = {
       ...process.env,
       HOME: home,
