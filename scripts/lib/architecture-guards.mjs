@@ -15,9 +15,12 @@ const DEPENDENCY_SECTIONS = [
 /** @deprecated RouteKit packages were extracted; kept empty for API stability. */
 export const CANONICAL_SHARED_PACKAGES = new Map();
 
-export function canonicalSharedPackageViolations(manifests) {
+export function canonicalSharedPackageViolations(
+  manifests,
+  packages = CANONICAL_SHARED_PACKAGES
+) {
   const violations = [];
-  for (const [dir, expectedName] of CANONICAL_SHARED_PACKAGES) {
+  for (const [dir, expectedName] of packages) {
     const entry = manifests.find((candidate) => candidate.dir === dir);
     if (entry === undefined) {
       violations.push(`${dir} is missing from the workspace`);
@@ -169,9 +172,24 @@ export function toolRegistryCliSourceViolations(consumerName, sources) {
   return violations;
 }
 
-/** No longer enforced in-repo: tool-registry lives in the routekit repo. */
-export function toolRegistryConstructionViolations(_sources) {
-  return [];
+/**
+ * Construction ownership lives in the routekit repo. Pass `owner` only when
+ * exercising the invariant against fixtures; production callers omit it.
+ */
+export function toolRegistryConstructionViolations(sources, owner = null) {
+  if (owner === null) return [];
+  const constructions = sources.flatMap(({ file, source }) => {
+    if (file === "packages/tools/src/registry.ts") return [];
+    return [...source.matchAll(/\bcreateToolRegistry\s*\(/g)].map(() => file);
+  });
+  const violations = [];
+  if (constructions.filter((file) => file === owner).length !== 1) {
+    violations.push(`${owner} must construct the canonical registry exactly once`);
+  }
+  for (const file of constructions) {
+    if (file !== owner) violations.push(`${file} constructs a parallel tool registry`);
+  }
+  return violations;
 }
 
 export function polynomialTrailingSlashRegexViolations(file, source) {

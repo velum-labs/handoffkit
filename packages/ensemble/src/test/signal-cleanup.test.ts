@@ -12,14 +12,18 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawn } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
+const require = createRequire(import.meta.url);
+const runtimeDir = dirname(require.resolve("@velum-labs/routekit-runtime"));
+
 const WORKTREE_MODULE = fileURLToPath(new URL("../worktree.js", import.meta.url));
-const CLEANUP_MODULE = fileURLToPath(new URL("../../../runtime-utils/dist/cleanup.js", import.meta.url));
-const PROCESS_MODULE = fileURLToPath(new URL("../../../runtime-utils/dist/process.js", import.meta.url));
+const CLEANUP_MODULE = join(runtimeDir, "cleanup.js");
+const PROCESS_MODULE = join(runtimeDir, "process.js");
 
 function git(cwd: string, args: string[]): string {
   return execFileSync("git", args, { cwd, encoding: "utf8" });

@@ -98,11 +98,9 @@ test("every required behavior maps to a real anchored test", () => {
   }
 });
 
-test("RouteKit process and authenticated bridge behaviors remain required", () => {
+test("Fusion/RouteKit composition bridge behaviors remain required", () => {
   const byId = new Map(contract().behaviors.map((behavior) => [behavior.id, behavior]));
   for (const id of [
-    "process.routekit-cli-serve",
-    "cli.routekit-command-surfaces",
     "composition.routekit-model-ids",
     "composition.routekit-authenticated-cli-bridge"
   ]) {
