@@ -16,6 +16,36 @@ package, and the PyPI FusionKit sidecar package set. Release tags are named
   Remote data tokens live in macOS Keychain or private `0600` files on other
   platforms and are never stored in the remote registry.
 
+## 0.10.0 - 2026-07-25
+
+- Reasoning now survives every protocol boundary the gateway translates across.
+  Encrypted OpenAI reasoning items were dropped when a Responses request became
+  a Chat Completions one, Anthropic thinking signatures and Google thought
+  signatures were lost whenever an assistant turn was replayed alongside tool
+  calls, and `reasoning_content` and `reasoning` were merged into a single
+  channel during trajectory capture. A thread that continued a reasoning turn
+  therefore restarted its reasoning upstream, and providers that verify signed
+  thinking rejected the replay outright.
+
+  Provider-native reasoning state now rides on a versioned `x_routekit` message
+  extension carrying the effort selection, Anthropic thinking blocks, OpenAI
+  encrypted reasoning items, and Google thought signatures. The extension is
+  stripped before a request leaves for a provider, so it is a gateway-internal
+  contract that clients only need to echo back on the next turn. Server-side web
+  search carries the same state across its continuation steps, Responses usage
+  reports `reasoning_tokens` and `cached_tokens` instead of dropping the detail,
+  and a mid-stream failover no longer discards reasoning already committed to
+  the response.
+
+  Requests that cannot be served losslessly now fail with an explicit `400`
+  rather than degrading silently: `previous_response_id` on this stateless
+  gateway (`unsupported_previous_response_id`), encrypted reasoning aimed at a
+  backend that cannot consume it (`unsupported_encrypted_reasoning`), and
+  reasoning controls that contradict each other (`invalid_reasoning_control`).
+
+  The FusionKit sidecar threads the same extension through judging and
+  synthesis, so a fused compound answer can be continued on a reasoning model.
+
 - Cursor BYOK users can now select reasoning effort through model variants such
   as `routekit/openai/gpt-5.5:high`. The `/v1/cursor/models` mirror advertises
   one suffixed variant per effort discovered for each model, and ingress strips
