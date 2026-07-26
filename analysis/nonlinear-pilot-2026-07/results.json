@@ -1,0 +1,94 @@
+{
+  "n": 25,
+  "arms": {
+    "solo-terminus": {
+      "passed": 10,
+      "rate": 0.4,
+      "wilson95": [
+        0.234,
+        0.5926
+      ]
+    },
+    "solo-qwen3": {
+      "passed": 7,
+      "rate": 0.28,
+      "wilson95": [
+        0.1428,
+        0.4758
+      ]
+    },
+    "linear-6wide": {
+      "passed": 12,
+      "rate": 0.48,
+      "wilson95": [
+        0.3003,
+        0.665
+      ]
+    },
+    "nonlinear-4+2": {
+      "passed": 12,
+      "rate": 0.48,
+      "wilson95": [
+        0.3003,
+        0.665
+      ]
+    },
+    "oracle-6wide": {
+      "passed": 14,
+      "rate": 0.56,
+      "wilson95": [
+        0.3707,
+        0.7333
+      ]
+    }
+  },
+  "mcnemar_nonlinear_vs_linear-6wide": {
+    "wins": 1,
+    "losses": 1,
+    "p": 1.0
+  },
+  "mcnemar_nonlinear_vs_solo-terminus": {
+    "wins": 2,
+    "losses": 0,
+    "p": 0.5
+  },
+  "mechanism": {
+    "repair_calls": 16,
+    "repair_conversions_public": 2,
+    "repair_conversion_rate": 0.125,
+    "repaired_public_pass_private_rate": 0.5,
+    "sampled_public_pass_private_rate": 0.7059,
+    "early_exit_rate": 0.68
+  },
+  "cost_usd": {
+    "linear-6wide": 0.5291,
+    "nonlinear-4+2": 0.3676
+  },
+  "errors": [
+    {
+      "task_id": "arc195_e",
+      "outcome": "provider_error",
+      "reason": "terminus@0.2: Expecting value: line 2423 column 1 (char 13321)"
+    },
+    {
+      "task_id": "abc400_g",
+      "outcome": "provider_error",
+      "reason": "terminus@0.9: Expecting value: line 5569 column 1 (char 30624)"
+    },
+    {
+      "task_id": "abc397_d",
+      "outcome": "provider_error",
+      "reason": "terminus@0.9: Expecting value: line 295 column 1 (char 1617)"
+    },
+    {
+      "task_id": "abc397_f",
+      "outcome": "provider_error",
+      "reason": "terminus@0.2: Expecting value: line 513 column 1 (char 2816)"
+    },
+    {
+      "task_id": "arc196_d",
+      "outcome": "provider_error",
+      "reason": "terminus@0.6: Expecting value: line 3575 column 1 (char 19657)"
+    }
+  ]
+}
