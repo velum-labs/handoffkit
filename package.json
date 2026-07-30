@@ -38,7 +38,7 @@
     "mono": "node scripts/monorepo.mjs"
   },
   "devDependencies": {
-    "@types/node": "22.19.20",
+    "@types/node": "26.1.2",
     "@velum-labs/model-fusion-protocol": "0.6.0",
     "@velum-labs/routekit": "0.10.1",
     "turbo": "2.10.5",
