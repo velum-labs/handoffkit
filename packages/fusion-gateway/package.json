@@ -32,7 +32,7 @@
     "@fusionkit/registry": "workspace:*",
     "@fusionkit/tracing": "workspace:*",
     "@velum-labs/routekit-contracts": "0.10.1",
-    "@velum-labs/routekit-gateway": "0.10.1",
+    "@velum-labs/routekit-gateway": "0.16.8",
     "@velum-labs/routekit-registry": "0.10.1",
     "@velum-labs/routekit-runtime": "0.10.1",
     "@velum-labs/routekit-tracing": "0.10.1"

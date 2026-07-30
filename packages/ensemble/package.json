@@ -128,7 +128,7 @@
     "@fusionkit/tracing": "workspace:*",
     "@fusionkit/workspace": "workspace:*",
     "@velum-labs/routekit-contracts": "0.10.1",
-    "@velum-labs/routekit-gateway": "0.10.1",
+    "@velum-labs/routekit-gateway": "0.16.8",
     "@velum-labs/cursorkit": "0.2.0"
   },
   "keywords": [
