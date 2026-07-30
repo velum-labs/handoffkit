@@ -230,8 +230,8 @@ importers:
         specifier: 0.10.1
         version: 0.10.1
       '@velum-labs/routekit-harness-core':
-        specifier: 0.10.1
-        version: 0.10.1
+        specifier: 0.16.8
+        version: 0.16.8
       '@velum-labs/routekit-registry':
         specifier: 0.10.1
         version: 0.10.1
@@ -300,8 +300,8 @@ importers:
         specifier: 0.10.1
         version: 0.10.1
       '@velum-labs/routekit-harness-core':
-        specifier: 0.10.1
-        version: 0.10.1
+        specifier: 0.16.8
+        version: 0.16.8
       '@velum-labs/routekit-runtime':
         specifier: 0.10.1
         version: 0.10.1
@@ -2764,6 +2764,9 @@ packages:
   '@velum-labs/routekit-contracts@0.10.1':
     resolution: {integrity: sha512-zmyav8vF0YMRZS5UchBRJwH5BqRb7He/+UUaNawTsvaLkOmKsdYOLuZ+e+suvqgJscX5xVez6hSYQZctxD4Ebw==}
 
+  '@velum-labs/routekit-contracts@0.16.8':
+    resolution: {integrity: sha512-KaspnRbtVU0XZSEA1VTHgqc/9N9uN6Bq4G/BD5bjCUbVHah0BP3v0zQJzggu4Eeo0Tw32fmXuqh5Xi3e8qloQA==}
+
   '@velum-labs/routekit-control@0.10.1':
     resolution: {integrity: sha512-2kyHPXg3exMgoXOkL7aLkvDMjurwCAXA2iNK7QviBsDwrtA0bIKqS1FdjnAyHuMdTpZgchjEZ1e9HvFe1r4XuA==}
 
@@ -2776,6 +2779,9 @@ packages:
   '@velum-labs/routekit-harness-core@0.10.1':
     resolution: {integrity: sha512-N9B8jnIOfNmE2f1cyIZEPkYw4cJaE9cYPkODmMu0yv3MVOdQQDYDAkSxOzRAOVJE1ZT4NotMikl7RlssNR4ziQ==}
 
+  '@velum-labs/routekit-harness-core@0.16.8':
+    resolution: {integrity: sha512-buIcN39h+rB58oO2N5UhLcu7fqY7SHfL4Zxg1zoJF9D56zChud0zxnrTfEvnGa0VM6kbMyym1BncWeRD5W+zEg==}
+
   '@velum-labs/routekit-registry@0.10.1':
     resolution: {integrity: sha512-Lio7H1/NYWPiUboEz5WNqp6dW0hEHwqPDYVilDO6FlxXms5kS7QDv2DQwckKkD0am/tNzm83n5CjgWMrT4CSFg==}
 
@@ -2784,6 +2790,9 @@ packages:
 
   '@velum-labs/routekit-runtime@0.10.1':
     resolution: {integrity: sha512-uMy4AdN8y24/I9BHPp0LBreh3mMhKx4EBQ6PnArADqsZwdlXfkLV2JTresAhRNzrMhjWZOta2VEpCHEZLpyuhQ==}
+
+  '@velum-labs/routekit-runtime@0.16.8':
+    resolution: {integrity: sha512-1XWkKORb1oh0dmMV07a4wc87CiOxx/uV3TgiHuD4WJCh9omTIDOjTpXkp+FXggo2d0CiZVUx1ylXh2sUwWyBlg==}
 
   '@velum-labs/routekit-telemetry-core@0.10.1':
     resolution: {integrity: sha512-0wCVBnSc78P1tua4v4dCebzzB4GzKLuHeMf1Xz2XIL8IMTRS3tcwx0Hrdpz46yeWw4+X58uNomjKXF7p9v9Nwg==}
@@ -7729,6 +7738,8 @@ snapshots:
 
   '@velum-labs/routekit-contracts@0.10.1': {}
 
+  '@velum-labs/routekit-contracts@0.16.8': {}
+
   '@velum-labs/routekit-control@0.10.1':
     dependencies:
       '@velum-labs/routekit-contracts': 0.10.1
@@ -7760,6 +7771,12 @@ snapshots:
       '@velum-labs/routekit-runtime': 0.10.1
       zod: 4.4.3
 
+  '@velum-labs/routekit-harness-core@0.16.8':
+    dependencies:
+      '@velum-labs/routekit-contracts': 0.16.8
+      '@velum-labs/routekit-runtime': 0.16.8
+      zod: 4.4.3
+
   '@velum-labs/routekit-registry@0.10.1': {}
 
   '@velum-labs/routekit-router@0.10.1':
@@ -7769,6 +7786,10 @@ snapshots:
       '@velum-labs/routekit-runtime': 0.10.1
 
   '@velum-labs/routekit-runtime@0.10.1':
+    optionalDependencies:
+      portless: 0.15.1
+
+  '@velum-labs/routekit-runtime@0.16.8':
     optionalDependencies:
       portless: 0.15.1
 

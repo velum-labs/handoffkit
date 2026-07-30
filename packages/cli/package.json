@@ -38,7 +38,7 @@
     "@velum-labs/routekit-config": "0.10.1",
     "@velum-labs/routekit-telemetry-core": "0.10.1",
     "@fusionkit/ensemble": "workspace:*",
-    "@velum-labs/routekit-harness-core": "0.10.1",
+    "@velum-labs/routekit-harness-core": "0.16.8",
     "@fusionkit/gateway": "workspace:*",
     "@fusionkit/protocol": "workspace:*",
     "@fusionkit/registry": "workspace:*",
