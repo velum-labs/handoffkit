@@ -44,7 +44,7 @@ Documentation = "https://fusionkit.velum-labs.com"
 
 [project.optional-dependencies]
 evals = [
-  "pandas>=2.3.3",
+  "pandas>=3.0.5",
 ]
 # Used only by the standalone LiveCodeBench runner adapter
 # (adapters/livecodebench_adapter.py). Pinned <4 because the dataset uses a
