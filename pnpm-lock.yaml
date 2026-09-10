@@ -22,7 +22,7 @@ importers:
         version: 0.6.0
       '@velum-labs/routekit':
         specifier: 0.10.1
-        version: 0.10.1
+        version: 0.10.1(@types/react@19.2.17)
       turbo:
         specifier: 2.10.5
         version: 2.10.5
@@ -215,8 +215,8 @@ importers:
         specifier: 0.10.1
         version: 0.10.1(@types/react@19.2.17)
       '@velum-labs/routekit-cli-ui':
-        specifier: 0.10.1
-        version: 0.10.1(@types/react@19.2.17)
+        specifier: 1.4.0
+        version: 1.4.0(@types/react@19.2.17)
       '@velum-labs/routekit-config':
         specifier: 0.10.1
         version: 0.10.1
@@ -2755,6 +2755,9 @@ packages:
   '@velum-labs/routekit-cli-ui@0.10.1':
     resolution: {integrity: sha512-BV2Pt4TrepG5mC11prcz88ZMigxGQnBzrIAVvfl6CCggB90ymSKidg6AldmNiZDvWFd48Ukmh1vSQUUMCQohLQ==}
 
+  '@velum-labs/routekit-cli-ui@1.4.0':
+    resolution: {integrity: sha512-9KaRb9SE6lHwkvsy8lw1gtmeR0RUvjPe3l8p1UPtzJkn+jDaQy2fwb1rPXEWtN9YCCUnhpKEnuR53Mtc+8SaoQ==}
+
   '@velum-labs/routekit-config-core@0.10.1':
     resolution: {integrity: sha512-NVB7wGTLoI7izaho5AfdvslKgbka3aI0YvVyYmZZCz4IE9IgA8T8W6i9GhwC+eWQi0xKAzb3ZBZ6QztiRfe9og==}
 
@@ -2879,8 +2882,8 @@ packages:
     resolution: {integrity: sha512-quJQXlTSUGL2LH9SUXo8VwsY4soanhgo6LNSm84E1LBcE8s3O0wpdiRzyR9z/ZZJMlMWv37qOOb9pdJlMUEKFQ==}
     engines: {node: '>=8'}
 
-  ansi-regex@6.2.2:
-    resolution: {integrity: sha512-Bq3SmSpyFHaWjPk8If9yc6svM8c56dB5BAtW4Qbw5jHTwwXXcTLoRMkpDJp6VL0XzlWaCHTXrkFURMYmD0sLqg==}
+  ansi-regex@6.3.0:
+    resolution: {integrity: sha512-WpDfL7NO6j7tH88IDBNVdUJxDh9nmCteAVW9dsep846XdwF4naCBK+/tGLX3KJgcpgMRXCFlTM2hKGoK9FsdrQ==}
     engines: {node: '>=12'}
 
   ansi-styles@6.2.3:
@@ -3015,8 +3018,8 @@ packages:
     resolution: {integrity: sha512-ywqV+5MmyL4E7ybXgKys4DugZbX0FC6LnwrhjuykIjnK9k8OQacQ7axGKnjDXWNhns0xot3bZI5h55H8yo9cJg==}
     engines: {node: '>=6'}
 
-  cli-truncate@6.1.0:
-    resolution: {integrity: sha512-ofWtXdvPO1WepoE9Gn4dPdZw+ADud1Yz9K+xm9FjK5vvrs/D60vrlKIQeSw1wJX4cphW2bnWi8GZSKvf9T6shw==}
+  cli-truncate@6.1.1:
+    resolution: {integrity: sha512-06p9vyLahLa4zkGcgsGxU6iEkSOiuI4fhCH6Emhe2lPAcoUv73n72DnODsnHA+5wwXGnV0n9M9/qOQJSjYhFhw==}
     engines: {node: '>=22'}
 
   client-only@0.0.1:
@@ -3419,6 +3422,9 @@ packages:
 
   es-toolkit@1.49.0:
     resolution: {integrity: sha512-G5iZ6Pc/FNRY/soKZHC+TxGDD83rHUDXxzaWhGCX44vAv/tMs56WMusnm/KMNK+luUPsgA9U28cGr4RDlSzL2g==}
+
+  es-toolkit@1.52.0:
+    resolution: {integrity: sha512-XTNEJQh1tY1ZJVcf6ayP/2n4ZPyaHlW2FWs7xvw5ddPuhUVjLD3olQVQS7kf58JbAB48iL0uL/jerTrjtV3lDA==}
 
   esast-util-from-estree@2.0.0:
     resolution: {integrity: sha512-4CyanoAudUSBAn5K13H4JhsMH6L9ZP7XbLVe/dKybkxMO7eDyLsT8UHl9TRNrU2Gr9nz+FovfSIjuXWJ81uVwQ==}
@@ -5137,8 +5143,8 @@ packages:
   tw-animate-css@1.4.0:
     resolution: {integrity: sha512-7bziOlRqH0hJx80h/3mbicLW7o8qLsH5+RaLR2t+OHM3D0JlWGODQKQ4cxbK7WlvmUxpcj6Kgu6EKqjrGFe3QQ==}
 
-  type-fest@5.7.0:
-    resolution: {integrity: sha512-1URUxUqfHFM1c+zfSPsa3gnkO7Aq21qyH75SIduNYz4SzY964rn1X2vCMQaHSHhktiw+0kPa2iyb6PUpXqB6Vg==}
+  type-fest@5.9.0:
+    resolution: {integrity: sha512-yANm3Jr3GiJ1qgJlxGAVxTOIcEOk1rhQHamlXtnrCK7EHP4HeM9OGxtMg/W7HFdrVzw/ZWJKGVIJusVH85sLtw==}
     engines: {node: '>=20'}
 
   type-is@2.1.0:
@@ -5267,15 +5273,15 @@ packages:
     resolution: {integrity: sha512-U89AsyEeAsyoF0zVJBkG9zBgekjgjK7yk9sje3F4IQpXBJ10TF6ByLlIfjMhcmHMJgHZI4KHt4rdNfktzxIAMA==}
     engines: {node: '>=20'}
 
-  wrap-ansi@10.0.0:
-    resolution: {integrity: sha512-SGcvg80f0wUy2/fXES19feHMz8E0JoXv2uNgHOu4Dgi2OrCy1lqwFYEJz1BLbDI0exjPMe/ZdzZ/YpGECBG/aQ==}
+  wrap-ansi@10.0.1:
+    resolution: {integrity: sha512-M0N4xzyzosiIok3svYlEo1sdLZts/8FPgYH/GPC3wvlmPoRvnoManGMrE54waYj3tISA8w6lsdesfVv67qSr8Q==}
     engines: {node: '>=20'}
 
   wrappy@1.0.2:
     resolution: {integrity: sha512-l4Sp/DRseor9wL6EvV2+TuQn63dMkPjZ/sp9XkghTEbV9KlPS1xUsZ3u7/IQO4wxtcFB4bgpQPRcR3QCvezPcQ==}
 
-  ws@8.21.0:
-    resolution: {integrity: sha512-Vsp28b7DRcimFQvrqu2Wek3z1iYxDCWqHYB8Qsnk/S4RfaCQzPGPyBNuVjJV3cd6UiKtUtp6sNM77gWvzcCH+g==}
+  ws@8.21.3:
+    resolution: {integrity: sha512-201TZ/kPWxoPr/OKWjquZR1SWKXcvxdH+e1xrx89b3YbmzLMFCLfnaG1HFIgWzJOEWZ7MvpK++odZufgYR50Rw==}
     engines: {node: '>=10.0.0'}
     peerDependencies:
       bufferutil: ^4.0.1
@@ -7716,6 +7722,18 @@ snapshots:
       - react-devtools-core
       - utf-8-validate
 
+  '@velum-labs/routekit-cli-ui@1.4.0(@types/react@19.2.17)':
+    dependencies:
+      figlet: 1.11.0
+      ink: 7.1.0(@types/react@19.2.17)(react@19.2.7)
+      react: 19.2.7
+      string-width: 8.2.1
+    transitivePeerDependencies:
+      - '@types/react'
+      - bufferutil
+      - react-devtools-core
+      - utf-8-validate
+
   '@velum-labs/routekit-config-core@0.10.1':
     dependencies:
       '@velum-labs/routekit-runtime': 0.10.1
@@ -7843,7 +7861,7 @@ snapshots:
       '@opentelemetry/sdk-trace-base': 2.9.0(@opentelemetry/api@1.9.1)
       '@opentelemetry/sdk-trace-node': 2.9.0(@opentelemetry/api@1.9.1)
 
-  '@velum-labs/routekit@0.10.1':
+  '@velum-labs/routekit@0.10.1(@types/react@19.2.17)':
     dependencies:
       '@velum-labs/routekit-accounts': 0.10.1
       '@velum-labs/routekit-cli-core': 0.10.1(@types/react@19.2.17)
@@ -7923,7 +7941,7 @@ snapshots:
 
   ansi-regex@5.0.1: {}
 
-  ansi-regex@6.2.2: {}
+  ansi-regex@6.3.0: {}
 
   ansi-styles@6.2.3: {}
 
@@ -8041,7 +8059,7 @@ snapshots:
 
   cli-spinners@2.9.2: {}
 
-  cli-truncate@6.1.0:
+  cli-truncate@6.1.1:
     dependencies:
       slice-ansi: 9.0.0
       string-width: 8.2.1
@@ -8420,6 +8438,8 @@ snapshots:
       es-errors: 1.3.0
 
   es-toolkit@1.49.0: {}
+
+  es-toolkit@1.52.0: {}
 
   esast-util-from-estree@2.0.0:
     dependencies:
@@ -9060,9 +9080,9 @@ snapshots:
       chalk: 5.6.2
       cli-boxes: 4.0.1
       cli-cursor: 4.0.0
-      cli-truncate: 6.1.0
+      cli-truncate: 6.1.1
       code-excerpt: 4.0.0
-      es-toolkit: 1.49.0
+      es-toolkit: 1.52.0
       indent-string: 5.0.0
       is-in-ci: 2.0.0
       patch-console: 2.0.0
@@ -9074,10 +9094,10 @@ snapshots:
       stack-utils: 2.0.6
       string-width: 8.2.1
       terminal-size: 4.0.1
-      type-fest: 5.7.0
+      type-fest: 5.9.0
       widest-line: 6.0.0
-      wrap-ansi: 10.0.0
-      ws: 8.21.0
+      wrap-ansi: 10.0.1
+      ws: 8.21.3
       yoga-layout: 3.2.1
     optionalDependencies:
       '@types/react': 19.2.17
@@ -10592,7 +10612,7 @@ snapshots:
 
   strip-ansi@7.2.0:
     dependencies:
-      ansi-regex: 6.2.2
+      ansi-regex: 6.3.0
 
   strip-bom@3.0.0: {}
 
@@ -10688,7 +10708,7 @@ snapshots:
 
   tw-animate-css@1.4.0: {}
 
-  type-fest@5.7.0:
+  type-fest@5.9.0:
     dependencies:
       tagged-tag: 1.0.0
 
@@ -10821,15 +10841,14 @@ snapshots:
     dependencies:
       string-width: 8.2.1
 
-  wrap-ansi@10.0.0:
+  wrap-ansi@10.0.1:
     dependencies:
       ansi-styles: 6.2.3
       string-width: 8.2.1
-      strip-ansi: 7.2.0
 
   wrappy@1.0.2: {}
 
-  ws@8.21.0: {}
+  ws@8.21.3: {}
 
   wsl-utils@0.3.1:
     dependencies:

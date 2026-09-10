@@ -33,7 +33,7 @@
     "@fusionkit/adapter-ai-sdk": "workspace:*",
     "@fusionkit/config": "workspace:*",
     "@velum-labs/routekit-cli-core": "0.10.1",
-    "@velum-labs/routekit-cli-ui": "0.10.1",
+    "@velum-labs/routekit-cli-ui": "1.4.0",
     "@velum-labs/routekit-config-core": "0.10.1",
     "@velum-labs/routekit-config": "0.10.1",
     "@velum-labs/routekit-telemetry-core": "0.10.1",
