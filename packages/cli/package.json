@@ -52,7 +52,7 @@
     "@velum-labs/routekit-registry": "0.10.1",
     "@velum-labs/routekit-router": "0.10.1",
     "commander": "14.0.3",
-    "figlet": "1.11.0",
+    "figlet": "1.11.3",
     "posthog-node": "5.46.0",
     "yaml": "2.9.0"
   },
